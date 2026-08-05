@@ -40,7 +40,7 @@ export function ProfileModal({
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
+      <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label="Close profile" onClick={onClose} />
         <div className="profile-modal__header">
           {profile?.avatar_url ? <img className="profile-modal__avatar" src={profile.avatar_url} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
@@ -98,7 +98,7 @@ export function EditProfileModal({
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section ref={dialogRef} className="auth-modal profile-modal profile-editor-modal" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
+      <section ref={dialogRef} className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label="Close profile editor" onClick={onClose} />
         <div className="modal-head">
           <div className="modal-head__copy">

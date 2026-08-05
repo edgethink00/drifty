@@ -3,6 +3,8 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use sha2::{Digest, Sha256};
+
 use super::{ManagedAiDownloadProgress, ManagedAiError, ManagedAiModelSpec};
 
 const DOWNLOAD_BUFFER_SIZE: usize = 64 * 1024;
@@ -19,13 +21,13 @@ pub(super) fn download_model_artifact(
     reset_dir(&staging_dir)?;
 
     let staged_file = staging_dir.join(spec.file_name);
-    let bytes_written = download_to_path(
+    let (bytes_written, sha256) = download_to_path(
         spec.download_url,
         spec.expected_size_bytes,
         &staged_file,
         progress,
     )?;
-    verify_download_size(spec, bytes_written, &staged_file)?;
+    verify_download(spec, bytes_written, &sha256, &staged_file)?;
 
     if artifact_dir.exists() {
         fs::remove_dir_all(&artifact_dir)?;
@@ -48,7 +50,7 @@ fn download_to_path(
     total_bytes: u64,
     path: &Path,
     progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
-) -> Result<u64, ManagedAiError> {
+) -> Result<(u64, String), ManagedAiError> {
     let client = reqwest::blocking::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .user_agent(USER_AGENT)
@@ -56,6 +58,7 @@ fn download_to_path(
     let mut response = client.get(url).send()?.error_for_status()?;
     let mut file = File::create(path)?;
     let mut bytes_written = 0_u64;
+    let mut hasher = Sha256::new();
     let mut buffer = [0_u8; DOWNLOAD_BUFFER_SIZE];
     loop {
         let bytes_read = read_download_chunk(&mut response, &mut buffer)?;
@@ -63,6 +66,7 @@ fn download_to_path(
             break;
         }
         file.write_all(&buffer[..bytes_read])?;
+        hasher.update(&buffer[..bytes_read]);
         let chunk_size = u64::try_from(bytes_read).map_err(|_| {
             ManagedAiError::DownloadFailed("download chunk size overflowed".to_string())
         })?;
@@ -73,7 +77,7 @@ fn download_to_path(
         ))?;
     }
     file.sync_all()?;
-    Ok(bytes_written)
+    Ok((bytes_written, format!("{:x}", hasher.finalize())))
 }
 
 fn read_download_chunk(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize, ManagedAiError> {
@@ -82,9 +86,10 @@ fn read_download_chunk(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize
         .map_err(|error| ManagedAiError::DownloadFailed(error.to_string()))
 }
 
-fn verify_download_size(
+fn verify_download(
     spec: ManagedAiModelSpec,
     bytes_written: u64,
+    sha256: &str,
     path: &Path,
 ) -> Result<(), ManagedAiError> {
     if bytes_written == 0 {
@@ -100,14 +105,22 @@ fn verify_download_size(
             spec.expected_size_bytes
         )));
     }
+    if sha256 != spec.expected_sha256 {
+        let _ = fs::remove_file(path);
+        return Err(ManagedAiError::DownloadFailed(format!(
+            "downloaded model checksum did not match the pinned artifact: expected {}, got {sha256}",
+            spec.expected_sha256
+        )));
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::io::{Error, ErrorKind, Read};
 
-    use super::{read_download_chunk, ManagedAiError};
+    use super::{read_download_chunk, verify_download, ManagedAiError};
 
     #[test]
     fn response_read_errors_are_download_failures() {
@@ -120,6 +133,22 @@ mod tests {
             ManagedAiError::DownloadFailed(message)
                 if message.contains("error decoding response body")
         ));
+    }
+
+    #[test]
+    fn pinned_model_checksum_rejects_same_size_corruption() {
+        let root = tempfile::tempdir().expect("create temp root");
+        let path = root.path().join("model.gguf");
+        fs::write(&path, b"corrupt").expect("write corrupt model");
+        let spec = super::super::require_model("drifty-qwen3-5-2b-economy").expect("model spec");
+
+        let error = verify_download(spec, spec.expected_size_bytes, "bad-checksum", &path)
+            .expect_err("checksum mismatch");
+
+        assert!(
+            matches!(error, ManagedAiError::DownloadFailed(message) if message.contains("checksum"))
+        );
+        assert!(!path.exists());
     }
 
     struct FailingReader;

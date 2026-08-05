@@ -5,7 +5,7 @@ import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { CompactClassificationHoverCard } from "./HoverCards";
-import type { CompactClassificationHoverState } from "./HoverCards";
+import type { CompactClassificationBreakdownRow, CompactClassificationHoverState } from "./HoverCards";
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
 import { formatCompactBarLabel } from "./compactChartLabels";
 import { useAnimatedDonutRatios } from "./compactChartTween";
@@ -28,6 +28,7 @@ export interface CompactRingChartProps {
   readonly centerPercent: number;
   readonly flowBlocks: FlowBlock[];
   readonly appIcons: AppIconMap;
+  readonly getAppBreakdown?: (entry: CompactRingEntry) => CompactClassificationBreakdownRow[];
 }
 
 function formatCompactRingLegendHours(totalSeconds: number): string {
@@ -42,6 +43,7 @@ export function CompactRingChart({
   centerPercent,
   flowBlocks,
   appIcons,
+  getAppBreakdown,
 }: CompactRingChartProps) {
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0 && entry.ratio > 0);
@@ -74,7 +76,7 @@ export function CompactRingChart({
       shareLabel: `${classifiedSeconds > 0 ? Math.round((entry.totalSeconds / classifiedSeconds) * 100) : 0}%`,
       dotClassName: entry.dotClassName ?? "",
       color: entry.color,
-      appBreakdown: buildCompactClassificationBreakdown(flowBlocks, entry.matchesBlock),
+      appBreakdown: getAppBreakdown?.(entry) ?? buildCompactClassificationBreakdown(flowBlocks, entry.matchesBlock),
       x,
       y,
     });

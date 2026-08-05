@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-companion-cursor-over-capsule"
+description = "Enables the watcher_companion_cursor_over_capsule command without any pre-configured scope."
+commands.allow = ["watcher_companion_cursor_over_capsule"]
+
+[[permission]]
+identifier = "deny-watcher-companion-cursor-over-capsule"
+description = "Denies the watcher_companion_cursor_over_capsule command without any pre-configured scope."
+commands.deny = ["watcher_companion_cursor_over_capsule"]

@@ -1,8 +1,10 @@
-import "./instrument";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
-import { captureSentryException } from "./lib/observability/sentry";
+import {
+  captureSentryException,
+  scheduleSentryInitialization,
+} from "./lib/observability/sentryClient";
 import {
   applyRejectionAction,
   resolveRejectionAction,
@@ -10,7 +12,6 @@ import {
   type ResolvedBootstrapSurface,
 } from "./lib/bootstrap/rejectionAction";
 import "./styles.css";
-import "./features/history/history.css";
 import "./features/dashboard/dashboard.css";
 import "./features/dashboard/compact-charts.css";
 import "./features/flow-chart/flow-chart.css";
@@ -18,10 +19,7 @@ import "./features/dashboard/week-dashboard.css";
 import "./features/dashboard/month-calendar.css";
 import "./features/insights/insights.css";
 import "./features/loading/loading-skeletons.css";
-import "./features/leaderboard/leaderboard.css";
-import "./features/leaderboard/rank-embeds.css";
 import "./features/profile/profile-page.css";
-import "./features/social/social.css";
 import "./styles/chartHoverMotion.css";
 import "./styles/modal-chrome.css";
 import { hideBootShell } from "./features/loading/bootShell";
@@ -74,6 +72,7 @@ class BootstrapErrorBoundary extends React.Component<
 
 function BootstrapLoader() {
   const [LoadedApp, setLoadedApp] = React.useState<React.ComponentType | null>(null);
+  const shouldInitializePostHogRef = React.useRef(false);
 
   React.useEffect(() => {
     window.__DRIFTY_SET_BOOT_STATUS__?.("Bootstrap shell mounted");
@@ -88,6 +87,14 @@ function BootstrapLoader() {
           const mod = await import("./features/companion/WatcherWindowApp");
           window.__DRIFTY_SET_BOOT_STATUS__?.("Watcher module imported");
           setLoadedApp(() => mod.WatcherWindowApp);
+          return;
+        }
+
+        if (nextSurface === "companion") {
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing companion module…");
+          const mod = await import("./features/companion/CompanionWindowApp");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Companion module imported");
+          setLoadedApp(() => mod.CompanionWindowApp);
           return;
         }
 
@@ -116,15 +123,14 @@ function BootstrapLoader() {
         }
 
         window.__DRIFTY_SET_BOOT_STATUS__?.("Importing App module…");
-        const [{ AuthProvider }, { initializePostHog }, mod] = await Promise.all([
+        const [{ AuthProvider }, mod] = await Promise.all([
           import("./features/auth/AuthContext"),
-          import("./lib/analytics/posthog"),
           import("./App"),
         ]);
-        initializePostHog();
         void syncInitialMenuBarIconStyle();
         window.__DRIFTY_SET_BOOT_STATUS__?.("App module imported");
         const App = mod.default;
+        shouldInitializePostHogRef.current = true;
         setLoadedApp(() => function AppWithAuthProvider() {
           return (
             <AuthProvider>
@@ -152,6 +158,16 @@ function BootstrapLoader() {
       window.__DRIFTY_BOOTSTRAPPED__ = true;
       hideBootShell();
       document.getElementById("boot-error")?.remove();
+      if (shouldInitializePostHogRef.current) {
+        void import("./lib/analytics/posthogClient")
+          .then(({ schedulePostHogInitialization }) => schedulePostHogInitialization())
+          .catch((error) => {
+            captureSentryException(error, {
+              tags: { surface: "bootstrap", phase: "posthog_schedule" },
+            });
+          });
+      }
+      scheduleSentryInitialization();
     }
   }, [LoadedApp]);
 
@@ -177,9 +193,15 @@ async function syncInitialMenuBarIconStyle(): Promise<void> {
 
 function resolveLocationSurface(location: Pick<Location, "pathname" | "search">): ResolvedBootstrapSurface {
   const requestedSurface = new URLSearchParams(location.search).get("driftySurface");
-  if (requestedSurface === "watcher" || requestedSurface === "drift-alarm" || requestedSurface === "pet-mode") return requestedSurface;
+  if (
+    requestedSurface === "watcher"
+    || requestedSurface === "companion"
+    || requestedSurface === "drift-alarm"
+    || requestedSurface === "pet-mode"
+  ) return requestedSurface;
   if (import.meta.env.DEV && requestedSurface === "privacy-review-concepts") return requestedSurface;
   if (location.pathname === "/watcher") return "watcher";
+  if (location.pathname === "/companion") return "companion";
   if (location.pathname === "/drift-alarm") return "drift-alarm";
   if (location.pathname === "/pet-mode") return "pet-mode";
   return "app";
@@ -194,6 +216,7 @@ async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
     const { getCurrentWindow } = await import("@tauri-apps/api/window");
     const label = getCurrentWindow().label;
     if (label === "watcher-peek") return "watcher";
+    if (label === "companion-pill") return "companion";
     if (label === "drift-alarm") return "drift-alarm";
     if (label === "pet-mode") return "pet-mode";
     return "app";
@@ -204,7 +227,12 @@ async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
 
 function resolveCurrentSurface(): ResolvedBootstrapSurface {
   const documentSurface = document.documentElement.dataset.surface;
-  if (documentSurface === "watcher" || documentSurface === "drift-alarm" || documentSurface === "pet-mode") {
+  if (
+    documentSurface === "watcher"
+    || documentSurface === "companion"
+    || documentSurface === "drift-alarm"
+    || documentSurface === "pet-mode"
+  ) {
     return documentSurface;
   }
   if (import.meta.env.DEV && documentSurface === "privacy-review-concepts") {

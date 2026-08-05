@@ -11,6 +11,7 @@ export type NativeOpenAiChatResponse = {
   readonly status?: unknown;
   readonly body?: unknown;
   readonly latencyMs?: unknown;
+  readonly retryAfterMs?: unknown;
 };
 
 type ManagedLocalProviderConfig = Extract<LocalAiProviderConfig, { readonly provider: "managed_local" }>;

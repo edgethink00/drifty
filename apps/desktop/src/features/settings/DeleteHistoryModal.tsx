@@ -97,7 +97,8 @@ export function DeleteHistoryModal({ onClose, onDeleted, deviceSyncEnabled = fal
       <section
         aria-labelledby="delete-history-modal-title"
         aria-modal="true"
-        className="auth-modal delete-history-modal"
+        className="auth-modal modal-shell delete-history-modal"
+        data-modal-variant="compact"
         role="dialog"
         onClick={(event) => event.stopPropagation()}
       >

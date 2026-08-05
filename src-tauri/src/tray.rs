@@ -19,6 +19,18 @@ use tauri::menu::{Menu, MenuBuilder, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State};
 
+#[cfg(target_os = "macos")]
+use objc2::MainThreadMarker;
+#[cfg(target_os = "macos")]
+use objc2_app_kit::{
+    NSColor, NSFont, NSFontAttributeName, NSFontWeightSemibold, NSForegroundColorAttributeName,
+    NSKernAttributeName,
+};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{
+    NSAttributedString, NSDictionary, NSMutableAttributedString, NSNumber, NSRange, NSString,
+};
+
 use self::drift_alarm_status::{
     drift_alerts_status_label, drift_summary_label, TrayDriftAlarmStatus,
 };
@@ -27,7 +39,7 @@ use self::productivity_icon::{
 };
 
 pub use self::productivity_icon::TrayProductivityState;
-use crate::donut_icon::{self, DonutIconRenderInput, TrayIconStyle};
+use crate::donut_icon::{self, DonutIconRenderInput, TrayDisplayMode, TrayIconStyle};
 use crate::shell_action::{self, tray_menu_id, ShellAction};
 use crate::tracker::TrackerController;
 use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState};
@@ -35,12 +47,27 @@ use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState};
 const TRAY_ID: &str = "drifty-menu";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 const TRAY_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
+const TRAY_TITLE_SCALE: f64 = 1.03;
+
+pub(crate) fn tray_icon_rect(app: &AppHandle) -> Option<tauri::Rect> {
+    app.tray_by_id(TRAY_ID)
+        .and_then(|tray| tray.rect().ok().flatten())
+}
 
 #[derive(Default)]
 pub struct TrayDriftAlarmState(Mutex<TrayDriftAlarmStatus>);
 
 #[derive(Default)]
 pub struct TrayIconStyleState(Mutex<TrayIconStyle>);
+
+#[derive(Clone, Copy, Default)]
+struct TrayDisplaySnapshot {
+    mode: TrayDisplayMode,
+    focus_seconds: f64,
+}
+
+#[derive(Default)]
+pub struct TrayDisplayState(Mutex<TrayDisplaySnapshot>);
 
 pub struct TrayRefreshWorker {
     lifecycle: Mutex<TrayRefreshWorkerLifecycle>,
@@ -210,6 +237,29 @@ pub fn tray_update_icon_style(
     *latest = style;
     drop(latest);
 
+    update_tray_icon(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn tray_update_display_mode(
+    app: AppHandle,
+    state: State<'_, TrayDisplayState>,
+    mode: TrayDisplayMode,
+    focus_seconds: f64,
+) -> Result<(), String> {
+    let snapshot = TrayDisplaySnapshot {
+        mode,
+        focus_seconds: finite_non_negative(focus_seconds),
+    };
+    let mut latest = state
+        .0
+        .lock()
+        .map_err(|_| "tray display state lock poisoned".to_string())?;
+    *latest = snapshot;
+    drop(latest);
+
+    apply_tray_display_title(&app, snapshot);
     update_tray_icon(&app);
     Ok(())
 }
@@ -515,16 +565,25 @@ struct TrayIconRenderKey {
     neutral_bits: u64,
     is_dark: bool,
     style: TrayIconStyle,
+    display_mode: TrayDisplayMode,
 }
 
 impl TrayIconRenderKey {
-    fn new(focus: f64, drift: f64, neutral: f64, is_dark: bool, style: TrayIconStyle) -> Self {
+    fn new(
+        focus: f64,
+        drift: f64,
+        neutral: f64,
+        is_dark: bool,
+        style: TrayIconStyle,
+        display_mode: TrayDisplayMode,
+    ) -> Self {
         Self {
             focus_bits: focus.to_bits(),
             drift_bits: drift.to_bits(),
             neutral_bits: neutral.to_bits(),
             is_dark,
             style,
+            display_mode,
         }
     }
 }
@@ -631,19 +690,15 @@ fn prepare_tray_icon(app: &AppHandle, request_generation: u64) -> Option<Prepare
     };
     let dark = is_dark_mode();
     let style = latest_tray_icon_style(app);
-    let key = TrayIconRenderKey::new(focus, drift, neutral, dark, style);
+    let display = latest_tray_display(app);
+    let key = TrayIconRenderKey::new(focus, drift, neutral, dark, style, display.mode);
 
     if tray_icon_render_key_is_current(key) {
         return None;
     }
 
-    let (rgba, width, height) = donut_icon::render(DonutIconRenderInput {
-        focus,
-        drift,
-        neutral,
-        is_dark: dark,
-        style,
-    });
+    let (rgba, width, height) =
+        render_tray_display_icon(display.mode, focus, drift, neutral, dark, style);
     Some(PreparedTrayIcon {
         request_generation,
         key,
@@ -651,6 +706,60 @@ fn prepare_tray_icon(app: &AppHandle, request_generation: u64) -> Option<Prepare
         width,
         height,
     })
+}
+
+fn render_tray_display_icon(
+    mode: TrayDisplayMode,
+    focus: f64,
+    drift: f64,
+    neutral: f64,
+    dark: bool,
+    style: TrayIconStyle,
+) -> (Vec<u8>, u32, u32) {
+    match mode {
+        TrayDisplayMode::Donut => donut_icon::render(DonutIconRenderInput {
+            focus,
+            drift,
+            neutral,
+            is_dark: dark,
+            style,
+        }),
+        TrayDisplayMode::FocusTime => {
+            add_trailing_icon_space(donut_icon::render_focus_dot(dark), 4)
+        }
+        /* This mode replaces the Focus-time dot, so it deliberately keeps the
+        compact 18px ring even if the legacy tray icon style is Expanded. */
+        TrayDisplayMode::DonutFocusTime => add_trailing_icon_space(
+            donut_icon::render(DonutIconRenderInput {
+                focus,
+                drift,
+                neutral,
+                is_dark: dark,
+                style: TrayIconStyle::Compact,
+            }),
+            4,
+        ),
+    }
+}
+
+fn add_trailing_icon_space(
+    (pixels, width, height): (Vec<u8>, u32, u32),
+    trailing_space: u32,
+) -> (Vec<u8>, u32, u32) {
+    if trailing_space == 0 {
+        return (pixels, width, height);
+    }
+    let source_width = width as usize;
+    let target_width = (width + trailing_space) as usize;
+    let height = height as usize;
+    let mut padded = vec![0; target_width * height * 4];
+    for row in 0..height {
+        let source_start = row * source_width * 4;
+        let target_start = row * target_width * 4;
+        padded[target_start..target_start + source_width * 4]
+            .copy_from_slice(&pixels[source_start..source_start + source_width * 4]);
+    }
+    (padded, target_width as u32, height as u32)
 }
 
 fn claim_tray_icon_render_request() -> u64 {
@@ -693,6 +802,121 @@ fn latest_tray_icon_style(app: &AppHandle) -> TrayIconStyle {
     app.try_state::<TrayIconStyleState>()
         .and_then(|state| state.0.lock().ok().map(|latest| *latest))
         .unwrap_or_default()
+}
+
+fn latest_tray_display(app: &AppHandle) -> TrayDisplaySnapshot {
+    app.try_state::<TrayDisplayState>()
+        .and_then(|state| state.0.lock().ok().map(|latest| *latest))
+        .unwrap_or_default()
+}
+
+fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot) {
+    let Some(tray) = app.tray_by_id(TRAY_ID) else {
+        return;
+    };
+    match display.mode {
+        TrayDisplayMode::Donut => {
+            let _ = tray.set_title(Some(""));
+            let _ = tray.set_tooltip(Some("Drifty"));
+        }
+        TrayDisplayMode::FocusTime => {
+            let focused = format_focus_time(display.focus_seconds);
+            let title = format!("{focused} focused");
+            let _ = tray.set_title(Some(&title));
+            apply_tray_title_typography(&tray, title);
+            let _ = tray.set_tooltip(Some(format!("Drifty · {focused} focused today")));
+        }
+        TrayDisplayMode::DonutFocusTime => {
+            let focused = format_focus_time(display.focus_seconds);
+            let title = format!("{focused} focused");
+            let _ = tray.set_title(Some(&title));
+            apply_tray_title_typography(&tray, title);
+            let _ = tray.set_tooltip(Some(format!(
+                "Drifty · {focused} focused today · productivity mix"
+            )));
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String) {
+    let _ = tray.with_inner_tray_icon(move |inner| {
+        let Some(status_item) = inner.ns_status_item() else {
+            return;
+        };
+        let font_size = scaled_tray_title_size(NSFont::systemFontSize());
+        let font = NSFont::systemFontOfSize_weight(
+            font_size,
+            reduced_tray_title_weight(unsafe { NSFontWeightSemibold }),
+        );
+        let color = NSColor::labelColor();
+        let attributes = NSDictionary::from_retained_objects(
+            &[unsafe { NSFontAttributeName }, unsafe {
+                NSForegroundColorAttributeName
+            }],
+            &[
+                font.into_super().into_super(),
+                color.into_super().into_super(),
+            ],
+        );
+        let title = NSString::from_str(&title);
+        let attributed = unsafe { NSAttributedString::new_with_attributes(&title, &attributes) };
+        let attributed = NSMutableAttributedString::from_attributed_nsstring(&attributed);
+        if let Some(label_start) = focused_label_start_utf16(&title.to_string()) {
+            let secondary_color = NSColor::colorWithCalibratedWhite_alpha(0.88, 0.92)
+                .into_super()
+                .into_super();
+            let extra_spacing = NSNumber::numberWithDouble(2.0).into_super().into_super();
+            unsafe {
+                attributed.addAttribute_value_range(
+                    NSForegroundColorAttributeName,
+                    &secondary_color,
+                    NSRange::new(label_start, "focused".len()),
+                );
+                attributed.addAttribute_value_range(
+                    NSKernAttributeName,
+                    &extra_spacing,
+                    NSRange::new(label_start.saturating_sub(1), 1),
+                );
+            }
+        }
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let Some(button) = status_item.button(mtm) else {
+            return;
+        };
+        button.setAttributedTitle(&attributed);
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+fn apply_tray_title_typography(_tray: &tauri::tray::TrayIcon, _title: String) {}
+
+fn scaled_tray_title_size(system_size: f64) -> f64 {
+    system_size * TRAY_TITLE_SCALE
+}
+
+fn reduced_tray_title_weight(weight: f64) -> f64 {
+    weight * 0.96
+}
+
+fn focused_label_start_utf16(title: &str) -> Option<usize> {
+    let prefix = title.strip_suffix("focused")?;
+    Some(prefix.encode_utf16().count())
+}
+
+fn format_focus_time(focus_seconds: f64) -> String {
+    let total_minutes = (finite_non_negative(focus_seconds) / 60.0).floor() as u64;
+    format!("{}:{:02}", total_minutes / 60, total_minutes % 60)
+}
+
+fn finite_non_negative(value: f64) -> f64 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        0.0
+    }
 }
 
 fn latest_tray_drift_alarm_status(app: &AppHandle) -> TrayDriftAlarmStatus {

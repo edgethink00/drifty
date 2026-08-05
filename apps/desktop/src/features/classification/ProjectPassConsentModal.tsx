@@ -62,7 +62,8 @@ function ProjectPassConsentDialog({
         aria-describedby={DESCRIPTION_ID}
         aria-labelledby={TITLE_ID}
         aria-modal="true"
-        className="auth-modal project-pass-consent-modal"
+        className="auth-modal modal-shell project-pass-consent-modal"
+        data-modal-variant="standard"
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}

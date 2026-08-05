@@ -360,7 +360,7 @@ function ExtremeConfirmDialog({
   const { t } = useLocalization();
   return (
     <div className="dc-onb-confirm-backdrop">
-      <section className="dc-onb-confirm" role="alertdialog" aria-modal="true" aria-labelledby="dc-onb-confirm-title">
+      <section className="dc-onb-confirm modal-shell" data-modal-variant="expressive" role="alertdialog" aria-modal="true" aria-labelledby="dc-onb-confirm-title">
         <div className="dc-onb-confirm__icon" aria-hidden="true">
           <ScissorsIcon />
         </div>

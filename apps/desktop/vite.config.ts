@@ -67,7 +67,15 @@ export default defineConfig(({ command, mode }) => {
           ]
         : []),
     ],
-    build: uploadSentrySourcemaps ? { sourcemap: "hidden" } : undefined,
+    build: {
+      ...(uploadSentrySourcemaps ? { sourcemap: "hidden" as const } : {}),
+      rollupOptions: {
+        input: {
+          auxiliary: new URL("./auxiliary.html", import.meta.url).pathname,
+          main: new URL("./index.html", import.meta.url).pathname,
+        },
+      },
+    },
     resolve: {
       alias: [
         {

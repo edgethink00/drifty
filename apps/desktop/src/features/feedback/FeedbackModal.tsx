@@ -1,9 +1,11 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
-import { FEEDBACK_CATEGORY_OPTIONS, submitFeedback, type FeedbackAttachment, type FeedbackCategory } from "./feedbackService";
+import { submitFeedback, type FeedbackAttachment } from "./feedbackService";
 
 const MESSAGE_MAX_LENGTH = 3_000;
+const COUNTER_REVEAL_REMAINING = 300;
+const COUNTER_WARN_REMAINING = 50;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ATTACHMENT_ACCEPT = "image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif";
 const MAX_ATTACHMENTS = 3;
@@ -31,14 +33,18 @@ type FeedbackModalProps = {
 
 export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   const [email, setEmail] = useState(initialEmail?.trim() ?? "");
-  const [category, setCategory] = useState<FeedbackCategory>("idea");
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; message?: string }>({});
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const previewUrlsRef = useRef<string[]>([]);
   useModalDismiss(onClose, { disabled: isSending });
+  const emailPrefilled = Boolean(initialEmail?.trim());
 
   useEffect(() => {
     return () => revokeAllPreviewUrls(previewUrlsRef);
@@ -52,21 +58,28 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
     const trimmedMessage = message.trim();
 
     if (!trimmedMessage) {
-      setError("Write a short note before sending feedback.");
+      setFieldErrors({ message: "Write a short note before sending feedback." });
+      setFormError(null);
+      messageInputRef.current?.focus();
       return;
     }
 
     if (!trimmedEmail) {
-      setError("Enter an email address so we can follow up.");
+      setFieldErrors({ email: "Enter an email address so we can follow up." });
+      setFormError(null);
+      emailInputRef.current?.focus();
       return;
     }
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setError("Enter a valid email address, like name@example.com.");
+      setFieldErrors({ email: "Enter a valid email address, like name@example.com." });
+      setFormError(null);
+      emailInputRef.current?.focus();
       return;
     }
 
-    setError(null);
+    setFieldErrors({});
+    setFormError(null);
     setIsSending(true);
 
     let preparedAttachments: FeedbackAttachment[];
@@ -74,13 +87,12 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
       preparedAttachments = await Promise.all(attachments.map(({ file }) => readAttachmentFile(file)));
     } catch {
       setIsSending(false);
-      setError("Unable to read the selected image. Remove it and try again.");
+      setAttachmentError("Unable to read the selected image. Remove it and try again.");
       return;
     }
 
     const result = await submitFeedback({
       email: trimmedEmail,
-      category,
       message: trimmedMessage,
       attachments: preparedAttachments,
     });
@@ -93,7 +105,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
       return;
     }
 
-    setError(result.error);
+    setFormError(result.error);
   }
 
   function handleOverlayClick() {
@@ -102,8 +114,9 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
 
   function handleSendAnother() {
     setIsSent(false);
-    setError(null);
-    setCategory("idea");
+    setFieldErrors({});
+    setAttachmentError(null);
+    setFormError(null);
     setMessage("");
     clearAttachments();
   }
@@ -146,7 +159,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
     if (acceptedAttachments.length > 0) {
       setAttachments((current) => [...current, ...acceptedAttachments]);
     }
-    setError(validationError);
+    setAttachmentError(validationError);
   }
 
   function removeAttachment(id: string) {
@@ -165,7 +178,8 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   return (
     <div className="auth-modal__overlay" onClick={handleOverlayClick}>
       <section
-        className="auth-modal feedback-modal"
+        className="auth-modal modal-shell feedback-modal"
+        data-modal-variant="standard"
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-modal-title"
@@ -175,10 +189,9 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
         <div className="modal-head feedback-modal__header">
           <div className="modal-head__copy">
             <h2 id="feedback-modal-title">{isSent ? "Feedback sent" : "Send feedback"}</h2>
+            {isSent ? null : <p>Tell us what&apos;s broken, what&apos;s missing, or what would make Drifty better.</p>}
           </div>
         </div>
-
-        {error ? <p className="auth-modal__error" role="alert">{error}</p> : null}
 
         {isSent ? (
           <div className="feedback-modal__sent" role="status">
@@ -190,36 +203,60 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
 
         {isSent ? null : (
           <form className="feedback-modal__form" onSubmit={handleSubmit} noValidate>
-            <label className="feedback-modal__field" htmlFor="feedback-message">
-              <span>Message</span>
-              <textarea
-                id="feedback-message"
-                className="feedback-modal__textarea"
+            <div className="feedback-modal__field">
+              <label className="feedback-modal__label" htmlFor="feedback-email">Email</label>
+              <input
+                id="feedback-email"
+                className={`feedback-modal__input${fieldErrors.email ? " is-invalid" : ""}`}
+                type="email"
+                autoComplete="email"
                 required
-                value={message}
-                onChange={(event) => setMessage(event.target.value)}
-                placeholder="What should we know?"
-                maxLength={MESSAGE_MAX_LENGTH}
+                value={email}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (fieldErrors.email) setFieldErrors((current) => ({ ...current, email: undefined }));
+                }}
+                placeholder="e.g. name@example.com"
                 disabled={isSending}
-                autoFocus
+                ref={emailInputRef}
+                autoFocus={!emailPrefilled}
+                aria-invalid={fieldErrors.email ? true : undefined}
+                aria-describedby={fieldErrors.email ? "feedback-email-error" : undefined}
               />
-            </label>
+              {fieldErrors.email ? (
+                <p className="feedback-modal__field-error" id="feedback-email-error" role="alert">{fieldErrors.email}</p>
+              ) : null}
+            </div>
 
-            <div className="feedback-modal__message-tools">
-              <label className={`feedback-modal__image-button${isSending || attachments.length >= MAX_ATTACHMENTS ? " is-disabled" : ""}`}>
-                <span className="sr-only">Add images</span>
-                <svg aria-hidden="true" viewBox="0 0 20 20" focusable="false">
-                  <path d="M4.75 3.5h10.5A2.25 2.25 0 0 1 17.5 5.75v8.5a2.25 2.25 0 0 1-2.25 2.25H4.75a2.25 2.25 0 0 1-2.25-2.25v-8.5A2.25 2.25 0 0 1 4.75 3.5Zm0 1.5a.75.75 0 0 0-.75.75v6.64l2.36-2.36a1.25 1.25 0 0 1 1.77 0l1.12 1.12 2.62-2.62a1.25 1.25 0 0 1 1.77 0L16 10.89V5.75a.75.75 0 0 0-.75-.75H4.75Zm9 2.5a1.25 1.25 0 1 1-2.5 0 1.25 1.25 0 0 1 2.5 0Z" />
-                </svg>
-                <input
-                  type="file"
-                  accept={ATTACHMENT_ACCEPT}
-                  multiple
-                  onChange={handleAttachmentsSelected}
-                  disabled={isSending || attachments.length >= MAX_ATTACHMENTS}
+            <div className="feedback-modal__field">
+              <div className="feedback-modal__message-wrap">
+                <textarea
+                  id="feedback-message"
+                  className={`feedback-modal__textarea${fieldErrors.message ? " is-invalid" : ""}`}
+                  aria-label="Message"
+                  required
+                  value={message}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
+                    if (fieldErrors.message) setFieldErrors((current) => ({ ...current, message: undefined }));
+                  }}
+                  placeholder="What should we know?"
+                  maxLength={MESSAGE_MAX_LENGTH}
+                  disabled={isSending}
+                  ref={messageInputRef}
+                  autoFocus={emailPrefilled}
+                  aria-invalid={fieldErrors.message ? true : undefined}
+                  aria-describedby={fieldErrors.message ? "feedback-message-error" : undefined}
                 />
-              </label>
-              <span>{message.length}/{MESSAGE_MAX_LENGTH}</span>
+                {message.length >= MESSAGE_MAX_LENGTH - COUNTER_REVEAL_REMAINING ? (
+                  <span className={`feedback-modal__counter${message.length >= MESSAGE_MAX_LENGTH - COUNTER_WARN_REMAINING ? " is-warn" : ""}`}>
+                    {message.length}/{MESSAGE_MAX_LENGTH}
+                  </span>
+                ) : null}
+              </div>
+              {fieldErrors.message ? (
+                <p className="feedback-modal__field-error" id="feedback-message-error" role="alert">{fieldErrors.message}</p>
+              ) : null}
             </div>
 
             {attachments.length > 0 ? (
@@ -241,50 +278,35 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
               </div>
             ) : null}
 
-            <fieldset className="feedback-modal__categories">
-              <legend>Category</legend>
-              <div className="settings-mode-switch settings-mode-switch--triple feedback-modal__category-list">
-                {FEEDBACK_CATEGORY_OPTIONS.map((option) => (
-                  <label
-                    key={option.id}
-                    className={`settings-mode-option feedback-modal__category${category === option.id ? " is-active" : ""}`}
-                  >
-                    <input
-                      type="radio"
-                      name="feedback-category"
-                      value={option.id}
-                      checked={category === option.id}
-                      onChange={() => setCategory(option.id)}
-                      disabled={isSending}
-                      required
-                    />
-                    <span>{option.label}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            {attachmentError ? (
+              <p className="feedback-modal__field-error feedback-modal__attachment-error" role="alert">{attachmentError}</p>
+            ) : null}
 
-            <label className="feedback-modal__field" htmlFor="feedback-email">
-              <span>Email</span>
-              <input
-                id="feedback-email"
-                className="settings-input feedback-modal__input"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                placeholder="name@example.com"
-                disabled={isSending}
-              />
-            </label>
+            {formError ? <p className="feedback-modal__field-error feedback-modal__form-error" role="alert">{formError}</p> : null}
 
             <div className="modal-foot feedback-modal__actions">
+              <div className="feedback-modal__attach-group">
+                <label
+                  className={`modal-btn modal-btn--ghost feedback-modal__attach${isSending || attachments.length >= MAX_ATTACHMENTS ? " is-disabled" : ""}`}
+                >
+                  <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                  </svg>
+                  <span>Attach images</span>
+                  <input
+                    type="file"
+                    accept={ATTACHMENT_ACCEPT}
+                    multiple
+                    onChange={handleAttachmentsSelected}
+                    disabled={isSending || attachments.length >= MAX_ATTACHMENTS}
+                  />
+                </label>
+              </div>
               <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
                 Cancel
               </button>
               <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending}>
-                {isSending ? "Sending…" : "Send feedback"}
+                {isSending ? "Sending…" : "Send"}
               </button>
             </div>
           </form>

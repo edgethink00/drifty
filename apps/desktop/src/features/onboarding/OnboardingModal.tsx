@@ -1,6 +1,6 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import type { TrackerStatus } from "@drifty/domain";
-import { capturePostHogEvent } from "../../lib/analytics/posthog";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import type { LocalAiSetupState } from "../settings/localAiSetup";

@@ -111,7 +111,7 @@ pub fn setup_drift_alarm_window(app: &tauri::App) -> tauri::Result<()> {
     let window = WebviewWindowBuilder::new(
         app,
         DRIFT_ALARM_WINDOW_LABEL,
-        WebviewUrl::App("index.html?driftySurface=drift-alarm".into()),
+        WebviewUrl::App("auxiliary.html?driftySurface=drift-alarm".into()),
     )
     .title("")
     .decorations(false)

@@ -2,7 +2,12 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EndOfDayReview, buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./EndOfDayReview";
+import {
+  EndOfDayReview,
+  buildEndOfDayReviewDailySignals,
+  buildEndOfDayReviewSummary,
+  type EndOfDayReviewEvent,
+} from "./EndOfDayReview";
 
 const reviewDay = "2026-04-06";
 const generatedAt = "2026-04-06T23:58:00.000Z";
@@ -63,6 +68,57 @@ function buildReviewEvent(segments: ActivitySegment[]): EndOfDayReviewEvent {
 }
 
 afterEach(cleanup);
+
+describe("buildEndOfDayReviewDailySignals", () => {
+  it("derives deep runs and the strongest focus hour from local segments", () => {
+    const signals = buildEndOfDayReviewDailySignals([
+      buildSegment({
+        id: "morning-focus",
+        appName: "Code",
+        startHour: 9,
+        durationMinutes: 90,
+        category: "workspace",
+        productivity: "focus",
+      }),
+      buildSegment({
+        id: "afternoon-focus",
+        appName: "Figma",
+        startHour: 14,
+        durationMinutes: 30,
+        category: "workspace",
+        productivity: "focus",
+      }),
+    ]);
+
+    expect(signals.deepSessionCount).toBe(1);
+    expect(signals.longestFocusRunSeconds).toBe(90 * 60);
+    const localPeakHour = String(new Date(Date.UTC(2026, 3, 6, 9)).getHours()).padStart(2, "0");
+    expect(signals.peakHourLabel).toBe(`${localPeakHour}:00`);
+    expect(signals.peakHourFocusSeconds).toBe(60 * 60);
+  });
+
+  it("keeps the reviewed cross-day rows in the deterministic Dev preview", () => {
+    const preview = buildEndOfDayReviewSummary({
+      day: reviewDay,
+      generatedAt,
+      segments: [],
+      isMock: true,
+    });
+
+    expect(preview.highlightLabel).toBe("Best this week");
+    expect(preview.comparison).toEqual({
+      focusDeltaSeconds: 38 * 60,
+      driftDeltaSeconds: -9 * 60,
+      otherDeltaSeconds: 5 * 60,
+    });
+    expect(preview.dailySignals).toEqual({
+      deepSessionCount: 0,
+      longestFocusRunSeconds: 0,
+      peakHourLabel: null,
+      peakHourFocusSeconds: 0,
+    });
+  });
+});
 
 describe("EndOfDayReview", () => {
   it("builds and renders a deterministic local day review", () => {

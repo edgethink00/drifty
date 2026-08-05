@@ -1,0 +1,1435 @@
+/* ── Companion pill ──────────────────────────────────────────────────────────
+   A resident capsule that replaces the watcher card when the Dev toggle is on.
+   Ported from prototypes/companion-pill/index.html; every rule is scoped to
+   .companion-pill-surface so the legacy watcher styling stays untouched and the
+   two surfaces can be compared side by side.
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Tokens the pill needs that the app's base set does not define. Colours match
+   the productivity palette the prototype was designed against; the surface
+   channels feed the per-state alpha grading below. */
+html[data-surface="companion"],
+html[data-surface="companion"] body,
+html[data-surface="companion"] #root {
+  background: transparent !important;
+}
+
+.companion-pill-surface {
+  /* Compatibility name for celebratory details; deliberately no overshoot. */
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-geometry: cubic-bezier(0.42, 0, 0.58, 1);
+  --pill-width-duration: 0s;
+  --pill-width-delay: 0s;
+  /* Transparent room the window keeps around the capsule, so the drop shadow is
+     not sliced off at the window edge and confetti has somewhere to land. One
+     value for every state: the native frame animates over 260ms while this
+     inset applies instantly, so a per-state gutter made the capsule lurch at
+     the start of a transition. Must match COMPANION_PILL_GUTTER_X / _Y in
+     src-tauri/src/commands/watcher.rs. */
+  --pill-gutter-x: 88px;
+  --pill-gutter-y: 64px;
+  --pill-resting-width: 220px;
+  --pill-resting-height: 28.9px;
+  --pill-card-width: var(--pill-resting-width);
+  --pill-card-height: var(--pill-resting-height);
+  /* Expanded moments share one trailing-control height so labeled CTAs,
+     dismiss, and overflow controls sit on the same visual axis. */
+  --pill-moment-control-size: 26px;
+  --p-focus: #4f751e;
+  --p-neutral: #9b968b;
+  --p-drift: #a34139;
+  --pill-rgb: 252, 252, 250;
+}
+:root[data-theme="dark"] .companion-pill-surface {
+  --p-focus: #b7d96b;
+  --p-neutral: #8f897d;
+  --p-drift: #e87568;
+  --pill-rgb: 28, 29, 26;
+}
+
+/* ============================================================
+   THE PILL
+   ============================================================ */
+.companion-pill-surface .pill {
+  position: absolute; z-index: 50;
+  /* The capsule floats inside the window's transparent gutter. Filling the
+     window edge-to-edge clipped the drop shadow into a hard grey rectangle
+     around the rounded pill. */
+  left: auto; right: var(--pill-gutter-x); top: var(--pill-gutter-y);
+  width: var(--pill-resting-width);
+  height: calc(100% - var(--pill-gutter-y) * 2);
+  border-radius: var(--radius-pill);
+  /* Opacity is graded by how much the state asks of you. The resting pill sits
+     on screen all day, so it lets the desktop through and reads as part of the
+     screen rather than a window covering it. Cards that carry a decision or a
+     dense chart get denser backing so nothing competes with their content. */
+  background: color-mix(in srgb, var(--mood-color, var(--p-neutral)) 8%, rgba(var(--pill-rgb), var(--pill-alpha, .82)));
+  border: 1px solid transparent;
+  /* 낮은 그림자 (기본 승격): 덜 떠 보이고 차분함 */
+  --pill-shadow: 0 10px 26px rgba(15,15,12,.30), 0 2px 7px rgba(15,15,12,.18), 0 0 0 .5px rgba(125,125,115,.16);
+  box-shadow: var(--pill-shadow);
+  user-select: none; -webkit-user-select: none;
+  touch-action: none;
+  transition:
+    border-radius .24s var(--ease-out),
+    background .2s ease,
+    box-shadow .22s ease,
+    border-color .22s ease,
+    opacity .16s ease,
+    width var(--pill-width-duration) var(--ease-geometry) var(--pill-width-delay);
+}
+/* The native panel keeps a fixed 410px horizontal canvas. Only the capsule
+   width animates, pinned to this canvas' right inset, so its visible right edge
+   is invariant even when AppKit and WebKit present on different frames. */
+.companion-pill-surface .pill[data-transition] {
+  --pill-width-duration: .28s;
+  --pill-width-delay: 0s;
+}
+.companion-pill-surface .pill[data-state="collapsed"],
+.companion-pill-surface .pill[data-state="peek"] {
+  width: var(--pill-resting-width);
+}
+.companion-pill-surface .pill[data-state="milestone"] {
+  width: 410px;
+}
+.companion-pill-surface .pill[data-state="reentry"] {
+  width: 410px;
+}
+.companion-pill-surface .pill[data-state="drift"],
+.companion-pill-surface .pill[data-state="nudge"] {
+  width: 352px;
+}
+.companion-pill-surface .pill[data-state="eod"] {
+  width: 331px;
+}
+/* V2/V3 use a 310px native capsule. Keeping the legacy 331px shell here made
+   the menu-bar tail 21px left of its status-item source even though the card
+   content itself was compact. One width now drives paint, hit testing and the
+   native anchor calculation. */
+.companion-pill-surface .pill[data-state="eod"][data-eod-layout="compact"] {
+  width: 310px;
+}
+/* Every state can be moved by its background, so every state says so. Controls
+   keep the pointer they are entitled to. */
+.companion-pill-surface .pill { cursor: grab; }
+.companion-pill-surface .pill button { cursor: pointer; }
+.companion-pill-surface .pill.is-dragging {
+  background: rgba(var(--pill-rgb), .96);
+  box-shadow: none;
+  cursor: grabbing;
+  opacity: .98;
+  transition: none;
+}
+
+/* A moment exits while its native panel is still at the full card size. The
+   React node and copy remain mounted for this whole beat; only after it reaches
+   zero opacity does the app request the native collapse. This avoids the old
+   one-frame pop where the card view was replaced before the window moved. */
+.companion-pill-surface .pill[data-moment-exiting="true"] {
+  pointer-events: none;
+}
+/* Menu-bar mode has no resident capsule to morph from. The status item is the
+   spatial source: native placement supplies its exact x coordinate inside the
+   capsule, and the tail plus transform origin both use that one value. */
+.companion-pill-surface .pill[data-direct-entry] {
+  transform-origin: var(--menu-anchor-x, 50%) 0;
+  will-change: transform, opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.companion-pill-surface .pill[data-direct-entry="pending"] {
+  /* Non-zero alpha prevents WebKit from culling the entire backdrop-filter
+     subtree while the hidden panel pre-warms its first backing texture. */
+  opacity: .001;
+  transform: translateY(-2px) scaleX(.06) scaleY(.06);
+  animation: none;
+}
+.companion-pill-surface .pill[data-direct-entry] .pill__clip {
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+/* Child effects (content, countdown, trophy, confetti) are committed while the
+   native panel is hidden but stay frozen at t=0. Releasing them with the shell
+   avoids the one-frame mismatch that read as flicker in Tauri but never
+   appeared in the always-visible HTML prototype. */
+.companion-pill-surface .pill[data-direct-entry="pending"] *,
+.companion-pill-surface .pill[data-direct-entry="pending"] *::before,
+.companion-pill-surface .pill[data-direct-entry="pending"] *::after {
+  animation-play-state: paused !important;
+}
+.companion-pill-surface .pill[data-direct-entry="true"] {
+  animation: companionMomentIn .34s cubic-bezier(.22, .8, .2, 1) both;
+}
+.companion-pill-surface .pill[data-direct-entry="true"]::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: -5px;
+  left: calc(var(--menu-anchor-x, 50%) - 6px);
+  width: 12px;
+  height: 12px;
+  border-radius: 2.5px;
+  background: color-mix(in srgb, var(--mood-color, var(--p-neutral)) 8%, rgba(var(--pill-rgb), var(--pill-alpha, .93)));
+  box-shadow: -.5px -.5px 0 color-mix(in srgb, currentColor 10%, transparent);
+  transform: rotate(45deg);
+}
+.companion-pill-surface .pill[data-direct-entry="true"] .pill__clip { z-index: 1; }
+.companion-pill-surface .pill[data-direct-entry="true"] .sparks { z-index: 2; }
+.companion-pill-surface .pill[data-direct-entry="true"] .view.is-active {
+  animation: companionMomentContentIn .16s var(--ease-out) .11s both;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-moment-exiting="true"] {
+  animation: companionMomentOut .34s cubic-bezier(.8, 0, .78, .2) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view.is-active {
+  animation: companionMomentContentOut .16s var(--ease-in) both;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-moment-exiting="true"] .view.is-active {
+  animation-delay: .07s;
+}
+
+/* Drift alerts have three semantic layers: observation, choices, dismissal.
+   Reveal them in that order after the shell starts opening instead of letting
+   the entire finished card flash into a still-growing capsule. */
+.companion-pill-surface .pill[data-state="drift"] {
+  --drift-copy-delay: .025s;
+  --drift-actions-delay: .07s;
+  --drift-close-delay: .055s;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-state="drift"] {
+  --drift-copy-delay: .09s;
+  --drift-actions-delay: .14s;
+  --drift-close-delay: .12s;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-state="drift"]
+  .view--drift.is-active {
+  animation-delay: .08s;
+}
+.companion-pill-surface .pill[data-state="drift"]:not([data-moment-exiting="true"])
+  .view--drift.is-active .card__copy {
+  animation: companionDriftCopyIn .18s var(--ease-out) var(--drift-copy-delay) both;
+}
+.companion-pill-surface .pill[data-state="drift"]:not([data-moment-exiting="true"])
+  .view--drift.is-active .card__actions {
+  animation: companionDriftActionsIn .19s var(--ease-out) var(--drift-actions-delay) both;
+}
+.companion-pill-surface .pill[data-state="drift"]:not([data-moment-exiting="true"])
+  .view--drift.is-active :is(.card__close, .card__more) {
+  animation: companionDriftCloseIn .15s var(--ease-out) var(--drift-close-delay) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--drift.is-active .card__actions {
+  animation: companionDriftActionsOut .1s var(--ease-in) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--drift.is-active :is(.card__close, .card__more) {
+  animation: companionDriftCloseOut .1s var(--ease-in) .015s both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--drift.is-active .card__copy {
+  animation: companionDriftCopyOut .12s var(--ease-in) .035s both;
+}
+@keyframes companionMomentIn {
+  0% { opacity: 0; transform: translateY(-2px) scaleX(.06) scaleY(.06); }
+  18% { opacity: .65; transform: translateY(-1px) scaleX(.28) scaleY(.28); }
+  48% { opacity: 1; transform: translateY(0) scaleX(.72) scaleY(.72); }
+  76% { opacity: 1; transform: translateY(0) scaleX(.96) scaleY(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes companionMomentContentIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes companionMomentContentOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-2px); }
+}
+@keyframes companionDriftCopyIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes companionDriftActionsIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes companionDriftCloseIn {
+  from { opacity: 0; transform: scale(.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes companionDriftActionsOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(3px); }
+}
+@keyframes companionDriftCloseOut {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(.9); }
+}
+@keyframes companionDriftCopyOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-3px); }
+}
+
+/* Day review is a reading surface, not one monolithic image. Its six layers
+   overlap within one short beat so the eye gets a clear top-to-bottom path
+   without turning the review into a slow feed animation. */
+.companion-pill-surface .pill[data-state="eod"] {
+  --eod-head-delay: 0s;
+  --eod-summary-delay: .015s;
+  --eod-ring-delay: .035s;
+  --eod-duo-delay: .055s;
+  --eod-apps-delay: .075s;
+  --eod-action-delay: .095s;
+  --eod-action-out-duration: .075s;
+  --eod-apps-out-duration: .085s;
+  --eod-apps-out-delay: .015s;
+  --eod-duo-out-duration: .09s;
+  --eod-duo-out-delay: .03s;
+  --eod-ring-out-duration: .095s;
+  --eod-ring-out-delay: .045s;
+  --eod-head-out-duration: .1s;
+  --eod-head-out-delay: .06s;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-state="eod"] {
+  --eod-head-delay: .06s;
+  --eod-summary-delay: .085s;
+  --eod-ring-delay: .11s;
+  --eod-duo-delay: .135s;
+  --eod-apps-delay: .16s;
+  --eod-action-delay: .185s;
+  --eod-action-out-duration: .08s;
+  --eod-apps-out-duration: .09s;
+  --eod-apps-out-delay: .02s;
+  --eod-duo-out-duration: .1s;
+  --eod-duo-out-delay: .035s;
+  --eod-ring-out-duration: .12s;
+  --eod-ring-out-delay: .055s;
+  --eod-head-out-duration: .14s;
+  --eod-head-out-delay: .09s;
+}
+.companion-pill-surface .pill[data-direct-entry="true"][data-state="eod"]
+  .view--eod.is-active {
+  animation-delay: .04s;
+}
+.companion-pill-surface .pill[data-state="eod"]:not([data-moment-exiting="true"])
+  .view--eod.is-active .card__head {
+  animation: companionEodLayerIn .15s var(--ease-out) var(--eod-head-delay) both;
+}
+.companion-pill-surface .pill[data-state="eod"]:not([data-moment-exiting="true"])
+  .view--eod.is-active .eodv12b--head {
+  animation: companionEodLayerIn .17s var(--ease-out) var(--eod-summary-delay) both;
+}
+.companion-pill-surface .pill[data-state="eod"]:not([data-moment-exiting="true"])
+  .view--eod.is-active .eodv12__ringrow {
+  animation: companionEodLayerIn .18s var(--ease-out) var(--eod-ring-delay) both;
+}
+.companion-pill-surface .pill[data-state="eod"]:not([data-moment-exiting="true"])
+  .view--eod.is-active .eodv12__duo {
+  animation: companionEodLayerIn .18s var(--ease-out) var(--eod-duo-delay) both;
+}
+.companion-pill-surface .pill[data-state="eod"]:not([data-moment-exiting="true"])
+  .view--eod.is-active .eodv12b--apps {
+  animation: companionEodLayerIn .18s var(--ease-out) var(--eod-apps-delay) both;
+}
+.companion-pill-surface .pill[data-state="eod"]:not([data-moment-exiting="true"])
+  .view--eod.is-active > .card__actions {
+  animation: companionEodLayerIn .16s var(--ease-out) var(--eod-action-delay) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--eod.is-active > .card__actions {
+  animation: companionEodLayerOut var(--eod-action-out-duration) var(--ease-in) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--eod.is-active .eodv12b--apps {
+  animation: companionEodLayerOut var(--eod-apps-out-duration) var(--ease-in) var(--eod-apps-out-delay) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--eod.is-active .eodv12__duo {
+  animation: companionEodLayerOut var(--eod-duo-out-duration) var(--ease-in) var(--eod-duo-out-delay) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--eod.is-active .eodv12__ringrow {
+  animation: companionEodLayerOut var(--eod-ring-out-duration) var(--ease-in) var(--eod-ring-out-delay) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--eod.is-active .eodv12b--head {
+  animation: companionEodLayerOut var(--eod-head-out-duration) var(--ease-in) var(--eod-head-out-delay) both;
+}
+.companion-pill-surface .pill[data-moment-exiting="true"] .view--eod.is-active .card__head {
+  animation: companionEodLayerOut var(--eod-head-out-duration) var(--ease-in) var(--eod-head-out-delay) both;
+}
+@keyframes companionEodLayerIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes companionEodLayerOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-3px); }
+}
+@keyframes companionMomentOut {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  24% { opacity: 1; transform: translateY(0) scaleX(.96) scaleY(.96); }
+  52% { opacity: 1; transform: translateY(0) scaleX(.72) scaleY(.72); }
+  82% { opacity: .65; transform: translateY(-1px) scaleX(.28) scaleY(.28); }
+  to { opacity: 0; transform: translateY(-2px) scaleX(.06) scaleY(.06); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-pill-surface .pill[data-transition] {
+    --pill-width-duration: 0s;
+    --pill-width-delay: 0s;
+  }
+  .companion-pill-surface .pill[data-moment-exiting="true"] {
+    animation: none;
+  }
+  .companion-pill-surface .pill[data-direct-entry="true"] {
+    animation: none;
+  }
+  .companion-pill-surface .view--drift .card__copy,
+  .companion-pill-surface .view--drift .card__actions,
+  .companion-pill-surface .view--drift .card__close {
+    animation: none !important;
+  }
+  .companion-pill-surface .view--eod .card__head,
+  .companion-pill-surface .view--eod .eodv12b,
+  .companion-pill-surface .view--eod .eodv12__ringrow,
+  .companion-pill-surface .view--eod .eodv12__duo,
+  .companion-pill-surface .view--eod > .card__actions {
+    animation: none !important;
+  }
+}
+/* Dropping the blur keeps the surface cheap for the whole drag; it now lives on
+   the clip layer, so that is what has to be switched off. */
+.companion-pill-surface .pill.is-dragging .pill__clip {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.companion-pill-surface .pill.is-dragging .orb__pip { animation-play-state: paused; }
+.companion-pill-surface .pill[data-state="drift"], .companion-pill-surface .pill[data-state="nudge"], .companion-pill-surface .pill[data-state="eod"] { border-radius: 17px; }
+/* the day review is the largest surface, so a slightly tighter corner keeps it
+   from reading as a rounded widget */
+.companion-pill-surface .pill[data-state="eod"] { border-radius: 15.3px; }
+/* state reads through a tinted halo instead of an outline */
+.companion-pill-surface .pill[data-mood="drift"][data-state="drift"] {
+  box-shadow: var(--pill-shadow), 0 0 28px color-mix(in srgb, var(--p-drift) 20%, transparent);
+}
+.companion-pill-surface .pill[data-state="nudge"] {
+  box-shadow: var(--pill-shadow), 0 0 32px color-mix(in srgb, var(--warn) 30%, transparent);
+}
+.companion-pill-surface .pill.is-fullscreen-hidden { transform: translateY(90px); opacity: 0; pointer-events: none; }
+
+/* ---------- the gutter is not part of the pill ----------
+   The window is deliberately larger than the capsule, and a native window is
+   rectangular, so that padding would otherwise swallow clicks meant for the
+   desktop behind it. Only the capsule takes the mouse. */
+.companion-pill-surface { pointer-events: none; }
+.companion-pill-surface .pill { pointer-events: auto; }
+/* Confetti is drawn outside the capsule, so a milestone must not clip it. */
+.companion-pill-surface[data-state="milestone"] .pill { overflow: visible; }
+
+.companion-pill-surface .pill__clip {
+  position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+  /* The blur lives here rather than on `.pill`. WebKit rasterises a
+     backdrop-filter against the element's own border box, so on the capsule it
+     painted a square tile that showed through at the rounded corners as a grey
+     block. Applying it to a child that is itself clipped to the capsule shape
+     makes the filtered region follow the radius. */
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+/* The review is the one recurring card that benefits from a quiet product
+   signature. Intervention cards stay unbranded so their observation and
+   actions remain the entire hierarchy; milestones keep their achievement icon. */
+.companion-pill-surface .moment-brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 18px;
+  margin-left: 0;
+  margin-right: 2px;
+  color: #1c1c19;
+  flex: none;
+}
+:root[data-theme="dark"] .companion-pill-surface .moment-brand { color: #f5f4ef; }
+.companion-pill-surface .moment-brand__mark {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.companion-pill-surface .moment-brand--heading { align-self: center; }
+
+/* views */
+.companion-pill-surface .view {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  opacity: 0; pointer-events: none;
+  transform: none;
+  transition: opacity .16s var(--ease-out);
+  will-change: opacity;
+}
+.companion-pill-surface .view.is-active {
+  opacity: 1; pointer-events: auto;
+}
+/* Browser-only visual QA has no AppKit transition event to advance the native
+   choreography. Keep the dedicated development preview in its settled frame. */
+.companion-pill-surface[data-preview="true"] .view.is-active {
+  opacity: 1;
+  transition: none;
+}
+
+/* Native content choreography ----------------------------------------------
+   AppKit owns the capsule geometry for the whole 280ms resize. The resident
+   controls used to fill that changing box, so the time and buttons visibly
+   slid across it before the card appeared and returned while the card was
+   still shrinking. During either boundary state, keep the resident view at its
+   exact resting size and pin it to the same edge the native panel preserves.
+   React only fades content; it never competes with AppKit for geometry. */
+.companion-pill-surface .pill[data-transition] .view--collapsed {
+  inset: auto;
+  top: 0;
+  width: var(--pill-resting-width);
+  height: var(--pill-resting-height);
+}
+/* The native frame begins slowly. Let the resting controls dissolve during
+   those first quiet pixels, then bring them back only once the closing capsule
+   is wide enough to hold their exact 220px layout. */
+.companion-pill-surface .pill[data-transition="opening"] .view--collapsed {
+  transition-duration: .09s;
+  transition-timing-function: var(--ease-in);
+}
+.companion-pill-surface .pill[data-transition="closing"] .view--collapsed {
+  transition-duration: .11s;
+  transition-timing-function: var(--ease-out);
+}
+/* `data-card-state` outlives the native frame during close, so keep the same
+   short resting-view fade after the state hand-off. */
+.companion-pill-surface .pill[data-card-state] .view--collapsed {
+  transition-duration: .11s;
+}
+/* During a resize the mood dot is the visual hand-off between the resident
+   pill and the card. Keep that one stable mark, while the text and controls
+   leave before either layout could collide. They return only after the native
+   frame reports completion. */
+.companion-pill-surface .pill__summary,
+.companion-pill-surface .resting__actions {
+  transition: opacity .08s var(--ease-out);
+}
+.companion-pill-surface .pill[data-transition] .view--collapsed .pill__summary,
+.companion-pill-surface .pill[data-transition] .view--collapsed .resting__actions {
+  opacity: 0;
+  transition-duration: .06s;
+  transition-timing-function: var(--ease-in);
+}
+.companion-pill-surface .pill[data-transition][data-anchor="right"] .view--collapsed {
+  right: 0;
+}
+.companion-pill-surface .pill[data-transition][data-anchor="left"] .view--collapsed {
+  left: 0;
+}
+.companion-pill-surface .pill[data-transition][data-anchor="center"] .view--collapsed {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.companion-pill-surface .pill[data-card-state="milestone"] {
+  --pill-card-width: 410px;
+  --pill-card-height: 54px;
+}
+.companion-pill-surface .pill[data-card-state="reentry"] {
+  --pill-card-width: 410px;
+  --pill-card-height: 54px;
+}
+.companion-pill-surface .pill[data-card-state="drift"],
+.companion-pill-surface .pill[data-card-state="nudge"] {
+  --pill-card-width: 352px;
+  --pill-card-height: 130px;
+}
+.companion-pill-surface .pill[data-card-state="eod"] {
+  --pill-card-width: 331px;
+  --pill-card-height: 480px;
+}
+.companion-pill-surface .pill[data-card-state="eodCompact"] {
+  --pill-card-width: 310px;
+  --pill-card-height: 284px;
+}
+.companion-pill-surface .pill[data-card-state="eodMinimal"] {
+  --pill-card-width: 310px;
+  --pill-card-height: 223px;
+}
+.companion-pill-surface .pill[data-transition] .view:not(.view--collapsed) {
+  inset: auto;
+  top: 0;
+  width: var(--pill-card-width);
+  height: var(--pill-card-height);
+}
+.companion-pill-surface .pill[data-transition][data-anchor="right"] .view:not(.view--collapsed) {
+  right: 0;
+}
+.companion-pill-surface .pill[data-transition][data-anchor="left"] .view:not(.view--collapsed) {
+  left: 0;
+}
+.companion-pill-surface .pill[data-transition][data-anchor="center"] .view:not(.view--collapsed) {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.companion-pill-surface .pill[data-transition="closing"] .view:not(.view--collapsed) {
+  /* The wide card is gone before AppKit narrows enough to clip it. The node
+     remains mounted through completion so no layout is torn down mid-frame. */
+  transition-duration: .11s;
+  transition-timing-function: var(--ease-in);
+}
+
+/* ---------- orb (mini watcher) ---------- */
+/* The orb is a single mood dot. There is no progress ring anywhere: the number
+   beside it already says how the day is going, so a second measure of the same
+   thing was noise. Collapsed, peek and milestone all show the identical dot. */
+.companion-pill-surface .orb { position: relative; width: 8px; height: 8px; flex: none; }
+.companion-pill-surface .orb svg { display: none; }
+.companion-pill-surface .orb__pip {
+  position: absolute; inset: 0;
+  border-radius: 50%; background: var(--mood-color);
+  animation: pipPulse 3.6s ease-in-out infinite;
+}
+@keyframes pipPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .5; transform: scale(.78); }
+}
+.companion-pill-surface .pill[data-mood="focus"] { --mood-color: var(--p-focus); }
+.companion-pill-surface .pill[data-mood="neutral"] { --mood-color: var(--p-neutral); }
+.companion-pill-surface .pill[data-mood="drift"] { --mood-color: var(--p-drift); }
+.companion-pill-surface .pill[data-mood="neutral"] .orb__pip { animation-duration: 4.4s; }
+.companion-pill-surface .pill[data-mood="drift"] .orb__pip { animation-duration: 1.5s; }
+
+/* ---------- dot view ---------- */
+.companion-pill-surface .view--dot { justify-content: center; }
+.companion-pill-surface .view--dot .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--mood-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mood-color) 16%, transparent);
+  animation: pipPulse 3.6s ease-in-out infinite;
+}
+
+/* ---------- resident controls ---------- */
+.companion-pill-surface .view--collapsed { gap: 8px; padding: 0 6px 0 11px; }
+.companion-pill-surface .pill__summary {
+  display: flex; align-items: center; gap: 4px;
+  flex: 1; min-width: 0; white-space: nowrap;
+}
+.companion-pill-surface .pill__measure {
+  color: var(--text); font-size: 16.1px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  -webkit-text-stroke: .015em currentColor;
+}
+.companion-pill-surface .pill__divider {
+  color: var(--text-soft); opacity: .65; margin: 0 1px;
+}
+.companion-pill-surface .pill__status {
+  color: var(--text-muted); font-size: 16.1px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.companion-pill-surface .pill[data-collapsed-kind="drift-grace"] .pill__measure { color: var(--p-drift); }
+.companion-pill-surface .pill[data-collapsed-kind="paused"] .pill__measure,
+.companion-pill-surface .pill[data-collapsed-kind="paused"] .pill__status { color: var(--text-soft); }
+.companion-pill-surface .peek__actions { display: flex; gap: 2px; }
+.companion-pill-surface .resting__actions { margin-left: auto; }
+.companion-pill-surface .icon-btn {
+  width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+  color: var(--text-soft); transition: background .14s ease, color .14s ease;
+}
+.companion-pill-surface .icon-btn:hover { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); }
+.companion-pill-surface .icon-btn svg { width: 13px; height: 13px; }
+/* Pause/play occupy less of their 16px viewBox than the overflow mark.
+   Give transport controls a larger optical box while preserving the shared
+   24px hit target and the spacing between both actions. */
+.companion-pill-surface .icon-btn[data-act="toggleTracking"] svg { width: 16px; height: 16px; }
+.companion-pill-surface .icon-btn[data-act="menuToggle"] svg { width: 15px; height: 15px; }
+.companion-pill-surface .icon-btn[data-act="menuToggle"][aria-expanded="true"] {
+  background: color-mix(in srgb, var(--text) 11%, transparent);
+  color: var(--text);
+}
+
+/* tracking toggle: pause while running, play while paused */
+.companion-pill-surface .icon-play { display: none; }
+.companion-pill-surface .pill[data-tracking="paused"] .icon-play { display: block; }
+.companion-pill-surface .pill[data-tracking="paused"] .icon-pause { display: none; }
+.companion-pill-surface .pill[data-tracking="paused"] [data-act="toggleTracking"] {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent-strong);
+}
+/* while paused the whole pill reads as idle */
+.companion-pill-surface .pill[data-tracking="paused"] .orb__pip { animation: none; opacity: .5; }
+
+/* ---------- milestone ---------- */
+.companion-pill-surface .view--milestone { gap: 10px; padding: 0 46px 0 10px; }
+.companion-pill-surface .view--milestone .orb__pip { animation: milestonePop 1.1s var(--ease-spring); }
+
+/* the mark swaps with the tier: routine wins keep the familiar orb,
+   rare ones (records, leaderboard) get a trophy on a raised disc */
+/* the mark is only as wide as what it shows: a bare orb, or a trophy disc */
+.companion-pill-surface .mile__mark { position: relative; display: grid; place-items: center; flex: none; width: 28px; height: 28px; }
+.companion-pill-surface .pill[data-tier="3"] .mile__mark { width: 28px; height: 28px; }
+/* the trophy disc already carries its own padding, so the view needs less */
+.companion-pill-surface .pill[data-tier="3"] .view--milestone { padding-left: 10px; }
+.companion-pill-surface .mile__trophy {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent-strong);
+  opacity: 0; transform: scale(.6);
+}
+.companion-pill-surface .mile__trophy svg { width: 15px; height: 15px; }
+.companion-pill-surface .pill[data-tier="3"] .mile__mark .orb { opacity: 0; }
+.companion-pill-surface .pill[data-tier="3"] .mile__trophy {
+  opacity: 1;
+  animation: trophyIn .55s var(--ease-spring) both;
+}
+@keyframes trophyIn {
+  0% { opacity: 0; transform: scale(.72) rotate(-6deg); }
+  60% { opacity: 1; transform: scale(1.04) rotate(1deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes milestonePop {
+  0% { transform: scale(1); }
+  28% { transform: scale(1.28); }
+  55% { transform: scale(.98); }
+  100% { transform: scale(1); }
+}
+.companion-pill-surface .mile__text { flex: 1; min-width: 0; }
+.companion-pill-surface .mile__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+.companion-pill-surface .mile__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--accent-strong);
+}
+.companion-pill-surface .mile__stat {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: 13.5px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: -.018em;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent-strong);
+}
+.companion-pill-surface .pill[data-tier="3"] .mile__stat { color: #c9a24f; }
+.companion-pill-surface .mile__sub { min-width: 0; font-size: 10.5px; color: var(--text-soft); transition: color .16s ease; }
+.companion-pill-surface .mile__subtext {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.companion-pill-surface .mile__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  height: var(--pill-moment-control-size);
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--pill-moment-control-size) / 2);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+  color: var(--text-soft);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease;
+}
+.companion-pill-surface .mile__action svg { width: 10px; height: 10px; display: block; }
+.companion-pill-surface .mile__action:hover {
+  background: color-mix(in srgb, var(--text) 17%, transparent);
+  color: var(--text);
+}
+.companion-pill-surface .mile__action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 2px;
+}
+.companion-pill-surface .pill[data-state="milestone"] {
+  box-shadow: var(--pill-shadow), 0 0 30px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* ---------- re-entry ----------
+   A calm temporal hand-off, not a celebration and not an alarm. The returning
+   plain clock sets context; the exact gap, last-active time, and a quiet path
+   back to that session own the hierarchy. */
+.companion-pill-surface .view--reentry {
+  gap: 10px;
+  padding: 0 46px 0 10px;
+}
+.companion-pill-surface .reentry__mark {
+  border-radius: 50%;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.companion-pill-surface .reentry__mark svg {
+  width: 15px;
+  height: 15px;
+}
+.companion-pill-surface .reentry__copy {
+  display: block;
+}
+.companion-pill-surface .view--reentry .card__close--float {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  left: auto;
+  z-index: 2;
+  transform: translateY(-50%);
+}
+.companion-pill-surface .reentry__title {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.companion-pill-surface .reentry__sub {
+  color: var(--text-soft);
+}
+.companion-pill-surface .reentry__title,
+.companion-pill-surface .reentry__sub .mile__subtext {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.companion-pill-surface .reentry__action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--pill-moment-control-size);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font: 650 10.5px/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+.companion-pill-surface .reentry__action svg {
+  width: 10px;
+  height: 10px;
+}
+.companion-pill-surface .reentry__action:hover,
+.companion-pill-surface .reentry__action:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  outline: none;
+}
+.companion-pill-surface .reentry__action:active { transform: scale(.97); }
+.companion-pill-surface .pill[data-state="reentry"] {
+  background: color-mix(in srgb, var(--accent) 4%, rgba(var(--pill-rgb), var(--pill-alpha, .93)));
+  box-shadow: var(--pill-shadow), 0 0 28px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.companion-pill-surface .pill[data-state="reentry"] .card__close-ring circle {
+  stroke: color-mix(in srgb, var(--accent) 58%, transparent);
+}
+
+/* sparks */
+/* ---------- celebration tiers ----------
+   tier 1 (routine): a quiet spark from the orb
+   tier 2 (record):  confetti burst across the pill
+   tier 3 (rare):    confetti + shimmer sweep + a stronger halo
+   ------------------------------------------------------------ */
+/* confetti must escape the pill; the shimmer must not */
+/* `.sparks` is a sibling of `.pill__clip`, so it spans the capsule rather than
+   the padded window. Confetti spawns at a percentage of this box (as in the
+   prototype) and is free to travel out into the surrounding gutter. */
+.companion-pill-surface .sparks {
+  position: absolute; inset: 0; pointer-events: none;
+  overflow: visible;
+}
+.companion-pill-surface .sparks i {
+  position: absolute; left: 22px; top: 50%;
+  width: var(--w, 4px); height: var(--h, 4px);
+  border-radius: var(--r, 50%);
+  background: var(--c, var(--accent)); opacity: 0;
+}
+
+/* tier 1 — six small sparks near the orb */
+.companion-pill-surface .pill[data-state="milestone"][data-tier="1"] .sparks i:nth-child(-n+6) {
+  animation: spark .9s var(--ease-out) forwards;
+}
+.companion-pill-surface .sparks i:nth-child(1) { --dx: -26px; --dy: -30px; animation-delay: .05s; }
+.companion-pill-surface .sparks i:nth-child(2) { --dx: 10px;  --dy: -36px; animation-delay: .12s; --c: var(--accent-strong); }
+.companion-pill-surface .sparks i:nth-child(3) { --dx: 34px;  --dy: -24px; animation-delay: .02s; }
+.companion-pill-surface .sparks i:nth-child(4) { --dx: -34px; --dy: 18px;  animation-delay: .16s; --c: var(--accent-strong); }
+.companion-pill-surface .sparks i:nth-child(5) { --dx: 26px;  --dy: 26px;  animation-delay: .08s; }
+.companion-pill-surface .sparks i:nth-child(6) { --dx: -8px;  --dy: 34px;  animation-delay: .2s; }
+@keyframes spark {
+  0% { opacity: 0; transform: translate(0, -50%) scale(.4); }
+  18% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), calc(-50% + var(--dy))) scale(1); }
+}
+
+/* tier 2 & 3 — confetti launched across the whole pill */
+.pill[data-state="milestone"][data-tier="2"] .sparks i,
+.companion-pill-surface .pill[data-state="milestone"][data-tier="3"] .sparks i {
+  animation: confetti 1.5s cubic-bezier(.2,.6,.35,1) forwards;
+}
+@keyframes confetti {
+  0%   { opacity: 0; transform: translate(0, -50%) rotate(0deg) scale(.5); }
+  12%  { opacity: 1; }
+  70%  { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: translate(var(--cx), calc(-50% + var(--cy))) rotate(var(--rot, 220deg)) scale(1);
+  }
+}
+
+/* tier 3 — a light sweep passes over the pill once, clipped to its shape */
+.companion-pill-surface .pill__clip::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg,
+    transparent 35%,
+    color-mix(in srgb, var(--accent) 26%, transparent) 50%,
+    transparent 65%);
+  transform: translateX(-100%);
+  opacity: 0;
+}
+.companion-pill-surface .pill[data-state="milestone"][data-tier="3"] .pill__clip::after {
+  opacity: 1;
+  animation: shimmer 1.15s var(--ease-out) .18s;
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); opacity: 1; }
+  to { transform: translateX(100%); opacity: 0; }
+}
+.companion-pill-surface .pill[data-state="milestone"][data-tier="3"] {
+  box-shadow: var(--pill-shadow), 0 0 44px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+.companion-pill-surface .pill[data-state="milestone"][data-tier="2"] {
+  box-shadow: var(--pill-shadow), 0 0 34px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+/* ---------- cards (drift / nudge / eod) ---------- */
+/* one rhythm for every card: same gap between every block, same padding all round */
+.companion-pill-surface .card {
+  --card-pad: 14px;
+  --card-gap: 12px;
+  flex-direction: column; align-items: stretch;
+  padding: var(--card-pad);
+  gap: var(--card-gap);
+}
+.companion-pill-surface .card__head { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+/* the card head now carries only the dismiss control (and a heading on day review):
+   the title already says what the moment is, so a feature-name chip added nothing */
+/* roomy circular dismiss: the glyph sits small inside a soft disc */
+.companion-pill-surface .card__close {
+  width: var(--pill-moment-control-size); height: var(--pill-moment-control-size); border-radius: 50%;
+  display: grid; place-items: center; color: var(--text-soft);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  transition: background .14s ease, color .14s ease;
+}
+.companion-pill-surface .card__close:hover { background: color-mix(in srgb, var(--text) 17%, transparent); color: var(--text); }
+.companion-pill-surface .card__close svg { width: 9px; height: 9px; }
+
+/* with no eyebrow left, the dismiss floats over the copy instead of
+   reserving an empty header row */
+.companion-pill-surface .card.card--float-close .card__close--float {
+  position: absolute; top: 14px; right: 14px; left: auto; z-index: 2;
+}
+.companion-pill-surface .card__more {
+  position: absolute; top: 14px; right: 46px; z-index: 2;
+  width: var(--pill-moment-control-size); height: var(--pill-moment-control-size); padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
+  color: var(--text-soft); background: transparent;
+  transition: background .14s ease, color .14s ease;
+}
+.companion-pill-surface .card__more:hover {
+  color: var(--text); background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+.companion-pill-surface .card__more span {
+  display: block; transform: translateY(-2px);
+  font-size: 9px; font-weight: 700; letter-spacing: 1px; line-height: 1;
+}
+/* the milestone is a pill, not a card: centre the dismiss on its axis */
+.companion-pill-surface .view--milestone .card__close--float {
+  position: absolute; top: 50%; right: 14px; left: auto;
+  transform: translateY(-50%); z-index: 2;
+}
+.companion-pill-surface .card--float-close .card__copy { padding-right: 60px; }
+/* no header row means the copy should sit centred in the space it has */
+.companion-pill-surface .card--float-close .card__copy { margin-top: auto; margin-bottom: auto; }
+.companion-pill-surface .card__title { font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: -.015em; display: flex; align-items: center; }
+.companion-pill-surface .card__copy { display: flex; flex-direction: column; gap: 3px; }
+.companion-pill-surface .card__sub { font-size: 11px; color: var(--text-soft); }
+.companion-pill-surface .card__sub b { color: var(--text-muted); font-weight: 600; }
+.companion-pill-surface .card__actions { display: flex; gap: 6px; margin-top: auto; }
+/* misclassification escape hatch: sits in the action row but stays an icon,
+   so it is reachable in one glance without competing with the real choices */
+/* the correction sits in the row but reads quieter than the real choices */
+.companion-pill-surface .act--quiet {
+  flex: 0 1 auto; padding: 7px 12px;
+  color: color-mix(in srgb, var(--text-soft) 82%, transparent);
+  background: transparent; border-color: transparent;
+  font-weight: 500;
+}
+.companion-pill-surface .act--quiet:hover {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-color: var(--line);
+}
+
+/* Break durations expand in place. The options overlay the trigger inside the
+   same footprint, so the card never changes size when they appear. */
+.companion-pill-surface .brk { position: relative; display: flex; flex: 1 1 auto; min-width: 0; }
+.companion-pill-surface .brk__trigger { flex: 1 1 auto; min-width: 0; }
+.companion-pill-surface .brk__opts {
+  position: absolute; inset: 0; z-index: 3;
+  display: flex; gap: 4px;
+  opacity: 0; transform: scale(.96);
+  pointer-events: none;
+  transition: opacity .14s ease, transform .18s var(--ease-spring);
+}
+.companion-pill-surface .brk.is-open .brk__opts { opacity: 1; transform: none; pointer-events: auto; }
+.companion-pill-surface .brk.is-open .brk__trigger { opacity: 0; pointer-events: none; }
+.companion-pill-surface .brk__opt {
+  flex: 1; min-width: 0; padding: 7px 0;
+  border-radius: 9px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-strong) 70%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  transition: background .14s ease, border-color .14s ease, color .14s ease;
+}
+.companion-pill-surface .brk__opt:hover {
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: var(--line-strong); color: var(--text);
+}
+.companion-pill-surface .act {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center;
+  padding: 7px 10px; border-radius: 9px; font-size: 11.5px; font-weight: 500;
+  border: 1px solid var(--line); background: transparent;
+  color: var(--text-soft); text-align: center;
+  white-space: nowrap;
+  transition: background .14s ease, border-color .14s ease, color .14s ease, transform .1s ease;
+}
+.companion-pill-surface .act:hover { background: color-mix(in srgb, var(--text) 6%, transparent); border-color: var(--line-strong); color: var(--text-muted); }
+.companion-pill-surface .act:active { transform: scale(.97); }
+
+/* primary reads through a raised surface, not a bright fill. The filled face
+   already draws the shape, so an outline on top of it only doubles the edge —
+   the same reason the day review's footer button dropped its border. */
+.companion-pill-surface .act--primary {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+  border-color: transparent;
+  color: var(--text);
+}
+.companion-pill-surface .act--primary:hover {
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  border-color: transparent;
+  color: var(--text);
+}
+
+/* destructive stays tinted: it is the one action that must not be misread */
+.companion-pill-surface .act--danger {
+  font-weight: 600;
+  background: transparent;
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line-strong));
+  color: var(--warn);
+}
+.companion-pill-surface .act--danger:hover {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ---------- EOD ---------- */
+/* the conclusion comes first, the breakdown supports it */
+.companion-pill-surface .eod__row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-soft);
+}
+.companion-pill-surface .eod__row::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--seg); flex: none;
+}
+.companion-pill-surface .eod__row span { flex: 1; }
+.companion-pill-surface .eod__row b {
+  font-family: var(--font-mono); font-weight: 500; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.companion-pill-surface .eod__badge {
+  flex: none; padding: 0; background: none; border: 0;
+  color: var(--text-soft);
+  font-size: 11.5px; font-weight: 500;
+}
+.companion-pill-surface .eod__badge::before { content: "· "; }
+.companion-pill-surface .eod__heading {
+  margin-right: auto;
+  font-size: 13.5px; font-weight: 600; letter-spacing: -.005em;
+  color: var(--text);
+  display: flex; align-items: baseline; gap: 5px;
+}
+/* the day review reads at arm's length: its action rides a size up too */
+.companion-pill-surface .view--eod .act { font-size: 12.5px; padding: 8px 10px; }
+
+/* moments with their own identity don't inherit the live mood tint:
+   the day review and the nudge report stay constant; milestones are always focus-green */
+.companion-pill-surface .pill[data-state="eod"], .companion-pill-surface .pill[data-state="nudge"] { background: rgba(var(--pill-rgb), var(--pill-alpha, .82)); }
+.companion-pill-surface .pill[data-state="eod"] .card__close-ring circle { stroke: color-mix(in srgb, var(--text) 42%, transparent); }
+/* Milestones keep a green cast so a celebration is recognisable before it is
+   read, but the tint is light: at 8% it was thinning the backing the headline
+   sits on, which is the opposite of what a card you only get four seconds with
+   needs. */
+.companion-pill-surface .pill[data-state="milestone"] { --mood-color: var(--p-focus); background: color-mix(in srgb, var(--p-focus) 5%, rgba(var(--pill-rgb), var(--pill-alpha, .82))); }
+
+/* how solid each state is: the longer it lives and the less it asks, the more
+   of the desktop it lets through */
+.pill[data-state="dot"],
+.pill[data-state="collapsed"],
+.companion-pill-surface .pill[data-state="peek"] { --pill-alpha: .82; }
+.pill[data-state="drift"],
+/* A milestone was graded lighter as a passing celebration, but it carries a
+   headline and a figure to read and only stays for four seconds, so the
+   desktop behind it was showing through the text. It sits with the drift
+   alarm: a moment that asks to be read gets the same backing. */
+.companion-pill-surface .pill[data-state="milestone"],
+.companion-pill-surface .pill[data-state="reentry"],
+.companion-pill-surface .pill[data-state="nudge"] { --pill-alpha: .93; }
+.companion-pill-surface .pill[data-state="eod"] { --pill-alpha: .95; }
+
+/* ---------- day review: the block layout that won ---------- */
+.companion-pill-surface .eodv { display: flex; flex-direction: column; gap: 12px; }
+/* Clean productivity dial: the segmented ring is the object. The old tinted
+   outer disc added a second, meaningless boundary around it. */
+.companion-pill-surface .eodv6__donut {
+  position: relative; width: 76px; height: 76px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: transparent;
+}
+.companion-pill-surface .eodv6__ring {
+  position: absolute; inset: 0; border-radius: 50%;
+  /* arc order matches the legend: focus → drift → other */
+  background:
+    conic-gradient(var(--p-focus) 0 63%, transparent 63% 64.4%,
+      var(--p-drift) 64.4% 76.8%, transparent 76.8% 78.2%,
+      var(--p-neutral) 78.2% 98.8%, transparent 98.8% 100%),
+    conic-gradient(color-mix(in srgb, var(--text-soft) 16%, transparent) 0 100%);
+  -webkit-mask: radial-gradient(circle closest-side, transparent 62%, #000 63%);
+  mask: radial-gradient(circle closest-side, transparent 62%, #000 63%);
+}
+.companion-pill-surface .eodv6__donut b { font-family: var(--font-display); font-size: 18px; font-weight: 760; color: var(--text); font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv6__donut b span { font-size: 10px; color: var(--text-soft); }
+/* matches the shipped .eodr-metric__label: sans, bold, .08em tracking.
+   The app reserves mono for the pill's clock, not for review labels. */
+.companion-pill-surface .eodsec {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-soft);
+}
+/* block style: every section on its own soft slab */
+.companion-pill-surface .eodv--12 { gap: 8px; }
+.companion-pill-surface .eodv12b { border-radius: 12px; padding: 10px 12px; background: color-mix(in srgb, var(--text) 4%, transparent); }
+.companion-pill-surface .eodv12b--head { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.companion-pill-surface .eodv12b--head b { font-family: var(--font-display); font-size: 24px; font-weight: 760; letter-spacing: -.02em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv12b--head .eod__delta { margin-left: 0; }
+.companion-pill-surface .eodv12__ringrow {
+  display: flex; align-items: center; gap: 14px;
+  padding-top: 8px; padding-bottom: 8px;
+}
+.companion-pill-surface .eodv--12 .eodv6__donut { width: 72px; height: 72px; }
+.companion-pill-surface .eodv12__cats .eod__row { font-size: 13px; gap: 9px; }
+/* the donut's figures read a touch light beside the bold deltas. SF Mono only
+   ships 500 then 600, and 600 is a full step too heavy here, so the ~5% bump
+   comes from a hairline stroke instead: same weight, same tabular metrics. */
+.companion-pill-surface .eodv12__cats .eod__row b { -webkit-text-stroke: .015em currentColor; }
+/* "▲38m" is wider than "▼9m", and a shrink-to-fit delta pushed each row's time
+   to a different x. Reserving one column width keeps the times in a straight
+   line no matter what the deltas say. */
+.companion-pill-surface .eodv12__cats .eod__delta { min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv12__cats { flex: 1; display: flex; flex-direction: column; gap: 5.5px; }
+.companion-pill-surface .eodv12__duo { display: flex; gap: 8px; }
+.companion-pill-surface .eodv12__duo > div { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.companion-pill-surface .eodv12__duo span {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--text-soft);
+}
+.companion-pill-surface .eodv12__duo b { font-family: var(--font-display); font-size: 17px; font-weight: 760; letter-spacing: -.03em; color: var(--text); font-variant-numeric: tabular-nums; }
+.companion-pill-surface .eodv12__duo .eod__delta { margin: 1px 0 0; }
+.companion-pill-surface .eodv12__apps { display: flex; flex-direction: column; gap: 7px; margin-top: 7px; }
+
+/* mirrors the shipped AppUsagePanel row: rank, identity, share bar, figures.
+   The bar uses the same accent→gold gradient the dashboard uses, so per-app
+   colours no longer compete with the productivity palette. */
+.companion-pill-surface .eodapp {
+  display: grid;
+  grid-template-columns: 2.4ch 16px minmax(0, 1fr) 46px 34px 26px;
+  align-items: center; gap: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line);
+}
+.companion-pill-surface .eodv12__apps .eodapp:last-child { padding-bottom: 0; border-bottom: 0; }
+.companion-pill-surface .eodapp__rank {
+  font-family: var(--font-mono); font-size: 9px; color: var(--text-soft);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.companion-pill-surface .eodapp__glyph {
+  display: grid; place-items: center;
+  width: 16px; height: 16px; border-radius: 4px;
+  background: color-mix(in srgb, var(--glyph, var(--blue)) 22%, transparent);
+  color: var(--glyph, var(--blue)); font-size: 9px;
+  overflow: hidden;
+}
+.companion-pill-surface .eodapp__glyph .app-glyph,
+.companion-pill-surface .eodapp__glyph .app-icon {
+  width: 16px; height: 16px; border-radius: inherit;
+}
+.companion-pill-surface .eodapp__glyph .app-glyph span { font-size: 7px; }
+.companion-pill-surface .eodapp__name {
+  font-size: 10.5px; color: var(--text-muted); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.companion-pill-surface .eodapp__bar {
+  height: 5px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  overflow: hidden;
+}
+.companion-pill-surface .eodapp__bar i {
+  display: block; width: var(--w, 0%); height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 62%, var(--gold)));
+}
+.companion-pill-surface .eodapp__time {
+  font-family: var(--font-mono); font-size: 10.5px; font-weight: 500;
+  color: var(--text); text-align: right; font-variant-numeric: tabular-nums;
+}
+.companion-pill-surface .eodapp__share {
+  font-family: var(--font-mono); font-size: 9px; color: var(--text-soft);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+
+/* the day review footer button sits 7% shorter than the alarm cards' (35 → 32.6)
+   and drops its outline: the filled surface already defines the shape */
+/* the review is a dense panel, so it hugs its edge tighter than the alarm cards */
+/* the review's own blocks already carry padding, so the heading can sit closer
+   to the first slab than an alarm's title sits to its buttons.
+   --card-gap is the row-to-row gap the footer uses; the head needs its own knob
+   because its row is 26px tall (the dismiss disc) while the heading text is
+   only ~19.6px, so 3.2px of slack rides along below the words. */
+.companion-pill-surface .view--eod.card { --card-pad: 10.5px; --card-gap: 7px; }
+/* The head row is 26px tall to fit the dismiss disc while the heading text is
+   only ~19.6px, so 3.2px of slack sits above and below the words. These margins
+   cancel it out, which makes the visible spacing land on the intended rhythm:
+   11px from the card's top edge to the heading, 9px from the heading down to
+   the first block, and the 7px card gap before "See full day". */
+.companion-pill-surface .view--eod .card__head { margin-top: -3.7px; margin-bottom: -1.2px; }
+.companion-pill-surface .view--eod .card__actions .act {
+  height: 32.6px; padding-top: 0; padding-bottom: 0;
+  border-color: transparent;
+}
+.companion-pill-surface .view--eod .card__actions .act:hover { border-color: transparent; }
+
+/* Compact v2 is a passing summary, not a second dashboard. It keeps the
+   decision-grade measures and sends app-level detail to See full day. */
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod.card {
+  --card-pad: 10px;
+  --card-gap: 7px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .card__head {
+  margin-top: -3.2px;
+  margin-bottom: -1px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv--12 { gap: 6px; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12b {
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12b--head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "label label" "value delta";
+  align-items: end;
+  column-gap: 9px;
+  row-gap: 2px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12b--head .eodsec { grid-area: label; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12b--head > b {
+  grid-area: value;
+  font-size: 22px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12b--head > .eod__delta {
+  grid-area: delta;
+  margin: 0 0 1px;
+  white-space: nowrap;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__ringrow {
+  gap: 11px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv6__donut {
+  width: 62px;
+  height: 62px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv6__donut b { font-size: 16px; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__cats { gap: 3px; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__cats .eod__row {
+  gap: 7px;
+  font-size: 11.5px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__cats .eod__row::before {
+  width: 7px;
+  height: 7px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__cats .eod__delta {
+  min-width: 31px;
+  font-size: 9.5px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__duo { gap: 6px; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__duo > .eodv12b {
+  min-width: 0;
+  padding: 7px 8px;
+  gap: 1px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__duo span { font-size: 8.5px; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__duo b { font-size: 15px; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__duo .eod__delta {
+  max-width: 100%;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12b--apps { display: none; }
+.companion-pill-surface .pill[data-eod-version="minimal"] .view--eod .eodv12__duo { display: none; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .card__actions { margin-top: 0; }
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .card__actions .act { height: 30px; }
+
+/* privacy */
+.companion-pill-surface .pill[data-private] [data-sensitive] { filter: blur(5px); opacity: .75; }
+
+/* ============================================================
+   AUTO-DISMISS INDICATORS
+   Each moment gets the treatment that fits its shape and intent.
+   ============================================================ */
+
+/* --- one countdown per moment, always orbiting the dismiss button ---
+   The milestone used to unwind its left orb as well, which said the same thing
+   twice at opposite ends of the pill. Only the ring on the X remains. --- */
+.companion-pill-surface .card__close { position: relative; }
+.companion-pill-surface .card__close-ring {
+  position: absolute; inset: -3px; pointer-events: none;
+  opacity: 0; transition: opacity .2s ease;
+}
+.companion-pill-surface .view[data-auto] .card__close-ring { opacity: 1; }
+.companion-pill-surface .card__close-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+.companion-pill-surface .card__close-ring circle {
+  fill: none; stroke-width: 1.25;
+  stroke: color-mix(in srgb, var(--mood-color) 62%, transparent);
+  stroke-linecap: round;
+  stroke-dasharray: 78.54;
+  stroke-dashoffset: calc(78.54px * (1 - var(--auto-start-scale, 1)));
+}
+.companion-pill-surface .view[data-auto] .card__close-ring circle {
+  animation: ringCountdown var(--auto-duration, 12s) linear forwards;
+  animation-play-state: running;
+}
+.companion-pill-surface .view[data-auto="paused"] .card__close-ring circle {
+  animation-play-state: paused;
+  stroke: color-mix(in srgb, var(--text) 30%, transparent);
+}
+@keyframes ringCountdown {
+  from { stroke-dashoffset: calc(78.54px * (1 - var(--auto-start-scale, 1))); }
+  to { stroke-dashoffset: 78.54px; }
+}
+
+.companion-pill-surface .view--nudge[data-auto="running"] .card__close-ring circle {
+  stroke: color-mix(in srgb, var(--warn) 62%, transparent);
+}
+
+/* loss-framing tone carries a touch more visual weight than neutral */
+.companion-pill-surface .view--drift[data-tone="loss"] .card__title { color: color-mix(in srgb, var(--p-drift) 82%, var(--text)); }
+
+
+
+
+/* ---------- graduated improvements (now default) ---------- */
+.companion-pill-surface .pill[data-collapsed-kind="break"] .pill__time { color: var(--text-soft); }
+.companion-pill-surface .pill[data-collapsed-kind="break"] .orb__pip { animation: none; opacity: .5; }
+
+/* ---------- dormant R2 leftovers (kept in DOM, hidden) ---------- */
+.companion-pill-surface .card__actions--sub { display: none; }
+.companion-pill-surface .pill__escalate { display: none; }
+
+/* ---------- graduated: gold tier-3 celebration ---------- */
+.companion-pill-surface .pill[data-tier="3"] .mile__trophy { background: color-mix(in srgb, #c9a24f 22%, transparent); color: #c9a24f; }
+.companion-pill-surface .pill[data-tier="3"] .mile__title { color: #c9a24f; }
+.companion-pill-surface .pill[data-state="milestone"][data-tier="3"] { box-shadow: var(--pill-shadow), 0 0 44px color-mix(in srgb, #c9a24f 42%, transparent); }
+.companion-pill-surface .pill[data-state="milestone"][data-tier="3"] .pill__clip::after {
+  background: linear-gradient(105deg, transparent 35%, color-mix(in srgb, #c9a24f 30%, transparent) 50%, transparent 65%);
+}
+/* the auto-dismiss ring on the X goes gold with the rest of the celebration */
+.companion-pill-surface .pill[data-state="milestone"][data-tier="3"] .card__close-ring circle {
+  stroke: color-mix(in srgb, #c9a24f 72%, transparent);
+}
+
+/* ---------- app badges (default: alarm · nudge · peek · window titles) ---------- */
+.companion-pill-surface .app-badge {
+  display: inline-grid; place-items: center;
+  width: 16px; height: 16px; border-radius: 5px;
+  font-size: 9px; line-height: 1; color: rgba(255,255,255,.92);
+  background: linear-gradient(150deg, var(--bg-a, #666), var(--bg-b, #333));
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.16);
+  flex: none; vertical-align: -2.5px; margin-right: 7px;
+}
+.companion-pill-surface .app-badge--sm { width: 14px; height: 14px; border-radius: 4px; vertical-align: -2.5px; margin-right: 5px; }
+/* glyph fonts sit unevenly; inline SVG icons center perfectly in the grid */
+.companion-pill-surface .app-badge svg { width: 9px; height: 9px; display: block; }
+.companion-pill-surface .app-badge--sm svg { width: 8px; height: 8px; }
+/* on the peek's second line the badge sits with the smaller type, so it shrinks
+   to match the 10.5px x-height instead of towering over it */
+.companion-pill-surface .peek__line2 .app-badge--sm {
+  width: 12px; height: 12px; border-radius: 3.5px;
+  vertical-align: -2px; margin-right: 5px;
+}
+.companion-pill-surface .peek__line2 .app-badge--sm svg { width: 7px; height: 7px; }
+
+
+
+/* ---------- R5 graduated: return-app badge, milestone kind icons, EOD deltas ---------- */
+.companion-pill-surface [data-return-badge] { display: inline-grid; }
+.companion-pill-surface .mile__mark .orb { opacity: 0; }
+.companion-pill-surface .mile__kind {
+  position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-strong);
+}
+.companion-pill-surface .mile__kind svg { display: none; width: 14px; height: 14px; }
+.companion-pill-surface .pill[data-mile-kind="total"] .mile__kind [data-kind-icon="total"] { display: block; }
+.companion-pill-surface .pill[data-mile-kind="recovery"] .mile__kind [data-kind-icon="recovery"] { display: block; }
+.companion-pill-surface .pill[data-mile-kind="rank"] .mile__kind [data-kind-icon="rank"] { display: block; }
+/* records show the trophy at any tier; rank keeps the star even at tier 3 */
+.companion-pill-surface .pill[data-mile-kind="record"] .mile__kind { display: none; }
+.companion-pill-surface .pill[data-mile-kind="record"] .mile__trophy { opacity: 1; animation: trophyIn .55s var(--ease-spring) both; }
+.companion-pill-surface .pill[data-mile-kind="rank"] .mile__trophy { opacity: 0; animation: none; }
+.companion-pill-surface .pill[data-tier="3"] .mile__kind { background: color-mix(in srgb, #c9a24f 20%, transparent); color: #c9a24f; }
+/* the shipped .eodr-metric__delta is sans/bold, same family as the label */
+.companion-pill-surface .eod__delta { font-style: normal; flex: none; margin-left: 2px; font-size: 10.5px; font-weight: 700; }
+.companion-pill-surface .eod__delta[data-delta="good"] { color: var(--accent-strong); }
+.companion-pill-surface .eod__delta[data-delta="flat"] { color: var(--text-soft); }
+
+/* ---------- improvement toggles: none open (all shipped or rejected) ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .companion-pill-surface .pill,
+  .companion-pill-surface .view,
+  .companion-pill-surface .orb__pip { transition: none !important; animation: none !important; }
+  .companion-pill-surface .sparks i,
+  .companion-pill-surface .mile__trophy,
+  .companion-pill-surface .mile__kind,
+  .companion-pill-surface .card__close-ring circle,
+  .companion-pill-surface .pill__clip::after { transition: none !important; animation: none !important; }
+}

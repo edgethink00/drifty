@@ -530,7 +530,7 @@
   align-items: center;
   gap: 7px;
   width: 100%;
-  padding: 7px 6px 7px 9px;
+  padding: 7px 6px 7px 14px;
   border-radius: 10px;
   background: color-mix(in srgb, var(--shell-floating-surface) 30%, transparent);
   backdrop-filter: none;
@@ -630,7 +630,7 @@
 .live-pill__summary-copy {
   min-width: 0;
   display: grid;
-  gap: 1.3px;
+  gap: 1.95px;
 }
 
 .live-pill__status-row {

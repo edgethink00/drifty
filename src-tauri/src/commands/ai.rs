@@ -32,6 +32,7 @@ pub struct AiClassificationChatResponse {
     pub status: u16,
     pub body: String,
     pub latency_ms: u128,
+    pub retry_after_ms: Option<u64>,
 }
 
 #[tauri::command]
@@ -135,12 +136,14 @@ pub fn post_openai_chat(
         .send()
         .map_err(|error| error.to_string())?;
     let status = response.status().as_u16();
+    let retry_after_ms = retry_after_ms(response.headers());
     let body = response.text().map_err(|error| error.to_string())?;
 
     Ok(AiClassificationChatResponse {
         status,
         body,
         latency_ms: started_at.elapsed().as_millis(),
+        retry_after_ms,
     })
 }
 
@@ -239,13 +242,28 @@ pub fn post_anthropic_chat(
         .send()
         .map_err(|error| error.to_string())?;
     let status = response.status().as_u16();
+    let retry_after_ms = retry_after_ms(response.headers());
     let body = response.text().map_err(|error| error.to_string())?;
 
     Ok(AiClassificationChatResponse {
         status,
         body,
         latency_ms: started_at.elapsed().as_millis(),
+        retry_after_ms,
     })
+}
+
+fn retry_after_ms(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    const MAX_RETRY_AFTER_SECONDS: u64 = 24 * 60 * 60;
+    let seconds = headers
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse::<u64>()
+        .ok()?
+        .min(MAX_RETRY_AFTER_SECONDS);
+    seconds.checked_mul(1000)
 }
 
 fn normalize_models(model: Option<&str>, models: Option<&[String]>) -> Vec<String> {

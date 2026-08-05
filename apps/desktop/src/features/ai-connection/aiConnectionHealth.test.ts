@@ -21,6 +21,17 @@ describe("aiConnectionIssueKindFromMessage", () => {
     expect(aiConnectionIssueKindFromMessage("Provider returned HTTP 401.")).toBe("provider");
     expect(aiConnectionIssueKindFromMessage("Quota exceeded")).toBe("provider");
   });
+
+  it.each([
+    ["OpenRouter rejected the API key.", "authentication"],
+    ["OpenRouter credits are required.", "credits"],
+    ["OpenRouter blocked this request.", "access"],
+    ["The selected OpenRouter model is unavailable.", "model_unavailable"],
+    ["OpenRouter is rate limiting requests.", "rate_limited"],
+    ["OpenRouter has no available provider for this request.", "unavailable"],
+  ] as const)("preserves the typed OpenRouter transport reason: %s", (message, expected) => {
+    expect(aiConnectionIssueKindFromMessage(message)).toBe(expected);
+  });
 });
 
 describe("localAiSetupFingerprint", () => {
@@ -126,6 +137,7 @@ describe("nextLocalAiConnectionCheck", () => {
     const connected = check({ status: "connected", consecutiveFailures: 0 });
     const failed = nextLocalAiConnectionCheck(connected, target, {
       kind: "connection_test_failure",
+      issueKind: "network",
       message: "Connection refused",
     }, 2_000);
     expect(failed?.status).toBe("failed");
@@ -137,6 +149,16 @@ describe("nextLocalAiConnectionCheck", () => {
     }, 3_000);
     expect(recovered?.status).toBe("connected");
     expect(recovered?.consecutiveFailures).toBe(0);
+  });
+
+  it("preserves a typed actionable OpenRouter failure instead of reparsing copy", () => {
+    const next = nextLocalAiConnectionCheck(null, target, {
+      kind: "connection_test_failure",
+      issueKind: "credits",
+      message: "OpenRouter credits are required.",
+    }, 2_000);
+
+    expect(next).toMatchObject({ status: "failed", issueKind: "credits", consecutiveFailures: 1 });
   });
 
   it("treats provider contact (including content-level failures) as recovery", () => {

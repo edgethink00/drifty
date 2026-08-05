@@ -31,6 +31,11 @@ import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../
 import { resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
 import { recordEnhancedContextDebugEvent, type EnhancedContextDebugReason, type EnhancedContextDebugStatus } from "../settings/debugLog";
 import { withClassificationActivity } from "./classificationActivity";
+import {
+  openRouterConnectionFailureMessage,
+  openRouterEmbeddedIssueKind,
+  openRouterIssueKindFromResponse,
+} from "../ai-connection/openRouterError";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -1265,10 +1270,8 @@ async function classifyLivePayloadWithLocalAi(
       providerRequest.request,
       provider.provider === "managed_local" ? provider : null,
     );
-    const status = typeof response.status === "number" ? response.status : 0;
-    if (status < 200 || status >= 300) {
-      return unavailableLiveClassification(`Local AI classification failed with HTTP ${status || "unknown"}.`);
-    }
+    const responseFailure = localProviderResponseFailure(response, provider);
+    if (responseFailure) return unavailableLiveClassification(responseFailure);
 
     const data = toLocalClassificationResponse(response, providerRequest.model);
     return firstLiveClassification(data, payload, "Local AI classification returned no usable classification.");
@@ -1339,10 +1342,8 @@ async function runLocalAiClassification(
     providerRequest.request,
     provider.provider === "managed_local" ? provider : null,
   );
-  const status = typeof response.status === "number" ? response.status : 0;
-  if (status < 200 || status >= 300) {
-    throw new Error(`Local AI classification failed with HTTP ${status || "unknown"}.`);
-  }
+  const responseFailure = localProviderResponseFailure(response, provider);
+  if (responseFailure) throw new Error(responseFailure);
 
   const data = toLocalClassificationResponse(response, providerRequest.model);
   const representativeRecords = await selectLocalAiClassificationRecords({
@@ -1490,8 +1491,8 @@ async function classifyLocalEnhancedRetry(input: {
       providerRequest.request,
       input.provider.provider === "managed_local" ? input.provider : null,
     );
-    const status = typeof response.status === "number" ? response.status : 0;
-    if (status < 200 || status >= 300) {
+    const responseFailure = localProviderResponseFailure(response, input.provider);
+    if (responseFailure) {
       if (debugLoggingEnabled) {
         recordRetryDebugEvent({
           status: "error",
@@ -1645,6 +1646,22 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
     model,
     latencyMs: responseLatencyMs(response),
   };
+}
+
+function localProviderResponseFailure(
+  response: NativeOpenAiChatResponse,
+  provider: LocalAiProviderConfig,
+): string | null {
+  const status = typeof response.status === "number" ? response.status : 0;
+  const httpFailed = status < 200 || status >= 300;
+  if (provider.provider === "openrouter_byok") {
+    const embeddedIssue = openRouterEmbeddedIssueKind(response.body);
+    if (httpFailed || embeddedIssue) {
+      const issueKind = embeddedIssue ?? openRouterIssueKindFromResponse(status, response.body);
+      return openRouterConnectionFailureMessage(issueKind, status);
+    }
+  }
+  return httpFailed ? `Local AI classification failed with HTTP ${status || "unknown"}.` : null;
 }
 
 async function readClassificationWorkProfile(useLocalFallback: boolean): Promise<string | null> {

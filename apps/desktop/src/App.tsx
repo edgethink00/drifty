@@ -1,7 +1,7 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, TrayDisplayMode } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -16,6 +16,7 @@ import {
   buildHourlySummary,
   buildProductivityPersona,
   buildPersonalProjectSliceProjection,
+  logicalDayIsoDateForDate,
   shiftIsoDate,
   todayIsoDate,
   totalDurationSeconds,
@@ -23,10 +24,8 @@ import {
 import logoUrl from "./assets/drifty-mark.svg";
 import {
   resolveDashboardAiUnavailableState,
+  isCloudBillingVariant,
 } from "./features/dashboard/dashboardAiUnavailableState";
-import {
-  isDashboardAiRecoveryOverlayVariant,
-} from "./features/dashboard/DashboardAiRecoveryOverlay";
 import {
   isDashboardAiRecoveryDismissed,
   storeDashboardAiRecoveryDismissal,
@@ -38,17 +37,15 @@ import {
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
-import { SocialPage, type SocialSection } from "./features/social/SocialPage";
+import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
 import { useDailyProductivitySeries } from "./features/share/dailyProductivity";
-import { TeamsBetaSurface } from "./features/team/TeamsBetaSurface";
 import { isTeamQaMockEnabled, useTeamQaMockController } from "./features/team/teamQaMock";
 import type { TeamWorkspaceAction } from "./features/team/TeamWorkspace";
 import { useTeamController } from "./features/team/useTeamController";
 import type { TeamProjectsSubView } from "./features/team/useTeamProjects";
 import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type PendingTeamInvite } from "./features/team/teamInviteDeepLinks";
-import { HistoryView } from "./features/history/HistoryView";
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
@@ -67,7 +64,6 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
-import { ClassificationPage } from "./features/classification/ClassificationPage";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
@@ -83,20 +79,19 @@ import { setOnboardingWindowPresentation } from "./lib/api/windowChromeClient";
 import {
   capturePostHogEvent,
   toAnalyticsErrorKind,
-} from "./lib/analytics/posthog";
+} from "./lib/analytics/posthogClient";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
 import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, isDevOnboardingForceOpenEnabled } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
-import { FeedbackModal } from "./features/feedback/FeedbackModal";
-import { DebugLogModal } from "./features/settings/DebugLogModal";
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
+import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
@@ -109,7 +104,6 @@ import {
 } from "./features/settings/aiPrivacyRequestSettings";
 import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup";
 import { useProjectClassification } from "./features/classification/useProjectClassification";
-import { ProjectsPage } from "./features/projects/ProjectsPage";
 import { CommandBar } from "./features/command-bar/CommandBar";
 import { NO_PROJECT_COLOR, NO_PROJECT_LABEL as FLOW_NO_PROJECT_LABEL, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
 
@@ -128,6 +122,26 @@ import {
   type WatcherPeekResponse,
 } from "./features/companion/WatcherPeek";
 import {
+  buildCompanionMilestonePreview,
+  type CompanionMilestonePreviewId,
+  buildCompanionDriftAlarmPreview,
+  buildCompanionExtremeNudgePreview,
+  buildCompanionReentryPreview,
+  type CompanionMomentPreviewId,
+} from "./features/companion/companionPillPreview";
+import {
+  COMPANION_HIDE_ONE_HOUR_MS,
+  persistCompanionHiddenUntil,
+  persistCompanionMenuBarDisplayMode,
+  persistCompanionSurfacePolicy,
+  resolveInitialCompanionHiddenUntil,
+  resolveInitialCompanionMenuBarDisplayMode,
+  resolveInitialCompanionSurfacePolicy,
+  resolveEffectiveCompanionSurfacePolicy,
+  type CompanionSurfacePolicy,
+} from "./features/companion/companionPillSettings";
+import { recordCompanionEngagementMetric } from "./features/companion/companionEngagementMetrics";
+import {
   EndOfDayReview,
   buildEndOfDayReviewSummary,
   type EndOfDayReviewEvent,
@@ -143,12 +157,19 @@ import {
 import {
   hideNativeWatcherPeek,
   isTauriRuntime,
+  listenToNativeCompanionVisibilityAction,
   listenToNativeEndOfDayReviewAction,
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
+  setNativeCompanionSurfacePolicy,
+  showNativeCompanionDriftAlarm,
+  showNativeCompanionMilestone,
+  showNativeCompanionReentry,
   showNativeEndOfDayReview,
   showNativeExtremeNudgeToast,
   showNativeWatcherPeek,
+  updateNativeCompanionPill,
+  type CompanionVisibilityAction,
   type EndOfDayReviewAction,
 } from "./features/companion/watcherBridge";
 import {
@@ -207,11 +228,15 @@ import {
   setNativePetModeEnabled,
   updateNativePetMode,
 } from "./features/pet-mode/petModeBridge";
+import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
+import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
+import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
+import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
 import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
-import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
+import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, buildWatcherSnapshotFromCurrent, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
 import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
@@ -236,9 +261,10 @@ import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
+import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, COMPANION_BETA_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialCompanionBetaEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
@@ -266,6 +292,7 @@ import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
 import { DASHBOARD_PREVIOUS_WEEK_FOCUS_DELAY_MS, resolveAppRefreshTickAction, resolveDashboardRefreshMode, shouldRefreshHistoryData, type DashboardPreviousWeekFocusLoad, type DashboardRefreshInputs, type DashboardWeekRefreshState, type DashboardWeekRefreshStatus } from "./features/dashboard/dashboardRefreshPolicy";
 import { DeferredTabBodyFallback } from "./features/loading/DeferredTabBodyFallback";
+import { DeferredPageImportFallback } from "./features/loading/DeferredPageImportFallback";
 import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
@@ -276,6 +303,27 @@ import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDrift
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
 import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 
+const LazyClassificationPage = lazy(async () => ({
+  default: (await import("./features/classification/ClassificationPage")).ClassificationPage,
+}));
+const LazyHistoryView = lazy(async () => ({
+  default: (await import("./features/history/HistoryView")).HistoryView,
+}));
+const LazyProjectsPage = lazy(async () => ({
+  default: (await import("./features/projects/ProjectsPage")).ProjectsPage,
+}));
+const LazySocialPage = lazy(async () => ({
+  default: (await import("./features/social/SocialPage")).SocialPage,
+}));
+const LazyTeamsBetaSurface = lazy(async () => ({
+  default: (await import("./features/team/TeamsBetaSurface")).TeamsBetaSurface,
+}));
+const LazyFeedbackModal = lazy(async () => ({
+  default: (await import("./features/feedback/FeedbackModal")).FeedbackModal,
+}));
+const LazyDebugLogModal = lazy(async () => ({
+  default: (await import("./features/settings/DebugLogModal")).DebugLogModal,
+}));
 const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const MANUAL_UPDATE_STATUS_NOTICE_MS = 6_000;
@@ -318,6 +366,29 @@ function isRendererFocused(): boolean {
 
 function assertNever(value: never): never {
   throw new Error(`Unexpected app state: ${JSON.stringify(value)}`);
+}
+
+function managedLocalAiTopbarLabel(status: ManagedLocalAiStatus | null): string | null {
+  if (status?.state !== "error") return null;
+
+  switch (status.errorKind) {
+    case "download_failed":
+      return "Download failed";
+    case "model_artifact_missing":
+      return "Model missing";
+    case "insufficient_memory":
+      return "Memory needed";
+    case "insufficient_storage":
+      return "Storage needed";
+    case "runtime_missing":
+      return "Runtime missing";
+    case "runtime_failed":
+      return "Start failed";
+    case null:
+      return "Issue";
+    default:
+      return assertNever(status.errorKind);
+  }
 }
 
 export default function App() {
@@ -404,9 +475,12 @@ export default function App() {
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
-  const [devModeEnabled, setDevModeEnabled] = useState(resolveInitialDevModeEnabled);
+  const [devModeEnabled, setDevModeEnabled] = useState(
+    () => isDevOnboardingBypassEnabled() || resolveInitialDevModeEnabled(),
+  );
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
+  const [companionBetaEnabled, setCompanionBetaEnabled] = useState(resolveInitialCompanionBetaEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [pendingTeamAction, setPendingTeamAction] = useState<TeamWorkspaceAction | null>(null);
@@ -422,6 +496,76 @@ export default function App() {
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
   const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
+  const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
+  const [companionMenuBarDisplayMode, setCompanionMenuBarDisplayMode] = useState(resolveInitialCompanionMenuBarDisplayMode);
+  const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
+  const companionBetaActive = isDevModeActive && companionBetaEnabled;
+  const companionPillEnabled = companionBetaActive && companionSurfacePolicy !== "off";
+  const companionTemporarilyHidden = companionHiddenUntil !== null && companionHiddenUntil > Date.now();
+  const effectiveCompanionSurfacePolicy = resolveEffectiveCompanionSurfacePolicy(
+    companionBetaActive,
+    companionSurfacePolicy,
+    companionTemporarilyHidden,
+  );
+  const companionPillVisible = effectiveCompanionSurfacePolicy === "floating";
+  const companionUsesMomentSurface = effectiveCompanionSurfacePolicy !== "off";
+
+  const handleCompanionSurfacePolicyChange = useCallback((policy: CompanionSurfacePolicy) => {
+    setCompanionSurfacePolicy(persistCompanionSurfacePolicy(policy));
+    setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
+    recordCompanionEngagementMetric(policy === "off" ? "companion_disabled" : "companion_enabled");
+  }, []);
+
+  const handleCompanionMenuBarDisplayModeChange = useCallback((mode: TrayDisplayMode) => {
+    setCompanionMenuBarDisplayMode(persistCompanionMenuBarDisplayMode(mode));
+  }, []);
+
+  const handleHideCompanionForOneHour = useCallback(() => {
+    if (!companionPillEnabled) return;
+    setCompanionHiddenUntil(persistCompanionHiddenUntil(Date.now() + COMPANION_HIDE_ONE_HOUR_MS));
+    recordCompanionEngagementMetric("companion_hidden_one_hour");
+  }, [companionPillEnabled]);
+
+  const handleShowCompanionNow = useCallback(() => {
+    setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
+    recordCompanionEngagementMetric("companion_shown_now");
+  }, []);
+
+  const handleCompanionVisibilityAction = useCallback((action: CompanionVisibilityAction) => {
+    if (action === "hideOneHour") {
+      handleHideCompanionForOneHour();
+      return;
+    }
+    handleCompanionSurfacePolicyChange("off");
+  }, [handleCompanionSurfacePolicyChange, handleHideCompanionForOneHour]);
+
+  useEffect(() => {
+    if (companionHiddenUntil === null) return undefined;
+    const remainingMs = companionHiddenUntil - Date.now();
+    if (remainingMs <= 0) {
+      setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
+    }, remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [companionHiddenUntil]);
+
+  useEffect(() => {
+    void setNativeCompanionSurfacePolicy(effectiveCompanionSurfacePolicy).catch((error: unknown) => {
+      console.warn("Failed to update the Companion surface policy", toErrorMessage(error));
+    });
+  }, [effectiveCompanionSurfacePolicy]);
+
+  useEffect(() => {
+    const iconStyle = effectiveCompanionSurfacePolicy === "menuBar"
+      ? "compact"
+      : resolveInitialMenuBarIconStyle();
+    const client = trackerClient as Partial<typeof trackerClient>;
+    if (typeof client.updateTrayIconStyle !== "function") return;
+    void client.updateTrayIconStyle(iconStyle).catch(() => undefined);
+  }, [effectiveCompanionSurfacePolicy]);
   const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
   // Project classification is a Dev-mode preview control (opt-in, off by default):
   // the Dev-settings toggle is the sole gate, so it is available in any build —
@@ -708,6 +852,11 @@ export default function App() {
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
+  const openCompanionNotificationSettings = useCallback(() => {
+    setSettingsSection("notifications");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
   const openAiSetupSettings = useCallback(() => {
     setSettingsSection("aiSetup");
     navigateToTab("settings");
@@ -751,13 +900,8 @@ export default function App() {
   }, []);
 
   const openEndOfDayReviewSettings = useCallback(() => {
-    if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
-    if (!isDevModeActive) return;
-    shouldFocusEndOfDayReviewSettingsRef.current = true;
-    setSettingsSection("dev");
-    navigateToTab("settings");
-    setAccountMenuOpen(false);
-  }, [isDevModeActive, navigateToTab]);
+    openCompanionNotificationSettings();
+  }, [openCompanionNotificationSettings]);
 
   const openEndOfDayReviewDashboard = useCallback(() => {
     setEndOfDayReviewEvent(null);
@@ -765,16 +909,40 @@ export default function App() {
     navigateToTab("dashboard", "Today");
   }, [navigateToTab, startOfDayMinutes]);
 
-  const handleEndOfDayReviewAction = useCallback((action: EndOfDayReviewAction) => {
+  const handleEndOfDayReviewAction = useCallback((action: EndOfDayReviewAction, activityAt?: string) => {
     setEndOfDayReviewEvent(null);
+
+    if (action === "openActivityDay" && activityAt) {
+      const activityDate = new Date(activityAt);
+      if (Number.isFinite(activityDate.getTime())) {
+        selectDay(logicalDayIsoDateForDate(activityDate, startOfDayMinutes));
+        navigateToTab("dashboard", "Today");
+        return;
+      }
+    }
+
+    if (action === "openSettings") {
+      openCompanionNotificationSettings();
+      return;
+    }
 
     if (action === "openNotificationSettings") {
       openEndOfDayReviewSettings();
       return;
     }
 
+    if (action === "openLeaderboard") {
+      navigateToTab("leaderboard");
+      return;
+    }
+
+    if (action === "openTrends") {
+      navigateToTab("trends");
+      return;
+    }
+
     openEndOfDayReviewDashboard();
-  }, [openEndOfDayReviewDashboard, openEndOfDayReviewSettings]);
+  }, [navigateToTab, openCompanionNotificationSettings, openEndOfDayReviewDashboard, openEndOfDayReviewSettings, startOfDayMinutes]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalShowsGoogle, setAuthModalShowsGoogle] = useState(true);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -814,6 +982,13 @@ export default function App() {
       rules: classificationRules,
     }),
     [classificationRules, segments, showAiClassificationImpact],
+  );
+  const companionFocusRecordClassificationOptions = useMemo<ClassificationOptions>(
+    () => ({
+      includeAiClassifications: showAiClassificationImpact,
+      rules: classificationRules,
+    }),
+    [classificationRules, showAiClassificationImpact],
   );
   const materializeBuiltInHeuristicTimeline = useCallback((sourceSegments: ActivitySegment[]) => materializeBuiltInHeuristicClassifications({
     classificationOptions: { fallbackCandidates: sourceSegments, includeAiClassifications: false, rules: classificationRules },
@@ -1147,9 +1322,28 @@ export default function App() {
   // Dev preview feeds the same resolver a synthetic input instead of swapping in
   // a canned state, so what you see is the production branching.
   const isSidebarCtaPreviewActive = isDevModeActive && sidebarCtaPreviewCase !== null;
+  const sidebarCtaPreviewInput = isSidebarCtaPreviewActive && sidebarCtaPreviewCase
+    ? buildSidebarCtaPreviewInput(sidebarCtaPreviewCase, Date.now())
+    : null;
+  const managedLocalTopbarLabel = sidebarCtaPreviewInput
+    ? managedLocalAiTopbarLabel(sidebarCtaPreviewInput.managedLocalAiStatus)
+    : isManagedLocalAiRoute(localAiSetup)
+      ? managedLocalAiTopbarLabel(managedLocalAiStatus)
+      : null;
+  const effectiveAiConnectionStatus = managedLocalTopbarLabel
+    ? {
+      tone: "error" as const,
+      label: managedLocalTopbarLabel,
+      providerLabel: "Local AI",
+      memoryLabel: sidebarCtaPreviewInput ? null : aiConnectionStatus.memoryLabel,
+      issueKind: "provider" as const,
+    }
+    : sidebarCtaPreviewInput
+      ? { ...sidebarCtaPreviewInput.aiStatus, memoryLabel: null }
+      : aiConnectionStatus;
   const sidebarCtaSlot = resolveSidebarCtaSlot(
-    isSidebarCtaPreviewActive && sidebarCtaPreviewCase
-      ? buildSidebarCtaPreviewInput(sidebarCtaPreviewCase, Date.now())
+    sidebarCtaPreviewInput
+      ? sidebarCtaPreviewInput
       : {
         aiStatus: aiConnectionStatus,
         billingCheckoutLoading: billingCheckoutLoadingInterval !== null,
@@ -1158,7 +1352,8 @@ export default function App() {
         billingEntitlementLoading,
         localAiProvider: localAiSetup.provider,
         localAiConfigured: localAiConnectionFingerprint !== null,
-        managedLocalAiStatus,
+        localAiDisconnectConfirmed: localAiConnectionPersistentFailure,
+        managedLocalAiStatus: isManagedLocalAiRoute(localAiSetup) ? managedLocalAiStatus : null,
       },
   );
   const sidebarUpgradeDismissed = !isSidebarCtaPreviewActive
@@ -1528,16 +1723,21 @@ export default function App() {
     const currentAppIcons = appIconsRef.current;
     const baseEvent = buildEndOfDayReviewSummary({ ...input, appIcons: currentAppIcons });
     const missingIconRequests = input.isMock ? [] : collectMissingEndOfDayReviewIconRequests(baseEvent);
-    if (!isTauriRuntime() || missingIconRequests.length === 0) return baseEvent;
+    if (!isTauriRuntime() || missingIconRequests.length === 0) {
+      return { ...baseEvent, layout: "minimal" };
+    }
 
     try {
       const resolvedIcons = await trackerClient.getAppIcons(missingIconRequests);
-      return buildEndOfDayReviewSummary({
+      return {
+        ...buildEndOfDayReviewSummary({
         ...input,
         appIcons: mergeResolvedAppIcons(currentAppIcons, missingIconRequests, resolvedIcons),
-      });
+        }),
+        layout: "minimal",
+      };
     } catch {
-      return baseEvent;
+      return { ...baseEvent, layout: "minimal" };
     }
   }, []);
 
@@ -1615,7 +1815,10 @@ export default function App() {
       alertKey: event.id,
       delivery,
     });
-    void showNativeDriftAlarm(event).then(() => {
+    const showNativeSurface = companionUsesMomentSurface
+      ? showNativeCompanionDriftAlarm
+      : showNativeDriftAlarm;
+    void showNativeSurface(event).then(() => {
       recordDriftAlarmDebugEvent({
         kind: "native_show_succeeded",
         alertKey: event.id,
@@ -1635,7 +1838,7 @@ export default function App() {
       pendingDriftAlarmEventRef.current = null;
       if (pendingEvent) showDriftAlarm(pendingEvent);
     });
-  }, [clearDriftAlarmEvent]);
+  }, [clearDriftAlarmEvent, companionUsesMomentSurface]);
 
   const previewDriftAlarm = useCallback((option: typeof DRIFT_ALARM_PREVIEW_OPTIONS[number]) => {
     driftAlarmPreviewCounterRef.current += 1;
@@ -1652,6 +1855,28 @@ export default function App() {
       copySettings: driftAlarmCopy,
     }));
   }, [availableDriftAlarmFocusTargets, driftAlarmCopy, showDriftAlarm]);
+
+  const previewCompanionMilestone = useCallback((previewId: CompanionMilestonePreviewId) => {
+    void showNativeCompanionMilestone(buildCompanionMilestonePreview(previewId))
+      .catch((error: unknown) => {
+        console.warn("Failed to preview companion milestone", toErrorMessage(error));
+      });
+  }, []);
+
+  /* The decision cards could not be reviewed without waiting for real drift, so
+     they are fired through the same native path the tracker uses. */
+  const previewCompanionMoment = useCallback((previewId: CompanionMomentPreviewId) => {
+    const sent = previewId === "reentry"
+      ? showNativeCompanionReentry(buildCompanionReentryPreview())
+      : previewId === "extreme-nudge"
+        ? showNativeExtremeNudgeToast(buildCompanionExtremeNudgePreview())
+        : companionUsesMomentSurface
+          ? showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId))
+          : showNativeDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
+    void sent.catch((error: unknown) => {
+      console.warn("Failed to preview companion moment", toErrorMessage(error));
+    });
+  }, [companionUsesMomentSurface]);
 
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
@@ -2711,13 +2936,18 @@ export default function App() {
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
+    if (companionBetaEnabled) setCompanionBetaEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
     if (petModeEnabled) setPetModeEnabled(false);
-  }, [devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, petModeEnabled, profileBetaEnabled, setPetModeEnabled, settingsSection, teamsBetaEnabled]);
+  }, [companionBetaEnabled, devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, petModeEnabled, profileBetaEnabled, setPetModeEnabled, settingsSection, teamsBetaEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(COMPANION_BETA_STORAGE_KEY, companionBetaActive ? "1" : "0");
+  }, [companionBetaActive]);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
@@ -2993,6 +3223,15 @@ export default function App() {
       unlisteners.push(unlisten);
     });
 
+    void listenToNativeCompanionVisibilityAction(handleCompanionVisibilityAction).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        cleanupTauriEventListener(unlisten);
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
     void listenToNativeWatcherResponse(handleWatcherResponse).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -3033,7 +3272,7 @@ export default function App() {
       disposed = true;
       unlisteners.forEach(cleanupTauriEventListener);
     };
-  }, [dismissWatcherPeek, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
+  }, [dismissWatcherPeek, handleCompanionVisibilityAction, handleDriftAlarmAction, handleDriftAlarmDismissed, handleEndOfDayReviewAction, handleWatcherResponse]);
 
   const evaluateDriftAlarm = useCallback((input: DriftAlarmEvaluationInput) => {
     const checkedAt = input.checkedAt ?? new Date();
@@ -4303,13 +4542,9 @@ export default function App() {
         hasRequiredAccountAuth,
         isSupabaseConfigured,
         localAiReady: Boolean(localAiClassificationOptions),
-        // Only a failure confirmed by repeated probes may summon the
-        // "AI provider disconnected" notice; single transient errors stay off
-        // the dashboard while the automatic re-test recovers in the background.
-        observedAiClassificationFailure: localAiConnectionPersistentFailure,
       })
       : null;
-  const dashboardAiRecoveryKey = dashboardAiUnavailableState && isDashboardAiRecoveryOverlayVariant(dashboardAiUnavailableState.variant)
+  const dashboardAiRecoveryKey = dashboardAiUnavailableState && isCloudBillingVariant(dashboardAiUnavailableState.variant)
     ? dashboardAiUnavailableState.variant
     : null;
   const dashboardAiRecoveryDismissed = dashboardAiRecoveryKey !== null
@@ -4400,6 +4635,85 @@ export default function App() {
     };
   }, []);
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
+  const companionTodaySnapshot = useMemo(() => {
+    const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
+    if (currentSnapshot) {
+      return buildWatcherSnapshotFromCurrent(
+        currentSnapshot,
+        todaySegments,
+        null,
+        selectedDayClassificationOptions,
+      );
+    }
+    return selectedDay === todayDay
+      ? watcherSnapshot
+      : buildWatcherSnapshot(todaySegments, selectedDayClassificationOptions);
+  }, [currentSnapshot, segments, selectedDay, selectedDayClassificationOptions, todayDay, watcherSnapshot]);
+
+  useEffect(() => {
+    const client = trackerClient as Partial<typeof trackerClient>;
+    if (typeof client.updateTrayDisplayMode !== "function") return;
+    const mode = effectiveCompanionSurfacePolicy === "menuBar"
+      ? companionMenuBarDisplayMode
+      : "donut";
+    void client.updateTrayDisplayMode(mode, companionTodaySnapshot.focusSecondsToday).catch((error: unknown) => {
+      console.warn("Failed to update the menu bar Companion display", toErrorMessage(error));
+    });
+  }, [
+    companionTodaySnapshot.focusSecondsToday,
+    companionMenuBarDisplayMode,
+    effectiveCompanionSurfacePolicy,
+  ]);
+
+  useCompanionDailyFocusMilestones({
+    ready: companionBetaActive && hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    day: todayDay,
+    focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
+    /* Visibility controls only the resident capsule. A milestone is an alert,
+       so a running tracker may announce it through the standalone surface. */
+    announcementsEnabled: companionBetaActive && status?.running === true,
+  });
+
+  useCompanionReentryMoment({
+    ready: companionBetaActive && hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    announcementsEnabled: companionUsesMomentSurface && status?.running === true,
+    activitySignal: status?.lastEventAt ?? currentSnapshot?.observedAt ?? null,
+    locale: localization.effectiveLanguage === "ko" ? "ko-KR" : "en-US",
+  });
+
+  useCompanionFocusRunMilestones({
+    ready: companionBetaActive && hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    day: todayDay,
+    startOfDayMinutes,
+    currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,
+    classificationOptions: companionFocusRecordClassificationOptions,
+    announcementsEnabled: companionBetaActive && status?.running === true,
+  });
+
+  useCompanionLeaderboardMilestones({
+    ready: companionBetaActive && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
+    userScopeKey: user?.id ?? null,
+    day: todayDay,
+    startOfWeek,
+    announcementsEnabled: companionBetaActive,
+  });
+
+  useEffect(() => {
+    if (!companionPillVisible || !isTauriRuntime()) return;
+    const event: WatcherPeekEvent = {
+      id: Date.now(),
+      ...companionTodaySnapshot,
+      slotIndex: 0,
+      trackingPaused: status?.running !== true,
+    };
+    void updateNativeCompanionPill(event).catch((error: unknown) => {
+        console.warn("Failed to refresh the companion pill", toErrorMessage(error));
+      });
+  }, [
+    companionPillVisible,
+    companionTodaySnapshot,
+    status?.running,
+  ]);
   useEffect(() => {
     if (!hasLoadedOnce) return;
     if (shouldBlockLocalTrackerAccess) return;
@@ -4550,12 +4864,13 @@ export default function App() {
 
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
+    if (!companionBetaActive) return;
     if (!hasLoadedOnce) return;
-    if (selectedDay !== todayDay) return;
-    if (segmentsLoadedDay !== todayDay) return;
+    if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
     if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
     if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
+    if (segments.length === 0) return;
 
     void buildEndOfDayReviewEvent({
       day: todayDay,
@@ -4564,7 +4879,7 @@ export default function App() {
     }).then(showEndOfDayReview).then((shown) => {
       if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
     });
-  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, companionBetaActive, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -5828,7 +6143,7 @@ export default function App() {
         </div>
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
-          <AiConnectionStatusBar status={aiConnectionStatus} onOpenSettings={openAiSetupSettings} />
+          <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
           {titlebarUpdate ? (
             <TopbarUpdateButton
               isInstalling={updaterInstalling}
@@ -5850,6 +6165,7 @@ export default function App() {
       {activeTab === "settings" ? (
         <SettingsSidebar
           activeSection={settingsSection}
+          companionBetaActive={companionBetaActive}
           isCollapsed={isSidebarVisuallyCollapsed}
           showDevSection={DEV_SETTINGS_ENABLED && devModeEnabled}
           onBack={handleSettingsBack}
@@ -6203,16 +6519,18 @@ export default function App() {
 
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>
+        <Suspense fallback={<DeferredPageImportFallback label={activeTab} />}>
 
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <DashboardPage
             appIcons={appIcons}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-            classificationActionLoading={classificationActionLoading}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAppUsage={stickyDashboardAppUsage}
+            dashboardSegments={effectiveDashboardSegments}
+            dashboardClassificationOptions={dashboardClassificationOptions}
             browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
             dashboardCategoryTotals={stickyDashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
@@ -6255,18 +6573,6 @@ export default function App() {
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}
-            onRetrySelectedDayAiClassification={() => {
-              void (async () => {
-                // Probe the provider before the classification retry: when
-                // nothing is left to classify, the run alone yields no
-                // connectivity evidence and the disconnect state would
-                // linger. Sequential, so one click never races two provider
-                // round-trips (managed local runtime starts are heavy) and
-                // the classification verdict lands last as freshest evidence.
-                await aiConnectionTest.runAuto();
-                await handleRunSelectedDayAiClassification();
-              })();
-            }}
             onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
             onSelectDay={selectDay}
           />
@@ -6274,7 +6580,7 @@ export default function App() {
 
         {/* Classification */}
         {activeTab === "classification" ? (
-          <ClassificationPage
+          <LazyClassificationPage
             appIcons={appIcons}
             canShiftClassificationForward={canShiftClassificationForward}
             classificationActivityPeakSeconds={classificationActivityPeakSeconds}
@@ -6331,7 +6637,7 @@ export default function App() {
         {activeTab === "history" ? (
           <div className="page page--history">
             {isDeferredTabBodyReady ? (
-              <HistoryView
+              <LazyHistoryView
                 appIcons={appIcons}
                 deleting={historyDeleting}
                 hasMoreSegments={displayedHistoryHasMoreSegments}
@@ -6355,7 +6661,7 @@ export default function App() {
 
         {/* Projects */}
         {activeTab === "projects" && projectClassificationFeatureEnabled ? (
-          <ProjectsPage
+          <LazyProjectsPage
             projects={projectClassification.projects}
             assignments={projectClassification.assignments}
             selectedDay={selectedDay}
@@ -6425,7 +6731,7 @@ export default function App() {
 
         {/* Social: public profile, embeds, and leaderboard */}
         {activeTab === "leaderboard" ? (
-          <SocialPage
+          <LazySocialPage
             activeSection={socialSection}
             actionError={leaderboardActionError}
             activePeriod={activeLeaderboardPeriod}
@@ -6472,7 +6778,7 @@ export default function App() {
         ) : null}
 
         {activeTab === "team" && canOpenTeamsBeta ? (
-          <TeamsBetaSurface
+          <LazyTeamsBetaSurface
             hasRequiredAccountAuth={hasRequiredAccountAuth}
             isPolicySignedIn={isPolicySignedIn}
             isSupabaseConfigured={isSupabaseConfigured}
@@ -6548,6 +6854,7 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
+                    onSendFeedback={() => setFeedbackModalOpen(true)}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
                   />
@@ -6649,6 +6956,10 @@ export default function App() {
                 )}
                 {settingsSection === "notifications" && (
                   <NotificationsSettingsSection
+                    companionSettingsVisible={companionBetaActive}
+                    companionHiddenUntil={companionHiddenUntil}
+                    companionSurfacePolicy={companionSurfacePolicy}
+                    companionMenuBarDisplayMode={companionMenuBarDisplayMode}
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
@@ -6657,6 +6968,10 @@ export default function App() {
                     onDriftAlarmCopyChange={setDriftAlarmCopy}
                     onDriftAlertsChange={setDriftAlertsEnabled}
                     onExtremeNudgeChange={setExtremeNudgeEnabled}
+                    onHideCompanionForOneHour={handleHideCompanionForOneHour}
+                    onShowCompanionNow={handleShowCompanionNow}
+                    onCompanionSurfacePolicyChange={handleCompanionSurfacePolicyChange}
+                    onCompanionMenuBarDisplayModeChange={handleCompanionMenuBarDisplayModeChange}
                   />
                 )}
                 {settingsSection === "privacy" && (
@@ -6667,6 +6982,7 @@ export default function App() {
                     todaySessionCount={segments.length}
                   />
                 )}
+                {settingsSection === "developer" && <DeveloperSettingsSection />}
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
@@ -6688,6 +7004,15 @@ export default function App() {
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
                     weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
+                    companionBetaEnabled={companionBetaEnabled}
+                    companionSurfacePolicy={companionSurfacePolicy}
+                    companionMenuBarDisplayMode={companionMenuBarDisplayMode}
+                    onCompanionBetaEnabledChange={setCompanionBetaEnabled}
+                    onCompanionSurfacePolicyChange={handleCompanionSurfacePolicyChange}
+                    onCompanionMenuBarDisplayModeChange={handleCompanionMenuBarDisplayModeChange}
+                    onPreviewCompanionMilestone={previewCompanionMilestone}
+                    onPreviewCompanionMoment={previewCompanionMoment}
+                    onPreviewCompanionDayReview={handleEndOfDayReviewPreview}
                     watcherMode={watcherMode}
                     watcherPeekEnabled={watcherPeekEnabled}
                     watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
@@ -6772,6 +7097,7 @@ export default function App() {
             </div>
           </div>
         ) : null}
+        </Suspense>
       </MainContentShell>
 
       {!isTauriRuntime() ? (
@@ -6808,17 +7134,23 @@ export default function App() {
 
       {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
 
-      {feedbackModalOpen ? <FeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} /> : null}
+      {feedbackModalOpen ? (
+        <Suspense fallback={null}>
+          <LazyFeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} />
+        </Suspense>
+      ) : null}
       {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}
 
       {debugLogPreview ? (
-        <DebugLogModal
-          text={debugLogPreview.text}
-          note={`Generated ${new Date(debugLogPreview.exportedAt).toLocaleTimeString()} · v${BUILD_INFO.version}`}
-          onClose={() => setDebugLogPreview(null)}
-          onCopy={() => void handleCopyDebugLogs()}
-          onDownload={handleDownloadDebugLogs}
-        />
+        <Suspense fallback={null}>
+          <LazyDebugLogModal
+            text={debugLogPreview.text}
+            note={`Generated ${new Date(debugLogPreview.exportedAt).toLocaleTimeString()} · v${BUILD_INFO.version}`}
+            onClose={() => setDebugLogPreview(null)}
+            onCopy={() => void handleCopyDebugLogs()}
+            onDownload={handleDownloadDebugLogs}
+          />
+        </Suspense>
       ) : null}
 
 

@@ -15,6 +15,7 @@ use super::memory::process_memory_usage_bytes;
 use super::{RUNTIME_HOST, RUNTIME_PORT};
 
 const START_READY_GRACE: Duration = Duration::from_millis(1_500);
+const START_FAILURE_TIMEOUT: Duration = Duration::from_secs(120);
 const HEALTH_TIMEOUT: Duration = Duration::from_millis(400);
 
 static RUNTIME_CHILD: LazyLock<Mutex<Option<ManagedRuntimeChild>>> =
@@ -23,6 +24,7 @@ static RUNTIME_CHILD: LazyLock<Mutex<Option<ManagedRuntimeChild>>> =
 struct ManagedRuntimeChild {
     model_id: &'static str,
     child: Child,
+    started_at: Instant,
 }
 
 pub(super) fn start_child(
@@ -37,8 +39,28 @@ pub(super) fn start_child(
     *guard = Some(ManagedRuntimeChild {
         model_id: spec.id,
         child,
+        started_at: Instant::now(),
     });
     Ok(())
+}
+
+pub(super) fn stop_child_if_start_timed_out(model_id: &str) -> Result<bool, ManagedAiError> {
+    let mut guard = runtime_guard()?;
+    let Some(runtime) = guard.as_mut() else {
+        return Ok(false);
+    };
+    if runtime.model_id != model_id {
+        return Ok(false);
+    }
+    if runtime.child.try_wait()?.is_some() {
+        *guard = None;
+        return Ok(false);
+    }
+    if runtime.started_at.elapsed() < START_FAILURE_TIMEOUT {
+        return Ok(false);
+    }
+    stop_child_in_guard(&mut guard)?;
+    Ok(true)
 }
 
 pub(super) fn wait_for_ready(runtime_path: &Path, spec: ManagedAiModelSpec) -> bool {
@@ -203,6 +225,15 @@ static TEST_RUNTIME_LISTENER_PIDS: Mutex<Option<Vec<u32>>> = Mutex::new(None);
 pub(super) fn set_runtime_listener_pids_for_tests(pids: Option<Vec<u32>>) {
     if let Ok(mut guard) = TEST_RUNTIME_LISTENER_PIDS.lock() {
         *guard = pids;
+    }
+}
+
+#[cfg(test)]
+pub(super) fn age_tracked_child_for_tests(age: Duration) {
+    if let Ok(mut guard) = RUNTIME_CHILD.lock() {
+        if let Some(runtime) = guard.as_mut() {
+            runtime.started_at = Instant::now().checked_sub(age).unwrap_or_else(Instant::now);
+        }
     }
 }
 

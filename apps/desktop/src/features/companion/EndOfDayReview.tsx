@@ -4,6 +4,7 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { DismissIcon, SettingsIcon } from "./DriftAlarmIcons";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
+import type { CompanionDayReviewLayout } from "./companionPillLayout";
 
 type ReviewBreakdownKey = "focus" | "drift" | "other";
 
@@ -29,8 +30,23 @@ export type EndOfDayReviewSourceSummary = EndOfDayReviewTopSource & {
   percent: number;
 };
 
+export type EndOfDayReviewComparison = {
+  focusDeltaSeconds: number;
+  driftDeltaSeconds: number;
+  otherDeltaSeconds: number;
+};
+
+export type EndOfDayReviewDailySignals = {
+  deepSessionCount: number;
+  longestFocusRunSeconds: number;
+  peakHourLabel: string | null;
+  peakHourFocusSeconds: number;
+};
+
 export type EndOfDayReviewEvent = {
   kind: "endOfDayReview";
+  /** Presentation choice carried into the dedicated Companion webview. */
+  layout?: CompanionDayReviewLayout;
   placement?: "top-right";
   day: string;
   generatedAt: string;
@@ -44,6 +60,9 @@ export type EndOfDayReviewEvent = {
   breakdownSources?: EndOfDayReviewBreakdownSource[];
   categorySummaries?: EndOfDayReviewCategorySummary[];
   sourceSummaries?: EndOfDayReviewSourceSummary[];
+  highlightLabel?: string;
+  comparison?: EndOfDayReviewComparison;
+  dailySignals?: EndOfDayReviewDailySignals;
   isMock?: boolean;
 };
 
@@ -111,6 +130,7 @@ export function buildEndOfDayReviewSummary({
   const productivityDurations = buildProductivityDurations(segments);
   const focusSeconds = productivityDurations.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const driftSeconds = productivityDurations.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0;
+  const dailySignals = buildEndOfDayReviewDailySignals(segments);
 
   return {
     kind: "endOfDayReview",
@@ -127,7 +147,74 @@ export function buildEndOfDayReviewSummary({
     breakdownSources: buildBreakdownSources(segments, appIcons),
     categorySummaries: buildCategorySummaries(segments, totalSeconds),
     sourceSummaries: buildSourceSummaries(segments, totalSeconds, appIcons),
+    /* Cross-day comparison data is not yet part of the live summary input.
+       Keep production honest, while the deterministic Dev preview reproduces
+       the reviewed card state instead of silently dropping those rows. */
+    highlightLabel: isMock ? "Best this week" : undefined,
+    comparison: isMock ? {
+      focusDeltaSeconds: 38 * 60,
+      driftDeltaSeconds: -9 * 60,
+      otherDeltaSeconds: 5 * 60,
+    } : undefined,
+    dailySignals,
     isMock: isMock || undefined,
+  };
+}
+
+const DEEP_SESSION_MIN_SECONDS = 45 * 60;
+const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
+
+export function buildEndOfDayReviewDailySignals(segments: ActivitySegment[]): EndOfDayReviewDailySignals {
+  const focusSegments = segments
+    .filter((segment) => segment.classification?.productivity === "focus")
+    .map((segment) => ({
+      startedAt: new Date(segment.startedAt),
+      endedAt: new Date(segment.endedAt),
+      durationSeconds: Math.max(0, segment.durationSeconds),
+    }))
+    .filter((segment) => Number.isFinite(segment.startedAt.getTime()) && Number.isFinite(segment.endedAt.getTime()))
+    .sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
+
+  const focusRuns: number[] = [];
+  let runEndMs = 0;
+  let runSeconds = 0;
+  for (const segment of focusSegments) {
+    const startMs = segment.startedAt.getTime();
+    const endMs = Math.max(startMs, segment.endedAt.getTime());
+    if (runSeconds > 0 && startMs > runEndMs + FOCUS_RUN_MAX_GAP_MS) {
+      focusRuns.push(runSeconds);
+      runSeconds = 0;
+    }
+    runSeconds += segment.durationSeconds;
+    runEndMs = Math.max(runEndMs, endMs);
+  }
+  if (runSeconds > 0) focusRuns.push(runSeconds);
+
+  const deepRuns = focusRuns.filter((seconds) => seconds >= DEEP_SESSION_MIN_SECONDS);
+  const focusByHour = new Map<number, number>();
+  for (const segment of focusSegments) {
+    let cursorMs = segment.startedAt.getTime();
+    const endMs = Math.max(cursorMs, segment.endedAt.getTime());
+    while (cursorMs < endMs) {
+      const hour = new Date(cursorMs);
+      hour.setMinutes(0, 0, 0);
+      const hourStartMs = hour.getTime();
+      const hourEndMs = hourStartMs + 60 * 60 * 1000;
+      const overlapSeconds = Math.max(0, Math.min(endMs, hourEndMs) - cursorMs) / 1000;
+      focusByHour.set(hourStartMs, (focusByHour.get(hourStartMs) ?? 0) + overlapSeconds);
+      cursorMs = Math.min(endMs, hourEndMs);
+    }
+  }
+
+  const peak = Array.from(focusByHour.entries())
+    .sort((left, right) => right[1] - left[1] || left[0] - right[0])[0];
+  const peakDate = peak ? new Date(peak[0]) : null;
+
+  return {
+    deepSessionCount: deepRuns.length,
+    longestFocusRunSeconds: Math.max(0, ...focusRuns),
+    peakHourLabel: peakDate ? `${String(peakDate.getHours()).padStart(2, "0")}:00` : null,
+    peakHourFocusSeconds: Math.round(peak?.[1] ?? 0),
   };
 }
 

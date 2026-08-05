@@ -13,7 +13,7 @@ import {
   type CloudTrialStartedNoticeModel,
 } from "./CloudTrialStartedNotice";
 import { toErrorMessage } from "../../lib/formatting";
-import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
+import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthogClient";
 
 type UseCloudBillingControllerInput = {
   readonly hasRequiredAccountAuth: boolean;

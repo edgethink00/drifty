@@ -48,6 +48,17 @@
   --radius-md: 14px;
   --radius-lg: 18px;
   --radius-pill: 999px;
+  /* Modal shell v2: the approved 125% curvature pass. These semantic tokens
+     keep shell shape independent from the smaller card/control radii above. */
+  --modal-radius-compact: 22.5px;
+  --modal-radius-standard: 25px;
+  --modal-radius-workspace: 25px;
+  --modal-radius-expressive: 30px;
+  --modal-radius-utility: 20px;
+  --modal-inset-compact: 24px;
+  --modal-inset-standard: 32px;
+  --modal-inset-workspace: 24px;
+  --modal-inset-expressive: 28px;
   --week-calendar-event-radius: 5.5px;
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;
@@ -203,6 +214,9 @@ body {
 html[data-surface="watcher"],
 html[data-surface="watcher"] body,
 html[data-surface="watcher"] #root,
+html[data-surface="companion"],
+html[data-surface="companion"] body,
+html[data-surface="companion"] #root,
 html[data-surface="drift-alarm"],
 html[data-surface="drift-alarm"] body,
 html[data-surface="drift-alarm"] #root {
@@ -210,6 +224,7 @@ html[data-surface="drift-alarm"] #root {
 }
 
 html[data-surface="watcher"] body,
+html[data-surface="companion"] body,
 html[data-surface="drift-alarm"] body {
   color: var(--text);
 }

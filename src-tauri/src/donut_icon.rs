@@ -15,6 +15,15 @@ pub enum TrayIconStyle {
     Expanded,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TrayDisplayMode {
+    Donut,
+    #[default]
+    FocusTime,
+    DonutFocusTime,
+}
+
 #[derive(Clone, Copy)]
 pub struct DonutIconRenderInput {
     pub focus: f64,
@@ -127,6 +136,34 @@ pub fn render(input: DonutIconRenderInput) -> (Vec<u8>, u32, u32) {
     (pixels, width as u32, H as u32)
 }
 
+pub fn render_focus_dot(is_dark: bool) -> (Vec<u8>, u32, u32) {
+    const W: usize = 10;
+    const H: usize = 18;
+    let focus_rgb: [u8; 3] = if is_dark {
+        [0xcf, 0xe8, 0x6a]
+    } else {
+        [0x53, 0x64, 0x14]
+    };
+    let mut pixels = vec![0u8; W * H * 4];
+    for py in 0..H {
+        for px in 0..W {
+            let dx = px as f64 + 0.5 - 5.0;
+            let dy = py as f64 + 0.5 - 9.0;
+            let distance = (dx * dx + dy * dy).sqrt();
+            let alpha = (4.0 - distance).clamp(0.0, 1.0);
+            if alpha <= 0.0 {
+                continue;
+            }
+            let index = (py * W + px) * 4;
+            pixels[index] = focus_rgb[0];
+            pixels[index + 1] = focus_rgb[1];
+            pixels[index + 2] = focus_rgb[2];
+            pixels[index + 3] = (alpha * 255.0) as u8;
+        }
+    }
+    (pixels, W as u32, H as u32)
+}
+
 fn normalize_shares(focus: f64, drift: f64, neutral: f64) -> Option<ProductivityShares> {
     let focus = finite_non_negative(focus);
     let drift = finite_non_negative(drift);
@@ -205,6 +242,37 @@ mod tests {
                 .expect("expanded"),
             TrayIconStyle::Expanded,
         );
+    }
+
+    #[test]
+    fn tray_display_mode_deserializes_from_frontend_values() {
+        assert_eq!(
+            serde_json::from_value::<TrayDisplayMode>(serde_json::json!("donut")).expect("donut"),
+            TrayDisplayMode::Donut,
+        );
+        assert_eq!(
+            serde_json::from_value::<TrayDisplayMode>(serde_json::json!("focusTime"))
+                .expect("focus time"),
+            TrayDisplayMode::FocusTime,
+        );
+        assert_eq!(
+            serde_json::from_value::<TrayDisplayMode>(serde_json::json!("donutFocusTime"))
+                .expect("donut and focus time"),
+            TrayDisplayMode::DonutFocusTime,
+        );
+    }
+
+    #[test]
+    fn focus_time_is_the_default_menu_bar_display() {
+        assert_eq!(TrayDisplayMode::default(), TrayDisplayMode::FocusTime);
+    }
+
+    #[test]
+    fn focus_time_display_renders_a_compact_focus_dot() {
+        let (pixels, width, height) = render_focus_dot(true);
+
+        assert_eq!((width, height), (10, 18));
+        assert!(count_color(&pixels, [0xcf, 0xe8, 0x6a]) > 0);
     }
 
     #[test]

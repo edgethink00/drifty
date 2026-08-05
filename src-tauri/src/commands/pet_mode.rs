@@ -671,11 +671,7 @@ pub fn pet_mode_lab_place_center(app: AppHandle) -> Result<PetModeInputBounds, S
     let work_area = monitor.work_area();
     let work_position = work_area.position.to_logical::<f64>(scale_factor);
     let work_size = work_area.size.to_logical::<f64>(scale_factor);
-    let target = calculate_pet_center_position(
-        work_position,
-        work_size.width,
-        work_size.height,
-    );
+    let target = calculate_pet_center_position(work_position, work_size.width, work_size.height);
     cancel_pet_motion();
     window
         .set_position(target)
@@ -1091,11 +1087,7 @@ fn resolve_macos_accessibility_target(
         }
     }
 
-    let script = pet_target_geometry_script(
-        &target.app_name,
-        search_selected_tab,
-        !target.preview,
-    );
+    let script = pet_target_geometry_script(&target.app_name, search_selected_tab, !target.preview);
     let output = Command::new("osascript")
         .args(["-e", &script])
         .output()
@@ -1712,26 +1704,14 @@ mod tests {
             original_home,
         );
         assert_eq!(
-            preferred_pet_position_after_drop(
-                None,
-                middle_drop,
-                work_position,
-                1440.0,
-                775.0,
-            ),
+            preferred_pet_position_after_drop(None, middle_drop, work_position, 1440.0, 775.0,),
             None,
         );
 
         let center = calculate_pet_center_position(work_position, 1440.0, 775.0);
         assert_eq!(center, LogicalPosition::new(648.0, 363.0));
         assert_eq!(
-            preferred_pet_position_after_drop(
-                original_home,
-                center,
-                work_position,
-                1440.0,
-                775.0,
-            ),
+            preferred_pet_position_after_drop(original_home, center, work_position, 1440.0, 775.0,),
             original_home,
         );
     }

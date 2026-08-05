@@ -28,7 +28,8 @@ export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConf
   return (
     <div className="auth-modal__overlay" onClick={() => (deleting ? undefined : onCancel())}>
       <section
-        className="auth-modal ai-delete-model-modal"
+        className="auth-modal modal-shell ai-delete-model-modal"
+        data-modal-variant="compact"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ai-delete-model-title"

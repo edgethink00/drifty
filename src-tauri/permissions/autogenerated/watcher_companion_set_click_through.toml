@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-companion-set-click-through"
+description = "Enables the watcher_companion_set_click_through command without any pre-configured scope."
+commands.allow = ["watcher_companion_set_click_through"]
+
+[[permission]]
+identifier = "deny-watcher-companion-set-click-through"
+description = "Denies the watcher_companion_set_click_through command without any pre-configured scope."
+commands.deny = ["watcher_companion_set_click_through"]

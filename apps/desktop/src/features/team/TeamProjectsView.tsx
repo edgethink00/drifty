@@ -98,7 +98,8 @@ function ProjectEditorModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section
-        className="auth-modal profile-modal team-modal team-editor-modal"
+        className="auth-modal modal-shell profile-modal team-modal team-editor-modal"
+        data-modal-variant="standard"
         role="dialog"
         aria-modal="true"
         aria-labelledby="team-editor-title"

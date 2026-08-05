@@ -63,7 +63,10 @@ pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
             let inherited = class_getInstanceMethod(current_class, selector);
             assert!(!inherited.is_null(), "NSWindow constrain method must exist");
             let encoding = method_getTypeEncoding(inherited);
-            assert!(!encoding.is_null(), "NSWindow constrain encoding must exist");
+            assert!(
+                !encoding.is_null(),
+                "NSWindow constrain encoding must exist"
+            );
             let implementation = unconstrained_frame as *const () as *const c_void;
             assert!(
                 class_addMethod(subclass, selector, implementation, encoding),

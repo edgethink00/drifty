@@ -124,6 +124,24 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertIn('tell application "Aside"', script)
         self.assertIn('URL of active tab of window 1', script)
 
+    def test_browser_script_recovers_aside_main_title_from_exact_synthetic_window_shape(self) -> None:
+        script = _browser_script("Aside")
+
+        self.assertIsNotNone(script)
+        self.assertIn('frontSubrole is "AXUnknown" and frontChildCount is 0', script)
+        self.assertIn('first window whose value of attribute "AXMain" is true', script)
+        self.assertIn('first window whose subrole is "AXStandardWindow"', script)
+        self.assertLess(
+            script.index('first window whose value of attribute "AXMain" is true'),
+            script.index('first window whose subrole is "AXStandardWindow"'),
+        )
+
+    def test_browser_script_keeps_aside_synthetic_window_recovery_out_of_other_browsers(self) -> None:
+        script = _browser_script("Google Chrome")
+
+        self.assertIsNotNone(script)
+        self.assertNotIn('frontSubrole is "AXUnknown" and frontChildCount is 0', script)
+
     def test_chromium_accessibility_fallback_supports_aside(self) -> None:
         script = accessibility_address_bar_script("Aside")
 

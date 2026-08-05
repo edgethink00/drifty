@@ -134,7 +134,7 @@ function LeaderboardToolbar({
           </span>
         ) : (
           <span className="leaderboard-refresh-status leaderboard-refresh-status--idle" aria-hidden="true">
-            Scores update hourly
+            Scores refresh throughout the day
           </span>
         )}
       </div>

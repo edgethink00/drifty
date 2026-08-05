@@ -63,6 +63,7 @@ export const trackerInvokeCommands = [
 export const trayInvokeCommands = [
   "tray_update_productivity_icon",
   "tray_update_icon_style",
+  "tray_update_display_mode",
   "tray_update_drift_alarm_status",
 ] as const;
 
@@ -179,6 +180,10 @@ export type TrayCommandMap = {
     result: void;
   };
   tray_update_icon_style: { args: { style: TrayIconStyle }; result: void };
+  tray_update_display_mode: {
+    args: { mode: TrayDisplayMode; focusSeconds: number };
+    result: void;
+  };
   tray_update_drift_alarm_status: { args: { status: DriftAlarmTrayStatus }; result: void };
 };
 
@@ -433,6 +438,7 @@ export interface ProductivityShareMix {
 }
 
 export type TrayIconStyle = "compact" | "expanded";
+export type TrayDisplayMode = "donut" | "focusTime" | "donutFocusTime";
 
 export interface DriftAlarmTrayStatus {
   readonly enabled: boolean;
@@ -768,6 +774,7 @@ export interface TrackerApi {
   purgeRemoteSegments(): Promise<{ purged: number }>;
   updateTrayProductivityIcon(mix: ProductivityShareMix): Promise<void>;
   updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
+  updateTrayDisplayMode(mode: TrayDisplayMode, focusSeconds: number): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;
 }
 

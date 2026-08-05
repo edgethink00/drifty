@@ -13,7 +13,7 @@ import {
   supabase,
   type DriftyAuthMode,
 } from "../../lib/supabase/client";
-import { capturePostHogEvent, recordPostHogAuthState, toAnalyticsErrorKind } from "../../lib/analytics/posthog";
+import { capturePostHogEvent, recordPostHogAuthState, toAnalyticsErrorKind } from "../../lib/analytics/posthogClient";
 import {
   getAuthDiagnosticError,
   getDesktopSessionDiagnosticSummary,

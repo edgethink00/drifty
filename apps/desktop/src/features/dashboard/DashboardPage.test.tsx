@@ -28,10 +28,11 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
     <DashboardPage
       appIcons={{}}
       billingCheckoutLoadingInterval={null}
-      classificationActionLoading={false}
       currentMinuteOfDay={4 * 60}
       dashboardAiRecoveryState={null}
       dashboardAppUsage={[]}
+      dashboardSegments={[]}
+      dashboardClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={[]}
       dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}
@@ -66,7 +67,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       onDismissDashboardAiRecovery={noop}
       onFlowIntervalChange={noop}
       onOpenDashboardAiSetup={noop}
-      onRetrySelectedDayAiClassification={noop}
       onSelectBillingPlan={noop}
       onSelectDay={noop}
     />,

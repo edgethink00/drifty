@@ -7,7 +7,15 @@ import {
 } from "../settings/localAiSetup";
 import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "../settings/managedLocalAiCatalog";
 
-export type AiConnectionIssueKind = "network" | "provider";
+export type AiConnectionIssueKind =
+  | "network"
+  | "provider"
+  | "authentication"
+  | "credits"
+  | "access"
+  | "model_unavailable"
+  | "rate_limited"
+  | "unavailable";
 
 export type LocalAiConnectionCheck = {
   readonly provider: LocalAiProvider;
@@ -21,21 +29,21 @@ export type LocalAiConnectionCheck = {
 
 export type LocalAiConnectionEvent =
   | { readonly kind: "connection_test_success"; readonly message: string }
-  | { readonly kind: "connection_test_failure"; readonly message: string }
+  | { readonly kind: "connection_test_failure"; readonly issueKind: AiConnectionIssueKind; readonly message: string }
   // A provider round-trip completed (classifications saved, or the provider
   // responded with unusable content) — proof the connection itself works.
   | { readonly kind: "provider_contact_ok"; readonly message: string }
   // A classification run failed at the transport layer (fetch/HTTP/timeout).
-  | { readonly kind: "classification_transport_failure"; readonly message: string };
+  | { readonly kind: "classification_transport_failure"; readonly issueKind?: AiConnectionIssueKind; readonly message: string };
 
 // A lone transport failure from a background classification run is weak
 // evidence (rate limits, wake-from-sleep blips); require this many consecutive
 // failures before tearing down an established "connected" state.
 export const CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD = 2;
 
-// The dashboard "AI provider disconnected" overlay is reserved for failures
-// confirmed by more than one probe, so a single failed launch test cannot
-// summon it before the automatic re-test has a chance to run.
+// Persistent disconnect status for chrome/status surfaces requires more than
+// one probe so a single failed launch test cannot flip the pill before the
+// automatic re-test has a chance to run.
 export const ESTABLISHED_DISCONNECT_FAILURE_THRESHOLD = 2;
 
 export function nextLocalAiConnectionCheck(
@@ -70,7 +78,7 @@ export function nextLocalAiConnectionCheck(
         provider: target.provider,
         fingerprint: target.fingerprint,
         status: "failed",
-        issueKind: aiConnectionIssueKindFromMessage(event.message),
+        issueKind: event.issueKind,
         message: event.message,
         checkedAt,
         consecutiveFailures: priorFailures + 1,
@@ -84,7 +92,7 @@ export function nextLocalAiConnectionCheck(
         provider: target.provider,
         fingerprint: target.fingerprint,
         status: "failed",
-        issueKind: aiConnectionIssueKindFromMessage(event.message),
+        issueKind: event.issueKind ?? aiConnectionIssueKindFromMessage(event.message),
         message: event.message,
         checkedAt,
         consecutiveFailures,
@@ -121,6 +129,12 @@ const NETWORK_ERROR_PATTERNS = [
 export function aiConnectionIssueKindFromMessage(message: string | null): AiConnectionIssueKind {
   const normalizedMessage = message?.trim().toLowerCase() ?? "";
   if (!normalizedMessage) return "provider";
+  if (normalizedMessage.includes("openrouter rejected the api key")) return "authentication";
+  if (normalizedMessage.includes("openrouter credits are required")) return "credits";
+  if (normalizedMessage.includes("openrouter blocked this request")) return "access";
+  if (normalizedMessage.includes("selected openrouter model is unavailable")) return "model_unavailable";
+  if (normalizedMessage.includes("openrouter is rate limiting requests")) return "rate_limited";
+  if (normalizedMessage.includes("openrouter has no available provider")) return "unavailable";
   return NETWORK_ERROR_PATTERNS.some((pattern) => normalizedMessage.includes(pattern)) ? "network" : "provider";
 }
 

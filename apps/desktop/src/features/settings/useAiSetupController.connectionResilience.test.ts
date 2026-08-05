@@ -212,7 +212,7 @@ describe("useAiSetupController connection resilience", () => {
       }));
     });
     act(() => {
-      recordTestResult({ kind: "error", message: "Connection refused" });
+      recordTestResult({ kind: "error", issueKind: "network", message: "Connection refused" });
     });
     expect(rendered.result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "network" });
     expect(runnerMocks.runAuto).not.toHaveBeenCalled();
@@ -224,7 +224,7 @@ describe("useAiSetupController connection resilience", () => {
 
     // Still failed: the next probe waits for the doubled backoff delay.
     act(() => {
-      recordTestResult({ kind: "error", message: "Connection refused" });
+      recordTestResult({ kind: "error", issueKind: "network", message: "Connection refused" });
     });
     act(() => {
       vi.advanceTimersByTime(30_000);
@@ -234,6 +234,36 @@ describe("useAiSetupController connection resilience", () => {
       vi.advanceTimersByTime(30_000);
     });
     expect(runnerMocks.runAuto).toHaveBeenCalledTimes(2);
+  });
+
+  it("honors a longer OpenRouter Retry-After delay", async () => {
+    vi.useFakeTimers();
+    const rendered = renderHook(() => useAiSetupController());
+    act(() => {
+      rendered.result.current.setLocalAiSetup((current: LocalAiSetupState) => ({
+        ...current,
+        provider: "openrouter_byok",
+        openRouterApiKey: "sk-or-v1-saved",
+      }));
+    });
+    act(() => {
+      recordTestResult({
+        kind: "error",
+        issueKind: "rate_limited",
+        message: "OpenRouter is rate limiting requests.",
+        retryAfterMs: 90_000,
+      });
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(89_999);
+    });
+    expect(runnerMocks.runAuto).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(runnerMocks.runAuto).toHaveBeenCalledTimes(1);
   });
 
   it("does not schedule automatic re-tests while the setup dialog is open", async () => {
@@ -250,7 +280,7 @@ describe("useAiSetupController connection resilience", () => {
       rendered.result.current.setAiSetupDialogOpen(true);
     });
     act(() => {
-      recordTestResult({ kind: "error", message: "Connection refused" });
+      recordTestResult({ kind: "error", issueKind: "network", message: "Connection refused" });
     });
 
     act(() => {
@@ -263,7 +293,7 @@ describe("useAiSetupController connection resilience", () => {
     const { result } = await renderConnectedController();
 
     await act(async () => {
-      recordTestResult({ kind: "error", message: "Connection refused" });
+      recordTestResult({ kind: "error", issueKind: "network", message: "Connection refused" });
     });
     expect(result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "network" });
 

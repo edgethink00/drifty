@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WatcherWindowApp } from "./WatcherWindowApp";
+import { buildCompanionReentryPreview } from "./companionPillPreview";
 import type { WatcherPeekEvent } from "./WatcherPeek";
-import type { WatcherWindowEvent } from "./watcherBridge";
+import type { CompanionPillWindowEvent } from "./watcherBridge";
 
 function buildEvent(overrides: Partial<WatcherPeekEvent>): WatcherPeekEvent {
   return {
@@ -33,7 +34,7 @@ const bridge = vi.hoisted(() => ({
   setNativeWatcherInteractive: vi.fn().mockResolvedValue(undefined),
   triggerNativeEndOfDayReviewAction: vi.fn().mockResolvedValue(undefined),
   triggerNativeExtremeNudgeAction: vi.fn().mockResolvedValue(undefined),
-  showHandler: null as ((event: WatcherWindowEvent) => void) | null,
+  showHandler: null as ((event: CompanionPillWindowEvent) => void) | null,
 }));
 
 vi.mock("./watcherBridge", () => ({
@@ -74,6 +75,18 @@ const passiveDriftEvent = buildEvent({
   driftPattern: "first",
 });
 
+const milestoneEvent = {
+  kind: "milestone" as const,
+  id: "daily-rank-3",
+  milestoneKind: "rank" as const,
+  tier: 3 as const,
+  title: "#3 in focus today",
+  subtitle: "You entered today's top three",
+  destination: "leaderboard" as const,
+  statSeconds: 4 * 3600 + 48 * 60,
+  statLabel: "today",
+};
+
 describe("WatcherWindowApp", () => {
   afterEach(() => {
     cleanup();
@@ -97,7 +110,7 @@ describe("WatcherWindowApp", () => {
 
   it("renders native watcher events passively", async () => {
     vi.useFakeTimers();
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
       bridge.showHandler = handler;
       return vi.fn();
     });
@@ -125,7 +138,7 @@ describe("WatcherWindowApp", () => {
 
   it("keeps passive drift reminders non-interactive", async () => {
     vi.useFakeTimers();
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
       bridge.showHandler = handler;
       return vi.fn();
     });
@@ -151,7 +164,7 @@ describe("WatcherWindowApp", () => {
 
   it("keeps focused encouragement non-interactive", async () => {
     vi.useFakeTimers();
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
       bridge.showHandler = handler;
       return vi.fn();
     });
@@ -173,6 +186,43 @@ describe("WatcherWindowApp", () => {
     expect(watcher.querySelector("button")).toBeNull();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(false);
     vi.useRealTimers();
+  });
+
+  it("renders milestone alerts when the resident Companion is off", async () => {
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+
+    const { container } = render(<WatcherWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.showHandler?.(milestoneEvent));
+
+    expect(container.querySelector(".companion-pill-surface")?.getAttribute("data-state")).toBe("milestone");
+    expect(screen.getByText("#3 in focus today")).toBeTruthy();
+    expect(screen.getByText("4:48")).toBeTruthy();
+    expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open leaderboard" }));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard");
+  });
+
+  it("opens the last activity day from a standalone re-entry card", async () => {
+    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
+      bridge.showHandler = handler;
+      return vi.fn();
+    });
+    const reentry = buildCompanionReentryPreview(123);
+
+    render(<WatcherWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.showHandler?.(reentry));
+
+    fireEvent.click(screen.getByRole("button", { name: "See last session" }));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
+      "openActivityDay",
+      reentry.lastActiveAt,
+    );
   });
 
 });

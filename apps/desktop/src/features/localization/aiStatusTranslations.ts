@@ -17,6 +17,18 @@ const AI_STATUS_TRANSLATION_KEYS = {
   "Local AI": "settings.ai.status.local",
   Connected: "settings.ai.status.connected",
   "Connection issue": "settings.ai.status.connectionIssue",
+  "Key issue": "settings.ai.status.keyIssue",
+  "Credits needed": "settings.ai.status.creditsNeeded",
+  "Access blocked": "settings.ai.status.accessBlocked",
+  "Model unavailable": "settings.ai.status.modelUnavailable",
+  "Rate limited": "settings.ai.status.rateLimited",
+  "Provider unavailable": "settings.ai.status.providerUnavailable",
+  "Download failed": "settings.ai.status.downloadFailed",
+  "Model missing": "settings.ai.status.modelMissing",
+  "Memory needed": "settings.ai.status.memoryNeeded",
+  "Storage needed": "settings.ai.status.storageNeeded",
+  "Runtime missing": "settings.ai.status.runtimeMissing",
+  "Start failed": "settings.ai.status.startFailed",
   Issue: "settings.ai.status.issue",
   "Classifying…": "settings.ai.status.classifying",
   "AI setup needed": "settings.ai.status.setupNeeded",
@@ -55,6 +67,12 @@ export function localizeAiConnectionTestMessage(
   if (value === "Supabase is not configured.") return t("settings.ai.connection.supabaseMissing");
   if (value === "Drifty Cloud billing needs attention.") return t("settings.ai.connection.billingAttention");
   if (value === "Cloud AI connection test returned an invalid response.") return t("settings.ai.connection.invalidResponse");
+  if (value === "OpenRouter rejected the API key.") return t("settings.ai.connection.openRouterKeyRejected");
+  if (value === "OpenRouter credits are required.") return t("settings.ai.connection.openRouterCreditsRequired");
+  if (value === "OpenRouter blocked this request.") return t("settings.ai.connection.openRouterAccessBlocked");
+  if (value === "The selected OpenRouter model is unavailable.") return t("settings.ai.connection.openRouterModelUnavailable");
+  if (value === "OpenRouter is rate limiting requests.") return t("settings.ai.connection.openRouterRateLimited");
+  if (value === "OpenRouter has no available provider for this request.") return t("settings.ai.connection.openRouterUnavailable");
 
   const providerHttpMatch = /^Provider returned HTTP (.+)\.$/u.exec(value);
   if (providerHttpMatch) {

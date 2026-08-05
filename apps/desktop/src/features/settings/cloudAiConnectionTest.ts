@@ -1,6 +1,7 @@
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
+import { aiConnectionIssueKindFromMessage } from "../ai-connection/aiConnectionHealth";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 
 type CloudFunctionResult<TData> = {
@@ -23,24 +24,29 @@ type CloudAiConnectionTestResponse = {
 };
 
 export async function testCloudAiConnection(client: CloudAiConnectionTestClient = supabase): Promise<AiConnectionTestResult> {
-  if (!client) return { kind: "error", message: "Supabase is not configured." };
+  if (!client) return { kind: "error", issueKind: "provider", message: "Supabase is not configured." };
 
   try {
     const body = await withCloudDevicePayload({ ...cloudApiClientMetadata });
     const { data, error } = await client.functions.invoke<CloudAiConnectionTestResponse>("test-ai-connection", {
       body,
     });
-    if (error) return { kind: "error", message: await readFunctionError(error, "Cloud AI connection test failed.") };
-    if (data?.error) return { kind: "error", message: data.error };
-    if (data?.ok !== true) return { kind: "error", message: "Cloud AI connection test returned an invalid response." };
+    if (error) {
+      const message = await readFunctionError(error, "Cloud AI connection test failed.");
+      return { kind: "error", issueKind: aiConnectionIssueKindFromMessage(message), message };
+    }
+    if (data?.error) return { kind: "error", issueKind: aiConnectionIssueKindFromMessage(data.error), message: data.error };
+    if (data?.ok !== true) return { kind: "error", issueKind: "provider", message: "Cloud AI connection test returned an invalid response." };
 
     const latencyMs = typeof data.latencyMs === "number" && Number.isFinite(data.latencyMs) ? data.latencyMs : 0;
     const providerLabel = providerDisplayName(data.provider);
     return { kind: "success", message: `Cloud AI connected via ${providerLabel} in ${latencyMs} ms.` };
   } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : "Cloud AI connection test failed.";
     return {
       kind: "error",
-      message: error instanceof Error && error.message ? error.message : "Cloud AI connection test failed.",
+      issueKind: aiConnectionIssueKindFromMessage(message),
+      message,
     };
   }
 }

@@ -1,17 +1,8 @@
 import { supabase } from "../../lib/supabase/client";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 
-export const FEEDBACK_CATEGORY_OPTIONS = [
-  { id: "idea", label: "Idea" },
-  { id: "bug", label: "Bug" },
-  { id: "other", label: "Other" },
-] as const;
-
-export type FeedbackCategory = (typeof FEEDBACK_CATEGORY_OPTIONS)[number]["id"];
-
 export type FeedbackPayload = {
   email: string;
-  category: FeedbackCategory;
   message: string;
   attachments?: FeedbackAttachment[];
 };
@@ -62,7 +53,6 @@ export async function submitFeedback(payload: FeedbackPayload, client: FeedbackC
       body: {
         ...cloudApiClientMetadata,
         email,
-        category: payload.category,
         message,
         ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
       },

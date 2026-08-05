@@ -399,7 +399,8 @@ export function TeamWorkspace({
     return (
       <div className="auth-modal__overlay" onClick={() => setInviteOpen(false)}>
         <section
-          className="auth-modal profile-modal team-modal"
+          className="auth-modal modal-shell profile-modal team-modal"
+          data-modal-variant="standard"
           role="dialog"
           aria-modal="true"
           aria-labelledby="team-invite-title"
@@ -467,7 +468,8 @@ export function TeamWorkspace({
     return (
       <div className="auth-modal__overlay" onClick={() => setSettingsOpen(false)}>
         <section
-          className="auth-modal profile-modal team-modal team-settings-modal"
+          className="auth-modal modal-shell profile-modal team-modal team-settings-modal"
+          data-modal-variant="workspace"
           role="dialog"
           aria-modal="true"
           aria-labelledby="team-settings-title"
@@ -549,7 +551,8 @@ export function TeamWorkspace({
     return (
       <div className="auth-modal__overlay" onClick={() => setAddOpen(false)}>
         <section
-          className="auth-modal profile-modal team-modal team-editor-modal"
+          className="auth-modal modal-shell profile-modal team-modal team-editor-modal"
+          data-modal-variant="standard"
           role="dialog"
           aria-modal="true"
           aria-labelledby="team-add-title"

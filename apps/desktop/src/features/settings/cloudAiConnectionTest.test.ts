@@ -27,11 +27,11 @@ describe("testCloudAiConnection", () => {
 
     const result = await testCloudAiConnection(client);
 
-    expect(result).toEqual({ kind: "error", message: "Drifty Cloud billing needs attention." });
+    expect(result).toEqual({ kind: "error", issueKind: "provider", message: "Drifty Cloud billing needs attention." });
   });
 
   it("reports missing Supabase configuration", async () => {
-    await expect(testCloudAiConnection(null)).resolves.toEqual({ kind: "error", message: "Supabase is not configured." });
+    await expect(testCloudAiConnection(null)).resolves.toEqual({ kind: "error", issueKind: "provider", message: "Supabase is not configured." });
   });
 });
 

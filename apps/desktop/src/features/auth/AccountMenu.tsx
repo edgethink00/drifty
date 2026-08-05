@@ -27,7 +27,8 @@ function SettingsIcon() {
   return (
     <svg {...menuIconProps}>
       <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+      {/* Common 6-tooth gear silhouette — less busy than the Lucide 8-lobe Settings path. */}
+      <path d="M10.09 3 L13.91 3 L14.08 5.79 L15.27 6.33 L16.34 7.1 L18.84 5.84 L20.75 9.16 L18.42 10.69 L18.55 12 L18.42 13.31 L20.75 14.84 L18.84 18.16 L16.34 16.9 L15.28 17.67 L14.08 18.21 L13.91 21 L10.09 21 L9.92 18.21 L8.73 17.67 L7.66 16.9 L5.16 18.16 L3.25 14.84 L5.58 13.31 L5.45 12 L5.58 10.69 L3.25 9.16 L5.16 5.84 L7.66 7.1 L8.73 6.33 L9.92 5.79 Z" />
     </svg>
   );
 }
@@ -35,8 +36,10 @@ function SettingsIcon() {
 function AiIcon() {
   return (
     <svg {...menuIconProps}>
-      <path d="M11.5 3.8 13 9.4 18.6 11 13 12.6 11.5 18.2 10 12.6 4.4 11 10 9.4Z" fill="currentColor" stroke="none" />
-      <path d="M18.2 13.4 18.7 15.3 20.6 15.8 18.7 16.3 18.2 18.2 17.7 16.3 15.8 15.8 17.7 15.3Z" fill="currentColor" stroke="none" />
+      {/* Optically enlarge the filled sparkle so AI Setting matches sibling icons
+          before the shared CSS icon scale is applied. */}
+      <path d="M11.5 2.22 13.33 9.05 20.16 11 13.33 12.95 11.5 19.78 9.67 12.95 2.84 11 9.67 9.05Z" fill="currentColor" stroke="none" />
+      <path d="M19.67 13.93 20.28 16.25 22.6 16.86 20.28 17.47 19.67 19.78 19.06 17.47 16.75 16.86 19.06 16.25Z" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -231,7 +234,7 @@ export function AccountMenu({
       </div>
       <div className="account-menu-separator account-menu-separator--account" role="separator" />
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
-        <span className="account-menu-icon"><SettingsIcon /></span>
+        <span className="account-menu-icon account-menu-icon--settings"><SettingsIcon /></span>
         <span>Settings</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onAiSetting} role="menuitem">

@@ -97,7 +97,8 @@ export function RankEmbedsModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section
-        className="auth-modal profile-modal rank-embeds-modal"
+        className="auth-modal modal-shell profile-modal rank-embeds-modal"
+        data-modal-variant="workspace"
         role="dialog"
         aria-modal="true"
         aria-labelledby="rank-embeds-title"

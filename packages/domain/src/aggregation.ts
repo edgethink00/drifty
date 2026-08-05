@@ -909,6 +909,55 @@ export function categorizeActivity(segment: ActivitySegment, options?: Classific
 
 const PRESERVED_FOCUS_STRIKE_MAX_GAP_SECONDS = 5 * 60;
 
+/**
+ * Sum the live run ending at a Focus segment.
+ *
+ * A run follows Drifty's productivity verdict rather than app identity: moving
+ * from VS Code to Figma keeps the run alive when both segments classify as
+ * Focus. Any observed Drift/Neutral segment, or an uncaptured gap over five
+ * minutes, ends it.
+ */
+export function computeCurrentFocusStrikeSeconds(
+  segments: ActivitySegment[],
+  currentFocusSegment: ActivitySegment,
+  options?: ClassificationOptions,
+): number | null {
+  if (categorizeActivity(currentFocusSegment, options) !== "focus") return null;
+
+  const sourceSegments = segments.some((segment) => segment.id === currentFocusSegment.id)
+    ? segments
+    : [...segments, currentFocusSegment];
+  const orderedSegments = [...sourceSegments].sort((left, right) => {
+    const leftStart = new Date(left.startedAt).getTime();
+    const rightStart = new Date(right.startedAt).getTime();
+    if (leftStart !== rightStart) return leftStart - rightStart;
+    return new Date(left.endedAt).getTime() - new Date(right.endedAt).getTime();
+  });
+  const currentIndex = orderedSegments.findIndex((segment) => segment.id === currentFocusSegment.id);
+  if (currentIndex !== orderedSegments.length - 1) return null;
+
+  let boundaryStartMs = new Date(currentFocusSegment.startedAt).getTime();
+  if (!Number.isFinite(boundaryStartMs)) return null;
+  let strikeSeconds = Math.max(0, currentFocusSegment.durationSeconds);
+
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const segment = orderedSegments[index];
+    const segmentEndMs = new Date(segment.endedAt).getTime();
+    const segmentStartMs = new Date(segment.startedAt).getTime();
+    if (!Number.isFinite(segmentEndMs) || !Number.isFinite(segmentStartMs)) break;
+    if (segmentEndMs > boundaryStartMs) continue;
+
+    const gapSeconds = Math.max(0, Math.round((boundaryStartMs - segmentEndMs) / 1000));
+    if (gapSeconds > PRESERVED_FOCUS_STRIKE_MAX_GAP_SECONDS) break;
+    if (categorizeActivity(segment, options) !== "focus") break;
+
+    strikeSeconds += Math.max(0, segment.durationSeconds);
+    boundaryStartMs = segmentStartMs;
+  }
+
+  return strikeSeconds > 0 ? strikeSeconds : null;
+}
+
 export function computePreservedFocusStrikeSeconds(
   segments: ActivitySegment[],
   currentDriftSegment: ActivitySegment,

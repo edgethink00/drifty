@@ -1794,7 +1794,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^test connection$/i);
 
     expect(await screen.findByRole("dialog", { name: /connection failed/i }, { timeout: 6_000 })).toBeTruthy();
-    expect(screen.getByText(/provider returned http 401/i)).toBeTruthy();
+    expect(screen.getByText(/openrouter rejected the api key/i)).toBeTruthy();
     const continueButton = screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
     expect(continueButton.disabled).toBe(true);
   }, 15_000);

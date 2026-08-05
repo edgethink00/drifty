@@ -57,6 +57,20 @@ fn posts_openrouter_models_array_without_comma_joining() {
 }
 
 #[test]
+fn preserves_numeric_retry_after_for_provider_backoff() {
+    let body = r#"{"error":{"code":429,"message":"Rate limited"}}"#;
+    let (address, server) =
+        capture_chat_response("429 Too Many Requests", "Retry-After: 90\r\n", body);
+    let response = post_openai_chat(chat_request(format!("http://{address}")))
+        .expect("chat request returns provider response");
+
+    server.join().expect("join server");
+    assert_eq!(response.status, 429);
+    assert_eq!(response.body, body);
+    assert_eq!(response.retry_after_ms, Some(90_000));
+}
+
+#[test]
 fn posts_single_normalized_models_entry_as_model() {
     let (address, server) = capture_one_chat_request();
     let mut request = chat_request(format!("http://{address}"));
@@ -248,6 +262,15 @@ fn anthropic_request(base_url: String) -> AiClassificationAnthropicChatRequest {
 }
 
 fn capture_one_chat_request() -> (std::net::SocketAddr, thread::JoinHandle<String>) {
+    let body = r#"{"choices":[{"message":{"content":"{\"results\":[]}"}}]}"#;
+    capture_chat_response("200 OK", "", body)
+}
+
+fn capture_chat_response(
+    status: &'static str,
+    extra_headers: &'static str,
+    body: &'static str,
+) -> (std::net::SocketAddr, thread::JoinHandle<String>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
     let address = listener.local_addr().expect("read test server address");
     let server = thread::spawn(move || {
@@ -255,9 +278,8 @@ fn capture_one_chat_request() -> (std::net::SocketAddr, thread::JoinHandle<Strin
         let mut buffer = [0_u8; 8192];
         let bytes = stream.read(&mut buffer).expect("read request");
         let request = String::from_utf8_lossy(&buffer[..bytes]).to_string();
-        let body = r#"{"choices":[{"message":{"content":"{\"results\":[]}"}}]}"#;
         let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{extra_headers}Content-Length: {}\r\n\r\n{}",
             body.len(),
             body
         );

@@ -1,6 +1,6 @@
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { categorizeActivity, classifyActivity, computePreservedFocusStrikeSeconds } from "@drifty/domain";
+import { categorizeActivity, classifyActivity, computeCurrentFocusStrikeSeconds, computePreservedFocusStrikeSeconds } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, CurrentActivitySnapshot, ProductivityLabel } from "@drifty/domain";
 import { isProductivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
@@ -60,6 +60,7 @@ export function getDefaultWatcherSnapshot(): WatcherSnapshot {
     minutesSinceLastWatcher: getMinutesSinceLastWatcher(),
     focusSecondsToday: 0,
     currentHourFocusSeconds: 0,
+    focusStrikeSeconds: null,
     preservedFocusStrikeSeconds: null,
   };
 }
@@ -101,6 +102,7 @@ export function buildWatcherSnapshot(segments: ActivitySegment[], classification
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
+    focusStrikeSeconds: computeCurrentFocusStrikeSeconds(segments, segment, classificationOptions),
     preservedFocusStrikeSeconds: computePreservedFocusStrikeSeconds(segments, segment, classificationOptions),
   };
 }
@@ -127,6 +129,7 @@ export function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot
   const focusSecondsToday = sumProductivitySeconds(segments, "focus", classificationOptions) + uncapturedFocusSeconds;
   const currentHourFocusSeconds = sumCurrentHourFocusSeconds(segments, classificationOptions) + uncapturedFocusSeconds;
   const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds([...segments, segment], segment, classificationOptions);
+  const focusStrikeSeconds = computeCurrentFocusStrikeSeconds([...segments, segment], segment, classificationOptions);
 
   return {
     productivity,
@@ -141,6 +144,7 @@ export function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot
     minutesSinceLastWatcher: recentWatcherResponse ? Math.max(0, Math.round((Date.now() - new Date(recentWatcherResponse.respondedAt).getTime()) / 60000)) : null,
     focusSecondsToday,
     currentHourFocusSeconds,
+    focusStrikeSeconds,
     preservedFocusStrikeSeconds,
   };
 }

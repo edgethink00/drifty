@@ -80,6 +80,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_purge_remote_segments",
   "tray_update_productivity_icon",
   "tray_update_icon_style",
+  "tray_update_display_mode",
   "tray_update_drift_alarm_status",
 ];
 
@@ -333,6 +334,18 @@ describe("trackerClient", () => {
     await trackerClient.updateTrayIconStyle("expanded");
 
     expect(invoke).toHaveBeenCalledWith("tray_update_icon_style", { style: "expanded" });
+  });
+
+  it("invokes tray_update_display_mode with the focused duration", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce(null);
+
+    await trackerClient.updateTrayDisplayMode("donutFocusTime", 9_660);
+
+    expect(invoke).toHaveBeenCalledWith("tray_update_display_mode", {
+      mode: "donutFocusTime",
+      focusSeconds: 9_660,
+    });
   });
 
   it("returns an empty dashboard week timeline outside Tauri", async () => {

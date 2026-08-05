@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { captureSentryException } from "../../lib/observability/sentry";
+import { captureSentryException } from "../../lib/observability/sentryClient";
 
 export type SentrySmokeSurface = "renderer" | "native";
 

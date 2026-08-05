@@ -129,6 +129,10 @@ fn install_model_at_root(
     model_id: &str,
     app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
+    let spec = require_model(model_id)?;
+    if let Some(status) = model_resource_error_status(root, spec, true, app)? {
+        return Ok(status);
+    }
     install_model_at_root_with_downloader(root, model_id, download_model_artifact, app)
 }
 
@@ -224,6 +228,9 @@ impl DownloadProgressWriteGate {
 
 fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
+    if let Some(status) = model_resource_error_status(root, spec, false, None)? {
+        return Ok(status);
+    }
     let artifact_dir = status_artifact_dir(root, spec)?;
     let Some(artifact_dir) = artifact_dir else {
         let status = status_with_installed_models(
@@ -241,16 +248,71 @@ fn start_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, M
 
     let status = match runtime::start_runtime(root, spec, &artifact_dir) {
         Ok(status) => status,
-        Err(error) => status_for_spec(
-            ManagedAiInstallState::Error,
-            spec,
-            Some(artifact_dir),
-            &error_message(error),
-        ),
+        Err(error) => {
+            let error_kind = runtime_error_kind(&error);
+            let message = error_message(error);
+            status_for_model_error(spec, Some(artifact_dir), &message, error_kind)
+        }
     };
     let status = status_with_installed_models(root, status)?;
     write_status(root, &status)?;
     Ok(status)
+}
+
+fn model_resource_error_status(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    check_storage: bool,
+    app: Option<&AppHandle>,
+) -> Result<Option<ManagedAiStatus>, ManagedAiError> {
+    let memory_bytes = hardware::machine_memory_bytes();
+    let storage_bytes = check_storage
+        .then(|| hardware::available_storage_bytes(root))
+        .flatten();
+    let Some(failure) = model_resource_failure(spec, memory_bytes, storage_bytes) else {
+        return Ok(None);
+    };
+    let mut error_status = status_for_model_error(spec, None, &failure.message, failure.error_kind);
+    error_status.required_resource_bytes = Some(failure.required_bytes);
+    error_status.available_resource_bytes = Some(failure.available_bytes);
+    let status = status_with_installed_models(root, error_status)?;
+    write_and_emit_status(root, &status, app)?;
+    Ok(Some(status))
+}
+
+struct ModelResourceFailure {
+    error_kind: ManagedAiStatusErrorKind,
+    message: String,
+    required_bytes: u64,
+    available_bytes: u64,
+}
+
+fn model_resource_failure(
+    spec: ManagedAiModelSpec,
+    memory_bytes: Option<u64>,
+    storage_bytes: Option<u64>,
+) -> Option<ModelResourceFailure> {
+    if let Some(available_bytes) =
+        memory_bytes.filter(|available| *available < spec.min_memory_bytes)
+    {
+        return Some(ModelResourceFailure {
+            error_kind: ManagedAiStatusErrorKind::InsufficientMemory,
+            message: "Selected local model requires more memory than this Mac has.".to_string(),
+            required_bytes: spec.min_memory_bytes,
+            available_bytes,
+        });
+    }
+    if let Some(available_bytes) =
+        storage_bytes.filter(|available| *available < spec.disk_required_bytes)
+    {
+        return Some(ModelResourceFailure {
+            error_kind: ManagedAiStatusErrorKind::InsufficientStorage,
+            message: "Not enough free storage to download the selected local model.".to_string(),
+            required_bytes: spec.disk_required_bytes,
+            available_bytes,
+        });
+    }
+    None
 }
 
 fn delete_model_at_root(root: &Path, model_id: &str) -> Result<ManagedAiStatus, ManagedAiError> {
@@ -274,31 +336,22 @@ fn status_artifact_dir(
     spec: ManagedAiModelSpec,
 ) -> Result<Option<PathBuf>, ManagedAiError> {
     let path = model_dir(root, spec.id);
-    if model_dir_has_artifacts(&path)? {
+    if model_dir_has_artifact(&path, spec)? {
         Ok(Some(path))
     } else {
         Ok(None)
     }
 }
 
-fn model_dir_has_artifacts(path: &Path) -> Result<bool, ManagedAiError> {
+fn model_dir_has_artifact(path: &Path, spec: ManagedAiModelSpec) -> Result<bool, ManagedAiError> {
     if !path.is_dir() {
         return Ok(false);
     }
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
-        if metadata.is_file()
-            && metadata.len() > 0
-            && entry
-                .path()
-                .extension()
-                .is_some_and(|extension| extension == "gguf")
-        {
-            return Ok(true);
-        }
+    match fs::metadata(path.join(spec.file_name)) {
+        Ok(metadata) => Ok(metadata.is_file() && metadata.len() == spec.expected_size_bytes),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(error.into()),
     }
-    Ok(false)
 }
 
 fn require_model(model_id: &str) -> Result<ManagedAiModelSpec, ManagedAiError> {
@@ -333,6 +386,9 @@ fn model_retry_error_kind(error: &ManagedAiError) -> Option<ManagedAiStatusError
         ManagedAiError::Http(_) | ManagedAiError::DownloadFailed(_) => {
             Some(ManagedAiStatusErrorKind::DownloadFailed)
         }
+        ManagedAiError::Io(error) if is_storage_full_error(error) => {
+            Some(ManagedAiStatusErrorKind::InsufficientStorage)
+        }
         ManagedAiError::AppData(_)
         | ManagedAiError::UnknownModel(_)
         | ManagedAiError::Io(_)
@@ -340,4 +396,25 @@ fn model_retry_error_kind(error: &ManagedAiError) -> Option<ManagedAiStatusError
         | ManagedAiError::RuntimeMissing(_)
         | ManagedAiError::RuntimeFailed(_) => None,
     }
+}
+
+fn runtime_error_kind(error: &ManagedAiError) -> ManagedAiStatusErrorKind {
+    match error {
+        ManagedAiError::RuntimeMissing(_) => ManagedAiStatusErrorKind::RuntimeMissing,
+        ManagedAiError::Io(error) if is_storage_full_error(error) => {
+            ManagedAiStatusErrorKind::InsufficientStorage
+        }
+        ManagedAiError::AppData(_)
+        | ManagedAiError::UnknownModel(_)
+        | ManagedAiError::Io(_)
+        | ManagedAiError::Json(_)
+        | ManagedAiError::Http(_)
+        | ManagedAiError::DownloadFailed(_)
+        | ManagedAiError::RuntimeFailed(_) => ManagedAiStatusErrorKind::RuntimeFailed,
+    }
+}
+
+fn is_storage_full_error(error: &std::io::Error) -> bool {
+    // ENOSPC is 28 on macOS, the only production target for this command.
+    error.raw_os_error() == Some(28)
 }

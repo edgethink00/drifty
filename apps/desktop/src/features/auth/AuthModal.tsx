@@ -37,7 +37,7 @@ export function AuthModal({
   if (!isEnabled) {
     return (
       <div className="auth-modal__overlay">
-        <div className="auth-modal">
+        <div className="auth-modal modal-shell" data-modal-variant="standard">
           {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={onClose} /> : null}
           <div className="modal-head">
             <div className="modal-head__copy">
@@ -116,7 +116,7 @@ export function AuthModal({
 
   return (
     <div className="auth-modal__overlay">
-      <div className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+      <div className="auth-modal modal-shell" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
         {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={onClose} /> : null}
         <div className="modal-head">
           <div className="modal-head__copy">

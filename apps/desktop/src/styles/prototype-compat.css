@@ -227,8 +227,8 @@
 
 .account-popover__name {
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 400;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -249,9 +249,9 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 7.2px;
-  min-height: 34.5px;
-  padding: 6.5px 8px 6.5px 5px;
+  gap: 6.7px;
+  min-height: 30.8px;
+  padding: 5.803px 8px 5.803px 5px;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -265,8 +265,9 @@
 .account-menu-item:hover { background: color-mix(in srgb, var(--bg-2) 72%, transparent); transform: none; }
 .account-menu-item:disabled { opacity: .42; }
 .account-menu-item--danger { color: var(--warn); }
-.account-menu-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; color: currentColor; }
-.account-menu-icon svg { display: block; width: 17px; height: 17px; }
+.account-menu-icon { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 17.1px; height: 17.1px; color: currentColor; }
+.account-menu-icon svg { display: block; width: 15.3px; height: 15.3px; }
+.account-menu-icon--settings svg { width: 14.1px; height: 14.1px; }
 .account-menu-toggle { margin-left: auto; flex: none; display: inline-flex; align-items: center; width: 30px; height: 17px; padding: 2px; border-radius: 999px; background: color-mix(in srgb, var(--text) 22%, transparent); transition: background 140ms ease; }
 .account-menu-toggle[data-on="true"] { background: var(--accent, #4a7dff); }
 .account-menu-toggle__knob { width: 13px; height: 13px; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.28); transition: transform 140ms ease; }

@@ -72,7 +72,8 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section
-        className="auth-modal projects-editor-modal"
+        className="auth-modal modal-shell projects-editor-modal"
+        data-modal-variant="workspace"
         role="dialog"
         aria-modal="true"
         aria-labelledby="projects-editor-title"

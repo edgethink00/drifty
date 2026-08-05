@@ -49,6 +49,10 @@ pub struct ManagedAiInstalledModel {
 pub enum ManagedAiStatusErrorKind {
     DownloadFailed,
     ModelArtifactMissing,
+    InsufficientMemory,
+    InsufficientStorage,
+    RuntimeMissing,
+    RuntimeFailed,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -67,6 +71,10 @@ pub struct ManagedAiStatus {
     pub(super) error_kind: Option<ManagedAiStatusErrorKind>,
     #[serde(default)]
     pub(super) memory_usage_bytes: Option<u64>,
+    #[serde(default)]
+    pub(super) required_resource_bytes: Option<u64>,
+    #[serde(default)]
+    pub(super) available_resource_bytes: Option<u64>,
 }
 
 pub(super) fn status_for_spec(
@@ -86,6 +94,8 @@ pub(super) fn status_for_spec(
         progress: None,
         error_kind: None,
         memory_usage_bytes: None,
+        required_resource_bytes: None,
+        available_resource_bytes: None,
     }
 }
 
@@ -106,6 +116,8 @@ pub(super) fn status_for_model_error(
         progress: None,
         error_kind: Some(error_kind),
         memory_usage_bytes: None,
+        required_resource_bytes: None,
+        available_resource_bytes: None,
     }
 }
 
@@ -121,6 +133,8 @@ pub(super) fn status_for_global_error(message: &str) -> ManagedAiStatus {
         progress: None,
         error_kind: None,
         memory_usage_bytes: None,
+        required_resource_bytes: None,
+        available_resource_bytes: None,
     }
 }
 
@@ -139,6 +153,8 @@ pub(super) fn status_for_download_progress(
         progress: Some(progress),
         error_kind: None,
         memory_usage_bytes: None,
+        required_resource_bytes: None,
+        available_resource_bytes: None,
     }
 }
 
@@ -172,6 +188,8 @@ pub(super) fn default_status() -> ManagedAiStatus {
         progress: None,
         error_kind: None,
         memory_usage_bytes: None,
+        required_resource_bytes: None,
+        available_resource_bytes: None,
     }
 }
 

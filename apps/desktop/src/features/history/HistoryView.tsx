@@ -5,6 +5,7 @@ import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import "./history.css";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -46,7 +47,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
       aria-labelledby="history-confirm-title"
       tabIndex={-1}
     >
-      <div className="history-confirm__panel">
+      <div className="history-confirm__panel modal-shell" data-modal-variant="compact">
         <h2 id="history-confirm-title">Delete history records?</h2>
         <p>
           This removes {recordCount} local activity {recordCount === 1 ? "record" : "records"} from this Mac.

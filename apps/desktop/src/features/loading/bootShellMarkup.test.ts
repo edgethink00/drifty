@@ -37,6 +37,17 @@ describe("boot shell markup", () => {
   });
 
   it("keeps the boot shell out of companion windows", () => {
-    expect(indexSource).toMatch(/html\[data-surface="watcher"\] #boot-shell,[\s\S]*html\[data-surface="drift-alarm"\] #boot-shell,[\s\S]*html\[data-surface="pet-mode"\] #boot-shell\s*{\s*display:\s*none;/);
+    const ruleStart = indexSource.indexOf('html[data-surface="watcher"] #boot-shell,');
+    const declarationStart = indexSource.indexOf("{", ruleStart);
+    const ruleEnd = indexSource.indexOf("}", declarationStart);
+    const bootShellRule = ruleStart < 0 || declarationStart < 0 || ruleEnd < 0
+      ? ""
+      : indexSource.slice(ruleStart, ruleEnd + 1);
+
+    expect(bootShellRule).toContain('html[data-surface="watcher"] #boot-shell');
+    expect(bootShellRule).toContain('html[data-surface="companion"] #boot-shell');
+    expect(bootShellRule).toContain('html[data-surface="drift-alarm"] #boot-shell');
+    expect(bootShellRule).toContain('html[data-surface="pet-mode"] #boot-shell');
+    expect(bootShellRule).toMatch(/\{\s*display:\s*none;/);
   });
 });

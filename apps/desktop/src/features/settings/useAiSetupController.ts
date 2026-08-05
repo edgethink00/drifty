@@ -40,7 +40,7 @@ type UseAiSetupControllerResult = {
   readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
   readonly localAiConnectionFingerprint: string | null;
   readonly localAiConnectionProviderLabel: ReturnType<typeof localAiProviderLabel>;
-  /** True once the failure is confirmed by repeated probes — gates the heavy "AI provider disconnected" dashboard surfaces. */
+  /** True once the failure is confirmed by repeated probes — gates chrome/status disconnect surfaces. */
   readonly localAiConnectionPersistentFailure: boolean;
   readonly localAiMemoryUsageBytes: number | null;
   readonly localAiProviderStatus: LocalAiProviderStatus;
@@ -58,6 +58,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
   const [openRouterKeyLoaded, setOpenRouterKeyLoaded] = useState(false);
   const lastSavedOpenRouterKeyRef = useRef<string | null>(null);
+  const localAiRetryAfterMsRef = useRef<number | null>(null);
 
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
   const localAiConnectionFingerprint = useMemo(() => localAiSetupFingerprint(localAiSetup), [localAiSetup]);
@@ -70,13 +71,14 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const recordLocalAiConnectionTestResult = useCallback((testedSetup: LocalAiSetupState, result: AiConnectionTestResult) => {
     const fingerprint = localAiSetupFingerprint(testedSetup);
     if (!fingerprint) {
+      localAiRetryAfterMsRef.current = null;
       setLocalAiConnectionCheck(null);
       return;
     }
-    applyLocalAiConnectionEvent(testedSetup.provider, fingerprint, {
-      kind: result.kind === "success" ? "connection_test_success" : "connection_test_failure",
-      message: result.message,
-    });
+    localAiRetryAfterMsRef.current = result.kind === "error" ? result.retryAfterMs ?? null : null;
+    applyLocalAiConnectionEvent(testedSetup.provider, fingerprint, result.kind === "success"
+      ? { kind: "connection_test_success", message: result.message }
+      : { kind: "connection_test_failure", issueKind: result.issueKind, message: result.message });
   }, [applyLocalAiConnectionEvent]);
 
   const aiConnectionTest = useAiConnectionTestRunner({
@@ -150,6 +152,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const retestAttemptRef = useRef(0);
   useEffect(() => {
     retestAttemptRef.current = 0;
+    localAiRetryAfterMsRef.current = null;
   }, [localAiConnectionFingerprint]);
 
   const { runAuto: runAutoConnectionTest } = aiConnectionTest;
@@ -163,7 +166,8 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     // While the setup dialog is open the user is driving tests by hand; an
     // automatic probe would overwrite the result they are looking at.
     if (aiSetupDialogOpen) return;
-    const delayMs = Math.min(AI_CONNECTION_RETEST_BASE_DELAY_MS * 2 ** retestAttemptRef.current, AI_CONNECTION_RETEST_MAX_DELAY_MS);
+    const exponentialDelayMs = Math.min(AI_CONNECTION_RETEST_BASE_DELAY_MS * 2 ** retestAttemptRef.current, AI_CONNECTION_RETEST_MAX_DELAY_MS);
+    const delayMs = Math.max(exponentialDelayMs, localAiRetryAfterMsRef.current ?? 0);
     const timeoutId = window.setTimeout(() => {
       retestAttemptRef.current += 1;
       void runAutoConnectionTest();

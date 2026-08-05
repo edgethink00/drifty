@@ -21,21 +21,23 @@ use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_m
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     ai_classification_openai_chat, cloud_sync_http_post, developer_check_pre_release_update,
-    developer_install_pre_release_update, drift_alarm_action, drift_alarm_current,
-    drift_alarm_dismiss, drift_alarm_hide, drift_alarm_show, extreme_nudge_apply,
-    focus_target_activate_browser_tab, focus_target_browser_tab_exists, focus_target_open_app,
-    managed_ai_catalog, managed_ai_delete, managed_ai_install, managed_ai_start, managed_ai_status,
-    managed_ai_stop_runtime_for_app_exit, pet_mode_begin_drag, pet_mode_cancel_motion, pet_mode_cursor_inside, pet_mode_exit_screen,
-    pet_mode_align_contact, pet_mode_input_bounds, pet_mode_intervene, pet_mode_lab_apply_target,
-    pet_mode_lab_place_center,
-    pet_mode_move_to_target, pet_mode_preview_action, pet_mode_preview_intervention,
-    pet_mode_remember_position,
-    pet_mode_report_contact, pet_mode_report_drag_error, pet_mode_report_pointer, pet_mode_return_from_outing,
+    developer_install_pre_release_update, developer_tools_get_status, developer_tools_install_cli,
+    developer_tools_install_codex_skill, developer_tools_install_skill,
+    developer_tools_uninstall_cli, developer_tools_uninstall_codex_skill,
+    developer_tools_uninstall_skill, drift_alarm_action, drift_alarm_current, drift_alarm_dismiss,
+    drift_alarm_hide, drift_alarm_show, extreme_nudge_apply, focus_target_activate_browser_tab,
+    focus_target_browser_tab_exists, focus_target_open_app, managed_ai_catalog, managed_ai_delete,
+    managed_ai_install, managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
+    pet_mode_align_contact, pet_mode_begin_drag, pet_mode_cancel_motion, pet_mode_cursor_inside,
+    pet_mode_exit_screen, pet_mode_input_bounds, pet_mode_intervene, pet_mode_lab_apply_target,
+    pet_mode_lab_place_center, pet_mode_move_to_target, pet_mode_preview_action,
+    pet_mode_preview_intervention, pet_mode_remember_position, pet_mode_report_contact,
+    pet_mode_report_drag_error, pet_mode_report_pointer, pet_mode_return_from_outing,
     pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
-    pet_mode_set_presence, pet_mode_update, sentry_capture_native_smoke, setup_drift_alarm_window,
-    setup_pet_mode_window, setup_watcher_window, startup_get_open_at_login_status,
-    startup_set_open_at_login_enabled, system_open_settings_pane,
-    tracker_apply_classification_rules, tracker_apply_synced_deletions,
+    pet_mode_set_presence, pet_mode_update, sentry_capture_native_smoke,
+    setup_companion_pill_window, setup_drift_alarm_window, setup_pet_mode_window,
+    setup_watcher_window, startup_get_open_at_login_status, startup_set_open_at_login_enabled,
+    system_open_settings_pane, tracker_apply_classification_rules, tracker_apply_synced_deletions,
     tracker_apply_synced_segments, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_delete_project,
     tracker_delete_project_anchor, tracker_get_ai_review_events, tracker_get_app_icons,
@@ -57,9 +59,14 @@ use commands::{
     tracker_save_project_window_assignments, tracker_save_team_project_assignments,
     tracker_search_classification_rule_candidates, tracker_search_timeline,
     tracker_set_developer_diagnostics, tracker_set_sync_state, tracker_start, tracker_stop,
-    tracker_upsert_team_projects, update_prompt_show_native, watcher_peek_cursor_inside,
-    watcher_peek_dismiss, watcher_peek_end_of_day_review_action, watcher_peek_extreme_nudge_action,
-    watcher_peek_hide, watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
+    tracker_upsert_team_projects, update_prompt_show_native, watcher_companion_clamp_to_screen,
+    watcher_companion_cursor_over_capsule, watcher_companion_dismiss_moment,
+    watcher_companion_present_prepared, watcher_companion_set_click_through,
+    watcher_companion_set_enabled, watcher_companion_set_state,
+    watcher_companion_set_surface_policy, watcher_companion_update,
+    watcher_companion_visibility_action, watcher_peek_cursor_inside, watcher_peek_dismiss,
+    watcher_peek_end_of_day_review_action, watcher_peek_extreme_nudge_action, watcher_peek_hide,
+    watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
     window_set_onboarding_presentation, DriftAlarmState,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -67,9 +74,10 @@ use tracker::{TrackerController, TrackerStartupState};
 use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
 use tracking_pause::TrackingPauseState;
 use tray::{
-    setup_tray, shutdown_tray_refresh_worker, tray_update_drift_alarm_status,
-    tray_update_icon_style, tray_update_productivity_icon, TrayDriftAlarmState, TrayIconStyleState,
-    TrayProductivityState, TrayRefreshWorker,
+    setup_tray, shutdown_tray_refresh_worker, tray_update_display_mode,
+    tray_update_drift_alarm_status, tray_update_icon_style, tray_update_productivity_icon,
+    TrayDisplayState, TrayDriftAlarmState, TrayIconStyleState, TrayProductivityState,
+    TrayRefreshWorker,
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
@@ -312,6 +320,7 @@ pub fn run() {
         .manage(TrayProductivityState::default())
         .manage(TrayDriftAlarmState::default())
         .manage(TrayIconStyleState::default())
+        .manage(TrayDisplayState::default())
         .manage(TrayRefreshWorker::default())
         .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
@@ -375,6 +384,7 @@ pub fn run() {
         .setup(|app| {
             setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
+            setup_companion_pill_window(app)?;
             setup_drift_alarm_window(app)?;
             setup_pet_mode_window(app)?;
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
@@ -438,6 +448,13 @@ pub fn run() {
             app_menu_set_dev_mode_checked,
             developer_check_pre_release_update,
             developer_install_pre_release_update,
+            developer_tools_get_status,
+            developer_tools_install_cli,
+            developer_tools_uninstall_cli,
+            developer_tools_install_codex_skill,
+            developer_tools_uninstall_codex_skill,
+            developer_tools_install_skill,
+            developer_tools_uninstall_skill,
             update_prompt_show_native,
             tracker_get_status,
             tracker_start,
@@ -499,6 +516,7 @@ pub fn run() {
             tray_update_productivity_icon,
             tray_update_drift_alarm_status,
             tray_update_icon_style,
+            tray_update_display_mode,
             auth_take_pending_deep_links,
             auth_load_saved_session,
             auth_save_session,
@@ -529,6 +547,16 @@ pub fn run() {
             watcher_peek_respond,
             watcher_peek_end_of_day_review_action,
             watcher_peek_extreme_nudge_action,
+            watcher_companion_set_enabled,
+            watcher_companion_set_surface_policy,
+            watcher_companion_set_state,
+            watcher_companion_present_prepared,
+            watcher_companion_set_click_through,
+            watcher_companion_cursor_over_capsule,
+            watcher_companion_clamp_to_screen,
+            watcher_companion_update,
+            watcher_companion_dismiss_moment,
+            watcher_companion_visibility_action,
             drift_alarm_current,
             drift_alarm_show,
             drift_alarm_hide,
