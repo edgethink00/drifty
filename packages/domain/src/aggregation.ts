@@ -758,6 +758,18 @@ export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: 
 
     const segmentStart = new Date(segment.startedAt).getTime();
     const segmentEnd = new Date(segment.endedAt).getTime();
+
+    // A newly captured context is stored as a point segment until a later
+    // matching sample extends it, while durationSeconds already contains the
+    // sampled activity. Preserve that recorded sample instead of dropping it
+    // from the leaderboard solely because its timestamp span is zero.
+    if (segmentEnd === segmentStart) {
+      if (segmentStart >= windowStart && segmentStart < windowEnd && Number.isFinite(segment.durationSeconds)) {
+        totalSeconds += Math.max(0, Math.round(segment.durationSeconds));
+      }
+      continue;
+    }
+
     const clippedStart = Math.max(segmentStart, windowStart);
     const clippedEnd = Math.min(segmentEnd, windowEnd);
 

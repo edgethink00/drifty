@@ -172,4 +172,72 @@ describe("buildRollingFocusSeconds", () => {
 
     expect(total).toBe(7200);
   });
+
+  it("preserves recorded focus time for a point segment", () => {
+    const capturedAt = new Date(2026, 3, 6, 14, 0).toISOString();
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "single-sample",
+          capturedAt,
+          capturedAt,
+          "Safari",
+          {
+            durationSeconds: 5,
+            siteDomain: "stackoverflow.com",
+            siteTitle: "Developer docs",
+          },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+    );
+
+    expect(total).toBe(5);
+  });
+
+  it("does not move a point segment into a different leaderboard day", () => {
+    const capturedAt = new Date(2026, 3, 7, 0, 0).toISOString();
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "next-day-sample",
+          capturedAt,
+          capturedAt,
+          "Safari",
+          {
+            durationSeconds: 5,
+            siteDomain: "stackoverflow.com",
+            siteTitle: "Developer docs",
+          },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+    );
+
+    expect(total).toBe(0);
+  });
+
+  it("keeps timestamp clipping for ordinary segments", () => {
+    const total = buildRollingFocusSeconds(
+      [
+        makeSegment(
+          "ordinary",
+          new Date(2026, 3, 6, 15, 0).toISOString(),
+          new Date(2026, 3, 6, 15, 10).toISOString(),
+          "Safari",
+          {
+            durationSeconds: 5,
+            siteDomain: "stackoverflow.com",
+            siteTitle: "Developer docs",
+          },
+        ),
+      ],
+      "2026-04-06",
+      "2026-04-06",
+    );
+
+    expect(total).toBe(10 * 60);
+  });
 });
