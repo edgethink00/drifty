@@ -76,10 +76,7 @@ fn download_to_path(
     Ok(bytes_written)
 }
 
-fn read_download_chunk(
-    reader: &mut dyn Read,
-    buffer: &mut [u8],
-) -> Result<usize, ManagedAiError> {
+fn read_download_chunk(reader: &mut dyn Read, buffer: &mut [u8]) -> Result<usize, ManagedAiError> {
     reader
         .read(buffer)
         .map_err(|error| ManagedAiError::DownloadFailed(error.to_string()))
@@ -129,7 +126,10 @@ mod tests {
 
     impl Read for FailingReader {
         fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
-            Err(Error::new(ErrorKind::InvalidData, "error decoding response body"))
+            Err(Error::new(
+                ErrorKind::InvalidData,
+                "error decoding response body",
+            ))
         }
     }
 }

@@ -196,10 +196,7 @@ fn tracker_start_and_status_errors_are_safe_and_bounded() {
         status_error,
         "Activity tracking status is unavailable. Try again."
     );
-    assert_eq!(
-        stop_error,
-        "Activity tracking could not stop. Try again."
-    );
+    assert_eq!(stop_error, "Activity tracking could not stop. Try again.");
 }
 
 #[test]

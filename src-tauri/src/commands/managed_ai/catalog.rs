@@ -181,7 +181,11 @@ pub(super) fn recommended_model_id(machine_memory_bytes: u64) -> Option<&'static
     })
 }
 
-fn fit_detail(spec: ManagedAiModelSpec, fit: ManagedAiModelFit, machine_memory_bytes: u64) -> Option<String> {
+fn fit_detail(
+    spec: ManagedAiModelSpec,
+    fit: ManagedAiModelFit,
+    machine_memory_bytes: u64,
+) -> Option<String> {
     match fit {
         ManagedAiModelFit::Good => None,
         ManagedAiModelFit::Tight => Some(format!(

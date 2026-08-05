@@ -76,7 +76,12 @@ fn sentry_release() -> String {
         compile_env(option_env!("DRIFTY_SENTRY_RELEASE")),
         compile_env(option_env!("SENTRY_RELEASE")),
     ])
-    .unwrap_or_else(|| build_release(env!("CARGO_PKG_VERSION"), option_env!("DRIFTY_BUILD_COMMIT")))
+    .unwrap_or_else(|| {
+        build_release(
+            env!("CARGO_PKG_VERSION"),
+            option_env!("DRIFTY_BUILD_COMMIT"),
+        )
+    })
 }
 
 fn build_release(version: &str, commit: Option<&str>) -> String {
@@ -128,7 +133,10 @@ mod tests {
 
     #[test]
     fn build_release_omits_unknown_commit() {
-        assert_eq!(build_release("1.2.16", Some("unknown")), "drifty-mac@1.2.16");
+        assert_eq!(
+            build_release("1.2.16", Some("unknown")),
+            "drifty-mac@1.2.16"
+        );
         assert_eq!(build_release("1.2.16", None), "drifty-mac@1.2.16");
     }
 }

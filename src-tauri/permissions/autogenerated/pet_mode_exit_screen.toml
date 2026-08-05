@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-exit-screen"
+description = "Enables the pet_mode_exit_screen command without any pre-configured scope."
+commands.allow = ["pet_mode_exit_screen"]
+
+[[permission]]
+identifier = "deny-pet-mode-exit-screen"
+description = "Denies the pet_mode_exit_screen command without any pre-configured scope."
+commands.deny = ["pet_mode_exit_screen"]

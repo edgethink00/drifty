@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-return-from-outing"
+description = "Enables the pet_mode_return_from_outing command without any pre-configured scope."
+commands.allow = ["pet_mode_return_from_outing"]
+
+[[permission]]
+identifier = "deny-pet-mode-return-from-outing"
+description = "Denies the pet_mode_return_from_outing command without any pre-configured scope."
+commands.deny = ["pet_mode_return_from_outing"]

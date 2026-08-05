@@ -38,7 +38,8 @@
       "capabilities": [
         "main-window",
         "watcher-window",
-        "drift-alarm-window"
+        "drift-alarm-window",
+        "pet-mode-window"
       ]
     }
   },

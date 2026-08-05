@@ -29,7 +29,7 @@ pub fn save_api_key(value: &str) -> Result<(), String> {
         OPENROUTER_API_KEY_ACCOUNT,
         trimmed_value.as_bytes(),
     )
-        .map_err(|error| format!("Unable to save OpenRouter API key in Keychain: {error}"))
+    .map_err(|error| format!("Unable to save OpenRouter API key in Keychain: {error}"))
 }
 
 pub fn clear_api_key() -> Result<(), String> {

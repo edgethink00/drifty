@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-intervene"
+description = "Enables the pet_mode_intervene command without any pre-configured scope."
+commands.allow = ["pet_mode_intervene"]
+
+[[permission]]
+identifier = "deny-pet-mode-intervene"
+description = "Denies the pet_mode_intervene command without any pre-configured scope."
+commands.deny = ["pet_mode_intervene"]

@@ -1,4 +1,4 @@
-import type { ChangeEvent, RefObject } from "react";
+import { useEffect, useState, type ChangeEvent, type RefObject } from "react";
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
@@ -21,6 +21,9 @@ import { DevSettingsWebAccountBlock } from "./DevSettingsWebAccountBlock";
 import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
+import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
+import { listenToNativePetModeLabState, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
+import type { PetModeLabAction, PetModeLabState, PetModePreviewAction } from "../pet-mode/petModeData";
 import { showBootShellPreview } from "../loading/bootShell";
 
 type DevSettingsSectionProps = {
@@ -39,6 +42,9 @@ type DevSettingsSectionProps = {
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
   readonly projectClassificationCorrectionsBusy: boolean;
   readonly projectPassRuns: readonly ProjectPassRun[];
+  readonly petModeEnabled: boolean;
+  readonly petModeLabPointerStatus: string | null;
+  readonly petModeLabInputBounds: string | null;
   readonly weekDashboardAxisScalePercent: number;
   readonly watcherMode: WatcherMode;
   readonly watcherPeekEnabled: boolean;
@@ -69,6 +75,12 @@ type DevSettingsSectionProps = {
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
+  readonly onPetModeEnabledChange: (enabled: boolean) => void;
+  readonly onPreviewPetModeIntervention: () => void;
+  readonly onPreviewPetModeBrowserTabClose: () => void;
+  readonly onPreviewPetModeDriftyWindowClose: () => void;
+  readonly onPlacePetModeCenter: () => void;
+  readonly onPreviewPetModeAction: (action: PetModePreviewAction) => void;
   readonly onCheckLatestBuild: () => void;
   readonly onInstallLatestBuild: () => void;
   readonly teamsBetaEnabled: boolean;
@@ -104,6 +116,9 @@ export function DevSettingsSection({
   projectClassificationAiReviewEvents,
   projectClassificationCorrectionsBusy,
   projectPassRuns,
+  petModeEnabled,
+  petModeLabPointerStatus,
+  petModeLabInputBounds,
   weekDashboardAxisScalePercent,
   watcherMode,
   watcherPeekEnabled,
@@ -134,6 +149,12 @@ export function DevSettingsSection({
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
+  onPetModeEnabledChange,
+  onPreviewPetModeIntervention,
+  onPreviewPetModeBrowserTabClose,
+  onPreviewPetModeDriftyWindowClose,
+  onPlacePetModeCenter,
+  onPreviewPetModeAction,
   onCheckLatestBuild,
   onInstallLatestBuild,
   teamsBetaEnabled,
@@ -154,6 +175,40 @@ export function DevSettingsSection({
 }: DevSettingsSectionProps) {
   const showWatcherPeekSettings = WATCHER_PEEK_SETTINGS_VISIBLE;
   const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
+  const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetModeLabState(setPetModeLabState).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+      void requestNativePetModeLabState().catch(() => undefined);
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, []);
+
+  const isPetModeLabActionDisabled = (action: PetModeLabAction) => {
+    if (!petModeEnabled) return true;
+    if (action === "stop") return false;
+    if (action === "wake") return petModeLabState?.phase !== "sleep";
+    if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
+    return petModeLabState !== null
+      && (petModeLabState.activeAction !== null || petModeLabState.phase !== "idle");
+  };
+  const petModeLabStatus = !petModeEnabled
+    ? "Off"
+    : petModeLabState?.phase !== undefined && petModeLabState.phase !== "idle"
+      ? formatPetModeLabPhase(petModeLabState.phase)
+      : petModeLabState?.lifeLoopEnabled
+        ? "Loop on"
+        : "Ready";
 
   return (
     <div className="settings-section">
@@ -172,9 +227,100 @@ export function DevSettingsSection({
         />
       </div>
 
-      {/* Preview feature toggles, grouped in one block */}
+      {/* Preview and beta features share one Settings group. */}
       <div className="settings-block settings-block--dev-preview">
-        <h3>{t("settings.dev.preview")}</h3>
+        <h3 className="settings-block__title-with-badge" aria-label={t("settings.dev.preview")}>
+          <span>{t("settings.dev.preview")}</span>
+          <span className="settings-beta-badge">Beta</span>
+        </h3>
+        <div className="settings-row settings-row--pet-mode" role="group" aria-label="Pet Mode preview">
+          <div>
+            <div className="lbl">Pet Mode <span className="settings-beta-badge">Dev</span></div>
+            <div className="desc">A quiet, nonverbal desktop pet. It stays visible about 60% of the time and only acts automatically on confirmed Extreme Nudge events.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={petModeEnabled} onChange={onPetModeEnabledChange} ariaLabel="Toggle Pet Mode preview" />
+          </div>
+        </div>
+        <div className="pet-mode-lab" role="group" aria-label="Pet Mode Lab">
+          <div className="pet-mode-lab__heading">
+            <div>
+              <div className="lbl">Pet Mode Lab</div>
+              <div className="desc">Run production behaviors individually or leave the approved life loop on for observation.</div>
+            </div>
+            <span className="pet-mode-lab__status" data-active={petModeEnabled}>{petModeLabStatus}</span>
+          </div>
+          {petModeLabPointerStatus || petModeLabInputBounds ? (
+            <div className="pet-mode-lab__diagnostics" role="status" aria-label="Pet Mode diagnostics">
+              {petModeLabPointerStatus ? <div className="pet-mode-lab__diagnostic"><span>Contact</span><code>{petModeLabPointerStatus}</code></div> : null}
+              {petModeLabInputBounds ? <div className="pet-mode-lab__diagnostic"><span>Input</span><code>{petModeLabInputBounds}</code></div> : null}
+            </div>
+          ) : null}
+          <div className="pet-mode-lab__groups">
+          <div className="pet-mode-lab__row">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Observe</div>
+              <div className="desc">Cycle approved behaviors every 8–14 seconds, or stop immediately.</div>
+            </div>
+            <div className="pet-mode-lab__controls" aria-label="Pet Mode automatic behavior test">
+              <PetModeLabAction label="Life loop" detail="Start continuous observation" action="life_loop" active={petModeLabState?.lifeLoopEnabled === true} disabled={isPetModeLabActionDisabled("life_loop")} onAction={onPreviewPetModeAction} variant="primary" />
+              <PetModeLabAction label="Stop" detail="Cancel current action" action="stop" disabled={isPetModeLabActionDisabled("stop")} onAction={onPreviewPetModeAction} variant="stop" />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Core actions</div>
+              <div className="desc">Review movement, intervention timing, and direct pet feedback.</div>
+            </div>
+            <div className="pet-mode-lab__controls" aria-label="Core pet actions">
+              <button type="button" className={`settings-btn pet-mode-lab__action${petModeLabState?.activeAction === "intervention" ? " is-active" : ""}`} aria-label="Intervention. Run, paw, and return" title="Run, paw, and return" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeIntervention}>Intervention</button>
+              <PetModeLabAction label="Walk" detail="20.8 px/s sample · 0.90×" action="walk" active={petModeLabState?.activeAction === "walk"} disabled={isPetModeLabActionDisabled("walk")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Pet reaction" detail="Lean and heart" action="pet" active={petModeLabState?.activeAction === "pet"} disabled={isPetModeLabActionDisabled("pet")} onAction={onPreviewPetModeAction} />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Everyday behavior</div>
+              <div className="desc">Inspect low-attention actions used by the life loop.</div>
+            </div>
+            <div className="pet-mode-lab__controls" aria-label="Ambient pet actions">
+              <PetModeLabAction label="Blink" detail="228 ms" action="blink" active={petModeLabState?.activeAction === "blink"} disabled={isPetModeLabActionDisabled("blink")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Tail flick" detail="Flow Tail B · 3.1 s" action="tail_flick" active={petModeLabState?.activeAction === "tail_flick"} disabled={isPetModeLabActionDisabled("tail_flick")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Stretch" detail="Flow Stretch C · 3.1 s" action="stretch" active={petModeLabState?.activeAction === "stretch"} disabled={isPetModeLabActionDisabled("stretch")} onAction={onPreviewPetModeAction} />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Presence state</div>
+              <div className="desc">Test how the pet rests, wakes, and temporarily leaves the screen.</div>
+            </div>
+            <div className="pet-mode-lab__controls" aria-label="Pet presence actions">
+              <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Position behavior</div>
+              <div className="desc">Place the pet temporarily at screen center, then use Walk to verify its upper resident Y.</div>
+            </div>
+            <div className="pet-mode-lab__controls" aria-label="Pet position behavior test">
+              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--target">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Close-target alignment</div>
+              <div className="desc">Move to a real close button and verify final paw contact.</div>
+            </div>
+            <div className="pet-mode-lab__controls" aria-label="Pet Mode target X tests">
+              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Latest observed tab" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
+              <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
+            </div>
+          </div>
+          </div>
+        </div>
         <div className="settings-row">
           <div>
             <div className="lbl">{t("settings.dev.koreanPreviewLabel")}</div>
@@ -343,4 +489,42 @@ export function DevSettingsSection({
       </div>
     </div>
   );
+}
+
+function PetModeLabAction({
+  label,
+  detail,
+  action,
+  active = false,
+  disabled,
+  onAction,
+  variant,
+}: {
+  readonly label: string;
+  readonly detail: string;
+  readonly action: PetModePreviewAction;
+  readonly active?: boolean;
+  readonly disabled: boolean;
+  readonly onAction: (action: PetModePreviewAction) => void;
+  readonly variant?: "primary" | "stop";
+}) {
+  return (
+    <button type="button" className={`settings-btn pet-mode-lab__action${variant === "primary" ? " pet-mode-lab__action--primary" : ""}${variant === "stop" ? " pet-mode-lab__action--stop" : ""}${active ? " is-active" : ""}`} aria-label={`${label} ${detail}`} title={detail} disabled={disabled} onClick={() => onAction(action)}>
+      {label}
+    </button>
+  );
+}
+
+function formatPetModeLabPhase(phase: string): string {
+  switch (phase) {
+    case "walk": return "Walking";
+    case "run": return "Running";
+    case "paw": return "Reaching";
+    case "blink": return "Blinking";
+    case "stretch": return "Stretching";
+    case "tail": return "Tail flick";
+    case "sleep": return "Sleeping";
+    case "happy": return "Reacting";
+    default: return "Working";
+  }
 }

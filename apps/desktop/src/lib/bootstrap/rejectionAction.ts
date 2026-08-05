@@ -4,7 +4,7 @@
  * replace the boot root; runtime rejections on the main app preserve its UI.
  */
 
-export type BootstrapSurface = "app" | "watcher" | "drift-alarm";
+export type BootstrapSurface = "app" | "watcher" | "drift-alarm" | "pet-mode";
 export type ResolvedBootstrapSurface = BootstrapSurface | "privacy-review-concepts";
 
 export type RejectionPhase = "startup" | "runtime";
@@ -45,7 +45,7 @@ export function resolveRejectionPhase(bootstrapped: boolean): RejectionPhase {
  */
 export function resolveRejectionAction(input: RejectionDecisionInput): RejectionAction {
   if (!input.bootstrapped) return "startup-error";
-  if (input.surface === "watcher" || input.surface === "drift-alarm") return "late-diagnostic";
+  if (input.surface === "watcher" || input.surface === "drift-alarm" || input.surface === "pet-mode") return "late-diagnostic";
   return "preserve";
 }
 

@@ -37,6 +37,6 @@ describe("boot shell markup", () => {
   });
 
   it("keeps the boot shell out of companion windows", () => {
-    expect(indexSource).toMatch(/html\[data-surface="watcher"\] #boot-shell,[\s\S]*html\[data-surface="drift-alarm"\] #boot-shell\s*{\s*display:\s*none;/);
+    expect(indexSource).toMatch(/html\[data-surface="watcher"\] #boot-shell,[\s\S]*html\[data-surface="drift-alarm"\] #boot-shell,[\s\S]*html\[data-surface="pet-mode"\] #boot-shell\s*{\s*display:\s*none;/);
   });
 });
