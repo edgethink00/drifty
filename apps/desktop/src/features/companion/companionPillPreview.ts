@@ -1,5 +1,6 @@
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { CompanionReentryEvent } from "./companionReentry";
 import { buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmEvent } from "./driftAlarmEvent";
 
 export const COMPANION_MILESTONE_PREVIEW_OPTIONS = [
@@ -24,6 +25,7 @@ export const COMPANION_MOMENT_PREVIEW_OPTIONS = [
   { id: "drift-alarm", label: "Drift alarm" },
   { id: "break-return", label: "Break over" },
   { id: "extreme-nudge", label: "Extreme nudge" },
+  { id: "reentry", label: "Long-break return" },
 ] as const;
 
 export type CompanionMomentPreviewId =
@@ -78,6 +80,24 @@ export function buildCompanionExtremeNudgePreview(now = Date.now()): ExtremeNudg
     closedLabel: "YouTube",
     focusLabel: "VS Code",
     breakOptions: [5, 15, 30, 60],
+  };
+}
+
+export function buildCompanionReentryPreview(
+  now = Date.now(),
+  language: "en" | "ko" = "en",
+): CompanionReentryEvent {
+  const returnedAt = new Date(now);
+  const lastActiveAt = new Date(now - (8 * 60 + 12) * 60 * 1000);
+  return {
+    kind: "reentry",
+    id: `companion-preview-reentry-${now}`,
+    awaySeconds: 8 * 60 * 60 + 12 * 60,
+    lastActiveAt: lastActiveAt.toISOString(),
+    returnedAt: returnedAt.toISOString(),
+    title: language === "ko" ? "8시간 12분 만에 돌아왔어요" : "Back after 8h 12m",
+    subtitle: language === "ko" ? "마지막 활동은 오전 1:18에 끝났어요" : "Last activity ended at 1:18 AM",
+    actionLabel: language === "ko" ? "마지막 기록 보기" : "See last session",
   };
 }
 

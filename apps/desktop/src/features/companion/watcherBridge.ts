@@ -7,6 +7,7 @@ import type { DriftAlarmEvent } from "./driftAlarmEvent";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
 import type { CompanionHorizontalAnchor, CompanionPillState } from "./companionPillLayout";
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
+import type { CompanionReentryEvent } from "./companionReentry";
 import type { CompanionSurfacePolicy } from "./companionPillSettings";
 
 type UnlistenFn = () => void;
@@ -17,6 +18,7 @@ type WatcherResponseEvent = {
 
 type EndOfDayReviewActionEvent = {
   action: unknown;
+  activityAt?: unknown;
 };
 
 type CompanionVisibilityActionEvent = {
@@ -30,7 +32,8 @@ export type EndOfDayReviewAction =
   | "openNotificationSettings"
   | "openSettings"
   | "openLeaderboard"
-  | "openTrends";
+  | "openTrends"
+  | "openActivityDay";
 export type CompanionVisibilityAction = "hideOneHour" | "turnOff";
 export type CompanionPillDriftAlarmPayload = {
   kind: "companionDriftAlarm";
@@ -40,6 +43,7 @@ export type CompanionPillWindowEvent = (
   | WatcherWindowEvent
   | CompanionPillDriftAlarmPayload
   | CompanionPillMilestoneEvent
+  | CompanionReentryEvent
 ) & {
   /** Native-only paint hint; omitted by browser prototypes and legacy watcher surfaces. */
   __companionPresentation?: "floating" | "menuBar";
@@ -89,6 +93,12 @@ export async function showNativeCompanionDriftAlarm(event: DriftAlarmEvent): Pro
 export async function showNativeCompanionMilestone(
   event: CompanionPillMilestoneEvent,
 ): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  await invoke("watcher_peek_show", { payload: event });
+  return true;
+}
+
+export async function showNativeCompanionReentry(event: CompanionReentryEvent): Promise<boolean> {
   if (!isTauriRuntime()) return false;
   await invoke("watcher_peek_show", { payload: event });
   return true;
@@ -198,9 +208,12 @@ export async function respondNativeWatcherPeek(response: WatcherPeekResponse): P
   await invoke("watcher_peek_respond", { response });
 }
 
-export async function triggerNativeEndOfDayReviewAction(action: EndOfDayReviewAction): Promise<void> {
+export async function triggerNativeEndOfDayReviewAction(
+  action: EndOfDayReviewAction,
+  activityAt?: string,
+): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_end_of_day_review_action", { action });
+  await invoke("watcher_peek_end_of_day_review_action", { action, activityAt });
 }
 
 export async function triggerNativeCompanionVisibilityAction(
@@ -272,10 +285,14 @@ export async function listenToNativeWatcherDismissed(onDismissed: () => void): P
   return listen("watcher-peek-dismissed", onDismissed);
 }
 
-export async function listenToNativeEndOfDayReviewAction(onAction: (action: EndOfDayReviewAction) => void): Promise<UnlistenFn | null> {
+export async function listenToNativeEndOfDayReviewAction(
+  onAction: (action: EndOfDayReviewAction, activityAt?: string) => void,
+): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
   return listen<EndOfDayReviewActionEvent>("end-of-day-review-action", ({ payload }) => {
-    if (isEndOfDayReviewAction(payload.action)) onAction(payload.action);
+    if (isEndOfDayReviewAction(payload.action)) {
+      onAction(payload.action, typeof payload.activityAt === "string" ? payload.activityAt : undefined);
+    }
   });
 }
 
@@ -298,7 +315,8 @@ function isEndOfDayReviewAction(value: unknown): value is EndOfDayReviewAction {
     || value === "openNotificationSettings"
     || value === "openSettings"
     || value === "openLeaderboard"
-    || value === "openTrends";
+    || value === "openTrends"
+    || value === "openActivityDay";
 }
 
 function isCompanionVisibilityAction(value: unknown): value is CompanionVisibilityAction {

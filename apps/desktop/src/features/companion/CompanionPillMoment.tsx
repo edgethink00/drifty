@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { CompanionReentryEvent } from "./companionReentry";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
-import { PillDismissIcon, PillMilestoneKindIcon, PillOpenArrowIcon, PillTrophyIcon } from "./CompanionPillIcons";
+import { PillDismissIcon, PillMilestoneKindIcon, PillOpenArrowIcon, PillReentryIcon, PillTrophyIcon } from "./CompanionPillIcons";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
 
 /**
@@ -52,6 +53,7 @@ export type CompanionPillDriftEvent = {
 export type CompanionPillMomentEvent =
   | CompanionPillMilestoneEvent
   | CompanionPillDriftEvent
+  | CompanionReentryEvent
   | ExtremeNudgeToastEvent
   | EndOfDayReviewEvent;
 
@@ -62,6 +64,7 @@ const COMPANION_BREAK_OPTIONS = [5, 15, 30, 60] as const;
 /** Material guidance for transient messages is 4-10s; the review earns more. */
 export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
   milestone: 4_000,
+  reentry: 8_000,
   driftAlarm: 10_000,
   extremeNudgeToast: 8_000,
   endOfDayReview: 12_000,
@@ -70,6 +73,7 @@ export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
 /** Match dwell time to how much there is to read and whether there is a CTA. */
 export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEvent): number {
   if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
+  if (event.kind === "reentry") return 8_000;
   if (event.kind === "driftAlarm") return event.mode === "break_return" ? 8_000 : 10_000;
   if (event.kind === "endOfDayReview") {
     if (event.layout === "full") return 12_000;
@@ -178,6 +182,7 @@ export function CompanionPillMoment({
   isDragging = false,
   onDismiss,
   onOpenDashboard,
+  onOpenReentry,
   onOpenDestination,
   onAction,
 }: {
@@ -187,6 +192,7 @@ export function CompanionPillMoment({
   isDragging?: boolean;
   onDismiss: (reason: CompanionPillDismissReason) => void;
   onOpenDashboard: () => void;
+  onOpenReentry?: (event: CompanionReentryEvent) => void;
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
   onAction?: (action: DriftAlarmAction) => void;
 }) {
@@ -201,13 +207,19 @@ export function CompanionPillMoment({
 
   useEffect(() => {
     if (!isActive || isPaused) return undefined;
-    const startedAt = Date.now();
+    /* Wall-clock time can move backwards when macOS corrects its clock or
+       resumes from sleep. A negative elapsed duration used to add time back to
+       the card exactly when hover paused it. performance.now() is monotonic,
+       and the clamp keeps even a broken fallback clock from increasing the
+       remaining budget. */
+    const startedAt = monotonicNowMs();
     startedAtRef.current = startedAt;
     const timer = window.setTimeout(() => onDismiss("auto"), remainingMsRef.current);
     return () => {
       window.clearTimeout(timer);
       if (startedAtRef.current === startedAt) {
-        remainingMsRef.current = Math.max(0, remainingMsRef.current - (Date.now() - startedAt));
+        const elapsedMs = Math.max(0, monotonicNowMs() - startedAt);
+        remainingMsRef.current = Math.max(0, remainingMsRef.current - elapsedMs);
         startedAtRef.current = null;
       }
     };
@@ -252,6 +264,32 @@ export function CompanionPillMoment({
           onDismiss={() => onDismiss("explicit")}
           onOpenDashboard={onOpenDashboard}
         />
+      </div>
+    );
+  }
+
+  if (event.kind === "reentry") {
+    return (
+      <div
+        className={`view view--reentry${isActive ? " is-active" : ""}`}
+        data-view="reentry"
+        data-auto={autoDismissState}
+        aria-hidden={!isActive}
+        style={autoDismissStyle}
+        {...holdHandlers}
+      >
+        <span className="mile__mark reentry__mark" aria-hidden="true"><PillReentryIcon /></span>
+        <div className="mile__text reentry__copy" data-sensitive={event.id.startsWith("companion-preview-") ? undefined : true}>
+          <div className="mile__title reentry__title">{event.title}</div>
+          <div className="mile__sub reentry__sub"><span className="mile__subtext">{event.subtitle}</span></div>
+        </div>
+        <button className="reentry__action" type="button" onClick={() => onOpenReentry?.(event)}>
+          <span>{event.actionLabel}</span>
+          <PillOpenArrowIcon />
+        </button>
+        <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
+          <PillDismissIcon />
+        </button>
       </div>
     );
   }
@@ -338,6 +376,13 @@ export function CompanionPillMoment({
   );
 }
 
+function monotonicNowMs(): number {
+  if (typeof performance !== "undefined" && typeof performance.now === "function") {
+    return performance.now();
+  }
+  return Date.now();
+}
+
 function MilestoneView({
   event,
   isActive,
@@ -366,15 +411,6 @@ function MilestoneView({
       style={autoDismissStyle}
       {...holdHandlers}
     >
-      {destination && onOpenDestination ? (
-        <button
-          className="mile__hit"
-          type="button"
-          data-companion-drag-surface
-          aria-label={milestoneDestinationLabel(destination)}
-          onClick={() => onOpenDestination(destination)}
-        />
-      ) : null}
       <span className="mile__mark" aria-hidden="true">
         <span className="orb"><i className="orb__pip" /></span>
         <span className="mile__kind" aria-hidden="true">
@@ -383,17 +419,27 @@ function MilestoneView({
         <span className="mile__trophy"><PillTrophyIcon /></span>
       </span>
       <div className="mile__text">
-        <div className="mile__title">{event.title}</div>
+        <div className="mile__title-row">
+          <div className="mile__title">{event.title}</div>
+          {stat ? (
+            <span className="mile__stat" aria-label={`${stat.value} ${stat.label}`}>
+              {stat.value}
+            </span>
+          ) : null}
+        </div>
         <div className="mile__sub"><span className="mile__subtext">{event.subtitle}</span></div>
       </div>
-      {stat ? (
-        <span className="mile__stat" aria-hidden="true">
-          <b className="mile__stat-value">{stat.value}</b>
-          <span className="mile__stat-label">{stat.label}</span>
-        </span>
-      ) : null}
       {destination && onOpenDestination ? (
-        <span className="mile__arrow" aria-hidden="true"><PillOpenArrowIcon /></span>
+        <button
+          className="mile__action"
+          type="button"
+          data-companion-drag-surface
+          aria-label={milestoneDestinationLabel(destination)}
+          onClick={() => onOpenDestination(destination)}
+        >
+          <span>{milestoneDestinationActionLabel(destination)}</span>
+          <PillOpenArrowIcon />
+        </button>
       ) : null}
       <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
         <PillDismissIcon />
@@ -445,4 +491,12 @@ function milestoneDestinationLabel(
   if (destination === "leaderboard") return "Open leaderboard";
   if (destination === "insights") return "Open trends";
   return "Open today's dashboard";
+}
+
+function milestoneDestinationActionLabel(
+  destination: NonNullable<CompanionPillMilestoneEvent["destination"]>,
+): string {
+  if (destination === "leaderboard") return "View rank";
+  if (destination === "insights") return "View insights";
+  return "View day";
 }

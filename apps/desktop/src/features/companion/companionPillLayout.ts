@@ -8,6 +8,7 @@ export type CompanionPillState =
   | "collapsed"
   | "peek"
   | "milestone"
+  | "reentry"
   | "drift"
   | "nudge"
   | "eod"
@@ -24,6 +25,7 @@ export const COMPANION_PILL_SIZES: Record<CompanionPillState, CompanionPillSize>
   /* Kept for bridge compatibility; the resident UI no longer enters hover peek. */
   peek: { width: 220, height: 28.9 },
   milestone: { width: 410, height: 54 },
+  reentry: { width: 410, height: 54 },
   drift: { width: 352, height: 130 },
   nudge: { width: 352, height: 130 },
   /* The clean 72px productivity ring removes 16px of unused outer-disc

@@ -42,6 +42,8 @@ const COMPANION_PILL_MILESTONE_HEIGHT: f64 = 54.0;
 /// Space for the measured milestone figure printed beside the headline. The
 /// figure is part of the product treatment rather than a user preference.
 const COMPANION_PILL_MILESTONE_STAT_WIDTH: f64 = 62.0;
+const COMPANION_PILL_REENTRY_WIDTH: f64 = 410.0;
+const COMPANION_PILL_REENTRY_HEIGHT: f64 = 54.0;
 const COMPANION_PILL_MOMENT_WIDTH: f64 = 352.0;
 const COMPANION_PILL_MOMENT_HEIGHT: f64 = 130.0;
 const COMPANION_PILL_REVIEW_WIDTH: f64 = 331.0;
@@ -193,6 +195,8 @@ pub struct WatcherPeekResponsePayload {
 #[serde(rename_all = "camelCase")]
 pub struct EndOfDayReviewActionPayload {
     pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activity_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -779,14 +783,21 @@ pub fn watcher_peek_respond(app: AppHandle, response: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn watcher_peek_end_of_day_review_action(app: AppHandle, action: String) -> Result<(), String> {
+pub fn watcher_peek_end_of_day_review_action(
+    app: AppHandle,
+    action: String,
+    activity_at: Option<String>,
+) -> Result<(), String> {
     watcher_peek_hide(app.clone())?;
     reveal_main_window_for_review_action(&app);
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit(
             "end-of-day-review-action",
-            EndOfDayReviewActionPayload { action },
+            EndOfDayReviewActionPayload {
+                action,
+                activity_at,
+            },
         )
         .map_err(|error| error.to_string())?;
     }
@@ -806,7 +817,7 @@ fn position_watcher_window(app: &AppHandle, payload: &Value) -> Result<(), Strin
     let work_area = monitor.work_area();
     let position = work_area.position.to_logical::<f64>(scale_factor);
     let size = work_area.size.to_logical::<f64>(scale_factor);
-    let watcher_position = if is_milestone_payload(payload) {
+    let watcher_position = if is_milestone_payload(payload) || is_reentry_payload(payload) {
         calculate_standalone_milestone_window_position(position.x, position.y, size.width)
     } else if is_end_of_day_review_payload(payload) {
         calculate_end_of_day_review_window_position(position.x, position.y, size.width, size.height)
@@ -867,8 +878,8 @@ fn watcher_surface_window_label(use_companion: bool) -> &'static str {
 
 fn validate_companion_pill_state(state: &str) -> Result<(), String> {
     match state {
-        "collapsed" | "peek" | "milestone" | "drift" | "nudge" | "eod" | "eodCompact"
-        | "eodMinimal" => Ok(()),
+        "collapsed" | "peek" | "milestone" | "reentry" | "drift" | "nudge" | "eod"
+        | "eodCompact" | "eodMinimal" => Ok(()),
         _ => Err(format!("unknown companion pill state: {state}")),
     }
 }
@@ -973,6 +984,7 @@ pub(super) fn companion_pill_capsule_size(state: &str) -> Result<(f64, f64), Str
             COMPANION_PILL_MILESTONE_WIDTH + COMPANION_PILL_MILESTONE_STAT_WIDTH,
             COMPANION_PILL_MILESTONE_HEIGHT,
         ),
+        "reentry" => (COMPANION_PILL_REENTRY_WIDTH, COMPANION_PILL_REENTRY_HEIGHT),
         "drift" | "nudge" => (COMPANION_PILL_MOMENT_WIDTH, COMPANION_PILL_MOMENT_HEIGHT),
         "eod" => (COMPANION_PILL_REVIEW_WIDTH, COMPANION_PILL_REVIEW_HEIGHT),
         "eodCompact" => (
@@ -1424,6 +1436,11 @@ fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
             STANDALONE_MILESTONE_WINDOW_WIDTH,
             STANDALONE_MILESTONE_WINDOW_HEIGHT,
         )
+    } else if is_reentry_payload(payload) {
+        (
+            COMPANION_PILL_REENTRY_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
+            COMPANION_PILL_REENTRY_HEIGHT + COMPANION_PILL_GUTTER_Y * 2.0,
+        )
     } else if is_end_of_day_review_payload(payload) {
         (END_OF_DAY_REVIEW_WIDTH, END_OF_DAY_REVIEW_HEIGHT)
     } else if is_extreme_nudge_toast_payload(payload) {
@@ -1435,6 +1452,7 @@ fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
 
 fn should_ignore_cursor_events_for_payload(payload: &Value) -> bool {
     !(is_milestone_payload(payload)
+        || is_reentry_payload(payload)
         || is_end_of_day_review_payload(payload)
         || is_extreme_nudge_toast_payload(payload))
 }
@@ -1495,6 +1513,10 @@ fn is_milestone_payload(payload: &Value) -> bool {
         payload.get("kind").and_then(Value::as_str),
         Some("milestone")
     )
+}
+
+fn is_reentry_payload(payload: &Value) -> bool {
+    matches!(payload.get("kind").and_then(Value::as_str), Some("reentry"))
 }
 
 fn is_companion_moment_payload(payload: &Value) -> bool {

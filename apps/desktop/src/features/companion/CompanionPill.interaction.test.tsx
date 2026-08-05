@@ -3,12 +3,14 @@ import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionPill } from "./CompanionPill";
 import {
+  CompanionPillMoment,
   resolveCompanionPillAutoDismissMs,
   type CompanionPillMomentEvent,
 } from "./CompanionPillMoment";
 import {
   buildCompanionExtremeNudgePreview,
   buildCompanionMilestonePreview,
+  buildCompanionReentryPreview,
 } from "./companionPillPreview";
 
 const nativeBridge = vi.hoisted(() => ({
@@ -105,6 +107,34 @@ describe("CompanionPill native interactions", () => {
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "compact" })).toBe(10_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "minimal" })).toBe(8_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(8_000);
+    expect(resolveCompanionPillAutoDismissMs(buildCompanionReentryPreview(1))).toBe(8_000);
+  });
+
+  it("renders re-entry as a quiet observation with a last-session CTA", () => {
+    vi.useFakeTimers();
+    const onOpenReentry = vi.fn();
+    const { container } = render(
+      <CompanionPill
+        peekEvent={null}
+        momentEvent={buildCompanionReentryPreview(1)}
+        onDismissMoment={vi.fn()}
+        onOpenDashboard={vi.fn()}
+        onOpenReentry={onOpenReentry}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector<HTMLElement>(".pill")?.dataset.state).toBe("reentry");
+    expect(container.querySelector(".reentry__mark svg")).not.toBeNull();
+    expect(container.textContent).toContain("Back after 8h 12m");
+    expect(container.textContent).toContain("Last activity ended at 1:18 AM");
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".reentry__action")!);
+    act(() => vi.advanceTimersByTime(160));
+    expect(onOpenReentry).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "reentry",
+      lastActiveAt: expect.any(String),
+    }));
+    expect(container.querySelector(".sparks")).toBeNull();
   });
 
   it("samples from pointer-down without styling a simple click as a drag", async () => {
@@ -189,6 +219,35 @@ describe("CompanionPill native interactions", () => {
     expect(onDismissMoment).not.toHaveBeenCalled();
   });
 
+  it("never adds auto-dismiss time when the wall clock moves backwards during hover", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-05T09:30:00.000Z"));
+    let monotonicMs = 0;
+    const performanceNowSpy = vi.spyOn(performance, "now").mockImplementation(() => monotonicMs);
+    const onDismiss = vi.fn();
+    const { container } = render(
+      <CompanionPillMoment
+        event={driftMoment}
+        onDismiss={onDismiss}
+        onOpenDashboard={vi.fn()}
+      />,
+    );
+    const view = container.querySelector<HTMLElement>(".view--drift");
+
+    monotonicMs = 4_000;
+    vi.setSystemTime(new Date("2026-08-05T08:30:00.000Z"));
+    fireEvent.pointerEnter(view!);
+    act(() => vi.advanceTimersByTime(20_000));
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    fireEvent.pointerLeave(view!);
+    act(() => vi.advanceTimersByTime(5_999));
+    expect(onDismiss).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(onDismiss).toHaveBeenCalledOnce();
+    performanceNowSpy.mockRestore();
+  });
+
   /* v2 prints the measured figure beside the headline; v1 states the threshold
      alone. The event carrying (or omitting) the value is what switches it. */
   it("prints a milestone's measured figure only when the event carries one", () => {
@@ -212,26 +271,39 @@ describe("CompanionPill native interactions", () => {
 
     /* Past an hour it reads as h:mm, so it is not mistaken for minutes:seconds
        on a surface where the resting pill already shows 2:41 that way. */
-    expect(container.querySelector(".mile__stat-value")?.textContent).toBe("1:02");
-    expect(container.querySelector(".mile__stat-label")?.textContent).toBe("today");
+    expect(container.querySelector(".mile__stat")?.textContent).toBe("1:02");
+    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("1:02 today");
+    expect(container.querySelector(".mile__action")?.textContent).toContain("View day");
 
     /* A record is about the run that beat it, not the whole day. */
     rerender(
       <CompanionPill
         {...props}
-        momentEvent={{ ...milestone, milestoneKind: "record", statSeconds: 48 * 60 }}
+        momentEvent={{
+          ...milestone,
+          milestoneKind: "record",
+          destination: "insights",
+          statSeconds: 48 * 60,
+        }}
       />,
     );
-    expect(container.querySelector(".mile__stat-value")?.textContent).toBe("48m");
-    expect(container.querySelector(".mile__stat-label")?.textContent).toBe("this run");
+    expect(container.querySelector(".mile__stat")?.textContent).toBe("48m");
+    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("48m this run");
+    expect(container.querySelector(".mile__action")?.textContent).toContain("View insights");
 
     rerender(
       <CompanionPill
         {...props}
-        momentEvent={{ ...milestone, milestoneKind: "rank", statLabel: "7 days" }}
+        momentEvent={{
+          ...milestone,
+          milestoneKind: "rank",
+          destination: "leaderboard",
+          statLabel: "7 days",
+        }}
       />,
     );
-    expect(container.querySelector(".mile__stat-label")?.textContent).toBe("7 days");
+    expect(container.querySelector(".mile__stat")?.getAttribute("aria-label")).toBe("1:02 7 days");
+    expect(container.querySelector(".mile__action")?.textContent).toContain("View rank");
 
     rerender(<CompanionPill {...props} momentEvent={{ ...milestone, statSeconds: null }} />);
     expect(container.querySelector(".mile__stat")).toBeNull();
@@ -270,6 +342,7 @@ describe("CompanionPill native interactions", () => {
   });
 
   it.each([
+    ["re-entry", buildCompanionReentryPreview(1), ".view--reentry .reentry__copy"],
     ["extreme nudge", buildCompanionExtremeNudgePreview(1), ".view--nudge .card__copy"],
     ["day review", {
       kind: "endOfDayReview" as const,
@@ -370,7 +443,7 @@ describe("CompanionPill native interactions", () => {
     expect(onStateChange).toHaveBeenCalledWith("eodMinimal");
   });
 
-  it("keeps a milestone card's destination on a simple click", () => {
+  it("opens a milestone destination from its visible CTA on a simple click", () => {
     vi.useFakeTimers();
     const onOpenDestination = vi.fn();
     const { container } = render(
@@ -383,8 +456,9 @@ describe("CompanionPill native interactions", () => {
         onOpenSettings={vi.fn()}
       />,
     );
-    const cardHit = container.querySelector<HTMLElement>(".mile__hit");
+    const cardHit = container.querySelector<HTMLElement>(".mile__action");
     expect(cardHit).not.toBeNull();
+    expect(cardHit?.textContent).toContain("View rank");
 
     dispatchPointer(cardHit!, "pointerdown", {
       button: 0,
@@ -414,7 +488,7 @@ describe("CompanionPill native interactions", () => {
     expect(onOpenDestination).toHaveBeenCalledWith("leaderboard");
   });
 
-  it("turns movement on a milestone's full-card action into a native drag", () => {
+  it("turns movement on a milestone CTA into a native drag", () => {
     nativeBridge.dragNativeCompanion.mockReturnValueOnce(new Promise(() => undefined));
     const onOpenDestination = vi.fn();
     const { container } = render(
@@ -428,7 +502,7 @@ describe("CompanionPill native interactions", () => {
       />,
     );
     const pill = container.querySelector<HTMLElement>(".pill");
-    const cardHit = container.querySelector<HTMLElement>(".mile__hit");
+    const cardHit = container.querySelector<HTMLElement>(".mile__action");
     expect(pill).not.toBeNull();
     expect(cardHit).not.toBeNull();
 

@@ -7,6 +7,7 @@ import {
   type CompanionPillDismissReason,
   type CompanionPillMilestoneEvent,
 } from "./CompanionPillMoment";
+import type { CompanionReentryEvent } from "./companionReentry";
 import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import {
   dismissNativeWatcherPeek,
@@ -100,20 +101,26 @@ export function WatcherWindowApp() {
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction(action));
   }, []);
 
+  const handleOpenReentry = useCallback((reentry: CompanionReentryEvent) => {
+    setEvent(null);
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", reentry.lastActiveAt));
+  }, []);
+
   const isReviewEvent = isEndOfDayReviewEvent(event);
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
   const isMilestone = isMilestoneEvent(event);
+  const isReentry = isReentryEvent(event);
 
   useEffect(() => {
-    if (isReviewEvent || isExtremeNudgeToastEvent || isMilestone) {
+    if (isReviewEvent || isExtremeNudgeToastEvent || isMilestone || isReentry) {
       ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
     }
-  }, [isExtremeNudgeToastEvent, isMilestone, isReviewEvent]);
+  }, [isExtremeNudgeToastEvent, isMilestone, isReentry, isReviewEvent]);
 
   return (
     <main
-      className={`watcher-window-surface${isMilestone ? " companion-pill-surface" : ""}`}
-      data-state={isMilestone ? "milestone" : undefined}
+      className={`watcher-window-surface${isMilestone || isReentry ? " companion-pill-surface" : ""}`}
+      data-state={isMilestone ? "milestone" : isReentry ? "reentry" : undefined}
       aria-label="Drifty watcher window"
     >
       {isMilestone ? (
@@ -122,6 +129,13 @@ export function WatcherWindowApp() {
           onDismiss={handleMilestoneDismiss}
           onOpenDashboard={handleOpenDashboard}
           onOpenDestination={handleOpenMilestoneDestination}
+        />
+      ) : isReentry ? (
+        <StandaloneReentry
+          event={event}
+          onDismiss={handleMilestoneDismiss}
+          onOpenDashboard={handleOpenDashboard}
+          onOpenReentry={handleOpenReentry}
         />
       ) : isReviewEvent ? (
         <EndOfDayReview
@@ -154,6 +168,10 @@ function isExtremeNudgeToast(event: CompanionPillWindowEvent | null): event is E
 
 function isMilestoneEvent(event: CompanionPillWindowEvent | null): event is CompanionPillMilestoneEvent {
   return event !== null && "kind" in event && event.kind === "milestone";
+}
+
+function isReentryEvent(event: CompanionPillWindowEvent | null): event is CompanionReentryEvent {
+  return event !== null && "kind" in event && event.kind === "reentry";
 }
 
 function isWatcherPeekEvent(event: CompanionPillWindowEvent | null): event is WatcherPeekEvent {
@@ -200,6 +218,31 @@ function StandaloneMilestone({
           <i key={index} style={style} />
         ))}
       </span>
+    </div>
+  );
+}
+
+function StandaloneReentry({
+  event,
+  onDismiss,
+  onOpenDashboard,
+  onOpenReentry,
+}: {
+  readonly event: CompanionReentryEvent;
+  readonly onDismiss: (reason: CompanionPillDismissReason) => void;
+  readonly onOpenDashboard: () => void;
+  readonly onOpenReentry: (event: CompanionReentryEvent) => void;
+}) {
+  return (
+    <div className="pill" data-state="reentry" data-mood="neutral">
+      <div className="pill__clip">
+        <CompanionPillMoment
+          event={event}
+          onDismiss={onDismiss}
+          onOpenDashboard={onOpenDashboard}
+          onOpenReentry={onOpenReentry}
+        />
+      </div>
     </div>
   );
 }

@@ -34,6 +34,9 @@ html[data-surface="companion"] #root {
   --pill-resting-height: 28.9px;
   --pill-card-width: var(--pill-resting-width);
   --pill-card-height: var(--pill-resting-height);
+  /* Expanded moments share one trailing-control height so labeled CTAs,
+     dismiss, and overflow controls sit on the same visual axis. */
+  --pill-moment-control-size: 26px;
   --p-focus: #4f751e;
   --p-neutral: #9b968b;
   --p-drift: #a34139;
@@ -89,6 +92,9 @@ html[data-surface="companion"] #root {
   width: var(--pill-resting-width);
 }
 .companion-pill-surface .pill[data-state="milestone"] {
+  width: 410px;
+}
+.companion-pill-surface .pill[data-state="reentry"] {
   width: 410px;
 }
 .companion-pill-surface .pill[data-state="drift"],
@@ -459,6 +465,12 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .view.is-active {
   opacity: 1; pointer-events: auto;
 }
+/* Browser-only visual QA has no AppKit transition event to advance the native
+   choreography. Keep the dedicated development preview in its settled frame. */
+.companion-pill-surface[data-preview="true"] .view.is-active {
+  opacity: 1;
+  transition: none;
+}
 
 /* Native content choreography ----------------------------------------------
    AppKit owns the capsule geometry for the whole 280ms resize. The resident
@@ -514,6 +526,10 @@ html[data-surface="companion"] #root {
   transform: translateX(-50%);
 }
 .companion-pill-surface .pill[data-card-state="milestone"] {
+  --pill-card-width: 410px;
+  --pill-card-height: 54px;
+}
+.companion-pill-surface .pill[data-card-state="reentry"] {
   --pill-card-width: 410px;
   --pill-card-height: 54px;
 }
@@ -673,79 +689,150 @@ html[data-surface="companion"] #root {
   100% { transform: scale(1); }
 }
 .companion-pill-surface .mile__text { flex: 1; min-width: 0; }
-
-/* ---------- the number behind the claim ----------
-   "3 hours of focus today" states the threshold that was crossed; this says
-   what the clock actually reads. It sits at the trailing edge, smaller than the
-   headline, so the eye lands on the claim first and picks the figure up second.
-   Rendered only when the event carries a measured value. */
-.companion-pill-surface .mile__stat {
-  display: grid;
-  justify-items: end;
-  gap: 1px;
-  flex: none;
-  margin-left: auto;
-  padding-left: 10px;
-  text-align: right;
+.companion-pill-surface .mile__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
-.companion-pill-surface .mile__stat-value {
+.companion-pill-surface .mile__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+  color: var(--accent-strong);
+}
+.companion-pill-surface .mile__stat {
+  flex: none;
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 760;
   line-height: 1;
-  letter-spacing: -.02em;
+  letter-spacing: -.018em;
   font-variant-numeric: tabular-nums;
   color: var(--accent-strong);
 }
-.companion-pill-surface .mile__stat-label {
-  font-size: 9.5px;
-  line-height: 1;
-  letter-spacing: .02em;
-  color: var(--text-soft);
-}
-/* the rare tiers already read gold, so the figure follows to stay one object */
-.companion-pill-surface .pill[data-tier="3"] .mile__stat-value { color: #c9a24f; }
-/* a long headline ellipsizes rather than shoving the figure off the capsule */
-.companion-pill-surface .view--milestone:has(.mile__stat) .mile__title,
-.companion-pill-surface .view--milestone:has(.mile__stat) .mile__subtext {
+.companion-pill-surface .pill[data-tier="3"] .mile__stat { color: #c9a24f; }
+.companion-pill-surface .mile__sub { min-width: 0; font-size: 10.5px; color: var(--text-soft); transition: color .16s ease; }
+.companion-pill-surface .mile__subtext {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* the figure needs the room the dismiss ring was tucked into */
-.companion-pill-surface .view--milestone:has(.mile__stat) { padding-right: 56px; }
-.companion-pill-surface .mile__title { font-size: 12.5px; font-weight: 700; letter-spacing: -.01em; color: var(--accent-strong); }
-.companion-pill-surface .mile__sub { font-size: 10.5px; color: var(--text-soft); }
-
-/* rare achievements get slightly more typographic presence */
-.companion-pill-surface .pill[data-tier="3"] .mile__title { font-size: 13.5px; letter-spacing: -.015em; }
-.companion-pill-surface .mile__hit {
-  position: absolute; inset: 0 40px 0 0; z-index: 1;
-  border: 0; padding: 0; background: transparent; cursor: pointer;
-}
-.companion-pill-surface .mile__hit:focus-visible { outline: none; }
-.companion-pill-surface .mile__sub { transition: color .16s ease; }
-.companion-pill-surface .mile__hit:hover ~ .mile__text .mile__sub,
-.companion-pill-surface .mile__hit:focus-visible ~ .mile__text .mile__sub { color: var(--text-muted); }
-.companion-pill-surface .mile__arrow {
-  position: absolute; right: 47px; top: 50%; z-index: 2;
-  display: grid; place-items: center;
-  width: 24px; height: 24px; margin-top: -12px;
-  border-radius: 50%; pointer-events: none;
+.companion-pill-surface .mile__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  height: var(--pill-moment-control-size);
+  padding: 0 8px;
+  border: 0;
+  border-radius: calc(var(--pill-moment-control-size) / 2);
   background: color-mix(in srgb, var(--text) 9%, transparent);
   color: var(--text-soft);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
   transition: background .16s ease, color .16s ease;
 }
-.companion-pill-surface .mile__arrow svg { width: 13px; height: 13px; display: block; }
-.companion-pill-surface .mile__hit:hover ~ .mile__arrow,
-.companion-pill-surface .mile__hit:focus-visible ~ .mile__arrow {
+.companion-pill-surface .mile__action svg { width: 10px; height: 10px; display: block; }
+.companion-pill-surface .mile__action:hover {
   background: color-mix(in srgb, var(--text) 17%, transparent);
   color: var(--text);
 }
-.companion-pill-surface .view--milestone:has(.mile__hit) { padding-right: 78px; }
+.companion-pill-surface .mile__action:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 2px;
+}
 .companion-pill-surface .pill[data-state="milestone"] {
   box-shadow: var(--pill-shadow), 0 0 30px color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+/* ---------- re-entry ----------
+   A calm temporal hand-off, not a celebration and not an alarm. The returning
+   plain clock sets context; the exact gap, last-active time, and a quiet path
+   back to that session own the hierarchy. */
+.companion-pill-surface .view--reentry {
+  gap: 10px;
+  padding: 0 46px 0 10px;
+}
+.companion-pill-surface .reentry__mark {
+  border-radius: 50%;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.companion-pill-surface .reentry__mark svg {
+  width: 15px;
+  height: 15px;
+}
+.companion-pill-surface .reentry__copy {
+  display: block;
+}
+.companion-pill-surface .view--reentry .card__close--float {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  left: auto;
+  z-index: 2;
+  transform: translateY(-50%);
+}
+.companion-pill-surface .reentry__title {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.companion-pill-surface .reentry__sub {
+  color: var(--text-soft);
+}
+.companion-pill-surface .reentry__title,
+.companion-pill-surface .reentry__sub .mile__subtext {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.companion-pill-surface .reentry__action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--pill-moment-control-size);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  font: 650 10.5px/1 var(--font-body);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+.companion-pill-surface .reentry__action svg {
+  width: 10px;
+  height: 10px;
+}
+.companion-pill-surface .reentry__action:hover,
+.companion-pill-surface .reentry__action:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  outline: none;
+}
+.companion-pill-surface .reentry__action:active { transform: scale(.97); }
+.companion-pill-surface .pill[data-state="reentry"] {
+  background: color-mix(in srgb, var(--accent) 4%, rgba(var(--pill-rgb), var(--pill-alpha, .93)));
+  box-shadow: var(--pill-shadow), 0 0 28px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.companion-pill-surface .pill[data-state="reentry"] .card__close-ring circle {
+  stroke: color-mix(in srgb, var(--accent) 58%, transparent);
 }
 
 /* sparks */
@@ -839,7 +926,7 @@ html[data-surface="companion"] #root {
    the title already says what the moment is, so a feature-name chip added nothing */
 /* roomy circular dismiss: the glyph sits small inside a soft disc */
 .companion-pill-surface .card__close {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: var(--pill-moment-control-size); height: var(--pill-moment-control-size); border-radius: 50%;
   display: grid; place-items: center; color: var(--text-soft);
   background: color-mix(in srgb, var(--text) 10%, transparent);
   transition: background .14s ease, color .14s ease;
@@ -854,7 +941,7 @@ html[data-surface="companion"] #root {
 }
 .companion-pill-surface .card__more {
   position: absolute; top: 14px; right: 46px; z-index: 2;
-  width: 26px; height: 26px; padding: 0;
+  width: var(--pill-moment-control-size); height: var(--pill-moment-control-size); padding: 0;
   display: grid; place-items: center;
   border: 0; border-radius: 50%;
   color: var(--text-soft); background: transparent;
@@ -1011,6 +1098,7 @@ html[data-surface="companion"] #root {
    desktop behind it was showing through the text. It sits with the drift
    alarm: a moment that asks to be read gets the same backing. */
 .companion-pill-surface .pill[data-state="milestone"],
+.companion-pill-surface .pill[data-state="reentry"],
 .companion-pill-surface .pill[data-state="nudge"] { --pill-alpha: .93; }
 .companion-pill-surface .pill[data-state="eod"] { --pill-alpha: .95; }
 
@@ -1246,11 +1334,11 @@ html[data-surface="companion"] #root {
   stroke-dasharray: 78.54;
   stroke-dashoffset: calc(78.54px * (1 - var(--auto-start-scale, 1)));
 }
-.companion-pill-surface .view[data-auto="running"] .card__close-ring circle {
+.companion-pill-surface .view[data-auto] .card__close-ring circle {
   animation: ringCountdown var(--auto-duration, 12s) linear forwards;
+  animation-play-state: running;
 }
 .companion-pill-surface .view[data-auto="paused"] .card__close-ring circle {
-  animation: ringCountdown var(--auto-duration, 12s) linear forwards;
   animation-play-state: paused;
   stroke: color-mix(in srgb, var(--text) 30%, transparent);
 }

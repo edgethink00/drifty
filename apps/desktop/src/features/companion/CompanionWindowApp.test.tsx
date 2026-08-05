@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionWindowApp } from "./CompanionWindowApp";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
-import { buildCompanionExtremeNudgePreview } from "./companionPillPreview";
+import { buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
 import type { WatcherPeekEvent } from "./WatcherPeek";
 import type { CompanionPillWindowEvent, NativeCompanionPointerEvent } from "./watcherBridge";
@@ -44,6 +44,7 @@ vi.mock("../../lib/api/trackerClient", () => ({
 
 vi.mock("./watcherBridge", () => ({
   dismissNativeCompanionMoment: bridge.dismissNativeCompanionMoment,
+  isTauriRuntime: () => true,
   isNativeCompanionCursorOverCapsule: bridge.isNativeCompanionCursorOverCapsule,
   listenToNativeCompanionPillClear: vi.fn(async (handler: () => void) => {
     bridge.clearHandler = handler;
@@ -210,7 +211,7 @@ describe("CompanionWindowApp", () => {
     expect(pill?.dataset.state).toBe("milestone");
     expect(pill?.dataset.tier).toBe("3");
     expect(pill?.dataset.mileKind).toBe("rank");
-    expect(container.querySelector(".mile__hit")).not.toBeNull();
+    expect(container.querySelector(".mile__action")?.textContent).toContain("View rank");
     /* Confetti scales with the tier: 6 sparks for a routine win, 16 for a
        record, 26 for a rare one, matching the prototype's celebration. */
     expect(container.querySelectorAll(".sparks i")).toHaveLength(26);
@@ -230,7 +231,7 @@ describe("CompanionWindowApp", () => {
     act(() => bridge.exitedHandler?.({ screenX: 500, screenY: 100 }));
     expect(milestone?.dataset.auto).toBe("running");
 
-    fireEvent.click(container.querySelector(".mile__hit")!);
+    fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(160));
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard");
@@ -333,6 +334,32 @@ describe("CompanionWindowApp", () => {
 
     act(() => vi.advanceTimersByTime(1));
     expect(container.textContent).toContain("3 hours of focus today");
+  });
+
+  it("presents a re-entry as low-priority context and records the local aggregate", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.(buildCompanionReentryPreview(123)));
+    act(() => bridge.transitionHandler?.({ state: "reentry", phase: "started", anchor: "center" }));
+    act(() => vi.advanceTimersByTime(180));
+
+    expect(container.querySelector<HTMLElement>(".pill")?.dataset.state).toBe("reentry");
+    expect(container.textContent).toContain("Back after 8h 12m");
+    expect(readCompanionEngagementMetrics()).toMatchObject({ reentry_shown: 1 });
+
+    fireEvent.click(container.querySelector<HTMLButtonElement>(".reentry__action")!);
+    act(() => vi.advanceTimersByTime(160));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
+      "openActivityDay",
+      buildCompanionReentryPreview(123).lastActiveAt,
+    );
+    expect(readCompanionEngagementMetrics()).toMatchObject({ reentry_opened: 1 });
+
+    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview(456)));
+    expect(container.textContent).toContain("Closed YouTube for you.");
+    expect(container.textContent).not.toContain("Back after 8h 12m");
   });
 
   it("lets an extreme nudge preempt and permanently discard an active milestone", async () => {

@@ -101,6 +101,7 @@ describe("companion pill surface", () => {
   it("keeps moment content at its final geometry while AppKit reveals it", () => {
     const transition = cssRule('.companion-pill-surface .pill[data-transition] .view:not(.view--collapsed)');
     const milestone = cssRule('.companion-pill-surface .pill[data-card-state="milestone"]');
+    const reentry = cssRule('.companion-pill-surface .pill[data-card-state="reentry"]');
     const right = cssRule('.companion-pill-surface .pill[data-transition][data-anchor="right"] .view:not(.view--collapsed)');
     const center = cssRule('.companion-pill-surface .pill[data-transition][data-anchor="center"] .view:not(.view--collapsed)');
 
@@ -108,6 +109,8 @@ describe("companion pill surface", () => {
     expect(transition).toContain("height: var(--pill-card-height);");
     expect(milestone).toContain("--pill-card-width: 410px;");
     expect(milestone).toContain("--pill-card-height: 54px;");
+    expect(reentry).toContain("--pill-card-width: 410px;");
+    expect(reentry).toContain("--pill-card-height: 54px;");
     expect(right).toContain("right: 0;");
     expect(center).toContain("left: 50%;");
     expect(center).toContain("transform: translateX(-50%);");
@@ -212,9 +215,46 @@ describe("companion pill surface", () => {
     expect(status).toContain("font-weight: 600;");
   });
 
-  it("gives milestone text the same solid backing as the drift nudge", () => {
+  it("keeps milestone metrics beside the title and exposes a compact labeled CTA", () => {
+    const surface = cssRule(".companion-pill-surface");
+    const titleRow = cssRule(".companion-pill-surface .mile__title-row");
+    const title = cssRule(".companion-pill-surface .mile__title");
+    const stat = cssRule(".companion-pill-surface .mile__stat");
+    const action = cssRule(".companion-pill-surface .mile__action");
+    const reentryAction = cssRule(".companion-pill-surface .reentry__action");
+    const dismiss = cssRule(".companion-pill-surface .card__close");
+    const overflow = cssRule(".companion-pill-surface .card__more");
+
+    expect(surface).toContain("--pill-moment-control-size: 26px;");
+    expect(titleRow).toContain("align-items: baseline;");
+    expect(titleRow).toContain("gap: 8px;");
+    expect(title).toContain("font-size: 13px;");
+    expect(stat).toContain("font-size: 13.5px;");
+    expect(action).toContain("height: var(--pill-moment-control-size);");
+    expect(reentryAction).toContain("height: var(--pill-moment-control-size);");
+    expect(dismiss).toContain("width: var(--pill-moment-control-size); height: var(--pill-moment-control-size);");
+    expect(overflow).toContain("width: var(--pill-moment-control-size); height: var(--pill-moment-control-size);");
+    expect(action).toContain("padding: 0 8px;");
+    expect(action).toContain("font-size: 10px;");
+    expect(pillStyles).not.toContain(".mile__hit");
+    expect(pillStyles).not.toContain(".mile__arrow");
+  });
+
+  it("pauses one continuous dismiss-ring animation instead of restarting it", () => {
+    const countdown = cssRule(".companion-pill-surface .view[data-auto] .card__close-ring circle");
+    const paused = cssRule('.companion-pill-surface .view[data-auto="paused"] .card__close-ring circle');
+
+    expect(countdown).toContain("animation: ringCountdown var(--auto-duration, 12s) linear forwards;");
+    expect(countdown).toContain("animation-play-state: running;");
+    expect(paused).toContain("animation-play-state: paused;");
+    expect(paused).not.toContain("animation: ringCountdown");
+    expect(pillStyles).not.toContain('.view[data-auto="running"] .card__close-ring circle');
+  });
+
+  it("gives every short reading moment the same solid backing as the drift nudge", () => {
     expect(pillStyles).toContain(
       '.companion-pill-surface .pill[data-state="milestone"],\n' +
+      '.companion-pill-surface .pill[data-state="reentry"],\n' +
       '.companion-pill-surface .pill[data-state="nudge"] { --pill-alpha: .93; }',
     );
     expect(pillStyles).toContain(

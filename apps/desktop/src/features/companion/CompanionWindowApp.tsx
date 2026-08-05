@@ -19,8 +19,10 @@ import {
   type CompanionPillState,
 } from "./companionPillLayout";
 import { openNativeCompanionPillMenu } from "./companionPillNativeMenu";
+import { buildCompanionReentryPreview } from "./companionPillPreview";
 import {
   dismissNativeCompanionMoment,
+  isTauriRuntime,
   listenToNativeCompanionPillClear,
   listenToNativeCompanionPillSnapshot,
   listenToNativeCompanionTransition,
@@ -47,7 +49,7 @@ const COMPANION_MOMENT_QUEUE_GAP_MS = 700;
 
 export function CompanionWindowApp() {
   const [peekEvent, setPeekEvent] = useState<WatcherPeekEvent | null>(null);
-  const [momentEvent, setMomentEvent] = useState<CompanionPillMomentEvent | null>(null);
+  const [momentEvent, setMomentEvent] = useState<CompanionPillMomentEvent | null>(resolveDevelopmentPreviewMoment);
   const momentEventRef = useRef<CompanionPillMomentEvent | null>(null);
   const [isPointerInside, setIsPointerInside] = useState(false);
   const momentQueueRef = useRef<CompanionPillMomentEvent[]>([]);
@@ -136,7 +138,14 @@ export function CompanionWindowApp() {
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem(COMPANION_THEME_STORAGE_KEY);
-    const theme = savedTheme === "light" || savedTheme === "dark" ? savedTheme : COMPANION_DEFAULT_THEME;
+    const previewTheme = import.meta.env.DEV
+      ? new URLSearchParams(window.location.search).get("driftyCompanionTheme")
+      : null;
+    const theme = previewTheme === "light" || previewTheme === "dark"
+      ? previewTheme
+      : savedTheme === "light" || savedTheme === "dark"
+        ? savedTheme
+        : COMPANION_DEFAULT_THEME;
     document.documentElement.dataset.surface = "companion";
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
@@ -225,6 +234,12 @@ export function CompanionWindowApp() {
         ? "openTrends"
         : "openDashboard";
     ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction(action));
+  }, [finishCurrentMoment]);
+
+  const handleOpenReentry = useCallback((event: Extract<CompanionPillMomentEvent, { kind: "reentry" }>) => {
+    finishCurrentMoment();
+    recordCompanionEngagementMetric("reentry_opened");
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", event.lastActiveAt));
   }, [finishCurrentMoment]);
 
   const handleHideForOneHour = useCallback(() => {
@@ -372,6 +387,7 @@ export function CompanionWindowApp() {
     <main
       className="watcher-window-surface companion-pill-surface"
       data-state={pillState}
+      data-preview={isDevelopmentPreview() ? "true" : undefined}
       aria-label="Drifty companion pill"
     >
       <CompanionPill
@@ -379,7 +395,7 @@ export function CompanionWindowApp() {
         momentEvent={momentEvent}
         anchor={horizontalAnchor}
         nativeTransition={nativeTransition}
-        usesNativeTransitionPhases
+        usesNativeTransitionPhases={isTauriRuntime()}
         presentsMomentImmediately={presentsMomentImmediately}
         directEntryAnimationReady={directEntryAnimationReady}
         menuAnchorX={menuAnchorX}
@@ -387,6 +403,7 @@ export function CompanionWindowApp() {
         isTrackingPaused={peekEvent?.trackingPaused === true}
         onDismissMoment={handleDismiss}
         onOpenDashboard={handleOpenDashboard}
+        onOpenReentry={handleOpenReentry}
         onOpenMilestoneDestination={handleOpenMilestoneDestination}
         onOpenSettings={handleOpenSettings}
         onOpenMenu={handleOpenMenu}
@@ -429,6 +446,7 @@ function companionMomentState(event: CompanionPillMomentEvent): CompanionPillSta
   }
   if (event.kind === "extremeNudgeToast") return "nudge";
   if (event.kind === "milestone") return "milestone";
+  if (event.kind === "reentry") return "reentry";
   return "drift";
 }
 
@@ -442,6 +460,7 @@ function toCompanionPillMoment(event: CompanionPillWindowEvent): CompanionPillMo
   if ("kind" in event && event.kind === "endOfDayReview") return event;
   if ("kind" in event && event.kind === "extremeNudgeToast") return event;
   if ("kind" in event && event.kind === "milestone") return event;
+  if ("kind" in event && event.kind === "reentry") return event;
   if (isCompanionDriftAlarmEvent(event)) {
     const alarm = event.alarm;
     const target = alarm.focusTargets[0] ?? null;
@@ -480,6 +499,7 @@ function isInterruptingMoment(event: CompanionPillMomentEvent): boolean {
 
 function companionShownMetric(event: CompanionPillMomentEvent): CompanionEngagementMetricKey {
   if (event.kind === "milestone") return "milestone_shown";
+  if (event.kind === "reentry") return "reentry_shown";
   if (event.kind === "driftAlarm") return "drift_alarm_shown";
   if (event.kind === "extremeNudgeToast") return "extreme_nudge_shown";
   return "day_review_shown";
@@ -496,4 +516,17 @@ function ignoreCompanionBridgePromise(promise: Promise<unknown>) {
 
 function ignoreCompanionBridgeRejection() {
   return undefined;
+}
+
+function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
+  const preview = isDevelopmentPreview();
+  const language = new URLSearchParams(window.location.search).get("driftyCompanionLanguage") === "ko"
+    ? "ko"
+    : "en";
+  return preview === "reentry" ? buildCompanionReentryPreview(Date.now(), language) : null;
+}
+
+function isDevelopmentPreview(): string | null {
+  if (!import.meta.env.DEV || typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("driftyCompanionPreview");
 }
