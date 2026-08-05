@@ -6,11 +6,12 @@ export const developerToolsInvokeCommands = {
   getStatus: "developer_tools_get_status",
   installCli: "developer_tools_install_cli",
   uninstallCli: "developer_tools_uninstall_cli",
-  installCodexSkill: "developer_tools_install_codex_skill",
-  uninstallCodexSkill: "developer_tools_uninstall_codex_skill",
+  installSkill: "developer_tools_install_skill",
+  uninstallSkill: "developer_tools_uninstall_skill",
 } as const;
 
 export type DeveloperArtifactState = (typeof ARTIFACT_STATES)[number];
+export type DeveloperSkillTarget = "codex" | "claudeCode" | "cursor" | "openCode";
 
 export type DeveloperArtifactStatus = {
   readonly state: DeveloperArtifactState;
@@ -24,6 +25,9 @@ export type DeveloperArtifactStatus = {
 export type DeveloperToolsStatus = {
   readonly cli: DeveloperArtifactStatus;
   readonly codexSkill: DeveloperArtifactStatus;
+  readonly claudeCodeSkill: DeveloperArtifactStatus;
+  readonly cursorSkill: DeveloperArtifactStatus;
+  readonly openCodeSkill: DeveloperArtifactStatus;
 };
 
 export type DeveloperToolsClient = {
@@ -31,8 +35,8 @@ export type DeveloperToolsClient = {
   readonly getStatus: () => Promise<DeveloperToolsStatus>;
   readonly installCli: () => Promise<DeveloperArtifactStatus>;
   readonly uninstallCli: () => Promise<DeveloperArtifactStatus>;
-  readonly installCodexSkill: () => Promise<DeveloperArtifactStatus>;
-  readonly uninstallCodexSkill: () => Promise<DeveloperArtifactStatus>;
+  readonly installSkill: (target: DeveloperSkillTarget) => Promise<DeveloperArtifactStatus>;
+  readonly uninstallSkill: (target: DeveloperSkillTarget) => Promise<DeveloperArtifactStatus>;
 };
 
 function isTauriRuntime() {
@@ -69,6 +73,9 @@ function parseStatus(value: unknown): DeveloperToolsStatus {
   return {
     cli: parseArtifact(Reflect.get(value, "cli")),
     codexSkill: parseArtifact(Reflect.get(value, "codexSkill")),
+    claudeCodeSkill: parseArtifact(Reflect.get(value, "claudeCodeSkill")),
+    cursorSkill: parseArtifact(Reflect.get(value, "cursorSkill")),
+    openCodeSkill: parseArtifact(Reflect.get(value, "openCodeSkill")),
   };
 }
 
@@ -83,10 +90,10 @@ export const developerToolsClient: DeveloperToolsClient = {
   async uninstallCli() {
     return parseArtifact(await invoke<unknown>(developerToolsInvokeCommands.uninstallCli));
   },
-  async installCodexSkill() {
-    return parseArtifact(await invoke<unknown>(developerToolsInvokeCommands.installCodexSkill));
+  async installSkill(target) {
+    return parseArtifact(await invoke<unknown>(developerToolsInvokeCommands.installSkill, { target }));
   },
-  async uninstallCodexSkill() {
-    return parseArtifact(await invoke<unknown>(developerToolsInvokeCommands.uninstallCodexSkill));
+  async uninstallSkill(target) {
+    return parseArtifact(await invoke<unknown>(developerToolsInvokeCommands.uninstallSkill, { target }));
   },
 };

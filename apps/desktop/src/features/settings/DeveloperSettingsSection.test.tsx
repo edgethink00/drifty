@@ -22,6 +22,9 @@ const artifact = (overrides: Partial<DeveloperArtifactStatus> = {}): DeveloperAr
 const status = (overrides: Partial<DeveloperToolsStatus> = {}): DeveloperToolsStatus => ({
   cli: artifact(),
   codexSkill: artifact({ installedPath: "~/.codex/skills/drifty" }),
+  claudeCodeSkill: artifact({ installedPath: "~/.claude/skills/drifty" }),
+  cursorSkill: artifact({ installedPath: "~/.cursor/skills/drifty" }),
+  openCodeSkill: artifact({ installedPath: "~/.config/opencode/skills/drifty" }),
   ...overrides,
 });
 
@@ -31,8 +34,8 @@ function mockClient(initialStatus: DeveloperToolsStatus): DeveloperToolsClient {
     getStatus: vi.fn().mockResolvedValue(initialStatus),
     installCli: vi.fn().mockResolvedValue(artifact({ state: "installed", canInstall: false, canUninstall: true })),
     uninstallCli: vi.fn().mockResolvedValue(artifact()),
-    installCodexSkill: vi.fn().mockResolvedValue(artifact({ state: "installed", canInstall: false, canUninstall: true })),
-    uninstallCodexSkill: vi.fn().mockResolvedValue(artifact()),
+    installSkill: vi.fn().mockResolvedValue(artifact({ state: "installed", canInstall: false, canUninstall: true })),
+    uninstallSkill: vi.fn().mockResolvedValue(artifact()),
   };
 }
 
@@ -49,30 +52,84 @@ describe("DeveloperSettingsSection", () => {
 
   afterEach(cleanup);
 
-  it("shows the CLI value, command examples, install actions, and PATH guidance", async () => {
+  it("shows command examples and install actions without shell setup before CLI installation", async () => {
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 
     expect(await screen.findByRole("button", { name: /Install CLI: Command line tools/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Add to Codex: Codex agent skill/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add skill to…" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "CLI" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Agent skill" })).toBeTruthy();
     expect(screen.getAllByText("drifty summary --day 2026-08-04").length).toBe(2);
     expect(screen.getByText("drifty search --query \"CLI\"")).toBeTruthy();
-    expect(screen.getByText("~/.local/bin/drifty")).toBeTruthy();
     expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
-    expect(screen.getByText(/never edits shell startup files/i)).toBeTruthy();
-    expect(screen.getByText(/Full URLs and window titles require/i)).toBeTruthy();
+    expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
+    expect(screen.getByText(/use --detail full for URLs and window titles/i)).toBeTruthy();
     expect(screen.getByText(/does not add network access/i)).toBeTruthy();
+    expect(screen.queryByText(/Give local agents a safe, read-only way/i)).toBeNull();
+    expect(screen.queryByText(/Query summaries, matching activity, and timelines/i)).toBeNull();
+    expect(screen.queryByText(/Add Drifty's query guidance to the agent/i)).toBeNull();
+    expect(screen.queryByText("LOCAL COMMAND LINE")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Copy command:/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Ask Drifty about your recorded work" })).toBeNull();
   });
 
-  it("copies commands and exposes confirmation feedback", async () => {
-    render(<DeveloperSettingsSection client={mockClient(status())} />);
+  it("shows and copies the shell-startup line once the CLI is installed", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status({
+      cli: artifact({ state: "installed", canInstall: false, canUninstall: true }),
+    }))} />);
 
-    const copyButton = await screen.findByRole("button", { name: /Copy command: drifty summary --day 2026-08-04/i });
+    expect(await screen.findByText('export PATH="$HOME/.local/bin:$PATH"')).toBeTruthy();
+    const copyButton = screen.getByRole("button", { name: /Copy path: export PATH=/i });
     fireEvent.click(copyButton);
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("drifty summary --day 2026-08-04"));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('export PATH="$HOME/.local/bin:$PATH"'));
     expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
+  });
+
+  it("opens the agent picker and installs the Codex skill from its target row", async () => {
+    const client = mockClient(status());
+    render(<DeveloperSettingsSection client={client} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+
+    expect(screen.getByRole("menu", { name: "All agents" })).toBeTruthy();
+    expect(screen.getByText("~/.claude/skills")).toBeTruthy();
+    expect(screen.queryByText("Coming soon")).toBeNull();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Codex.*~\/.codex\/skills.*Add/i }));
+
+    await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("codex"));
+  });
+
+  it("installs the selected Cursor skill and updates the skill location", async () => {
+    const client = mockClient(status());
+    render(<DeveloperSettingsSection client={client} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Cursor.*~\/\.cursor\/skills.*Add/i }));
+
+    await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("cursor"));
+    expect(screen.getByRole("heading", { name: "Cursor agent skill" })).toBeTruthy();
+    expect(screen.getByText("~/.cursor/skills/drifty")).toBeTruthy();
+  });
+
+  it("removes only the selected installed agent skill", async () => {
+    const client = mockClient(status({
+      cursorSkill: artifact({
+        state: "installed",
+        installedPath: "~/.cursor/skills/drifty",
+        canInstall: false,
+        canUninstall: true,
+      }),
+    }));
+    render(<DeveloperSettingsSection client={client} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Cursor.*Added/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove: Cursor" }));
+
+    await waitFor(() => expect(client.uninstallSkill).toHaveBeenCalledWith("cursor"));
+    expect(client.uninstallSkill).not.toHaveBeenCalledWith("codex");
   });
 
   it("installs through the native client and refreshes status", async () => {
@@ -86,7 +143,9 @@ describe("DeveloperSettingsSection", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Install CLI: Command line tools/i }));
 
     await waitFor(() => expect(client.installCli).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole("button", { name: /Uninstall: Command line tools/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /Reinstall: Command line tools/i })).toBeTruthy();
+    expect(screen.queryByText("Installed")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Uninstall: Command line tools/i })).toBeNull();
   });
 
   it("does not offer destructive actions for a foreign path", async () => {
@@ -104,7 +163,7 @@ describe("DeveloperSettingsSection", () => {
     expect(await screen.findByText("Needs repair")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Repair: Command line tools/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Uninstall: Command line tools/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /Copy path: ~\/.local\/bin\/drifty/i })).toBeTruthy();
+    expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
     expect(screen.getByText(/will not replace or remove/i)).toBeTruthy();
   });
 
@@ -113,7 +172,7 @@ describe("DeveloperSettingsSection", () => {
     const client: DeveloperToolsClient = { ...baseClient, isAvailable: () => false };
     render(<DeveloperSettingsSection client={client} />);
 
-    expect((await screen.findAllByText("Unavailable in this build")).length).toBe(2);
+    expect((await screen.findAllByText("Unavailable in this build")).length).toBe(1);
     expect(client.getStatus).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /Install CLI/i })).toBeNull();
   });

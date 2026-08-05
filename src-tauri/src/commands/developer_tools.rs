@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
@@ -8,6 +8,18 @@ use std::os::unix::fs::symlink;
 
 const CLI_INSTALL_RELATIVE_PATH: &str = ".local/bin/drifty";
 const CODEX_SKILL_INSTALL_RELATIVE_PATH: &str = ".codex/skills/drifty";
+const CLAUDE_CODE_SKILL_INSTALL_RELATIVE_PATH: &str = ".claude/skills/drifty";
+const CURSOR_SKILL_INSTALL_RELATIVE_PATH: &str = ".cursor/skills/drifty";
+const OPEN_CODE_SKILL_INSTALL_RELATIVE_PATH: &str = ".config/opencode/skills/drifty";
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DeveloperSkillTarget {
+    Codex,
+    ClaudeCode,
+    Cursor,
+    OpenCode,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,12 +46,15 @@ pub struct DeveloperArtifactStatus {
 pub struct DeveloperToolsStatus {
     pub cli: DeveloperArtifactStatus,
     pub codex_skill: DeveloperArtifactStatus,
+    pub claude_code_skill: DeveloperArtifactStatus,
+    pub cursor_skill: DeveloperArtifactStatus,
+    pub open_code_skill: DeveloperArtifactStatus,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ArtifactKind {
     Cli,
-    CodexSkill,
+    Skill(DeveloperSkillTarget),
 }
 
 #[tauri::command]
@@ -73,26 +88,36 @@ pub fn developer_tools_uninstall_cli(app: AppHandle) -> Result<DeveloperArtifact
 pub fn developer_tools_install_codex_skill(
     app: AppHandle,
 ) -> Result<DeveloperArtifactStatus, String> {
-    let paths = artifact_paths(&app, ArtifactKind::CodexSkill)?;
-    install_owned_link(ArtifactKind::CodexSkill, &paths.source, &paths.destination)?;
-    Ok(artifact_status(
-        ArtifactKind::CodexSkill,
-        &paths.source,
-        &paths.destination,
-    ))
+    developer_tools_install_skill(app, DeveloperSkillTarget::Codex)
+}
+
+#[tauri::command]
+pub fn developer_tools_install_skill(
+    app: AppHandle,
+    target: DeveloperSkillTarget,
+) -> Result<DeveloperArtifactStatus, String> {
+    let kind = ArtifactKind::Skill(target);
+    let paths = artifact_paths(&app, kind)?;
+    install_owned_link(kind, &paths.source, &paths.destination)?;
+    Ok(artifact_status(kind, &paths.source, &paths.destination))
 }
 
 #[tauri::command]
 pub fn developer_tools_uninstall_codex_skill(
     app: AppHandle,
 ) -> Result<DeveloperArtifactStatus, String> {
-    let paths = artifact_paths(&app, ArtifactKind::CodexSkill)?;
-    uninstall_owned_link(ArtifactKind::CodexSkill, &paths.source, &paths.destination)?;
-    Ok(artifact_status(
-        ArtifactKind::CodexSkill,
-        &paths.source,
-        &paths.destination,
-    ))
+    developer_tools_uninstall_skill(app, DeveloperSkillTarget::Codex)
+}
+
+#[tauri::command]
+pub fn developer_tools_uninstall_skill(
+    app: AppHandle,
+    target: DeveloperSkillTarget,
+) -> Result<DeveloperArtifactStatus, String> {
+    let kind = ArtifactKind::Skill(target);
+    let paths = artifact_paths(&app, kind)?;
+    uninstall_owned_link(kind, &paths.source, &paths.destination)?;
+    Ok(artifact_status(kind, &paths.source, &paths.destination))
 }
 
 struct ArtifactPaths {
@@ -102,10 +127,33 @@ struct ArtifactPaths {
 
 fn status_for_app(app: &AppHandle) -> Result<DeveloperToolsStatus, String> {
     let cli = artifact_paths(app, ArtifactKind::Cli)?;
-    let skill = artifact_paths(app, ArtifactKind::CodexSkill)?;
+    let codex_skill = artifact_paths(app, ArtifactKind::Skill(DeveloperSkillTarget::Codex))?;
+    let claude_code_skill =
+        artifact_paths(app, ArtifactKind::Skill(DeveloperSkillTarget::ClaudeCode))?;
+    let cursor_skill = artifact_paths(app, ArtifactKind::Skill(DeveloperSkillTarget::Cursor))?;
+    let open_code_skill = artifact_paths(app, ArtifactKind::Skill(DeveloperSkillTarget::OpenCode))?;
     Ok(DeveloperToolsStatus {
         cli: artifact_status(ArtifactKind::Cli, &cli.source, &cli.destination),
-        codex_skill: artifact_status(ArtifactKind::CodexSkill, &skill.source, &skill.destination),
+        codex_skill: artifact_status(
+            ArtifactKind::Skill(DeveloperSkillTarget::Codex),
+            &codex_skill.source,
+            &codex_skill.destination,
+        ),
+        claude_code_skill: artifact_status(
+            ArtifactKind::Skill(DeveloperSkillTarget::ClaudeCode),
+            &claude_code_skill.source,
+            &claude_code_skill.destination,
+        ),
+        cursor_skill: artifact_status(
+            ArtifactKind::Skill(DeveloperSkillTarget::Cursor),
+            &cursor_skill.source,
+            &cursor_skill.destination,
+        ),
+        open_code_skill: artifact_status(
+            ArtifactKind::Skill(DeveloperSkillTarget::OpenCode),
+            &open_code_skill.source,
+            &open_code_skill.destination,
+        ),
     })
 }
 
@@ -116,12 +164,19 @@ fn artifact_paths(app: &AppHandle, kind: ArtifactKind) -> Result<ArtifactPaths, 
         .ok_or_else(|| "Unable to resolve the current user's home directory.".to_owned())?;
     let source = match kind {
         ArtifactKind::Cli => resolve_cli_source(app),
-        ArtifactKind::CodexSkill => resolve_skill_source(app),
+        ArtifactKind::Skill(_) => resolve_skill_source(app),
     }
     .unwrap_or_else(|| PathBuf::from("/__drifty_unavailable_artifact__"));
     let destination = home.join(match kind {
         ArtifactKind::Cli => CLI_INSTALL_RELATIVE_PATH,
-        ArtifactKind::CodexSkill => CODEX_SKILL_INSTALL_RELATIVE_PATH,
+        ArtifactKind::Skill(DeveloperSkillTarget::Codex) => CODEX_SKILL_INSTALL_RELATIVE_PATH,
+        ArtifactKind::Skill(DeveloperSkillTarget::ClaudeCode) => {
+            CLAUDE_CODE_SKILL_INSTALL_RELATIVE_PATH
+        }
+        ArtifactKind::Skill(DeveloperSkillTarget::Cursor) => CURSOR_SKILL_INSTALL_RELATIVE_PATH,
+        ArtifactKind::Skill(DeveloperSkillTarget::OpenCode) => {
+            OPEN_CODE_SKILL_INSTALL_RELATIVE_PATH
+        }
     });
     Ok(ArtifactPaths {
         source,
@@ -342,21 +397,35 @@ fn absolute_link_target(destination: &Path, target: &Path) -> PathBuf {
 fn source_available(kind: ArtifactKind, source: &Path) -> bool {
     match kind {
         ArtifactKind::Cli => source.is_file(),
-        ArtifactKind::CodexSkill => valid_skill_source(source),
+        ArtifactKind::Skill(_) => valid_skill_source(source),
     }
 }
 
 fn display_install_path(kind: ArtifactKind) -> &'static str {
     match kind {
         ArtifactKind::Cli => "~/.local/bin/drifty",
-        ArtifactKind::CodexSkill => "~/.codex/skills/drifty",
+        ArtifactKind::Skill(DeveloperSkillTarget::Codex) => "~/.codex/skills/drifty",
+        ArtifactKind::Skill(DeveloperSkillTarget::ClaudeCode) => "~/.claude/skills/drifty",
+        ArtifactKind::Skill(DeveloperSkillTarget::Cursor) => "~/.cursor/skills/drifty",
+        ArtifactKind::Skill(DeveloperSkillTarget::OpenCode) => "~/.config/opencode/skills/drifty",
     }
 }
 
 fn unavailable_message(kind: ArtifactKind) -> &'static str {
     match kind {
         ArtifactKind::Cli => "The CLI executable is unavailable in this build.",
-        ArtifactKind::CodexSkill => "The bundled Codex skill is unavailable in this build.",
+        ArtifactKind::Skill(DeveloperSkillTarget::Codex) => {
+            "The bundled Codex skill is unavailable in this build."
+        }
+        ArtifactKind::Skill(DeveloperSkillTarget::ClaudeCode) => {
+            "The bundled Claude Code skill is unavailable in this build."
+        }
+        ArtifactKind::Skill(DeveloperSkillTarget::Cursor) => {
+            "The bundled Cursor skill is unavailable in this build."
+        }
+        ArtifactKind::Skill(DeveloperSkillTarget::OpenCode) => {
+            "The bundled OpenCode skill is unavailable in this build."
+        }
     }
 }
 
@@ -499,10 +568,18 @@ mod tests {
         .expect("skill destination parent");
         symlink(&foreign_skill_target, &skill_destination).expect("foreign skill link");
 
-        assert!(install_owned_link(ArtifactKind::CodexSkill, &skill, &skill_destination).is_err());
-        assert!(
-            uninstall_owned_link(ArtifactKind::CodexSkill, &skill, &skill_destination).is_err()
-        );
+        assert!(install_owned_link(
+            ArtifactKind::Skill(DeveloperSkillTarget::Codex),
+            &skill,
+            &skill_destination
+        )
+        .is_err());
+        assert!(uninstall_owned_link(
+            ArtifactKind::Skill(DeveloperSkillTarget::Codex),
+            &skill,
+            &skill_destination
+        )
+        .is_err());
         assert_eq!(
             fs::read_link(&skill_destination).expect("unchanged skill target"),
             foreign_skill_target
@@ -515,13 +592,54 @@ mod tests {
         let source = skill_source(root.path());
         let destination = root.path().join("home/.codex/skills/drifty");
 
-        install_owned_link(ArtifactKind::CodexSkill, &source, &destination).expect("install");
+        install_owned_link(
+            ArtifactKind::Skill(DeveloperSkillTarget::Codex),
+            &source,
+            &destination,
+        )
+        .expect("install");
         assert_eq!(
-            artifact_status(ArtifactKind::CodexSkill, &source, &destination).state,
+            artifact_status(
+                ArtifactKind::Skill(DeveloperSkillTarget::Codex),
+                &source,
+                &destination
+            )
+            .state,
             DeveloperArtifactState::Installed
         );
-        uninstall_owned_link(ArtifactKind::CodexSkill, &source, &destination).expect("uninstall");
+        uninstall_owned_link(
+            ArtifactKind::Skill(DeveloperSkillTarget::Codex),
+            &source,
+            &destination,
+        )
+        .expect("uninstall");
         assert!(!destination.exists());
+    }
+
+    #[test]
+    fn all_skill_targets_install_to_their_documented_paths() {
+        let root = TempDir::new().expect("temp dir");
+        let source = skill_source(root.path());
+        let cases = [
+            (DeveloperSkillTarget::Codex, ".codex/skills/drifty"),
+            (DeveloperSkillTarget::ClaudeCode, ".claude/skills/drifty"),
+            (DeveloperSkillTarget::Cursor, ".cursor/skills/drifty"),
+            (
+                DeveloperSkillTarget::OpenCode,
+                ".config/opencode/skills/drifty",
+            ),
+        ];
+
+        for (target, relative_destination) in cases {
+            let kind = ArtifactKind::Skill(target);
+            let destination = root.path().join("home").join(relative_destination);
+            install_owned_link(kind, &source, &destination).expect("install target skill");
+            assert_eq!(
+                artifact_status(kind, &source, &destination).state,
+                DeveloperArtifactState::Installed
+            );
+            assert_eq!(fs::read_link(&destination).expect("link target"), source);
+        }
     }
 
     #[test]
