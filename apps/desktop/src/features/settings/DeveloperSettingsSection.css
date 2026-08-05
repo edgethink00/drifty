@@ -1,0 +1,57 @@
+.settings-section--developer .settings-section-intro {
+  max-width: 44rem;
+  margin: 0 0 0.75rem;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.6;
+}
+
+.settings-row--developer-tool {
+  align-items: flex-start;
+}
+
+.developer-tool-path {
+  display: inline-block;
+  margin-top: 0.48rem;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  overflow-wrap: anywhere;
+}
+
+.developer-tool-privacy {
+  max-width: 42rem;
+  margin-top: 0.48rem !important;
+}
+
+.developer-tool-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.developer-tool-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 36%, var(--line));
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+  font-size: var(--type-setting-desc-size);
+}
+
+@media (max-width: 760px) {
+  .settings-row--developer-tool {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .developer-tool-controls {
+    justify-content: flex-start;
+  }
+}

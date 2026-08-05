@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-developer-tools-install-codex-skill"
+description = "Enables the developer_tools_install_codex_skill command without any pre-configured scope."
+commands.allow = ["developer_tools_install_codex_skill"]
+
+[[permission]]
+identifier = "deny-developer-tools-install-codex-skill"
+description = "Denies the developer_tools_install_codex_skill command without any pre-configured scope."
+commands.deny = ["developer_tools_install_codex_skill"]

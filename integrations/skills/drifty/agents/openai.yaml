@@ -1,0 +1,6 @@
+interface:
+  display_name: "Drifty"
+  short_description: "Query local Drifty activity history safely"
+  default_prompt: "Use $drifty to answer my question from local Drifty activity history."
+policy:
+  allow_implicit_invocation: true

@@ -96,6 +96,7 @@ import { AccountSettingsSection } from "./features/settings/AccountSettingsSecti
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
 import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
+import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
@@ -6846,6 +6847,7 @@ export default function App() {
                     todaySessionCount={segments.length}
                   />
                 )}
+                {settingsSection === "developer" && <DeveloperSettingsSection />}
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}

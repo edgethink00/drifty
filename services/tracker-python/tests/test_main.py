@@ -19,6 +19,36 @@ from app.tracker.power_state import PowerStateSample
 
 
 class TrackerMainTests(unittest.TestCase):
+    def test_public_cli_dispatch_does_not_match_internal_argument_values(self) -> None:
+        self.assertFalse(
+            tracker_main._is_public_cli_invocation(
+                ["--db", "status", "--request-json", '{"command":"get_status"}']
+            )
+        )
+
+    def test_public_cli_dispatch_accepts_commands_overrides_and_unknown_commands(self) -> None:
+        self.assertTrue(
+            tracker_main._is_public_cli_invocation(
+                ["--db", "/tmp/status", "summary", "--day", "2026-08-05"]
+            )
+        )
+        self.assertTrue(tracker_main._is_public_cli_invocation(["unknown-command"]))
+        self.assertFalse(tracker_main._is_public_cli_invocation(["serve", "--db", "/tmp/status"]))
+
+    def test_public_cli_dispatch_preserves_legacy_modes_after_global_options(self) -> None:
+        self.assertFalse(tracker_main._is_public_cli_invocation(["--db", "/tmp/db", "daemon"]))
+        self.assertFalse(tracker_main._is_public_cli_invocation(["--db=/tmp/db", "serve"]))
+        self.assertFalse(
+            tracker_main._is_public_cli_invocation(
+                ["--smoke-id", "drifty-sentry-smoke-abcdef", tracker_main.SENTRY_SMOKE_MODE]
+            )
+        )
+        self.assertTrue(
+            tracker_main._is_public_cli_invocation(
+                ["--db", "/tmp/db", "summary", "--day", "2026-08-05"]
+            )
+        )
+
     def test_sentry_smoke_test_requires_initialized_sdk(self) -> None:
         result = tracker_main.sentry_smoke_test("drifty-sentry-smoke-abcdef", False)
 
