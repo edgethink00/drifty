@@ -37,7 +37,7 @@ export function OpenRouterModelDialog({
   useModalDismiss(onClose);
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal model-picker-modal" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
+      <section className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="openrouter-model-picker-title" onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label={t("settings.ai.close")} onClick={onClose} />
         <div className="modal-head">
           <div className="modal-head__copy">

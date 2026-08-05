@@ -12,15 +12,86 @@
    stylesheets (shared-surfaces, leaderboard, team, projects, rank-embeds).
    ────────────────────────────────────────────────────────────────────────── */
 
-/* Shell polish — softer radius + a two-layer shadow (v1.3). The circular close
-   button is absolutely positioned, so the shell must be a positioning context. */
+/* Shell polish. The circular close button is absolutely positioned, so the
+   shell must be a positioning context. `data-modal-variant` is the visual
+   contract shared by the auth family and independent dialog shells. */
 .auth-modal {
   position: relative;
-  border-radius: 16px;
   border-color: var(--line);
   box-shadow:
     0 1px 2px rgba(28, 28, 25, 0.05),
     0 24px 56px color-mix(in srgb, #1c1c19 10%, transparent);
+}
+
+/* Keep short dialogs centered while allowing a dialog taller than the window
+   to start at the overlay inset instead of being clipped above the viewport. */
+.auth-modal__overlay {
+  align-items: flex-start;
+  overflow: auto;
+}
+
+.auth-modal__overlay > .auth-modal {
+  flex: 0 0 auto;
+  margin: auto;
+}
+
+.modal-shell {
+  --modal-shell-radius: var(--modal-radius-standard);
+  --modal-shell-inset: var(--modal-inset-standard);
+}
+
+.modal-shell[data-modal-variant="compact"] {
+  --modal-shell-radius: var(--modal-radius-compact);
+  --modal-shell-inset: var(--modal-inset-compact);
+}
+
+.modal-shell[data-modal-variant="standard"] {
+  --modal-shell-radius: var(--modal-radius-standard);
+  --modal-shell-inset: var(--modal-inset-standard);
+}
+
+.modal-shell[data-modal-variant="workspace"] {
+  --modal-shell-radius: var(--modal-radius-workspace);
+  --modal-shell-inset: var(--modal-inset-workspace);
+}
+
+.modal-shell[data-modal-variant="expressive"] {
+  --modal-shell-radius: var(--modal-radius-expressive);
+  --modal-shell-inset: var(--modal-inset-expressive);
+}
+
+.modal-shell[data-modal-variant="utility"] {
+  --modal-shell-radius: var(--modal-radius-utility);
+}
+
+/* Use shell-family specificity so independently loaded feature CSS cannot
+   silently restore an older 14/16/18px radius later in the cascade. */
+.auth-modal.modal-shell,
+.cloud-device-confirm__panel.modal-shell,
+.history-confirm__panel.modal-shell,
+.dc-onb-confirm.modal-shell,
+.cmd-box.modal-shell,
+.dashboard-ai-recovery__panel.modal-shell {
+  border-radius: var(--modal-shell-radius);
+}
+
+.auth-modal.modal-shell,
+.cloud-device-confirm__panel.modal-shell,
+.history-confirm__panel.modal-shell,
+.dc-onb-confirm.modal-shell,
+.dashboard-ai-recovery__panel.modal-shell {
+  padding: var(--modal-shell-inset);
+}
+
+/* Profile embed owns a full-bleed body, so its workspace inset needs matching
+   negative margins instead of flattening that structure. */
+.auth-modal.profile-embeds-modal.modal-shell {
+  padding: var(--modal-shell-inset) var(--modal-shell-inset) 0;
+}
+
+.profile-embeds-modal.modal-shell .profile-embeds-modal__body {
+  margin: 0 calc(var(--modal-shell-inset) * -1);
+  padding: 12px var(--modal-shell-inset) var(--modal-shell-inset);
 }
 
 /* ── Circular close button (replaces text "X", bottom Cancel/Close rows) ─── */
@@ -44,6 +115,11 @@
     background var(--transition-fast),
     color var(--transition-fast),
     border-color var(--transition-fast);
+}
+
+.modal-shell .modal-x {
+  top: 14px;
+  right: 14px;
 }
 
 .modal-x:hover {
@@ -96,6 +172,31 @@
 /* profile-family headers (avatar + title) need room for the circular X too */
 .profile-modal__header {
   padding-right: 2.6rem;
+}
+
+/* Generic modal titles share one typographic rhythm. Avatar, icon, and eyebrow
+   led headers remain intentional structural exceptions, but their title type
+   still resolves to the same scale. */
+.modal-shell .modal-head__copy h2,
+.modal-shell .auth-modal__header h2,
+.modal-shell .profile-modal__header h2,
+.modal-shell.rank-embeds-modal .rank-embeds-modal__header h2,
+.cloud-device-confirm__panel.modal-shell h2,
+.history-confirm__panel.modal-shell h2 {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.modal-shell .modal-head,
+.modal-shell .profile-modal__header {
+  margin-bottom: 16px;
+}
+
+.cloud-device-confirm__panel.modal-shell .cloud-device-confirm__eyebrow {
+  display: none;
 }
 
 /* ── Standardized footer: right-aligned pill buttons + optional note ─────── */

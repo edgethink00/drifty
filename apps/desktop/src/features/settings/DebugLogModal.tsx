@@ -16,7 +16,8 @@ export function DebugLogModal({ text, note, onClose, onCopy, onDownload }: Debug
   return (
     <div className="auth-modal__overlay debug-log-modal__overlay" onClick={onClose}>
       <section
-        className="auth-modal debug-log-modal"
+        className="auth-modal modal-shell debug-log-modal"
+        data-modal-variant="workspace"
         role="dialog"
         aria-modal="true"
         aria-label="Debug log"

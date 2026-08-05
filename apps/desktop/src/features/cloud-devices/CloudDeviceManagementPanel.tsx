@@ -105,7 +105,7 @@ export function CloudDeviceManagementPanel({
           aria-labelledby="cloud-device-confirm-title"
           aria-describedby="cloud-device-confirm-description"
         >
-          <div className="cloud-device-confirm__panel">
+          <div className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact">
             <p className="cloud-device-confirm__eyebrow">{t("settings.cloudDevices.device")}</p>
             <h2 id="cloud-device-confirm-title">{t("settings.cloudDevices.removeTitle")}</h2>
             <p id="cloud-device-confirm-description">

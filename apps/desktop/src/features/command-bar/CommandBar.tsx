@@ -18,7 +18,8 @@ export function CommandBar({ includeProjects, onDismiss, onNavigate }: CommandBa
         ref={dialogRef}
         aria-label="Command palette"
         aria-modal="true"
-        className="cmd-box"
+        className="cmd-box modal-shell"
+        data-modal-variant="utility"
         onClick={(event) => event.stopPropagation()}
         role="dialog"
         tabIndex={-1}

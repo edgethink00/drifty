@@ -126,7 +126,8 @@ export function ProfileEmbedsModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section
-        className="auth-modal profile-modal profile-embeds-modal"
+        className="auth-modal modal-shell profile-modal profile-embeds-modal"
+        data-modal-variant="workspace"
         role="dialog"
         aria-modal="true"
         aria-labelledby="embeds-modal-title"

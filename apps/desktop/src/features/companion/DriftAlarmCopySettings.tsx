@@ -94,7 +94,8 @@ export function DriftAlarmCopySettings({
       {isEditorOpen ? (
         <div className="auth-modal__overlay drift-copy-modal__overlay" onClick={cancelEditor}>
           <section
-            className="auth-modal drift-copy-modal"
+            className="auth-modal modal-shell drift-copy-modal"
+            data-modal-variant="workspace"
             role="dialog"
             aria-modal="true"
             aria-labelledby="drift-copy-modal-title"

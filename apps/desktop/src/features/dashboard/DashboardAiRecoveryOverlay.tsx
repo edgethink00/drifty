@@ -24,7 +24,7 @@ export function DashboardAiRecoveryOverlay({
   useModalDismiss(onClose);
   return (
     <div className={`dashboard-ai-recovery dashboard-ai-recovery--${state.variant}`}>
-      <section className="dashboard-ai-recovery__panel" role="dialog" aria-label="Restore AI analysis">
+      <section className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace" role="dialog" aria-modal="true" aria-label="Restore AI analysis">
         <ModalCloseButton label="Dismiss AI recovery" onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">
           <span className="label-mono">Cloud AI paused</span>

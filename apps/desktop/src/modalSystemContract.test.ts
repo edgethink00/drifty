@@ -1,0 +1,81 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+function read(relativePath: string): string {
+  return readFileSync(new URL(relativePath, import.meta.url), "utf8");
+}
+
+const modalSurfaces = [
+  ["Sign in", "./features/auth/AuthModal.tsx", /className="auth-modal modal-shell" data-modal-variant="standard"/],
+  ["Send feedback", "./features/feedback/FeedbackModal.tsx", /className="auth-modal modal-shell feedback-modal"\s+data-modal-variant="standard"/],
+  ["Delete history", "./features/settings/DeleteHistoryModal.tsx", /className="auth-modal modal-shell delete-history-modal"\s+data-modal-variant="compact"/],
+  ["Project analysis consent", "./features/classification/ProjectPassConsentModal.tsx", /className="auth-modal modal-shell project-pass-consent-modal"\s+data-modal-variant="standard"/],
+  ["Public profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal" data-modal-variant="standard"/],
+  ["Edit profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace"/],
+  ["Profile embed", "./features/profile/ProfileEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal profile-embeds-modal"\s+data-modal-variant="workspace"/],
+  ["Rank embed", "./features/leaderboard/RankEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal rank-embeds-modal"\s+data-modal-variant="workspace"/],
+  ["New project", "./features/projects/ProjectEditorModal.tsx", /className="auth-modal modal-shell projects-editor-modal"\s+data-modal-variant="workspace"/],
+  ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
+  ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
+  ["Delete local model", "./features/settings/DeleteManagedModelModal.tsx", /className="auth-modal modal-shell ai-delete-model-modal"\s+data-modal-variant="compact"/],
+  ["Invite to team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal"\s+data-modal-variant="standard"/],
+  ["Team settings", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-settings-modal"\s+data-modal-variant="workspace"/],
+  ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
+  ["New shared project", "./features/team/TeamProjectsView.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
+  ["Remove cloud device", "./features/cloud-devices/CloudDeviceManagementPanel.tsx", /className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact"/],
+  ["Delete selected records", "./features/history/HistoryView.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
+  ["Extreme nudge consent", "./features/onboarding/OnboardingDesignCodeContent.tsx", /className="dc-onb-confirm modal-shell" data-modal-variant="expressive"/],
+  ["Command palette", "./features/command-bar/CommandBar.tsx", /className="cmd-box modal-shell"\s+data-modal-variant="utility"/],
+  ["Edit drift alarm copy", "./features/companion/DriftAlarmCopySettings.tsx", /className="auth-modal modal-shell drift-copy-modal"\s+data-modal-variant="workspace"/],
+  ["Restore AI analysis", "./features/dashboard/DashboardAiRecoveryOverlay.tsx", /className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"/],
+] as const;
+
+describe("modal system v2 contract", () => {
+  it("keeps the approved 125% shell radii and variant insets as semantic tokens", () => {
+    const tokens = read("./styles/tokens-base.css");
+
+    expect(tokens).toContain("--modal-radius-compact: 22.5px;");
+    expect(tokens).toContain("--modal-radius-standard: 25px;");
+    expect(tokens).toContain("--modal-radius-workspace: 25px;");
+    expect(tokens).toContain("--modal-radius-expressive: 30px;");
+    expect(tokens).toContain("--modal-radius-utility: 20px;");
+    expect(tokens).toContain("--modal-inset-compact: 24px;");
+    expect(tokens).toContain("--modal-inset-standard: 32px;");
+    expect(tokens).toContain("--modal-inset-workspace: 24px;");
+    expect(tokens).toContain("--modal-inset-expressive: 28px;");
+  });
+
+  it("classifies every production popup surface under one explicit variant", () => {
+    expect(modalSurfaces).toHaveLength(22);
+
+    for (const [name, path, pattern] of modalSurfaces) {
+      expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
+    }
+  });
+
+  it("normalizes shell radius, inset, close placement, and generic header rhythm centrally", () => {
+    const chrome = read("./styles/modal-chrome.css");
+
+    expect(chrome).toContain("border-radius: var(--modal-shell-radius);");
+    expect(chrome).toContain("padding: var(--modal-shell-inset);");
+    expect(chrome).toContain(".modal-shell .modal-x");
+    expect(chrome).toContain(".modal-shell .modal-head__copy h2");
+    expect(chrome).toContain(".cloud-device-confirm__panel.modal-shell .cloud-device-confirm__eyebrow");
+  });
+
+  it("keeps tall auth-family dialogs reachable at the minimum app height", () => {
+    const chrome = read("./styles/modal-chrome.css");
+
+    expect(chrome).toContain(".auth-modal__overlay {");
+    expect(chrome).toContain("align-items: flex-start;");
+    expect(chrome).toContain("overflow: auto;");
+    expect(chrome).toContain(".auth-modal__overlay > .auth-modal {");
+    expect(chrome).toContain("margin: auto;");
+  });
+
+  it("keeps the full-screen AI recovery surface exposed as a modal dialog", () => {
+    const recovery = read("./features/dashboard/DashboardAiRecoveryOverlay.tsx");
+
+    expect(recovery).toContain('role="dialog" aria-modal="true" aria-label="Restore AI analysis"');
+  });
+});

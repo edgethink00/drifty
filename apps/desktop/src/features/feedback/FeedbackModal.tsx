@@ -178,7 +178,8 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
   return (
     <div className="auth-modal__overlay" onClick={handleOverlayClick}>
       <section
-        className="auth-modal feedback-modal"
+        className="auth-modal modal-shell feedback-modal"
+        data-modal-variant="standard"
         role="dialog"
         aria-modal="true"
         aria-labelledby="feedback-modal-title"
