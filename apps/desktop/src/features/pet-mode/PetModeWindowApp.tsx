@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
-import { PetModeCat, type PetModeCatPhase, type PetModeDragPose } from "./PetModeCat";
+import { PetModeCat, type PetModeCatPhase } from "./PetModeCat";
 import {
   alignNativePetContact,
+  beginNativePetDrag,
   cancelNativePetMotion,
   exitNativePetScreen,
+  listenToNativePetDragEnd,
+  listenToNativePetDragStart,
   listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest,
   moveNativePetToTarget,
   rememberNativePetPosition,
   reportNativePetContact,
+  reportNativePetDragError,
   reportNativePetModeLabState,
   reportNativePetPointer,
   returnNativePetFromOuting,
@@ -26,6 +29,7 @@ import {
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
   PET_MODE_DRAG_SETTLE_MS,
+  PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
@@ -48,7 +52,6 @@ export function PetModeWindowApp() {
   const [phase, setPhase] = useState<PetModeCatPhase>("idle");
   const [facing, setFacing] = useState<"left" | "right">("right");
   const [pawFrame, setPawFrame] = useState(0);
-  const [dragPose, setDragPose] = useState<PetModeDragPose>("a");
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const actionTokenRef = useRef(0);
@@ -58,10 +61,6 @@ export function PetModeWindowApp() {
   const visibleRef = useRef(true);
   const sleepTouchRef = useRef(0);
   const manualDragRef = useRef(false);
-  const nextDragPoseRef = useRef<PetModeDragPose>("a");
-  const rememberPositionTimerRef = useRef(0);
-  const dragSettleTimerRef = useRef(0);
-  const pointerPressRef = useRef<{ pointerId: number; startX: number; startY: number; dragging: boolean } | null>(null);
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
 
@@ -91,26 +90,50 @@ export function PetModeWindowApp() {
   }, [reportLabState]);
 
   const finishManualDrag = useCallback((rememberPosition = true) => {
-    if (!manualDragRef.current && phaseRef.current !== "drag") return;
+    if (
+      !manualDragRef.current
+      && phaseRef.current !== "drag"
+    ) return;
     manualDragRef.current = false;
-    window.clearTimeout(rememberPositionTimerRef.current);
-    window.clearTimeout(dragSettleTimerRef.current);
+    const releaseToken = ++actionTokenRef.current;
 
-    if (prefersReducedMotion()) {
-      commitPhase("idle");
-    } else {
-      commitPhase("settle");
-      dragSettleTimerRef.current = window.setTimeout(() => {
-        if (phaseRef.current === "settle") commitPhase("idle");
-      }, PET_MODE_DRAG_SETTLE_MS);
-    }
+    void (async () => {
+      if (!prefersReducedMotion()) {
+        flushSync(() => commitPhase("release"));
+        await delay(PET_MODE_DRAG_SETTLE_MS);
+        if (releaseToken !== actionTokenRef.current) return;
+      }
 
-    if (rememberPosition) {
-      // Native dragging has already committed the window's final position by
-      // pointer-up. Persist it directly instead of waiting for another move
-      // event that may never arrive after a short drag.
-      void rememberNativePetPosition().catch(() => undefined);
-    }
+      if (releaseToken === actionTokenRef.current) commitPhase("idle");
+      if (rememberPosition) {
+        // Position persistence is bookkeeping, not part of the visual handoff.
+        // Never strand the cat in the held/release silhouette while a native
+        // monitor query or mutex is delayed.
+        void rememberNativePetPosition().catch((error) => {
+          void reportNativePetDragError(error).catch(() => undefined);
+        });
+      }
+    })();
+  }, [commitPhase]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetDragStart(() => {
+      if (!manualDragRef.current || phaseRef.current === "drag") return;
+      sleepTouchRef.current = 0;
+      flushSync(() => commitPhase("drag"));
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
   }, [commitPhase]);
 
   useEffect(() => {
@@ -136,30 +159,18 @@ export function PetModeWindowApp() {
   }, [reportLabState]);
 
   useEffect(() => {
-    // A compact pet is its own input surface. Delaying this behind a native
-    // hover poll leaves the first press click-through, which can activate the
-    // dashboard below before the pet renderer gets a chance to consume it.
-    void setNativePetInteractive(true).catch(() => undefined);
-    return () => {
-      void setNativePetInteractive(false).catch(() => undefined);
-    };
-  }, []);
-
-  useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    const petWindow = getCurrentWindow();
-    void petWindow.onMoved(() => {
-      if (!manualDragRef.current) return;
-      window.clearTimeout(rememberPositionTimerRef.current);
-      rememberPositionTimerRef.current = window.setTimeout(() => {
-        // Pointer capture normally finishes the drag. This is a native fallback
-        // for the rare case where WebKit loses pointer-up during window move.
-        finishManualDrag();
-      }, 900);
+    void listenToNativePetDragEnd((result) => {
+      if (!result.moved) return;
+      // The native tracker is the authority for mouse-up. Depending only on
+      // the invoke promise can leave WebKit in `drag` after the native loop has
+      // already released, especially when the panel crosses app/display
+      // boundaries. The event arrives directly from that loop's completion.
+      finishManualDrag();
     }).then((nextUnlisten) => {
       if (disposed) {
-        nextUnlisten();
+        cleanupTauriEventListener(nextUnlisten);
         return;
       }
       unlisten = nextUnlisten;
@@ -167,10 +178,19 @@ export function PetModeWindowApp() {
     return () => {
       disposed = true;
       cleanupTauriEventListener(unlisten);
-      window.clearTimeout(rememberPositionTimerRef.current);
-      window.clearTimeout(dragSettleTimerRef.current);
     };
   }, [finishManualDrag]);
+
+  useEffect(() => {
+    // A compact pet is its own input surface. Delaying this behind a native
+    // hover poll leaves the first press click-through, which can activate the
+    // dashboard below before the pet renderer gets a chance to consume it.
+    // Do not disable input in this effect's cleanup: during Vite HMR, an old
+    // mount can finish that async cleanup after the replacement mount has
+    // enabled input and leave the still-visible panel click-through. Native
+    // presence/enable commands already disable input whenever the panel hides.
+    void setNativePetInteractive(true).catch(() => undefined);
+  }, []);
 
   const revealForAction = useCallback(async () => {
     if (visibleRef.current) return;
@@ -326,7 +346,11 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "motion") {
-        if (manualDragRef.current || phaseRef.current === "drag" || phaseRef.current === "settle") return;
+        if (
+          manualDragRef.current
+          || phaseRef.current === "drag"
+          || phaseRef.current === "release"
+        ) return;
         commitPhase(event.motion);
         return;
       }
@@ -352,7 +376,11 @@ export function PetModeWindowApp() {
         })();
         return;
       }
-      if (manualDragRef.current || phaseRef.current === "drag" || phaseRef.current === "settle") {
+      if (
+        manualDragRef.current
+        || phaseRef.current === "drag"
+        || phaseRef.current === "release"
+      ) {
         reportLabState();
         return;
       }
@@ -507,81 +535,44 @@ export function PetModeWindowApp() {
     event.stopPropagation();
     void reportNativePetPointer().catch(() => undefined);
     if (typeof event.button === "number" && event.button > 0) return;
-    // Native dragging only starts once the pointer has genuinely moved.
-    pointerPressRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      dragging: false,
-    };
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const handlePointerMove = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    const press = pointerPressRef.current;
-    if (press && !press.dragging) {
-      const distance = Math.hypot(event.clientX - press.startX, event.clientY - press.startY);
-      if (distance >= 7) {
-        press.dragging = true;
-        const dragToken = ++actionTokenRef.current;
-        sleepTouchRef.current = 0;
-        manualDragRef.current = true;
-        // `startDragging` enters the native macOS window-drag loop. If React's
-        // update is still queued at that point, WebKit keeps compositing the
-        // last idle/walk frame for the whole drag. Commit the scruff bitmap
-        // synchronously, then leave enough time for one real browser paint
-        // before handing control to AppKit.
-        const selectedDragPose = nextDragPoseRef.current;
-        nextDragPoseRef.current = selectedDragPose === "a" ? "b" : "a";
-        flushSync(() => {
-          setDragPose(selectedDragPose);
-          commitPhase("drag");
-        });
-        window.clearTimeout(rememberPositionTimerRef.current);
-        window.clearTimeout(dragSettleTimerRef.current);
-        rememberPositionTimerRef.current = window.setTimeout(() => {
+    if (manualDragRef.current) return;
+    const dragToken = ++actionTokenRef.current;
+    manualDragRef.current = true;
+    void cancelNativePetMotion().catch(() => undefined);
+    void (async () => {
+      try {
+        // Native tracking must begin in the original pointer-down task so it
+        // preserves the exact initial cursor coordinate. Waiting here for the
+        // pickup artwork made short/quick drags lose their first 148 ms and
+        // appear as a tiny twitch. Rust owns that visual hold now: it captures
+        // the pointer immediately, lets WebKit paint, then follows the full
+        // delta without sacrificing input.
+        const result = await beginNativePetDrag(
+          event.clientX,
+          event.clientY,
+          prefersReducedMotion() ? 0 : PET_MODE_DRAG_PICKUP_MS,
+        );
+        // A real pointer drag owns the pet until release. Automatic/lab actions
+        // may invalidate their own token while AppKit runs its native tracking
+        // loop, but they must never strand manualDragRef at true or suppress the
+        // user's release transition.
+        if (result.moved) {
           finishManualDrag();
-        }, 8_000);
-        void (async () => {
-          await cancelNativePetMotion().catch(() => undefined);
-          await delay(34);
-          if (
-            !manualDragRef.current
-            || phaseRef.current !== "drag"
-            || actionTokenRef.current !== dragToken
-          ) return;
-          await getCurrentWindow().startDragging();
-        })().catch(() => finishManualDrag(false));
+          return;
+        }
+        manualDragRef.current = false;
+        // Native movement never crossed the drag threshold, so this entire
+        // gesture is a normal petting tap. Cancel any interrupted life pose
+        // before playing the existing happy reaction, while preserving the
+        // deliberate two-touch wake behavior for a sleeping cat.
+        if (phaseRef.current !== "sleep") commitPhase("idle");
+        handlePet();
+      } catch (error) {
+        void reportNativePetDragError(error).catch(() => undefined);
+        manualDragRef.current = false;
+        if (dragToken === actionTokenRef.current) commitPhase("idle");
       }
-    }
-  };
-
-  const handlePointerUp = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const press = pointerPressRef.current;
-    pointerPressRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
-    if (!press) return;
-    if (press.dragging) {
-      finishManualDrag();
-      return;
-    }
-    handlePet();
-  };
-
-  const handlePointerCancel = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const press = pointerPressRef.current;
-    pointerPressRef.current = null;
-    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
-      event.currentTarget.releasePointerCapture?.(event.pointerId);
-    }
-    if (press?.dragging) finishManualDrag();
+    })();
   };
 
   const handlePet = () => {
@@ -605,16 +596,13 @@ export function PetModeWindowApp() {
         type="button"
         className="pet-mode-hit-target"
         onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerCancel}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
         }}
         aria-label="Pet Drifty cat. Drag to move."
       >
-        <PetModeCat phase={phase} facing={facing} pawFrame={pawFrame} dragPose={dragPose} />
+        <PetModeCat phase={phase} facing={facing} pawFrame={pawFrame} />
         <span
           ref={contactAnchorRef}
           className={`pet-mode-contact-anchor pet-mode-contact-anchor--${facing}`}

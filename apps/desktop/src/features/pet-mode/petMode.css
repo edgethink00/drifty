@@ -88,15 +88,11 @@
 .pet-mode-cat--run .pet-mode-cat__motion,
 .pet-mode-cat--paw .pet-mode-cat__motion,
 .pet-mode-cat--drag .pet-mode-cat__motion,
-.pet-mode-cat--settle .pet-mode-cat__motion,
+.pet-mode-cat--release .pet-mode-cat__motion,
 .pet-mode-cat--tail .pet-mode-cat__motion,
 .pet-mode-cat--stretch .pet-mode-cat__motion { animation: none; }
-.pet-mode-cat--drag .pet-mode-cat__motion {
-  /* Pivot around the generated pose's nape instead of its canvas centre so
-     the tiny sway reads as a held cat, not a floating sprite. */
-  transform-origin: 66% 11%;
-  animation: pet-mode-drag-suspend 1.2s ease-in-out infinite;
-}
+.pet-mode-cat--drag .pet-mode-cat__motion { transform: none; }
+.pet-mode-cat--release .pet-mode-cat__motion { transform: none; }
 .pet-mode-cat--happy .pet-mode-cat__motion,
 .pet-mode-cat--happy .pet-mode-cat__expression { animation: pet-mode-companion-lean .6s cubic-bezier(.25, 1, .5, 1) 2; }
 .pet-mode-cat--sleep .pet-mode-cat__motion {
@@ -118,14 +114,40 @@
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
 .pet-mode-cat__sleep-pose { transform: translateY(-1px); }
-.pet-mode-cat__raster--drag { object-fit: contain; }
-.pet-mode-cat__drag-idle { will-change: transform, opacity; }
-.pet-mode-cat__drag-idle {
-  z-index: 0;
-  opacity: 1;
+.pet-mode-cat__raster--drag {
+  object-fit: contain;
+  /* Clamp the generated pose's bright body range to the canonical f001 ivory
+     distribution. The piecewise sRGB map leaves dark face pixels and alpha
+     intact while retaining a restrained three-level body shading range. */
+  filter: url("#pet-mode-scruff-b-color-match");
 }
-.pet-mode-cat--settle .pet-mode-cat__drag-idle {
-  animation: pet-mode-drag-idle 180ms cubic-bezier(.25, 1, .5, 1) both;
+.pet-mode-cat__filters { position: absolute; width: 0; height: 0; overflow: hidden; }
+.pet-mode-cat__drag-preload {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+}
+.pet-mode-cat__drag-pending-idle,
+.pet-mode-cat__drag-pending-held { will-change: transform, opacity; }
+.pet-mode-cat__drag-pending-idle {
+  animation: pet-mode-drag-idle-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
+}
+.pet-mode-cat__drag-pending-held {
+  animation: pet-mode-drag-held-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
+}
+.pet-mode-cat__release-held,
+.pet-mode-cat__release-idle { will-change: transform, opacity; }
+.pet-mode-cat__release-held {
+  z-index: 1;
+  animation: pet-mode-release-held var(--pet-drag-release-duration) linear both;
+}
+.pet-mode-cat__release-idle {
+  z-index: 0;
+  animation: pet-mode-release-idle var(--pet-drag-release-duration) linear both;
 }
 /* Exact F12 extraction geometry from the approved HTML prototype. `contain`
    normalised the wide source crop, which made the paw reach look shortened. */
@@ -239,8 +261,8 @@
 .pet-mode-cat--walk .pet-mode-cat__shadow { animation: pet-mode-shadow 480ms ease-in-out infinite; }
 .pet-mode-cat--run .pet-mode-cat__shadow { animation: pet-mode-shadow 240ms ease-in-out infinite; }
 .pet-mode-cat--drag .pet-mode-cat__shadow { opacity: 0; }
-.pet-mode-cat--settle .pet-mode-cat__shadow {
-  animation: pet-mode-drag-shadow-return 180ms cubic-bezier(.25, 1, .5, 1) both;
+.pet-mode-cat--release .pet-mode-cat__shadow {
+  animation: pet-mode-release-shadow var(--pet-drag-release-duration) linear both;
 }
 .pet-mode-cat__heart,
 .pet-mode-cat__zzz {
@@ -281,19 +303,40 @@
   50% { transform: scaleY(1.025); }
 }
 
-@keyframes pet-mode-drag-suspend {
-  0%, 100% { transform: translateY(-1px) rotate(-.35deg); }
-  50% { transform: translateY(-.5px) rotate(.35deg); }
+@keyframes pet-mode-release-held {
+  0% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
+  10.26% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: .99; }
+  20.51% { transform: translateX(-1px) translateY(-2px) scale(1.29); opacity: .97; }
+  32.05% { transform: translateX(-1px) translateY(-1px) scale(1.29); opacity: .72; }
+  43.59%, 100% { transform: translateX(-1px) translateY(0) scale(1.29); opacity: 0; }
 }
 
-@keyframes pet-mode-drag-idle {
-  0% { opacity: 1; transform: translateY(-2px) scale(.96, 1.035); }
-  72% { opacity: 1; transform: translateY(1px) scale(1.01, .985); }
-  100% { opacity: 1; transform: none; }
+@keyframes pet-mode-drag-idle-handoff {
+  0% { transform: translateY(0); opacity: 1; }
+  0.01%, 12.16% { transform: translateY(-1px); opacity: .99; }
+  12.17%, 24.31% { transform: translateY(-2px); opacity: .97; }
+  24.32%, 100% { transform: translateY(-2px); opacity: 0; }
 }
 
-@keyframes pet-mode-drag-shadow-return {
-  0% { opacity: 0; transform: scaleX(.72); }
+@keyframes pet-mode-drag-held-handoff {
+  0%, 24.31% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: 0; }
+  24.32%, 35.13% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: .92; }
+  35.14%, 47.29% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: .95; }
+  47.30%, 59.45% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: .98; }
+  59.46%, 100% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
+}
+
+@keyframes pet-mode-release-idle {
+  0%, 32.05% { transform: translateY(0); opacity: 0; }
+  43.59% { transform: translateY(0); opacity: .55; }
+  55.13% { transform: translateY(0); opacity: .82; }
+  67.95% { transform: translateY(0); opacity: .96; }
+  82.05%, 100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pet-mode-release-shadow {
+  0%, 32.05% { opacity: 0; transform: scaleX(.74); }
+  55.13% { opacity: .35; transform: scaleX(.9); }
   100% { opacity: .65; transform: scaleX(1); }
 }
 
@@ -323,7 +366,11 @@
   .pet-mode-cat__expression,
   .pet-mode-cat__expression-face,
   .pet-mode-cat__eyes,
-  .pet-mode-cat__toy {
+  .pet-mode-cat__toy,
+  .pet-mode-cat__drag-pending-idle,
+  .pet-mode-cat__drag-pending-held,
+  .pet-mode-cat__release-held,
+  .pet-mode-cat__release-idle {
     animation: none !important;
     transition: none !important;
   }
@@ -335,5 +382,4 @@
   }
   .pet-mode-cat--blink .pet-mode-cat__blink-eye { opacity: 0; transform: scaleY(.08); }
   .pet-mode-cat--blink .pet-mode-cat__blink-lid { opacity: 1; }
-  .pet-mode-cat--settle .pet-mode-cat__drag-idle { opacity: 1; transform: none; }
 }

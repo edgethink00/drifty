@@ -16,7 +16,7 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSPoint;
 
-use super::pet_panel::{configure_pet_panel, show_pet_panel};
+use super::pet_panel::{configure_pet_panel, perform_pet_panel_drag, show_pet_panel};
 
 #[cfg(target_os = "macos")]
 #[path = "pet_mode_native_ax.rs"]
@@ -154,6 +154,16 @@ pub struct PetModeInputBounds {
     pub visible: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeNativeDragResult {
+    moved: bool,
+    start_x: f64,
+    start_y: f64,
+    end_x: f64,
+    end_y: f64,
+}
+
 #[derive(Clone, Debug)]
 struct PetModeTargetPoint {
     x: f64,
@@ -239,6 +249,12 @@ pub fn pet_mode_update(app: AppHandle, snapshot: Value) -> Result<(), String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
+    // A visible enabled pet is always an input-owning surface. Reassert this
+    // invariant on tracker snapshots so a WebView/HMR replacement cannot
+    // leave the surviving native panel permanently click-through.
+    window
+        .set_ignore_cursor_events(false)
+        .map_err(|error| error.to_string())?;
     emit_pet_event(&window, json!({ "kind": "snapshot", "snapshot": snapshot }))
 }
 
@@ -319,6 +335,14 @@ pub fn pet_mode_preview_action(app: AppHandle, action: PetModePreviewAction) -> 
         &window,
         json!({ "kind": "preview_action", "action": action }),
     )
+}
+
+#[tauri::command]
+pub fn pet_mode_cancel_motion() {
+    // Manual pickup needs to stop native travel immediately without emitting a
+    // `stop` preview event back into the pet renderer. That event intentionally
+    // invalidates action tokens and would cancel the delayed pickup handoff.
+    cancel_pet_motion();
 }
 
 #[tauri::command]
@@ -532,6 +556,70 @@ pub fn pet_mode_set_interactive(app: AppHandle, interactive: bool) -> Result<(),
     window
         .set_ignore_cursor_events(!interactive)
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn pet_mode_begin_drag(
+    app: AppHandle,
+    start_client_x: f64,
+    start_client_y: f64,
+    pickup_delay_ms: u64,
+) -> Result<PetModeNativeDragResult, String> {
+    // Capture and cancellation share one native command boundary. The
+    // best-effort renderer-side cancellation may race this invoke; doing it
+    // here guarantees an in-flight walk cannot fight the manual pointer.
+    cancel_pet_motion();
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    let before = current_pet_logical_position(&window)?;
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[pet-mode-drag] begin client=({start_client_x:.1},{start_client_y:.1}) window={before:?}"
+    );
+    // Pointer tracking lasts for the full mouse gesture. Keep it off Tauri's
+    // command/main execution path so WebKit can composite the reviewed pickup
+    // frames while the native panel follows the cursor.
+    let drag_app = app.clone();
+    let drag_window = window.clone();
+    let moved = tauri::async_runtime::spawn_blocking(move || {
+        perform_pet_panel_drag(
+            &drag_app,
+            &drag_window,
+            start_client_x,
+            start_client_y,
+            pickup_delay_ms,
+        )
+    })
+    .await
+    .map_err(|error| format!("Pet Mode drag task failed: {error}"))??;
+    let after = current_pet_logical_position(&window)?;
+    #[cfg(debug_assertions)]
+    {
+        eprintln!("[pet-mode-drag] end window={after:?} moved={moved}");
+    }
+    let result = PetModeNativeDragResult {
+        moved,
+        start_x: before.x,
+        start_y: before.y,
+        end_x: after.x,
+        end_y: after.y,
+    };
+    // Emit from the native completion boundary as well as returning the
+    // command result. A moved non-activating panel can delay the WebKit invoke
+    // callback even though the global mouse button is already up; this event
+    // lets the renderer begin its reviewed release immediately and is safe to
+    // receive twice because the web state machine is idempotent.
+    window
+        .emit("pet-mode-drag-end", &result)
+        .map_err(|error| error.to_string())?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn pet_mode_report_drag_error(error: String) {
+    #[cfg(debug_assertions)]
+    eprintln!("[pet-mode-drag] webview invoke failed: {error}");
 }
 
 #[tauri::command]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-begin-drag"
+description = "Enables the pet_mode_begin_drag command without any pre-configured scope."
+commands.allow = ["pet_mode_begin_drag"]
+
+[[permission]]
+identifier = "deny-pet-mode-begin-drag"
+description = "Denies the pet_mode_begin_drag command without any pre-configured scope."
+commands.deny = ["pet_mode_begin_drag"]

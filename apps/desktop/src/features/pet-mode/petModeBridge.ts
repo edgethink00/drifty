@@ -96,7 +96,7 @@ export async function previewNativePetModeAction(action: PetModePreviewAction): 
 
 export async function cancelNativePetMotion(): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("pet_mode_preview_action", { action: "stop" });
+  await invoke("pet_mode_cancel_motion");
 }
 
 export async function applyNativePetModeLabTarget(
@@ -185,6 +185,45 @@ export async function setNativePetPresence(visible: boolean): Promise<void> {
 
 export async function setNativePetInteractive(interactive: boolean): Promise<void> {
   await invoke("pet_mode_set_interactive", { interactive });
+}
+
+export type PetModeNativeDragResult = {
+  readonly moved: boolean;
+  readonly startX: number;
+  readonly startY: number;
+  readonly endX: number;
+  readonly endY: number;
+};
+
+export async function beginNativePetDrag(
+  startClientX: number,
+  startClientY: number,
+  pickupDelayMs: number,
+): Promise<PetModeNativeDragResult> {
+  return invoke<PetModeNativeDragResult>("pet_mode_begin_drag", {
+    startClientX,
+    startClientY,
+    pickupDelayMs,
+  });
+}
+
+export async function listenToNativePetDragEnd(
+  onDragEnd: (result: PetModeNativeDragResult) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<PetModeNativeDragResult>("pet-mode-drag-end", ({ payload }) => onDragEnd(payload));
+}
+
+export async function listenToNativePetDragStart(
+  onDragStart: () => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<boolean>("pet-mode-drag-start", () => onDragStart());
+}
+
+export async function reportNativePetDragError(error: unknown): Promise<void> {
+  const message = error instanceof Error ? error.message : String(error);
+  await invoke("pet_mode_report_drag_error", { error: message });
 }
 
 export async function isNativePetCursorInside(): Promise<boolean | null> {

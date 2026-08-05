@@ -5,6 +5,9 @@ import {
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
+  PET_MODE_DRAG_PICKUP_MS,
+  PET_MODE_DRAG_PICKUP_TIMELINE,
+  PET_MODE_DRAG_RELEASE_TIMELINE,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_LIFE_MOTION_FPS,
@@ -45,8 +48,21 @@ describe("petModeData", () => {
     expect(PET_MODE_BLINK_INTERVAL_MAX_MS).toBe(7_280);
   });
 
-  it("keeps the drag release hand-off short and responsive", () => {
-    expect(PET_MODE_DRAG_SETTLE_MS).toBe(180);
+  it("keeps the approved nine-frame pickup and monotonic release", () => {
+    expect(PET_MODE_DRAG_PICKUP_TIMELINE).toHaveLength(9);
+    expect(PET_MODE_DRAG_RELEASE_TIMELINE).toHaveLength(9);
+    expect(PET_MODE_DRAG_PICKUP_MS).toBe(148);
+    expect(PET_MODE_DRAG_SETTLE_MS).toBe(156);
+    expect(PET_MODE_DRAG_PICKUP_TIMELINE.map((frame) => frame.y)).toEqual([0, -1, -2, -3, -4, -4, -4, -4, -4]);
+    expect(PET_MODE_DRAG_RELEASE_TIMELINE.map((frame) => frame.y)).toEqual([-4, -3, -2, -1, 0, 0, 0, 0, 0]);
+    expect(PET_MODE_DRAG_RELEASE_TIMELINE.map((frame) => frame.pose)).toEqual([
+      "held", "held", "held", "held", "idle", "idle", "idle", "idle", "idle",
+    ]);
+    expect(PET_MODE_DRAG_RELEASE_TIMELINE[PET_MODE_DRAG_RELEASE_TIMELINE.length - 1]).toMatchObject({
+      pose: "idle",
+      y: 0,
+      opacity: 1,
+    });
   });
 
   it("keeps all selected Flow life motions on one reviewed frame clock", () => {

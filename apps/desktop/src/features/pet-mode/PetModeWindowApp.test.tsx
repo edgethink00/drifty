@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import {
   PET_MODE_BLINK_DURATION_MS,
+  PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_TAIL_FLICK_DURATION_MS,
@@ -38,8 +39,31 @@ const bridge = vi.hoisted(() => ({
     attempts: 1,
     diagnostic: "test_target",
   }),
+  beginNativePetDrag: vi.fn().mockResolvedValue({
+    moved: false,
+    startX: 120,
+    startY: 80,
+    endX: 120,
+    endY: 80,
+  }),
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),
+  dragEndHandler: null as ((result: {
+    moved: boolean;
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+  }) => void) | null,
+  dragStartHandler: null as (() => void) | null,
   eventHandler: null as ((event: PetModeWindowEvent) => void) | null,
+  listenToNativePetDragEnd: vi.fn().mockImplementation(async (handler) => {
+    bridge.dragEndHandler = handler;
+    return vi.fn();
+  }),
+  listenToNativePetDragStart: vi.fn().mockImplementation(async (handler) => {
+    bridge.dragStartHandler = handler;
+    return vi.fn();
+  }),
   listenToNativePetModeEvent: vi.fn(),
   listenToNativePetModeLabStateRequest: vi.fn().mockResolvedValue(vi.fn()),
   moveNativePetToTarget: vi.fn().mockResolvedValue({
@@ -51,6 +75,7 @@ const bridge = vi.hoisted(() => ({
     targetY: 48,
   }),
   reportNativePetContact: vi.fn().mockResolvedValue(undefined),
+  reportNativePetDragError: vi.fn().mockResolvedValue(undefined),
   reportNativePetModeLabState: vi.fn().mockResolvedValue(undefined),
   reportNativePetPointer: vi.fn().mockResolvedValue(undefined),
   returnNativePetHome: vi.fn().mockResolvedValue(undefined),
@@ -60,17 +85,20 @@ const bridge = vi.hoisted(() => ({
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
   setNativePetInteractive: vi.fn().mockResolvedValue(undefined),
-  startDragging: vi.fn().mockResolvedValue(undefined),
   onMoved: vi.fn().mockResolvedValue(vi.fn()),
 }));
 
 vi.mock("./petModeBridge", () => ({
   alignNativePetContact: bridge.alignNativePetContact,
+  beginNativePetDrag: bridge.beginNativePetDrag,
   cancelNativePetMotion: bridge.cancelNativePetMotion,
+  listenToNativePetDragEnd: bridge.listenToNativePetDragEnd,
+  listenToNativePetDragStart: bridge.listenToNativePetDragStart,
   listenToNativePetModeEvent: bridge.listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest: bridge.listenToNativePetModeLabStateRequest,
   moveNativePetToTarget: bridge.moveNativePetToTarget,
   reportNativePetContact: bridge.reportNativePetContact,
+  reportNativePetDragError: bridge.reportNativePetDragError,
   reportNativePetModeLabState: bridge.reportNativePetModeLabState,
   reportNativePetPointer: bridge.reportNativePetPointer,
   returnNativePetHome: bridge.returnNativePetHome,
@@ -83,7 +111,7 @@ vi.mock("./petModeBridge", () => ({
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ startDragging: bridge.startDragging, onMoved: bridge.onMoved }),
+  getCurrentWindow: () => ({ onMoved: bridge.onMoved }),
 }));
 
 describe("PetModeWindowApp", () => {
@@ -91,11 +119,14 @@ describe("PetModeWindowApp", () => {
     cleanup();
     vi.useRealTimers();
     vi.clearAllMocks();
+    bridge.dragEndHandler = null;
+    bridge.dragStartHandler = null;
     bridge.eventHandler = null;
     delete document.documentElement.dataset.surface;
   });
 
   it("boots as a transparent pet surface and supports direct dragging", async () => {
+    vi.useFakeTimers();
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -107,8 +138,9 @@ describe("PetModeWindowApp", () => {
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
     dispatchPointer(pet, "pointerdown", { pointerId: 1, clientX: 10, clientY: 10 });
     dispatchPointer(pet, "pointermove", { pointerId: 1, clientX: 20, clientY: 10 });
-    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 40)); });
-    expect(bridge.startDragging).toHaveBeenCalledTimes(1);
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(1);
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(10, 10, PET_MODE_DRAG_PICKUP_MS);
   });
 
   it("applies native facing updates before movement so the cat never walks backward", async () => {
@@ -382,7 +414,12 @@ describe("PetModeWindowApp", () => {
     expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps a cat tap inside the pet window and only starts native dragging after a threshold", async () => {
+  it("lets native movement distinguish a cat tap from a real panel drag", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -393,22 +430,98 @@ describe("PetModeWindowApp", () => {
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
     dispatchPointer(pet, "pointerdown", { pointerId: 3, clientX: 12, clientY: 12 });
     dispatchPointer(pet, "pointerup", { pointerId: 3, clientX: 12, clientY: 12 });
-    expect(bridge.startDragging).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("happy");
+    expect(bridge.reportNativePetModeLabState).not.toHaveBeenCalledWith(expect.objectContaining({
+      phase: "drag",
+    }));
 
+    bridge.beginNativePetDrag.mockResolvedValueOnce({
+      moved: true,
+      startX: 120,
+      startY: 80,
+      endX: 240,
+      endY: 140,
+    });
     dispatchPointer(pet, "pointerdown", { pointerId: 4, clientX: 12, clientY: 12 });
     dispatchPointer(pet, "pointermove", { pointerId: 4, clientX: 24, clientY: 12 });
-    await act(async () => { await new Promise((resolve) => window.setTimeout(resolve, 40)); });
-    expect(bridge.startDragging).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(2);
+  });
+
+  it("turns a tap during motion into petting without flashing the held pose", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "motion", motion: "run" });
+    });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 31, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 31, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("happy");
+    expect(bridge.reportNativePetModeLabState).not.toHaveBeenCalledWith(expect.objectContaining({
+      phase: "drag",
+    }));
+  });
+
+  it("preserves the sleeping cat's two-tap wake behavior", async () => {
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 32, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 32, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sleep");
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 33, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 33, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
   it("lets a drag take over from native movement without clicking through to the dashboard", async () => {
     vi.useFakeTimers();
-    let phaseAtNativeDragStart: string | null = null;
-    let assetAtNativeDragStart: string | null = null;
-    bridge.startDragging.mockImplementationOnce(async () => {
+    let phaseAtNativeCommandStart: string | null = null;
+    let assetAtNativeCommandStart: string | null = null;
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => {
       const catAtNativeHandoff = screen.getByLabelText("Drifty pet cat");
-      phaseAtNativeDragStart = catAtNativeHandoff.getAttribute("data-phase");
-      assetAtNativeDragStart = catAtNativeHandoff.querySelector("img")?.getAttribute("src") ?? null;
+      phaseAtNativeCommandStart = catAtNativeHandoff.getAttribute("data-phase");
+      assetAtNativeCommandStart = catAtNativeHandoff
+        .querySelector(".pet-mode-cat__drag-pending-held")
+        ?.getAttribute("src") ?? null;
+      return new Promise((resolve) => {
+        completeNativeDrag = () => resolve({
+          moved: true,
+          startX: 120,
+          startY: 80,
+          endX: 240,
+          endY: 140,
+        });
+      });
     });
     Object.defineProperty(window, "matchMedia", {
       configurable: true,
@@ -427,29 +540,31 @@ describe("PetModeWindowApp", () => {
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
     const press = dispatchPointer(pet, "pointerdown", { pointerId: 8, clientX: 18, clientY: 18 });
     dispatchPointer(pet, "pointermove", { pointerId: 8, clientX: 30, clientY: 18 });
-    await act(async () => { await vi.advanceTimersByTimeAsync(34); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
     expect(press.defaultPrevented).toBe(true);
     expect(bridge.reportNativePetPointer).toHaveBeenCalledTimes(1);
     expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(1);
-    expect(bridge.startDragging).toHaveBeenCalledTimes(1);
-    expect(phaseAtNativeDragStart).toBe("drag");
-    expect(assetAtNativeDragStart).toBe("/pet-mode/drag/scruff-a.png?v=gpt-image-20260805");
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(1);
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(18, 18, PET_MODE_DRAG_PICKUP_MS);
+    expect(phaseAtNativeCommandStart).toBe("run");
+    expect(assetAtNativeCommandStart).toBeNull();
     const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("run");
+
+    act(() => {
+      bridge.dragStartHandler?.();
+    });
     expect(cat.getAttribute("data-phase")).toBe("drag");
-    expect(cat.querySelector("img")?.getAttribute("src")).toBe("/pet-mode/drag/scruff-a.png?v=gpt-image-20260805");
+    expect(cat.querySelector(".pet-mode-cat__drag-pending-held")?.getAttribute("src")).toBe("/pet-mode/drag/scruff-b.png?v=gpt-image-20260805");
 
     dispatchPointer(pet, "pointerup", { pointerId: 8, clientX: 30, clientY: 18 });
-    expect(cat.getAttribute("data-phase")).toBe("settle");
-    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
 
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
     expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
 
-    dispatchPointer(pet, "pointerdown", { pointerId: 10, clientX: 18, clientY: 18 });
-    dispatchPointer(pet, "pointermove", { pointerId: 10, clientX: 30, clientY: 18 });
-    await act(async () => { await vi.advanceTimersByTimeAsync(34); });
-    expect(cat.querySelector("img")?.getAttribute("src")).toBe("/pet-mode/drag/scruff-b.png?v=gpt-image-20260805");
-    dispatchPointer(pet, "pointerup", { pointerId: 10, clientX: 30, clientY: 18 });
   });
 
   it("keeps manual drag authoritative over a running life action and stale native motion", async () => {
@@ -474,9 +589,22 @@ describe("PetModeWindowApp", () => {
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("stretch");
 
+    let completeLifeActionDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeLifeActionDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 240,
+        endY: 140,
+      });
+    }));
     dispatchPointer(pet, "pointerdown", { pointerId: 9, clientX: 18, clientY: 18 });
     dispatchPointer(pet, "pointermove", { pointerId: 9, clientX: 30, clientY: 18 });
-    await act(async () => { await vi.advanceTimersByTimeAsync(34); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => {
+      bridge.dragStartHandler?.();
+    });
     expect(cat.getAttribute("data-phase")).toBe("drag");
 
     act(() => {
@@ -485,10 +613,85 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("drag");
 
     dispatchPointer(pet, "pointerup", { pointerId: 9, clientX: 30, clientY: 18 });
+    await act(async () => { completeLifeActionDrag(); await Promise.resolve(); });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_MOTION_DURATION_MS + PET_MODE_DRAG_SETTLE_MS);
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("always completes a moved native drag even when another action invalidates its token", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 240,
+        endY: 140,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 10, clientX: 18, clientY: 18 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => {
+      bridge.dragStartHandler?.();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stop" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("starts release from the native drag-end event before the invoke promise settles", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 11, clientX: 18, clientY: 18 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => {
+      bridge.dragStartHandler?.();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+
+    act(() => {
+      bridge.dragEndHandler?.({ moved: true, startX: 120, startY: 80, endX: 180, endY: 96 });
+    });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
   });
 
   it("owns its compact native input surface immediately so the first press cannot click through", async () => {

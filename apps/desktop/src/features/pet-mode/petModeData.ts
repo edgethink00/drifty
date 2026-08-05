@@ -18,9 +18,48 @@ export const PET_MODE_GAIT_FRAME_COUNT = 30;
 export const PET_MODE_BLINK_DURATION_MS = 228;
 export const PET_MODE_BLINK_INTERVAL_MIN_MS = 4_420;
 export const PET_MODE_BLINK_INTERVAL_MAX_MS = 7_280;
-// Fast enough to read as one release gesture, long enough to hide the raster
-// hand-off from the suspended scruff pose back to the standing idle pose.
-export const PET_MODE_DRAG_SETTLE_MS = 180;
+export type PetModeDragTransitionFrame = {
+  readonly pose: "idle" | "held";
+  readonly y: number;
+  readonly opacity: number;
+  readonly durationMs: number;
+};
+
+// Approved V10.1 drag hand-off. These are deliberately discrete reviewed
+// frames rather than a CSS morph: the generated held pose must retain its
+// contour while the native window changes ownership to and from AppKit.
+export const PET_MODE_DRAG_PICKUP_TIMELINE: readonly PetModeDragTransitionFrame[] = [
+  { pose: "idle", y: 0, opacity: 1, durationMs: 0 },
+  { pose: "idle", y: -1, opacity: .99, durationMs: 18 },
+  { pose: "idle", y: -2, opacity: .97, durationMs: 18 },
+  { pose: "held", y: -3, opacity: .92, durationMs: 16 },
+  { pose: "held", y: -4, opacity: .95, durationMs: 18 },
+  { pose: "held", y: -4, opacity: .98, durationMs: 18 },
+  { pose: "held", y: -4, opacity: 1, durationMs: 18 },
+  { pose: "held", y: -4, opacity: 1, durationMs: 20 },
+  { pose: "held", y: -4, opacity: 1, durationMs: 22 },
+] as const;
+
+export const PET_MODE_DRAG_RELEASE_TIMELINE: readonly PetModeDragTransitionFrame[] = [
+  { pose: "held", y: -4, opacity: 1, durationMs: 0 },
+  { pose: "held", y: -3, opacity: .99, durationMs: 16 },
+  { pose: "held", y: -2, opacity: .97, durationMs: 16 },
+  { pose: "held", y: -1, opacity: .72, durationMs: 18 },
+  { pose: "idle", y: 0, opacity: .55, durationMs: 18 },
+  { pose: "idle", y: 0, opacity: .82, durationMs: 18 },
+  { pose: "idle", y: 0, opacity: .96, durationMs: 20 },
+  { pose: "idle", y: 0, opacity: 1, durationMs: 22 },
+  { pose: "idle", y: 0, opacity: 1, durationMs: 28 },
+] as const;
+
+export const PET_MODE_DRAG_PICKUP_MS = PET_MODE_DRAG_PICKUP_TIMELINE.reduce(
+  (total, frame) => total + frame.durationMs,
+  0,
+);
+export const PET_MODE_DRAG_SETTLE_MS = PET_MODE_DRAG_RELEASE_TIMELINE.reduce(
+  (total, frame) => total + frame.durationMs,
+  0,
+);
 // Tail and stretch use cleaned frames from selected Google Flow Omni Flash
 // takes. Every active take starts and ends on the exact approved idle bitmap,
 // preventing a full-silhouette snap at either hand-off.

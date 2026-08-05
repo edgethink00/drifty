@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   getPetModeGaitFramesPerSecond,
+  PET_MODE_DRAG_PICKUP_MS,
+  PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
   PET_MODE_PAW_CONTACT_FRAME,
@@ -17,7 +19,7 @@ type PetModeCatPhase =
   | "tail"
   | "sleep"
   | "drag"
-  | "settle";
+  | "release";
 
 type WalkFramesFile = {
   readonly frames: readonly string[];
@@ -28,12 +30,7 @@ const LIFE_MOTION_ASSET_BY_PHASE = {
   stretch: "stretch",
   tail: "tail",
 } as const;
-const DRAG_SCRUFF_ASSET_BY_POSE = {
-  a: "/pet-mode/drag/scruff-a.png?v=gpt-image-20260805",
-  b: "/pet-mode/drag/scruff-b.png?v=gpt-image-20260805",
-} as const;
-
-export type PetModeDragPose = keyof typeof DRAG_SCRUFF_ASSET_BY_POSE;
+const DRAG_SCRUFF_ASSET = "/pet-mode/drag/scruff-b.png?v=gpt-image-20260805";
 
 type LifeMotionPhase = keyof typeof LIFE_MOTION_ASSET_BY_PHASE;
 
@@ -41,12 +38,10 @@ export function PetModeCat({
   phase,
   facing,
   pawFrame,
-  dragPose,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
   readonly pawFrame: number;
-  readonly dragPose: PetModeDragPose;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -88,11 +83,9 @@ export function PetModeCat({
     // Drag feedback has to be available on the very first grab. Waiting for
     // the phase swap to request this bitmap creates a one-frame empty pet while
     // the native window has already started following the pointer.
-    for (const asset of Object.values(DRAG_SCRUFF_ASSET_BY_POSE)) {
-      const image = new Image();
-      image.src = asset;
-      void image.decode?.().catch(() => undefined);
-    }
+    const image = new Image();
+    image.src = DRAG_SCRUFF_ASSET;
+    void image.decode?.().catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -148,9 +141,22 @@ export function PetModeCat({
   const lifeMotionAsset = isLifeMotionPhase(phase)
     ? LIFE_MOTION_ASSET_BY_PHASE[phase]
     : null;
-
+  const dragMotionDurations = {
+    "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
+    "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
+  } as CSSProperties;
   return (
-    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase}>
+    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} style={dragMotionDurations}>
+      <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
+        <filter id="pet-mode-scruff-b-color-match" colorInterpolationFilters="sRGB">
+          <feComponentTransfer>
+            <feFuncR type="table" tableValues="0 .25 .5 .898039 .909804" />
+            <feFuncG type="table" tableValues="0 .25 .5 .878431 .890196" />
+            <feFuncB type="table" tableValues="0 .25 .5 .827451 .839216" />
+            <feFuncA type="identity" />
+          </feComponentTransfer>
+        </filter>
+      </svg>
       <div className="pet-mode-cat__motion">
         {phase === "paw" ? (
           <img
@@ -160,19 +166,35 @@ export function PetModeCat({
             draggable={false}
           />
         ) : phase === "drag" ? (
-          <img
-            className="pet-mode-cat__raster pet-mode-cat__raster--drag"
-            src={DRAG_SCRUFF_ASSET_BY_POSE[dragPose]}
-            alt=""
-            draggable={false}
-          />
-        ) : phase === "settle" ? (
-          <img
-            className="pet-mode-cat__raster pet-mode-cat__drag-idle"
-            src="/pet-mode/paw/f001.png"
-            alt=""
-            draggable={false}
-          />
+          <>
+            <img
+              className="pet-mode-cat__raster pet-mode-cat__drag-pending-idle"
+              src="/pet-mode/paw/f001.png"
+              alt=""
+              draggable={false}
+            />
+            <img
+              className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__drag-pending-held"
+              src={DRAG_SCRUFF_ASSET}
+              alt=""
+              draggable={false}
+            />
+          </>
+        ) : phase === "release" ? (
+          <>
+            <img
+              className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__release-held"
+              src={DRAG_SCRUFF_ASSET}
+              alt=""
+              draggable={false}
+            />
+            <img
+              className="pet-mode-cat__raster pet-mode-cat__release-idle"
+              src="/pet-mode/paw/f001.png"
+              alt=""
+              draggable={false}
+            />
+          </>
         ) : lifeMotionAsset ? (
           <img
             className="pet-mode-cat__raster pet-mode-cat__raster--life-motion"
@@ -201,6 +223,13 @@ export function PetModeCat({
         )}
         {usesSeparatedFace ? <span className="pet-mode-cat__face-erase" aria-hidden="true" /> : null}
       </div>
+      <img
+        className="pet-mode-cat__drag-preload"
+        src={DRAG_SCRUFF_ASSET}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+      />
       {usesSeparatedFace ? <PetModeExpression phase={phase} /> : null}
       <span className="pet-mode-cat__toy" aria-hidden="true" />
       <span className="pet-mode-cat__shadow" aria-hidden="true" />
