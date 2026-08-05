@@ -109,11 +109,6 @@ vi.mock("./features/profile/profileService", () => ({
 }));
 
 vi.mock("./features/feedback/feedbackService", () => ({
-  FEEDBACK_CATEGORY_OPTIONS: [
-    { id: "idea", label: "Idea" },
-    { id: "bug", label: "Bug" },
-    { id: "other", label: "Other" },
-  ],
   submitFeedback,
 }));
 
@@ -403,30 +398,29 @@ describe("App auth modal", () => {
 
     const dialog = await screen.findByRole("dialog", { name: /send feedback/i });
     expect(within(dialog).queryByText(/product feedback/i)).toBeNull();
-    expect(dialog.textContent).not.toMatch(/start with the note|a feature or improvement|something broken|anything else/i);
+    expect(dialog.textContent).not.toMatch(/start with the note|a feature or improvement|something broken/i);
     expect(dialog.textContent).not.toMatch(/does not attach app, site, window, or session history/i);
     expect(
-      Array.from(dialog.querySelectorAll(".feedback-modal__field > span, .feedback-modal__categories legend")).map(
+      Array.from(dialog.querySelectorAll(".feedback-modal__label")).map(
         (node) => node.textContent,
       ),
-    ).toEqual(["Message", "Category", "Email"]);
+    ).toEqual(["Email"]);
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /^send feedback$/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^send$/i }));
     expect((await within(dialog).findByRole("alert")).textContent).toMatch(/write a short note/i);
 
     fireEvent.change(within(dialog).getByLabelText(/message/i), { target: { value: "  The timer froze after wake.  " } });
-    fireEvent.change(within(dialog).getByLabelText(/add images/i), {
+    fireEvent.change(within(dialog).getByLabelText(/attach images/i), {
       target: { files: [new File(["not-image"], "tracker.log", { type: "text/plain" })] },
     });
     expect((await within(dialog).findByRole("alert")).textContent).toMatch(/supported image type/i);
     expect(within(dialog).queryByText("tracker.log")).toBeNull();
-    fireEvent.change(within(dialog).getByLabelText(/add images/i), {
+    fireEvent.change(within(dialog).getByLabelText(/attach images/i), {
       target: { files: [new File(["image-bytes"], "wake-bug.png", { type: "image/png" })] },
     });
     expect(within(dialog).getByText("wake-bug.png")).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole("radio", { name: /^bug$/i }));
     fireEvent.change(within(dialog).getByLabelText(/email/i), { target: { value: " alex@example.com " } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /^send feedback$/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /^send$/i }));
 
     await waitFor(() => {
       expect(submitFeedback).toHaveBeenCalledTimes(1);
@@ -434,11 +428,10 @@ describe("App auth modal", () => {
     const payload = submitFeedback.mock.calls[0]?.[0];
     expect(payload).toEqual({
       email: "alex@example.com",
-      category: "bug",
       message: "The timer froze after wake.",
       attachments: [{ filename: "wake-bug.png", contentType: "image/png", content: "aW1hZ2UtYnl0ZXM=", size: 11 }],
     });
-    expect(Object.keys(payload).sort()).toEqual(["attachments", "category", "email", "message"]);
+    expect(Object.keys(payload).sort()).toEqual(["attachments", "email", "message"]);
     expect((await within(dialog).findByRole("status")).textContent).toMatch(/we got your feedback/i);
     expect(within(dialog).queryByRole("button", { name: /^sent$/i })).toBeNull();
     // Two accessible "Close" controls exist after sending: the circular modal-x

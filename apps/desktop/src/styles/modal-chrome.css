@@ -272,9 +272,7 @@
    code / URLs (opt in with .modal-code). Scoped to .auth-modal so the settings
    pages keep their own input styling. */
 .auth-modal .auth-modal__field > span,
-.auth-modal .feedback-modal__field > span,
-.auth-modal .projects-field__label,
-.auth-modal fieldset.feedback-modal__categories > legend {
+.auth-modal .projects-field__label {
   font-family: var(--font-mono);
   font-size: 0.56rem;
   letter-spacing: 0.14em;
@@ -296,6 +294,7 @@
 
 .auth-modal .settings-input:focus-visible,
 .auth-modal .auth-modal__field input:focus-visible,
+.auth-modal .feedback-modal__input:focus-visible,
 .auth-modal .feedback-modal__textarea:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
   outline-offset: 1px;

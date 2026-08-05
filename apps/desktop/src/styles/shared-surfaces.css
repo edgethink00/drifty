@@ -755,7 +755,7 @@
 
 .feedback-modal {
   max-height: min(720px, calc(100vh - 2rem));
-  max-width: 500px;
+  max-width: 520px;
   overflow-y: auto;
 }
 
@@ -763,9 +763,20 @@
   margin-bottom: var(--space-4);
 }
 
+/* Let the subtitle span the full modal width instead of stopping at the
+   close-button gutter, so it stays on one line. */
+.auth-modal .feedback-modal__header {
+  padding-right: 0;
+}
+
+.auth-modal .feedback-modal__header .modal-head__copy p {
+  font-size: .74rem;
+  letter-spacing: -0.005em;
+}
+
 .feedback-modal__form {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .feedback-modal__field {
@@ -773,80 +784,20 @@
   gap: var(--space-2);
 }
 
-.feedback-modal__field > span,
-.feedback-modal__categories legend {
-  color: var(--text-muted);
+.feedback-modal__label {
+  color: var(--text);
   font-size: .82rem;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
-.feedback-modal__categories {
-  border: 0;
-  display: grid;
-  gap: var(--space-2);
-}
-
-.feedback-modal__category-list {
-  display: grid;
-  gap: 2px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 2px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--bg-2) 72%, var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 54%, transparent);
-  width: 100%;
-}
-
-.feedback-modal__category {
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  min-height: 34px;
-  padding: 6px 8px;
-  border-radius: 12px;
-  color: var(--text-soft);
-  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast), color var(--transition-fast);
-}
-
-.feedback-modal__category:focus-within {
-  outline: 2px solid color-mix(in srgb, var(--accent) 46%, transparent);
-  outline-offset: 2px;
-}
-
-.feedback-modal__category input {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.feedback-modal__category span {
-  position: relative;
-  pointer-events: none;
-  font-size: .78rem;
-  line-height: 1;
-}
-
-.feedback-modal__category:hover {
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  color: var(--text-muted);
-}
-
-.feedback-modal__category.is-active {
-  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
-  box-shadow: 0 3px 8px color-mix(in srgb, var(--accent) 7%, transparent);
-  color: var(--text);
-}
-
+.feedback-modal__input,
 .feedback-modal__textarea {
-  min-height: 144px;
-  resize: vertical;
-  background: var(--bg-2);
+  width: 100%;
+  background: color-mix(in srgb, var(--bg-2) 70%, var(--surface-strong));
   border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: .78rem .86rem;
+  border-radius: var(--radius-sm);
+  padding: .65rem .85rem;
   color: var(--text);
   font-size: .88rem;
   line-height: 1.5;
@@ -854,67 +805,47 @@
   transition: border-color var(--transition-fast);
 }
 
+.feedback-modal__input {
+  padding-top: .41rem;
+  padding-bottom: .41rem;
+}
+
+:root[data-theme="dark"] .feedback-modal__input,
+:root[data-theme="dark"] .feedback-modal__textarea {
+  background: color-mix(in srgb, var(--bg-2) 80%, #ffffff);
+}
+
+.feedback-modal__textarea {
+  min-height: 144px;
+  resize: vertical;
+}
+
 .feedback-modal__textarea:focus {
   border-color: var(--accent);
 }
 
-.feedback-modal__message-tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.feedback-modal__input.is-invalid,
+.feedback-modal__textarea.is-invalid {
+  border-color: color-mix(in srgb, var(--warn) 62%, var(--line));
+}
+
+.auth-modal .feedback-modal__input.is-invalid:focus-visible,
+.auth-modal .feedback-modal__textarea.is-invalid:focus-visible {
+  border-color: color-mix(in srgb, var(--warn) 62%, var(--line));
+  outline: 2px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  outline-offset: 1px;
+}
+
+.feedback-modal__field-error {
+  margin: 0;
+  color: var(--warn);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.feedback-modal__attachment-error,
+.feedback-modal__form-error {
   margin-top: calc(var(--space-2) * -1);
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: .68rem;
-}
-
-.feedback-modal__image-button {
-  display: grid;
-  place-items: center;
-  position: relative;
-  width: 30px;
-  height: 30px;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
-  color: var(--text-soft);
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-}
-
-.feedback-modal__image-button:hover:not(.is-disabled) {
-  background: color-mix(in srgb, var(--accent-soft) 36%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
-  color: var(--accent-strong);
-  transform: translateY(-1px);
-}
-
-.feedback-modal__image-button:focus-within {
-  outline: 2px solid color-mix(in srgb, var(--accent) 46%, transparent);
-  outline-offset: 2px;
-}
-
-.feedback-modal__image-button.is-disabled {
-  cursor: not-allowed;
-  opacity: .45;
-}
-
-.feedback-modal__image-button svg {
-  width: 16px;
-  height: 16px;
-  fill: currentColor;
-}
-
-.feedback-modal__image-button input {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.feedback-modal__images {
-  margin-top: calc(var(--space-1) * -1);
 }
 
 .feedback-modal__image-list {
@@ -932,7 +863,7 @@
   min-width: min(100%, 218px);
   padding: 5px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
@@ -940,7 +871,7 @@
 .feedback-modal__image-chip > span {
   width: 34px;
   height: 34px;
-  border-radius: 8px;
+  border-radius: 6px;
   object-fit: cover;
 }
 
@@ -971,7 +902,7 @@
 .feedback-modal__image-chip small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: .66rem;
+  font-size: var(--type-chip-size);
 }
 
 .feedback-modal__image-chip button {
@@ -993,14 +924,77 @@
   color: var(--warn);
 }
 
-.feedback-modal__input {
-  width: 100%;
+.auth-modal .feedback-modal__actions {
+  border-top: 0;
+  padding-top: 0;
 }
 
-.feedback-modal__actions {
+.feedback-modal__attach-group {
   display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
+  align-items: center;
+  gap: var(--space-3);
+  margin-right: auto;
+}
+
+.feedback-modal__attach {
+  position: relative;
+  overflow: hidden;
+}
+
+.feedback-modal__attach input[type="file"] {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.feedback-modal__attach:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
+}
+
+.feedback-modal__attach.is-disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.feedback-modal__attach.is-disabled input[type="file"] {
+  cursor: not-allowed;
+}
+
+.feedback-modal__message-wrap {
+  position: relative;
+  display: grid;
+}
+
+.feedback-modal__counter {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-control-size);
+  pointer-events: none;
+  animation: feedback-counter-in 0.18s ease;
+}
+
+.feedback-modal__counter.is-warn {
+  color: var(--warn);
+}
+
+@keyframes feedback-counter-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback-modal__counter {
+    animation: none;
+  }
 }
 
 .feedback-modal__sent + .feedback-modal__actions {
@@ -1012,7 +1006,7 @@
   gap: var(--space-2);
   padding: var(--space-4);
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
-  border-radius: 16px;
+  border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--accent-soft) 46%, var(--surface));
 }
 
