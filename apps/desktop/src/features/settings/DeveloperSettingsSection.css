@@ -1,35 +1,456 @@
-.settings-section--developer .settings-section-intro {
-  max-width: 44rem;
-  margin: 0 0 0.75rem;
+.settings-section--developer {
+  container-type: inline-size;
+  width: min(100%, 56rem);
+  gap: 2rem !important;
+}
+
+.developer-page-header {
+  display: grid;
+  gap: 0.58rem;
+  padding: 0 0.5rem;
+}
+
+.developer-page-header h3,
+.developer-section-heading h4,
+.developer-cli-hero h5,
+.developer-skill-card h5,
+.developer-page-header p,
+.developer-section-heading p,
+.developer-cli-hero p,
+.developer-skill-card p,
+.developer-shell-note {
+  margin: 0;
+}
+
+.developer-page-header h3 {
+  color: var(--text);
+  font-size: 1.5rem;
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.developer-page-header p {
+  max-width: 64ch;
   color: var(--text-soft);
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.55;
 }
 
-.settings-row--developer-tool {
-  align-items: flex-start;
+.developer-group {
+  display: grid;
+  gap: 0.78rem;
 }
 
-.developer-tool-path {
-  display: inline-block;
-  margin-top: 0.48rem;
+.developer-section-heading {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0 0.5rem;
+}
+
+.developer-section-heading h4 {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.developer-section-heading p {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.developer-cli-hero,
+.developer-command-list,
+.developer-skill-card {
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--line));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.developer-cli-hero {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.88fr) minmax(18rem, 1.12fr);
+  gap: 1.35rem;
+  padding: 1.15rem;
+}
+
+.developer-terminal {
+  align-self: stretch;
+  min-height: 15rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--canvas) 12%, transparent);
+  border-radius: 0.78rem;
+  background: #202722;
+  box-shadow: 0 18px 40px rgb(16 28 20 / 18%);
+  color: #f1f5f0;
+  font-family: var(--font-mono);
+}
+
+.developer-terminal__bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2.2rem;
+  padding: 0 0.8rem;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  background: #171c19;
+}
+
+.developer-terminal__bar span {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: #727d76;
+}
+
+.developer-terminal__bar span:first-child { background: #bf726a; }
+.developer-terminal__bar span:nth-child(2) { background: #c4a65f; }
+.developer-terminal__bar span:nth-child(3) { background: #73977d; }
+
+.developer-terminal__bar strong {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgb(241 245 240 / 62%);
+  font-size: 0.65rem;
+  font-weight: 520;
+  letter-spacing: 0.04em;
+}
+
+.developer-terminal__body {
+  display: grid;
+  gap: 1rem;
+  padding: 1.18rem;
+  font-size: 0.72rem;
+  line-height: 1.55;
+}
+
+.developer-terminal__body p { margin: 0; }
+.developer-terminal__body p > span { color: #8fc19c; }
+
+.developer-terminal__rule {
+  height: 1px;
+  background: rgb(255 255 255 / 9%);
+}
+
+.developer-terminal__body dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.developer-terminal__body dl > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.developer-terminal__body dt {
+  color: rgb(241 245 240 / 45%);
+  font-size: 0.55rem;
+  letter-spacing: 0.08em;
+}
+
+.developer-terminal__body dd {
+  margin: 0;
+  color: #f4f6f3;
+  font-size: 0.83rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.developer-terminal__hint {
+  color: rgb(241 245 240 / 48%);
+  font-size: 0.62rem;
+}
+
+.developer-cli-hero__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.2rem 0;
+}
+
+.developer-cli-hero__content > div:first-child {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.developer-eyebrow {
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 680;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.developer-cli-hero h5,
+.developer-skill-card h5 {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 680;
+  line-height: 1.3;
+}
+
+.developer-cli-hero__content > div:first-child > p,
+.developer-skill-card__content > div:first-child > p {
+  max-width: 50ch;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  line-height: 1.52;
+}
+
+.developer-path-control {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.developer-path-control__label {
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  font-weight: 620;
+}
+
+.developer-path-control__value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  min-height: 2.4rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, var(--line));
+  border-radius: 0.62rem;
+  background: color-mix(in srgb, var(--text) 4%, var(--surface));
+}
+
+.developer-path-control__value code {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 0.72rem;
+  overflow: hidden;
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: var(--type-setting-value-size);
-  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.developer-tool-privacy {
-  max-width: 42rem;
-  margin-top: 0.48rem !important;
+.developer-copy-button {
+  position: relative;
+  display: inline-grid;
+  width: 2.5rem;
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--text) 8%, var(--line));
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.developer-tool-controls {
+.developer-copy-button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.developer-copy-button:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+.developer-copy-button.is-copied {
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+
+.developer-copy-button > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.developer-copy-button__feedback {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.developer-artifact-actions {
   display: flex;
-  flex-wrap: wrap;
+  min-height: 2.5rem;
   align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.developer-artifact-actions__button-slot {
+  display: flex;
+  min-width: 10rem;
   justify-content: flex-end;
-  gap: 0.5rem;
+}
+
+.developer-status {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.34rem;
+  padding: 0.3rem 0.58rem;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, var(--line));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 4%, var(--surface));
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.developer-status svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
+.developer-status--installed {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.developer-status--needsRepair {
+  border-color: color-mix(in srgb, var(--warn) 22%, var(--line));
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+  color: var(--warn);
+}
+
+.developer-command-list {
+  overflow: hidden;
+}
+
+.developer-command-row {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) 2.5rem;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.4rem;
+  padding: 0 0 0 1rem;
+}
+
+.developer-command-row + .developer-command-row {
+  border-top: 1px solid color-mix(in srgb, var(--text) 8%, var(--line));
+}
+
+.developer-command-row__icon,
+.developer-skill-card__icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+
+.developer-command-row__icon svg,
+.developer-skill-card__icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.developer-command-row__content {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+
+.developer-command-row__content code {
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-command-row__content span {
+  color: var(--text-soft);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.developer-command-row > .developer-copy-button {
+  align-self: stretch;
+  height: auto;
+}
+
+.developer-shell-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.48rem;
+  padding: 0 0.5rem;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.developer-shell-note svg {
+  width: 0.9rem;
+  min-width: 0.9rem;
+  height: 0.9rem;
+  margin-top: 0.08rem;
+}
+
+.developer-skill-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1rem;
+  padding: 1.05rem;
+}
+
+.developer-skill-card__content {
+  display: grid;
+  min-width: 0;
+  gap: 0.85rem;
+}
+
+.developer-skill-card__content > div:first-child {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.developer-skill-card > .developer-artifact-actions {
+  width: 10rem;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.developer-skill-card > .developer-artifact-actions .developer-status {
+  align-self: flex-end;
+}
+
+.developer-artifact-privacy,
+.developer-artifact-message {
+  max-width: 58ch;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.developer-artifact-message {
+  color: var(--warn);
 }
 
 .developer-tool-error {
@@ -45,13 +466,79 @@
   font-size: var(--type-setting-desc-size);
 }
 
-@media (max-width: 760px) {
-  .settings-row--developer-tool {
+@container (max-width: 46rem) {
+  .developer-cli-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-terminal {
+    min-height: 12rem;
+  }
+
+  .developer-skill-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .developer-skill-card > .developer-artifact-actions {
+    width: auto;
+    grid-column: 2;
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+@container (max-width: 34rem) {
+  .settings-section--developer {
+    gap: 1.6rem !important;
+  }
+
+  .developer-cli-hero,
+  .developer-skill-card {
+    padding: 0.85rem;
+  }
+
+  .developer-terminal__body dl {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-command-row {
+    grid-template-columns: minmax(0, 1fr) 2.5rem;
+    padding-left: 0.8rem;
+  }
+
+  .developer-command-row__icon {
+    display: none;
+  }
+
+  .developer-skill-card {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-skill-card__icon {
+    display: none;
+  }
+
+  .developer-skill-card > .developer-artifact-actions {
+    grid-column: 1;
+  }
+
+  .developer-artifact-actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .developer-tool-controls {
-    justify-content: flex-start;
+  .developer-artifact-actions__button-slot,
+  .developer-artifact-actions__button-slot .settings-btn {
+    width: 100%;
+  }
+
+  .developer-status {
+    align-self: flex-start !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .developer-copy-button {
+    transition: none;
   }
 }

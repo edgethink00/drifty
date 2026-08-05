@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   DeveloperArtifactStatus,
@@ -37,17 +37,42 @@ function mockClient(initialStatus: DeveloperToolsStatus): DeveloperToolsClient {
 }
 
 describe("DeveloperSettingsSection", () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+
+  beforeEach(() => {
+    writeText.mockClear();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+  });
+
   afterEach(cleanup);
 
-  it("shows public CLI and Codex Skill install actions with privacy and PATH notes", async () => {
+  it("shows the CLI value, command examples, install actions, and PATH guidance", async () => {
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 
     expect(await screen.findByRole("button", { name: /Install CLI: Command line tools/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Install Skill: Codex agent skill/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add to Codex: Codex agent skill/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "CLI" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Agent skill" })).toBeTruthy();
+    expect(screen.getAllByText("drifty summary --day 2026-08-04").length).toBe(2);
+    expect(screen.getByText("drifty search --query \"CLI\"")).toBeTruthy();
     expect(screen.getByText("~/.local/bin/drifty")).toBeTruthy();
     expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
     expect(screen.getByText(/never edits shell startup files/i)).toBeTruthy();
     expect(screen.getByText(/Full URLs and window titles require/i)).toBeTruthy();
+    expect(screen.getByText(/does not add network access/i)).toBeTruthy();
+  });
+
+  it("copies commands and exposes confirmation feedback", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status())} />);
+
+    const copyButton = await screen.findByRole("button", { name: /Copy command: drifty summary --day 2026-08-04/i });
+    fireEvent.click(copyButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("drifty summary --day 2026-08-04"));
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeTruthy();
   });
 
   it("installs through the native client and refreshes status", async () => {
@@ -79,6 +104,7 @@ describe("DeveloperSettingsSection", () => {
     expect(await screen.findByText("Needs repair")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Repair: Command line tools/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Uninstall: Command line tools/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /Copy path: ~\/.local\/bin\/drifty/i })).toBeTruthy();
     expect(screen.getByText(/will not replace or remove/i)).toBeTruthy();
   });
 
