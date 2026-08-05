@@ -83,6 +83,7 @@ describe("Korean localization preview", () => {
           updaterMessage={null}
           onAutoInstallFutureUpdatesChange={() => undefined}
           onCheckForUpdates={() => undefined}
+          onSendFeedback={() => undefined}
           onStartOfDayChange={() => undefined}
           onStartOfWeekChange={() => undefined}
         />
@@ -91,6 +92,9 @@ describe("Korean localization preview", () => {
 
     expect(screen.getByText("표시 언어")).toBeTruthy();
     expect(screen.getByRole("combobox", { name: "표시 언어" })).toBeTruthy();
+    expect(screen.getByText("커뮤니티 및 지원")).toBeTruthy();
+    expect(screen.getByText("Drifty 커뮤니티")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "피드백 보내기" })).toHaveLength(1);
     expect(screen.getByText("한국어 미리보기는 베타이며 현재 온보딩과 주요 설정에만 적용됩니다. 여기서 영어를 선택하거나 개발자 설정에서 한국어 미리보기를 끄면 영어로 돌아갑니다.")).toBeTruthy();
   });
 });

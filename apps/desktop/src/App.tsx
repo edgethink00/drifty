@@ -6718,6 +6718,7 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
+                    onSendFeedback={() => setFeedbackModalOpen(true)}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
                   />
