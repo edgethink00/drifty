@@ -13,6 +13,7 @@ describe("SettingsSidebar", () => {
 
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     expect(within(settingsNav).queryByRole("button", { name: /^Dev$/ })).toBeNull();
+    expect(within(settingsNav).getByRole("button", { name: /^Developer$/ })).toBeTruthy();
     expect(within(settingsNav).getByRole("button", { name: /^Permissions$/ })).toBeTruthy();
     expect(within(settingsNav).getByRole("button", { name: /^Companion & Alerts$/ })).toBeTruthy();
   });
@@ -46,7 +47,9 @@ describe("SettingsSidebar", () => {
       "Account",
       "Privacy & Data",
     ]);
-    expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["App", "Account & data", "AI"]);
+    const advancedGroup = screen.getByRole("group", { name: /^Advanced$/ });
+    expect(within(advancedGroup).getAllByRole("button").map((button) => button.textContent)).toEqual(["Developer"]);
+    expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["App", "Account & data", "AI", "Advanced"]);
     expect(screen.getByRole("button", { name: /^Permissions$/ }).getAttribute("aria-current")).toBe("page");
 
     fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));
@@ -65,6 +68,15 @@ describe("SettingsSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Dev$/ }));
 
     expect(onSectionChange).toHaveBeenCalledWith("dev");
+  });
+
+  it("routes to the public Developer section without dev gates", () => {
+    const onSectionChange = vi.fn<(section: SettingsSection) => void>();
+
+    render(<SettingsSidebar activeSection="general" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={onSectionChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Developer$/ }));
+
+    expect(onSectionChange).toHaveBeenCalledWith("developer");
   });
 
   it("keeps collapsed settings nav items labeled for hover without changing accessible names", () => {

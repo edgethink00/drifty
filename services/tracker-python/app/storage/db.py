@@ -53,6 +53,7 @@ TIMELINE_SEARCH_FIELDS = (
     "activity_segments.window_title",
     "activity_classifications.category",
     "activity_classifications.productivity",
+    "projects.name",
 )
 
 BrowserHistoryResolver = Callable[[Optional[str], Optional[str], Optional[str]], Any]
@@ -102,19 +103,23 @@ class ImportedActivityInsertResult:
 
 
 class TrackerDatabase:
-    def __init__(self, db_path: Path, *, perform_maintenance: bool = True):
+    def __init__(self, db_path: Path, *, perform_maintenance: bool = True, read_only: bool = False):
         self.db_path = db_path
         self.path = db_path
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only
+        if not self.read_only:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._connection: sqlite3.Connection | None = None
         self.maintenance_error: str | None = None
-        self.maintenance_result = (
-            prepare_database(self.db_path)
-            if perform_maintenance
-            else DatabasePreparationResult(existed=self.db_path.exists())
-        )
-        self._init_db()
-        if perform_maintenance and self.maintenance_result.existed:
+        self.maintenance_result = DatabasePreparationResult(existed=self.db_path.exists())
+        if not self.read_only:
+            self.maintenance_result = (
+                prepare_database(self.db_path)
+                if perform_maintenance
+                else self.maintenance_result
+            )
+            self._init_db()
+        if not self.read_only and perform_maintenance and self.maintenance_result.existed:
             self.create_periodic_backup()
 
     def _record_maintenance_error(
@@ -168,7 +173,10 @@ class TrackerDatabase:
         """
         if self._connection is not None:
             return self._connection
-        connection = sqlite3.connect(self.db_path)
+        if self.read_only:
+            connection = sqlite3.connect(f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True)
+        else:
+            connection = sqlite3.connect(self.db_path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         # The daemon and the serve process write this database concurrently
@@ -176,7 +184,10 @@ class TrackerDatabase:
         # instead of raising "database is locked" immediately.
         connection.execute("PRAGMA busy_timeout = 5000")
         # WAL mode only needs NORMAL durability; avoids an fsync per commit.
-        connection.execute("PRAGMA synchronous = NORMAL")
+        if self.read_only:
+            connection.execute("PRAGMA query_only = ON")
+        else:
+            connection.execute("PRAGMA synchronous = NORMAL")
         self._connection = connection
         return connection
 
@@ -3483,6 +3494,10 @@ class TrackerDatabase:
               ON youtube_video_metadata.video_id = activity_segments.youtube_video_id
             LEFT JOIN activity_classifications
               ON activity_classifications.segment_id = activity_segments.id
+            LEFT JOIN activity_project_assignments
+              ON activity_project_assignments.segment_id = activity_segments.id
+            LEFT JOIN projects
+              ON projects.id = activity_project_assignments.project_id
             WHERE 1=1
         """
         params: list[Any] = []

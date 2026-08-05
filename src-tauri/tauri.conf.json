@@ -59,6 +59,10 @@
     "externalBin": [
       "binaries/drifty-tracker"
     ],
+    "resources": {
+      "../integrations/skills/drifty/SKILL.md": "integrations/skills/drifty/SKILL.md",
+      "../integrations/skills/drifty/agents/openai.yaml": "integrations/skills/drifty/agents/openai.yaml"
+    },
     "macOS": {
       "minimumSystemVersion": "13.0",
       "entitlements": "entitlements.plist",

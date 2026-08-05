@@ -1377,7 +1377,34 @@ def serve():
         sys.stdout.flush()
 
 
+def _is_public_cli_invocation(arguments: list[str]) -> bool:
+    if "--request-json" in arguments:
+        return False
+    legacy_options_with_values = {"--db", "--request-json", "--smoke-id"}
+    legacy_modes = {"request", "daemon", "serve", SENTRY_SMOKE_MODE}
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument in legacy_options_with_values:
+            index += 2
+            continue
+        if any(argument.startswith(f"{option}=") for option in legacy_options_with_values):
+            index += 1
+            continue
+        if argument.startswith("-"):
+            index += 1
+            continue
+        return argument not in legacy_modes
+    return True
+
+
 def main():
+    user_cli_args = sys.argv[1:]
+    if _is_public_cli_invocation(user_cli_args):
+        from app.cli import run_cli
+
+        raise SystemExit(run_cli(user_cli_args))
+
     parser = argparse.ArgumentParser()
     parser.add_argument("mode", nargs="?", default="request")
     parser.add_argument("--request-json", dest="request_json")

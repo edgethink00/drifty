@@ -1,0 +1,703 @@
+.settings-section--developer {
+  --developer-code-font: "Menlo", "Monaco", ui-monospace, monospace;
+  --developer-code-control-height: 2.185rem;
+  container-type: inline-size;
+  width: min(100%, 58rem);
+  gap: 2rem !important;
+  font-kerning: normal;
+}
+
+.developer-page-header {
+  padding: 0 0.5rem;
+}
+
+.developer-page-header h3,
+.developer-section-heading h4,
+.developer-cli-hero h5,
+.developer-skill-card h5,
+.developer-cli-hero p,
+.developer-skill-card p {
+  margin: 0;
+}
+
+.developer-page-header h3 {
+  color: var(--text);
+  font-size: 1.625rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.developer-group {
+  display: grid;
+  gap: 0.78rem;
+}
+
+.developer-section-heading {
+  padding: 0 0.5rem;
+}
+
+.developer-section-heading h4 {
+  color: var(--text);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.developer-cli-hero,
+.developer-command-list,
+.developer-skill-card {
+  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--line));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+  box-shadow: 0 1px 1px color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.developer-cli-hero {
+  display: grid;
+  grid-template-columns: minmax(15.25rem, 0.94fr) minmax(19rem, 1.06fr);
+  gap: 1.25rem;
+  padding: 1.05rem;
+}
+
+.developer-terminal {
+  align-self: stretch;
+  min-height: 13.5rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--canvas) 12%, transparent);
+  border-radius: 0.78rem;
+  background: #202722;
+  box-shadow: 0 18px 40px rgb(16 28 20 / 18%);
+  color: #f1f5f0;
+  font-family: var(--font-sans);
+}
+
+.developer-terminal__bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2rem;
+  padding: 0 0.8rem;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  background: #171c19;
+}
+
+.developer-terminal__bar span {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 50%;
+  background: #727d76;
+}
+
+.developer-terminal__bar span:first-child { background: #bf726a; }
+.developer-terminal__bar span:nth-child(2) { background: #c4a65f; }
+.developer-terminal__bar span:nth-child(3) { background: #73977d; }
+
+.developer-terminal__bar strong {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgb(241 245 240 / 62%);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.developer-terminal__body {
+  display: grid;
+  gap: 0.82rem;
+  padding: 1.05rem;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.developer-terminal__body p { margin: 0; }
+.developer-terminal__body p > span { color: #8fc19c; }
+
+.developer-terminal__command {
+  font-family: var(--developer-code-font);
+  font-weight: 400;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+}
+
+.developer-terminal__rule {
+  height: 1px;
+  background: rgb(255 255 255 / 9%);
+}
+
+.developer-terminal__body dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.developer-terminal__body dl > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.developer-terminal__body dt {
+  color: rgb(241 245 240 / 45%);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+}
+
+.developer-terminal__body dd {
+  margin: 0;
+  color: #f4f6f3;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.developer-terminal__hint {
+  color: rgb(241 245 240 / 48%);
+  font-size: 0.75rem;
+}
+
+.developer-cli-hero__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.78rem;
+  padding: 0.1rem 0;
+}
+
+.developer-cli-hero__content > div:first-child {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.developer-cli-hero__content > .developer-artifact-actions {
+  margin-top: auto;
+}
+
+.developer-cli-hero h5,
+.developer-skill-card h5 {
+  color: var(--text);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.developer-cli-hero__content > div:first-child > p,
+.developer-skill-card__content > div:first-child > p {
+  max-width: 50ch;
+  color: var(--text-soft);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.developer-path-control {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.developer-path-control__label {
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.developer-path-control__value {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  align-items: center;
+  min-height: var(--developer-code-control-height);
+  justify-self: start;
+  overflow: hidden;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+
+.developer-path-control__value code {
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 0 0.78rem 0 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--developer-code-font);
+  font-size: 0.875rem;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-copy-button {
+  position: relative;
+  display: inline-grid;
+  width: var(--developer-code-control-height);
+  min-width: var(--developer-code-control-height);
+  height: var(--developer-code-control-height);
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.developer-copy-button:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.developer-copy-button:focus-visible {
+  z-index: 1;
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 44%, transparent);
+}
+
+.developer-copy-button.is-copied {
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+
+.developer-copy-button > svg {
+  width: 1.0625rem;
+  height: 1.0625rem;
+}
+
+.developer-copy-button__feedback {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.developer-artifact-actions {
+  display: flex;
+  min-height: 0;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 0.5rem;
+}
+
+.developer-artifact-actions__button-slot {
+  display: flex;
+  min-width: 7rem;
+  justify-content: flex-start;
+}
+
+.content--settings .settings-section--developer .developer-artifact-actions__button-slot .settings-btn--primary {
+  min-width: 7rem;
+  height: 2.125rem;
+  min-height: 2.125rem;
+  padding: 0 0.82rem;
+  border-color: var(--text);
+  border-radius: 0.58rem;
+  background: var(--text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 16%, transparent);
+  color: var(--canvas);
+}
+
+.content--settings .settings-section--developer .developer-artifact-actions__button-slot .settings-btn--primary:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text) 88%, var(--accent));
+  background: color-mix(in srgb, var(--text) 88%, var(--accent));
+  color: var(--canvas);
+  transform: none;
+}
+
+.content--settings .settings-section--developer .settings-btn {
+  min-width: 9.5rem;
+  height: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border-radius: 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.developer-status {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.34rem;
+  padding: 0.38rem 0.68rem;
+  border: 1px solid color-mix(in srgb, var(--text) 9%, var(--line));
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 4%, var(--surface));
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.developer-status svg {
+  width: 0.78rem;
+  height: 0.78rem;
+}
+
+.developer-status--installed {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.developer-status--needsRepair {
+  border-color: color-mix(in srgb, var(--warn) 22%, var(--line));
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
+  color: var(--warn);
+}
+
+.developer-command-list {
+  overflow: hidden;
+}
+
+.developer-command-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-height: 4.275rem;
+  padding: 0 1.35rem;
+}
+
+.developer-command-row + .developer-command-row {
+  border-top: 1px solid color-mix(in srgb, var(--text) 8%, var(--line));
+}
+
+.developer-command-row__content {
+  display: grid;
+  min-width: 0;
+  gap: 0.28rem;
+}
+
+.developer-command-row__content code {
+  justify-self: start;
+  max-width: 100%;
+  padding: 0.08rem 0.38rem;
+  overflow: hidden;
+  border-radius: 0.38rem;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+  font-family: var(--developer-code-font);
+  font-size: 0.875rem;
+  font-weight: 400;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-command-row__content span {
+  color: var(--text-soft);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.developer-skill-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 1.25rem;
+  padding: 1.25rem;
+}
+
+.developer-skill-card__content {
+  display: grid;
+  min-width: 0;
+  gap: 0.85rem;
+}
+
+.developer-skill-card__content > div:first-child {
+  display: grid;
+  gap: 0.28rem;
+}
+
+.developer-skill-card__actions {
+  display: grid;
+  width: 11.25rem;
+  justify-items: stretch;
+  gap: 0.62rem;
+}
+
+.developer-skill-card__actions > .settings-btn {
+  width: 100%;
+}
+
+.developer-skill-picker {
+  position: relative;
+}
+
+.developer-skill-picker__trigger {
+  display: flex;
+  width: 100%;
+  min-height: 2.125rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.85rem 0 0.92rem;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, var(--line));
+  border-radius: 0.68rem;
+  background: color-mix(in srgb, var(--text) 4%, var(--surface));
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.developer-skill-picker__trigger:hover:not(:disabled),
+.developer-skill-picker__trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--text) 16%, var(--line));
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+}
+
+.developer-skill-picker__trigger:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 2px;
+}
+
+.developer-skill-picker__trigger:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.developer-skill-picker__trigger svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--text-soft);
+  transition: transform var(--transition-fast);
+}
+
+.developer-skill-picker__trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.developer-skill-picker__menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.38rem);
+  left: 0;
+  width: min(23rem, calc(100vw - 3rem));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--text) 8%, var(--line));
+  border-radius: 0.78rem;
+  background: color-mix(in srgb, var(--surface) 98%, var(--canvas));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--text) 10%, transparent), 0 1px 3px color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+.developer-skill-picker__menu > p {
+  margin: 0;
+  padding: 0.6rem 0.75rem 0.52rem;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.developer-skill-picker__options {
+  padding: 0.16rem 0 0.24rem;
+  border-top: 1px solid color-mix(in srgb, var(--text) 5%, var(--line));
+}
+
+.developer-skill-picker__option {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 1.3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.75rem;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+button.developer-skill-picker__option {
+  cursor: pointer;
+}
+
+button.developer-skill-picker__option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+button.developer-skill-picker__option:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: -2px;
+}
+
+.developer-skill-picker__option:disabled {
+  cursor: default;
+}
+
+.developer-skill-picker__option--unavailable {
+  color: var(--text-soft);
+}
+
+.developer-skill-picker__agent-icon {
+  display: grid;
+  width: 1.3rem;
+  height: 1.3rem;
+  place-items: center;
+  color: var(--text-soft);
+}
+
+.developer-skill-picker__agent-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.developer-skill-picker__agent-copy {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.34rem;
+}
+
+.developer-skill-picker__agent-copy strong {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-skill-picker__agent-copy small {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-skill-picker__action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.developer-skill-picker__action.is-installed {
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.developer-skill-picker__action svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.developer-artifact-privacy,
+.developer-artifact-message {
+  max-width: 58ch;
+  color: var(--text-soft);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.developer-artifact-privacy {
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.developer-artifact-message {
+  color: var(--warn);
+}
+
+.developer-tool-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 36%, var(--line));
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+  font-size: var(--type-setting-desc-size);
+}
+
+@container (max-width: 46rem) {
+  .developer-cli-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-terminal {
+    min-height: 12.5rem;
+  }
+
+  .developer-skill-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .developer-skill-card__actions {
+    width: 11.25rem;
+    grid-column: 2;
+    justify-self: end;
+  }
+}
+
+@container (max-width: 34rem) {
+  .settings-section--developer {
+    gap: 1.6rem !important;
+  }
+
+  .developer-cli-hero,
+  .developer-skill-card {
+    padding: 0.85rem;
+  }
+
+  .developer-terminal__body dl {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-command-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0 0.8rem;
+  }
+
+  .developer-skill-card {
+    grid-template-columns: 1fr;
+  }
+
+  .developer-skill-card__actions {
+    grid-column: 1;
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .developer-artifact-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .developer-artifact-actions__button-slot,
+  .developer-artifact-actions__button-slot .settings-btn {
+    width: 100%;
+  }
+
+  .developer-status {
+    align-self: flex-start !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .developer-copy-button {
+    transition: none;
+  }
+}

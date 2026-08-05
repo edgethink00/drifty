@@ -30,6 +30,7 @@ export const SETTINGS_SECTIONS = [
   "aiSetup",
   "notifications",
   "privacy",
+  "developer",
   "data",
   "dev",
 ] as const;

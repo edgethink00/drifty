@@ -1,6 +1,6 @@
 import { useLocalization } from "../localization/LocalizationContext";
 
-export type SettingsSection = "account" | "general" | "permissions" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "dev";
+export type SettingsSection = "account" | "general" | "permissions" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
 
 const SETTINGS_NAV_GROUPS = [
   {
@@ -33,6 +33,7 @@ const SETTINGS_NAV_GROUPS = [
     id: "advanced",
     labelKey: "settings.sidebar.groupAdvanced",
     items: [
+      { id: "developer", labelKey: "settings.section.developer" },
       { id: "dev", labelKey: "common.dev" },
     ],
   },
@@ -60,8 +61,10 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
       return (<svg {...props}><path d="M6 9a6 6 0 0 1 12 0c0 4.5 1.5 5.5 2 6H4c.5-.5 2-1.5 2-6" /><path d="M10.2 19a1.9 1.9 0 0 0 3.6 0" /></svg>);
     case "privacy":
       return (<svg {...props}><path d="M12 3.5 5.5 6.2V11c0 4.4 2.9 7.4 6.5 9 3.6-1.6 6.5-4.6 6.5-9V6.2z" /><path d="M9.2 12l2 2 3.4-3.6" /></svg>);
-    case "dev":
+    case "developer":
       return (<svg {...props}><path d="M8.5 8 4.5 12l4 4" /><path d="M15.5 8l4 4-4 4" /><path d="M13.4 5l-2.8 14" /></svg>);
+    case "dev":
+      return (<svg {...props}><path d="M12 3v3M12 18v3M3 12h3M18 12h3" /><circle cx="12" cy="12" r="4.2" /><path d="m5.6 5.6 2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" /></svg>);
   }
 }
 
