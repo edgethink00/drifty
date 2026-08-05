@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEMO_DASHBOARD_REPLAY_DURATION_MAX_SECONDS,
@@ -25,6 +25,11 @@ const bootShellActions = vi.hoisted(() => ({
   showBootShellPreview: vi.fn(),
 }));
 
+const petModeLabEvents = vi.hoisted(() => ({
+  listener: null as ((state: { phase: string; activeAction: string | null; lifeLoopEnabled: boolean }) => void) | null,
+  request: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../../appFeatureSwitches", () => ({
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: false,
   get DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED() {
@@ -40,6 +45,14 @@ vi.mock("../loading/bootShell", () => ({
   showBootShellPreview: bootShellActions.showBootShellPreview,
 }));
 
+vi.mock("../pet-mode/petModeBridge", () => ({
+  listenToNativePetModeLabState: vi.fn(async (listener) => {
+    petModeLabEvents.listener = listener;
+    return vi.fn();
+  }),
+  requestNativePetModeLabState: petModeLabEvents.request,
+}));
+
 describe("DevSettingsSection", () => {
   afterEach(() => {
     cleanup();
@@ -48,6 +61,8 @@ describe("DevSettingsSection", () => {
   beforeEach(() => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
     bootShellActions.showBootShellPreview.mockClear();
+    petModeLabEvents.listener = null;
+    petModeLabEvents.request.mockClear();
   });
 
   it("shows Sentry smoke controls in production Dev settings", () => {
@@ -76,6 +91,48 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
+  });
+
+  it("keeps the detailed Pet Mode Lab behind the Dev preview toggle", () => {
+    const props = renderProductionDevSettings();
+    expect(screen.getByRole("group", { name: "Pet Mode Lab" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Intervention/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Walk 20.8 px\/s sample/ }).getAttribute("disabled")).toBe("");
+
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle Pet Mode preview" }));
+    expect(props.onPetModeEnabledChange).toHaveBeenCalledWith(true);
+
+    cleanup();
+    const enabledProps = renderProductionDevSettings(75, { petModeEnabled: true });
+    fireEvent.click(screen.getByRole("button", { name: /Intervention/ }));
+    expect(enabledProps.onPreviewPetModeIntervention).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Stretch Flow Stretch C/ }));
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("stretch");
+    fireEvent.click(screen.getByRole("button", { name: /Browser tab X/ }));
+    expect(enabledProps.onPreviewPetModeBrowserTabClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Drifty window X/ }));
+    expect(enabledProps.onPreviewPetModeDriftyWindowClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole("button", { name: /Life loop/ }));
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("life_loop");
+    fireEvent.click(screen.getByRole("button", { name: /Center drop/ }));
+    expect(enabledProps.onPlacePetModeCenter).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Look around/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Play Flow/ })).toBeNull();
+  });
+
+  it("shows the real pet phase and prevents overlapping Lab actions", async () => {
+    renderProductionDevSettings(75, { petModeEnabled: true });
+    await act(async () => undefined);
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "tail", activeAction: "tail_flick", lifeLoopEnabled: false });
+    });
+
+    expect(screen.getByText("Tail flick", { selector: ".pet-mode-lab__status" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Tail flick/ }).classList.contains("is-active")).toBe(true);
+    expect(screen.getByRole("button", { name: /Tail flick/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Stop/ }).getAttribute("disabled")).toBeNull();
   });
 
   it("keeps the redesigned Companion behind an explicit Dev beta toggle", () => {

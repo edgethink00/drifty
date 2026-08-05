@@ -15,7 +15,6 @@ fn lock_runtime_globals() -> MutexGuard<'static, ()> {
         .unwrap_or_else(PoisonError::into_inner)
 }
 
-
 struct SufficientMemoryForTests;
 
 impl SufficientMemoryForTests {

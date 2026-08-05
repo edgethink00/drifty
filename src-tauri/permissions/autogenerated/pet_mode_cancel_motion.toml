@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-cancel-motion"
+description = "Enables the pet_mode_cancel_motion command without any pre-configured scope."
+commands.allow = ["pet_mode_cancel_motion"]
+
+[[permission]]
+identifier = "deny-pet-mode-cancel-motion"
+description = "Denies the pet_mode_cancel_motion command without any pre-configured scope."
+commands.deny = ["pet_mode_cancel_motion"]

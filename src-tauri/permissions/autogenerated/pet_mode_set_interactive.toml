@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-set-interactive"
+description = "Enables the pet_mode_set_interactive command without any pre-configured scope."
+commands.allow = ["pet_mode_set_interactive"]
+
+[[permission]]
+identifier = "deny-pet-mode-set-interactive"
+description = "Denies the pet_mode_set_interactive command without any pre-configured scope."
+commands.deny = ["pet_mode_set_interactive"]

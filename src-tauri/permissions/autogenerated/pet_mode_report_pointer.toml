@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-report-pointer"
+description = "Enables the pet_mode_report_pointer command without any pre-configured scope."
+commands.allow = ["pet_mode_report_pointer"]
+
+[[permission]]
+identifier = "deny-pet-mode-report-pointer"
+description = "Denies the pet_mode_report_pointer command without any pre-configured scope."
+commands.deny = ["pet_mode_report_pointer"]

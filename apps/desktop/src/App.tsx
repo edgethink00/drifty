@@ -209,6 +209,25 @@ import {
   type DriftAlarmTransientPending,
 } from "./features/companion/driftAlarmTransientDefer";
 import { useCompanionSettingsController } from "./features/companion/useCompanionSettingsController";
+import {
+  buildPetModeInterventionTarget,
+  buildPetModeLabBrowserTabTarget,
+  buildPetModeLabDriftyWindowTarget,
+  buildPetModePreviewInterventionTarget,
+  buildPetModeSnapshot,
+} from "./features/pet-mode/petModeData";
+import {
+  applyNativePetModeLabTarget,
+  getNativePetInputBounds,
+  listenToNativePetAlignment,
+  listenToNativePetPointer,
+  placeNativePetModeAtCenterForLab,
+  playNativePetModeIntervention,
+  previewNativePetModeAction,
+  previewNativePetModeIntervention,
+  setNativePetModeEnabled,
+  updateNativePetMode,
+} from "./features/pet-mode/petModeBridge";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
 import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
@@ -574,12 +593,14 @@ export default function App() {
     driftAlertsEnabled,
     driftAlarmCopy,
     extremeNudgeEnabled,
+    petModeEnabled,
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
     setDriftAlertDelaySeconds,
     setDriftAlarmCopy,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
+    setPetModeEnabled,
     setWatcherMode,
     setWatcherPeekEnabled,
     watcherMode,
@@ -587,6 +608,9 @@ export default function App() {
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController();
+  const petModeActive = isDevModeActive && petModeEnabled;
+  const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
+  const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
     const enabled = driftAlertsEnabled;
@@ -782,6 +806,39 @@ export default function App() {
   const navigateBack = useCallback(() => {
     setNavigationHistory((current) => (current.index > 0 ? { ...current, index: current.index - 1 } : current));
   }, []);
+
+  const formatPetModeInputBounds = useCallback((bounds: {
+    readonly x: number;
+    readonly y: number;
+    readonly width: number;
+    readonly height: number;
+    readonly visible: boolean;
+  }) => (
+    `Native input bounds · ${bounds.x}, ${bounds.y} · ${bounds.width}×${bounds.height} · ${bounds.visible ? "visible" : "hidden"}`
+  ), []);
+
+  useEffect(() => {
+    if (!petModeActive) {
+      setPetModeLabInputBounds(null);
+      return;
+    }
+    if (activeTab !== "settings" || settingsSection !== "dev") return;
+    let disposed = false;
+    const refresh = () => {
+      void getNativePetInputBounds().then((bounds) => {
+        if (!disposed && bounds) setPetModeLabInputBounds(formatPetModeInputBounds(bounds));
+      });
+    };
+    // The native enable effect runs later in this component. Delay one paint,
+    // then keep the Dev-only coordinate read live while testing movement.
+    const timerId = window.setTimeout(refresh, 120);
+    const intervalId = window.setInterval(refresh, 500);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timerId);
+      window.clearInterval(intervalId);
+    };
+  }, [activeTab, formatPetModeInputBounds, petModeActive, settingsSection]);
 
   const navigateForward = useCallback(() => {
     setNavigationHistory((current) => (
@@ -2885,7 +2942,8 @@ export default function App() {
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-  }, [companionBetaEnabled, devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+    if (petModeEnabled) setPetModeEnabled(false);
+  }, [companionBetaEnabled, devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, petModeEnabled, profileBetaEnabled, setPetModeEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(COMPANION_BETA_STORAGE_KEY, companionBetaActive ? "1" : "0");
@@ -3640,9 +3698,19 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      void applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
-        forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
-      })).then(async (result) => {
+      const runExtremeNudge = async () => {
+        if (petModeActive) {
+          await playNativePetModeIntervention(buildPetModeInterventionTarget({
+            id: alertKey,
+            appName: segment.appName,
+            browserName: segment.browserName,
+          }));
+        }
+        return applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
+          forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
+        }));
+      };
+      void runExtremeNudge().then(async (result) => {
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
@@ -3986,7 +4054,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -4516,6 +4584,56 @@ export default function App() {
   }, [selectedDayProductivityTotals]);
   const watcherSnapshot = useMemo(() => buildWatcherSnapshot(segments, selectedDayClassificationOptions), [selectedDayClassificationOptions, segments]);
   useEffect(() => { watcherSnapshotRef.current = watcherSnapshot; }, [watcherSnapshot]);
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const snapshot = petModeActive ? buildPetModeSnapshot(watcherSnapshot) : null;
+    void setNativePetModeEnabled(petModeActive, snapshot).catch((nextError) => {
+      console.warn("Failed to sync Pet Mode window", nextError);
+    });
+  }, [petModeActive]);
+  useEffect(() => {
+    if (!petModeActive || !isTauriRuntime()) return;
+    void updateNativePetMode(buildPetModeSnapshot(watcherSnapshot)).catch((nextError) => {
+      console.warn("Failed to update Pet Mode snapshot", nextError);
+    });
+  }, [petModeActive, watcherSnapshot]);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetPointer(({ at }) => {
+      if (!disposed) setPetModeLabPointerStatus(`Pet input received · ${new Date(at).toLocaleTimeString()}`);
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetAlignment((alignment) => {
+      if (disposed) return;
+      const measuredTarget = !/(fallback|unavailable)/i.test(alignment.diagnostic);
+      const quality = !measuredTarget
+        ? "geometry fallback"
+        : alignment.errorDistance <= 1
+          ? "99% contact"
+          : "needs calibration";
+      setPetModeLabPointerStatus(
+        `${quality} · ${alignment.errorDistance.toFixed(2)} px · Δ ${alignment.errorX.toFixed(2)}, ${alignment.errorY.toFixed(2)} · ${alignment.diagnostic}`,
+      );
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
   const companionTodaySnapshot = useMemo(() => {
     const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
@@ -6882,6 +7000,9 @@ export default function App() {
                     webAccountPreviewEnabled={devWebAccountPreviewEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
+                    petModeEnabled={petModeEnabled}
+                    petModeLabPointerStatus={petModeLabPointerStatus}
+                    petModeLabInputBounds={petModeLabInputBounds}
                     weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
                     companionBetaEnabled={companionBetaEnabled}
                     companionSurfacePolicy={companionSurfacePolicy}
@@ -6923,6 +7044,39 @@ export default function App() {
                     onCheckLatestBuild={() => void developerPreReleaseUpdateController.checkLatestBuild()}
                     onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
+                    onPetModeEnabledChange={setPetModeEnabled}
+                    onPreviewPetModeIntervention={() => {
+                      const target = buildPetModePreviewInterventionTarget(segments);
+                      if (target) {
+                        void playNativePetModeIntervention(target);
+                        return;
+                      }
+                      void previewNativePetModeIntervention();
+                    }}
+                    onPreviewPetModeBrowserTabClose={() => {
+                      const target = buildPetModeLabBrowserTabTarget(segments);
+                      if (!target) return;
+                      void playNativePetModeIntervention(target).then((contacted) => {
+                        if (contacted) return applyNativePetModeLabTarget(target);
+                        setPetModeLabPointerStatus("Exact browser tab X unavailable · no close performed");
+                        return undefined;
+                      }).catch(() => undefined);
+                    }}
+                    onPreviewPetModeDriftyWindowClose={() => {
+                      const target = buildPetModeLabDriftyWindowTarget();
+                      void playNativePetModeIntervention(target).then((contacted) => {
+                        if (contacted) return applyNativePetModeLabTarget(target);
+                        return undefined;
+                      }).catch(() => undefined);
+                    }}
+                    onPlacePetModeCenter={() => {
+                      void placeNativePetModeAtCenterForLab().then((bounds) => {
+                        if (bounds) setPetModeLabInputBounds(formatPetModeInputBounds(bounds));
+                      }).catch(() => undefined);
+                    }}
+                    onPreviewPetModeAction={(action) => {
+                      void previewNativePetModeAction(action);
+                    }}
                     teamsBetaEnabled={teamsBetaEnabled}
                     profileBetaEnabled={profileBetaEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}

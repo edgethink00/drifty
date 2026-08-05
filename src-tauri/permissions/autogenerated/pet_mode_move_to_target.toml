@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-move-to-target"
+description = "Enables the pet_mode_move_to_target command without any pre-configured scope."
+commands.allow = ["pet_mode_move_to_target"]
+
+[[permission]]
+identifier = "deny-pet-mode-move-to-target"
+description = "Denies the pet_mode_move_to_target command without any pre-configured scope."
+commands.deny = ["pet_mode_move_to_target"]

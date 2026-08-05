@@ -1,0 +1,385 @@
+:root[data-surface="pet-mode"] {
+  color-scheme: dark;
+  background: transparent;
+  --pet-fur: #e8e5da;
+  --pet-ink: #171916;
+  --pet-accent: #a9d66d;
+}
+
+:root[data-surface="pet-mode"],
+:root[data-surface="pet-mode"] body,
+:root[data-surface="pet-mode"] #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+}
+
+.pet-mode-surface {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  contain: strict;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pet-mode-hit-target {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.pet-mode-hit-target:active { cursor: grabbing; }
+.pet-mode-contact-anchor {
+  position: absolute;
+  top: 40px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.pet-mode-contact-anchor--right { right: 1px; }
+.pet-mode-contact-anchor--left { left: 1px; }
+.pet-mode-hit-target:focus-visible::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 1px solid color-mix(in srgb, var(--pet-accent) 72%, transparent);
+  border-radius: 24px;
+}
+
+.pet-mode-cat {
+  position: absolute;
+  /* Keep the approved 60% cat viewport (121.2 × 92.4) centered inside the
+     wider native panel. The extra six points on each side reveal the complete
+     F12 paw silhouette without changing the cat's scale. */
+  left: 11.4px;
+  top: 4.2px;
+  width: 121.2px;
+  height: 92.4px;
+  color: var(--pet-fur);
+  transform-origin: 50% 62%;
+  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.13));
+  will-change: transform;
+}
+
+.pet-mode-cat.is-mirrored { transform: scaleX(-1); }
+
+.pet-mode-cat__motion {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  transform-origin: 50% 78%;
+  animation: pet-mode-idle-breathe 3.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+.pet-mode-cat--walk .pet-mode-cat__motion,
+.pet-mode-cat--run .pet-mode-cat__motion,
+.pet-mode-cat--paw .pet-mode-cat__motion,
+.pet-mode-cat--drag .pet-mode-cat__motion,
+.pet-mode-cat--release .pet-mode-cat__motion,
+.pet-mode-cat--tail .pet-mode-cat__motion,
+.pet-mode-cat--stretch .pet-mode-cat__motion { animation: none; }
+.pet-mode-cat--drag .pet-mode-cat__motion { transform: none; }
+.pet-mode-cat--release .pet-mode-cat__motion { transform: none; }
+.pet-mode-cat--happy .pet-mode-cat__motion,
+.pet-mode-cat--happy .pet-mode-cat__expression { animation: pet-mode-companion-lean .6s cubic-bezier(.25, 1, .5, 1) 2; }
+.pet-mode-cat--sleep .pet-mode-cat__motion {
+  animation: pet-mode-sleep-breathe 2.8s ease-in-out infinite;
+  transform-origin: 50% 92%;
+}
+
+.pet-mode-cat__raster,
+.pet-mode-cat__vector {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.pet-mode-cat__vector { color: var(--pet-fur); }
+.pet-mode-cat__face { color: var(--pet-ink); }
+.pet-mode-cat__sleep-pose { transform: translateY(-1px); }
+.pet-mode-cat__raster--drag {
+  object-fit: contain;
+  /* Clamp the generated pose's bright body range to the canonical f001 ivory
+     distribution. The piecewise sRGB map leaves dark face pixels and alpha
+     intact while retaining a restrained three-level body shading range. */
+  filter: url("#pet-mode-scruff-b-color-match");
+}
+.pet-mode-cat__filters { position: absolute; width: 0; height: 0; overflow: hidden; }
+.pet-mode-cat__drag-preload {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  pointer-events: none;
+}
+.pet-mode-cat__drag-pending-idle,
+.pet-mode-cat__drag-pending-held { will-change: transform, opacity; }
+.pet-mode-cat__drag-pending-idle {
+  animation: pet-mode-drag-idle-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
+}
+.pet-mode-cat__drag-pending-held {
+  animation: pet-mode-drag-held-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
+}
+.pet-mode-cat__release-held,
+.pet-mode-cat__release-idle { will-change: transform, opacity; }
+.pet-mode-cat__release-held {
+  z-index: 1;
+  animation: pet-mode-release-held var(--pet-drag-release-duration) linear both;
+}
+.pet-mode-cat__release-idle {
+  z-index: 0;
+  animation: pet-mode-release-idle var(--pet-drag-release-duration) linear both;
+}
+/* Exact F12 extraction geometry from the approved HTML prototype. `contain`
+   normalised the wide source crop, which made the paw reach look shortened. */
+.pet-mode-cat__raster--paw {
+  inset: auto;
+  left: 2.265%;
+  top: -3.083%;
+  width: 106.72%;
+  height: 96.833%;
+  object-fit: fill;
+}
+
+/* Flow life-motion frames include a transparent 36/12/20/20 source-pixel
+   gutter. Map the original 797×581 idle canvas back onto the exact approved
+   position while letting tails and stretched paws use the surrounding native
+   panel space instead of being clipped by the bitmap boundary. */
+.pet-mode-cat__raster--life-motion {
+  inset: auto;
+  left: -5.4745px;
+  top: .1987px;
+  width: 129.7159px;
+  height: 93.2191px;
+  object-fit: fill;
+}
+
+/* Tail V2-B uses the larger comparison canvas that preserved its complete
+   Flow contour. These values are the approved review geometry scaled exactly
+   50% into the native 60% pet panel, keeping every frame inside 144 × 99 px. */
+.pet-mode-cat--tail .pet-mode-cat__raster--life-motion {
+  left: -18.2484px;
+  top: -13.1835px;
+  width: 142.4896px;
+  height: 106.6011px;
+}
+
+.pet-mode-cat__face-erase {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: var(--pet-fur);
+  clip-path: ellipse(10.8% 7.5% at 79.8% 44.5%);
+  -webkit-mask: url("/pet-mode/paw/f001.png") center / contain no-repeat;
+  mask: url("/pet-mode/paw/f001.png") center / contain no-repeat;
+  pointer-events: none;
+}
+
+.pet-mode-cat__expression {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  color: var(--pet-ink);
+  pointer-events: none;
+}
+
+.pet-mode-cat__eyes path,
+.pet-mode-cat__expression-mouth {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.pet-mode-cat__eyes--open ellipse,
+.pet-mode-cat__eyes--blink ellipse { fill: currentColor; }
+.pet-mode-cat__eyes path { stroke-width: 8; }
+.pet-mode-cat__blink-lid path { stroke-width: 5.5; }
+.pet-mode-cat__expression-mouth { stroke-width: 8; opacity: .96; }
+
+.pet-mode-cat--blink .pet-mode-cat__face-erase,
+.pet-mode-cat--blink .pet-mode-cat__expression {
+  opacity: 1;
+}
+.pet-mode-cat--blink .pet-mode-cat__blink-eye {
+  animation: pet-mode-blink-eye 228ms cubic-bezier(.45, 0, .55, 1) both;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.pet-mode-cat--blink .pet-mode-cat__blink-lid {
+  animation: pet-mode-blink-lid 228ms linear both;
+}
+
+.pet-mode-cat__toy {
+  position: absolute;
+  z-index: 2;
+  left: 8%;
+  bottom: 5%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c58c63;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, #c58c63 18%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pet-mode-cat__shadow {
+  position: absolute;
+  z-index: -1;
+  left: 21%;
+  right: 18%;
+  bottom: 7%;
+  height: 8%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .16);
+  filter: blur(5px);
+  opacity: .65;
+}
+
+.pet-mode-cat--walk .pet-mode-cat__shadow { animation: pet-mode-shadow 480ms ease-in-out infinite; }
+.pet-mode-cat--run .pet-mode-cat__shadow { animation: pet-mode-shadow 240ms ease-in-out infinite; }
+.pet-mode-cat--drag .pet-mode-cat__shadow { opacity: 0; }
+.pet-mode-cat--release .pet-mode-cat__shadow {
+  animation: pet-mode-release-shadow var(--pet-drag-release-duration) linear both;
+}
+.pet-mode-cat__heart,
+.pet-mode-cat__zzz {
+  position: absolute;
+  right: 22%;
+  top: 8%;
+  color: var(--pet-accent);
+  font: 700 15px/1 ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  opacity: 0;
+}
+.pet-mode-cat--happy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
+.pet-mode-cat--sleep .pet-mode-cat__zzz { opacity: .8; animation: pet-mode-zzz 1.8s ease-in-out infinite; }
+
+@keyframes pet-mode-idle-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.008); }
+}
+
+@keyframes pet-mode-blink-eye {
+  0%, 12%, 88%, 100% { opacity: 1; transform: scaleY(1); }
+  30% { opacity: 1; transform: scaleY(.2); }
+  36%, 62% { opacity: 0; transform: scaleY(.08); }
+  68% { opacity: 1; transform: scaleY(.28); }
+}
+
+@keyframes pet-mode-blink-lid {
+  0%, 30%, 68%, 100% { opacity: 0; }
+  36%, 62% { opacity: 1; }
+}
+
+@keyframes pet-mode-companion-lean {
+  0%, 100% { transform: none; }
+  48% { transform: translateX(3px) rotate(1.4deg); }
+}
+
+@keyframes pet-mode-sleep-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.025); }
+}
+
+@keyframes pet-mode-release-held {
+  0% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
+  10.26% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: .99; }
+  20.51% { transform: translateX(-1px) translateY(-2px) scale(1.29); opacity: .97; }
+  32.05% { transform: translateX(-1px) translateY(-1px) scale(1.29); opacity: .72; }
+  43.59%, 100% { transform: translateX(-1px) translateY(0) scale(1.29); opacity: 0; }
+}
+
+@keyframes pet-mode-drag-idle-handoff {
+  0% { transform: translateY(0); opacity: 1; }
+  0.01%, 12.16% { transform: translateY(-1px); opacity: .99; }
+  12.17%, 24.31% { transform: translateY(-2px); opacity: .97; }
+  24.32%, 100% { transform: translateY(-2px); opacity: 0; }
+}
+
+@keyframes pet-mode-drag-held-handoff {
+  0%, 24.31% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: 0; }
+  24.32%, 35.13% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: .92; }
+  35.14%, 47.29% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: .95; }
+  47.30%, 59.45% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: .98; }
+  59.46%, 100% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
+}
+
+@keyframes pet-mode-release-idle {
+  0%, 32.05% { transform: translateY(0); opacity: 0; }
+  43.59% { transform: translateY(0); opacity: .55; }
+  55.13% { transform: translateY(0); opacity: .82; }
+  67.95% { transform: translateY(0); opacity: .96; }
+  82.05%, 100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pet-mode-release-shadow {
+  0%, 32.05% { opacity: 0; transform: scaleX(.74); }
+  55.13% { opacity: .35; transform: scaleX(.9); }
+  100% { opacity: .65; transform: scaleX(1); }
+}
+
+@keyframes pet-mode-shadow {
+  0%, 100% { scale: .94 1; opacity: .48; }
+  50% { scale: 1.04 .88; opacity: .68; }
+}
+
+@keyframes pet-mode-heart {
+  0% { opacity: 0; translate: 0 6px; scale: .72; }
+  25% { opacity: 1; }
+  100% { opacity: 0; translate: 3px -18px; scale: 1.05; }
+}
+
+@keyframes pet-mode-zzz {
+  0%, 100% { opacity: .35; translate: 0 2px; }
+  50% { opacity: .82; translate: 2px -4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-mode-cat,
+  .pet-mode-cat__motion,
+  .pet-mode-cat__heart,
+  .pet-mode-cat__zzz,
+  .pet-mode-cat__shadow,
+  .pet-mode-cat__face-erase,
+  .pet-mode-cat__expression,
+  .pet-mode-cat__expression-face,
+  .pet-mode-cat__eyes,
+  .pet-mode-cat__toy,
+  .pet-mode-cat__drag-pending-idle,
+  .pet-mode-cat__drag-pending-held,
+  .pet-mode-cat__release-held,
+  .pet-mode-cat__release-idle {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .pet-mode-cat--blink .pet-mode-cat__face-erase,
+  .pet-mode-cat--blink .pet-mode-cat__expression {
+    opacity: 1;
+    transform: none;
+  }
+  .pet-mode-cat--blink .pet-mode-cat__blink-eye { opacity: 0; transform: scaleY(.08); }
+  .pet-mode-cat--blink .pet-mode-cat__blink-lid { opacity: 1; }
+}

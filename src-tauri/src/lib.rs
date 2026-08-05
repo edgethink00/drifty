@@ -28,7 +28,14 @@ use commands::{
     drift_alarm_hide, drift_alarm_show, extreme_nudge_apply, focus_target_activate_browser_tab,
     focus_target_browser_tab_exists, focus_target_open_app, managed_ai_catalog, managed_ai_delete,
     managed_ai_install, managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
-    sentry_capture_native_smoke, setup_companion_pill_window, setup_drift_alarm_window,
+    pet_mode_align_contact, pet_mode_begin_drag, pet_mode_cancel_motion, pet_mode_cursor_inside,
+    pet_mode_exit_screen, pet_mode_input_bounds, pet_mode_intervene, pet_mode_lab_apply_target,
+    pet_mode_lab_place_center, pet_mode_move_to_target, pet_mode_preview_action,
+    pet_mode_preview_intervention, pet_mode_remember_position, pet_mode_report_contact,
+    pet_mode_report_drag_error, pet_mode_report_pointer, pet_mode_return_from_outing,
+    pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
+    pet_mode_set_presence, pet_mode_update, sentry_capture_native_smoke,
+    setup_companion_pill_window, setup_drift_alarm_window, setup_pet_mode_window,
     setup_watcher_window, startup_get_open_at_login_status, startup_set_open_at_login_enabled,
     system_open_settings_pane, tracker_apply_classification_rules, tracker_apply_synced_deletions,
     tracker_apply_synced_segments, tracker_delete_activity_segments,
@@ -379,6 +386,7 @@ pub fn run() {
             setup_watcher_window(app)?;
             setup_companion_pill_window(app)?;
             setup_drift_alarm_window(app)?;
+            setup_pet_mode_window(app)?;
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
 
@@ -555,6 +563,29 @@ pub fn run() {
             drift_alarm_dismiss,
             drift_alarm_action,
             extreme_nudge_apply,
+            pet_mode_set_enabled,
+            pet_mode_update,
+            pet_mode_intervene,
+            pet_mode_preview_intervention,
+            pet_mode_preview_action,
+            pet_mode_cancel_motion,
+            pet_mode_lab_apply_target,
+            pet_mode_lab_place_center,
+            pet_mode_move_to_target,
+            pet_mode_align_contact,
+            pet_mode_report_contact,
+            pet_mode_report_drag_error,
+            pet_mode_report_pointer,
+            pet_mode_return_home,
+            pet_mode_set_presence,
+            pet_mode_set_interactive,
+            pet_mode_begin_drag,
+            pet_mode_cursor_inside,
+            pet_mode_input_bounds,
+            pet_mode_roam,
+            pet_mode_exit_screen,
+            pet_mode_return_from_outing,
+            pet_mode_remember_position,
         ])
         .run(tauri::generate_context!())
     {

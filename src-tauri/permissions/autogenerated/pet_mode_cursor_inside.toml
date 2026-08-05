@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-cursor-inside"
+description = "Enables the pet_mode_cursor_inside command without any pre-configured scope."
+commands.allow = ["pet_mode_cursor_inside"]
+
+[[permission]]
+identifier = "deny-pet-mode-cursor-inside"
+description = "Denies the pet_mode_cursor_inside command without any pre-configured scope."
+commands.deny = ["pet_mode_cursor_inside"]

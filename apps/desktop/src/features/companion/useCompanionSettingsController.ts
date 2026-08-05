@@ -23,18 +23,21 @@ import {
   resolveInitialWatcherPeriodicMinutes,
   type WatcherMode,
 } from "./watcherData";
+import { PET_MODE_STORAGE_KEY, resolveInitialPetModeEnabled } from "../pet-mode/petModeData";
 
 type UseCompanionSettingsControllerResult = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
+  readonly petModeEnabled: boolean;
   readonly handleWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly handleWatcherPeriodicMinChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly setDriftAlertDelaySeconds: Dispatch<SetStateAction<DriftAlertDelaySeconds>>;
   readonly setDriftAlarmCopy: Dispatch<SetStateAction<DriftAlarmCopySettingsValue>>;
   readonly setDriftAlertsEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setExtremeNudgeEnabled: Dispatch<SetStateAction<boolean>>;
+  readonly setPetModeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setWatcherMode: Dispatch<SetStateAction<WatcherMode>>;
   readonly setWatcherPeekEnabled: Dispatch<SetStateAction<boolean>>;
   readonly watcherMode: WatcherMode;
@@ -48,6 +51,7 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
   const [driftAlertDelaySeconds, setDriftAlertDelaySeconds] = useState<DriftAlertDelaySeconds>(resolveInitialDriftAlertDelaySeconds);
   const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
+  const [petModeEnabled, setPetModeEnabled] = useState(resolveInitialPetModeEnabled);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
@@ -85,6 +89,10 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
   }, [extremeNudgeEnabled]);
 
   useEffect(() => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, petModeEnabled ? "1" : "0");
+  }, [petModeEnabled]);
+
+  useEffect(() => {
     window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
   }, [watcherPeekEnabled]);
 
@@ -109,12 +117,14 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     driftAlertsEnabled,
     driftAlarmCopy,
     extremeNudgeEnabled,
+    petModeEnabled,
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
     setDriftAlertDelaySeconds,
     setDriftAlarmCopy,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
+    setPetModeEnabled,
     setWatcherMode,
     setWatcherPeekEnabled,
     watcherMode,

@@ -1304,6 +1304,196 @@
   margin-bottom: var(--space-2);
 }
 
+.settings-block__title-with-badge {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.settings-block__title-with-badge .settings-beta-badge {
+  translate: 0 .02rem;
+}
+
+.settings-row--pet-mode {
+  padding-bottom: var(--space-3);
+}
+
+.pet-mode-lab {
+  position: relative;
+  display: grid;
+  gap: 0;
+  padding: 0 var(--space-4) var(--space-3);
+  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
+  background: var(--settings-row-card-bg);
+}
+
+.pet-mode-lab::after {
+  content: "";
+  position: absolute;
+  right: var(--space-4);
+  bottom: 0;
+  left: var(--space-4);
+  height: 1px;
+  background: var(--line);
+}
+
+.pet-mode-lab__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+}
+
+.pet-mode-lab__heading .desc {
+  max-width: 64ch;
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+}
+
+.pet-mode-lab__status {
+  flex: 0 0 auto;
+  padding: .28rem .56rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.pet-mode-lab__status[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+  color: color-mix(in srgb, var(--accent) 72%, var(--text));
+  background: color-mix(in srgb, var(--accent-soft) 42%, transparent);
+}
+
+.pet-mode-lab__diagnostics {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+}
+
+.pet-mode-lab__diagnostic {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pet-mode-lab__diagnostic span {
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  font-weight: 650;
+  letter-spacing: .04em;
+}
+
+.pet-mode-lab__diagnostic code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-setting-value-size);
+  line-height: 1.4;
+}
+
+.pet-mode-lab__groups {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.pet-mode-lab__row {
+  display: grid;
+  grid-template-columns: minmax(11rem, .42fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 4.25rem;
+  padding: var(--space-2) 0;
+}
+
+.pet-mode-lab__row + .pet-mode-lab__row {
+  border-top: 1px solid var(--line);
+}
+
+.pet-mode-lab__row-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.pet-mode-lab__row-copy .desc {
+  max-width: 42ch;
+}
+
+.pet-mode-lab__controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.content--settings .pet-mode-lab__action {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  height: 2rem;
+  min-height: 2rem;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: var(--type-input-size);
+  font-weight: 620;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.content--settings .pet-mode-lab__action--primary {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 68%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 76%, var(--text));
+}
+
+.content--settings .pet-mode-lab__action--stop {
+  color: var(--text-soft);
+}
+
+.content--settings .pet-mode-lab__action--warning {
+  border-color: color-mix(in srgb, var(--warn, var(--text)) 34%, var(--line));
+  background: color-mix(in srgb, var(--warn-soft, var(--surface)) 50%, var(--surface));
+}
+
+.content--settings .pet-mode-lab__action:disabled:not(.is-active) {
+  cursor: default;
+  opacity: .42;
+}
+
+.content--settings .pet-mode-lab__action.is-active,
+.content--settings .pet-mode-lab__action.is-active:disabled {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--surface));
+  color: color-mix(in srgb, var(--accent) 78%, var(--text));
+  opacity: 1;
+}
+
+@media (max-width: 860px) {
+  .pet-mode-lab__row {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+    padding-block: var(--space-3);
+  }
+
+  .pet-mode-lab__controls {
+    justify-content: flex-start;
+  }
+}
+
 .settings-row--ai-preview {
   gap: var(--space-2);
   padding-bottom: 0;
