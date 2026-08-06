@@ -5192,10 +5192,12 @@ export default function App() {
     ? dashboardPreviousWeekFocusLoad.focusSeconds
     : null;
   const weekFocusDeltaPercent = previousWeekFocusSeconds !== null && previousWeekFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousWeekFocusSeconds) / previousWeekFocusSeconds) * 100) : null;
+  const weekFocusDeltaSeconds = previousWeekFocusSeconds !== null ? dashboardFocusSeconds - previousWeekFocusSeconds : null;
   const previousDayFocusSeconds = dashPeriod === "Today" && dashboardPreviousDayFocusLoad?.key === dashboardPreviousDayFocusKey
     ? dashboardPreviousDayFocusLoad.focusSeconds
     : null;
   const dayFocusDeltaPercent = previousDayFocusSeconds !== null && previousDayFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousDayFocusSeconds) / previousDayFocusSeconds) * 100) : null;
+  const dayFocusDeltaSeconds = previousDayFocusSeconds !== null ? dashboardFocusSeconds - previousDayFocusSeconds : null;
   const weekDashboardModel = useMemo(() => {
     if (dashPeriod !== "Week") return emptyWeekDashboardModel();
     return buildWeekDashboardModel({
@@ -6525,6 +6527,7 @@ export default function App() {
         {activeTab === "dashboard" ? (
           <DashboardPage
             appIcons={appIcons}
+            appTheme={theme}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
@@ -6553,6 +6556,7 @@ export default function App() {
             focusDriftSection={focusDriftSection}
             dayBreakdownTiles={stickyDayBreakdownTiles}
             dayFocusDeltaPercent={isPreviewSurface ? 12 : stickyDayFocusDeltaPercent}
+            dayFocusDeltaSeconds={isPreviewSurface ? 48 * 60 : dayFocusDeltaSeconds}
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
@@ -6565,6 +6569,7 @@ export default function App() {
             totalSeconds={stickyTotalSeconds}
             weekCalendarEvents={weekCalendarEvents}
             weekFocusDeltaPercent={weekFocusDeltaPercent}
+            weekFocusDeltaSeconds={isPreviewSurface ? 3 * 3600 + 5 * 60 : weekFocusDeltaSeconds}
             weekRefreshStatus={weekRefreshStatus}
             weekRows={weekRows}
             weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
@@ -6573,6 +6578,7 @@ export default function App() {
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}
+            onJoinLeaderboard={handleLeaderboardOptIn}
             onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
             onSelectDay={selectDay}
           />

@@ -262,6 +262,7 @@ describe("leaderboardService", () => {
     client.rpc.mockResolvedValue({
       data: [{
         rank: 3,
+        participant_count: 120,
         display_name: "no-name",
         period: "weekly",
         focus_seconds: 1200,
@@ -281,6 +282,7 @@ describe("leaderboardService", () => {
       error: null,
       data: {
         rank: 3,
+        participant_count: 120,
         display_name: "no-name",
         period: "weekly",
         focus_seconds: 1200,
@@ -377,6 +379,7 @@ describe("leaderboardService", () => {
       data: [
         {
           rank: 1,
+          participant_count: 2_858,
           public_id: "profile-1",
           display_name: "Alex",
           avatar_url: "https://cdn.example.com/alex.png",
@@ -400,6 +403,7 @@ describe("leaderboardService", () => {
       data: [
         {
           rank: 1,
+          participant_count: 2_858,
           public_id: "profile-1",
           display_name: "Alex",
           avatar_url: "https://cdn.example.com/alex.png",

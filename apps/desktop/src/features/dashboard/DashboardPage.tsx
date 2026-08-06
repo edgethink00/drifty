@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, FlowIntervalMinutes, ProductivityDuration } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
@@ -18,7 +18,9 @@ import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
-import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen } from "../settings/settingsStorage";
+import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type ThemeMode } from "../settings/settingsStorage";
+import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
+import { buildShareCardData, buildShareWeekCardData } from "../share/shareCard";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
@@ -27,6 +29,7 @@ import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel 
 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
+  readonly appTheme: ThemeMode;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly currentMinuteOfDay: number | null;
   readonly dashboardAiRecoveryState: DashboardAiUnavailableState | null;
@@ -57,6 +60,7 @@ type DashboardPageProps = {
   readonly focusDriftSection: ReactNode;
   readonly dayBreakdownTiles: ReactNode;
   readonly dayFocusDeltaPercent: number | null;
+  readonly dayFocusDeltaSeconds: number | null;
   readonly hasTimelineData: boolean;
   readonly historyClassificationOptions: ClassificationOptions;
   readonly historySegments: ActivitySegment[];
@@ -70,6 +74,7 @@ type DashboardPageProps = {
   readonly totalSeconds: number;
   readonly weekCalendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly weekFocusDeltaPercent: number | null;
+  readonly weekFocusDeltaSeconds: number | null;
   readonly weekRefreshStatus: "idle" | "loading" | "error";
   readonly weekRows: WeekDayRow[];
   readonly weekCurrentCalendarDay: string | null;
@@ -78,12 +83,14 @@ type DashboardPageProps = {
   readonly onDismissDashboardAiRecovery: () => void;
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
+  readonly onJoinLeaderboard?: () => Promise<void>;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
   readonly onSelectDay: (day: string) => void;
 };
 
 export function DashboardPage({
   appIcons,
+  appTheme,
   billingCheckoutLoadingInterval,
   currentMinuteOfDay,
   dashboardAiRecoveryState,
@@ -111,6 +118,7 @@ export function DashboardPage({
   focusDriftSection,
   dayBreakdownTiles,
   dayFocusDeltaPercent,
+  dayFocusDeltaSeconds,
   hasTimelineData,
   historyClassificationOptions,
   historySegments,
@@ -124,6 +132,7 @@ export function DashboardPage({
   totalSeconds,
   weekCalendarEvents,
   weekFocusDeltaPercent,
+  weekFocusDeltaSeconds,
   weekRefreshStatus,
   weekRows,
   weekCurrentCalendarDay,
@@ -132,10 +141,12 @@ export function DashboardPage({
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
   onOpenDashboardAiSetup,
+  onJoinLeaderboard,
   onSelectBillingPlan,
   onSelectDay,
 }: DashboardPageProps) {
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
+  const [shareCardOpen, setShareCardOpen] = useState(false);
   // Shared by the Day view and WeekDashboard: the Breakdown side panel is one
   // surface across both dashboards, so its collapse state lives here (and in
   // localStorage) instead of per view.
@@ -171,6 +182,42 @@ export function DashboardPage({
   // content column (day-split__main / week-v2-calendar) instead of on top of
   // the page. Loading and Month keep the classic top placement.
   const headInsideBlock = !initialDataLoading && (dashPeriod === "Today" || dashPeriod === "Week");
+  const showShareButton = !initialDataLoading && !isDashboardReplayActive && (
+    (dashPeriod === "Today" && hasMeasuredDayActivity)
+    || (dashPeriod === "Week" && totalSeconds > 0)
+  );
+  // Share cards are assembled only after the modal opens. The shape is aggregate-only:
+  // category/productivity totals and derived hourly/daily rhythm, never raw activity rows.
+  const shareCard = useMemo<ShareCardModalCard | null>(() => {
+    if (!shareCardOpen) return null;
+    if (dashPeriod === "Week") {
+      return {
+        kind: "week",
+        data: buildShareWeekCardData({
+          startDay: dashboardRange.startDay,
+          endDay: dashboardRange.endDay,
+          totalSeconds,
+          categoryTotals: dashboardCategoryTotals,
+          productivityTotals: dashboardProductivityTotals,
+          weekRows,
+          calendarEvents: weekCalendarEvents,
+          deltaSeconds: weekFocusDeltaSeconds,
+        }),
+      };
+    }
+    if (dashPeriod !== "Today") return null;
+    return {
+      kind: "day",
+      data: buildShareCardData({
+        day: selectedDay,
+        totalSeconds,
+        categoryTotals: dashboardCategoryTotals,
+        productivityTotals: dashboardProductivityTotals,
+        flowBlocks,
+        deltaSeconds: dayFocusDeltaSeconds,
+      }),
+    };
+  }, [dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, flowBlocks, selectedDay, shareCardOpen, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
   const pageHead = (
     <div className={`pg-head dashboard-page-head${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
         <div className="dashboard-page-head__row">
@@ -185,7 +232,20 @@ export function DashboardPage({
               </span>
             </h1>
           </div>
-          {dashboardDateNavigator}
+          <div className="dashboard-page-head__side">
+            {showShareButton ? (
+              <button
+                type="button"
+                className="ghost-button dashboard-share-button"
+                aria-haspopup="dialog"
+                onClick={() => setShareCardOpen(true)}
+              >
+                <ShareIcon />
+                <span>Share</span>
+              </button>
+            ) : null}
+            {dashboardDateNavigator}
+          </div>
         </div>
     </div>
   );
@@ -383,6 +443,25 @@ export function DashboardPage({
           </BreakdownSidePanel>
         </div>
       )}
+
+      {shareCardOpen && shareCard ? (
+        <ShareCardModal
+          card={shareCard}
+          defaultTheme={appTheme}
+          onJoinLeaderboard={onJoinLeaderboard}
+          onClose={() => setShareCardOpen(false)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function ShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3v12" />
+      <path d="m8 6.5 4-3.5 4 3.5" />
+      <path d="M6.5 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-.5" />
+    </svg>
   );
 }

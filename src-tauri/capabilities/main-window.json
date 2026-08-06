@@ -32,6 +32,7 @@
     "allow-developer-tools-install-skill",
     "allow-developer-tools-uninstall-skill",
     "allow-sentry-capture-native-smoke",
+    "allow-share-card-save-png",
     "allow-tracker-get-status",
     "allow-tracker-start",
     "allow-tracker-stop",

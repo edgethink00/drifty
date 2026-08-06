@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-share-card-save-png"
+description = "Enables the share_card_save_png command without any pre-configured scope."
+commands.allow = ["share_card_save_png"]
+
+[[permission]]
+identifier = "deny-share-card-save-png"
+description = "Denies the share_card_save_png command without any pre-configured scope."
+commands.deny = ["share_card_save_png"]

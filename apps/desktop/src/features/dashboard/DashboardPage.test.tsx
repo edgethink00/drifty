@@ -27,6 +27,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
   render(
     <DashboardPage
       appIcons={{}}
+      appTheme="light"
       billingCheckoutLoadingInterval={null}
       currentMinuteOfDay={4 * 60}
       dashboardAiRecoveryState={null}
@@ -48,6 +49,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
       dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
       dayFocusDeltaPercent={null}
+      dayFocusDeltaSeconds={null}
       hasTimelineData={options.hasTimelineData ?? false}
       historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       historySegments={[]}
@@ -62,6 +64,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       weekCurrentCalendarDay={null}
       weekCurrentMinuteOfDay={null}
       weekFocusDeltaPercent={null}
+      weekFocusDeltaSeconds={null}
       weekRefreshStatus="idle"
       weekRows={[]}
       onDismissDashboardAiRecovery={noop}
@@ -123,6 +126,16 @@ describe("DashboardPage demo replay empty data", () => {
     expect(screen.getByText("3 visits summarized locally.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /last 48 hours|add estimates/i })).toBeNull();
   });
+
+  it("shows Share for a measured day without a Dev settings gate", () => {
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      hasTimelineData: true,
+      totalSeconds: 3_600,
+    });
+
+    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+  });
 });
 
 describe("DashboardPage day metrics without measured activity", () => {
@@ -154,5 +167,41 @@ describe("DashboardPage day metrics without measured activity", () => {
     // The breakdown Productivity donut is shown (measured activity exists); scope
     // to its panel label so it isn't confused with the flow chart's colour toggle.
     expect(screen.getByLabelText("Productivity compact classification")).toBeTruthy();
+  });
+});
+
+describe("DashboardPage share card", () => {
+  it("opens the aggregate share card from a measured day", () => {
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+      dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+      dashboardTitleDuration: "1h",
+      hasTimelineData: true,
+      totalSeconds: 3_600,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Share" }));
+
+    expect(screen.getByRole("dialog", { name: "Share your day" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "LinkedIn" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "X" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy image" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Share card preview/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Previous share card" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Next share card" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Curve Card" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("radio", { name: "Weekly Curve" })).toBeNull();
+    expect(screen.getByRole("radio", { name: "Productivity" })).toBeTruthy();
+    expect(screen.queryByRole("radiogroup", { name: "Card accent color" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Card theme" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next share card" }));
+    expect(screen.getByRole("radio", { name: "Rank Statement" }).getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("keeps Share hidden during replay and without measured activity", () => {
+    renderDashboardWithNoData();
+    expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
   });
 });

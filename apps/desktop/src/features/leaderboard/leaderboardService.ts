@@ -9,6 +9,8 @@ export const DEFAULT_LEADERBOARD_PERIOD: LeaderboardPeriod = "weekly";
 
 export interface LeaderboardRow {
   rank: number;
+  /** Number of fresh, opted-in participants in this leaderboard window. */
+  participant_count?: number | null;
   public_id: string | null;
   display_name: string;
   avatar_url: string;
@@ -22,6 +24,8 @@ export interface LeaderboardRow {
 
 export interface OwnLeaderboardEntry {
   rank: number | null;
+  /** Number of fresh, opted-in participants in this leaderboard window. */
+  participant_count?: number | null;
   display_name: string;
   period: LeaderboardPeriod;
   focus_seconds: number;
@@ -100,6 +104,7 @@ type LeaderboardClient = {
 };
 type LeaderboardRpcRow = {
   rank: number | string;
+  participant_count?: number | string | null;
   public_id?: string | null;
   display_name: string;
   avatar_url?: string | null;
@@ -146,6 +151,11 @@ function getRowFocusSeconds(row: { focus_seconds?: number | string | null; focus
   return Number(row.focus_seconds ?? row.focus_seconds_7d ?? 0);
 }
 
+function getParticipantCount(row: { participant_count?: number | string | null }): number | null {
+  const value = Number(row.participant_count);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
+}
+
 function toLeaderboardErrorMessage(error: { message: string } | Error | unknown) {
   const message =
     typeof error === "object" && error !== null && "message" in error && typeof (error as { message: unknown }).message === "string"
@@ -185,8 +195,10 @@ function buildAggregatePayload(
 }
 
 function normalizeLeaderboardRow(row: LeaderboardRpcRow): LeaderboardRow {
+  const participantCount = getParticipantCount(row);
   return {
     rank: Number(row.rank),
+    ...(participantCount === null ? {} : { participant_count: participantCount }),
     public_id: row.public_id ? String(row.public_id) : null,
     display_name: String(row.display_name),
     avatar_url: String(row.avatar_url ?? ""),
@@ -200,8 +212,10 @@ function normalizeLeaderboardRow(row: LeaderboardRpcRow): LeaderboardRow {
 }
 
 function normalizeOwnLeaderboardRow(row: OwnLeaderboardRpcRow): OwnLeaderboardEntry {
+  const participantCount = getParticipantCount(row);
   return {
     rank: row.rank === null || row.rank === undefined ? null : Number(row.rank),
+    ...(participantCount === null ? {} : { participant_count: participantCount }),
     display_name: String(row.display_name ?? ""),
     period: normalizePeriod(row.period),
     focus_seconds: getRowFocusSeconds(row),

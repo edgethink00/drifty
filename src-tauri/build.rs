@@ -30,6 +30,7 @@ fn main() {
             "developer_tools_install_skill",
             "developer_tools_uninstall_skill",
             "sentry_capture_native_smoke",
+            "share_card_save_png",
             "update_prompt_show_native",
             "tracker_get_status",
             "tracker_start",
