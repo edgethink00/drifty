@@ -63,6 +63,7 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavTextBlock).toContain("max-width: 0;");
     expect(collapsedNavTextBlock).not.toMatch(/(?:^|\n)\s*width:\s*0/);
     expect(collapsedTrackerControlBlock).toContain("width: 2.25rem;");
+    expect(collapsedTrackerControlBlock).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(collapsedTrackerControlBlock).toContain("padding: 0;");
     expect(collapsedTrackerControlBlock).toContain("background: transparent;");
     expect(collapsedTrackerControlBlock).toContain("box-shadow: none;");
