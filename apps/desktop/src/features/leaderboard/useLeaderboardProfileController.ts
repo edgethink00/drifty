@@ -51,6 +51,8 @@ type UseLeaderboardProfileControllerInput = {
   readonly activeTab: string;
   readonly allowsEffectiveAnonymousAuth: boolean;
   readonly authMetadataAvatarUrl: string;
+  /** False while the persisted session is still being restored. */
+  readonly isAuthResolved: boolean;
   readonly hasRequiredAccountAuth: boolean;
   readonly isEffectiveAuthRequired: boolean;
   readonly isSupabaseConfigured: boolean;
@@ -64,6 +66,12 @@ type UseLeaderboardProfileControllerInput = {
 type UseLeaderboardProfileControllerResult = {
   readonly activeLeaderboardPeriod: LeaderboardPeriod;
   readonly isLeaderboardOptedIn: boolean;
+  /**
+   * True once we actually know whether this account is on the board. Until then
+   * `isLeaderboardOptedIn` is merely "not known to be joined", which must not be
+   * rendered as a confident "not joined".
+   */
+  readonly isLeaderboardParticipationResolved: boolean;
   readonly isProfileEditorOpen: boolean;
   readonly leaderboardActionError: string | null;
   readonly leaderboardActionLoading: boolean;
@@ -292,6 +300,7 @@ export function useLeaderboardProfileController({
   allowsEffectiveAnonymousAuth,
   authMetadataAvatarUrl,
   hasRequiredAccountAuth,
+  isAuthResolved,
   isEffectiveAuthRequired,
   isSupabaseConfigured,
   showAiClassificationImpact,
@@ -368,6 +377,14 @@ export function useLeaderboardProfileController({
   const leaderboardOwnEntryScopeKey = isPolicySignedIn ? getLeaderboardUserScopeKey(user) : "signed-out";
   const scopedOwnLeaderboardEntry = leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey ? ownLeaderboardEntry : null;
   const isLeaderboardOptedIn = scopedOwnLeaderboardEntry?.opted_in === true;
+  // Participation is only "known" once the account is settled and this scope's own
+  // entry has actually been fetched. While a persisted session is still being
+  // restored the scope key is "signed-out" and the own-entry request is skipped,
+  // so a joined user would otherwise render as a confident "not joined" and then
+  // snap back — the join/share flicker.
+  const isLeaderboardParticipationResolved = leaderboardUsesPreviewProfile
+    || !isSupabaseConfigured
+    || (isAuthResolved && (!isPolicySignedIn || leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey));
 
   useEffect(() => {
     leaderboardOptInCacheRef.current = null;
@@ -1182,6 +1199,7 @@ export function useLeaderboardProfileController({
   return {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
+    isLeaderboardParticipationResolved,
     isProfileEditorOpen,
     leaderboardActionError,
     leaderboardActionLoading,

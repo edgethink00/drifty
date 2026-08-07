@@ -2400,6 +2400,27 @@
   font-weight: 500;
 }
 
+/* Participation state is still unknown (e.g. session restore): hold the button's
+   footprint so the hero doesn't reflow once the real control resolves. */
+.leaderboard-hero__participation-placeholder {
+  display: inline-block;
+  min-height: 1.95rem;
+  width: 8.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 38%, transparent);
+  opacity: 0.55;
+}
+
+/* The Share pill is narrower than the join/leave control, so its stand-in
+   matches that width instead of leaving an oversized gap in the action row. */
+.leaderboard-hero__participation-placeholder--share {
+  width: 5.2rem;
+}
+
+.leaderboard-hero__status--pending {
+  opacity: 0.6;
+}
+
 /* Hero action bar — polished pill buttons */
 .hero-action-btn {
   display: inline-flex;

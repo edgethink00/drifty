@@ -1199,6 +1199,7 @@ export default function App() {
   const {
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
+    isLeaderboardParticipationResolved,
     isProfileEditorOpen,
     leaderboardActionError,
     leaderboardActionLoading,
@@ -1252,6 +1253,7 @@ export default function App() {
     allowsEffectiveAnonymousAuth,
     authMetadataAvatarUrl,
     hasRequiredAccountAuth,
+    isAuthResolved: authStatus !== "loading",
     isEffectiveAuthRequired,
     isSupabaseConfigured,
     showAiClassificationImpact,
@@ -6746,6 +6748,7 @@ export default function App() {
             isActionLoading={leaderboardActionLoading}
             isLoading={leaderboardLoading}
             isOptedIn={isLeaderboardOptedIn}
+            isParticipationResolved={isLeaderboardParticipationResolved}
             isSignedIn={isPolicySignedIn}
             isSupabaseEnabled={isSupabaseConfigured || leaderboardUsesPreviewProfile}
             leaderboard={leaderboardRows}

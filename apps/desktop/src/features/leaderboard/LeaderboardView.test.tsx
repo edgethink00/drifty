@@ -635,4 +635,80 @@ describe("LeaderboardView", () => {
 
     expect(onSelectProfile).toHaveBeenCalledWith(leaderboard[0]);
   });
+
+  // Regression: a joined account used to render as a confident "not joined" while
+  // the persisted session was still restoring, so Join appeared and Share vanished
+  // for a frame before snapping back.
+  describe("while participation is still unknown", () => {
+    const pendingProps = () => ({
+      isOptedIn: false,
+      isParticipationResolved: false,
+      publicProfile: makePublicProfile(),
+    });
+
+    it("shows neither the join nor the leave control", () => {
+      renderView(pendingProps());
+
+      expect(screen.queryByRole("button", { name: /join leaderboard/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
+    });
+
+    it("does not claim the account is off the board", () => {
+      renderView(pendingProps());
+
+      expect(screen.queryByText(/not on the board yet/i)).toBeNull();
+      expect(screen.getByText(/checking your status/i)).toBeTruthy();
+    });
+
+    it("withholds Share but holds its footprint so the hero does not reflow", () => {
+      const { container } = renderView(pendingProps());
+
+      expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
+      // Two placeholders: one for the participation control, one for Share.
+      expect(container.querySelectorAll(".leaderboard-hero__participation-placeholder").length).toBe(2);
+    });
+
+    it("announces the pending participation check to assistive tech", () => {
+      renderView(pendingProps());
+
+      expect(screen.getByRole("status", { name: /checking your leaderboard participation/i })).toBeTruthy();
+    });
+
+    it("keeps the participation slot neutral even while the board is loading", () => {
+      renderView({ ...pendingProps(), isLoading: true });
+
+      expect(screen.queryByRole("button", { name: /join leaderboard/i })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^leave leaderboard$/i })).toBeNull();
+    });
+
+    it("restores the joined controls once participation resolves", () => {
+      const { rerender } = renderView(pendingProps());
+
+      expect(screen.queryByRole("button", { name: /^share$/i })).toBeNull();
+
+      rerender(
+        <LeaderboardView
+          isSupabaseEnabled
+          isSignedIn
+          isLoading={false}
+          error={null}
+          isOptedIn
+          isParticipationResolved
+          activePeriod="weekly"
+          leaderboard={[]}
+          profileDisplayName={null}
+          email={null}
+          isActionLoading={false}
+          actionError={null}
+          publicProfile={makePublicProfile()}
+          onOptIn={vi.fn()}
+          onOptOut={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole("button", { name: /^share$/i })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^leave leaderboard$/i })).toBeTruthy();
+      expect(screen.queryByText(/checking your status/i)).toBeNull();
+    });
+  });
 });

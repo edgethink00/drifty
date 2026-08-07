@@ -10,6 +10,7 @@ export type LeaderboardPageProps = {
   isActionLoading: boolean;
   isLoading: boolean;
   isOptedIn: boolean;
+  isParticipationResolved?: boolean;
   isSignedIn: boolean;
   isSupabaseEnabled: boolean;
   leaderboard: LeaderboardRow[];
@@ -35,6 +36,7 @@ export function LeaderboardPage({
   isActionLoading,
   isLoading,
   isOptedIn,
+  isParticipationResolved,
   isSignedIn,
   isSupabaseEnabled,
   leaderboard,
@@ -67,6 +69,7 @@ export function LeaderboardPage({
           isLoading={isLoading}
           error={error}
           isOptedIn={isOptedIn}
+          isParticipationResolved={isParticipationResolved}
           ownFocusSeconds={ownFocusSeconds}
           ownRank={ownRank}
           activePeriod={activePeriod}

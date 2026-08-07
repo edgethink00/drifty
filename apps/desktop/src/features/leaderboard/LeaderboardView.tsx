@@ -33,6 +33,11 @@ export type LeaderboardViewProps = {
   isLoading?: boolean;
   error?: string | null;
   isOptedIn: boolean;
+  /**
+   * False while participation is still unknown (e.g. session restore). The
+   * participation controls hold their space instead of asserting "not joined".
+   */
+  isParticipationResolved?: boolean;
   ownRank?: number | null;
   activePeriod?: LeaderboardPeriod;
   leaderboard?: LeaderboardRow[];
@@ -58,6 +63,7 @@ export function LeaderboardView({
   isLoading = false,
   error = null,
   isOptedIn,
+  isParticipationResolved = true,
   ownRank = null,
   activePeriod = "weekly",
   leaderboard = [],
@@ -152,12 +158,17 @@ export function LeaderboardView({
                       style={{ width: 77, height: 77, borderRadius: 18, fontSize: "1.68rem", flex: "0 0 auto" }}
                     />
                     <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
-                      <span className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}`} style={{ justifySelf: "start" }}>
-                        {isOptedIn
-                          ? currentUserRank !== null
-                            ? formatRank(currentUserRank)
-                            : "On the board"
-                          : "Not on the board yet"}
+                      <span
+                        className={`leaderboard-hero__status${isOptedIn ? " leaderboard-hero__status--live" : ""}${isParticipationResolved ? "" : " leaderboard-hero__status--pending"}`}
+                        style={{ justifySelf: "start" }}
+                      >
+                        {!isParticipationResolved
+                          ? "Checking your status"
+                          : isOptedIn
+                            ? currentUserRank !== null
+                              ? formatRank(currentUserRank)
+                              : "On the board"
+                            : "Not on the board yet"}
                       </span>
                       <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
                       {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
@@ -207,7 +218,15 @@ export function LeaderboardView({
               style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
             >
               <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
-                {isLoading ? (
+                {!isParticipationResolved ? (
+                  // Participation is still unknown, so the slot holds its footprint
+                  // rather than naming an action that may be the wrong one.
+                  <span
+                    className="leaderboard-hero__participation-placeholder"
+                    role="status"
+                    aria-label="Checking your leaderboard participation"
+                  />
+                ) : isLoading ? (
                   <button
                     type="button"
                     className={isOptedIn
@@ -246,7 +265,9 @@ export function LeaderboardView({
                         <EmbedIcon />
                         Embed
                       </button>
-                      {isOptedIn ? (
+                      {!isParticipationResolved ? (
+                        <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
+                      ) : isOptedIn ? (
                         <button type="button" className="ghost-button profile-btn hero-action-btn" disabled>
                           <ShareIcon />
                           Share
@@ -271,7 +292,9 @@ export function LeaderboardView({
                       <EmbedIcon />
                       Embed
                     </button>
-                    {isOptedIn ? (
+                    {!isParticipationResolved ? (
+                      <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
+                    ) : isOptedIn ? (
                       <button type="button" className="ghost-button profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
                         <ShareIcon />
                         Share
