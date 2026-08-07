@@ -74,8 +74,8 @@
 }
 
 .sidebar--settings .settings-nav-item {
-  min-height: 2.28rem;
-  padding: 0.58rem 0.7rem;
+  min-height: var(--nav-item-height);
+  padding: 0 0.7rem;
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: 12.5px;

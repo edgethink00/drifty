@@ -486,9 +486,7 @@
   line-height: inherit;
 }
 
-.nav-item.nav-item--period {
-  padding-block: 8px;
-}
+/* Period rows share the common nav row height (--nav-item-height). */
 
 .sidebar-nav--periods {
   margin-bottom: 16px;

@@ -89,9 +89,9 @@
   background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
+/* Row height/padding are owned by `.sidebar--settings .settings-nav-item`
+   in settings.css via --nav-item-height. Keep visual-only rules here. */
 .content--settings .settings-nav-item {
-  min-height: 2.2rem;
-  padding: 0.56rem 0.72rem;
   border-radius: 12px;
   color: color-mix(in srgb, var(--text) 78%, transparent);
   font-family: var(--font-sans);
@@ -173,9 +173,7 @@
   }
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav-item {
-    min-height: 2.05rem;
     min-width: 0;
-    padding: 0.5rem 0.7rem;
     text-align: center;
     white-space: nowrap;
   }

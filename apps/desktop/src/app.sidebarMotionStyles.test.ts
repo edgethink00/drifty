@@ -26,11 +26,14 @@ describe("sidebar motion styles", () => {
   it("keeps one-line dashboard period items on the primary nav vertical rhythm", () => {
     const styles = readStyles();
     const navItemBlock = cssBlock(styles, ".nav-item");
-    const periodBlock = cssBlock(styles, ".nav-item.nav-item--period");
     const periodTextBlock = cssBlock(styles, ".nav-item--period > span:not(.nav-item__hover-label)");
 
-    expect(navItemBlock).toContain("padding: 8px 10px;");
-    expect(periodBlock).toContain("padding-block: 8px;");
+    // Row height now comes from the shared --nav-item-height token, so period
+    // rows inherit the primary nav rhythm instead of re-declaring their own
+    // vertical padding.
+    expect(navItemBlock).toContain("min-height: var(--nav-item-height);");
+    expect(navItemBlock).toContain("padding: 0 10px;");
+    expect(styles).not.toMatch(/\.nav-item\.nav-item--period\s*\{[^}]*padding-block/);
     expect(periodTextBlock).toContain("line-height: inherit;");
   });
 
