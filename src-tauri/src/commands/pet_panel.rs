@@ -116,10 +116,19 @@ pub fn show_pet_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), Str
     window.show().map_err(|error| error.to_string())
 }
 
-fn pet_drag_position(window_x: i32, window_y: i32, pointer_dx: f64, pointer_dy: f64) -> (i32, i32) {
+use std::time::{Duration, Instant};
+
+/// New window origin that keeps the initial grab offset attached to the
+/// pointer. All values share one coordinate space; the caller feeds Cocoa
+/// global points so no y-flip or scale conversion is needed.
+fn pet_drag_origin(
+    start_origin: (f64, f64),
+    start_mouse: (f64, f64),
+    mouse: (f64, f64),
+) -> (f64, f64) {
     (
-        window_x.saturating_add(pointer_dx.round() as i32),
-        window_y.saturating_add(pointer_dy.round() as i32),
+        start_origin.0 + (mouse.0 - start_mouse.0),
+        start_origin.1 + (mouse.1 - start_mouse.1),
     )
 }
 
@@ -131,11 +140,16 @@ fn is_pet_drag_delta(pointer_dx: f64, pointer_dy: f64) -> bool {
 
 /// Track the real pointer without occupying AppKit's main thread. The earlier
 /// nested AppKit event loop moved the non-activating panel correctly, but it
-/// starved WebKit's layer commits for the full gesture. As a result the
-/// approved pickup pose was not composited until mouse-up, immediately before
-/// the release pose replaced it. Sampling global physical coordinates keeps
-/// the grab point exact across negative/mixed-scale display origins while the
-/// normal main run loop remains free to render the sprite transition.
+/// starved WebKit's layer commits for the full gesture, so the pickup pose was
+/// never composited before mouse-up.
+///
+/// This version keeps the gesture loop on a background thread but applies the
+/// position on the AppKit main thread, where each apply block samples the
+/// freshest `NSEvent.mouseLocation` itself and calls `setFrameOrigin`
+/// directly. A single in-flight flag coalesces dispatches: the background
+/// loop only paces the applies, so the panel updates at whatever cadence the
+/// main thread can actually paint with effectively zero sampling lag, and
+/// there is no fixed-interval throttle to beat against the display refresh.
 #[cfg(target_os = "macos")]
 pub fn perform_pet_panel_drag(
     app: &AppHandle,
@@ -144,8 +158,10 @@ pub fn perform_pet_panel_drag(
     _start_client_y: f64,
     pickup_delay_ms: u64,
 ) -> Result<bool, String> {
-    use std::time::{Duration, Instant};
-    use tauri::{PhysicalPosition, Position};
+    use objc2_app_kit::{NSEvent, NSWindow};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc::sync_channel;
+    use std::sync::Arc;
 
     #[link(name = "ApplicationServices", kind = "framework")]
     unsafe extern "C" {
@@ -154,9 +170,83 @@ pub fn perform_pet_panel_drag(
 
     const COMBINED_SESSION_STATE: u32 = 0;
     const LEFT_MOUSE_BUTTON: u32 = 0;
+    const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(250);
+
     let start_pointer = app.cursor_position().map_err(|error| error.to_string())?;
-    let start_window = window.outer_position().map_err(|error| error.to_string())?;
-    let mut last_window = start_window;
+
+    // Capture the drag anchor (window origin + pointer) in Cocoa global
+    // points on the main thread so every later apply is a pure delta in one
+    // coordinate space, exact across negative/mixed-scale display origins.
+    let anchor = {
+        let (sender, receiver) = sync_channel(1);
+        let window_for_anchor = window.clone();
+        app.run_on_main_thread(move || {
+            let result = (|| {
+                let ptr = window_for_anchor.ns_window().ok()?;
+                // SAFETY: Tauri retains this NSWindow and the block runs on
+                // AppKit's main thread.
+                let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
+                let origin = ns_window.frame().origin;
+                let mouse = NSEvent::mouseLocation();
+                Some(((origin.x, origin.y), (mouse.x, mouse.y)))
+            })();
+            let _ = sender.send(result);
+        })
+        .map_err(|error| error.to_string())?;
+        receiver
+            .recv_timeout(MAIN_THREAD_TIMEOUT)
+            .map_err(|_| "Pet Mode drag anchor capture timed out".to_string())?
+            .ok_or_else(|| "Pet Mode drag anchor is unavailable".to_string())?
+    };
+    let (anchor_origin, anchor_mouse) = anchor;
+
+    // Coalesce main-thread applies: at most one block is queued at a time, so
+    // a busy main thread never accumulates a backlog of stale positions.
+    let apply_in_flight = Arc::new(AtomicBool::new(false));
+    let dispatch_apply = |wait_for_completion: bool| -> Result<(), String> {
+        if apply_in_flight
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Ok(());
+        }
+        let flag = Arc::clone(&apply_in_flight);
+        let window_for_apply = window.clone();
+        let completion = if wait_for_completion {
+            Some(sync_channel::<()>(1))
+        } else {
+            None
+        };
+        let completion_sender = completion.as_ref().map(|(sender, _)| sender.clone());
+        app.run_on_main_thread(move || {
+            if let Ok(ptr) = window_for_apply.ns_window() {
+                // SAFETY: Tauri retains this NSWindow and the block runs on
+                // AppKit's main thread.
+                let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
+                let mouse = NSEvent::mouseLocation();
+                let (x, y) = pet_drag_origin(anchor_origin, anchor_mouse, (mouse.x, mouse.y));
+                let current = ns_window.frame().origin;
+                // Skip no-op moves so a stationary held pointer does not spam
+                // AppKit with redundant frame notifications.
+                if (x - current.x).abs() >= 0.01 || (y - current.y).abs() >= 0.01 {
+                    ns_window.setFrameOrigin(objc2_foundation::NSPoint::new(x, y));
+                }
+            }
+            flag.store(false, Ordering::Release);
+            if let Some(sender) = completion_sender {
+                let _ = sender.send(());
+            }
+        })
+        .map_err(|error| {
+            apply_in_flight.store(false, Ordering::Release);
+            error.to_string()
+        })?;
+        if let Some((_, receiver)) = completion {
+            let _ = receiver.recv_timeout(MAIN_THREAD_TIMEOUT);
+        }
+        Ok(())
+    };
+
     let mut moved = false;
     let mut pickup_started_at: Option<Instant> = None;
     let pickup_delay = Duration::from_millis(pickup_delay_ms.min(500));
@@ -165,8 +255,6 @@ pub fn perform_pet_panel_drag(
         let pointer = app.cursor_position().map_err(|error| error.to_string())?;
         let dx = pointer.x - start_pointer.x;
         let dy = pointer.y - start_pointer.y;
-        let (x, y) = pet_drag_position(start_window.x, start_window.y, dx, dy);
-        let next_window = PhysicalPosition::new(x, y);
         if !moved && is_pet_drag_delta(dx, dy) {
             moved = true;
             pickup_started_at = Some(Instant::now());
@@ -181,11 +269,8 @@ pub fn perform_pet_panel_drag(
         }
         let pickup_finished =
             pickup_started_at.is_some_and(|started_at| started_at.elapsed() >= pickup_delay);
-        if pickup_finished && next_window != last_window {
-            window
-                .set_position(Position::Physical(next_window))
-                .map_err(|error| error.to_string())?;
-            last_window = next_window;
+        if pickup_finished {
+            dispatch_apply(false)?;
         }
         // SAFETY: CGEventSourceButtonState is a process-independent CoreGraphics
         // query and accepts the documented combined-session/left-button enum
@@ -195,14 +280,20 @@ pub fn perform_pet_panel_drag(
         if !pressed {
             // A fast real drag may finish before the visual pickup hold. Keep
             // its full pointer delta instead of degrading it into a click.
-            if moved && next_window != last_window {
-                window
-                    .set_position(Position::Physical(next_window))
-                    .map_err(|error| error.to_string())?;
+            if moved {
+                // Drain any in-flight coalesced apply so the waiting settle
+                // below is guaranteed to be dispatched, not skipped.
+                let drain_deadline = Instant::now() + MAIN_THREAD_TIMEOUT;
+                while apply_in_flight.load(Ordering::Acquire) && Instant::now() < drain_deadline {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+                // Final settle: wait for the apply so the mouse-up position is
+                // committed before the command reports the end coordinates.
+                dispatch_apply(true)?;
             }
             break;
         }
-        std::thread::sleep(Duration::from_millis(8));
+        std::thread::sleep(Duration::from_millis(4));
     }
 
     Ok(moved)
@@ -222,11 +313,13 @@ pub fn perform_pet_panel_drag(
 
 #[cfg(test)]
 mod tests {
-    use super::{is_pet_drag_delta, pet_drag_position};
+    use super::{is_pet_drag_delta, pet_drag_origin};
 
     #[test]
     fn native_drag_preserves_the_exact_pointer_delta() {
-        assert_eq!(pet_drag_position(-1884, -406, 132.2, 56.4), (-1752, -350));
+        let (x, y) = pet_drag_origin((-1884.0, -406.0), (10.0, 20.0), (142.2, 76.4));
+        assert!((x - (-1751.8)).abs() < 1e-9);
+        assert!((y - (-349.6)).abs() < 1e-9);
     }
 
     #[test]
@@ -240,5 +333,14 @@ mod tests {
     fn drag_starts_only_when_the_physical_threshold_is_crossed() {
         assert!(is_pet_drag_delta(7.0, 0.0));
         assert!(is_pet_drag_delta(5.0, 5.0));
+    }
+
+    #[test]
+    fn a_grab_offset_stays_attached_to_the_pointer() {
+        // Pointer returns to its anchor -> origin returns to its anchor.
+        assert_eq!(
+            pet_drag_origin((300.0, 500.0), (350.0, 520.0), (350.0, 520.0)),
+            (300.0, 500.0)
+        );
     }
 }
