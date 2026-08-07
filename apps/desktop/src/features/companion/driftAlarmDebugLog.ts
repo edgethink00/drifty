@@ -81,6 +81,8 @@ export type DriftAlarmDebugSegmentSummary = {
   readonly browserName: string | null;
   readonly siteDomain: string | null;
   readonly youtubeVideoId: string | null;
+  readonly youtubeIsShorts: boolean | null;
+  readonly youtubeUrlPathKind: YouTubeUrlPathKind;
   readonly hasSiteContext: boolean;
   readonly siteSource: string | null;
   readonly browserAutomationStatus: string | null;
@@ -98,6 +100,8 @@ export type DriftAlarmDebugSnapshotSummary = {
   readonly browserName: string | null;
   readonly siteDomain: string | null;
   readonly youtubeVideoId: string | null;
+  readonly youtubeIsShorts: boolean | null;
+  readonly youtubeUrlPathKind: YouTubeUrlPathKind;
   readonly hasSiteContext: boolean;
   readonly siteSource: string | null;
   readonly captureConfidence: number | null;
@@ -235,6 +239,8 @@ export function summarizeDriftAlarmSegment(segment: ActivitySegment, sourceSegme
     browserName: normalizeText(segment.browserName),
     siteDomain: normalizeText(segment.siteDomain),
     youtubeVideoId: normalizeText(segment.youtubeVideoId),
+    youtubeIsShorts: segment.youtubeIsShorts ?? null,
+    youtubeUrlPathKind: youtubeUrlPathKind(segment),
     hasSiteContext: hasSiteContext(segment),
     siteSource: normalizeText(segment.siteSource),
     browserAutomationStatus: normalizeText(segment.browserAutomationStatus),
@@ -266,6 +272,8 @@ export function summarizeDriftAlarmSnapshot(snapshot: CurrentActivitySnapshot | 
     browserName: normalizeText(snapshot.browserName),
     siteDomain: normalizeText(snapshot.siteDomain),
     youtubeVideoId: normalizeText(snapshot.youtubeVideoId),
+    youtubeIsShorts: snapshot.youtubeIsShorts ?? null,
+    youtubeUrlPathKind: youtubeUrlPathKind(snapshot),
     hasSiteContext: hasSiteContext(snapshot),
     siteSource: normalizeText(snapshot.siteSource),
     captureConfidence: finiteNumberOrNull(snapshot.captureConfidence),
@@ -404,6 +412,50 @@ function pruneRecentEvents(events: readonly DriftAlarmDebugEvent[], nowMs: numbe
 
 function hasSiteContext(surface: ActivitySegment | CurrentActivitySnapshot): boolean {
   return Boolean(surface.siteDomain?.trim() || surface.siteUrl?.trim() || surface.youtubeVideoId?.trim());
+}
+
+/**
+ * Shape of a YouTube URL path, without the URL itself.
+ *
+ * Shorts classification keys off the first path segment, so a diagnosis needs
+ * to know which shape was captured. Logging the raw `siteUrl` would put full
+ * browsing URLs into an exportable file, so record only the discriminator the
+ * classifier actually reads.
+ */
+export type YouTubeUrlPathKind =
+  | "shorts"
+  | "watch"
+  | "embed"
+  | "live"
+  | "root"
+  | "other"
+  | "missing_url"
+  | "unparsable"
+  | "not_youtube";
+
+export function youtubeUrlPathKind(surface: Pick<ActivitySegment, "siteDomain" | "siteUrl">): YouTubeUrlPathKind {
+  const rawUrl = surface.siteUrl?.trim();
+  const domain = surface.siteDomain?.trim()?.toLowerCase().replace(/^www\./, "");
+  const youtubeDomains = new Set(["youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"]);
+  if (!rawUrl) return domain && youtubeDomains.has(domain) ? "missing_url" : "not_youtube";
+
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return "unparsable";
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
+  if (!youtubeDomains.has(host)) return "not_youtube";
+
+  const [firstPart] = parsed.pathname.split("/").filter(Boolean);
+  if (!firstPart) return "root";
+  if (firstPart === "shorts") return "shorts";
+  if (firstPart === "embed") return "embed";
+  if (firstPart === "live") return "live";
+  if (firstPart === "watch") return "watch";
+  return "other";
 }
 
 function normalizeRecordedAt(value: string | undefined, fallback: Date): string {

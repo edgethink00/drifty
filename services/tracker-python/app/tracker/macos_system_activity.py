@@ -67,6 +67,18 @@ def row_name(row: OnScreenWindowRow) -> str:
     return (row["name"] or "").strip()
 
 
+def has_readable_window_names(rows: Sequence[OnScreenWindowRow]) -> bool:
+    """Report whether this process can actually read window names.
+
+    ``kCGWindowName`` is only populated when Screen Recording permission is
+    granted. Without it every row arrives with a ``None`` name, which is
+    indistinguishable from a genuinely untitled window once ``row_name``
+    collapses both to ``""``. Any marker that treats "no name" as evidence must
+    first confirm names are observable at all.
+    """
+    return any(row["name"] is not None for row in rows)
+
+
 def is_dock_window(row: OnScreenWindowRow) -> bool:
     return row["owner_name"] == "Dock"
 
@@ -76,12 +88,19 @@ def is_mission_control_marker(row: OnScreenWindowRow) -> bool:
 
 
 def is_app_switcher_marker(row: OnScreenWindowRow) -> bool:
-    return is_dock_window(row) and row["layer"] == 20 and row_name(row) == ""
+    # Layer 20 is the Dock's own window level, so a permanently visible Dock
+    # also sits here. The empty name is what separates the switcher overlay
+    # from the Dock itself -- but an unreadable name is not an empty one, so
+    # require a real "" rather than a missing value.
+    return is_dock_window(row) and row["layer"] == 20 and row["name"] is not None and row_name(row) == ""
 
 
 def system_transient_activity_from_rows(rows: Sequence[OnScreenWindowRow]) -> SystemTransientActivity | None:
     if any(is_mission_control_marker(row) for row in rows):
         return "mission_control"
-    if any(is_app_switcher_marker(row) for row in rows):
+    # Without readable names the switcher is undetectable. Suppressing drift
+    # alarms forever is far worse than missing a brief switcher overlay, so
+    # report "nothing transient" instead of guessing.
+    if has_readable_window_names(rows) and any(is_app_switcher_marker(row) for row in rows):
         return "app_switcher"
     return None

@@ -52,6 +52,58 @@ function segment(overrides: Partial<ActivitySegment> = {}): ActivitySegment {
 }
 
 describe("drift alarm debug log", () => {
+  it("records the YouTube path shape and shorts flag a classification depends on", () => {
+    // A Shorts session that reaches the classifier without `youtubeIsShorts`
+    // is graded as a plain video, so the export must show whether the signal
+    // survived capture and which URL shape produced it.
+    const shorts = summarizeDriftAlarmSegment(segment({
+      siteDomain: "youtube.com",
+      siteUrl: "https://www.youtube.com/shorts/ShortQA0001",
+      youtubeVideoId: "ShortQA0001",
+      youtubeIsShorts: true,
+    }));
+    expect(shorts.youtubeUrlPathKind).toBe("shorts");
+    expect(shorts.youtubeIsShorts).toBe(true);
+
+    const watch = summarizeDriftAlarmSegment(segment({
+      siteDomain: "youtube.com",
+      siteUrl: "https://www.youtube.com/watch?v=ShortQA0001",
+      youtubeVideoId: "ShortQA0001",
+      youtubeIsShorts: false,
+    }));
+    expect(watch.youtubeUrlPathKind).toBe("watch");
+    expect(watch.youtubeIsShorts).toBe(false);
+  });
+
+  it("separates a missing YouTube URL from a non-YouTube surface", () => {
+    // This is the exact ambiguity that blocked the Shorts diagnosis: the
+    // export showed a youtube.com domain but no way to tell whether the URL
+    // was never captured.
+    const missingUrl = summarizeDriftAlarmSegment(segment({
+      siteDomain: "youtube.com",
+      youtubeVideoId: "ShortQA0001",
+    }));
+    expect(missingUrl.youtubeUrlPathKind).toBe("missing_url");
+    expect(missingUrl.youtubeIsShorts).toBeNull();
+
+    const other = summarizeDriftAlarmSegment(segment({
+      siteDomain: "example.com",
+      siteUrl: "https://example.com/watch",
+    }));
+    expect(other.youtubeUrlPathKind).toBe("not_youtube");
+  });
+
+  it("never puts a raw browsing URL into the exported summary", () => {
+    // The debug log is user-exportable, so the privacy boundary requires the
+    // path shape rather than the URL itself.
+    const summary = summarizeDriftAlarmSegment(segment({
+      siteDomain: "youtube.com",
+      siteUrl: "https://www.youtube.com/shorts/ShortQA0001?feature=share",
+    }));
+    expect(JSON.stringify(summary)).not.toContain("feature=share");
+    expect(JSON.stringify(summary)).not.toContain("https://");
+  });
+
   it("keeps only the recent five minute alarm diagnostics", () => {
     const storage = new MemoryStorage();
     const oldDate = new Date("2026-06-13T15:00:00.000Z");

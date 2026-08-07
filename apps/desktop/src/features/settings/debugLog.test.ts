@@ -75,6 +75,8 @@ const driftAlarmDebugEvent: DriftAlarmDebugEvent = {
     browserName: "Google Chrome",
     siteDomain: "youtube.com",
     youtubeVideoId: "video-1",
+    youtubeIsShorts: null,
+    youtubeUrlPathKind: "missing_url",
     hasSiteContext: true,
     siteSource: "applescript",
     captureConfidence: 0.95,

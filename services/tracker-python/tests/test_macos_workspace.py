@@ -289,6 +289,55 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertEqual(snapshot.system_transient_activity, 'app_switcher')
         mock_browser_metadata.assert_called_once_with('Google Chrome')
 
+    def test_current_snapshot_ignores_app_switcher_when_window_names_are_unreadable(self) -> None:
+        # Without Screen Recording permission every kCGWindowName arrives as
+        # None. A permanently visible Dock also lives on layer 20, so treating
+        # the missing name as "empty" reported app_switcher forever and
+        # suppressed every drift alarm.
+        unreadable_dock_rows = [
+            {"owner_name": "Dock", "layer": 20, "name": None},
+            {"owner_name": "Google Chrome", "layer": 0, "name": None},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=unreadable_dock_rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nActive tab'
+
+            snapshot = current_snapshot()
+
+        self.assertIsNone(snapshot.system_transient_activity)
+
+    def test_current_snapshot_still_detects_app_switcher_when_names_are_readable(self) -> None:
+        # A readable name elsewhere proves the empty Dock overlay name is real
+        # evidence rather than a permission artifact.
+        readable_rows = [
+            {"owner_name": "Dock", "layer": 20, "name": ""},
+            {"owner_name": "Google Chrome", "layer": 0, "name": "Active tab"},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=readable_rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nActive tab'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.system_transient_activity, 'app_switcher')
+
+    def test_current_snapshot_keeps_mission_control_without_readable_names(self) -> None:
+        # Mission Control keys off layer 18 alone, so it must stay detectable
+        # even when names are unreadable.
+        mission_control_rows = [
+            {"owner_name": "Dock", "layer": 18, "name": None},
+        ]
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._onscreen_window_rows', return_value=mission_control_rows), \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = 'Google Chrome\ncom.google.Chrome\nActive tab'
+
+            snapshot = current_snapshot()
+
+        self.assertEqual(snapshot.system_transient_activity, 'mission_control')
+
     def test_get_current_snapshot_returns_system_transient_activity(self) -> None:
         snapshot = Snapshot(
             observed_at='2026-06-14T10:00:00+00:00',
