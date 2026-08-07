@@ -78,6 +78,20 @@ describe("FlowChartView", () => {
     expect(styles).not.toContain("@keyframes flow-cell-classifying-pulse");
   });
 
+  it("folds the Unclassified label before the head reaches its stacking breakpoint", () => {
+    // The head is only meant to stack under 660px, so the chip has to shed its
+    // long word above that to keep the row on one line in between.
+    const foldedLabelRule = cssRule(".flow-chart-legend__group--unclassified .flow-chart-legend__label");
+    expect(foldedLabelRule).toContain("width: 0;");
+    // Collapsed rather than display:none so the chip keeps the height of the
+    // Focus/Neutral/Drift chips it sits beside.
+    expect(foldedLabelRule).not.toContain("display: none;");
+    const foldBreakpoint = styles.indexOf("@container (max-width: 820px)");
+    const stackBreakpoint = styles.indexOf("@container (max-width: 660px)");
+    expect(foldBreakpoint).toBeGreaterThan(-1);
+    expect(stackBreakpoint).toBeGreaterThan(-1);
+  });
+
   it("keeps category legend dots at the JEO-10 enlarged marker size", () => {
     const categoryDotRule = cssRule(".flow-chart-legend__dot");
     const toneDotRule = cssRule(".flow-chart-legend__tone-dot");

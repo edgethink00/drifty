@@ -399,3 +399,24 @@ button.flow-cell:focus {
     min-width: 0;
   }
 }
+
+/* "Unclassified" is by far the widest legend entry, so on days that do have
+   unclassified time it pushed the head onto a second line well before the
+   660px stacking breakpoint above. In that in-between band the chip keeps its
+   gray dot — which is the part that maps to the cells — and drops the word;
+   the accessible name and hover copy still carry the meaning. */
+@container (max-width: 820px) {
+  .flow-chart-legend__group--unclassified .flow-chart-legend__label {
+    /* Collapsed to zero width rather than removed from flow: the text still
+       sets the line box, so the folded chip keeps the same height as the
+       Focus/Neutral/Drift chips beside it instead of shrinking. */
+    display: inline-block;
+    width: 0;
+    overflow: hidden;
+  }
+
+  .flow-chart-legend__group--unclassified .flow-chart-legend__parent {
+    gap: 0;
+    padding-inline: 0.3rem;
+  }
+}

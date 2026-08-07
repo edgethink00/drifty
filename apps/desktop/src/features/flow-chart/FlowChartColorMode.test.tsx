@@ -85,6 +85,51 @@ describe("FlowChartView color mode", () => {
     expect(cell.classList.contains("flow-cell--unclassified-pending")).toBe(false);
   });
 
+  it("hides the Unclassified legend chip when the day has no unclassified time", () => {
+    const { rerender } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+
+    const legend = () => screen.getByLabelText("Flow chart tones");
+    expect(within(legend()).queryByText("Unclassified")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    expect(within(legend()).queryByText("Unclassified")).toBeNull();
+
+    // The chip comes back as soon as there is gray time for it to explain.
+    rerender(
+      <FlowChartView
+        blocks={[makeFlowBlock(), makeFlowBlock({ id: "flow-block-2", minuteOfDay: 14 * 60 + 3, category: "unknown", productivity: "neutral" })]}
+        appIcons={{}}
+        intervalMinutes={3}
+      />,
+    );
+    expect(within(legend()).getByText("Unclassified")).toBeTruthy();
+  });
+
+  it("keeps the empty-day legend on a single row by omitting the Unclassified chip", () => {
+    render(<FlowChartView blocks={[]} appIcons={{}} intervalMinutes={3} showEmptyGrid />);
+
+    const legend = screen.getByLabelText("Flow chart tones");
+    expect(within(legend).queryByText("Unclassified")).toBeNull();
+    expect(within(legend).getByText("Focus")).toBeTruthy();
+    expect(within(legend).getByText("Drift")).toBeTruthy();
+  });
+
+  it("keeps the Unclassified chip nameable when narrow layouts hide its label", () => {
+    // The visible word is dropped by a container query at narrow widths, so the
+    // meaning has to survive on the chip itself rather than the text node.
+    render(
+      <FlowChartView
+        blocks={[makeFlowBlock({ category: "unknown", productivity: "neutral" })]}
+        appIcons={{}}
+        intervalMinutes={3}
+      />,
+    );
+
+    const legend = screen.getByLabelText("Flow chart tones");
+    expect(within(legend).getByLabelText("Unclassified")).toBeTruthy();
+    expect(legend.querySelector(".flow-chart-legend__group--unclassified .flow-chart-legend__label")?.textContent).toBe("Unclassified");
+  });
+
   it("offers a Project color mode only when project data is available and colors cells by project", () => {
     const blocks = [
       makeFlowBlock({ minuteOfDay: 14 * 60, projectColor: "#112233" }),

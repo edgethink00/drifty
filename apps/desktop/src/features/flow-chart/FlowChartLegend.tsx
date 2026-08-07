@@ -71,20 +71,27 @@ export function FlowChartLegend({
     y: event.clientY,
   });
   const unclassifiedToneStyle: FlowLegendToneStyle = { "--flow-legend-tone": CATEGORY_COLORS.unknown };
-  const unclassifiedLegend = (
+  /* The Unclassified chip is the widest entry in the row, so keeping it on for
+     days that have no unclassified time pushed the head into a second line at
+     normal window sizes (the head is only meant to stack under the narrow
+     container breakpoint). It also only explains something the user can
+     actually see, so it rides along with the gray cells it describes. */
+  const hasUnclassifiedBlocks = blocks.some((block) => block.category === "unknown");
+  const unclassifiedLegend = hasUnclassifiedBlocks ? (
     <span className="flow-chart-legend__group flow-chart-legend__group--unclassified">
       <span
         className="flow-chart-legend__parent flow-chart-legend__parent--tone"
+        aria-label={categoryLabel("unknown")}
         onMouseEnter={(event) => showLegendHover(event, categoryLabel("unknown"), "Not classified yet", (block) => block.category === "unknown")}
         onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
         onMouseLeave={() => setHoveredLegend(null)}
         title="Unclassified blocks"
       >
         <span className="flow-chart-legend__tone-dot" style={unclassifiedToneStyle} />
-        {categoryLabel("unknown")}
+        <span className="flow-chart-legend__label">{categoryLabel("unknown")}</span>
       </span>
     </span>
-  );
+  ) : null;
 
   return (
     <div className="flow-chart-legend" aria-label="Flow chart tones">
