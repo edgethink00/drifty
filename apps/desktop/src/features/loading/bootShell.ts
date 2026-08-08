@@ -1,4 +1,5 @@
-export const BOOT_SHELL_PREVIEW_DURATION_MS = 3_000;
+export const BOOT_SHELL_PREVIEW_DURATION_MS = 7_000;
+export const BOOT_SHELL_PREVIEW_DURATION_SECONDS = BOOT_SHELL_PREVIEW_DURATION_MS / 1_000;
 
 let previewTimeoutId: number | null = null;
 
@@ -15,20 +16,27 @@ export function hideBootShell(): void {
 
   shell.hidden = true;
   shell.setAttribute("aria-hidden", "true");
+  shell.setAttribute("aria-busy", "false");
   delete shell.dataset.bootPreview;
 }
 
 export function showBootShellPreview(): boolean {
   const shell = document.getElementById("boot-shell");
   const status = document.getElementById("boot-status");
-  if (!shell || !status) return false;
+  const visibleStatus = document.getElementById("boot-status-visible");
+  if (!shell || !status || !visibleStatus) return false;
 
   if (previewTimeoutId !== null) window.clearTimeout(previewTimeoutId);
 
-  status.textContent = "drifty loading…";
+  status.textContent = "Loading Drifty…";
+  visibleStatus.textContent = "drifty loading…";
+  visibleStatus.style.animation = "none";
+  void visibleStatus.offsetWidth;
+  visibleStatus.style.removeProperty("animation");
   document.documentElement.dataset.bootActive = "true";
   shell.hidden = false;
   shell.removeAttribute("aria-hidden");
+  shell.setAttribute("aria-busy", "true");
   shell.dataset.bootPreview = "true";
 
   previewTimeoutId = window.setTimeout(() => {

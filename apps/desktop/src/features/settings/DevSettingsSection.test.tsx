@@ -42,6 +42,7 @@ vi.mock("../../appFeatureSwitches", () => ({
 }));
 
 vi.mock("../loading/bootShell", () => ({
+  BOOT_SHELL_PREVIEW_DURATION_SECONDS: 7,
   showBootShellPreview: bootShellActions.showBootShellPreview,
 }));
 
@@ -164,10 +165,10 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
   });
 
-  it("previews the real startup loading screen for three seconds", () => {
+  it("previews the real startup loading screen for seven seconds", () => {
     renderProductionDevSettings();
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview 3 seconds" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview 7 seconds" }));
 
     expect(screen.getByText("Startup loading screen")).toBeTruthy();
     expect(bootShellActions.showBootShellPreview).toHaveBeenCalledTimes(1);

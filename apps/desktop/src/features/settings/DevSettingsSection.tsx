@@ -25,7 +25,7 @@ import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import type { PetModeLabAction, PetModeLabState, PetModePreviewAction } from "../pet-mode/petModeData";
-import { showBootShellPreview } from "../loading/bootShell";
+import { BOOT_SHELL_PREVIEW_DURATION_SECONDS, showBootShellPreview } from "../loading/bootShell";
 import type {
   CompanionMilestonePreviewId,
   CompanionMomentPreviewId,
@@ -383,7 +383,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Startup loading screen</div>
-            <div className="desc">Show the real startup loading screen over the app for three seconds.</div>
+            <div className="desc">Show the real startup loading screen over the app for {BOOT_SHELL_PREVIEW_DURATION_SECONDS} seconds.</div>
           </div>
           <div className="ctrl">
             <button
@@ -391,7 +391,7 @@ export function DevSettingsSection({
               className="settings-btn"
               onClick={() => { showBootShellPreview(); }}
             >
-              Preview 3 seconds
+              Preview {BOOT_SHELL_PREVIEW_DURATION_SECONDS} seconds
             </button>
           </div>
         </div>

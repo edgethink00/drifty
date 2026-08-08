@@ -130,34 +130,62 @@
         display: none;
       }
       .boot-loading__content {
+        position: relative;
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 11.4px;
         animation: boot-breathe 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
       }
       .boot-loading__mark {
-        width: 51.681px;
-        height: 51.681px;
+        width: 56.8491px;
+        height: 56.8491px;
         display: block;
         filter: var(--boot-mark-filter);
         opacity: 0.72;
       }
       .boot-loading {
+        position: absolute;
+        top: calc(100% + 11.4px);
+        white-space: nowrap;
         color: color-mix(in srgb, var(--boot-text) 72%, transparent);
-        font-size: 17.325px;
+        font-size: 15.5925px;
         font-weight: 500;
         letter-spacing: 0.01em;
         line-height: 1.4;
+        animation: boot-status-reveal 220ms ease-out 3.5s both;
+      }
+      .boot-sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
       @keyframes boot-breathe {
         0%, 100% { opacity: 0.62; }
         50%      { opacity: 0.82; }
       }
+      @keyframes boot-status-reveal {
+        from {
+          opacity: 0;
+          transform: translateY(2px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
         .boot-loading__content {
           animation: none;
           opacity: 0.72;
+        }
+        .boot-loading {
+          animation-duration: 1ms;
         }
       }
       .boot-error {
@@ -229,10 +257,11 @@
       <div class="boot-window-drag-strip" data-tauri-drag-region aria-hidden="true"></div>
       <div class="boot-loading__content">
         <img class="boot-loading__mark" src="/src/assets/drifty-mark.svg" alt="" aria-hidden="true" />
-        <span id="boot-status" class="boot-loading" role="status" aria-live="polite">drifty loading&hellip;</span>
+        <span id="boot-status" class="boot-sr-only" role="status" aria-live="polite">Loading Drifty&hellip;</span>
+        <span id="boot-status-visible" class="boot-loading" aria-hidden="true">drifty loading&hellip;</span>
       </div>
     </div>
-    <div id="boot-error" class="boot-error"></div>
+    <div id="boot-error" class="boot-error" role="alert" aria-live="assertive"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

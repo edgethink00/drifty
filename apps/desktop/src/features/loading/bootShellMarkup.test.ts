@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 describe("boot shell markup", () => {
   const indexSource = readFileSync("index.html", "utf8");
 
-  it("renders the Drifty symbol above the branded loading copy", () => {
+  it("renders the Drifty symbol with accessible and delayed visible loading copy", () => {
     const shellStart = indexSource.indexOf('<div id="boot-shell"');
     const shellEnd = indexSource.indexOf('<div id="boot-error"');
     const bootShell = indexSource.slice(shellStart, shellEnd);
@@ -13,10 +13,13 @@ describe("boot shell markup", () => {
     expect(bootShell).toContain('class="boot-window-drag-strip" data-tauri-drag-region');
     expect(bootShell).toContain('src="/src/assets/drifty-mark.svg"');
     expect(bootShell).toContain('class="boot-loading__mark"');
-    expect(bootShell).toContain('id="boot-status"');
+    expect(bootShell).toContain('id="boot-status" class="boot-sr-only" role="status" aria-live="polite"');
+    expect(bootShell).toContain("Loading Drifty&hellip;");
+    expect(bootShell).toContain('id="boot-status-visible" class="boot-loading" aria-hidden="true"');
     expect(bootShell).toContain("drifty loading&hellip;");
     expect(indexSource).not.toContain("drifty still loading");
     expect(bootShell.indexOf("boot-loading__mark")).toBeLessThan(bootShell.indexOf("boot-status"));
+    expect(indexSource).toContain('<div id="boot-error" class="boot-error" role="alert" aria-live="assertive"></div>');
   });
 
   it("shows the native window behind the loading canvas without exposing the mounted app", () => {
@@ -30,10 +33,11 @@ describe("boot shell markup", () => {
     expect(indexSource).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*{[^}]*\.boot-loading__content\s*{[^}]*animation:\s*none;/s);
   });
 
-  it("uses the requested boot spacing, mark size, and loading-copy size", () => {
-    expect(indexSource).toMatch(/\.boot-loading__content\s*{[^}]*gap:\s*11\.4px;/s);
-    expect(indexSource).toMatch(/\.boot-loading__mark\s*{[^}]*width:\s*51\.681px;[^}]*height:\s*51\.681px;/s);
-    expect(indexSource).toMatch(/\.boot-loading\s*{[^}]*font-size:\s*17\.325px;/s);
+  it("centers the enlarged mark and reveals smaller loading copy after 3.5 seconds", () => {
+    expect(indexSource).toMatch(/\.boot-loading__content\s*\{[^}]*position:\s*relative;/s);
+    expect(indexSource).toMatch(/\.boot-loading__mark\s*\{[^}]*width:\s*56\.8491px;[^}]*height:\s*56\.8491px;/s);
+    expect(indexSource).toMatch(/\.boot-loading\s*\{[^}]*position:\s*absolute;[^}]*top:\s*calc\(100% \+ 11\.4px\);[^}]*font-size:\s*15\.5925px;[^}]*animation:\s*boot-status-reveal 220ms ease-out 3\.5s both;/s);
+    expect(indexSource).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^}]*\.boot-loading__content\s*\{[^}]*animation:\s*none;[^}]*\}[^}]*\.boot-loading\s*\{[^}]*animation-duration:\s*1ms;/s);
   });
 
   it("keeps the boot shell out of companion windows", () => {
