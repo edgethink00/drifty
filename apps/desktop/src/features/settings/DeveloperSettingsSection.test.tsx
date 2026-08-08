@@ -56,10 +56,12 @@ describe("DeveloperSettingsSection", () => {
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 
     expect(await screen.findByRole("button", { name: /Install CLI: Command line tools/i })).toBeTruthy();
+    expect(screen.queryByText("Not installed")).toBeNull();
     expect(screen.getByRole("button", { name: "Add skill to…" })).toBeTruthy();
+    expect(screen.getByText("Command line tools")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "CLI" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Agent skill" })).toBeTruthy();
-    expect(screen.getAllByText("drifty summary --day 2026-08-04").length).toBe(2);
+    expect(screen.getAllByText("drifty summary --day 2026-08-04").length).toBe(1);
     expect(screen.getByText("drifty search --query \"CLI\"")).toBeTruthy();
     expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
     expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
@@ -109,8 +111,21 @@ describe("DeveloperSettingsSection", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Cursor.*~\/\.cursor\/skills.*Add/i }));
 
     await waitFor(() => expect(client.installSkill).toHaveBeenCalledWith("cursor"));
-    expect(screen.getByRole("heading", { name: "Cursor agent skill" })).toBeTruthy();
+    expect(screen.getByText("Cursor agent skill")).toBeTruthy();
     expect(screen.getByText("~/.cursor/skills/drifty")).toBeTruthy();
+  });
+
+  it("closes the agent picker on Escape and returns focus to its trigger", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status())} />);
+
+    const trigger = await screen.findByRole("button", { name: "Add skill to…" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu", { name: "All agents" })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "All agents" })).toBeNull());
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("removes only the selected installed agent skill", async () => {

@@ -123,33 +123,20 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
 
   return (
     <div className="settings-section settings-section--developer">
-      <header className="developer-page-header">
+      <div className="settings-block">
         <h3>{t("settings.section.developer")}</h3>
-      </header>
-
-      <section className="developer-group" aria-labelledby="developer-cli-heading">
-        <div className="developer-section-heading">
-          <h4 id="developer-cli-heading">{t("settings.developer.cliSectionTitle")}</h4>
-        </div>
-
-        <div className="developer-cli-hero">
-          <TerminalPreview />
-          <div className="developer-cli-hero__content">
-            <div>
-              <p>{t("settings.developer.cliDescription")}</p>
-            </div>
-            {cliStatus?.state === "installed" ? (
-              <PathControl
-                compact
-                path={SHELL_STARTUP_LINE}
-                copied={copiedValue === SHELL_STARTUP_LINE}
-                label={t("settings.developer.shellStartupLabel")}
-                onCopy={() => void copy(SHELL_STARTUP_LINE)}
-                copyLabel={t("settings.developer.copyPath")}
-                copiedLabel={t("settings.developer.copied")}
-              />
-            ) : null}
-            {cliStatus?.message ? <p className="developer-artifact-message" role="status">{cliStatus.message}</p> : null}
+        <h4 className="developer-subheading">{t("settings.developer.cliSectionTitle")}</h4>
+        {/* Terminal figure sits above the copy and the install action. */}
+        <div className="settings-row settings-row--fallback settings-row--group-start developer-cli-row">
+          <div className="developer-cli-row__figure">
+            <CommandPreview t={t} />
+          </div>
+          <div className="developer-cli-row__copy">
+            <div className="lbl">{t("settings.developer.cliTitle")}</div>
+            <div className="desc">{t("settings.developer.cliDescription")}</div>
+            {cliStatus?.message ? <div className="desc developer-note developer-note--warn" role="status">{cliStatus.message}</div> : null}
+          </div>
+          <div className="ctrl settings-row__actions">
             <ArtifactActions
               artifact="cli"
               status={cliStatus}
@@ -166,41 +153,45 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
             />
           </div>
         </div>
-
-        <div className="developer-command-list" aria-label={t("settings.developer.examplesLabel")}>
-          {CLI_EXAMPLES.map(({ command, descriptionKey }) => (
-            <div className="developer-command-row" key={command}>
-              <div className="developer-command-row__content">
-                <code>{command}</code>
-                <span>{t(descriptionKey)}</span>
+        {cliStatus?.state === "installed" ? (
+          <div className="settings-row">
+            <div>
+              <div className="lbl">{t("settings.developer.shellStartupLabel")}</div>
+              <div className="desc">
+                <CodeValue
+                  value={SHELL_STARTUP_LINE}
+                  copied={copiedValue === SHELL_STARTUP_LINE}
+                  copyLabel={t("settings.developer.copyPath")}
+                  copiedLabel={t("settings.developer.copied")}
+                  onCopy={() => void copy(SHELL_STARTUP_LINE)}
+                />
               </div>
             </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="developer-group" aria-labelledby="developer-skill-heading">
-        <div className="developer-section-heading">
-          <h4 id="developer-skill-heading">{t("settings.developer.skillSectionTitle")}</h4>
-        </div>
-        <div className="developer-skill-card">
-          <div className="developer-skill-card__content">
-            <div>
-              <h5>{`${t(selectedTarget.nameKey)} ${t("settings.developer.agentSkillSuffix")}`}</h5>
-              <p>{t("settings.developer.skillDescription")}</p>
-            </div>
-            <PathControl
-              path={skillPath}
-              copied={copiedValue === skillPath}
-              label={t("settings.developer.skillPathLabel")}
-              onCopy={() => void copy(skillPath)}
-              copyLabel={t("settings.developer.copyPath")}
-              copiedLabel={t("settings.developer.copied")}
-            />
-            <p className="developer-artifact-privacy">{t("settings.developer.skillPrivacy")}</p>
-            {skillStatus?.message ? <p className="developer-artifact-message" role="status">{skillStatus.message}</p> : null}
           </div>
-          <div className="developer-skill-card__actions">
+        ) : null}
+      </div>
+
+      {/* Separate block, but pulled close to the CLI card above it. */}
+      <div className="settings-block developer-commands-block">
+        {CLI_EXAMPLES.map(({ command, descriptionKey }) => (
+          <div className="settings-row" key={command}>
+            <div>
+              <div className="lbl"><code className="developer-code">{command}</code></div>
+              <div className="desc">{t(descriptionKey)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="settings-block">
+        <h3>{t("settings.developer.skillSectionTitle")}</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{`${t(selectedTarget.nameKey)} ${t("settings.developer.agentSkillSuffix")}`}</div>
+            <div className="desc">{t("settings.developer.skillDescription")}</div>
+            {skillStatus?.message ? <div className="desc developer-note developer-note--warn" role="status">{skillStatus.message}</div> : null}
+          </div>
+          <div className="ctrl settings-row__actions">
             <SkillTargetPicker
               status={status}
               busy={busy}
@@ -224,7 +215,22 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
             ) : null}
           </div>
         </div>
-      </section>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.developer.skillPathLabel")}</div>
+            <div className="desc">
+              <CodeValue
+                value={skillPath}
+                copied={copiedValue === skillPath}
+                copyLabel={t("settings.developer.copyPath")}
+                copiedLabel={t("settings.developer.copied")}
+                onCopy={() => void copy(skillPath)}
+              />
+            </div>
+            <div className="desc developer-note">{t("settings.developer.skillPrivacy")}</div>
+          </div>
+        </div>
+      </div>
 
       {error ? (
         <div className="developer-tool-error" role="alert">
@@ -271,48 +277,63 @@ function ArtifactActions({
   const installingActionLabel = isInstalled ? reinstallingLabel : installingLabel;
   const canRunInstall = isInstalled || Boolean(status?.canInstall || status?.canRepair);
   const chipLabel = status ? statusLabel(status.state, t) : checkingLabel;
+  // The action button already says what the state is ("Install CLI", "Repair",
+  // "Reinstall"), so the chip only appears when there is no button to speak for
+  // it — an unavailable build, or a path Drifty must not touch.
+  const showStatusChip = !canRunInstall;
 
   return (
-    <div className={`developer-artifact-actions${isInstalled ? " developer-artifact-actions--installed" : ""}`}>
-      {!isInstalled ? (
-        <span className={`developer-status developer-status--${status?.state ?? "checking"}`} role="status">
+    <>
+      {showStatusChip ? (
+        <span className={`settings-beta-badge developer-status developer-status--${status?.state ?? "checking"}`} role="status">
           {chipLabel}
         </span>
       ) : null}
-      <div className="developer-artifact-actions__button-slot">
-        {canRunInstall ? (
-          <button
-            type="button"
-            className="settings-btn settings-btn--primary"
-            disabled={busy !== null}
-            aria-label={`${installActionLabel}: ${title}`}
-            onClick={() => void onRun(artifact, "install")}
-          >
-            {activeBusy && busy?.operation === "install" ? installingActionLabel : installActionLabel}
-          </button>
-        ) : null}
-      </div>
-    </div>
+      {canRunInstall ? (
+        <button
+          type="button"
+          className="settings-btn"
+          disabled={busy !== null}
+          aria-label={`${installActionLabel}: ${title}`}
+          onClick={() => void onRun(artifact, "install")}
+        >
+          {activeBusy && busy?.operation === "install" ? installingActionLabel : installActionLabel}
+        </button>
+      ) : null}
+    </>
   );
 }
 
-type PathControlProps = {
-  readonly compact?: boolean;
-  readonly path: string;
+type CodeValueProps = {
+  readonly value: string;
   readonly copied: boolean;
-  readonly label: string;
   readonly copyLabel: string;
   readonly copiedLabel: string;
   readonly onCopy: () => void;
 };
 
-function PathControl({ compact = false, path, copied, label, copyLabel, copiedLabel, onCopy }: PathControlProps) {
+function CodeValue({ value, copied, copyLabel, copiedLabel, onCopy }: CodeValueProps) {
   return (
-    <div className={`developer-path-control${compact ? " developer-path-control--compact" : ""}`}>
-      <span className="developer-path-control__label">{label}</span>
-      <div className="developer-path-control__value">
-        <CopyButton copied={copied} label={`${copyLabel}: ${path}`} copiedLabel={copiedLabel} onClick={onCopy} />
-        <code>{path}</code>
+    <span className="developer-code-value">
+      <code className="developer-code">{value}</code>
+      <CopyButton copied={copied} label={`${copyLabel}: ${value}`} copiedLabel={copiedLabel} onClick={onCopy} />
+    </span>
+  );
+}
+
+/* Decorative terminal figure: one short command line, as in the original design.
+   The example commands themselves live in the list below, and no activity
+   numbers appear here, so nothing can be mistaken for recorded data. */
+function CommandPreview({ t }: { readonly t: (key: TranslationKey) => string }) {
+  return (
+    <div className="developer-command-preview" aria-hidden="true">
+      <div className="developer-command-preview__bar">
+        <span /><span /><span />
+        <strong>{t("settings.developer.terminalTitle")}</strong>
+      </div>
+      <div className="developer-command-preview__body">
+        <p className="developer-command-preview__command"><span>$</span> drifty summary</p>
+        <p className="developer-command-preview__hint">{t("settings.developer.examplesLabel")}</p>
       </div>
     </div>
   );
@@ -339,35 +360,49 @@ type SkillTargetPickerProps = {
 function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onInstall, t }: SkillTargetPickerProps) {
   const [open, setOpen] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
+  // Matches the AccountMenu popover contract: listeners only exist while the menu
+  // is open, and Escape returns focus to the trigger instead of stranding it.
   useEffect(() => {
+    if (!open) return undefined;
+
     const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!pickerRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!(event.target instanceof Node)) return;
+      if (pickerRef.current?.contains(event.target)) return;
+      setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
     };
+
     document.addEventListener("pointerdown", closeOnOutsidePress);
     document.addEventListener("keydown", closeOnEscape);
     return () => {
       document.removeEventListener("pointerdown", closeOnOutsidePress);
       document.removeEventListener("keydown", closeOnEscape);
     };
-  }, []);
+  }, [open]);
 
   const handleInstall = async (target: DeveloperSkillTarget, artifact: DeveloperArtifactStatus | undefined) => {
     onSelectTarget(target);
     if (!artifact?.canInstall && !artifact?.canRepair) {
       setOpen(false);
+      triggerRef.current?.focus();
       return;
     }
     await onInstall(target);
     setOpen(false);
+    triggerRef.current?.focus();
   };
 
   return (
     <div className="developer-skill-picker" ref={pickerRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="developer-skill-picker__trigger"
         aria-expanded={open}
@@ -415,27 +450,6 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
           </div>
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function TerminalPreview() {
-  return (
-    <div className="developer-terminal" aria-hidden="true">
-      <div className="developer-terminal__bar">
-        <span /><span /><span />
-        <strong>Drifty CLI</strong>
-      </div>
-      <div className="developer-terminal__body">
-        <p className="developer-terminal__command"><span>$</span> drifty summary --day 2026-08-04</p>
-        <div className="developer-terminal__rule" />
-        <dl>
-          <div><dt>RECORDED</dt><dd>2h 05m</dd></div>
-          <div><dt>FOCUS</dt><dd>1h 42m</dd></div>
-          <div><dt>TOP APP</dt><dd>Codex</dd></div>
-        </dl>
-        <p className="developer-terminal__hint">Local history · read only</p>
-      </div>
     </div>
   );
 }
