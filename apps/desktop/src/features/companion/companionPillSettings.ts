@@ -12,7 +12,15 @@ export const COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY = "drifty.dev.companion.day
 export type CompanionSurfacePolicy = "floating" | "menuBar" | "off";
 
 export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionSurfacePolicy = "menuBar";
-export const COMPANION_MENU_BAR_DISPLAY_DEFAULT: TrayDisplayMode = "focusTime";
+/**
+ * The donut is the default because it is the only display that always fits.
+ * A `focusTime` title renders as `"7:39 focused"` and measured 134px wide in
+ * the menu bar — wider than any other resident item — so on a busy menu bar
+ * macOS pushes Drifty past the right screen edge and the icon silently
+ * disappears. The 18px donut leaves that budget intact; the timed displays
+ * stay available as explicit opt-in choices.
+ */
+export const COMPANION_MENU_BAR_DISPLAY_DEFAULT: TrayDisplayMode = "donut";
 export const COMPANION_DAY_REVIEW_LAYOUT_DEFAULT: CompanionDayReviewLayout = "minimal";
 export const COMPANION_PILL_DEFAULT_ENABLED = true;
 

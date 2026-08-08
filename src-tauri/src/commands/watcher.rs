@@ -58,7 +58,21 @@ pub(super) const COMPANION_PILL_CANVAS_WIDTH: f64 =
 /// edge sit exactly on the display boundary. Horizontal anchoring and vertical
 /// menu-bar clearance are intentionally different product decisions.
 const COMPANION_PILL_TOP_MARGIN: f64 = 24.0;
-const COMPANION_MENU_BAR_GAP_Y: f64 = 6.0;
+/// Breathing room under the menu bar for a card opened from the status item.
+/// Paired with `COMPANION_MENU_BAR_GAP_X` so a card pushed against the screen
+/// edge keeps a comparable margin on both axes instead of reading as a panel
+/// welded to the corner.
+const COMPANION_MENU_BAR_GAP_Y: f64 = 8.0;
+/// Minimum gap between a menu-bar card and the right edge of the work area.
+/// A status item near the edge — or pushed past it on a crowded menu bar —
+/// used to clamp the card flush against the boundary, leaving 0px on the
+/// right while the top kept its gap.
+const COMPANION_MENU_BAR_GAP_X: f64 = 12.0;
+/// How far the card's pointer stays clear of its own rounded corners. The
+/// pointer is a 12px diamond (`--menu-anchor-x` in `companion-pill.css`) and
+/// the widest corner radius is 17px, so half the pointer plus that radius is
+/// the point where the tail stops overlapping the curve.
+const COMPANION_MENU_BAR_POINTER_INSET: f64 = 23.0;
 const COMPANION_MENU_BAR_HIDE_DELAY: Duration = Duration::from_millis(360);
 #[cfg(not(target_os = "macos"))]
 const COMPANION_PILL_EDGE_ANCHOR_THRESHOLD: f64 = 24.0;
@@ -1239,9 +1253,24 @@ fn calculate_menu_bar_companion_position(
 ) -> MenuBarCompanionPlacement {
     let work_right = work_area_x + work_area_width;
     let tray_center = tray_x + tray_width / 2.0;
-    let max_capsule_left = (work_right - capsule_width).max(work_area_x);
-    let capsule_left = (tray_center - capsule_width / 2.0).clamp(work_area_x, max_capsule_left);
-    let anchor_x = (tray_center - capsule_left).clamp(16.0, (capsule_width - 16.0).max(16.0));
+    /* Reserve the side margin before clamping. A card that cannot be centered
+    under its status item should stop short of the edge rather than sit on it,
+    but a display too narrow to hold the card plus both margins must still
+    place the card, so the bounds collapse toward the work area instead of
+    inverting. */
+    let min_capsule_left = work_area_x + COMPANION_MENU_BAR_GAP_X;
+    let max_capsule_left = (work_right - capsule_width - COMPANION_MENU_BAR_GAP_X).max(work_area_x);
+    let capsule_left = (tray_center - capsule_width / 2.0)
+        .clamp(min_capsule_left.min(max_capsule_left), max_capsule_left);
+    /* Keep the pointer inside the capsule's rounded corners. Once a card is
+    clamped, the status item can sit beyond the card — even off-screen on a
+    crowded menu bar — so the anchor has to stay a painterly inset rather than
+    tracking the raw tray center. */
+    let anchor_inset = COMPANION_MENU_BAR_POINTER_INSET.min(capsule_width / 2.0);
+    let anchor_x = (tray_center - capsule_left).clamp(
+        anchor_inset,
+        (capsule_width - anchor_inset).max(anchor_inset),
+    );
     let capsule_top = (tray_y + tray_height + COMPANION_MENU_BAR_GAP_Y)
         .max(work_area_y + COMPANION_MENU_BAR_GAP_Y);
     MenuBarCompanionPlacement {

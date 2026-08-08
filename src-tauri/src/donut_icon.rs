@@ -18,8 +18,11 @@ pub enum TrayIconStyle {
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum TrayDisplayMode {
-    Donut,
+    /// Keep this default aligned with `COMPANION_MENU_BAR_DISPLAY_DEFAULT` in
+    /// `companionPillSettings.ts`. The donut is the only display narrow enough
+    /// to always survive a crowded menu bar.
     #[default]
+    Donut,
     FocusTime,
     DonutFocusTime,
 }
@@ -263,8 +266,8 @@ mod tests {
     }
 
     #[test]
-    fn focus_time_is_the_default_menu_bar_display() {
-        assert_eq!(TrayDisplayMode::default(), TrayDisplayMode::FocusTime);
+    fn donut_is_the_default_menu_bar_display() {
+        assert_eq!(TrayDisplayMode::default(), TrayDisplayMode::Donut);
     }
 
     #[test]

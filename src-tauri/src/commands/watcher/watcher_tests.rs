@@ -174,7 +174,7 @@ fn menu_bar_companion_centers_each_card_under_the_status_item() {
     assert_eq!(moment_left + moment_width / 2.0, tray_center);
     assert_eq!(collapsed.anchor_x, collapsed_width / 2.0);
     assert_eq!(moment.anchor_x, moment_width / 2.0);
-    assert_eq!(collapsed.window_position.y + COMPANION_PILL_GUTTER_Y, 30.0);
+    assert_eq!(collapsed.window_position.y + COMPANION_PILL_GUTTER_Y, 32.0);
 }
 
 #[test]
@@ -195,8 +195,39 @@ fn menu_bar_companion_clamps_at_the_screen_edge_but_keeps_pointing_to_the_status
     );
 
     let capsule_left = placement.window_position.x + left_inset;
-    assert_eq!(capsule_left + moment_width, 1_728.0);
-    assert_eq!(capsule_left + placement.anchor_x, 1_709.0);
+    // A clamped card stops short of the boundary instead of sitting on it.
+    assert_eq!(capsule_left + moment_width, 1_728.0 - 12.0);
+    /* The status item sits at 1709, past the card's right edge once the side
+    margin is reserved, so the pointer settles on its inset and stays inside
+    the capsule instead of chasing the tray center off the card. */
+    assert_eq!(placement.anchor_x, moment_width - 23.0);
+    assert!(capsule_left + placement.anchor_x < capsule_left + moment_width);
+}
+
+/// A status item pushed past the right screen edge by a crowded menu bar is
+/// the case that used to weld the card to the corner with a 0px gap.
+#[test]
+fn menu_bar_companion_keeps_its_margin_when_the_status_item_is_offscreen() {
+    let moment_width = companion_pill_capsule_size("milestone").unwrap().0;
+    let left_inset = companion_pill_left_inset("milestone", COMPANION_PILL_GUTTER_X).unwrap();
+    let placement = calculate_menu_bar_companion_position(
+        1_693.0,
+        0.0,
+        134.0,
+        24.0,
+        0.0,
+        24.0,
+        1_728.0,
+        moment_width,
+        left_inset,
+        COMPANION_PILL_GUTTER_Y,
+    );
+
+    let capsule_left = placement.window_position.x + left_inset;
+    assert_eq!(1_728.0 - (capsule_left + moment_width), 12.0);
+    // The tray center (1760) lies beyond the card, so the pointer settles on
+    // its inset rather than escaping the capsule.
+    assert_eq!(placement.anchor_x, moment_width - 23.0);
 }
 
 #[test]
