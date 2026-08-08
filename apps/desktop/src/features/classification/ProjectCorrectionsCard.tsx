@@ -30,23 +30,25 @@ export function ProjectCorrectionsCard({ events, onRevert, busy = false }: Proje
         <h3>Intelligence adjustments</h3>
         <p>The analysis model corrected {active.length} classification{active.length === 1 ? "" : "s"} using whole-day context.</p>
       </div>
-      <ul className="corrections-list">
-        {active.map((event) => (
-          <li key={event.id} className="corrections-item">
-            <div className="corrections-item__body">
-              <div className="corrections-item__change">
-                <span className="corrections-item__from">{labelFor(event.prevCategory, event.prevProductivity)}</span>
-                <span className="corrections-item__arrow" aria-hidden="true">→</span>
-                <span className="corrections-item__to">{labelFor(event.newCategory, event.newProductivity)}</span>
+      <div className="corrections-list-shell">
+        <ul className="corrections-list">
+          {active.map((event) => (
+            <li key={event.id} className="corrections-item">
+              <div className="corrections-item__body">
+                <div className="corrections-item__change">
+                  <span className="corrections-item__from">{labelFor(event.prevCategory, event.prevProductivity)}</span>
+                  <span className="corrections-item__arrow" aria-hidden="true">→</span>
+                  <span className="corrections-item__to">{labelFor(event.newCategory, event.newProductivity)}</span>
+                </div>
+                {event.reason ? <p className="corrections-item__reason">{event.reason}</p> : null}
               </div>
-              {event.reason ? <p className="corrections-item__reason">{event.reason}</p> : null}
-            </div>
-            <button type="button" className="settings-btn corrections-item__revert" onClick={() => onRevert(event.id)} disabled={busy}>
-              Revert
-            </button>
-          </li>
-        ))}
-      </ul>
+              <button type="button" className="settings-btn corrections-item__revert" onClick={() => onRevert(event.id)} disabled={busy}>
+                Revert
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
