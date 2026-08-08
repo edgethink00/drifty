@@ -99,10 +99,59 @@ pub fn configure_pet_panel(_window: &WebviewWindow) -> tauri::Result<()> {
     Ok(())
 }
 
+/// How long a marshalled presentation waits for AppKit to run the block.
+/// Matches the timeout the other Pet Mode main-thread hops already use.
+#[cfg(target_os = "macos")]
+const PET_PANEL_MAIN_THREAD_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// Whether a presentation has to hop to AppKit's main thread first.
+///
+/// Split out so the policy is testable without an `AppHandle`: ordering a
+/// window in from a tokio worker aborts the process, so anything not already
+/// on the main thread must be marshalled.
+#[cfg(target_os = "macos")]
+fn pet_panel_needs_main_thread_hop(on_main_thread: bool) -> bool {
+    !on_main_thread
+}
+
 /// Show without activating the application. `WebviewWindow::show` is correct
 /// on other platforms, while AppKit's panel ordering API preserves whatever
 /// app the user is currently working in.
+///
+/// Ordering a window in is main-thread-only. Several Pet Mode commands run
+/// their body inside `spawn_blocking` because they drive a sleeping animation
+/// loop that must not occupy AppKit's main thread, so this function marshals
+/// just the ordering step and blocks for its result. Calling it directly from
+/// a tokio worker used to abort the whole process with
+/// "Must only be used from the main thread".
 pub fn show_pet_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::MainThreadMarker;
+
+        if pet_panel_needs_main_thread_hop(MainThreadMarker::new().is_some()) {
+            let app_for_main = app.clone();
+            let window_for_main = window.clone();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            app.run_on_main_thread(move || {
+                let _ = sender.send(show_pet_panel_on_main_thread(
+                    &app_for_main,
+                    &window_for_main,
+                ));
+            })
+            .map_err(|error| error.to_string())?;
+
+            return receiver
+                .recv_timeout(PET_PANEL_MAIN_THREAD_TIMEOUT)
+                .map_err(|_| "Pet Mode panel presentation timed out".to_string())?;
+        }
+    }
+
+    show_pet_panel_on_main_thread(app, window)
+}
+
+/// The actual presentation, always reached on the main thread.
+fn show_pet_panel_on_main_thread(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         use tauri_nspanel::ManagerExt as PanelManagerExt;
@@ -313,6 +362,8 @@ pub fn perform_pet_panel_drag(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "macos")]
+    use super::pet_panel_needs_main_thread_hop;
     use super::{is_pet_drag_delta, pet_drag_origin};
 
     #[test]
@@ -342,5 +393,23 @@ mod tests {
             pet_drag_origin((300.0, 500.0), (350.0, 520.0), (350.0, 520.0)),
             (300.0, 500.0)
         );
+    }
+
+    /// Pet Mode drives its walk animations from `spawn_blocking`, so several
+    /// presentations reach this module on a tokio worker. Ordering a window in
+    /// from there aborted the process with "Must only be used from the main
+    /// thread", taking the menu-bar status item down with it.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn presentation_off_the_main_thread_is_marshalled() {
+        assert!(pet_panel_needs_main_thread_hop(false));
+    }
+
+    /// A presentation already on the main thread must stay synchronous:
+    /// hopping would deadlock a caller that is itself the main thread.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn presentation_on_the_main_thread_runs_directly() {
+        assert!(!pet_panel_needs_main_thread_hop(true));
     }
 }
