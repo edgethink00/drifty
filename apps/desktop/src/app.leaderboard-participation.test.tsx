@@ -556,7 +556,7 @@ describe("App leaderboard participation", () => {
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
-  it("skips automatic monthly payload construction when every local period record is in the current slot", async () => {
+  it("skips automatic leaderboard publishing when every local period record is in the current slot", async () => {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const sameSlotSuccessAt = new Date(2026, 5, 2, 13, 5, 0, 0).toISOString();
 
@@ -596,9 +596,9 @@ describe("App leaderboard participation", () => {
     });
     await vi.advanceTimersByTimeAsync(100);
 
-    const monthlyWindowStart = `${shiftIsoDate(todayIsoDate(), -29)}T04:00:00`;
-    expect(getTimeline.mock.calls.some(([range]) => range.start === monthlyWindowStart)).toBe(false);
-    expect(fetchOwnLeaderboardEntry).not.toHaveBeenCalled();
+    // Production Companion milestones independently read rank and focus
+    // history; the publishing path itself must remain idle in this slot.
+    expect(fetchOwnLeaderboardEntry.mock.calls.map(([period]) => period).sort()).toEqual(["daily", "weekly"]);
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 

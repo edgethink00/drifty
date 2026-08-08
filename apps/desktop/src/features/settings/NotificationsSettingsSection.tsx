@@ -4,8 +4,7 @@ import type { DriftAlarmCopySettingsValue } from "../companion/driftAlarmCopy";
 import { DriftAlarmCopySettings } from "../companion/DriftAlarmCopySettings";
 import {
   COMPANION_MENU_BAR_DISPLAY_OPTIONS,
-  COMPANION_SURFACE_POLICY_OPTIONS,
-  type CompanionSurfacePolicy,
+  type CompanionResidentPreference,
 } from "../companion/companionPillSettings";
 import type { TrayDisplayMode } from "@drifty/domain";
 import { SettingsSelect } from "./SettingsSelect";
@@ -14,9 +13,8 @@ import type { PetModeCoat, PetModeSize } from "../pet-mode/petModeData";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 type NotificationsSettingsSectionProps = {
-  readonly companionSettingsVisible?: boolean;
   readonly companionHiddenUntil: number | null;
-  readonly companionSurfacePolicy: CompanionSurfacePolicy;
+  readonly companionSurfacePolicy: CompanionResidentPreference;
   readonly companionMenuBarDisplayMode: TrayDisplayMode;
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
@@ -28,7 +26,7 @@ type NotificationsSettingsSectionProps = {
   readonly onExtremeNudgeChange: (enabled: boolean) => void;
   readonly onHideCompanionForOneHour: () => void;
   readonly onShowCompanionNow: () => void;
-  readonly onCompanionSurfacePolicyChange: (policy: CompanionSurfacePolicy) => void;
+  readonly onCompanionSurfacePolicyChange: (policy: CompanionResidentPreference) => void;
   readonly onCompanionMenuBarDisplayModeChange: (mode: TrayDisplayMode) => void;
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
@@ -39,7 +37,6 @@ type NotificationsSettingsSectionProps = {
 };
 
 export function NotificationsSettingsSection({
-  companionSettingsVisible = true,
   companionHiddenUntil,
   companionSurfacePolicy,
   companionMenuBarDisplayMode,
@@ -63,7 +60,6 @@ export function NotificationsSettingsSection({
   onPetModeSizeChange,
 }: NotificationsSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const companionEnabled = companionSurfacePolicy !== "off";
   const companionTemporarilyHidden = companionHiddenUntil !== null && companionHiddenUntil > Date.now();
   const hiddenUntilLabel = companionHiddenUntil !== null && companionHiddenUntil > Date.now()
     ? new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", {
@@ -77,31 +73,25 @@ export function NotificationsSettingsSection({
   }));
   return (
     <div className="settings-section">
-      {companionSettingsVisible ? <div className="settings-block">
+      <div className="settings-block">
         <h3>{t("settings.section.notifications")}</h3>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.companion.placement")}</div>
-            <div className="desc">{companionSurfacePolicyDescription(companionSurfacePolicy, t)}</div>
-          </div>
-          <div className="ctrl">
-            <div className="settings-mode-switch settings-mode-switch--compact" role="radiogroup" aria-label={t("settings.companion.placement")}>
-              {COMPANION_SURFACE_POLICY_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`settings-mode-option${companionSurfacePolicy === option.value ? " is-active" : ""}`}
-                  role="radio"
-                  aria-checked={companionSurfacePolicy === option.value}
-                  onClick={() => onCompanionSurfacePolicyChange(option.value)}
-                >
-                  <span>{localizedCompanionPolicyLabel(option.value, t)}</span>
-                </button>
-              ))}
+        {companionSurfacePolicy === "off" ? (
+          <div className="settings-row">
+            <div>
+              <div className="lbl">{t("settings.companion.offTitle")}</div>
+              <div className="desc">{t("settings.companion.offDescription")}</div>
+            </div>
+            <div className="ctrl">
+              <button
+                type="button"
+                className="settings-btn"
+                onClick={() => onCompanionSurfacePolicyChange("menuBar")}
+              >
+                {t("settings.companion.showInMenuBar")}
+              </button>
             </div>
           </div>
-        </div>
-        {companionSurfacePolicy === "menuBar" && (
+        ) : <>
           <div className="settings-row">
             <div>
               <div className="lbl">{t("settings.companion.menuBarDisplay")}</div>
@@ -132,8 +122,7 @@ export function NotificationsSettingsSection({
               </div>
             </div>
           </div>
-        )}
-        <div className={`settings-row${companionEnabled ? "" : " settings-row--disabled"}`}>
+        <div className="settings-row">
           <div>
             <div className="lbl">{t("settings.companion.temporaryHide")}</div>
             <div className="desc">
@@ -146,7 +135,6 @@ export function NotificationsSettingsSection({
             <button
               type="button"
               className="settings-btn"
-              disabled={!companionEnabled}
               onClick={companionTemporarilyHidden ? onShowCompanionNow : onHideCompanionForOneHour}
             >
               {companionTemporarilyHidden
@@ -155,7 +143,23 @@ export function NotificationsSettingsSection({
             </button>
           </div>
         </div>
-      </div> : null}
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.companion.turnOff")}</div>
+            <div className="desc">{t("settings.companion.offDescription")}</div>
+          </div>
+          <div className="ctrl">
+            <button
+              type="button"
+              className="settings-btn"
+              onClick={() => onCompanionSurfacePolicyChange("off")}
+            >
+              {t("common.off")}
+            </button>
+          </div>
+        </div>
+        </>}
+      </div>
 
       <div className="settings-block">
         <h3>{t("settings.notifications.driftAlerts")}</h3>
@@ -215,7 +219,7 @@ export function NotificationsSettingsSection({
           it is the most optional of the three: the pill and drift alerts are
           core to how Drifty nudges, while the pet is decoration you opt into. */}
       <div className="settings-block">
-        <h3>Desktop pet</h3>
+        <h3>{t("settings.pet.title")}</h3>
         <PetSettings
           enabled={petModeEnabled}
           onEnabledChange={onPetModeEnabledChange}
@@ -227,24 +231,6 @@ export function NotificationsSettingsSection({
       </div>
     </div>
   );
-}
-
-function companionSurfacePolicyDescription(
-  policy: CompanionSurfacePolicy,
-  t: LocalizationController["t"],
-): string {
-  if (policy === "menuBar") return t("settings.companion.menuBarDescription");
-  if (policy === "floating") return t("settings.companion.floatingDescription");
-  return t("settings.companion.offDescription");
-}
-
-function localizedCompanionPolicyLabel(
-  policy: CompanionSurfacePolicy,
-  t: LocalizationController["t"],
-): string {
-  if (policy === "menuBar") return t("settings.companion.menuBar");
-  if (policy === "floating") return t("settings.companion.floating");
-  return t("common.off");
 }
 
 function localizedDriftAlertDelayLabel(value: string, t: LocalizationController["t"]): string {

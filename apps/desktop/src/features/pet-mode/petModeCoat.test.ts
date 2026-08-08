@@ -45,7 +45,6 @@ describe("pet mode coat selection", () => {
   it("specifies every coat exactly once, in the same order", () => {
     expect(PET_MODE_COAT_SPECS.map((spec) => spec.value)).toEqual([...PET_MODE_COATS]);
     for (const spec of PET_MODE_COAT_SPECS) {
-      expect(spec.label.length).toBeGreaterThan(0);
       expect(getPetModeCoatSpec(spec.value)).toBe(spec);
     }
   });

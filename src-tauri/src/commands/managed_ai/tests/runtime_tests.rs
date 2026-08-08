@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use super::*;
 
-// Serializes tests that touch the process-global RUNTIME_CHILD slot or the
-// runtime-listener pid override.
+// Serializes tests that touch the process-global RUNTIME_CHILD slot, the
+// runtime-listener pid override, or the shared machine-memory override.
 static RUNTIME_GLOBALS_LOCK: Mutex<()> = Mutex::new(());
 
 fn lock_runtime_globals() -> MutexGuard<'static, ()> {
@@ -34,6 +34,7 @@ impl Drop for SufficientMemoryForTests {
 
 #[test]
 fn start_requires_runtime_assets() {
+    let _globals = lock_runtime_globals();
     let _memory = SufficientMemoryForTests::pin();
     let root = tempfile::tempdir().expect("create temp root");
     let status =

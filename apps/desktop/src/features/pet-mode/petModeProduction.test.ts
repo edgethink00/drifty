@@ -56,11 +56,11 @@ describe("pet promoted out of Dev", () => {
   });
 
   it("offers the visibility toggle in the account menu", () => {
-    expect(accountMenu).toContain("Show pet");
+    expect(accountMenu).toContain('t("settings.pet.show")');
     expect(accountMenu).toContain('role="menuitemcheckbox"');
     // Signed-out users still own a local pet, so the toggle must not sit
     // inside the signed-in-only branch.
-    const petIndex = accountMenu.indexOf("Show pet");
+    const petIndex = accountMenu.indexOf('t("settings.pet.show")');
     const profileIndex = accountMenu.indexOf("showProfile ?");
     expect(petIndex).toBeLessThan(profileIndex);
   });

@@ -138,7 +138,7 @@ import {
   resolveInitialCompanionMenuBarDisplayMode,
   resolveInitialCompanionSurfacePolicy,
   resolveEffectiveCompanionSurfacePolicy,
-  type CompanionSurfacePolicy,
+  type CompanionResidentPreference,
 } from "./features/companion/companionPillSettings";
 import { recordCompanionEngagementMetric } from "./features/companion/companionEngagementMetrics";
 import {
@@ -266,7 +266,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, COMPANION_BETA_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialCompanionBetaEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
@@ -482,7 +482,7 @@ export default function App() {
   );
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
-  const [companionBetaEnabled, setCompanionBetaEnabled] = useState(resolveInitialCompanionBetaEnabled);
+  const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(resolveInitialFloatingCompanionDevEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
   const [pendingTeamInvite, setPendingTeamInvite] = useState<PendingTeamInvite | null>(null);
   const [pendingTeamAction, setPendingTeamAction] = useState<TeamWorkspaceAction | null>(null);
@@ -501,32 +501,41 @@ export default function App() {
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
   const [companionMenuBarDisplayMode, setCompanionMenuBarDisplayMode] = useState(resolveInitialCompanionMenuBarDisplayMode);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
-  const companionBetaActive = isDevModeActive && companionBetaEnabled;
-  const companionPillEnabled = companionBetaActive && companionSurfacePolicy !== "off";
+  const floatingCompanionDevActive = isDevModeActive && floatingCompanionDevEnabled;
+  const companionResidentEnabled = companionSurfacePolicy !== "off";
   const companionTemporarilyHidden = companionHiddenUntil !== null && companionHiddenUntil > Date.now();
   const effectiveCompanionSurfacePolicy = resolveEffectiveCompanionSurfacePolicy(
-    companionBetaActive,
     companionSurfacePolicy,
+    floatingCompanionDevActive,
     companionTemporarilyHidden,
   );
   const companionPillVisible = effectiveCompanionSurfacePolicy === "floating";
   const companionUsesMomentSurface = effectiveCompanionSurfacePolicy !== "off";
 
-  const handleCompanionSurfacePolicyChange = useCallback((policy: CompanionSurfacePolicy) => {
-    setCompanionSurfacePolicy(persistCompanionSurfacePolicy(policy));
+  const handleCompanionSurfacePolicyChange = useCallback((policy: CompanionResidentPreference) => {
+    setCompanionSurfacePolicy((currentPolicy) => {
+      const nextPolicy = persistCompanionSurfacePolicy(policy);
+      if (nextPolicy !== currentPolicy) {
+        recordCompanionEngagementMetric(nextPolicy === "off" ? "companion_disabled" : "companion_enabled");
+      }
+      return nextPolicy;
+    });
     setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
-    recordCompanionEngagementMetric(policy === "off" ? "companion_disabled" : "companion_enabled");
   }, []);
 
   const handleCompanionMenuBarDisplayModeChange = useCallback((mode: TrayDisplayMode) => {
     setCompanionMenuBarDisplayMode(persistCompanionMenuBarDisplayMode(mode));
   }, []);
 
+  const handleFloatingCompanionDevEnabledChange = useCallback((enabled: boolean) => {
+    setFloatingCompanionDevEnabled(enabled);
+  }, []);
+
   const handleHideCompanionForOneHour = useCallback(() => {
-    if (!companionPillEnabled) return;
+    if (!companionResidentEnabled) return;
     setCompanionHiddenUntil(persistCompanionHiddenUntil(Date.now() + COMPANION_HIDE_ONE_HOUR_MS));
     recordCompanionEngagementMetric("companion_hidden_one_hour");
-  }, [companionPillEnabled]);
+  }, [companionResidentEnabled]);
 
   const handleShowCompanionNow = useCallback(() => {
     setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
@@ -2946,7 +2955,7 @@ export default function App() {
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
-    if (companionBetaEnabled) setCompanionBetaEnabled(false);
+    if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
@@ -2955,11 +2964,11 @@ export default function App() {
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [companionBetaEnabled, devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
-    window.localStorage.setItem(COMPANION_BETA_STORAGE_KEY, companionBetaActive ? "1" : "0");
-  }, [companionBetaActive]);
+    window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
+  }, [floatingCompanionDevActive]);
 
   useEffect(() => {
     const effectiveTeamsBetaEnabled = DEV_SETTINGS_ENABLED && devModeEnabled && teamsBetaEnabled;
@@ -4688,36 +4697,36 @@ export default function App() {
   ]);
 
   useCompanionDailyFocusMilestones({
-    ready: companionBetaActive && hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
     day: todayDay,
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     /* Visibility controls only the resident capsule. A milestone is an alert,
        so a running tracker may announce it through the standalone surface. */
-    announcementsEnabled: companionBetaActive && status?.running === true,
+    announcementsEnabled: status?.running === true,
   });
 
   useCompanionReentryMoment({
-    ready: companionBetaActive && hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
     announcementsEnabled: companionUsesMomentSurface && status?.running === true,
     activitySignal: status?.lastEventAt ?? currentSnapshot?.observedAt ?? null,
     locale: localization.effectiveLanguage === "ko" ? "ko-KR" : "en-US",
   });
 
   useCompanionFocusRunMilestones({
-    ready: companionBetaActive && hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
     day: todayDay,
     startOfDayMinutes,
     currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,
     classificationOptions: companionFocusRecordClassificationOptions,
-    announcementsEnabled: companionBetaActive && status?.running === true,
+    announcementsEnabled: status?.running === true,
   });
 
   useCompanionLeaderboardMilestones({
-    ready: companionBetaActive && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
+    ready: isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
     userScopeKey: user?.id ?? null,
     day: todayDay,
     startOfWeek,
-    announcementsEnabled: companionBetaActive,
+    announcementsEnabled: true,
   });
 
   useEffect(() => {
@@ -4886,7 +4895,6 @@ export default function App() {
 
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
-    if (!companionBetaActive) return;
     if (!hasLoadedOnce) return;
     if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
@@ -4901,7 +4909,7 @@ export default function App() {
     }).then(showEndOfDayReview).then((shown) => {
       if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
     });
-  }, [buildEndOfDayReviewEvent, companionBetaActive, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -6189,7 +6197,6 @@ export default function App() {
       {activeTab === "settings" ? (
         <SettingsSidebar
           activeSection={settingsSection}
-          companionBetaActive={companionBetaActive}
           isCollapsed={isSidebarVisuallyCollapsed}
           showDevSection={DEV_SETTINGS_ENABLED && devModeEnabled}
           onBack={handleSettingsBack}
@@ -6989,7 +6996,6 @@ export default function App() {
                 )}
                 {settingsSection === "notifications" && (
                   <NotificationsSettingsSection
-                    companionSettingsVisible={companionBetaActive}
                     companionHiddenUntil={companionHiddenUntil}
                     petModeEnabled={petModeEnabled}
                     petModeCoat={petModeCoat}
@@ -7043,12 +7049,8 @@ export default function App() {
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
                     weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
-                    companionBetaEnabled={companionBetaEnabled}
-                    companionSurfacePolicy={companionSurfacePolicy}
-                    companionMenuBarDisplayMode={companionMenuBarDisplayMode}
-                    onCompanionBetaEnabledChange={setCompanionBetaEnabled}
-                    onCompanionSurfacePolicyChange={handleCompanionSurfacePolicyChange}
-                    onCompanionMenuBarDisplayModeChange={handleCompanionMenuBarDisplayModeChange}
+                    floatingCompanionDevEnabled={floatingCompanionDevEnabled}
+                    onFloatingCompanionDevEnabledChange={handleFloatingCompanionDevEnabledChange}
                     onPreviewCompanionMilestone={previewCompanionMilestone}
                     onPreviewCompanionMoment={previewCompanionMoment}
                     onPreviewCompanionDayReview={handleEndOfDayReviewPreview}

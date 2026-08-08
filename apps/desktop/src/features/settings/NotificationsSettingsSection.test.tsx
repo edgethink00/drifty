@@ -3,8 +3,12 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultDriftAlarmCopy } from "../companion/driftAlarmCopy";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
-function renderSettings(overrides: Partial<Parameters<typeof NotificationsSettingsSection>[0]> = {}) {
+function renderSettings(
+  overrides: Partial<Parameters<typeof NotificationsSettingsSection>[0]> = {},
+  language: DisplayLanguage = "en",
+) {
   const props = {
     companionHiddenUntil: null,
     companionSurfacePolicy: "menuBar" as const,
@@ -29,28 +33,27 @@ function renderSettings(overrides: Partial<Parameters<typeof NotificationsSettin
     onPetModeSizeChange: vi.fn(),
     ...overrides,
   };
-  render(<NotificationsSettingsSection {...props} />);
+  render(
+    <LocalizationTestProvider language={language}>
+      <NotificationsSettingsSection {...props} />
+    </LocalizationTestProvider>,
+  );
   return props;
 }
 
 describe("NotificationsSettingsSection", () => {
   afterEach(cleanup);
 
-  it("keeps Companion placement and temporary hide distinct", () => {
+  it("shows the menu-bar Companion controls without a placement selector", () => {
     const props = renderSettings();
 
-    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
+    expect(screen.queryByRole("radiogroup", { name: "Companion placement" })).toBeNull();
+    expect(screen.getByRole("radiogroup", { name: "Menu bar display" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Hide for 1 hour" }));
+    fireEvent.click(screen.getByRole("button", { name: "Off" }));
 
-    expect(props.onCompanionSurfacePolicyChange).toHaveBeenCalledWith("off");
     expect(props.onHideCompanionForOneHour).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps Companion controls out of the legacy settings experience", () => {
-    renderSettings({ companionSettingsVisible: false });
-
-    expect(screen.queryByRole("radio", { name: "Off" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Drift alerts" })).toBeTruthy();
+    expect(props.onCompanionSurfacePolicyChange).toHaveBeenCalledWith("off");
   });
 
   it("offers an immediate recovery action while temporarily hidden", () => {
@@ -62,20 +65,28 @@ describe("NotificationsSettingsSection", () => {
     expect(props.onShowCompanionNow).toHaveBeenCalledTimes(1);
   });
 
-  it("disables temporary hide while Companion is permanently off", () => {
-    renderSettings({ companionSurfacePolicy: "off" });
-    expect(screen.getByRole("button", { name: "Hide for 1 hour" }).getAttribute("disabled")).toBe("");
-    expect(screen.getByText(/Hide the resident Companion\. Safety alerts and earned milestones still arrive\./)).toBeTruthy();
+  it("offers a menu-bar recovery action while Companion is permanently off", () => {
+    const props = renderSettings({ companionSurfacePolicy: "off" });
+    expect(screen.queryByRole("button", { name: "Hide for 1 hour" })).toBeNull();
+    expect(screen.getByText("Companion is off")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show in menu bar" }));
+    expect(props.onCompanionSurfacePolicyChange).toHaveBeenCalledWith("menuBar");
   });
 
-  it("keeps menu-bar display choices scoped to the menu-bar Companion", () => {
+  it("changes the production menu-bar display", () => {
     const props = renderSettings();
     fireEvent.click(screen.getByRole("radio", { name: "Donut + focus time" }));
 
     expect(props.onCompanionMenuBarDisplayModeChange).toHaveBeenCalledWith("donutFocusTime");
+  });
 
-    cleanup();
-    renderSettings({ companionSurfacePolicy: "floating" });
-    expect(screen.queryByRole("radiogroup", { name: "Menu bar display" })).toBeNull();
+  it("localizes the production pet settings in Korean", () => {
+    renderSettings({}, "ko");
+
+    expect(screen.getByRole("heading", { name: "데스크톱 펫" })).toBeTruthy();
+    expect(screen.getByText("펫 표시")).toBeTruthy();
+    expect(screen.getByRole("radiogroup", { name: "펫 크기" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "아이보리" })).toBeTruthy();
   });
 });

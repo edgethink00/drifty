@@ -205,7 +205,10 @@ fn pet_contact_offsets(facing: &str) -> (f64, f64) {
     } else {
         PET_MODE_CONTACT_X_RIGHT / PET_MODE_WIDTH
     };
-    (width * x_ratio, height * (PET_MODE_CONTACT_Y / PET_MODE_HEIGHT))
+    (
+        width * x_ratio,
+        height * (PET_MODE_CONTACT_Y / PET_MODE_HEIGHT),
+    )
 }
 
 pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
@@ -693,9 +696,9 @@ pub async fn pet_mode_begin_drag(
 }
 
 #[tauri::command]
-pub fn pet_mode_report_drag_error(error: String) {
+pub fn pet_mode_report_drag_error(_error: String) {
     #[cfg(debug_assertions)]
-    eprintln!("[pet-mode-drag] webview invoke failed: {error}");
+    eprintln!("[pet-mode-drag] webview invoke failed: {_error}");
 }
 
 #[tauri::command]

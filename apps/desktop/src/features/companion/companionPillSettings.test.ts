@@ -56,18 +56,19 @@ describe("Companion visibility settings", () => {
     expect(resolveInitialCompanionPillEnabled()).toBe(false);
   });
 
-  it("routes beta-off users to legacy regardless of stored Companion choices", () => {
-    expect(resolveEffectiveCompanionSurfacePolicy(false, "floating", false)).toBe("off");
-    expect(resolveEffectiveCompanionSurfacePolicy(false, "menuBar", false)).toBe("off");
-    expect(resolveEffectiveCompanionSurfacePolicy(true, "menuBar", false)).toBe("menuBar");
-    expect(resolveEffectiveCompanionSurfacePolicy(true, "floating", true)).toBe("off");
+  it("uses the stored production preference unless Dev Floating or temporary hide overrides it", () => {
+    expect(resolveEffectiveCompanionSurfacePolicy("menuBar", false, false)).toBe("menuBar");
+    expect(resolveEffectiveCompanionSurfacePolicy("menuBar", true, false)).toBe("floating");
+    expect(resolveEffectiveCompanionSurfacePolicy("menuBar", true, true)).toBe("off");
+    expect(resolveEffectiveCompanionSurfacePolicy("off", true, false)).toBe("floating");
+    expect(resolveEffectiveCompanionSurfacePolicy("off", false, false)).toBe("off");
   });
 
-  it("persists the selected Companion placement and menu-bar display", () => {
-    persistCompanionSurfacePolicy("floating");
+  it("migrates a stored Floating choice to the production menu bar", () => {
+    window.localStorage.setItem(COMPANION_SURFACE_POLICY_STORAGE_KEY, "floating");
     persistCompanionMenuBarDisplayMode("donutFocusTime");
 
-    expect(resolveInitialCompanionSurfacePolicy()).toBe("floating");
+    expect(resolveInitialCompanionSurfacePolicy()).toBe("menuBar");
     expect(resolveInitialCompanionMenuBarDisplayMode()).toBe("donutFocusTime");
   });
 

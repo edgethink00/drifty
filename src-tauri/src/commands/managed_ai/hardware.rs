@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 pub(super) fn machine_memory_bytes() -> Option<u64> {
     #[cfg(test)]

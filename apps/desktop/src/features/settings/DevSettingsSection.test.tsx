@@ -138,14 +138,14 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("button", { name: /Stop/ }).getAttribute("disabled")).toBeNull();
   });
 
-  it("keeps the redesigned Companion behind an explicit Dev beta toggle", () => {
-    const props = renderProductionDevSettings(75, { companionBetaEnabled: false });
+  it("keeps the floating Companion behind an explicit Dev toggle", () => {
+    const props = renderProductionDevSettings(75, { floatingCompanionDevEnabled: false });
 
-    expect(screen.getByText(/released legacy watcher/i)).toBeTruthy();
+    expect(screen.getByText(/production uses the menu-bar Companion/i)).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Floating" })).toBeNull();
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle Companion beta" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle floating Companion" }));
 
-    expect(props.onCompanionBetaEnabledChange).toHaveBeenCalledWith(true);
+    expect(props.onFloatingCompanionDevEnabledChange).toHaveBeenCalledWith(true);
   });
 
   it("keeps core Dev preview controls visible without release-channel feature gates", () => {
@@ -184,24 +184,11 @@ describe("DevSettingsSection", () => {
     expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(3, "weekly-rank-1");
   });
 
-  it("switches the live Companion review policy between floating, menu bar, and off", () => {
-    const props = renderProductionDevSettings();
+  it("keeps production placement choices out of the Dev Companion Lab", () => {
+    renderProductionDevSettings();
 
-    expect(screen.getByRole("radio", { name: "Floating" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(screen.getByRole("radio", { name: "Menu bar" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Off" }));
-
-    expect(props.onCompanionSurfacePolicyChange).toHaveBeenNthCalledWith(1, "menuBar");
-    expect(props.onCompanionSurfacePolicyChange).toHaveBeenNthCalledWith(2, "off");
-  });
-
-  it("switches the menu bar resident between the donut and focused time", () => {
-    const props = renderProductionDevSettings();
-
-    expect(screen.getByRole("radio", { name: "Donut" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(screen.getByRole("radio", { name: "Focus time" }));
-
-    expect(props.onCompanionMenuBarDisplayModeChange).toHaveBeenCalledWith("focusTime");
+    expect(screen.queryByRole("radiogroup", { name: "Companion policy" })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Menu bar display" })).toBeNull();
   });
 
   it("locks the Companion Day review to final V3", () => {

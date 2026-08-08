@@ -18,13 +18,6 @@ describe("SettingsSidebar", () => {
     expect(within(settingsNav).getByRole("button", { name: /^Companion & Alerts$/ })).toBeTruthy();
   });
 
-  it("keeps the legacy Notifications label while Companion beta is off", () => {
-    render(<SettingsSidebar activeSection="general" companionBetaActive={false} isCollapsed={false} showDevSection onBack={vi.fn()} onSectionChange={vi.fn()} />);
-
-    expect(screen.getByRole("button", { name: /^Notifications$/ })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Companion & Alerts$/ })).toBeNull();
-  });
-
   it("groups sections, marks the current page, and labels the exit action", () => {
     const onBack = vi.fn();
 

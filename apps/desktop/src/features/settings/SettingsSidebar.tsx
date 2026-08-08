@@ -70,14 +70,13 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
 
 type SettingsSidebarProps = {
   readonly activeSection: SettingsSection;
-  readonly companionBetaActive?: boolean;
   readonly isCollapsed: boolean;
   readonly showDevSection: boolean;
   readonly onBack: () => void;
   readonly onSectionChange: (section: SettingsSection) => void;
 };
 
-export function SettingsSidebar({ activeSection, companionBetaActive = true, isCollapsed, showDevSection, onBack, onSectionChange }: SettingsSidebarProps) {
+export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, onBack, onSectionChange }: SettingsSidebarProps) {
   const visibleNavGroups = SETTINGS_NAV_GROUPS
     .map((group) => ({
       ...group,
@@ -105,9 +104,7 @@ export function SettingsSidebar({ activeSection, companionBetaActive = true, isC
           return (
             <div key={group.id} className="settings-nav-group" role="group" aria-label={groupLabel}>
               {group.items.map((item) => {
-                const label = item.id === "notifications" && !companionBetaActive
-                  ? t("settings.section.legacyNotifications")
-                  : t(item.labelKey);
+                const label = t(item.labelKey);
                 const isActive = activeSection === item.id;
                 return (
                   <button

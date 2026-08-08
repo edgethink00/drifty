@@ -191,7 +191,6 @@ export function isPetModeCoat(value: unknown): value is PetModeCoat {
 // the color the pet will actually be instead of a hand-maintained copy.
 export type PetModeCoatSpec = {
   readonly value: PetModeCoat;
-  readonly label: string;
   readonly fur: string;
   readonly ink: string;
 };
@@ -199,37 +198,31 @@ export type PetModeCoatSpec = {
 export const PET_MODE_COAT_SPECS: readonly PetModeCoatSpec[] = [
   {
     value: "ivory",
-    label: "Ivory",
     fur: "#e8e5da",
     ink: "#171916",
   },
   {
     value: "charcoal",
-    label: "Charcoal",
     fur: "#33332f",
     ink: "#f2f1ed",
   },
   {
     value: "grey",
-    label: "Grey",
     fur: "#a3a199",
     ink: "#1a1b18",
   },
   {
     value: "apricot",
-    label: "Apricot",
     fur: "#d9b18c",
     ink: "#3c2b1c",
   },
   {
     value: "sage",
-    label: "Sage",
     fur: "#93a88e",
     ink: "#1c241a",
   },
   {
     value: "plum",
-    label: "Plum",
     fur: "#7a5f6b",
     ink: "#efe6ea",
   },

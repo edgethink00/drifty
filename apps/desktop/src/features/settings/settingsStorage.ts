@@ -29,7 +29,7 @@ export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
-export const COMPANION_BETA_STORAGE_KEY = "drifty.dev.companionBeta";
+export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
 
 export const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
 export const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
@@ -430,14 +430,14 @@ export function resolveInitialProfileBetaEnabled(): boolean {
   return window.localStorage.getItem(PROFILE_BETA_STORAGE_KEY) === "1";
 }
 
-/**
- * The redesigned Companion is deliberately opt-in while it is exercised in
- * real Tauri sessions. Legacy watcher, drift-alarm, and review surfaces remain
- * the release behavior until this Dev gate is enabled.
- */
-export function resolveInitialCompanionBetaEnabled(): boolean {
+/** Floating remains a Dev-only preview while the menu-bar Companion ships. */
+export function resolveInitialFloatingCompanionDevEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(COMPANION_BETA_STORAGE_KEY) === "1";
+  try {
+    return window.localStorage.getItem(FLOATING_COMPANION_DEV_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 export function resolveInitialEnhancedContextSettings(): EnhancedContextSettings {

@@ -4,108 +4,37 @@ import {
   type CompanionMilestonePreviewId,
   type CompanionMomentPreviewId,
 } from "../companion/companionPillPreview";
-import {
-  COMPANION_MENU_BAR_DISPLAY_OPTIONS,
-  COMPANION_SURFACE_POLICY_OPTIONS,
-  type CompanionSurfacePolicy,
-} from "../companion/companionPillSettings";
-import type { TrayDisplayMode } from "@drifty/domain";
 import { Toggle } from "../../components/Toggle";
 
 type DevSettingsCompanionPillBlockProps = {
-  readonly betaEnabled: boolean;
-  readonly policy: CompanionSurfacePolicy;
-  readonly menuBarDisplayMode: TrayDisplayMode;
-  readonly onBetaEnabledChange: (enabled: boolean) => void;
-  readonly onPolicyChange: (policy: CompanionSurfacePolicy) => void;
-  readonly onMenuBarDisplayModeChange: (mode: TrayDisplayMode) => void;
+  readonly floatingEnabled: boolean;
+  readonly onFloatingEnabledChange: (enabled: boolean) => void;
   readonly onPreviewMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewMoment: (previewId: CompanionMomentPreviewId) => void;
   readonly onPreviewDayReview: () => void;
 };
 
 export function DevSettingsCompanionPillBlock({
-  betaEnabled,
-  policy,
-  menuBarDisplayMode,
-  onBetaEnabledChange,
-  onPolicyChange,
-  onMenuBarDisplayModeChange,
+  floatingEnabled,
+  onFloatingEnabledChange,
   onPreviewMilestone,
   onPreviewMoment,
   onPreviewDayReview,
 }: DevSettingsCompanionPillBlockProps) {
   return (
     <div className="settings-block settings-block--dev-preview">
-      <h3>Companion beta</h3>
+      <h3>Companion Lab</h3>
       <div className="settings-row settings-row--companion-previews">
         <div>
-          <div className="lbl">Use redesigned Companion</div>
+          <div className="lbl">Use floating Companion</div>
           <div className="desc">
-            {betaEnabled
-              ? "New Companion moments are active. Day review uses final V3 and drift cards include the Settings overflow."
-              : "Off keeps the released legacy watcher, drift alarm, and day review completely unchanged."}
+            {floatingEnabled
+              ? "Dev preview is enabled. Resident Companion moments expand from the desktop pill when it is not temporarily hidden."
+              : "Production uses the menu-bar Companion when Companion is enabled."}
           </div>
         </div>
         <div className="ctrl">
-          <Toggle checked={betaEnabled} onChange={onBetaEnabledChange} ariaLabel="Toggle Companion beta" />
-        </div>
-      </div>
-      {betaEnabled ? <>
-      <div className="settings-row settings-row--companion-previews">
-        <div>
-          <div className="lbl">Companion policy</div>
-          <div className="desc">
-            {policy === "floating"
-              ? "Keep the resident pill visible and expand moments in place."
-              : policy === "menuBar"
-                ? "Use the menu-bar indicator as the resident surface; moments arrive below it as standalone cards."
-                : "Remove the resident Companion. Safety alerts and earned milestones still arrive standalone."}
-          </div>
-        </div>
-        <div className="ctrl">
-          <div className="settings-mode-switch settings-mode-switch--compact" role="radiogroup" aria-label="Companion policy">
-            {COMPANION_SURFACE_POLICY_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`settings-mode-option${policy === option.value ? " is-active" : ""}`}
-                role="radio"
-                aria-checked={policy === option.value}
-                onClick={() => onPolicyChange(option.value)}
-              >
-                <span>{option.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <div className="settings-row settings-row--companion-previews">
-        <div>
-          <div className="lbl">Menu bar display</div>
-          <div className="desc">
-            {menuBarDisplayMode === "donut"
-              ? "Show today's Focus, Drift, and Other mix as the compact ring."
-              : menuBarDisplayMode === "donutFocusTime"
-                ? "Replace the focus dot with today's productivity ring, keeping focused time beside it."
-                : "Show today's focused time beside a small status dot."}
-          </div>
-        </div>
-        <div className="ctrl">
-          <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Menu bar display">
-            {COMPANION_MENU_BAR_DISPLAY_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={`settings-mode-option${menuBarDisplayMode === option.value ? " is-active" : ""}`}
-                role="radio"
-                aria-checked={menuBarDisplayMode === option.value}
-                onClick={() => onMenuBarDisplayModeChange(option.value)}
-              >
-                <span>{option.label}</span>
-              </button>
-            ))}
-          </div>
+          <Toggle checked={floatingEnabled} onChange={onFloatingEnabledChange} ariaLabel="Toggle floating Companion" />
         </div>
       </div>
       <div className="settings-row settings-row--companion-previews">
@@ -171,7 +100,6 @@ export function DevSettingsCompanionPillBlock({
           </button>
         </div>
       </div>
-      </> : null}
     </div>
   );
 }

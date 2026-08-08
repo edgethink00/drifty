@@ -8,10 +8,12 @@ export const COMPANION_SURFACE_POLICY_STORAGE_KEY = "drifty.companion.surfacePol
 export const COMPANION_MENU_BAR_DISPLAY_STORAGE_KEY = "drifty.companion.menuBarDisplay.v1";
 export const COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY = "drifty.dev.companion.dayReviewLayout.v1";
 
-/** The menu bar is the calm default; the desktop pill remains an alternative. */
-export type CompanionSurfacePolicy = "floating" | "menuBar" | "off";
+/** Stored user preference for the production resident Companion. */
+export type CompanionResidentPreference = "menuBar" | "off";
+/** Effective native surface after temporary and Dev-only overrides. */
+export type CompanionSurfacePolicy = "floating" | CompanionResidentPreference;
 
-export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionSurfacePolicy = "menuBar";
+export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionResidentPreference = "menuBar";
 /**
  * The donut is the default because it is the only display that always fits.
  * A `focusTime` title renders as `"7:39 focused"` and measured 134px wide in
@@ -23,15 +25,6 @@ export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionSurfacePolicy = "menuBar
 export const COMPANION_MENU_BAR_DISPLAY_DEFAULT: TrayDisplayMode = "donut";
 export const COMPANION_DAY_REVIEW_LAYOUT_DEFAULT: CompanionDayReviewLayout = "minimal";
 export const COMPANION_PILL_DEFAULT_ENABLED = true;
-
-export const COMPANION_SURFACE_POLICY_OPTIONS: ReadonlyArray<{
-  readonly value: CompanionSurfacePolicy;
-  readonly label: string;
-}> = [
-  { value: "floating", label: "Floating" },
-  { value: "menuBar", label: "Menu bar" },
-  { value: "off", label: "Off" },
-];
 
 export const COMPANION_MENU_BAR_DISPLAY_OPTIONS: ReadonlyArray<{
   readonly value: TrayDisplayMode;
@@ -46,11 +39,12 @@ export const COMPANION_MENU_BAR_DISPLAY_OPTIONS: ReadonlyArray<{
 export const COMPANION_HIDDEN_UNTIL_STORAGE_KEY = "drifty.companion.hiddenUntil.v1";
 export const COMPANION_HIDE_ONE_HOUR_MS = 60 * 60 * 1000;
 
-export function resolveInitialCompanionSurfacePolicy(): CompanionSurfacePolicy {
+export function resolveInitialCompanionSurfacePolicy(): CompanionResidentPreference {
   if (typeof window === "undefined") return COMPANION_SURFACE_POLICY_DEFAULT;
   try {
     const storedPolicy = window.localStorage.getItem(COMPANION_SURFACE_POLICY_STORAGE_KEY);
-    if (isCompanionSurfacePolicy(storedPolicy)) return storedPolicy;
+    if (storedPolicy === "off") return "off";
+    if (storedPolicy === "menuBar" || storedPolicy === "floating") return "menuBar";
 
     const legacyEnabled = window.localStorage.getItem(COMPANION_PILL_STORAGE_KEY)
       ?? window.localStorage.getItem(LEGACY_COMPANION_PILL_STORAGE_KEY);
@@ -60,7 +54,9 @@ export function resolveInitialCompanionSurfacePolicy(): CompanionSurfacePolicy {
   }
 }
 
-export function persistCompanionSurfacePolicy(policy: CompanionSurfacePolicy): CompanionSurfacePolicy {
+export function persistCompanionSurfacePolicy(
+  policy: CompanionResidentPreference,
+): CompanionResidentPreference {
   if (typeof window === "undefined") return policy;
   try {
     window.localStorage.setItem(COMPANION_SURFACE_POLICY_STORAGE_KEY, policy);
@@ -82,16 +78,17 @@ export function persistCompanionPillEnabled(enabled: boolean): boolean {
 }
 
 /**
- * A disabled beta must be indistinguishable from the released legacy path at
- * the native bridge. Passing `off` closes the Companion panel and makes watcher
- * events use their legacy windows instead.
+ * The public policy records only whether Companion is enabled. A Dev-only
+ * Floating preview temporarily overrides the production menu-bar surface.
  */
 export function resolveEffectiveCompanionSurfacePolicy(
-  betaActive: boolean,
-  policy: CompanionSurfacePolicy,
+  preference: CompanionResidentPreference,
+  floatingDevActive: boolean,
   temporarilyHidden: boolean,
 ): CompanionSurfacePolicy {
-  return !betaActive || temporarilyHidden ? "off" : policy;
+  if (temporarilyHidden) return "off";
+  if (floatingDevActive) return "floating";
+  return preference;
 }
 
 export function resolveInitialCompanionMenuBarDisplayMode(): TrayDisplayMode {
@@ -168,8 +165,4 @@ export function persistCompanionHiddenUntil(hiddenUntil: number | null): number 
     // Runtime state still changes when storage is unavailable.
   }
   return hiddenUntil;
-}
-
-function isCompanionSurfacePolicy(value: string | null): value is CompanionSurfacePolicy {
-  return value === "floating" || value === "menuBar" || value === "off";
 }

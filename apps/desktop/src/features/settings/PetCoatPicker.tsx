@@ -5,6 +5,8 @@ import {
   type PetModeCoat,
   type PetModeSize,
 } from "../pet-mode/petModeData";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
 
 // The pet's user-facing settings, shown in Companion & Alerts. Visibility is
 // also toggleable from the account menu; both write the same stored value.
@@ -23,18 +25,19 @@ export function PetSettings({
   readonly size: PetModeSize;
   readonly onSizeChange: (size: PetModeSize) => void;
 }) {
+  const { t } = useLocalization();
   return (
     <>
-      <div className="settings-row settings-row--pet-mode" role="group" aria-label="Desktop pet">
+      <div className="settings-row settings-row--pet-mode" role="group" aria-label={t("settings.pet.title")}>
         <div>
           {/* The block heading already says "Desktop pet"; this row names the
               action, matching "Drift alerts / Show drift alerts" next door and
               the account menu's own "Show pet". */}
-          <div className="lbl">Show pet</div>
-          <div className="desc">A quiet cat that lives on your desktop and only reacts to confirmed drift.</div>
+          <div className="lbl">{t("settings.pet.show")}</div>
+          <div className="desc">{t("settings.pet.description")}</div>
         </div>
         <div className="ctrl">
-          <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel="Toggle the desktop pet" />
+          <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel={t("settings.pet.toggleAria")} />
         </div>
       </div>
       {/* Kept visible but inert while the pet is off, matching how Extreme
@@ -56,13 +59,14 @@ function PetSizePicker({
   readonly onChange: (size: PetModeSize) => void;
   readonly disabled?: boolean;
 }) {
+  const { t } = useLocalization();
   return (
     <div className={`settings-row settings-row--pet-size${disabled ? " settings-row--disabled" : ""}`}>
       <div>
-        <div className="lbl">Pet size</div>
+        <div className="lbl">{t("settings.pet.size")}</div>
       </div>
       <div className="ctrl">
-        <div className="settings-mode-switch settings-mode-switch--compact" role="radiogroup" aria-label="Pet size" aria-disabled={disabled}>
+        <div className="settings-mode-switch settings-mode-switch--compact" role="radiogroup" aria-label={t("settings.pet.size")} aria-disabled={disabled}>
           {PET_MODE_SIZES.map((size) => (
             <button
               key={size}
@@ -95,14 +99,17 @@ export function PetCoatPicker({
   readonly onChange: (coat: PetModeCoat) => void;
   readonly disabled?: boolean;
 }) {
+  const { t } = useLocalization();
   return (
     <div className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
       <div>
-        <div className="lbl">Pet coat</div>
+        <div className="lbl">{t("settings.pet.coat")}</div>
       </div>
       <div className="ctrl">
-        <div className="pet-coat-picker" role="radiogroup" aria-label="Pet coat" aria-disabled={disabled}>
-          {PET_MODE_COAT_SPECS.map((spec) => (
+        <div className="pet-coat-picker" role="radiogroup" aria-label={t("settings.pet.coat")} aria-disabled={disabled}>
+          {PET_MODE_COAT_SPECS.map((spec) => {
+            const label = localizedPetCoatLabel(spec.value, t);
+            return (
             <button
               key={spec.value}
               type="button"
@@ -110,19 +117,36 @@ export function PetCoatPicker({
               style={{ "--pet-coat-fur": spec.fur, "--pet-coat-ink": spec.ink } as React.CSSProperties}
               role="radio"
               aria-checked={spec.value === value}
-              aria-label={spec.label}
-              title={spec.label}
+              aria-label={label}
+              title={label}
               disabled={disabled}
               onClick={() => onChange(spec.value)}
             >
               <PetCoatSwatchCat />
-              <span className="pet-coat-swatch__label">{spec.label}</span>
+              <span className="pet-coat-swatch__label">{label}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
   );
+}
+
+const PET_COAT_LABEL_KEYS: Readonly<Record<PetModeCoat, TranslationKey>> = {
+  ivory: "settings.pet.coatIvory",
+  charcoal: "settings.pet.coatCharcoal",
+  grey: "settings.pet.coatGrey",
+  apricot: "settings.pet.coatApricot",
+  sage: "settings.pet.coatSage",
+  plum: "settings.pet.coatPlum",
+};
+
+function localizedPetCoatLabel(
+  coat: PetModeCoat,
+  t: LocalizationController["t"],
+): string {
+  return t(PET_COAT_LABEL_KEYS[coat]);
 }
 
 // The pet's resting pose is a baked bitmap, not a vector, so an approximated

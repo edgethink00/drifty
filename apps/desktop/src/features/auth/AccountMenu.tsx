@@ -2,6 +2,7 @@ import { getAccountDisplayName } from "./accountDisplay";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, SVGProps } from "react";
 import { createPortal } from "react-dom";
+import { useLocalization } from "../localization/LocalizationContext";
 
 const menuIconProps: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -160,6 +161,7 @@ export function AccountMenu({
   onSignIn,
   onSignOut,
 }: AccountMenuProps) {
+  const { t } = useLocalization();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
@@ -281,7 +283,7 @@ export function AccountMenu({
         aria-checked={isPetVisible}
       >
         <span className="account-menu-icon"><PetIcon /></span>
-        <span>Show pet</span>
+        <span>{t("settings.pet.show")}</span>
         <span className="account-menu-toggle" data-on={isPetVisible} aria-hidden="true">
           <span className="account-menu-toggle__knob" />
         </span>

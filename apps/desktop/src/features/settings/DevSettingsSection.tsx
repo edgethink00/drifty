@@ -7,7 +7,7 @@ import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/wa
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
 import { DevPreviewControls, type DriftAlarmPreviewOption } from "./DevPreviewControls";
-import type { AiReviewEvent, ProjectPassRun, TrayDisplayMode } from "@drifty/domain";
+import type { AiReviewEvent, ProjectPassRun } from "@drifty/domain";
 import type { DemoDashboardReplaySettings } from "./settingsStorage";
 import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUpdateController";
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
@@ -30,7 +30,6 @@ import type {
   CompanionMilestonePreviewId,
   CompanionMomentPreviewId,
 } from "../companion/companionPillPreview";
-import type { CompanionSurfacePolicy } from "../companion/companionPillSettings";
 
 type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
@@ -52,12 +51,8 @@ type DevSettingsSectionProps = {
   readonly petModeLabPointerStatus: string | null;
   readonly petModeLabInputBounds: string | null;
   readonly weekDashboardAxisScalePercent: number;
-  readonly companionBetaEnabled: boolean;
-  readonly companionSurfacePolicy: CompanionSurfacePolicy;
-  readonly companionMenuBarDisplayMode: TrayDisplayMode;
-  readonly onCompanionBetaEnabledChange: (enabled: boolean) => void;
-  readonly onCompanionSurfacePolicyChange: (policy: CompanionSurfacePolicy) => void;
-  readonly onCompanionMenuBarDisplayModeChange: (mode: TrayDisplayMode) => void;
+  readonly floatingCompanionDevEnabled: boolean;
+  readonly onFloatingCompanionDevEnabledChange: (enabled: boolean) => void;
   readonly onPreviewCompanionMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewCompanionMoment: (previewId: CompanionMomentPreviewId) => void;
   readonly onPreviewCompanionDayReview: () => void;
@@ -134,12 +129,8 @@ export function DevSettingsSection({
   petModeLabPointerStatus,
   petModeLabInputBounds,
   weekDashboardAxisScalePercent,
-  companionBetaEnabled,
-  companionSurfacePolicy,
-  companionMenuBarDisplayMode,
-  onCompanionBetaEnabledChange,
-  onCompanionSurfacePolicyChange,
-  onCompanionMenuBarDisplayModeChange,
+  floatingCompanionDevEnabled,
+  onFloatingCompanionDevEnabledChange,
   onPreviewCompanionMilestone,
   onPreviewCompanionMoment,
   onPreviewCompanionDayReview,
@@ -371,12 +362,8 @@ export function DevSettingsSection({
         onWeekDashboardAxisScalePercentChange={onWeekDashboardAxisScalePercentChange}
       />
       <DevSettingsCompanionPillBlock
-        betaEnabled={companionBetaEnabled}
-        policy={companionSurfacePolicy}
-        menuBarDisplayMode={companionMenuBarDisplayMode}
-        onBetaEnabledChange={onCompanionBetaEnabledChange}
-        onPolicyChange={onCompanionSurfacePolicyChange}
-        onMenuBarDisplayModeChange={onCompanionMenuBarDisplayModeChange}
+        floatingEnabled={floatingCompanionDevEnabled}
+        onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
         onPreviewMilestone={onPreviewCompanionMilestone}
         onPreviewMoment={onPreviewCompanionMoment}
         onPreviewDayReview={onPreviewCompanionDayReview}
