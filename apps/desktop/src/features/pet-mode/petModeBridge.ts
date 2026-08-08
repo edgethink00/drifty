@@ -50,6 +50,11 @@ export async function updateNativePetMode(snapshot: PetModeSnapshot): Promise<vo
   await invoke("pet_mode_update", { snapshot });
 }
 
+export async function setNativePetModeSize(width: number, height: number): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_mode_set_size", { width, height });
+}
+
 export async function playNativePetModeIntervention(
   target: PetModeInterventionTarget,
 ): Promise<boolean> {

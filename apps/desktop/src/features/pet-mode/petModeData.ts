@@ -1,7 +1,14 @@
 import type { ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import type { WatcherSnapshot } from "../companion/watcherData";
 
-export const PET_MODE_STORAGE_KEY = "drifty.dev.petMode";
+// The pet shipped as a Dev preview, so its settings lived under `drifty.dev.*`.
+// Now that it is a production feature the keys drop that prefix, and the old
+// ones are still read once so an existing preview user keeps their pet and
+// their chosen coat instead of silently reverting to the defaults.
+export const PET_MODE_STORAGE_KEY = "drifty.pet.enabled";
+export const PET_MODE_COAT_STORAGE_KEY = "drifty.pet.coat";
+export const PET_MODE_LEGACY_STORAGE_KEY = "drifty.dev.petMode";
+export const PET_MODE_LEGACY_COAT_STORAGE_KEY = "drifty.dev.petModeCoat";
 export const PET_MODE_PRESENCE_RATIO = 0.6;
 export const PET_MODE_PRESENT_MS = 9 * 60 * 1000;
 export const PET_MODE_AWAY_MS = 6 * 60 * 1000;
@@ -161,7 +168,114 @@ export function getPetModeLifeActionInterval(productivity: ProductivityLabel | n
 
 export function resolveInitialPetModeEnabled(): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(PET_MODE_STORAGE_KEY) === "1";
+  const stored = window.localStorage.getItem(PET_MODE_STORAGE_KEY);
+  if (stored !== null) return stored === "1";
+  return window.localStorage.getItem(PET_MODE_LEGACY_STORAGE_KEY) === "1";
+}
+
+// The prototype shipped the cat as a themed pair: its light theme used a
+// charcoal coat with ivory facial detail, and its dark theme inverted both.
+// The native pet lost that pairing when the silhouette moved to baked
+// rasters, so the coat is an explicit user choice here instead of a theme
+// side effect. `ivory` keeps the exact colors the current pet already ships.
+export const PET_MODE_COATS = ["ivory", "charcoal", "grey", "apricot", "sage", "plum"] as const;
+export type PetModeCoat = (typeof PET_MODE_COATS)[number];
+export const PET_MODE_DEFAULT_COAT: PetModeCoat = "ivory";
+
+export function isPetModeCoat(value: unknown): value is PetModeCoat {
+  return typeof value === "string" && (PET_MODE_COATS as readonly string[]).includes(value);
+}
+
+// One definition per coat, shared by the pet window and the Settings picker.
+// `fur` is the same value the CSS token carries, so the swatch always shows
+// the color the pet will actually be instead of a hand-maintained copy.
+export type PetModeCoatSpec = {
+  readonly value: PetModeCoat;
+  readonly label: string;
+  readonly fur: string;
+  readonly ink: string;
+};
+
+export const PET_MODE_COAT_SPECS: readonly PetModeCoatSpec[] = [
+  {
+    value: "ivory",
+    label: "Ivory",
+    fur: "#e8e5da",
+    ink: "#171916",
+  },
+  {
+    value: "charcoal",
+    label: "Charcoal",
+    fur: "#33332f",
+    ink: "#f2f1ed",
+  },
+  {
+    value: "grey",
+    label: "Grey",
+    fur: "#a3a199",
+    ink: "#1a1b18",
+  },
+  {
+    value: "apricot",
+    label: "Apricot",
+    fur: "#d9b18c",
+    ink: "#3c2b1c",
+  },
+  {
+    value: "sage",
+    label: "Sage",
+    fur: "#93a88e",
+    ink: "#1c241a",
+  },
+  {
+    value: "plum",
+    label: "Plum",
+    fur: "#7a5f6b",
+    ink: "#efe6ea",
+  },
+];
+
+export function getPetModeCoatSpec(coat: PetModeCoat): PetModeCoatSpec {
+  return PET_MODE_COAT_SPECS.find((spec) => spec.value === coat) ?? PET_MODE_COAT_SPECS[0];
+}
+
+// The pet's approved geometry is 144x99 with the cat drawn at 121.2x92.4
+// inside it. Size is expressed as a percentage of that reviewed layout so the
+// cat, its hit target, and the native panel all scale by one factor instead of
+// each carrying its own numbers.
+export const PET_MODE_BASE_WIDTH = 144;
+export const PET_MODE_BASE_HEIGHT = 99;
+export const PET_MODE_SIZES = [50, 75, 100, 125] as const;
+export type PetModeSize = (typeof PET_MODE_SIZES)[number];
+export const PET_MODE_DEFAULT_SIZE: PetModeSize = 100;
+export const PET_MODE_SIZE_STORAGE_KEY = "drifty.pet.size";
+
+export function isPetModeSize(value: unknown): value is PetModeSize {
+  return typeof value === "number" && (PET_MODE_SIZES as readonly number[]).includes(value);
+}
+
+export function resolveInitialPetModeSize(): PetModeSize {
+  if (typeof window === "undefined") return PET_MODE_DEFAULT_SIZE;
+  const stored = Number(window.localStorage.getItem(PET_MODE_SIZE_STORAGE_KEY));
+  return isPetModeSize(stored) ? stored : PET_MODE_DEFAULT_SIZE;
+}
+
+export function getPetModeWindowSize(size: PetModeSize): { readonly width: number; readonly height: number } {
+  // Rounded to whole points: the native panel cannot occupy a fraction of a
+  // pixel, and letting the window round independently of the CSS scale would
+  // clip the cat's outline at some sizes.
+  return {
+    width: Math.round(PET_MODE_BASE_WIDTH * size / 100),
+    height: Math.round(PET_MODE_BASE_HEIGHT * size / 100),
+  };
+}
+
+export function resolveInitialPetModeCoat(): PetModeCoat {
+  if (typeof window === "undefined") return PET_MODE_DEFAULT_COAT;
+  const stored = window.localStorage.getItem(PET_MODE_COAT_STORAGE_KEY);
+  if (isPetModeCoat(stored)) return stored;
+  const legacy = window.localStorage.getItem(PET_MODE_LEGACY_COAT_STORAGE_KEY);
+  return isPetModeCoat(legacy) ? legacy : PET_MODE_DEFAULT_COAT;
 }
 
 export function buildPetModeSnapshot(snapshot: WatcherSnapshot): PetModeSnapshot {

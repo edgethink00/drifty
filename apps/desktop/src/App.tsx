@@ -215,6 +215,7 @@ import {
   buildPetModeLabDriftyWindowTarget,
   buildPetModePreviewInterventionTarget,
   buildPetModeSnapshot,
+  getPetModeWindowSize,
 } from "./features/pet-mode/petModeData";
 import {
   applyNativePetModeLabTarget,
@@ -226,6 +227,7 @@ import {
   previewNativePetModeAction,
   previewNativePetModeIntervention,
   setNativePetModeEnabled,
+  setNativePetModeSize,
   updateNativePetMode,
 } from "./features/pet-mode/petModeBridge";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
@@ -594,6 +596,8 @@ export default function App() {
     driftAlarmCopy,
     extremeNudgeEnabled,
     petModeEnabled,
+    petModeCoat,
+    petModeSize,
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
     setDriftAlertDelaySeconds,
@@ -601,6 +605,8 @@ export default function App() {
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
     setPetModeEnabled,
+    setPetModeCoat,
+    setPetModeSize,
     setWatcherMode,
     setWatcherPeekEnabled,
     watcherMode,
@@ -608,7 +614,9 @@ export default function App() {
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController();
-  const petModeActive = isDevModeActive && petModeEnabled;
+  // No Dev gate: the pet ships as a production surface and is controlled from
+  // the account menu and Companion settings.
+  const petModeActive = petModeEnabled;
   const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
   const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
@@ -2944,8 +2952,10 @@ export default function App() {
     if (forceFrontmostFallbackCaptureEnabled) setForceFrontmostFallbackCaptureEnabled(false);
     if (forceBrowserHistoryUrlFallbackEnabled) setForceBrowserHistoryUrlFallbackEnabled(false);
     if (forceChromiumAxExtremeNudgeEnabled) setForceChromiumAxExtremeNudgeEnabled(false);
-    if (petModeEnabled) setPetModeEnabled(false);
-  }, [companionBetaEnabled, devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, petModeEnabled, profileBetaEnabled, setPetModeEnabled, settingsSection, teamsBetaEnabled]);
+    // The pet is deliberately absent here. It is a production feature now, so
+    // turning Dev mode off must leave it exactly as the user set it; only the
+    // Pet Mode Lab is gated behind Dev.
+  }, [companionBetaEnabled, devModeEnabled, devWebAccountPreviewEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(COMPANION_BETA_STORAGE_KEY, companionBetaActive ? "1" : "0");
@@ -4593,6 +4603,16 @@ export default function App() {
       console.warn("Failed to sync Pet Mode window", nextError);
     });
   }, [petModeActive]);
+  // Resize the native panel whenever the size changes, and once more each time
+  // the pet is switched on: the window is recreated at its default size, so a
+  // non-default choice has to be re-applied before it becomes visible.
+  useEffect(() => {
+    if (!petModeActive || !isTauriRuntime()) return;
+    const { width, height } = getPetModeWindowSize(petModeSize);
+    void setNativePetModeSize(width, height).catch((nextError) => {
+      console.warn("Failed to resize Pet Mode window", nextError);
+    });
+  }, [petModeActive, petModeSize]);
   useEffect(() => {
     if (!petModeActive || !isTauriRuntime()) return;
     void updateNativePetMode(buildPetModeSnapshot(watcherSnapshot)).catch((nextError) => {
@@ -6485,6 +6505,7 @@ export default function App() {
             userAvatarUrl={profile?.avatar_url || profileDraft.avatarUrl || authMetadataAvatarUrl}
             userEmail={user?.email ?? null}
             isDarkMode={theme === "dark"}
+            isPetVisible={petModeEnabled}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             showProfile={canOpenProfileBeta}
             onProfile={() => {
@@ -6500,6 +6521,9 @@ export default function App() {
             }}
             onToggleTheme={() => {
               toggleTheme();
+            }}
+            onTogglePet={() => {
+              setPetModeEnabled((enabled) => !enabled);
             }}
             onCheckForUpdates={() => {
               handleTrayCheckForUpdates();
@@ -6967,6 +6991,12 @@ export default function App() {
                   <NotificationsSettingsSection
                     companionSettingsVisible={companionBetaActive}
                     companionHiddenUntil={companionHiddenUntil}
+                    petModeEnabled={petModeEnabled}
+                    petModeCoat={petModeCoat}
+                    petModeSize={petModeSize}
+                    onPetModeEnabledChange={setPetModeEnabled}
+                    onPetModeCoatChange={setPetModeCoat}
+                    onPetModeSizeChange={setPetModeSize}
                     companionSurfacePolicy={companionSurfacePolicy}
                     companionMenuBarDisplayMode={companionMenuBarDisplayMode}
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
@@ -7053,7 +7083,6 @@ export default function App() {
                     onCheckLatestBuild={() => void developerPreReleaseUpdateController.checkLatestBuild()}
                     onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
-                    onPetModeEnabledChange={setPetModeEnabled}
                     onPreviewPetModeIntervention={() => {
                       const target = buildPetModePreviewInterventionTarget(segments);
                       if (target) {

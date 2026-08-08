@@ -90,7 +90,6 @@ type DevSettingsSectionProps = {
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
-  readonly onPetModeEnabledChange: (enabled: boolean) => void;
   readonly onPreviewPetModeIntervention: () => void;
   readonly onPreviewPetModeBrowserTabClose: () => void;
   readonly onPreviewPetModeDriftyWindowClose: () => void;
@@ -173,7 +172,6 @@ export function DevSettingsSection({
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
-  onPetModeEnabledChange,
   onPreviewPetModeIntervention,
   onPreviewPetModeBrowserTabClose,
   onPreviewPetModeDriftyWindowClose,
@@ -257,20 +255,13 @@ export function DevSettingsSection({
           <span>{t("settings.dev.preview")}</span>
           <span className="settings-beta-badge">Beta</span>
         </h3>
-        <div className="settings-row settings-row--pet-mode" role="group" aria-label="Pet Mode preview">
-          <div>
-            <div className="lbl">Pet Mode <span className="settings-beta-badge">Dev</span></div>
-            <div className="desc">A quiet, nonverbal desktop pet. It stays visible about 60% of the time and only acts automatically on confirmed Extreme Nudge events.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={petModeEnabled} onChange={onPetModeEnabledChange} ariaLabel="Toggle Pet Mode preview" />
-          </div>
-        </div>
+        {/* Only the Lab stays here. The pet itself, its coat, and its size are
+            production settings and live in Companion & Alerts. */}
         <div className="pet-mode-lab" role="group" aria-label="Pet Mode Lab">
           <div className="pet-mode-lab__heading">
             <div>
               <div className="lbl">Pet Mode Lab</div>
-              <div className="desc">Run production behaviors individually or leave the approved life loop on for observation.</div>
+              <div className="desc">Run production behaviors individually or leave the approved life loop on for observation. Turn the pet on in Companion &amp; Alerts first.</div>
             </div>
             <span className="pet-mode-lab__status" data-active={petModeEnabled}>{petModeLabStatus}</span>
           </div>
@@ -281,65 +272,43 @@ export function DevSettingsSection({
             </div>
           ) : null}
           <div className="pet-mode-lab__groups">
+          {/* Six labelled sections with prose under each one pushed the real
+              controls far down the page. Everything a button explained now
+              lives in its own tooltip, so the Lab is a compact bank of actions
+              grouped by what they exercise: the loop, the pet's own behavior,
+              and anything that moves the window. */}
           <div className="pet-mode-lab__row">
             <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Observe</div>
-              <div className="desc">Cycle approved behaviors every 8–14 seconds, or stop immediately.</div>
+              <div className="lbl">Run</div>
             </div>
-            <div className="pet-mode-lab__controls" aria-label="Pet Mode automatic behavior test">
-              <PetModeLabAction label="Life loop" detail="Start continuous observation" action="life_loop" active={petModeLabState?.lifeLoopEnabled === true} disabled={isPetModeLabActionDisabled("life_loop")} onAction={onPreviewPetModeAction} variant="primary" />
+            <div className="pet-mode-lab__controls" aria-label="Pet Mode loop controls">
+              <PetModeLabAction label="Life loop" detail="Cycle approved behaviors every 8–14 s" action="life_loop" active={petModeLabState?.lifeLoopEnabled === true} disabled={isPetModeLabActionDisabled("life_loop")} onAction={onPreviewPetModeAction} variant="primary" />
               <PetModeLabAction label="Stop" detail="Cancel current action" action="stop" disabled={isPetModeLabActionDisabled("stop")} onAction={onPreviewPetModeAction} variant="stop" />
+              <button type="button" className={`settings-btn pet-mode-lab__action${petModeLabState?.activeAction === "intervention" ? " is-active" : ""}`} aria-label="Intervention. Run, paw, and return" title="Run, paw, and return" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeIntervention}>Intervention</button>
             </div>
           </div>
           <div className="pet-mode-lab__row">
             <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Core actions</div>
-              <div className="desc">Review movement, intervention timing, and direct pet feedback.</div>
+              <div className="lbl">Behavior</div>
             </div>
-            <div className="pet-mode-lab__controls" aria-label="Core pet actions">
-              <button type="button" className={`settings-btn pet-mode-lab__action${petModeLabState?.activeAction === "intervention" ? " is-active" : ""}`} aria-label="Intervention. Run, paw, and return" title="Run, paw, and return" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeIntervention}>Intervention</button>
+            <div className="pet-mode-lab__controls" aria-label="Pet behavior actions">
               <PetModeLabAction label="Walk" detail="20.8 px/s sample · 0.90×" action="walk" active={petModeLabState?.activeAction === "walk"} disabled={isPetModeLabActionDisabled("walk")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Pet reaction" detail="Lean and heart" action="pet" active={petModeLabState?.activeAction === "pet"} disabled={isPetModeLabActionDisabled("pet")} onAction={onPreviewPetModeAction} />
-            </div>
-          </div>
-          <div className="pet-mode-lab__row">
-            <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Everyday behavior</div>
-              <div className="desc">Inspect low-attention actions used by the life loop.</div>
-            </div>
-            <div className="pet-mode-lab__controls" aria-label="Ambient pet actions">
               <PetModeLabAction label="Blink" detail="228 ms" action="blink" active={petModeLabState?.activeAction === "blink"} disabled={isPetModeLabActionDisabled("blink")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Tail flick" detail="Flow Tail B · 3.1 s" action="tail_flick" active={petModeLabState?.activeAction === "tail_flick"} disabled={isPetModeLabActionDisabled("tail_flick")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Stretch" detail="Flow Stretch C · 3.1 s" action="stretch" active={petModeLabState?.activeAction === "stretch"} disabled={isPetModeLabActionDisabled("stretch")} onAction={onPreviewPetModeAction} />
-            </div>
-          </div>
-          <div className="pet-mode-lab__row">
-            <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Presence state</div>
-              <div className="desc">Test how the pet rests, wakes, and temporarily leaves the screen.</div>
-            </div>
-            <div className="pet-mode-lab__controls" aria-label="Pet presence actions">
               <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
-            </div>
-          </div>
-          <div className="pet-mode-lab__row">
-            <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Position behavior</div>
-              <div className="desc">Place the pet temporarily at screen center, then use Walk to verify its upper resident Y.</div>
-            </div>
-            <div className="pet-mode-lab__controls" aria-label="Pet position behavior test">
-              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--target">
             <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Close-target alignment</div>
-              <div className="desc">Move to a real close button and verify final paw contact.</div>
+              <div className="lbl">Placement</div>
             </div>
-            <div className="pet-mode-lab__controls" aria-label="Pet Mode target X tests">
-              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Latest observed tab" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
+            <div className="pet-mode-lab__controls" aria-label="Pet placement and target tests">
+              <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
+              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement, then use Walk to verify resident Y" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
+              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
               <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
             </div>
           </div>

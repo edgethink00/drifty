@@ -21,6 +21,12 @@ function renderSettings(overrides: Partial<Parameters<typeof NotificationsSettin
     onExtremeNudgeChange: vi.fn(),
     onHideCompanionForOneHour: vi.fn(),
     onShowCompanionNow: vi.fn(),
+    petModeEnabled: false,
+    petModeCoat: "ivory" as const,
+    petModeSize: 100 as const,
+    onPetModeEnabledChange: vi.fn(),
+    onPetModeCoatChange: vi.fn(),
+    onPetModeSizeChange: vi.fn(),
     ...overrides,
   };
   render(<NotificationsSettingsSection {...props} />);

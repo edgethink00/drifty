@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
-    async_runtime, AppHandle, Emitter, LogicalPosition, Manager, Monitor,
+    async_runtime, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor,
     PhysicalPosition as Point, PhysicalSize as Size, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
@@ -50,6 +50,11 @@ static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
 static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
+/// The pet panel's current logical size. Every placement calculation needs the
+/// real footprint: with a user-selectable size, treating the panel as a fixed
+/// 144x99 would let a 125% pet clamp to a right edge computed for a smaller
+/// window and hang off the screen.
+static PET_MODE_SIZE: Mutex<(f64, f64)> = Mutex::new((PET_MODE_WIDTH, PET_MODE_HEIGHT));
 static PET_MODE_PREVIEW_RETURN_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -173,7 +178,43 @@ struct PetModeTargetPoint {
     diagnostic: String,
 }
 
+/// Current pet panel width/height in logical points. Falls back to the base
+/// geometry if the lock is poisoned so placement never panics.
+fn pet_size() -> (f64, f64) {
+    PET_MODE_SIZE
+        .lock()
+        .map(|size| *size)
+        .unwrap_or((PET_MODE_WIDTH, PET_MODE_HEIGHT))
+}
+
+fn pet_width() -> f64 {
+    pet_size().0
+}
+
+fn pet_height() -> f64 {
+    pet_size().1
+}
+
+/// Contact points are authored against the base 144x99 panel. Scaling them by
+/// the current size keeps the paw landing on its target when the pet is
+/// rendered larger or smaller.
+fn pet_contact_offsets(facing: &str) -> (f64, f64) {
+    let (width, height) = pet_size();
+    let x_ratio = if facing == "left" {
+        PET_MODE_CONTACT_X_LEFT / PET_MODE_WIDTH
+    } else {
+        PET_MODE_CONTACT_X_RIGHT / PET_MODE_WIDTH
+    };
+    (width * x_ratio, height * (PET_MODE_CONTACT_Y / PET_MODE_HEIGHT))
+}
+
 pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
+    // The panel is always (re)created at the base geometry, so the tracked
+    // size has to start there too. The webview re-applies the user's choice
+    // once it mounts.
+    if let Ok(mut current) = PET_MODE_SIZE.lock() {
+        *current = (PET_MODE_WIDTH, PET_MODE_HEIGHT);
+    }
     let window = WebviewWindowBuilder::new(
         app,
         PET_MODE_WINDOW_LABEL,
@@ -371,8 +412,8 @@ pub fn pet_mode_align_contact(
     {
         return Err("Pet Mode contact alignment received non-finite coordinates".to_string());
     }
-    if !(-4.0..=PET_MODE_WIDTH + 4.0).contains(&request.anchor_x)
-        || !(-4.0..=PET_MODE_HEIGHT + 4.0).contains(&request.anchor_y)
+    if !(-4.0..=pet_width() + 4.0).contains(&request.anchor_x)
+        || !(-4.0..=pet_height() + 4.0).contains(&request.anchor_y)
     {
         return Err("Pet Mode contact anchor is outside the native panel".to_string());
     }
@@ -556,6 +597,41 @@ pub fn pet_mode_set_interactive(app: AppHandle, interactive: bool) -> Result<(),
     window
         .set_ignore_cursor_events(!interactive)
         .map_err(|error| error.to_string())
+}
+
+/// Resizes the pet panel so the user's size choice changes the pet's real
+/// footprint on the desktop, not just how the cat is drawn inside a fixed
+/// window. The panel is created with matching min/max bounds to keep it
+/// unresizable by the user, so those have to be relaxed before the resize and
+/// re-pinned to the new size afterwards.
+#[tauri::command]
+pub fn pet_mode_set_size(app: AppHandle, width: f64, height: f64) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
+        return Ok(());
+    };
+    if !(width.is_finite() && height.is_finite()) || width <= 0.0 || height <= 0.0 {
+        return Err("Pet Mode size must be a positive, finite size".to_string());
+    }
+    let size = LogicalSize::new(width, height);
+    window
+        .set_min_size(None::<LogicalSize<f64>>)
+        .map_err(|error| error.to_string())?;
+    window
+        .set_max_size(None::<LogicalSize<f64>>)
+        .map_err(|error| error.to_string())?;
+    window.set_size(size).map_err(|error| error.to_string())?;
+    window
+        .set_min_size(Some(size))
+        .map_err(|error| error.to_string())?;
+    window
+        .set_max_size(Some(size))
+        .map_err(|error| error.to_string())?;
+    // Placement math reads this rather than the base constants, so it has to
+    // land before the next move, roam, or clamp runs.
+    if let Ok(mut current) = PET_MODE_SIZE.lock() {
+        *current = (width, height);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -831,7 +907,7 @@ fn move_pet_to_target(
             .unwrap_or(home_monitor)
     };
     let current = current_pet_logical_position(&window)?;
-    let facing = if point.x >= current.x + PET_MODE_WIDTH / 2.0 {
+    let facing = if point.x >= current.x + pet_width() / 2.0 {
         "right"
     } else {
         "left"
@@ -873,7 +949,7 @@ fn move_pet_to_preview_target(
     let work_area = monitor.work_area();
     let work_position = work_area.position.to_logical::<f64>(scale_factor);
     let work_size = work_area.size.to_logical::<f64>(scale_factor);
-    let available_right = work_position.x + work_size.width - (current.x + PET_MODE_WIDTH);
+    let available_right = work_position.x + work_size.width - (current.x + pet_width());
     let available_left = current.x - work_position.x;
     let offset: f64 = if available_right >= 152.0 || available_right >= available_left {
         152.0
@@ -904,13 +980,8 @@ fn move_pet_to_preview_target(
         target_kind: PetModeTargetKind::Fallback,
         confidence: PetModeTargetConfidence::Low,
         diagnostic: "preview_nearby_target".to_string(),
-        target_x: target_position.x
-            + if facing == "left" {
-                PET_MODE_CONTACT_X_LEFT
-            } else {
-                PET_MODE_CONTACT_X_RIGHT
-            },
-        target_y: target_position.y + PET_MODE_CONTACT_Y,
+        target_x: target_position.x + pet_contact_offsets(facing).0,
+        target_y: target_position.y + pet_contact_offsets(facing).1,
     })
 }
 
@@ -1271,13 +1342,9 @@ fn calculate_pet_contact_position_in_bounds(
     screen_width: f64,
     screen_height: f64,
 ) -> LogicalPosition<f64> {
-    let contact_x = if facing == "left" {
-        PET_MODE_CONTACT_X_LEFT
-    } else {
-        PET_MODE_CONTACT_X_RIGHT
-    };
+    let (contact_x, contact_y) = pet_contact_offsets(facing);
     clamp_pet_position(
-        LogicalPosition::new(point.x - contact_x, point.y - PET_MODE_CONTACT_Y),
+        LogicalPosition::new(point.x - contact_x, point.y - contact_y),
         screen_position,
         screen_width,
         screen_height,
@@ -1317,7 +1384,7 @@ fn calculate_pet_home_position(monitor: &Monitor) -> LogicalPosition<f64> {
             return clamp_pet_position(preferred, position, size.width, size.height);
         }
     }
-    let x = position.x + ((size.width - PET_MODE_WIDTH) * 0.28).max(0.0);
+    let x = position.x + ((size.width - pet_width()) * 0.28).max(0.0);
     clamp_pet_position(
         LogicalPosition::new(x, position.y + PET_MODE_HOME_Y),
         position,
@@ -1352,19 +1419,19 @@ fn calculate_pet_exit_position(
     let position = work_area.position.to_logical::<f64>(scale_factor);
     let size = work_area.size.to_logical::<f64>(scale_factor);
     let center = position.x + size.width / 2.0;
-    let side = if start.x + PET_MODE_WIDTH / 2.0 < center {
+    let side = if start.x + pet_width() / 2.0 < center {
         "left"
     } else {
         "right"
     };
     let x = if side == "left" {
-        position.x - PET_MODE_WIDTH - 12.0
+        position.x - pet_width() - 12.0
     } else {
         position.x + size.width + 12.0
     };
     let y = start.y.clamp(
         position.y,
-        position.y + (size.height - PET_MODE_HEIGHT).max(0.0),
+        position.y + (size.height - pet_height()).max(0.0),
     );
     (side, LogicalPosition::new(x, y))
 }
@@ -1376,7 +1443,7 @@ fn calculate_pet_outing_return_start(monitor: &Monitor, side: &str) -> LogicalPo
     let size = work_area.size.to_logical::<f64>(scale_factor);
     let home = calculate_pet_home_position(monitor);
     let x = if side == "left" {
-        position.x - PET_MODE_WIDTH - 12.0
+        position.x - pet_width() - 12.0
     } else {
         position.x + size.width + 12.0
     };
@@ -1389,8 +1456,8 @@ fn clamp_pet_position(
     work_width: f64,
     work_height: f64,
 ) -> LogicalPosition<f64> {
-    let max_x = work_position.x + (work_width - PET_MODE_WIDTH).max(0.0);
-    let max_y = work_position.y + (work_height - PET_MODE_HEIGHT).max(0.0);
+    let max_x = work_position.x + (work_width - pet_width()).max(0.0);
+    let max_y = work_position.y + (work_height - pet_height()).max(0.0);
     LogicalPosition::new(
         target.x.clamp(work_position.x, max_x),
         target.y.clamp(work_position.y, max_y),
@@ -1404,8 +1471,8 @@ fn calculate_pet_center_position(
 ) -> LogicalPosition<f64> {
     clamp_pet_position(
         LogicalPosition::new(
-            work_position.x + (work_width - PET_MODE_WIDTH).max(0.0) / 2.0,
-            work_position.y + (work_height - PET_MODE_HEIGHT).max(0.0) / 2.0,
+            work_position.x + (work_width - pet_width()).max(0.0) / 2.0,
+            work_position.y + (work_height - pet_height()).max(0.0) / 2.0,
         ),
         work_position,
         work_width,
@@ -1421,7 +1488,7 @@ fn preferred_pet_position_after_drop(
     work_height: f64,
 ) -> Option<LogicalPosition<f64>> {
     let candidate = clamp_pet_position(candidate, work_position, work_width, work_height);
-    let candidate_center_y = candidate.y + PET_MODE_HEIGHT / 2.0;
+    let candidate_center_y = candidate.y + pet_height() / 2.0;
     let resident_band_bottom = work_position.y + work_height * PET_MODE_RESIDENT_BAND_RATIO;
     if candidate_center_y <= resident_band_bottom {
         Some(candidate)
@@ -1793,6 +1860,34 @@ mod tests {
         assert!((PET_MODE_CONTACT_X_RIGHT - 143.0).abs() < f64::EPSILON);
         assert!((PET_MODE_CONTACT_X_LEFT - 1.0).abs() < f64::EPSILON);
         assert!((PET_MODE_CONTACT_Y - 40.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn clamping_follows_the_selected_pet_size() {
+        // Placement used to assume a fixed 144x99 panel. Once size became a
+        // user setting that let an enlarged pet clamp against a right edge
+        // computed for a smaller window and hang off the screen.
+        let work_position = LogicalPosition::new(0.0, 0.0);
+        let (work_width, work_height) = (1512.0, 982.0);
+        let far_off_screen = LogicalPosition::new(9999.0, 9999.0);
+
+        for (width, height) in [(72.0, 50.0), (144.0, 99.0), (180.0, 124.0)] {
+            *PET_MODE_SIZE.lock().unwrap() = (width, height);
+            let clamped =
+                clamp_pet_position(far_off_screen, work_position, work_width, work_height);
+            assert!(
+                clamped.x + width <= work_width + f64::EPSILON,
+                "{width}x{height} pet overflows the right edge by {}",
+                clamped.x + width - work_width
+            );
+            assert!(
+                clamped.y + height <= work_height + f64::EPSILON,
+                "{width}x{height} pet overflows the bottom edge by {}",
+                clamped.y + height - work_height
+            );
+        }
+
+        *PET_MODE_SIZE.lock().unwrap() = (PET_MODE_WIDTH, PET_MODE_HEIGHT);
     }
 
     #[test]

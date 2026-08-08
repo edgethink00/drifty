@@ -4,6 +4,89 @@
   --pet-fur: #e8e5da;
   --pet-ink: #171916;
   --pet-accent: #a9d66d;
+  /* Vector art reads these two tokens directly. The baked rasters cannot, so
+     `--pet-raster-filter` carries the equivalent recolor for them. Ivory runs
+     through its own ramp rather than passing the bitmaps through untouched:
+     the generated frames disagree slightly on the exact cream, and only the
+     ramp collapses them onto one colour. That ramp also supersedes the old
+     scruff-b clamp, which existed to pull that one frame's brighter body back
+     into the same range. */
+  --pet-raster-filter: url("#pet-mode-coat-ivory");
+  --pet-drag-raster-filter: url("#pet-mode-coat-ivory");
+  --pet-contact-shadow: rgba(0, 0, 0, .16);
+  --pet-drop-shadow: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.13));
+}
+
+/* Charcoal inverts the fur/ink pair to the prototype's light-theme values
+   (`--cat-fur: #33332f`, `--cat-detail: #f2f1ed`). A dark pet cannot rely on
+   the black contact shadow for separation, so the grounding cues invert too:
+   the drop shadow becomes a thin light rim that keeps the silhouette legible
+   on dark wallpapers, and the contact ellipse stays dark but denser so the
+   cat still reads as standing on the desktop rather than floating. */
+:root[data-surface="pet-mode"][data-pet-coat="charcoal"] {
+  --pet-fur: #33332f;
+  --pet-ink: #f2f1ed;
+  --pet-raster-filter: url("#pet-mode-coat-charcoal");
+  /* The charcoal ramp already flattens luminance before mapping, so the drag
+     pose lands on the same body tone as every other frame without the ivory
+     clamp in front of it. Reusing one filter keeps the two paths from drifting
+     apart the way the earlier per-channel pair did. */
+  --pet-drag-raster-filter: url("#pet-mode-coat-charcoal");
+  --pet-contact-shadow: rgba(0, 0, 0, .26);
+  --pet-drop-shadow:
+    drop-shadow(0 0 .6px rgba(255, 255, 255, .5))
+    drop-shadow(0 5px 5px rgba(0, 0, 0, 0.22));
+}
+
+/* Grey keeps ivory's dark facial ink but a mid-tone body, so it needs neither
+   rim treatment at full strength: a light rim would wash into the fur, and a
+   heavy black shadow would muddy it. A soft rim plus ivory's original contact
+   shadow keeps it grounded on both light and dark desktops. */
+:root[data-surface="pet-mode"][data-pet-coat="grey"] {
+  --pet-fur: #a3a199;
+  --pet-ink: #1a1b18;
+  --pet-raster-filter: url("#pet-mode-coat-grey");
+  --pet-drag-raster-filter: url("#pet-mode-coat-grey");
+  --pet-contact-shadow: rgba(0, 0, 0, .2);
+  --pet-drop-shadow:
+    drop-shadow(0 0 .5px rgba(255, 255, 255, .28))
+    drop-shadow(0 5px 5px rgba(0, 0, 0, 0.18));
+}
+
+/* Apricot is a light coat, so it follows ivory's grounding: no rim is needed
+   because the fur already separates from dark desktops on its own. */
+:root[data-surface="pet-mode"][data-pet-coat="apricot"] {
+  --pet-fur: #d9b18c;
+  --pet-ink: #3c2b1c;
+  --pet-raster-filter: url("#pet-mode-coat-apricot");
+  --pet-drag-raster-filter: url("#pet-mode-coat-apricot");
+  --pet-contact-shadow: rgba(0, 0, 0, .18);
+  --pet-drop-shadow: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.15));
+}
+
+/* Sage sits at grey's luminance, so it inherits grey's balanced treatment. */
+:root[data-surface="pet-mode"][data-pet-coat="sage"] {
+  --pet-fur: #93a88e;
+  --pet-ink: #1c241a;
+  --pet-raster-filter: url("#pet-mode-coat-sage");
+  --pet-drag-raster-filter: url("#pet-mode-coat-sage");
+  --pet-contact-shadow: rgba(0, 0, 0, .2);
+  --pet-drop-shadow:
+    drop-shadow(0 0 .5px rgba(255, 255, 255, .28))
+    drop-shadow(0 5px 5px rgba(0, 0, 0, 0.18));
+}
+
+/* Plum is dark enough to need charcoal's rim, but its fur is warmer and
+   lighter than charcoal, so the rim is dialled back to avoid a halo. */
+:root[data-surface="pet-mode"][data-pet-coat="plum"] {
+  --pet-fur: #7a5f6b;
+  --pet-ink: #efe6ea;
+  --pet-raster-filter: url("#pet-mode-coat-plum");
+  --pet-drag-raster-filter: url("#pet-mode-coat-plum");
+  --pet-contact-shadow: rgba(0, 0, 0, .24);
+  --pet-drop-shadow:
+    drop-shadow(0 0 .6px rgba(255, 255, 255, .38))
+    drop-shadow(0 5px 5px rgba(0, 0, 0, 0.2));
 }
 
 :root[data-surface="pet-mode"],
@@ -26,6 +109,21 @@
   -webkit-user-select: none;
 }
 
+/* Size scales the reviewed 144x99 layout as a whole. Everything inside keeps
+   its approved pixel geometry and simply renders larger or smaller, so the
+   cat, its clip-path hit target, and the motion offsets stay in proportion
+   instead of each needing its own set of numbers per size. The native panel is
+   resized to match, so the pet's real footprint changes too. */
+.pet-mode-scale {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 144px;
+  height: 99px;
+  transform: scale(var(--pet-size-scale, 1));
+  transform-origin: 0 0;
+}
+
 .pet-mode-hit-target {
   position: relative;
   width: 100%;
@@ -39,6 +137,36 @@
   cursor: grab;
   touch-action: none;
 }
+
+/* The button still spans the panel so focus and layout are unchanged, but
+   pointer input is limited to the pet itself. Without this, roughly two
+   thirds of the panel was clickable empty space: the silhouette covers only
+   ~36% of the 144x99 window, so grabbing a far corner still dragged the cat.
+
+   `pet-mode-hit-shape` is the real target. It masks itself with the idle
+   frame, which measures as covering 75-100% of every other pose, and scales
+   slightly past the drawn cat so thin parts like the tail and the stretched
+   paw stay comfortably grabbable. */
+.pet-mode-hit-target { pointer-events: none; }
+
+.pet-mode-hit-shape {
+  position: absolute;
+  /* Matches `.pet-mode-cat` bounds so the clip lines up with the drawn cat. */
+  left: 11.4px;
+  top: 4.2px;
+  width: 121.2px;
+  height: 92.4px;
+  pointer-events: auto;
+  /* `clip-path` is used rather than `mask`: a mask hides pixels but still hit
+     tests the full box, which is exactly the bug being fixed here. The polygon
+     traces the idle frame's alpha, dilated so thin parts like the tail stay
+     grabbable, and simplified to ~46 points. */
+  clip-path: polygon(70.64% 99.83%, 72.02% 95.87%, 71.89% 91.74%, 71.77% 87.61%, 72.02% 83.48%, 72.65% 79.35%, 73.65% 75.22%, 74.65% 71.08%, 76.54% 66.95%, 81.68% 62.82%, 85.57% 58.69%, 87.70% 54.56%, 88.83% 50.43%, 89.21% 46.30%, 89.21% 42.17%, 88.96% 38.04%, 88.21% 33.91%, 87.08% 29.78%, 85.32% 25.65%, 83.31% 21.51%, 81.93% 17.38%, 80.30% 13.25%, 61.23% 9.12%, 58.34% 9.12%, 54.96% 13.25%, 53.32% 17.38%, 51.82% 21.51%, 0.00% 25.65%, 0.00% 29.78%, 0.00% 33.91%, 0.00% 38.04%, 1.51% 42.17%, 3.51% 46.30%, 6.40% 50.43%, 11.17% 54.56%, 11.04% 58.69%, 10.29% 62.82%, 9.66% 66.95%, 9.16% 71.08%, 8.91% 75.22%, 8.78% 79.35%, 8.78% 83.48%, 8.91% 87.61%, 9.28% 91.74%, 10.16% 95.87%, 12.42% 99.83%);
+}
+
+/* The cat mirrors when it faces left, so the mask has to mirror with it or the
+   target would sit on the wrong side of the panel. */
+.pet-mode-hit-shape.is-mirrored { transform: scaleX(-1); }
 
 .pet-mode-hit-target:active { cursor: grabbing; }
 .pet-mode-contact-anchor {
@@ -69,7 +197,7 @@
   height: 92.4px;
   color: var(--pet-fur);
   transform-origin: 50% 62%;
-  filter: drop-shadow(0 5px 5px rgba(0, 0, 0, 0.13));
+  filter: var(--pet-drop-shadow);
   will-change: transform;
 }
 
@@ -111,6 +239,12 @@
   pointer-events: none;
 }
 
+/* Every baked frame recolors through the same variable, so gait, paw, life
+   motion, and the idle fallback all switch coat in the same paint. Nothing
+   here swaps `src`, which is what keeps a coat change from flashing the
+   ivory bitmap mid-animation. */
+.pet-mode-cat__raster { filter: var(--pet-raster-filter); }
+
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
 .pet-mode-cat__sleep-pose { transform: translateY(-1px); }
@@ -119,7 +253,10 @@
   /* Clamp the generated pose's bright body range to the canonical f001 ivory
      distribution. The piecewise sRGB map leaves dark face pixels and alpha
      intact while retaining a restrained three-level body shading range. */
-  filter: url("#pet-mode-scruff-b-color-match");
+  /* On charcoal this resolves to a single filter that composes the clamp and
+     the recolor. Chaining them as two separate filters would re-quantise the
+     already-clamped body range and drift the drag pose off the other frames. */
+  filter: var(--pet-drag-raster-filter);
 }
 .pet-mode-cat__filters { position: absolute; width: 0; height: 0; overflow: hidden; }
 .pet-mode-cat__drag-preload {
@@ -253,7 +390,7 @@
   bottom: 7%;
   height: 8%;
   border-radius: 50%;
-  background: rgba(0, 0, 0, .16);
+  background: var(--pet-contact-shadow);
   filter: blur(5px);
   opacity: .65;
 }

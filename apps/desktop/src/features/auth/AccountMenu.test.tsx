@@ -30,6 +30,8 @@ function renderAccountMenu({ userAvatarUrl = null, userEmail = null }: RenderAcc
         userAvatarUrl={userAvatarUrl}
         userEmail={userEmail}
         isDarkMode={false}
+        isPetVisible={false}
+        onTogglePet={() => {}}
         onToggle={() => setIsOpen((open) => !open)}
         {...handlers}
       />

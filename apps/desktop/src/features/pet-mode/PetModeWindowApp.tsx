@@ -28,6 +28,7 @@ import {
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
+  PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
@@ -35,12 +36,17 @@ import {
   PET_MODE_PAW_FPS,
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
+  PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeLifeActionInterval,
+  resolveInitialPetModeCoat,
+  resolveInitialPetModeSize,
   type PetModeInterventionTarget,
   type PetModeLabAction,
   type PetModePreviewAction,
   type PetModeSnapshot,
+  type PetModeCoat,
+  type PetModeSize,
 } from "./petModeData";
 import "./petMode.css";
 
@@ -139,6 +145,46 @@ export function PetModeWindowApp() {
   useEffect(() => {
     document.documentElement.dataset.surface = "pet-mode";
     return () => { delete document.documentElement.dataset.surface; };
+  }, []);
+
+  // The pet runs in its own webview, so it cannot read the settings hook that
+  // owns the toggle. Both webviews share localStorage, and `storage` fires in
+  // every *other* document, which is exactly the cross-window direction needed
+  // here. Applying the coat as a `data-` attribute means the swap is a pure
+  // style recalculation: no remount, no `src` change, no animation restart.
+  useEffect(() => {
+    const applyCoat = (coat: PetModeCoat) => {
+      document.documentElement.dataset.petCoat = coat;
+    };
+    applyCoat(resolveInitialPetModeCoat());
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_COAT_STORAGE_KEY) return;
+      applyCoat(resolveInitialPetModeCoat());
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      delete document.documentElement.dataset.petCoat;
+    };
+  }, []);
+
+  // Size arrives the same way the coat does. The webview only scales its own
+  // drawing; the main window owns resizing the native panel, so both sides
+  // read the same stored value rather than messaging each other.
+  useEffect(() => {
+    const applySize = (size: PetModeSize) => {
+      document.documentElement.style.setProperty("--pet-size-scale", String(size / 100));
+    };
+    applySize(resolveInitialPetModeSize());
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_SIZE_STORAGE_KEY) return;
+      applySize(resolveInitialPetModeSize());
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      document.documentElement.style.removeProperty("--pet-size-scale");
+    };
   }, []);
 
   useEffect(() => {
@@ -591,24 +637,30 @@ export function PetModeWindowApp() {
 
   return (
     <main className="pet-mode-surface" data-productivity={snapshot?.productivity ?? "neutral"}>
-      <button
-        ref={hitTargetRef}
-        type="button"
-        className="pet-mode-hit-target"
-        onPointerDown={handlePointerDown}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-        aria-label="Pet Drifty cat. Drag to move."
-      >
-        <PetModeCat phase={phase} facing={facing} pawFrame={pawFrame} />
-        <span
-          ref={contactAnchorRef}
-          className={`pet-mode-contact-anchor pet-mode-contact-anchor--${facing}`}
-          aria-hidden="true"
-        />
-      </button>
+      <div className="pet-mode-scale">
+        <button
+          ref={hitTargetRef}
+          type="button"
+          className="pet-mode-hit-target"
+          onPointerDown={handlePointerDown}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          aria-label="Pet Drifty cat. Drag to move."
+        >
+          <span
+            className={`pet-mode-hit-shape${facing === "left" ? " is-mirrored" : ""}`}
+            aria-hidden="true"
+          />
+          <PetModeCat phase={phase} facing={facing} pawFrame={pawFrame} />
+          <span
+            ref={contactAnchorRef}
+            className={`pet-mode-contact-anchor pet-mode-contact-anchor--${facing}`}
+            aria-hidden="true"
+          />
+        </button>
+      </div>
     </main>
   );
 }

@@ -93,14 +93,17 @@ describe("DevSettingsSection", () => {
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
-  it("keeps the detailed Pet Mode Lab behind the Dev preview toggle", () => {
-    const props = renderProductionDevSettings();
+  it("keeps the detailed Pet Mode Lab in Dev while the pet itself ships elsewhere", () => {
+    renderProductionDevSettings();
     expect(screen.getByRole("group", { name: "Pet Mode Lab" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Intervention/ }).getAttribute("disabled")).toBe("");
     expect(screen.getByRole("button", { name: /Walk 20.8 px\/s sample/ }).getAttribute("disabled")).toBe("");
 
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle Pet Mode preview" }));
-    expect(props.onPetModeEnabledChange).toHaveBeenCalledWith(true);
+    // The pet is a production feature now: its on/off switch, coat, and size
+    // live in Companion & Alerts, so Dev must not offer a second copy.
+    expect(screen.queryByRole("switch", { name: /Pet Mode preview/ })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Pet coat" })).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Pet size" })).toBeNull();
 
     cleanup();
     const enabledProps = renderProductionDevSettings(75, { petModeEnabled: true });

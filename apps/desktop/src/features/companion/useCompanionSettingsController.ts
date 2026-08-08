@@ -23,7 +23,16 @@ import {
   resolveInitialWatcherPeriodicMinutes,
   type WatcherMode,
 } from "./watcherData";
-import { PET_MODE_STORAGE_KEY, resolveInitialPetModeEnabled } from "../pet-mode/petModeData";
+import {
+  PET_MODE_COAT_STORAGE_KEY,
+  PET_MODE_SIZE_STORAGE_KEY,
+  PET_MODE_STORAGE_KEY,
+  resolveInitialPetModeCoat,
+  resolveInitialPetModeEnabled,
+  resolveInitialPetModeSize,
+  type PetModeCoat,
+  type PetModeSize,
+} from "../pet-mode/petModeData";
 
 type UseCompanionSettingsControllerResult = {
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
@@ -31,6 +40,8 @@ type UseCompanionSettingsControllerResult = {
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
   readonly extremeNudgeEnabled: boolean;
   readonly petModeEnabled: boolean;
+  readonly petModeCoat: PetModeCoat;
+  readonly petModeSize: PetModeSize;
   readonly handleWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly handleWatcherPeriodicMinChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly setDriftAlertDelaySeconds: Dispatch<SetStateAction<DriftAlertDelaySeconds>>;
@@ -38,6 +49,8 @@ type UseCompanionSettingsControllerResult = {
   readonly setDriftAlertsEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setExtremeNudgeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeEnabled: Dispatch<SetStateAction<boolean>>;
+  readonly setPetModeCoat: Dispatch<SetStateAction<PetModeCoat>>;
+  readonly setPetModeSize: Dispatch<SetStateAction<PetModeSize>>;
   readonly setWatcherMode: Dispatch<SetStateAction<WatcherMode>>;
   readonly setWatcherPeekEnabled: Dispatch<SetStateAction<boolean>>;
   readonly watcherMode: WatcherMode;
@@ -52,6 +65,8 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
   const [driftAlarmCopy, setDriftAlarmCopy] = useState(resolveInitialDriftAlarmCopy);
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
   const [petModeEnabled, setPetModeEnabled] = useState(resolveInitialPetModeEnabled);
+  const [petModeCoat, setPetModeCoat] = useState<PetModeCoat>(resolveInitialPetModeCoat);
+  const [petModeSize, setPetModeSize] = useState<PetModeSize>(resolveInitialPetModeSize);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
   const [watcherPeriodicMinMinutes, setWatcherPeriodicMinMinutes] = useState(() => resolveInitialWatcherPeriodicMinutes("min"));
@@ -92,6 +107,17 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, petModeEnabled ? "1" : "0");
   }, [petModeEnabled]);
 
+  // The pet webview reads this key on mount and via `storage`, so persisting
+  // it is the whole cross-window handoff. Writing it unconditionally keeps a
+  // coat chosen while the pet is off applied the next time it appears.
+  useEffect(() => {
+    window.localStorage.setItem(PET_MODE_COAT_STORAGE_KEY, petModeCoat);
+  }, [petModeCoat]);
+
+  useEffect(() => {
+    window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, String(petModeSize));
+  }, [petModeSize]);
+
   useEffect(() => {
     window.localStorage.setItem(WATCHER_PEEK_STORAGE_KEY, watcherPeekEnabled ? "1" : "0");
   }, [watcherPeekEnabled]);
@@ -118,6 +144,8 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     driftAlarmCopy,
     extremeNudgeEnabled,
     petModeEnabled,
+    petModeCoat,
+    petModeSize,
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
     setDriftAlertDelaySeconds,
@@ -125,6 +153,8 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
     setPetModeEnabled,
+    setPetModeCoat,
+    setPetModeSize,
     setWatcherMode,
     setWatcherPeekEnabled,
     watcherMode,

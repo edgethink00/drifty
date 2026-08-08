@@ -9,6 +9,8 @@ import {
 } from "../companion/companionPillSettings";
 import type { TrayDisplayMode } from "@drifty/domain";
 import { SettingsSelect } from "./SettingsSelect";
+import { PetSettings } from "./PetCoatPicker";
+import type { PetModeCoat, PetModeSize } from "../pet-mode/petModeData";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 type NotificationsSettingsSectionProps = {
@@ -28,6 +30,12 @@ type NotificationsSettingsSectionProps = {
   readonly onShowCompanionNow: () => void;
   readonly onCompanionSurfacePolicyChange: (policy: CompanionSurfacePolicy) => void;
   readonly onCompanionMenuBarDisplayModeChange: (mode: TrayDisplayMode) => void;
+  readonly petModeEnabled: boolean;
+  readonly petModeCoat: PetModeCoat;
+  readonly petModeSize: PetModeSize;
+  readonly onPetModeEnabledChange: (enabled: boolean) => void;
+  readonly onPetModeCoatChange: (coat: PetModeCoat) => void;
+  readonly onPetModeSizeChange: (size: PetModeSize) => void;
 };
 
 export function NotificationsSettingsSection({
@@ -47,6 +55,12 @@ export function NotificationsSettingsSection({
   onShowCompanionNow,
   onCompanionSurfacePolicyChange,
   onCompanionMenuBarDisplayModeChange,
+  petModeEnabled,
+  petModeCoat,
+  petModeSize,
+  onPetModeEnabledChange,
+  onPetModeCoatChange,
+  onPetModeSizeChange,
 }: NotificationsSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const companionEnabled = companionSurfacePolicy !== "off";
@@ -194,6 +208,22 @@ export function NotificationsSettingsSection({
           </div>
         </div>
         <DriftAlarmCopySettings value={driftAlarmCopy} onChange={onDriftAlarmCopyChange} />
+      </div>
+
+      {/* The pet is a companion surface, so it belongs on this tab rather than
+          in Appearance, which covers the app's own chrome. It sits last because
+          it is the most optional of the three: the pill and drift alerts are
+          core to how Drifty nudges, while the pet is decoration you opt into. */}
+      <div className="settings-block">
+        <h3>Desktop pet</h3>
+        <PetSettings
+          enabled={petModeEnabled}
+          onEnabledChange={onPetModeEnabledChange}
+          coat={petModeCoat}
+          onCoatChange={onPetModeCoatChange}
+          size={petModeSize}
+          onSizeChange={onPetModeSizeChange}
+        />
       </div>
     </div>
   );

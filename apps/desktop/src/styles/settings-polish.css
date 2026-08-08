@@ -1316,6 +1316,130 @@
   padding-bottom: var(--space-3);
 }
 
+/* The coat picker wraps instead of using a fixed column count, so adding a
+   coat never requires editing this rule. It mirrors the existing color-preset
+   swatch language (selection ring, hover lift) rather than inventing a new
+   selected state. */
+/* The shared compact switch is a three-column grid; pet size has four steps. */
+.content--settings .settings-row--pet-size .settings-mode-switch--compact {
+  grid-template-columns: repeat(4, minmax(3rem, 1fr));
+}
+
+/* With the description gone this row is a label and a wide control, so let the
+   picker claim the space the copy used to take. */
+.content--settings .settings-row--pet-coat .ctrl {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 26rem;
+}
+
+.content--settings .pet-coat-picker {
+  display: flex;
+  /* One row, always. Chips share the available width so six coats stay on a
+     single line instead of wrapping into a ragged second row. */
+  gap: 0.3rem;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.content--settings .pet-coat-swatch {
+  display: grid;
+  gap: 0.16rem;
+  justify-items: center;
+  flex: 0 1 3.7rem;
+  min-width: 0;
+  padding: 0.28rem 0.2rem 0.26rem;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, var(--line));
+  border-radius: var(--settings-control-radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.content--settings .pet-coat-swatch:hover {
+  border-color: color-mix(in srgb, var(--text) 26%, var(--line));
+  transform: translateY(-1px);
+}
+
+/* While the pet is off these stay readable but must not invite interaction:
+   the row already carries the dimmed `--disabled` treatment. */
+.content--settings .pet-coat-swatch:disabled {
+  cursor: default;
+}
+
+.content--settings .pet-coat-swatch:disabled:hover {
+  border-color: color-mix(in srgb, var(--text) 12%, var(--line));
+  transform: none;
+}
+
+.content--settings .pet-coat-swatch.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--surface) 88%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.content--settings .pet-coat-swatch:focus-visible {
+  outline: 2px solid var(--settings-focus-ring);
+  outline-offset: 2px;
+}
+
+/* The chip carries its own backdrop because a pale coat on a pale surface, or
+   a dark coat on a dark one, would otherwise lose its silhouette in the very
+   control used to choose it. A neutral mid grey is the one backdrop that keeps
+   both the lightest and darkest coats readable, and it stays fixed across
+   themes so the preview matches the desktop rather than the settings chrome. */
+.content--settings .pet-coat-swatch__cat {
+  position: relative;
+  display: block;
+  width: 100%;
+  /* Match the source frame's aspect ratio so `contain` neither letterboxes nor
+     pillarboxes it. Any mismatch here would scale the masked body away from
+     the face overlay, which is drawn in the same 797x581 coordinate space. */
+  aspect-ratio: 797 / 581;
+  border-radius: calc(var(--settings-control-radius) - 3px);
+  background: #8d8f92;
+}
+
+/* Masking a solid fill with the pet's own frame keeps the preview silhouette
+   pixel identical to the running pet. The mask box is inset so the cat sits
+   inside the chip with a little air around it. */
+.content--settings .pet-coat-swatch__body,
+.content--settings .pet-coat-swatch__face {
+  position: absolute;
+  inset: 0;
+}
+
+.content--settings .pet-coat-swatch__body {
+  background: var(--pet-coat-fur);
+  -webkit-mask: url("/pet-mode/paw/f001.png") center / contain no-repeat;
+  mask: url("/pet-mode/paw/f001.png") center / contain no-repeat;
+}
+
+.content--settings .pet-coat-swatch__face {
+  width: auto;
+  height: auto;
+  fill: var(--pet-coat-ink);
+  stroke: var(--pet-coat-ink);
+}
+
+.content--settings .pet-coat-swatch__label {
+  font-size: 0.66rem;
+  font-weight: 620;
+  line-height: 1.1;
+  color: var(--text-muted);
+}
+
+.content--settings .pet-coat-swatch.is-selected .pet-coat-swatch__label { color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) {
+  .content--settings .pet-coat-swatch { transition: none; }
+  .content--settings .pet-coat-swatch:hover { transform: none; }
+}
+
 .pet-mode-lab {
   position: relative;
   display: grid;
