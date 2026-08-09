@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { captureSentryException } from "../../lib/observability/sentryClient";
 import {
   getPetModeGaitFramesPerSecond,
   PET_MODE_DRAG_PICKUP_MS,
@@ -54,7 +55,20 @@ export function PetModeCat({
       .then((payload) => {
         if (active && Array.isArray(payload.frames)) setWalkFrames(payload.frames);
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        // A swallowed rejection here is invisible: the render falls back to a
+        // single standing frame, so the cat crosses the screen with frozen
+        // legs and nothing is logged anywhere. That shipped once already — a
+        // production `connect-src` without `'self'` refused this very request
+        // — so the failure has to stay audible even though it is non-fatal.
+        //
+        // Reported as well as logged: the console is not visible in a packaged
+        // build, and this asset is static, so a failure means a policy or
+        // packaging fault that no user will ever think to report as anything
+        // more specific than "the cat looks broken".
+        console.warn("[pet-mode] walk frames failed to load; gait will not animate", error);
+        captureSentryException(error, { tags: { surface: "pet-mode", asset: "walk-frames" } });
+      });
     return () => { active = false; };
   }, []);
 
