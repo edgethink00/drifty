@@ -86,6 +86,7 @@ type DevSettingsSectionProps = {
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
   readonly onPreviewPetModeIntervention: () => void;
+  readonly onRehearsePetModeIntercept: () => void;
   readonly onPreviewPetModeBrowserTabClose: () => void;
   readonly onPreviewPetModeDriftyWindowClose: () => void;
   readonly onPlacePetModeCenter: () => void;
@@ -164,6 +165,7 @@ export function DevSettingsSection({
   onOpenDebugLogs,
   onOpenReplayOnboarding,
   onPreviewPetModeIntervention,
+  onRehearsePetModeIntercept,
   onPreviewPetModeBrowserTabClose,
   onPreviewPetModeDriftyWindowClose,
   onPlacePetModeCenter,
@@ -300,6 +302,7 @@ export function DevSettingsSection({
               <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement, then use Walk to verify resident Y" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
+              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
               <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
             </div>
           </div>

@@ -420,6 +420,38 @@
 .pet-mode-cat--happy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
 .pet-mode-cat--sleep .pet-mode-cat__zzz { opacity: .8; animation: pet-mode-zzz 1.8s ease-in-out infinite; }
 
+/* The run to a target used to be silent, so the only way to learn what the cat
+   was about to do was to watch a tab disappear. This marker states the intent
+   while the approach is still interruptible, which is what turns those seconds
+   into a real chance to grab the cat. */
+.pet-mode-cat__alert {
+  position: absolute;
+  /* Two constraints squeeze this: the run and paw frames lift the head well
+     past the idle pose, while the pet panel clips anything above its top edge.
+     Sit beside the head rather than over it, which clears every gait frame
+     without leaving the panel. */
+  right: 2%;
+  top: -4%;
+  color: #ff453a;
+  font: 800 19px/1 ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  /* The pet panel is transparent and sits over arbitrary desktop content, so
+     the glyph carries its own dark halo instead of trusting the backdrop. */
+  text-shadow:
+    0 0 3px rgb(0 0 0 / .55),
+    0 1px 2px rgb(0 0 0 / .45);
+  opacity: 0;
+}
+.pet-mode-cat--run .pet-mode-cat__alert,
+.pet-mode-cat--paw .pet-mode-cat__alert {
+  opacity: 1;
+  animation: pet-mode-alert 620ms ease-in-out infinite;
+}
+
+@keyframes pet-mode-alert {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-2.5px) scale(1.12); }
+}
+
 @keyframes pet-mode-idle-breathe {
   0%, 100% { transform: scaleY(1); }
   50% { transform: scaleY(1.008); }
@@ -505,6 +537,7 @@
   .pet-mode-cat__motion,
   .pet-mode-cat__heart,
   .pet-mode-cat__zzz,
+  .pet-mode-cat__alert,
   .pet-mode-cat__shadow,
   .pet-mode-cat__face-erase,
   .pet-mode-cat__expression,

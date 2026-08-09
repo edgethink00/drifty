@@ -47,6 +47,7 @@ const PREVIEW_FOCUS_TARGETS = [
 export function buildCompanionDriftAlarmPreview(
   previewId: Extract<CompanionMomentPreviewId, "drift-alarm" | "break-return">,
   now = Date.now(),
+  petIntercepted = false,
 ): DriftAlarmEvent {
   const shared = {
     id: `companion-preview-${previewId}-${now}`,
@@ -67,7 +68,7 @@ export function buildCompanionDriftAlarmPreview(
       nextFocusLabel: "VS Code",
     });
   }
-  return buildDriftAlarmEvent(shared);
+  return buildDriftAlarmEvent({ ...shared, petIntercepted });
 }
 
 export function buildCompanionExtremeNudgePreview(now = Date.now()): ExtremeNudgeToastEvent {

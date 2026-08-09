@@ -28,6 +28,8 @@ function mergeDriftAlarmCopy(value: unknown): DriftAlarmCopySettingsValue {
   return {
     driftTitle: stringField(value, "driftTitle", defaults.driftTitle),
     driftSummary: defaults.driftSummary,
+    petInterceptTitle: stringField(value, "petInterceptTitle", defaults.petInterceptTitle),
+    petInterceptSummary: defaults.petInterceptSummary,
     currentContextPill: defaults.currentContextPill,
     latestFocusPill: defaults.latestFocusPill,
     returnToFocusLabel: defaults.returnToFocusLabel,

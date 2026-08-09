@@ -60,6 +60,9 @@ type DriftAlarmEventInput = {
   readonly sourceAppName?: string;
   readonly sourceIconSrc?: string | null;
   readonly copySettings?: DriftAlarmCopySettingsValue;
+  /* Copy-only switch. The event still carries mode "drift" so every consumer,
+     surface size, and stored interaction keeps working unchanged. */
+  readonly petIntercepted?: boolean;
   readonly sourceSegmentId?: string | null;
 };
 
@@ -87,7 +90,7 @@ export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEve
     sourceAppName: input.sourceAppName?.trim() || "Unknown app",
     sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
-      mode: "drift",
+      mode: input.petIntercepted ? "pet_intercept" : "drift",
       contextLabel: input.contextLabel,
       driftDurationLabel,
       latestFocusLabel: focusTargets[0]?.label ?? null,

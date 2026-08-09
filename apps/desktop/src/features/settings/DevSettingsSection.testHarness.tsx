@@ -70,6 +70,7 @@ export function renderProductionDevSettings(
     onInstallLatestBuild: vi.fn(),
     onOpenReplayOnboarding: vi.fn(),
     onPreviewPetModeIntervention: vi.fn(),
+    onRehearsePetModeIntercept: vi.fn(),
     onPreviewPetModeBrowserTabClose: vi.fn(),
     onPreviewPetModeDriftyWindowClose: vi.fn(),
     onPlacePetModeCenter: vi.fn(),

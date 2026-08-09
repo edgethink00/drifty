@@ -1,6 +1,8 @@
 export type DriftAlarmCopySettingsValue = {
   readonly driftTitle: string;
   readonly driftSummary: string;
+  readonly petInterceptTitle: string;
+  readonly petInterceptSummary: string;
   readonly currentContextPill: string;
   readonly latestFocusPill: string;
   readonly returnToFocusLabel: string;
@@ -21,6 +23,12 @@ export type DriftAlarmCopySettingsValue = {
 export type DriftAlarmCopyContext =
   | {
     readonly mode: "drift";
+    readonly contextLabel: string;
+    readonly driftDurationLabel: string;
+    readonly latestFocusLabel: string | null;
+  }
+  | {
+    readonly mode: "pet_intercept";
     readonly contextLabel: string;
     readonly driftDurationLabel: string;
     readonly latestFocusLabel: string | null;
@@ -66,6 +74,11 @@ type TemplateValues = Record<string, string | null>;
 const DEFAULT_DRIFT_ALARM_COPY = {
   driftTitle: "Let's get you back in flow.",
   driftSummary: "This seems outside your focus flow.",
+  /* Catching the cat is a deliberate physical act, so the card has to show it
+     landed. Reusing the ordinary drift title here read as if nothing had
+     happened. The question hands the judgement back without accusing. */
+  petInterceptTitle: "Still drifting?",
+  petInterceptSummary: "{context} stayed open.",
   currentContextPill: "Now {context}",
   latestFocusPill: "Latest focus {latestFocus}",
   returnToFocusLabel: "Return to focus",
@@ -97,7 +110,9 @@ export function buildDriftAlarmCopy(settings: DriftAlarmCopySettingsValue, conte
   };
 
   switch (context.mode) {
-    case "drift": {
+    case "drift":
+    case "pet_intercept": {
+      const intercepted = context.mode === "pet_intercept";
       const values = {
         context: fallbackText(context.contextLabel, "This drift"),
         driftDuration: context.driftDurationLabel,
@@ -109,8 +124,12 @@ export function buildDriftAlarmCopy(settings: DriftAlarmCopySettingsValue, conte
 
       return {
         ...sharedCopy,
-        title: renderTemplate(settings.driftTitle, defaults.driftTitle, values),
-        summary: renderTemplate(defaults.driftSummary, defaults.driftSummary, values),
+        title: intercepted
+          ? renderTemplate(settings.petInterceptTitle, defaults.petInterceptTitle, values)
+          : renderTemplate(settings.driftTitle, defaults.driftTitle, values),
+        summary: intercepted
+          ? renderTemplate(defaults.petInterceptSummary, defaults.petInterceptSummary, values)
+          : renderTemplate(defaults.driftSummary, defaults.driftSummary, values),
         contextPills: [
           renderTemplate(defaults.currentContextPill, defaults.currentContextPill, values),
           ...latestFocusPill,

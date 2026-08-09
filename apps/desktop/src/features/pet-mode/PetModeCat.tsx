@@ -382,6 +382,7 @@ export function PetModeCat({
       <span className="pet-mode-cat__shadow" aria-hidden="true" />
       <span className="pet-mode-cat__heart" aria-hidden="true">♥</span>
       <span className="pet-mode-cat__zzz" aria-hidden="true">z</span>
+      <span className="pet-mode-cat__alert" aria-hidden="true">!</span>
     </div>
   );
 }

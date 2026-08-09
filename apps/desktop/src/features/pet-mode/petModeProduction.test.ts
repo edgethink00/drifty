@@ -106,3 +106,109 @@ describe("pet size", () => {
     expect(app).toContain("[petModeActive, petModeSize]");
   });
 });
+
+describe("catching the cat cancels the close", () => {
+  const css = readFileSync("src/features/pet-mode/petMode.css", "utf8");
+  const petWindow = readFileSync("src/features/pet-mode/PetModeWindowApp.tsx", "utf8");
+  const cat = readFileSync("src/features/pet-mode/PetModeCat.tsx", "utf8");
+
+  it("never closes a tab or app when the paw did not reach its contact frame", () => {
+    // The paw contact frame is the stated cause of the close. Closing without
+    // it turns the whole approach animation into a lie and destroys a tab the
+    // user just reached out to protect.
+    const runner = app.slice(app.indexOf("const runExtremeNudge = async () => {"));
+    const body = runner.slice(0, runner.indexOf("applyNativeExtremeNudge"));
+    expect(body).toContain("const contacted = await playNativePetModeIntervention");
+    expect(body).toContain("if (!contacted)");
+    expect(body).toContain("pet_intercepted");
+  });
+
+  it("hands an intercepted nudge to the companion without an OS notification", () => {
+    // The user is already looking at the screen with a hand on the pointer, so
+    // a system banner on top of the companion is pure noise.
+    expect(app).toContain('const intercepted = result.diagnostic === "pet_intercepted"');
+    expect(app).toContain("showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted)");
+  });
+
+  it("keys the one-round reprieve to the segment, not the rotating alert key", () => {
+    // The alert key embeds `endedAt` and rotates on every poll while the same
+    // drift continues. Keying the reprieve on it would grant a fresh pass every
+    // 15 seconds and turn interception into a permanent bypass.
+    expect(app).toContain("petInterceptedSegmentRef.current = latestDrift.sourceSegmentId ?? segment.id");
+    expect(app).toContain("if (petInterceptedSegmentRef.current === (latestDrift.sourceSegmentId ?? segment.id))");
+    expect(app).toContain("pet_intercept_reprieve");
+  });
+
+  it("spends the reprieve so a continued drift is nudged again", () => {
+    const gate = app.slice(app.indexOf("if (petInterceptedSegmentRef.current === (latestDrift.sourceSegmentId"));
+    expect(gate.slice(0, gate.indexOf("recordDriftAlarmDebugEvent"))).toContain("petInterceptedSegmentRef.current = null");
+  });
+
+  it("reports a missed contact immediately instead of waiting out the timeout", () => {
+    // Without this the caller burns the full contact timeout before it can
+    // react, leaving a caught cat in the user's hand and a silent screen.
+    const finallyBlock = petWindow.slice(petWindow.indexOf("} finally {"));
+    expect(finallyBlock.slice(0, finallyBlock.indexOf("if (movedToTarget)"))).toContain("reportNativePetContact(target.id, false)");
+  });
+
+  it("warns before the close while the approach can still be interrupted", () => {
+    expect(cat).toContain('className="pet-mode-cat__alert"');
+    expect(css).toContain(".pet-mode-cat--run .pet-mode-cat__alert");
+    expect(css).toContain(".pet-mode-cat--paw .pet-mode-cat__alert");
+  });
+
+  it("treats a chosen break as permission to drift, so the cat stays away for its whole duration", () => {
+    // Product decision: picking a break duration authorises that drift. The
+    // snooze gate has to keep sitting in front of the nudge call, otherwise the
+    // cat would run at a tab the user just bought time for.
+    const snoozeGate = app.indexOf("const activeSnooze = driftAlarmSnooze ?? driftAlarmSnoozeRef.current;");
+    const nudgeCall = app.indexOf("applyCurrentExtremeNudge(");
+    expect(snoozeGate).toBeGreaterThan(-1);
+    expect(nudgeCall).toBeGreaterThan(snoozeGate);
+
+    const gateBlock = app.slice(snoozeGate, app.indexOf("if (!latestDrift)", snoozeGate));
+    expect(gateBlock).toContain('reason: "snoozed"');
+    expect(gateBlock).toContain("return;");
+  });
+
+  it("lets the cat intervene again when the break ends and the drift is still going", () => {
+    // Expiry clears the snooze and the delivered-alert key, so the next poll
+    // treats a continuing drift as a fresh candidate rather than a duplicate.
+    const expiry = app.slice(app.indexOf("pendingBreakReturnAlarmRef.current = driftAlarmSnooze;"));
+    const block = expiry.slice(0, expiry.indexOf("}, delayMs);"));
+    expect(block).toContain("driftAlarmSnoozeRef.current = null");
+    expect(block).toContain("lastDriftAlertSegmentRef.current = null");
+  });
+
+  it("lets Dev show the caught-cat card on demand for visual review", () => {
+    // Visual work has to be reviewable by the person approving it. Gating the
+    // card behind winning a live grab, or behind a throwaway capture harness,
+    // leaves nothing they can actually open and judge.
+    const devSettings = readFileSync("src/features/settings/DevSettingsSection.tsx", "utf8");
+    expect(devSettings).toContain("onRehearsePetModeIntercept");
+    expect(devSettings).toContain("Intercept card");
+
+    const handler = app.slice(app.indexOf("onRehearsePetModeIntercept={() => {"));
+    const body = handler.slice(0, handler.indexOf("onPreviewPetModeBrowserTabClose"));
+    // Same native surface the real interception hands off to.
+    expect(body).toContain("previewPetInterceptCard()");
+    // Never destructive, and never dependent on catching the cat first.
+    expect(body).not.toContain("applyNativePetModeLabTarget");
+    expect(body).not.toContain("applyNativeExtremeNudge");
+    expect(body).not.toContain("playNativePetModeIntervention");
+  });
+
+  it("does not greet a caught cat with the ordinary drift headline", () => {
+    // The user just reached out and grabbed the cat. Reusing "Let's get you back
+    // in flow." there reads as if the app never noticed the gesture.
+    const copy = readFileSync("src/features/companion/driftAlarmCopy.ts", "utf8");
+    expect(copy).toContain('petInterceptTitle: "Still drifting?"');
+    expect(copy).toContain('case "pet_intercept"');
+
+    // The distinction is copy-only: the event still ships as a drift alarm so
+    // surface sizing, actions, and stored interactions stay unchanged.
+    const event = readFileSync("src/features/companion/driftAlarmEvent.ts", "utf8");
+    expect(event).toContain('mode: input.petIntercepted ? "pet_intercept" : "drift"');
+    expect(event).toContain('mode: "drift"');
+  });
+});

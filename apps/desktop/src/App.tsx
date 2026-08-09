@@ -1394,6 +1394,11 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  // Catching the cat buys one quiet round per drift stretch. Keyed by source
+  // segment rather than alert key, because the alert key embeds `endedAt` and
+  // rotates every poll while the same drift continues; keying on it would hand
+  // out a fresh reprieve every 15 seconds and make interception a free bypass.
+  const petInterceptedSegmentRef = useRef<string | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const lastEligibleDriftCandidateRef = useRef<DriftAlarmCandidate | null>(null);
   const pendingDriftAlarmTransientRef = useRef<DriftAlarmTransientPending | null>(null);
@@ -1893,6 +1898,18 @@ export default function App() {
           : showNativeDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
     void sent.catch((error: unknown) => {
       console.warn("Failed to preview companion moment", toErrorMessage(error));
+    });
+  }, [companionUsesMomentSurface]);
+
+  /* The caught-cat card differs from the ordinary drift card only in its copy,
+     so it needs its own preview to be reviewable at all. */
+  const previewPetInterceptCard = useCallback(() => {
+    const alarm = buildCompanionDriftAlarmPreview("drift-alarm", Date.now(), true);
+    const sent = companionUsesMomentSurface
+      ? showNativeCompanionDriftAlarm(alarm)
+      : showNativeDriftAlarm(alarm);
+    void sent.catch((error: unknown) => {
+      console.warn("Failed to preview pet intercept card", toErrorMessage(error));
     });
   }, [companionUsesMomentSurface]);
 
@@ -3584,6 +3601,7 @@ export default function App() {
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       lastDriftAlertSegmentRef.current = null;
+      petInterceptedSegmentRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
         setDriftAlarmSnooze(null);
@@ -3654,7 +3672,10 @@ export default function App() {
       default:
         assertNever(transientDecision);
     }
-    const buildCurrentDriftAlarmEvent = (focusTargets: readonly DriftAlarmFocusTarget[] = availableDriftAlarmFocusTargetsForAlarm) => {
+    const buildCurrentDriftAlarmEvent = (
+      focusTargets: readonly DriftAlarmFocusTarget[] = availableDriftAlarmFocusTargetsForAlarm,
+      petIntercepted = false,
+    ) => {
       const contextLabel = getWatcherContextLabel(segment, category);
       const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
       const sourceAppName = segment.appName.trim() || "Unknown app";
@@ -3675,10 +3696,11 @@ export default function App() {
         sourceIconSrc,
         copySettings: driftAlarmCopy,
         sourceSegmentId,
+        petIntercepted,
       });
     };
-    const showCurrentDriftAlarm = () => {
-      showDriftAlarm(buildCurrentDriftAlarmEvent());
+    const showCurrentDriftAlarm = (petIntercepted = false) => {
+      showDriftAlarm(buildCurrentDriftAlarmEvent(availableDriftAlarmFocusTargetsForAlarm, petIntercepted));
     };
     const markCurrentDriftAlarmDelivered = () => {
       recordDriftAlarmDebugEvent({
@@ -3689,8 +3711,8 @@ export default function App() {
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
-    const showFallbackDriftAlarm = (notify: boolean) => {
-      showCurrentDriftAlarm();
+    const showFallbackDriftAlarm = (notify: boolean, petIntercepted = false) => {
+      showCurrentDriftAlarm(petIntercepted);
       markCurrentDriftAlarmDelivered();
       if (notify) {
         recordDriftAlarmDebugEvent({
@@ -3712,6 +3734,21 @@ export default function App() {
     };
     const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
       lastDriftAlertSegmentRef.current = alertKey;
+      // One caught cat per drift stretch keeps the reprieve meaningful without
+      // letting it become permanent: this round stays quiet, and the next poll
+      // sends the cat again if the drift is still going.
+      if (petInterceptedSegmentRef.current === (latestDrift.sourceSegmentId ?? segment.id)) {
+        petInterceptedSegmentRef.current = null;
+        recordDriftAlarmDebugEvent({
+          kind: "extreme_nudge_result",
+          alertKey,
+          result: "not_applied",
+          reason: "pet_intercept_reprieve",
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+        return;
+      }
       recordDriftAlarmDebugEvent({
         kind: "extreme_nudge_started",
         alertKey,
@@ -3720,11 +3757,18 @@ export default function App() {
       });
       const runExtremeNudge = async () => {
         if (petModeActive) {
-          await playNativePetModeIntervention(buildPetModeInterventionTarget({
+          const contacted = await playNativePetModeIntervention(buildPetModeInterventionTarget({
             id: alertKey,
             appName: segment.appName,
             browserName: segment.browserName,
           }));
+          // The paw contact frame is the stated cause of the close. When the
+          // user catches the cat before that frame, nothing has pressed the X,
+          // so closing anyway would make the whole animation a lie. Hand the
+          // moment to the companion instead of destroying a tab or an app.
+          if (!contacted) {
+            return { applied: false, diagnostic: "pet_intercepted" } as const;
+          }
         }
         return applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
           forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
@@ -3740,7 +3784,17 @@ export default function App() {
           evaluation,
         });
         if (!result.applied) {
-          if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
+          if (lastDriftAlertSegmentRef.current === alertKey) {
+            const intercepted = result.diagnostic === "pet_intercepted";
+            if (intercepted) {
+              petInterceptedSegmentRef.current = latestDrift.sourceSegmentId ?? segment.id;
+            }
+            // A caught cat is a deliberate user signal, not a delivery failure.
+            // Reuse the same alarm surface, but never fire an OS notification
+            // on top of it: the user is already looking at the screen and has a
+            // hand on the pointer.
+            showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted);
+          }
           return;
         }
         let resolvedDriftAlarmFocusTargets = availableDriftAlarmFocusTargetsForAlarm;
@@ -7090,6 +7144,13 @@ export default function App() {
                         return;
                       }
                       void previewNativePetModeIntervention();
+                    }}
+                    onRehearsePetModeIntercept={() => {
+                      // Shows exactly what a caught cat produces, without making the
+                      // reviewer win the grab first. Same native surface the real
+                      // interception hands off to, so this is the shipped card.
+                      setPetModeLabPointerStatus("Showing the card a caught cat produces");
+                      previewPetInterceptCard();
                     }}
                     onPreviewPetModeBrowserTabClose={() => {
                       const target = buildPetModeLabBrowserTabTarget(segments);

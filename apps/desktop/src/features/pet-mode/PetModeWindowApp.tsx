@@ -265,6 +265,7 @@ export function PetModeWindowApp() {
   const playIntervention = useCallback(async (target: PetModeInterventionTarget) => {
     const token = ++actionTokenRef.current;
     let movedToTarget = false;
+    let contacted = false;
 
     try {
       await revealForAction();
@@ -284,7 +285,6 @@ export function PetModeWindowApp() {
 
       const reducedMotion = prefersReducedMotion();
       const unitMilliseconds = reducedMotion ? 8 : 1000 / PET_MODE_PAW_FPS;
-      let contacted = false;
       for (const step of PET_MODE_PAW_TIMELINE) {
         if (token !== actionTokenRef.current) return;
         if (!contacted && step.frame === PET_MODE_PAW_CONTACT_FRAME) {
@@ -314,6 +314,13 @@ export function PetModeWindowApp() {
 
       if (token !== actionTokenRef.current) return;
     } finally {
+      // Every early return above means the paw never reached its contact frame:
+      // the user grabbed the cat, or another action took over. Report that
+      // immediately so the caller resolves now instead of burning the full
+      // contact timeout before it can react.
+      if (!contacted && !target.preview) {
+        void reportNativePetContact(target.id, false).catch(() => undefined);
+      }
       if (token !== actionTokenRef.current) return;
       if (movedToTarget) {
         commitPhase("walk");
