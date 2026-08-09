@@ -301,6 +301,11 @@ fn should_reveal_main_window_on_reopen(has_visible_windows: bool) -> bool {
     !has_visible_windows
 }
 
+#[cfg(target_os = "macos")]
+fn should_use_isolated_dev_activation_policy(value: Option<&std::ffi::OsStr>) -> bool {
+    value == Some(std::ffi::OsStr::new("1"))
+}
+
 pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.unminimize();
@@ -383,6 +388,12 @@ pub fn run() {
 
     if let Err(error) = builder
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            if should_use_isolated_dev_activation_policy(
+                std::env::var_os("DRIFTY_ISOLATED_DEV").as_deref(),
+            ) {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
             setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
             setup_companion_pill_window(app)?;

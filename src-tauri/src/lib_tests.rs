@@ -63,6 +63,23 @@ fn macos_reopen_policy_reveals_only_without_visible_windows() {
     assert!(should_reveal_main_window_on_reopen(false));
     assert!(!should_reveal_main_window_on_reopen(true));
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn isolated_dev_activation_policy_requires_explicit_launcher_marker() {
+    use std::ffi::OsStr;
+
+    assert!(should_use_isolated_dev_activation_policy(Some(OsStr::new(
+        "1"
+    ))));
+    assert!(!should_use_isolated_dev_activation_policy(None));
+    assert!(!should_use_isolated_dev_activation_policy(Some(
+        OsStr::new("0")
+    )));
+    assert!(!should_use_isolated_dev_activation_policy(Some(
+        OsStr::new("true")
+    )));
+}
 fn tracker_status(running: bool) -> TrackerStatus {
     let (tracker_mode, message) = if running {
         ("tracking", "Tracker is running.")

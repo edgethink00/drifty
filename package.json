@@ -14,7 +14,8 @@
     "build:web": "npm --prefix apps/desktop run build",
     "build:tracker-sidecar": "node scripts/build-tracker-sidecar.mjs",
     "typecheck": "npm --prefix apps/desktop run typecheck",
-    "test:python": "PYTHONPATH=services/tracker-python python3 -m unittest discover -s services/tracker-python/tests -v"
+    "test:python": "PYTHONPATH=services/tracker-python python3 -m unittest discover -s services/tracker-python/tests -v",
+    "tauri:dev:isolated": "sh scripts/tauri-dev-isolated.sh"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.4.1",
