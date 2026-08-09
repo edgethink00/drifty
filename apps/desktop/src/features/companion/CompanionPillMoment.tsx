@@ -3,6 +3,7 @@ import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { CompanionReentryEvent } from "./companionReentry";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
+import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import { PillDismissIcon, PillMilestoneKindIcon, PillOpenArrowIcon, PillReentryIcon, PillTrophyIcon } from "./CompanionPillIcons";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
 
@@ -66,7 +67,7 @@ export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
   milestone: 4_000,
   reentry: 8_000,
   driftAlarm: 10_000,
-  extremeNudgeToast: 8_000,
+  extremeNudgeToast: EXTREME_NUDGE_TOAST_VISIBLE_MS,
   endOfDayReview: 12_000,
 };
 

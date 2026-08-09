@@ -72,9 +72,10 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(screen.getByRole("button", { name: "Take a break" })).toBeTruthy();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
     expect(toast.getAttribute("data-phase")).toBe("visible");
+    expect(toast.style.getPropertyValue("--extreme-toast-visible-duration")).toBe("6000ms");
 
     act(() => {
-      vi.advanceTimersByTime(7_999);
+      vi.advanceTimersByTime(5_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -107,7 +108,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
 
     fireEvent.pointerLeave(toast);
     act(() => {
-      vi.advanceTimersByTime(3_999);
+      vi.advanceTimersByTime(1_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -138,7 +139,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(3_999);
+      vi.advanceTimersByTime(1_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -194,7 +195,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(toast.hasAttribute("data-timer-paused")).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(3_999);
+      vi.advanceTimersByTime(1_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -220,7 +221,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(toast.hasAttribute("data-timer-paused")).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(5_999);
+      vi.advanceTimersByTime(3_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 

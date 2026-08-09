@@ -44,7 +44,6 @@
 .extreme-nudge-toast {
   --extreme-toast-tone: var(--warn);
   --extreme-toast-ease: cubic-bezier(.16, 1, .3, 1);
-  --extreme-toast-visible-duration: 8s;
   align-items: start;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   border: 1px solid color-mix(in srgb, var(--extreme-toast-tone) 18%, var(--line));

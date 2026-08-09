@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
 import { BreakDurationPicker } from "./BreakDurationPicker";
 import { FlagIcon } from "./DriftAlarmIcons";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
+import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import { useDelayedDriftAlarmAction } from "./useDelayedDriftAlarmAction";
 import { isNativeWatcherCursorInside } from "./watcherBridge";
 
@@ -18,7 +19,6 @@ export type ExtremeNudgeToastEvent = {
 
 type ToastPhase = "visible" | "leaving";
 
-const EXTREME_NUDGE_TOAST_VISIBLE_MS = 8_000;
 const EXTREME_NUDGE_TOAST_EXIT_MS = 280;
 const EXTREME_NUDGE_HOVER_WATCHDOG_MS = 250;
 
@@ -171,6 +171,7 @@ export function ExtremeNudgeToast({
       className="extreme-nudge-toast"
       data-phase={phase}
       data-timer-paused={isTimerPaused ? "true" : undefined}
+      style={{ "--extreme-toast-visible-duration": `${EXTREME_NUDGE_TOAST_VISIBLE_MS}ms` } as CSSProperties}
       role={isPreview ? "group" : "status"}
       aria-live={isPreview ? undefined : "polite"}
       aria-atomic={isPreview ? undefined : "true"}

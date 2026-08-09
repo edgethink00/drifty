@@ -106,7 +106,7 @@ describe("CompanionPill native interactions", () => {
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "full" })).toBe(12_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "compact" })).toBe(10_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "minimal" })).toBe(8_000);
-    expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(8_000);
+    expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(6_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionReentryPreview(1))).toBe(8_000);
   });
 
