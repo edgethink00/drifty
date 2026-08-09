@@ -19,6 +19,10 @@ export const PET_MODE_RUN_SPEED = 300;
 export const PET_MODE_RUN_STRIDE = 72;
 export const PET_MODE_GAIT_CADENCE = 0.9;
 export const PET_MODE_GAIT_FRAME_COUNT = 30;
+// The native panel starts mostly outside the display edge and uses the same
+// 420ms protocol duration to walk inward. This value times the matching gait
+// and renderer fallback.
+export const PET_MODE_ENTRY_DURATION_MS = 420;
 // One complete upper-lid pass: close, a very short contact, then reopen.
 // Keeping the phase and CSS animation on one shared duration prevents the
 // overlay from being removed before the opening frame has finished.
@@ -88,7 +92,7 @@ export const PET_MODE_PAW_TIMELINE = [
   })),
 ] as const;
 
-export type PetModeMotionKind = "walk" | "run";
+export type PetModeMotionKind = "entry" | "walk" | "run";
 
 export type PetModePreviewAction =
   | "stop"
@@ -128,6 +132,7 @@ export type PetModeWindowEvent =
   | { readonly kind: "snapshot"; readonly snapshot: PetModeSnapshot }
   | { readonly kind: "facing"; readonly facing: "left" | "right" }
   | { readonly kind: "motion"; readonly motion: PetModeMotionKind }
+  | { readonly kind: "entry_complete" }
   | { readonly kind: "preview_action"; readonly action: PetModePreviewAction }
   | { readonly kind: "intervention"; readonly target: PetModeInterventionTarget };
 
@@ -153,6 +158,9 @@ export type PetModeContactAlignment = {
 };
 
 export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number {
+  if (motion === "entry") {
+    return PET_MODE_GAIT_FRAME_COUNT * 1000 / PET_MODE_ENTRY_DURATION_MS;
+  }
   const speed = motion === "run" ? PET_MODE_RUN_SPEED : PET_MODE_WALK_SPEED;
   const stride = motion === "run" ? PET_MODE_RUN_STRIDE : PET_MODE_WALK_STRIDE;
   return PET_MODE_GAIT_FRAME_COUNT * speed * PET_MODE_GAIT_CADENCE / stride;

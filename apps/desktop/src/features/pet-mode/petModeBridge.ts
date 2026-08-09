@@ -35,13 +35,28 @@ export type PetModeInputBounds = {
 // Native travel can legitimately use the full six-second cap before the paw
 // reaches its reviewed contact frame. Keep the listener alive through both.
 const PET_MODE_CONTACT_TIMEOUT_MS = 8_000;
+let petModeEnabledSync: Promise<void> = Promise.resolve();
 
 export async function setNativePetModeEnabled(
   enabled: boolean,
   snapshot: PetModeSnapshot | null,
+  reducedMotion: boolean,
+  width: number,
+  height: number,
 ): Promise<boolean> {
   if (!isTauriRuntime()) return false;
-  await invoke("pet_mode_set_enabled", { enabled, snapshot });
+  const sync = petModeEnabledSync.then(() => invoke("pet_mode_set_enabled", {
+    enabled,
+    snapshot,
+    reducedMotion,
+    width,
+    height,
+  }));
+  // React effects can enqueue off/on transitions faster than Tauri can finish
+  // the first command. Preserve call order without allowing one rejected invoke
+  // to poison every later Pet Mode transition.
+  petModeEnabledSync = sync.then(() => undefined, () => undefined);
+  await sync;
   return true;
 }
 

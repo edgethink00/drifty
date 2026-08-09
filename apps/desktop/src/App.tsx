@@ -227,7 +227,6 @@ import {
   previewNativePetModeAction,
   previewNativePetModeIntervention,
   setNativePetModeEnabled,
-  setNativePetModeSize,
   updateNativePetMode,
 } from "./features/pet-mode/petModeBridge";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
@@ -4608,18 +4607,17 @@ export default function App() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     const snapshot = petModeActive ? buildPetModeSnapshot(watcherSnapshot) : null;
-    void setNativePetModeEnabled(petModeActive, snapshot).catch((nextError) => {
-      console.warn("Failed to sync Pet Mode window", nextError);
-    });
-  }, [petModeActive]);
-  // Resize the native panel whenever the size changes, and once more each time
-  // the pet is switched on: the window is recreated at its default size, so a
-  // non-default choice has to be re-applied before it becomes visible.
-  useEffect(() => {
-    if (!petModeActive || !isTauriRuntime()) return;
+    const reducedMotion = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { width, height } = getPetModeWindowSize(petModeSize);
-    void setNativePetModeSize(width, height).catch((nextError) => {
-      console.warn("Failed to resize Pet Mode window", nextError);
+    void setNativePetModeEnabled(
+      petModeActive,
+      snapshot,
+      reducedMotion,
+      width,
+      height,
+    ).catch((nextError) => {
+      console.warn("Failed to sync Pet Mode window", nextError);
     });
   }, [petModeActive, petModeSize]);
   useEffect(() => {

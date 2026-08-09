@@ -11,6 +11,7 @@ import {
 
 type PetModeCatPhase =
   | "idle"
+  | "entry"
   | "walk"
   | "run"
   | "paw"
@@ -39,10 +40,12 @@ export function PetModeCat({
   phase,
   facing,
   pawFrame,
+  entrySequence = 0,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
   readonly pawFrame: number;
+  readonly entrySequence?: number;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -103,10 +106,10 @@ export function PetModeCat({
   }, []);
 
   useEffect(() => {
-    const moving = phase === "walk" || phase === "run";
+    const moving = phase === "entry" || phase === "walk" || phase === "run";
     if (!moving || walkFrames.length === 0) return undefined;
     setWalkFrame(0);
-    const framesPerSecond = getPetModeGaitFramesPerSecond(phase === "run" ? "run" : "walk");
+    const framesPerSecond = getPetModeGaitFramesPerSecond(phase);
     const startedAt = performance.now();
     let displayedFrame = 0;
     let animationFrameId = 0;
@@ -123,7 +126,7 @@ export function PetModeCat({
     };
     animationFrameId = window.requestAnimationFrame(render);
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [phase, walkFrames.length]);
+  }, [entrySequence, phase, walkFrames.length]);
 
   useEffect(() => {
     if (!isLifeMotionPhase(phase)) return undefined;
@@ -159,6 +162,21 @@ export function PetModeCat({
     "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
     "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
   } as CSSProperties;
+  const walkVectorBody = (
+    <>
+      <path d={walkFrames[walkFrame]} fill="currentColor" />
+      <g className="pet-mode-cat__face">
+        {/* These eyes carried no `fill`, so they fell back to SVG's
+            default black. That happened to match the ivory cat's ink and
+            hid the bug, but it ignores `--pet-ink` and left black eyes on
+            a charcoal coat. Bind them to the token like every other
+            facial detail. */}
+        <circle cx="120.4" cy="46.2" r="2.2" fill="currentColor" />
+        <circle cx="140.3" cy="46.2" r="2.2" fill="currentColor" />
+        <path d="M127.6 50.2 Q129.6 52.8 131.6 50.5 Q133.6 52.8 135.7 50.2" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+      </g>
+    </>
+  );
   return (
     <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} style={dragMotionDurations}>
       <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
@@ -338,19 +356,9 @@ export function PetModeCat({
           />
         ) : phase === "sleep" ? (
           <PetModeSleepPose />
-        ) : (phase === "walk" || phase === "run") && walkFrames.length > 0 ? (
+        ) : (phase === "entry" || phase === "walk" || phase === "run") && walkFrames.length > 0 ? (
           <svg className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
-            <path d={walkFrames[walkFrame]} fill="currentColor" />
-            <g className="pet-mode-cat__face">
-              {/* These eyes carried no `fill`, so they fell back to SVG's
-                  default black. That happened to match the ivory cat's ink and
-                  hid the bug, but it ignores `--pet-ink` and left black eyes on
-                  a charcoal coat. Bind them to the token like every other
-                  facial detail. */}
-              <circle cx="120.4" cy="46.2" r="2.2" fill="currentColor" />
-              <circle cx="140.3" cy="46.2" r="2.2" fill="currentColor" />
-              <path d="M127.6 50.2 Q129.6 52.8 131.6 50.5 Q133.6 52.8 135.7 50.2" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
-            </g>
+            {walkVectorBody}
           </svg>
         ) : (
           <img

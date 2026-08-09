@@ -29,6 +29,7 @@ pub const PET_MODE_WINDOW_LABEL: &str = "pet-mode";
 const PET_MODE_WIDTH: f64 = 144.0;
 const PET_MODE_HEIGHT: f64 = 99.0;
 const PET_MODE_HOME_Y: f64 = 14.0;
+const PET_MODE_HOME_EDGE_INSET: f64 = 24.0;
 // Manual placement stays completely free, but only a drop inside this upper
 // screen band redefines the pet's long-term home. A lower drop is temporary:
 // the next autonomous walk still targets the remembered upper resident lane.
@@ -37,6 +38,12 @@ const PET_MODE_RUN_SPEED: f64 = 300.0;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
+const PET_MODE_ENTRY_DURATION_MS: u64 = 420;
+const PET_MODE_ENTRY_INITIAL_VISIBLE_RATIO: f64 = 0.25;
+// AppKit can defer the first NSPanel composite while the settings toggle's
+// accessibility action is still unwinding. The full panel begins outside the
+// display with one quarter visible, then moves inward after this short hold.
+const PET_MODE_ENTRY_PAINT_DELAY_MS: u64 = 120;
 // F12 source contact point (162.8751 / 150) scaled to the fixed 121.2-point
 // cat viewport and centered in the 144-point native panel.
 const PET_MODE_CONTACT_X_RIGHT: f64 = 143.0;
@@ -46,6 +53,7 @@ const PET_MODE_FALLBACK_TARGET_INSET: f64 = 28.0;
 const PET_MODE_AX_SCAN_LIMIT: usize = 360;
 
 static PET_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
+static PET_MODE_ENTRY_ACTIVE: AtomicBool = AtomicBool::new(false);
 static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
@@ -257,18 +265,30 @@ pub fn pet_mode_set_enabled(
     app: AppHandle,
     enabled: bool,
     snapshot: Option<Value>,
+    reduced_motion: bool,
+    width: f64,
+    height: f64,
 ) -> Result<(), String> {
-    PET_MODE_ENABLED.store(enabled, Ordering::Relaxed);
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Err("Pet Mode window is not available".to_string());
     };
 
     if !enabled {
+        PET_MODE_ENABLED.store(false, Ordering::Relaxed);
+        PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+        cancel_pet_motion();
+        let (width, height) = pet_size();
+        let _ = window.set_min_size(Some(LogicalSize::new(width, height)));
         let _ = window.set_ignore_cursor_events(true);
         return window.hide().map_err(|error| error.to_string());
     }
 
-    position_pet_home(&app, &window, false)?;
+    // Size and placement form one presentation transaction. Applying the
+    // persisted size here prevents a cold launch from calculating the entry
+    // offset at the default panel size and resizing halfway through the step.
+    let size_changed = apply_pet_mode_size(&window, width, height)?;
+    let was_enabled = PET_MODE_ENABLED.swap(true, Ordering::Relaxed);
+
     window
         .set_always_on_top(true)
         .map_err(|error| error.to_string())?;
@@ -278,11 +298,174 @@ pub fn pet_mode_set_enabled(
     window
         .set_ignore_cursor_events(false)
         .map_err(|error| error.to_string())?;
-    show_pet_panel(&app, &window)?;
+
+    // React can legitimately re-send the enabled state while the panel is
+    // already active (notably under Strict Mode). Reassert presentation without
+    // snapping an in-flight entrance back home or replaying the choreography.
+    if was_enabled {
+        let entry_active = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed);
+        if (reduced_motion && entry_active) || size_changed {
+            PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+            cancel_pet_motion();
+            if reduced_motion {
+                let (final_width, final_height) = pet_size();
+                window
+                    .set_size(LogicalSize::new(final_width, final_height))
+                    .map_err(|error| error.to_string())?;
+            }
+            position_pet_home(&app, &window, false)?;
+        }
+        show_pet_panel(&app, &window)?;
+        if !PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed) {
+            // A renderer can remount while the native panel survives. Reassert
+            // the settled state so persisted enabled storage cannot fabricate
+            // a second entry pose in the replacement WebView.
+            emit_pet_event(&window, json!({ "kind": "entry_complete" }))?;
+        }
+        if let Some(snapshot) = snapshot {
+            emit_pet_event(&window, json!({ "kind": "snapshot", "snapshot": snapshot }))?;
+        }
+        return Ok(());
+    }
+
+    cancel_pet_motion();
+    let monitor = resolve_pet_home_monitor(&app)
+        .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+    let home = calculate_pet_home_position(&monitor);
+    let (final_width, final_height) = pet_size();
+    let scale_factor = monitor.scale_factor();
+    let screen_position = monitor.position().to_logical::<f64>(scale_factor);
+    let screen_size = monitor.size().to_logical::<f64>(scale_factor);
+    let entry = pet_entry_geometry(screen_position.x, screen_size.width, home.x, final_width);
+    emit_pet_event(&window, json!({ "kind": "facing", "facing": entry.facing }))?;
+
+    if reduced_motion {
+        PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+        window
+            .set_size(LogicalSize::new(final_width, final_height))
+            .map_err(|error| error.to_string())?;
+        window
+            .set_position(home)
+            .map_err(|error| error.to_string())?;
+        show_pet_panel(&app, &window)?;
+        emit_pet_event(&window, json!({ "kind": "entry_complete" }))?;
+    } else {
+        PET_MODE_ENTRY_ACTIVE.store(true, Ordering::Relaxed);
+        window
+            .set_size(LogicalSize::new(final_width, final_height))
+            .map_err(|error| error.to_string())?;
+        window
+            .set_position(LogicalPosition::new(entry.start_x, home.y))
+            .map_err(|error| error.to_string())?;
+        show_pet_panel(&app, &window)?;
+    }
+
+    if !reduced_motion {
+        let entry_window = window.clone();
+        let entry_start_x = entry.start_x;
+        let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
+        drop(async_runtime::spawn_blocking(move || {
+            // The display edge is the reveal boundary. Only one quarter of the
+            // full panel starts onscreen, so the first visible frame cannot be
+            // a complete cat floating in the middle of the desktop.
+            thread::sleep(Duration::from_millis(PET_MODE_ENTRY_PAINT_DELAY_MS));
+            if !pet_entry_motion_is_current(motion_revision) {
+                return;
+            }
+            let _ = emit_pet_event(
+                &entry_window,
+                json!({ "kind": "motion", "motion": "entry" }),
+            );
+            // Give the WebView one frame to switch from its held inward-facing
+            // idle pose to the first gait frame before native movement begins.
+            thread::sleep(Duration::from_millis(16));
+            if !pet_entry_motion_is_current(motion_revision) {
+                return;
+            }
+            let _ = animate_pet_entry_window(&entry_window, entry_start_x, home, motion_revision);
+            if !pet_entry_motion_is_current(motion_revision)
+                || !PET_MODE_ENTRY_ACTIVE.swap(false, Ordering::Relaxed)
+            {
+                return;
+            }
+            let _ = emit_pet_event(&entry_window, json!({ "kind": "entry_complete" }));
+        }));
+    }
+
     if let Some(snapshot) = snapshot {
         emit_pet_event(&window, json!({ "kind": "snapshot", "snapshot": snapshot }))?;
     }
     Ok(())
+}
+
+fn animate_pet_entry_window(
+    window: &WebviewWindow,
+    start_x: f64,
+    home: LogicalPosition<f64>,
+    motion_revision: u64,
+) -> Result<(), String> {
+    let started_at = Instant::now();
+    let duration = Duration::from_millis(PET_MODE_ENTRY_DURATION_MS);
+    loop {
+        if !pet_entry_motion_is_current(motion_revision) {
+            return Ok(());
+        }
+        let progress = (started_at.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
+        let x = start_x + (home.x - start_x) * progress;
+        window
+            .set_position(LogicalPosition::new(x, home.y))
+            .map_err(|error| error.to_string())?;
+        if progress >= 1.0 {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(16));
+    }
+}
+
+fn pet_entry_motion_is_current(motion_revision: u64) -> bool {
+    pet_entry_motion_matches(
+        motion_revision,
+        PET_MODE_MOTION_REVISION.load(Ordering::Relaxed),
+        PET_MODE_ENABLED.load(Ordering::Relaxed),
+        PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed),
+    )
+}
+
+fn pet_entry_motion_matches(
+    expected_revision: u64,
+    current_revision: u64,
+    enabled: bool,
+    entry_active: bool,
+) -> bool {
+    expected_revision == current_revision && enabled && entry_active
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PetEntryGeometry {
+    facing: &'static str,
+    start_x: f64,
+}
+
+fn pet_entry_geometry(
+    screen_x: f64,
+    screen_width: f64,
+    home_x: f64,
+    pet_width: f64,
+) -> PetEntryGeometry {
+    let visible_width = pet_width * PET_MODE_ENTRY_INITIAL_VISIBLE_RATIO;
+    let screen_center = screen_x + screen_width / 2.0;
+    let pet_center = home_x + pet_width / 2.0;
+    if pet_center < screen_center {
+        PetEntryGeometry {
+            facing: "right",
+            start_x: screen_x - pet_width + visible_width,
+        }
+    } else {
+        PetEntryGeometry {
+            facing: "left",
+            start_x: screen_x + screen_width - visible_width,
+        }
+    }
 }
 
 #[tauri::command]
@@ -612,9 +795,26 @@ pub fn pet_mode_set_size(app: AppHandle, width: f64, height: f64) -> Result<(), 
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
+    apply_pet_mode_size(&window, width, height).map(|_| ())
+}
+
+fn apply_pet_mode_size(window: &WebviewWindow, width: f64, height: f64) -> Result<bool, String> {
     if !(width.is_finite() && height.is_finite()) || width <= 0.0 || height <= 0.0 {
         return Err("Pet Mode size must be a positive, finite size".to_string());
     }
+    let changed = PET_MODE_SIZE
+        .lock()
+        .map(|current| {
+            (current.0 - width).abs() > f64::EPSILON || (current.1 - height).abs() > f64::EPSILON
+        })
+        .unwrap_or(true);
+    // A repeated enabled sync must not disturb a native entrance already in
+    // flight. If the requested final footprint is current, leave the live
+    // panel untouched.
+    if !changed {
+        return Ok(false);
+    }
+
     let size = LogicalSize::new(width, height);
     window
         .set_min_size(None::<LogicalSize<f64>>)
@@ -634,7 +834,7 @@ pub fn pet_mode_set_size(app: AppHandle, width: f64, height: f64) -> Result<(), 
     if let Ok(mut current) = PET_MODE_SIZE.lock() {
         *current = (width, height);
     }
-    Ok(())
+    Ok(true)
 }
 
 #[tauri::command]
@@ -1387,13 +1587,17 @@ fn calculate_pet_home_position(monitor: &Monitor) -> LogicalPosition<f64> {
             return clamp_pet_position(preferred, position, size.width, size.height);
         }
     }
-    let x = position.x + ((size.width - pet_width()) * 0.28).max(0.0);
+    let x = default_pet_home_x(position.x, size.width, pet_width());
     clamp_pet_position(
         LogicalPosition::new(x, position.y + PET_MODE_HOME_Y),
         position,
         size.width,
         size.height,
     )
+}
+
+fn default_pet_home_x(work_x: f64, work_width: f64, pet_width: f64) -> f64 {
+    work_x + (work_width - pet_width - PET_MODE_HOME_EDGE_INSET).max(0.0)
 }
 
 fn calculate_pet_roam_position(monitor: &Monitor) -> LogicalPosition<f64> {
@@ -1573,6 +1777,7 @@ fn animate_pet_window(
 }
 
 fn cancel_pet_motion() {
+    PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
     PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed);
 }
 
@@ -1716,6 +1921,45 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn entry_starts_partly_outside_the_nearest_display_edge() {
+        let right = pet_entry_geometry(0.0, 1440.0, 1272.0, 144.0);
+        assert_eq!(right.facing, "left");
+        assert_eq!(right.start_x, 1404.0);
+        assert_eq!(1440.0 - right.start_x, 36.0);
+
+        let left = pet_entry_geometry(0.0, 1440.0, 24.0, 144.0);
+        assert_eq!(left.facing, "right");
+        assert_eq!(left.start_x, -108.0);
+        assert_eq!(left.start_x + 144.0, 36.0);
+
+        let negative_origin = pet_entry_geometry(-1440.0, 1440.0, -168.0, 144.0);
+        assert_eq!(negative_origin.facing, "left");
+        assert_eq!(negative_origin.start_x, -36.0);
+        assert_eq!(0.0 - negative_origin.start_x, 36.0);
+
+        let offset_left = pet_entry_geometry(1512.0, 1920.0, 1536.0, 180.0);
+        assert_eq!(offset_left.facing, "right");
+        assert_eq!(offset_left.start_x, 1377.0);
+        assert_eq!(offset_left.start_x + 180.0 - 1512.0, 45.0);
+    }
+
+    #[test]
+    fn default_home_stays_inset_from_each_work_area_right_edge() {
+        assert_eq!(default_pet_home_x(0.0, 1440.0, 144.0), 1272.0);
+        assert_eq!(default_pet_home_x(-1440.0, 1440.0, 144.0), -168.0);
+        assert_eq!(default_pet_home_x(1512.0, 1920.0, 180.0), 3228.0);
+        assert_eq!(default_pet_home_x(0.0, 120.0, 144.0), 0.0);
+    }
+
+    #[test]
+    fn stale_or_cancelled_entry_motion_never_reaches_completion() {
+        assert!(pet_entry_motion_matches(8, 8, true, true));
+        assert!(!pet_entry_motion_matches(8, 9, true, true));
+        assert!(!pet_entry_motion_matches(8, 8, false, true));
+        assert!(!pet_entry_motion_matches(8, 8, true, false));
+    }
 
     #[test]
     fn parses_selected_browser_tab_close_geometry() {

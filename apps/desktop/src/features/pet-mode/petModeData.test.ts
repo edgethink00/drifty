@@ -9,6 +9,7 @@ import {
   PET_MODE_DRAG_PICKUP_TIMELINE,
   PET_MODE_DRAG_RELEASE_TIMELINE,
   PET_MODE_DRAG_SETTLE_MS,
+  PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
@@ -73,6 +74,8 @@ describe("petModeData", () => {
   });
 
   it("locks the gait to the approved HTML distance ratios", () => {
+    expect(PET_MODE_ENTRY_DURATION_MS).toBe(420);
+    expect(getPetModeGaitFramesPerSecond("entry")).toBeCloseTo(71.428571, 6);
     expect(getPetModeGaitFramesPerSecond("walk")).toBeCloseTo(21.6, 6);
     expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(112.5, 6);
   });

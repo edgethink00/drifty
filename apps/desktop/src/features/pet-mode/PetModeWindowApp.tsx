@@ -31,6 +31,7 @@ import {
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
+  PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
@@ -40,6 +41,7 @@ import {
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeLifeActionInterval,
   resolveInitialPetModeCoat,
+  resolveInitialPetModeEnabled,
   resolveInitialPetModeSize,
   type PetModeInterventionTarget,
   type PetModeLabAction,
@@ -55,13 +57,29 @@ const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
 type LifeAction = PetModePreviewAction;
 
 export function PetModeWindowApp() {
-  const [phase, setPhase] = useState<PetModeCatPhase>("idle");
-  const [facing, setFacing] = useState<"left" | "right">("right");
+  // The native window is created hidden and normally has time to mount before
+  // the main app restores the persisted setting. Starting in the matching pose
+  // also covers the cold-start race where the native entry event arrives before
+  // this webview listener is attached.
+  const [initialAppearance] = useState(() => {
+    const reducedMotion = typeof window !== "undefined"
+      && typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const entersOnLaunch = resolveInitialPetModeEnabled() && !reducedMotion;
+    return {
+      phase: entersOnLaunch ? "entry" as const : "idle" as const,
+      facing: entersOnLaunch ? "left" as const : "right" as const,
+    };
+  });
+  const initialPhase: PetModeCatPhase = initialAppearance.phase;
+  const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
+  const [facing, setFacing] = useState<"left" | "right">(initialAppearance.facing);
+  const [entrySequence, setEntrySequence] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const actionTokenRef = useRef(0);
-  const phaseRef = useRef<PetModeCatPhase>("idle");
+  const phaseRef = useRef<PetModeCatPhase>(initialPhase);
   const activeLabActionRef = useRef<PetModeLabAction | null>(null);
   const labLifeLoopEnabledRef = useRef(false);
   const visibleRef = useRef(true);
@@ -397,7 +415,17 @@ export function PetModeWindowApp() {
           || phaseRef.current === "drag"
           || phaseRef.current === "release"
         ) return;
+        if (event.motion === "entry") {
+          // A persisted cold-start pose may already be `entry`. Bump a separate
+          // sequence so the gait restarts exactly when native screen movement
+          // begins instead of continuing from the hidden mount time.
+          setEntrySequence((sequence) => sequence + 1);
+        }
         commitPhase(event.motion);
+        return;
+      }
+      if (event.kind === "entry_complete") {
+        if (phaseRef.current === "entry") commitPhase("idle");
         return;
       }
       if (event.kind === "preview_action") {
@@ -454,6 +482,17 @@ export function PetModeWindowApp() {
       actionTokenRef.current += 1;
     };
   }, [commitPhase, playIntervention, playLifeAction, reportLabState, setActiveLabAction]);
+
+  useEffect(() => {
+    if (phase !== "entry") return;
+    // Native completion is authoritative. The extra 500ms covers the native
+    // visible paint hold plus scheduling slack; this only prevents a
+    // stale gait if cold-start/HMR misses the completion event.
+    const timerId = window.setTimeout(() => {
+      if (phaseRef.current === "entry") commitPhase("idle");
+    }, PET_MODE_ENTRY_DURATION_MS + 500);
+    return () => window.clearTimeout(timerId);
+  }, [commitPhase, entrySequence, phase]);
 
   useEffect(() => {
     if (!labLifeLoopEnabled) return;
@@ -635,13 +674,15 @@ export function PetModeWindowApp() {
     void playLifeAction("pet");
   };
 
+  const entering = phase === "entry";
+
   return (
     <main className="pet-mode-surface" data-productivity={snapshot?.productivity ?? "neutral"}>
       <div className="pet-mode-scale">
         <button
           ref={hitTargetRef}
           type="button"
-          className="pet-mode-hit-target"
+          className={`pet-mode-hit-target${entering ? " is-entering" : ""}`}
           onPointerDown={handlePointerDown}
           onClick={(event) => {
             event.preventDefault();
@@ -653,7 +694,12 @@ export function PetModeWindowApp() {
             className={`pet-mode-hit-shape${facing === "left" ? " is-mirrored" : ""}`}
             aria-hidden="true"
           />
-          <PetModeCat phase={phase} facing={facing} pawFrame={pawFrame} />
+          <PetModeCat
+            phase={phase}
+            facing={facing}
+            pawFrame={pawFrame}
+            entrySequence={entrySequence}
+          />
           <span
             ref={contactAnchorRef}
             className={`pet-mode-contact-anchor pet-mode-contact-anchor--${facing}`}

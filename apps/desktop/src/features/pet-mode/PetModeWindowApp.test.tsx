@@ -7,6 +7,7 @@ import {
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
+  PET_MODE_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   type PetModeWindowEvent,
 } from "./petModeData";
@@ -122,6 +123,8 @@ describe("PetModeWindowApp", () => {
     bridge.dragEndHandler = null;
     bridge.dragStartHandler = null;
     bridge.eventHandler = null;
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
     delete document.documentElement.dataset.surface;
   });
 
@@ -156,6 +159,80 @@ describe("PetModeWindowApp", () => {
     });
 
     expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
+  });
+
+  it("renders the dedicated entry gait and settles on the native idle signal", async () => {
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+      bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+    });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    expect(cat.classList.contains("is-mirrored")).toBe(true);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "entry_complete" });
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("does not synthesize a cold-start entry pose when reduced motion is requested", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("recovers a persisted cold-start entry if the native completion event was missed", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    expect(screen.getByRole("button").classList.contains("is-entering")).toBe(true);
+
+    act(() => { vi.advanceTimersByTime(921); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(screen.getByRole("button").classList.contains("is-entering")).toBe(false);
+  });
+
+  it("restarts the fallback deadline when native begins a newer entry", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => { vi.advanceTimersByTime(800); });
+    act(() => {
+      bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+    });
+    act(() => { vi.advanceTimersByTime(121); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
+
+    act(() => { vi.advanceTimersByTime(800); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
   it("runs detailed Pet Mode Lab actions through the real pet state machine", async () => {
