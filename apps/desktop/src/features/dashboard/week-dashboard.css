@@ -2190,7 +2190,8 @@
   padding-top: 2px;
 }
 
-.week-v2-grid--day .week-v2-side__content > .kpi-row--insights {
+.week-v2-grid--day .week-v2-side__content > .kpi-row--insights,
+.page--week-dashboard .week-v2-side__content > .kpi-row--insights {
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: var(--line);
@@ -2202,7 +2203,8 @@
   grid-auto-rows: min-content;
 }
 
-.week-v2-grid--day .week-v2-side__content .kpi-row--insights .metric-tile {
+.week-v2-grid--day .week-v2-side__content .kpi-row--insights .metric-tile,
+.page--week-dashboard .week-v2-side__content .kpi-row--insights .metric-tile {
   background: var(--surface);
   border: 0;
   padding: 8px 12px 9px;
@@ -2263,9 +2265,12 @@
 
 .page--week-dashboard .week-v2-side__content {
   gap: 0;
-  height: auto;
+  /* Size against the bordered side panel, not the raw viewport. The old
+     100vh cap could end the scroll viewport well above its parent in short
+     Tauri windows, leaving blank panel space while clipping the last card. */
+  height: 100%;
   min-height: 0;
-  max-height: calc(100vh - 116px);
+  max-height: 100%;
   align-content: start;
   overflow-y: auto;
 }
@@ -2288,7 +2293,8 @@
   padding-top: 2px;
 }
 
-.page--week-dashboard .week-v2-side__content > :last-child {
+.page--week-dashboard .week-v2-side__content > .week-v2-side-card:last-child,
+.page--week-dashboard .week-v2-side__content > .flow-compact-split-chart__panel:last-child {
   border-bottom: 0;
 }
 

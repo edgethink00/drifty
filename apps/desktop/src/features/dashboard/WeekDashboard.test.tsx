@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
@@ -103,29 +103,39 @@ type WeekDashboardRenderOverrides = {
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
+  readonly rows?: WeekDayRow[];
+  readonly segments?: ActivitySegment[];
   readonly sideOpen?: boolean;
+  readonly totalSeconds?: number;
   readonly onToggleSide?: () => void;
 };
 
 function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
-  const { axisScalePercent, calendarEvents = new Map(), ...dashboardOverrides } = overrides;
+  const {
+    axisScalePercent,
+    calendarEvents = new Map(),
+    rows = weekRows,
+    segments = weekSegments,
+    totalSeconds = 4500,
+    ...dashboardOverrides
+  } = overrides;
 
   return render(
     <WeekDashboard
       appIcons={{}}
       axisScalePercent={axisScalePercent}
       calendarEvents={calendarEvents}
-      segments={weekSegments}
+      segments={segments}
       classificationOptions={{ includeAiClassifications: false }}
       categoryEntries={categoryEntries}
       endDay="2024-01-07"
       focusDeltaPercent={null}
       productivityEntries={productivityEntries}
       refreshStatus="idle"
-      rows={weekRows}
+      rows={rows}
       startDay="2024-01-01"
       startOfDayMinutes={0}
-      totalSeconds={4500}
+      totalSeconds={totalSeconds}
       {...dashboardOverrides}
     />,
   );
@@ -204,6 +214,67 @@ describe("WeekDashboard breakdown panel", () => {
     expect(container.querySelector(".week-v2-grid--side-open")).toBeTruthy();
   });
 
+  it("shows the four weekly summary metrics with the busiest day", () => {
+    const { container } = renderWeekDashboard();
+    const summary = container.querySelector<HTMLElement>('[aria-label="Week summary metrics"]');
+
+    expect(summary).toBeTruthy();
+    const tiles = summary!.querySelectorAll<HTMLElement>(".metric-tile");
+    expect(tiles).toHaveLength(4);
+    expect(summary!.classList.contains("kpi-row--insights")).toBe(true);
+    expect(summary!.classList.contains("insight-summary")).toBe(true);
+    expect(summary!.previousElementSibling?.classList.contains("week-v2-side-card--weekly-breakdown")).toBe(true);
+    expect(within(tiles[0]).getByText("Tracked")).toBeTruthy();
+    expect(within(tiles[0]).getByText("1h 15m")).toBeTruthy();
+    expect(within(tiles[0]).getByText("1h 15m avg/day")).toBeTruthy();
+    expect(within(tiles[1]).getByText("Sessions")).toBeTruthy();
+    expect(within(tiles[1]).getByText("2")).toBeTruthy();
+    expect(within(tiles[1]).getByText("38m avg")).toBeTruthy();
+    expect(within(tiles[2]).getByText("Peak day")).toBeTruthy();
+    expect(within(tiles[2]).getByText("Wed")).toBeTruthy();
+    expect(within(tiles[2]).getByText("1h 15m")).toBeTruthy();
+    expect(within(tiles[3]).getByText("Apps")).toBeTruthy();
+    expect(within(tiles[3]).getByText("2")).toBeTruthy();
+    expect(within(tiles[3]).getByText("Visual Studio Code")).toBeTruthy();
+  });
+
+  it("keeps empty and tied weekly summary states deterministic", () => {
+    const emptyRows = weekRows.map((row) => ({ ...row, totalSeconds: 0 }));
+    const { container, rerender } = renderWeekDashboard({ rows: emptyRows, segments: [], totalSeconds: 0 });
+    const emptySummary = within(container.querySelector<HTMLElement>('[aria-label="Week summary metrics"]')!);
+
+    expect(emptySummary.getByText("No active days")).toBeTruthy();
+    expect(emptySummary.getByText("No sessions")).toBeTruthy();
+    expect(emptySummary.getAllByText("No activity")).toHaveLength(2);
+
+    const tiedRows = weekRows.map((row, index) => ({ ...row, totalSeconds: index < 2 ? 600 : 0 }));
+    const tiedSegments: ActivitySegment[] = [
+      { ...weekSegments[0], id: "zulu", appName: "Zulu", bundleId: "app.zulu", durationSeconds: 600 },
+      { ...weekSegments[0], id: "alpha", appName: "Alpha", bundleId: "app.alpha", durationSeconds: 600 },
+    ];
+    rerender(
+      <WeekDashboard
+        appIcons={{}}
+        calendarEvents={new Map()}
+        segments={tiedSegments}
+        classificationOptions={{ includeAiClassifications: false }}
+        categoryEntries={categoryEntries}
+        endDay="2024-01-07"
+        focusDeltaPercent={null}
+        productivityEntries={productivityEntries}
+        refreshStatus="idle"
+        rows={tiedRows}
+        startDay="2024-01-01"
+        startOfDayMinutes={0}
+        totalSeconds={1200}
+      />,
+    );
+    const tiedTiles = container.querySelectorAll<HTMLElement>('[aria-label="Week summary metrics"] .metric-tile');
+
+    expect(within(tiedTiles[2]).getByText("Mon")).toBeTruthy();
+    expect(within(tiedTiles[3]).getByText("Alpha")).toBeTruthy();
+  });
+
   it("shows the shared detail card for a weekly breakdown segment", () => {
     const { container } = renderWeekDashboard();
     const segment = container.querySelector<HTMLElement>('.week-v2-side-card--weekly-breakdown .wt-seg[aria-label^="Wed Workspace"]');
@@ -213,8 +284,8 @@ describe("WeekDashboard breakdown panel", () => {
 
     const hoverCard = document.body.querySelector<HTMLElement>(".compact-classification-hover-card");
     expect(hoverCard).toBeTruthy();
-    expect(screen.getByText("Visual Studio Code")).toBeTruthy();
-    expect(screen.getByText("news.example")).toBeTruthy();
+    expect(within(hoverCard!).getByText("Visual Studio Code")).toBeTruthy();
+    expect(within(hoverCard!).getByText("news.example")).toBeTruthy();
     expect(hoverCard?.textContent).toContain("1h 15m");
     expect(hoverCard?.textContent).toContain("100% of tracked time");
 
@@ -228,13 +299,15 @@ describe("WeekDashboard breakdown panel", () => {
 
     expect(productivityArc).toBeTruthy();
     fireEvent.mouseEnter(productivityArc!, { clientX: 120, clientY: 140 });
-    expect(screen.getByText("Visual Studio Code")).toBeTruthy();
+    expect(within(document.body.querySelector<HTMLElement>(".compact-classification-hover-card")!).getByText("Visual Studio Code")).toBeTruthy();
     fireEvent.mouseLeave(productivityArc!);
 
     const categorySegment = container.querySelector<HTMLElement>(".flow-compact-split-chart__bar .flow-compact-split-chart__segment");
     expect(categorySegment).toBeTruthy();
     fireEvent.mouseEnter(categorySegment!, { clientX: 120, clientY: 140 });
-    expect(screen.getByText("Visual Studio Code")).toBeTruthy();
-    expect(screen.getByText("news.example")).toBeTruthy();
+    const categoryHoverCard = document.body.querySelector<HTMLElement>(".compact-classification-hover-card");
+    expect(categoryHoverCard).toBeTruthy();
+    expect(within(categoryHoverCard!).getByText("Visual Studio Code")).toBeTruthy();
+    expect(within(categoryHoverCard!).getByText("news.example")).toBeTruthy();
   });
 });

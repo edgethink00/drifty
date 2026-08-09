@@ -2,8 +2,8 @@ import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
-import { logicalMinuteOfDay } from "@drifty/domain";
+import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDuration, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
+import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
@@ -16,6 +16,7 @@ import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrom
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
 import { buildWeekBreakdownHoverRows } from "./weekBreakdownHover";
+import { MetricTile } from "../../components/MetricTile";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -106,6 +107,42 @@ type WeekSideTrendChart = {
   readonly gridlines: { readonly label: string; readonly topPercent: number }[];
   readonly columns: WeekSideTrendColumn[];
 };
+
+type WeekSummaryMetrics = {
+  readonly activeDayCount: number;
+  readonly averageDailySeconds: number;
+  readonly averageSessionMinutes: number;
+  readonly peakDayLabel: string;
+  readonly peakDaySeconds: number;
+  readonly sessionCount: number;
+  readonly topAppLabel: string;
+  readonly uniqueAppsCount: number;
+};
+
+function buildWeekSummaryMetrics(
+  rows: readonly WeekDayRow[],
+  segments: readonly ActivitySegment[],
+  totalSeconds: number,
+): WeekSummaryMetrics {
+  const activeRows = rows.filter((row) => row.totalSeconds > 0);
+  const peakDay = activeRows.reduce<WeekDayRow | null>(
+    (peak, row) => !peak || row.totalSeconds > peak.totalSeconds ? row : peak,
+    null,
+  );
+  const topApp = buildAppUsageSummaries([...segments], { limit: 1, groupBy: "app" })[0] ?? null;
+  const uniqueAppsCount = new Set(segments.map((segment) => segment.bundleId ?? segment.appName)).size;
+
+  return {
+    activeDayCount: activeRows.length,
+    averageDailySeconds: activeRows.length > 0 ? Math.round(totalSeconds / activeRows.length) : 0,
+    averageSessionMinutes: segments.length > 0 ? Math.round(totalSeconds / 60 / segments.length) : 0,
+    peakDayLabel: peakDay?.dayName ?? "\u2014",
+    peakDaySeconds: peakDay?.totalSeconds ?? 0,
+    sessionCount: segments.length,
+    topAppLabel: topApp?.appName ?? "No activity",
+    uniqueAppsCount,
+  };
+}
 
 const WEEK_SIDE_TREND_VLINE_LEFTS = [14.2857, 28.5714, 42.8571, 57.1429, 71.4286, 85.7143];
 const WEEK_SIDE_TREND_STEP_CANDIDATES = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
@@ -240,6 +277,10 @@ export function WeekDashboard({
   const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
   const productivityRingEntries = buildProductivityRingEntries(productivityEntries);
   const productivityCenterPercent = buildProductivityCenterPercent(productivityEntries);
+  const summaryMetrics = useMemo(
+    () => buildWeekSummaryMetrics(rows, segments, totalSeconds),
+    [rows, segments, totalSeconds],
+  );
   const sideTrendChart = useMemo(() => buildWeekSideTrendChart(rows, colorMode), [colorMode, rows]);
   const buildHoverRows = useCallback((key: string, mode: WeekDashboardColorMode, day?: string) => (
     buildWeekBreakdownHoverRows({
@@ -603,6 +644,34 @@ export function WeekDashboard({
               </div>
             </div>
           </section>
+          <div className="kpi-row kpi-row--insights insight-summary" aria-label="Week summary metrics">
+            <MetricTile
+              className="insight-summary__tile insight-summary__tile--tracked"
+              label="Tracked"
+              value={formatDuration(totalSeconds)}
+              detail={summaryMetrics.activeDayCount > 0
+                ? `${formatCompactDurationFromSeconds(summaryMetrics.averageDailySeconds)} avg/day`
+                : "No active days"}
+            />
+            <MetricTile
+              className="insight-summary__tile insight-summary__tile--sessions"
+              label="Sessions"
+              value={String(summaryMetrics.sessionCount)}
+              detail={summaryMetrics.sessionCount > 0 ? `${summaryMetrics.averageSessionMinutes}m avg` : "No sessions"}
+            />
+            <MetricTile
+              className="insight-summary__tile insight-summary__tile--peak"
+              label="Peak day"
+              value={summaryMetrics.peakDayLabel}
+              detail={summaryMetrics.peakDaySeconds > 0 ? formatCompactDurationFromSeconds(summaryMetrics.peakDaySeconds) : "No activity"}
+            />
+            <MetricTile
+              className="insight-summary__tile insight-summary__tile--apps"
+              label="Apps"
+              value={String(summaryMetrics.uniqueAppsCount)}
+              detail={summaryMetrics.topAppLabel}
+            />
+          </div>
         </BreakdownSidePanel>
         {breakdownHover ? <CompactClassificationHoverCard hover={breakdownHover} appIcons={appIcons} /> : null}
       </div>
