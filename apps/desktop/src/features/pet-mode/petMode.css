@@ -233,6 +233,12 @@
   animation: pet-mode-sleep-breathe 2.8s ease-in-out infinite;
   transform-origin: 50% 92%;
 }
+/* Sitting is a long-held pose, so it keeps the same slow breathing the sleep
+   pose uses. Without it a multi-minute sit reads as a frozen bitmap. */
+.pet-mode-cat--sit .pet-mode-cat__motion {
+  animation: pet-mode-sleep-breathe 3.4s ease-in-out infinite;
+  transform-origin: 50% 96%;
+}
 
 .pet-mode-cat__raster,
 .pet-mode-cat__vector {
@@ -254,6 +260,24 @@
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
 .pet-mode-cat__sleep-pose { transform: translateY(-1px); }
+.pet-mode-cat__sit-pose { transform: translateY(-1px); }
+/* The blink scheduler swaps in the standing sprite, so it cannot drive a
+   sitting blink without snapping the pose. A sit can be held for minutes,
+   which is exactly the "frozen" impression this pose exists to remove, so the
+   sit blinks inside its own artwork: the open eye fades out for one beat while
+   a closed lid takes its place. */
+.pet-mode-cat__sit-eye-open { animation: pet-mode-sit-eye-open 6.4s ease-in-out infinite; }
+.pet-mode-cat__sit-eye-closed { opacity: 0; animation: pet-mode-sit-eye-closed 6.4s ease-in-out infinite; }
+
+@keyframes pet-mode-sit-eye-open {
+  0%, 95.4%, 100% { opacity: 1; }
+  96.2%, 98.4% { opacity: 0; }
+}
+
+@keyframes pet-mode-sit-eye-closed {
+  0%, 95.4%, 100% { opacity: 0; }
+  96.2%, 98.4% { opacity: 1; }
+}
 .pet-mode-cat__raster--drag {
   object-fit: contain;
   /* Clamp the generated pose's bright body range to the canonical f001 ivory
@@ -547,7 +571,9 @@
   .pet-mode-cat__drag-pending-idle,
   .pet-mode-cat__drag-pending-held,
   .pet-mode-cat__release-held,
-  .pet-mode-cat__release-idle {
+  .pet-mode-cat__release-idle,
+  .pet-mode-cat__sit-eye-open,
+  .pet-mode-cat__sit-eye-closed {
     animation: none !important;
     transition: none !important;
   }

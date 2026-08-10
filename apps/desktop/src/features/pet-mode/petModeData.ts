@@ -13,6 +13,14 @@ export const PET_MODE_PRESENCE_RATIO = 0.6;
 export const PET_MODE_PRESENT_MS = 9 * 60 * 1000;
 export const PET_MODE_AWAY_MS = 6 * 60 * 1000;
 export const PET_MODE_LIFE_ACTION_INTERVAL_MS = 12 * 60 * 1000;
+// Sitting and sleeping are long holds, so the scheduler cannot keep using one
+// flat interval: after a settled pose the pet should consider its next move
+// sooner than it would after standing around.
+export const PET_MODE_SETTLED_ACTION_INTERVAL_MS = 100 * 1000;
+export const PET_MODE_SIT_MIN_MS = 2.5 * 60 * 1000;
+export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
+export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
+export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
 export const PET_MODE_WALK_SPEED = 20.8;
 export const PET_MODE_WALK_STRIDE = 26;
 export const PET_MODE_RUN_SPEED = 300;
@@ -102,6 +110,7 @@ export type PetModePreviewAction =
   | "stretch"
   | "tail_flick"
   | "sleep"
+  | "sit"
   | "wake"
   | "pet"
   | "outing";
@@ -169,9 +178,66 @@ export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number
 export function getPetModeLifeActionInterval(productivity: ProductivityLabel | null): number {
   // B3 stays intentionally subtle: focused work only makes autonomous actions
   // rarer. It never changes the pet's mood or creates a reward/punishment loop.
-  return productivity === "focus"
-    ? PET_MODE_LIFE_ACTION_INTERVAL_MS * 1.65
+  return adjustPetModeIntervalForFocus(PET_MODE_LIFE_ACTION_INTERVAL_MS, productivity);
+}
+
+/**
+ * How long to wait before rolling the next autonomous action.
+ *
+ * A pet that just stood back up should not wait another full cycle before it
+ * does anything, or the settled poses read as isolated events instead of a
+ * rhythm. Coming out of sit/sleep the pet reconsiders sooner.
+ */
+export function getPetModeNextActionInterval(
+  productivity: ProductivityLabel | null,
+  previousAction: PetModeLifeAction | null,
+): number {
+  const base = previousAction === "sit" || previousAction === "sleep"
+    ? PET_MODE_SETTLED_ACTION_INTERVAL_MS
     : PET_MODE_LIFE_ACTION_INTERVAL_MS;
+  return adjustPetModeIntervalForFocus(base, productivity);
+}
+
+function adjustPetModeIntervalForFocus(
+  interval: number,
+  productivity: ProductivityLabel | null,
+): number {
+  return productivity === "focus" ? interval * 1.65 : interval;
+}
+
+export type PetModeLifeAction = "walk" | "stretch" | "sit" | "sleep";
+
+/**
+ * Autonomous action weights, conditioned on the pose the pet is already in.
+ *
+ * The scheduler used to draw uniformly from a flat list, so the previous pose
+ * had no influence and the cat spent most of its visible time standing. A cat
+ * settles in stages instead: it sits first, and sleep is far more likely from
+ * a sit than from standing. Weights are relative within each row.
+ */
+const PET_MODE_ACTION_WEIGHTS: Record<"standing" | "sitting", Record<PetModeLifeAction, number>> = {
+  // From standing, sitting is the natural next step and sleep is unusual: a cat
+  // settles in stages rather than dropping from four feet straight into a nap.
+  standing: { walk: 3, stretch: 2, sit: 6, sleep: 1 },
+  // Already settled. Dozing off is the likely continuation, but a sit that does
+  // not become a nap should usually stay a sit instead of standing back up,
+  // which is what keeps the settled pose on screen for a meaningful share.
+  sitting: { walk: 2, stretch: 1, sit: 3, sleep: 6 },
+};
+
+export function pickPetModeLifeAction(
+  posture: "standing" | "sitting",
+  random: number,
+): PetModeLifeAction {
+  const weights = PET_MODE_ACTION_WEIGHTS[posture];
+  const actions = Object.keys(weights) as PetModeLifeAction[];
+  const total = actions.reduce((sum, action) => sum + weights[action], 0);
+  let cursor = Math.min(Math.max(random, 0), 0.999_999) * total;
+  for (const action of actions) {
+    cursor -= weights[action];
+    if (cursor < 0) return action;
+  }
+  return "sit";
 }
 
 export function resolveInitialPetModeEnabled(): boolean {

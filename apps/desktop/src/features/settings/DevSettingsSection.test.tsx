@@ -112,6 +112,8 @@ describe("DevSettingsSection", () => {
     expect(enabledProps.onPreviewPetModeIntervention).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Stretch Flow Stretch C/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("stretch");
+    fireEvent.click(screen.getByRole("button", { name: /Sit G pose QA/ }));
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sit");
     fireEvent.click(screen.getByRole("button", { name: /Browser tab X/ }));
     expect(enabledProps.onPreviewPetModeBrowserTabClose).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Drifty window X/ }));
@@ -137,6 +139,13 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("button", { name: /Tail flick/ }).getAttribute("disabled")).toBe("");
     expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
     expect(screen.getByRole("button", { name: /Stop/ }).getAttribute("disabled")).toBeNull();
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "sit", activeAction: "sit", lifeLoopEnabled: false });
+    });
+
+    expect(screen.getByText("Sitting", { selector: ".pet-mode-lab__status" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Sit G pose QA/ }).classList.contains("is-active")).toBe(true);
   });
 
   it("keeps the floating Companion behind an explicit Dev toggle", () => {

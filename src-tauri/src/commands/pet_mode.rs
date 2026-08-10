@@ -101,6 +101,7 @@ pub enum PetModePreviewAction {
     Stretch,
     TailFlick,
     Sleep,
+    Sit,
     Wake,
     Pet,
     Outing,
@@ -2191,10 +2192,12 @@ mod tests {
     }
 
     #[test]
-    fn preview_actions_accept_active_life_loop_and_tail_wire_values() {
+    fn preview_actions_accept_active_life_loop_tail_and_sit_wire_values() {
         let life_loop: PetModePreviewAction = serde_json::from_str("\"life_loop\"").unwrap();
         let tail: PetModePreviewAction = serde_json::from_str("\"tail_flick\"").unwrap();
+        let sit: PetModePreviewAction = serde_json::from_str("\"sit\"").unwrap();
         assert!(matches!(life_loop, PetModePreviewAction::LifeLoop));
         assert!(matches!(tail, PetModePreviewAction::TailFlick));
+        assert!(matches!(sit, PetModePreviewAction::Sit));
     }
 }

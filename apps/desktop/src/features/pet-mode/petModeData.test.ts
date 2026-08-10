@@ -17,10 +17,12 @@ import {
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
+  PET_MODE_SETTLED_ACTION_INTERVAL_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeGaitFramesPerSecond,
   getPetModeLifeActionInterval,
+  getPetModeNextActionInterval,
   buildPetModeInterventionTarget,
   buildPetModeLabBrowserTabTarget,
   buildPetModeLabDriftyWindowTarget,
@@ -95,6 +97,10 @@ describe("petModeData", () => {
   it("only quiets autonomous life actions during focused work", () => {
     expect(getPetModeLifeActionInterval("neutral")).toBe(12 * 60 * 1000);
     expect(getPetModeLifeActionInterval("focus")).toBe(19.8 * 60 * 1000);
+    expect(getPetModeNextActionInterval("neutral", null)).toBe(12 * 60 * 1000);
+    expect(getPetModeNextActionInterval("focus", "walk")).toBe(19.8 * 60 * 1000);
+    expect(getPetModeNextActionInterval("neutral", "sit")).toBe(PET_MODE_SETTLED_ACTION_INTERVAL_MS);
+    expect(getPetModeNextActionInterval("focus", "sleep")).toBe(PET_MODE_SETTLED_ACTION_INTERVAL_MS * 1.65);
   });
 
   it("minimizes the tracker snapshot sent to the pet surface", () => {

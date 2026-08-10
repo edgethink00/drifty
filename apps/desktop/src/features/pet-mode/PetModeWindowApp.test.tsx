@@ -256,6 +256,18 @@ describe("PetModeWindowApp", () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_MOTION_DURATION_MS); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "wake" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
   it("uses the selected full Tail V2-B asset for the complete tail action", async () => {

@@ -38,13 +38,19 @@ import {
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
   PET_MODE_SIZE_STORAGE_KEY,
+  PET_MODE_SIT_MAX_MS,
+  PET_MODE_SIT_MIN_MS,
+  PET_MODE_SLEEP_MAX_MS,
+  PET_MODE_SLEEP_MIN_MS,
   PET_MODE_TAIL_FLICK_DURATION_MS,
-  getPetModeLifeActionInterval,
+  getPetModeNextActionInterval,
+  pickPetModeLifeAction,
   resolveInitialPetModeCoat,
   resolveInitialPetModeEnabled,
   resolveInitialPetModeSize,
   type PetModeInterventionTarget,
   type PetModeLabAction,
+  type PetModeLifeAction,
   type PetModePreviewAction,
   type PetModeSnapshot,
   type PetModeCoat,
@@ -52,7 +58,6 @@ import {
 } from "./petModeData";
 import "./petMode.css";
 
-const LIFE_ACTIONS = ["walk", "stretch", "sleep"] as const;
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
 type LifeAction = PetModePreviewAction;
 
@@ -84,6 +89,9 @@ export function PetModeWindowApp() {
   const labLifeLoopEnabledRef = useRef(false);
   const visibleRef = useRef(true);
   const sleepTouchRef = useRef(0);
+  // The previous autonomous action is the scheduler's short-term context.
+  // `null` means the pet has not completed an autonomous action yet.
+  const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
   const manualDragRef = useRef(false);
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
@@ -380,12 +388,16 @@ export function PetModeWindowApp() {
     if (action === "sleep") {
       commitPhase("sleep");
       if (preview) return;
-      await delay(randomBetween(2.5, 7.5) * 60_000);
+      await delay(randomBetween(PET_MODE_SLEEP_MIN_MS, PET_MODE_SLEEP_MAX_MS));
+    } else if (action === "sit") {
+      commitPhase("sit");
+      if (preview) return;
+      await delay(randomBetween(PET_MODE_SIT_MIN_MS, PET_MODE_SIT_MAX_MS));
     } else if (action === "walk") {
       commitPhase("walk");
       await roamNativePet();
     } else {
-      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "walk" | "stop" | "life_loop">, PetModeCatPhase> = {
+      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop">, PetModeCatPhase> = {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
@@ -528,16 +540,34 @@ export function PetModeWindowApp() {
   useEffect(() => {
     let disposed = false;
     let timerId = 0;
+    // `schedule` re-arms the full presence window; `retry` only waits for the
+    // pet to become interruptible. Re-arming on every retry made the outing
+    // starve once sit/sleep started holding the pet out of `idle` for minutes:
+    // the due outing was pushed back another nine minutes each time instead of
+    // firing as soon as the pet stood back up.
+    const runOuting = () => {
+      void playOuting(PET_MODE_AWAY_MS).finally(() => {
+        if (!disposed) schedule();
+      });
+    };
+    const retry = () => {
+      timerId = window.setTimeout(() => {
+        if (disposed) return;
+        if (phaseRef.current !== "idle" || !visibleRef.current) {
+          retry();
+          return;
+        }
+        runOuting();
+      }, 1_000);
+    };
     const schedule = () => {
       timerId = window.setTimeout(() => {
         if (disposed) return;
         if (phaseRef.current !== "idle" || !visibleRef.current) {
-          timerId = window.setTimeout(schedule, 1_000);
+          retry();
           return;
         }
-        void playOuting(PET_MODE_AWAY_MS).finally(() => {
-          if (!disposed) schedule();
-        });
+        runOuting();
       }, PET_MODE_PRESENT_MS);
     };
     schedule();
@@ -550,18 +580,41 @@ export function PetModeWindowApp() {
   useEffect(() => {
     let disposed = false;
     let timerId = 0;
-    const schedule = () => {
-      const interval = getPetModeLifeActionInterval(snapshot?.productivity ?? null);
+    const roll = () => {
+      // The pet stands back up between autonomous actions. Condition the next
+      // roll on the previous autonomous pose rather than pretending the current
+      // `idle` frame is still seated. A completed sit opens the dozing branch.
+      const posture = previousAutonomousActionRef.current === "sit" ? "sitting" : "standing";
+      const action = pickPetModeLifeAction(posture, Math.random());
+      previousAutonomousActionRef.current = action;
+      void playLifeAction(action, false).finally(() => {
+        if (!disposed) schedule();
+      });
+    };
+    // Same starvation guard as the outing timer: once the roll is due, wait for
+    // an interruptible moment instead of restarting the whole interval.
+    const retry = () => {
       timerId = window.setTimeout(() => {
         if (disposed) return;
         if (phaseRef.current !== "idle" || !visibleRef.current) {
-          timerId = window.setTimeout(schedule, 1_000);
+          retry();
           return;
         }
-        const action = LIFE_ACTIONS[Math.floor(Math.random() * LIFE_ACTIONS.length)];
-        void playLifeAction(action, false).finally(() => {
-          if (!disposed) schedule();
-        });
+        roll();
+      }, 1_000);
+    };
+    const schedule = () => {
+      const interval = getPetModeNextActionInterval(
+        snapshot?.productivity ?? null,
+        previousAutonomousActionRef.current,
+      );
+      timerId = window.setTimeout(() => {
+        if (disposed) return;
+        if (phaseRef.current !== "idle" || !visibleRef.current) {
+          retry();
+          return;
+        }
+        roll();
       }, randomBetween(.72, 1.28) * interval);
     };
     schedule();
@@ -602,7 +655,11 @@ export function PetModeWindowApp() {
     const schedule = () => {
       timerId = window.setTimeout(() => {
         if (disposed) return;
-        if (Math.random() < .34 && phaseRef.current === "idle" && visibleRef.current) {
+        // The tail flick only fires from `idle`, so its share of screen time
+        // fell as sit/sleep took that time over. Raising the gate keeps the
+        // flick roughly as frequent as before per minute of standing, which is
+        // the cadence that was reviewed and approved.
+        if (Math.random() < .62 && phaseRef.current === "idle" && visibleRef.current) {
           commitPhase("tail");
           resetTimerId = window.setTimeout(() => {
             if (phaseRef.current === "tail") commitPhase("idle");
@@ -677,7 +734,15 @@ export function PetModeWindowApp() {
       void playLifeAction("wake");
       return;
     }
-    if (phaseRef.current !== "idle" && phaseRef.current !== "blink" && phaseRef.current !== "tail") return;
+    // Sitting is a multi-minute hold, so it has to stay pettable or the pet
+    // reads as unresponsive for most of the time it is settled. Unlike sleep it
+    // needs no two-touch guard: the cat is already awake and looking.
+    if (
+      phaseRef.current !== "idle"
+      && phaseRef.current !== "blink"
+      && phaseRef.current !== "tail"
+      && phaseRef.current !== "sit"
+    ) return;
     void playLifeAction("pet");
   };
 
