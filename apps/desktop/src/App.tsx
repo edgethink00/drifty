@@ -414,6 +414,7 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(resolveInitialSidebarCollapsed);
   const [selectedDay, setSelectedDay] = useState(() => logicalTodayIsoDate(resolveInitialStartOfDayMinutes()));
   const [status, setStatus] = useState<TrackerStatus | null>(null);
+  const [trackerPausePending, setTrackerPausePending] = useState(false);
   const hasTrackerStatus = status !== null;
   const [brandCaptureMotionKey, setBrandCaptureMotionKey] = useState(0);
   const triggerBrandCaptureMotion = useCallback(() => {
@@ -1382,6 +1383,8 @@ export default function App() {
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
   const refreshRequestRef = useRef(0);
+  const trackerMutationGenerationRef = useRef(0);
+  const trackerStopInFlightRef = useRef(false);
   const lastFullDayRefreshAtRef = useRef(0);
   const historyRefreshRequestRef = useRef(0);
   const historySearchRequestRef = useRef(0);
@@ -2086,6 +2089,7 @@ export default function App() {
 
     const requestId = refreshRequestRef.current + 1;
     refreshRequestRef.current = requestId;
+    const trackerMutationGeneration = trackerMutationGenerationRef.current;
     historyRefreshRequestRef.current += 1;
     if (isRequiredCurrentSnapshotRefresh) requiredCurrentSnapshotRefreshInFlightRef.current = true;
     if (isForegroundRefresh) setLoading(true);
@@ -2156,7 +2160,10 @@ export default function App() {
 
       const statusRequest = isForegroundRefresh
         ? trackerClient.getStatus().then((nextStatus) => {
-          if (refreshRequestRef.current !== requestId) return nextStatus;
+          if (
+            refreshRequestRef.current !== requestId
+            || trackerMutationGenerationRef.current !== trackerMutationGeneration
+          ) return nextStatus;
           setStatus(nextStatus);
           setAccessibilityGranted(nextStatus.accessibilityGranted);
           return nextStatus;
@@ -2165,7 +2172,10 @@ export default function App() {
 
       const currentSnapshotRequest = isForegroundRefresh
         ? statusRequest.then((nextStatus) => {
-            if (refreshRequestRef.current !== requestId) return null;
+            if (
+              refreshRequestRef.current !== requestId
+              || trackerMutationGenerationRef.current !== trackerMutationGeneration
+            ) return null;
             if (!nextStatus?.running) return null;
             return isRequiredCurrentSnapshotRefresh
               ? trackerClient.getCurrentSnapshot()
@@ -2193,7 +2203,9 @@ export default function App() {
       const alarmDay = currentDriftAlarmDay();
       const isAlarmDayRefresh = day === alarmDay;
 
-      if (isForegroundRefresh) setCurrentSnapshot(nextCurrentSnapshot);
+      if (isForegroundRefresh && trackerMutationGenerationRef.current === trackerMutationGeneration) {
+        setCurrentSnapshot(nextCurrentSnapshot);
+      }
       if (isAlarmDayRefresh) {
         liveDriftAlarmSegmentsRef.current = [];
         updateDriftAlarmBaseSegments(day, materializedTimeline.segments);
@@ -2642,6 +2654,7 @@ export default function App() {
     if (day !== currentDriftAlarmDay()) return false;
 
     liveDriftAlarmRefreshInFlightRef.current = true;
+    const trackerMutationGeneration = trackerMutationGenerationRef.current;
     try {
       const timelineRange = getDriftAlarmPollTimelineRange(day, startOfDayMinutes);
       const [liveTimeline, nextCurrentSnapshot] = await Promise.all([
@@ -2653,7 +2666,10 @@ export default function App() {
         }),
       ]);
 
-      if (day !== currentDriftAlarmDay()) return false;
+      if (
+        day !== currentDriftAlarmDay()
+        || trackerMutationGenerationRef.current !== trackerMutationGeneration
+      ) return false;
       liveDriftAlarmSegmentsRef.current = liveTimeline;
       evaluateDriftAlarmRef.current?.({
         checkedAt: new Date(),
@@ -2677,6 +2693,7 @@ export default function App() {
     if (selectedDayRef.current !== day) return false;
 
     liveTailRefreshInFlightRef.current = true;
+    const trackerMutationGeneration = trackerMutationGenerationRef.current;
     try {
       const selectedDayRange = getLogicalDayRange(day, day, startOfDayMinutes);
       const cursor = latestActivitySegmentCursor(segmentsRef.current);
@@ -2686,7 +2703,10 @@ export default function App() {
         limit: LIVE_TAIL_LIMIT,
       });
 
-      if (selectedDayRef.current !== day) return false;
+      if (
+        selectedDayRef.current !== day
+        || trackerMutationGenerationRef.current !== trackerMutationGeneration
+      ) return false;
 
       setStatus((current) => {
         if (!current) return current;
@@ -4877,7 +4897,15 @@ export default function App() {
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
   const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
-  const liveTrackerActionLabel = isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Retry tracker" : status.running ? "Pause tracking" : "Resume tracking";
+  const liveTrackerActionLabel = trackerPausePending
+    ? "Pausing…"
+    : isTrackerUnavailable
+      ? "Tracker unavailable"
+      : isTrackerDegraded
+        ? "Retry tracker"
+        : status.running
+          ? "Pause tracking"
+          : "Resume tracking";
   const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
     currentDay: effectiveTodayDayForWeekModel,
     currentMinuteOfDay: effectiveCurrentMinuteOfDay,
@@ -4900,7 +4928,7 @@ export default function App() {
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
   const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? `Last capture: ${lastCaptureDistanceLabel}`;
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
-  const isSidebarTrackerActionDisabled = replaySidebarTrackerCard === null && isTrackerUnavailable;
+  const isSidebarTrackerActionDisabled = replaySidebarTrackerCard === null && (isTrackerUnavailable || trackerPausePending);
 
   const activeSlots = dayField.filter((slot) => slot.totalSeconds > 0);
   const activeHours = Array.from(new Set(activeSlots.map((slot) => slot.hour)));
@@ -5611,8 +5639,11 @@ export default function App() {
   }
 
   async function handleBackgroundStartTracking() {
+    const trackerMutationGeneration = trackerMutationGenerationRef.current + 1;
+    trackerMutationGenerationRef.current = trackerMutationGeneration;
     try {
       const nextStatus = await trackerClient.start();
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
       setStatus(nextStatus);
       setAccessibilityGranted(nextStatus.accessibilityGranted);
       const degraded = nextStatus.trackerMode === "degraded" || nextStatus.running !== true;
@@ -5625,6 +5656,7 @@ export default function App() {
       });
       if (!degraded) await refresh();
     } catch (startError) {
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
       const nextStatus = await trackerClient.getStatus().catch((): TrackerStatus => ({
         running: false,
         accessibilityGranted: false,
@@ -5633,6 +5665,7 @@ export default function App() {
         trackerMode: "degraded",
         message: "Activity tracking could not start. Try starting it again.",
       }));
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
       setStatus(nextStatus);
       setAccessibilityGranted(nextStatus.accessibilityGranted);
       capturePostHogEvent("tracker_action", {
@@ -5651,10 +5684,13 @@ export default function App() {
   // Throws on failure (after surfacing the error) so onboarding completion can abort.
   async function handleStartTrackingFromOnboarding() {
     setError(null);
+    const trackerMutationGeneration = trackerMutationGenerationRef.current + 1;
+    trackerMutationGenerationRef.current = trackerMutationGeneration;
     let nextStatus: TrackerStatus;
     try {
       nextStatus = await trackerClient.start();
     } catch (startError) {
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) throw startError;
       const message = toErrorMessage(startError);
       setError(message);
       capturePostHogEvent("tracker_action", {
@@ -5665,6 +5701,7 @@ export default function App() {
       throw new Error(message);
     }
 
+    if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
     setStatus(nextStatus);
     setAccessibilityGranted(nextStatus.accessibilityGranted);
     if (nextStatus.trackerMode === "degraded" || nextStatus.running !== true) {
@@ -5710,23 +5747,58 @@ export default function App() {
   }
 
   async function handleStopTracking() {
+    if (trackerStopInFlightRef.current) return;
+    trackerStopInFlightRef.current = true;
+    setTrackerPausePending(true);
     setError(null);
+    const trackerMutationGeneration = trackerMutationGenerationRef.current + 1;
+    trackerMutationGenerationRef.current = trackerMutationGeneration;
     try {
-      const nextStatus: TrackerStatus | undefined = await trackerClient.stop();
-      await refresh();
+      const nextStatus = await trackerClient.stop();
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+      setStatus(nextStatus);
+      setAccessibilityGranted(nextStatus.accessibilityGranted);
+      if (!nextStatus.running) setCurrentSnapshot(null);
       capturePostHogEvent("tracker_action", {
         action: "stop",
         result: "success",
-        tracker_mode: toTrackerModeAnalytics(nextStatus?.trackerMode ?? status?.trackerMode),
-        running: nextStatus?.running ?? false,
+        tracker_mode: toTrackerModeAnalytics(nextStatus.trackerMode ?? status?.trackerMode),
+        running: nextStatus.running ?? false,
       });
+      void refresh(selectedDayRef.current, { foreground: false });
     } catch (e) {
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+      const reconciledStatus = await trackerClient.getStatus().catch(() => null);
+      if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+      if (reconciledStatus) {
+        setStatus(reconciledStatus);
+        setAccessibilityGranted(reconciledStatus.accessibilityGranted);
+        if (!reconciledStatus.running) setCurrentSnapshot(null);
+      }
+      const reconciledTrackerMode = reconciledStatus?.trackerMode ?? null;
+      const didConfirmPaused = reconciledStatus?.running === false
+        && reconciledTrackerMode !== "unavailable"
+        && reconciledTrackerMode !== "degraded";
+      if (didConfirmPaused && reconciledStatus) {
+        capturePostHogEvent("tracker_action", {
+          action: "stop",
+          result: "success",
+          tracker_mode: toTrackerModeAnalytics(reconciledStatus.trackerMode),
+          running: false,
+          error_kind: toAnalyticsErrorKind(e),
+        });
+        void refresh(selectedDayRef.current, { foreground: false });
+        return;
+      }
       setError(toErrorMessage(e));
       capturePostHogEvent("tracker_action", {
         action: "stop",
         result: "error",
         error_kind: toAnalyticsErrorKind(e),
       });
+    } finally {
+      trackerStopInFlightRef.current = false;
+      setTrackerPausePending(false);
     }
   }
 
@@ -6144,8 +6216,13 @@ export default function App() {
         // Opportunistic: capture the rest of onboarding in the first day. Failures
         // stay silent — the completion-time start still surfaces real errors.
         void (async () => {
+          const trackerMutationGeneration = trackerMutationGenerationRef.current + 1;
+          trackerMutationGenerationRef.current = trackerMutationGeneration;
           try {
-            await trackerClient.start();
+            const nextStatus = await trackerClient.start();
+            if (trackerMutationGenerationRef.current !== trackerMutationGeneration) return;
+            setStatus(nextStatus);
+            setAccessibilityGranted(nextStatus.accessibilityGranted);
             await refresh();
           } catch {
             // silent early start; completion retries with full error handling
@@ -6544,6 +6621,7 @@ export default function App() {
                 void (status?.running && !isTrackerDegraded ? handleStopTracking() : handleStartTracking());
               }}
               disabled={isSidebarTrackerActionDisabled}
+              aria-busy={trackerPausePending || undefined}
               aria-label={sidebarTrackerActionLabel}
               title={sidebarTrackerActionLabel}
             >

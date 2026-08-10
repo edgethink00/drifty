@@ -56,6 +56,8 @@ IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "18
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
 DATABASE_BACKUP_CHECK_SECONDS = 60 * 60
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
+TRACKER_EXIT_TIMEOUT_SECONDS = 3.0
+TRACKER_EXIT_POLL_SECONDS = 0.05
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 RuntimeMode = Literal["source", "frozen"]
@@ -110,6 +112,14 @@ def lifecycle_lock_path() -> Path:
     return state_dir() / "tracker.lifecycle.lock"
 
 
+def daemon_lock_path() -> Path:
+    return state_dir() / "tracker.daemon.lock"
+
+
+def pid_lock_path() -> Path:
+    return state_dir() / "tracker.pid.lock"
+
+
 def ensure_state_dir() -> None:
     state_dir().mkdir(parents=True, exist_ok=True)
 
@@ -118,6 +128,49 @@ def ensure_state_dir() -> None:
 def tracker_lifecycle_lock():
     ensure_state_dir()
     with lifecycle_lock_path().open("a+") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def _acquire_tracker_daemon_lock():
+    ensure_state_dir()
+    lock_file = daemon_lock_path().open("a+")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock_file.close()
+        return None
+    return lock_file
+
+
+def _release_tracker_daemon_lock(lock_file) -> None:
+    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    lock_file.close()
+
+
+@contextmanager
+def tracker_daemon_lock():
+    """Try to own the tracker-state sampling lock for this process lifetime."""
+
+    lock_file = _acquire_tracker_daemon_lock()
+    if lock_file is None:
+        yield None
+        return
+    try:
+        yield lock_file
+    finally:
+        _release_tracker_daemon_lock(lock_file)
+
+
+@contextmanager
+def tracker_pid_lock():
+    """Serialize PID record compare/write/unlink operations across runtimes."""
+
+    ensure_state_dir()
+    with pid_lock_path().open("a+") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
         try:
             yield
@@ -312,29 +365,57 @@ def _browser_history_import_request(payload: dict):
 
 
 def is_running() -> bool:
-    pid_file = pid_path()
     pid = _read_tracker_pid()
-    if pid is None:
-        pid_file.unlink(missing_ok=True)
-        return False
-    try:
-        os.kill(pid, 0)
-    except Exception:
-        pid_file.unlink(missing_ok=True)
-        return False
-    ownership = _tracker_process_ownership(pid)
-    if ownership == "unrelated":
-        pid_file.unlink(missing_ok=True)
-        return False
-    return True
+    if pid is not None and _process_exists(pid):
+        ownership = _tracker_process_ownership(pid)
+        if ownership != "unrelated":
+            return True
+    processes = _process_table()
+    return processes is not None and bool(_matching_tracker_daemon_pids(processes))
 
 
-def _read_tracker_pid() -> int | None:
+def _read_tracker_pid_unlocked() -> int | None:
     try:
         pid = int(pid_path().read_text().strip())
     except Exception:
         return None
     return pid if pid > 0 else None
+
+
+def _read_tracker_pid() -> int | None:
+    with tracker_pid_lock():
+        return _read_tracker_pid_unlocked()
+
+
+def _write_tracker_pid(pid: int) -> None:
+    with tracker_pid_lock():
+        pid_path().write_text(str(pid))
+
+
+def _remove_pid_record_if_owned(pid: int) -> bool:
+    """Remove the PID record only when it still names ``pid``.
+
+    The short PID-record lock closes the read/unlink race where an exiting old
+    daemon could otherwise delete a newly-started daemon's record.
+    """
+
+    with tracker_pid_lock():
+        if _read_tracker_pid_unlocked() != pid:
+            return False
+        pid_path().unlink(missing_ok=True)
+        return True
+
+
+def _process_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
 
 
 def _process_command(pid: int) -> str | None:
@@ -350,6 +431,30 @@ def _process_command(pid: int) -> str | None:
     if result.returncode != 0:
         return None
     return result.stdout.strip() or None
+
+
+def _process_table() -> dict[int, str] | None:
+    """Return an untruncated process snapshot or ``None`` when inspection fails."""
+
+    try:
+        result = subprocess.run(
+            ["ps", "-axww", "-o", "pid=", "-o", "command="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+
+    processes: dict[int, str] = {}
+    for line in result.stdout.splitlines():
+        match = re.match(r"\s*(\d+)\s+(.+?)\s*$", line)
+        if match is None:
+            continue
+        processes[int(match.group(1))] = match.group(2)
+    return processes
 
 
 def _current_script_path() -> str:
@@ -420,11 +525,8 @@ def _command_arguments(command: str) -> list[str] | None:
         return None
 
 
-def _command_db_path(command: str) -> Path | None:
-    _, separator, raw_db_path = command.rpartition(" --db ")
-    if not separator:
-        return None
-    value = raw_db_path.strip()
+def _resolve_command_path(raw_path: str) -> Path | None:
+    value = raw_path.strip()
     if not value:
         return None
     if value[0] in {"'", '"'}:
@@ -438,33 +540,132 @@ def _command_db_path(command: str) -> Path | None:
         return None
 
 
-def _is_tracker_daemon_command(command: str) -> bool:
-    arguments = _command_arguments(command)
-    if not arguments or "daemon" not in arguments:
-        return False
-    command_db_path = _command_db_path(command)
-    if command_db_path is None or command_db_path != DB_PATH.expanduser().resolve():
-        return False
-    if _current_runtime_mode() == "frozen" and arguments[0] == sys.executable:
-        return True
-    if _current_script_path() in arguments:
-        return True
-    return any(
-        Path(argument).name == "main.py" and "tracker-python" in Path(argument).parts
-        for argument in arguments
+def _tracker_runtime_from_prefix(prefix: str) -> tuple[RuntimeMode, Path] | None:
+    """Recognize source or packaged Drifty tracker runtime command prefixes.
+
+    Runtime names are only an additional guard. Callers must also require the
+    exact ``daemon`` mode and exact resolved DB path before treating a process
+    as signalable.
+    """
+
+    arguments = _command_arguments(prefix)
+    if arguments:
+        if len(arguments) == 1:
+            executable = Path(arguments[0]).expanduser().resolve()
+            if re.fullmatch(r"drifty-tracker(?:-(?:aarch64|x86_64)-apple-darwin)?", executable.name):
+                return "frozen", executable
+            if executable.as_posix().endswith("/services/tracker-python/app/main.py"):
+                return "source", executable
+        if len(arguments) == 2:
+            interpreter = Path(arguments[0])
+            script = Path(arguments[1]).expanduser().resolve()
+            if "python" in interpreter.name.lower() and script.as_posix().endswith(
+                "/services/tracker-python/app/main.py"
+            ):
+                return "source", script
+
+    # ``ps`` on macOS does not quote argv entries containing spaces. Source
+    # worktrees can therefore appear as one interpreter token followed by an
+    # unquoted script path containing spaces.
+    interpreter_raw, separator, script_raw = prefix.partition(" ")
+    if separator and "python" in Path(interpreter_raw).name.lower():
+        script = Path(script_raw).expanduser().resolve()
+        if script.as_posix().endswith("/services/tracker-python/app/main.py"):
+            return "source", script
+
+    # The packaged executable path itself can also contain spaces in an app or
+    # updater directory. Its basename remains stable across those locations.
+    executable = Path(prefix).expanduser().resolve()
+    if re.fullmatch(r"drifty-tracker(?:-(?:aarch64|x86_64)-apple-darwin)?", executable.name):
+        return "frozen", executable
+    return None
+
+
+def _daemon_command_details(command: str) -> tuple[RuntimeMode, Path, Path] | None:
+    prefix, separator, raw_db_path = command.rpartition(" daemon --db ")
+    if not separator:
+        prefix, separator, raw_db_path = command.rpartition(" daemon --db=")
+    if not separator or not prefix.strip():
+        return None
+
+    runtime = _tracker_runtime_from_prefix(prefix.strip())
+    command_db_path = _resolve_command_path(raw_db_path)
+    if runtime is None or command_db_path is None:
+        return None
+    runtime_mode, runtime_path = runtime
+    return runtime_mode, runtime_path, command_db_path
+
+
+def _matching_tracker_daemon_pids(processes: dict[int, str]) -> list[int]:
+    return sorted(
+        pid
+        for pid, command in processes.items()
+        if pid != os.getpid() and _is_tracker_daemon_command(command)
     )
+
+
+def _reconcile_pid_record(daemon_pids: list[int]) -> None:
+    """Drop stale records and adopt a sole verified same-DB daemon."""
+
+    recorded_pid = _read_tracker_pid()
+    if recorded_pid is not None and recorded_pid not in daemon_pids:
+        _remove_pid_record_if_owned(recorded_pid)
+        recorded_pid = None
+    if len(daemon_pids) == 1 and recorded_pid != daemon_pids[0]:
+        _write_tracker_pid(daemon_pids[0])
+
+
+def _process_has_exited(pid: int) -> bool:
+    try:
+        waited_pid, _ = os.waitpid(pid, os.WNOHANG)
+    except (ChildProcessError, OSError):
+        waited_pid = 0
+    if waited_pid == pid or not _process_exists(pid):
+        return True
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "state="],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return False
+    return result.returncode == 0 and result.stdout.strip().startswith("Z")
+
+
+def _wait_for_process_exit(pid: int, timeout_seconds: float = TRACKER_EXIT_TIMEOUT_SECONDS) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if _process_has_exited(pid):
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(TRACKER_EXIT_POLL_SECONDS, remaining))
+
+
+def _is_tracker_daemon_command(command: str) -> bool:
+    details = _daemon_command_details(command)
+    if details is None:
+        return False
+    return details[2] == DB_PATH.expanduser().resolve()
 
 
 def _running_daemon_matches_current_script(pid: int) -> bool:
     command = _process_command(pid)
     if command is None or not _is_tracker_daemon_command(command):
         return False
-    arguments = _command_arguments(command)
-    if arguments is None:
+    details = _daemon_command_details(command)
+    if details is None:
         return False
-    if _current_runtime_mode() == "frozen":
-        return arguments[0] == sys.executable
-    return _current_script_path() in arguments
+    runtime_mode, runtime_path, _ = details
+    current_runtime_path = (
+        Path(sys.executable).expanduser().resolve()
+        if _current_runtime_mode() == "frozen"
+        else Path(_current_script_path()).expanduser().resolve()
+    )
+    return runtime_mode == _current_runtime_mode() and runtime_path == current_runtime_path
 
 
 def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bool:
@@ -474,19 +675,37 @@ def _running_daemon_matches_current_runtime(pid: int, db: TrackerDatabase) -> bo
 
 
 def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
+    if not _process_exists(pid):
+        _remove_pid_record_if_owned(pid)
+        return "tracker"
     ownership = _tracker_process_ownership(pid)
     if ownership == "unknown":
         return ownership
     if ownership == "unrelated":
-        pid_path().unlink(missing_ok=True)
+        _remove_pid_record_if_owned(pid)
         return ownership
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
-        pass
-    finally:
-        pid_path().unlink(missing_ok=True)
+        _remove_pid_record_if_owned(pid)
+        return ownership
+    if not _wait_for_process_exit(pid):
+        raise TimeoutError(f"Tracker daemon {pid} did not exit after SIGTERM.")
+    _remove_pid_record_if_owned(pid)
     return ownership
+
+
+def _stop_tracker_daemons(daemon_pids: list[int]) -> list[str]:
+    errors: list[str] = []
+    for pid in daemon_pids:
+        try:
+            ownership = _stop_verified_tracker_daemon(pid)
+        except Exception as exc:
+            errors.append(str(exc))
+            continue
+        if ownership == "unknown":
+            errors.append(f"Unable to verify tracker daemon {pid}; refusing to signal it.")
+    return errors
 
 
 def start_tracking():
@@ -495,24 +714,29 @@ def start_tracking():
 
 
 def _start_tracking_locked():
-    if is_running():
-        pid = _read_tracker_pid()
-        if pid is None:
-            return response(False, get_status()["data"], "Tracker PID record became unavailable.")
-        ownership = _tracker_process_ownership(pid)
-        if ownership == "unknown":
-            return response(
-                False,
-                get_status()["data"],
-                "Unable to verify the existing tracker process; refusing to start a second daemon.",
-            )
-        if ownership == "tracker" and _running_daemon_matches_current_runtime(pid, database()):
-            return response(True, get_status()["data"])
-        if ownership == "tracker":
-            _stop_verified_tracker_daemon(pid)
-            time.sleep(0.25)
-        else:
-            pid_path().unlink(missing_ok=True)
+    processes = _process_table()
+    if processes is None:
+        return response(
+            False,
+            get_status()["data"],
+            "Unable to inspect tracker processes; refusing to start a second daemon.",
+        )
+    daemon_pids = _matching_tracker_daemon_pids(processes)
+    _reconcile_pid_record(daemon_pids)
+
+    if len(daemon_pids) == 1 and _running_daemon_matches_current_runtime(daemon_pids[0], database()):
+        return response(True, get_status()["data"])
+
+    stop_errors = _stop_tracker_daemons(daemon_pids)
+    if stop_errors:
+        return response(False, get_status()["data"], " ".join(stop_errors))
+
+    remaining_processes = _process_table()
+    if remaining_processes is None:
+        return response(False, get_status()["data"], "Unable to confirm that old tracker daemons exited.")
+    remaining_pids = _matching_tracker_daemon_pids(remaining_processes)
+    if remaining_pids:
+        return response(False, get_status()["data"], "Old tracker daemons are still running.")
 
     command = _daemon_command("daemon")
     subprocess.Popen(
@@ -535,29 +759,34 @@ def stop_tracking():
 
 
 def _stop_tracking_locked():
-    pid_file = pid_path()
-    if not pid_file.exists():
-        return response(True, get_status()["data"])
-
-    pid = _read_tracker_pid()
-    if pid is None:
-        pid_file.unlink(missing_ok=True)
-        return response(True, get_status()["data"])
-
-    try:
-        ownership = _stop_verified_tracker_daemon(pid)
-    except Exception as exc:
-        return response(False, error=str(exc))
-    if ownership == "unknown":
+    processes = _process_table()
+    if processes is None:
         return response(
             False,
             get_status()["data"],
-            "Unable to verify the tracker process; refusing to signal it.",
+            "Unable to inspect tracker processes; refusing to report a successful stop.",
         )
-    if ownership == "unrelated":
-        return response(True, get_status()["data"])
+    daemon_pids = _matching_tracker_daemon_pids(processes)
+    _reconcile_pid_record(daemon_pids)
 
-    return response(True, get_status()["data"])
+    stop_errors = _stop_tracker_daemons(daemon_pids)
+    if stop_errors:
+        return response(False, get_status()["data"], " ".join(stop_errors))
+
+    remaining_processes = _process_table()
+    if remaining_processes is None:
+        return response(False, get_status()["data"], "Unable to confirm that tracker daemons exited.")
+    remaining_pids = _matching_tracker_daemon_pids(remaining_processes)
+    if remaining_pids:
+        return response(False, get_status()["data"], "Tracker daemons are still running.")
+
+    recorded_pid = _read_tracker_pid()
+    if recorded_pid is not None:
+        _remove_pid_record_if_owned(recorded_pid)
+    status = get_status()["data"]
+    if status.get("running"):
+        return response(False, status, "Tracker still reports running after stop.")
+    return response(True, status)
 
 
 def get_status():
@@ -1282,11 +1511,22 @@ def _maybe_create_periodic_backup(
 
 
 def daemon():
-    ensure_state_dir()
-    pid_path().write_text(str(os.getpid()))
-    db = database()
-    db.set_meta("tracker_script_path", _current_script_path())
-    db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
+    daemon_pid = os.getpid()
+    lock_file = _acquire_tracker_daemon_lock()
+    if lock_file is None:
+        return
+
+    try:
+        _write_tracker_pid(daemon_pid)
+        db = database()
+        db.set_meta("tracker_script_path", _current_script_path())
+        db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
+    except BaseException:
+        try:
+            _remove_pid_record_if_owned(daemon_pid)
+        finally:
+            _release_tracker_daemon_lock(lock_file)
+        raise
     last_capture_tick: float | None = None
     last_backup_check = time.time()
 
@@ -1321,7 +1561,10 @@ def daemon():
                 last_capture_tick = None
             time.sleep(SAMPLE_SECONDS)
     finally:
-        pid_path().unlink(missing_ok=True)
+        try:
+            _remove_pid_record_if_owned(daemon_pid)
+        finally:
+            _release_tracker_daemon_lock(lock_file)
 
 
 def _dispatch(request: dict):
