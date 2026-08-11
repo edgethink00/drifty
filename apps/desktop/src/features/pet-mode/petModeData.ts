@@ -27,10 +27,35 @@ export const PET_MODE_RUN_SPEED = 300;
 export const PET_MODE_RUN_STRIDE = 72;
 export const PET_MODE_GAIT_CADENCE = 0.9;
 export const PET_MODE_GAIT_FRAME_COUNT = 30;
-// The native panel starts mostly outside the display edge and uses the same
-// 420ms protocol duration to walk inward. This value times the matching gait
-// and renderer fallback.
-export const PET_MODE_ENTRY_DURATION_MS = 420;
+// Translation duration only; native separately owns the hidden pre-paint hold
+// and one-frame renderer handoff. The panel starts with every opaque cat pixel
+// outside the display, and the extra distance over the former peek entrance is
+// matched by this slightly longer travel so walking speed does not regress.
+export const PET_MODE_ENTRY_DURATION_MS = 833;
+// Reach walking speed quickly, hold it for most of the entrance, then reserve
+// a slightly longer slowdown for an exact, quiet landing. This reads as animal
+// locomotion instead of a UI element easing for the entire trip.
+export const PET_MODE_ENTRY_ACCELERATION_RATIO = 0.1;
+export const PET_MODE_ENTRY_DECELERATION_RATIO = 0.18;
+// In the 144-point base panel, all idle and registered gait silhouettes leave
+// at least this much transparent leading-edge gutter. Native scales it with
+// the selected pet size and keeps one extra base point outside the display to
+// prevent antialiasing from flashing a stationary face before movement.
+export const PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX = 24.329;
+export const PET_MODE_ENTRY_HIDDEN_SAFETY_PX = 1;
+// Native completion is authoritative. This grace only recovers a renderer that
+// missed the native completion event during cold start or HMR.
+export const PET_MODE_ENTRY_FALLBACK_GRACE_MS = 500;
+// The traced walk vector and the canonical idle raster use different source
+// canvases. In the fixed 121.2×92.4 cat box, the last walk-frames-v2 frame sits
+// 3.76px above paw/f001.png. Align those measured visible foot lines so
+// completing a walk never drops the cat toward the desktop.
+export const PET_MODE_GAIT_BASELINE_SHIFT_PX = 3.76;
+// Alpha-bound measurement in the fixed cat box puts the final walk silhouette
+// at x=60.292px and the canonical idle silhouette at x=53.909px. Shift the
+// vector in its local coordinate space; the root facing mirror then reverses
+// this offset automatically without a direction-specific branch.
+export const PET_MODE_GAIT_CENTER_SHIFT_PX = -6.383;
 // One complete upper-lid pass: close, a very short contact, then reopen.
 // Keeping the phase and CSS animation on one shared duration prevents the
 // overlay from being removed before the opening frame has finished.
@@ -173,6 +198,55 @@ export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number
   const speed = motion === "run" ? PET_MODE_RUN_SPEED : PET_MODE_WALK_SPEED;
   const stride = motion === "run" ? PET_MODE_RUN_STRIDE : PET_MODE_WALK_STRIDE;
   return PET_MODE_GAIT_FRAME_COUNT * speed * PET_MODE_GAIT_CADENCE / stride;
+}
+
+export function getPetModeEntryProgress(elapsedMilliseconds: number): number {
+  const linearProgress = Math.min(
+    1,
+    Math.max(0, elapsedMilliseconds) / PET_MODE_ENTRY_DURATION_MS,
+  );
+  const accelerationDuration = PET_MODE_ENTRY_ACCELERATION_RATIO;
+  const decelerationDuration = PET_MODE_ENTRY_DECELERATION_RATIO;
+  const decelerationStart = 1 - decelerationDuration;
+  const cruiseDuration = decelerationStart - accelerationDuration;
+  // The unscaled area under the velocity profile: two triangular ramps plus
+  // the constant-speed plateau. Dividing by it guarantees a final progress of 1.
+  const travelArea = accelerationDuration / 2 + cruiseDuration + decelerationDuration / 2;
+
+  if (linearProgress < accelerationDuration) {
+    return linearProgress * linearProgress / (2 * accelerationDuration * travelArea);
+  }
+  if (linearProgress < decelerationStart) {
+    const distance = accelerationDuration / 2 + linearProgress - accelerationDuration;
+    return distance / travelArea;
+  }
+
+  const decelerationElapsed = linearProgress - decelerationStart;
+  const distanceBeforeDeceleration = accelerationDuration / 2 + cruiseDuration;
+  const decelerationDistance = decelerationElapsed
+    - decelerationElapsed * decelerationElapsed / (2 * decelerationDuration);
+  return (distanceBeforeDeceleration + decelerationDistance) / travelArea;
+}
+
+export function getPetModeGaitFrameIndex(
+  motion: PetModeMotionKind,
+  elapsedMilliseconds: number,
+  frameCount = PET_MODE_GAIT_FRAME_COUNT,
+): number {
+  if (!Number.isInteger(frameCount) || frameCount < 1) return 0;
+  if (motion === "entry") {
+    // Native X uses this same travel profile. Advancing the gait from distance
+    // instead of linear time keeps the paws planted through the short launch,
+    // long walking plateau, and final slowdown.
+    return Math.min(
+      frameCount - 1,
+      Math.floor(getPetModeEntryProgress(elapsedMilliseconds) * frameCount),
+    );
+  }
+  const rawFrame = Math.floor(
+    Math.max(0, elapsedMilliseconds) * getPetModeGaitFramesPerSecond(motion) / 1000,
+  );
+  return rawFrame % frameCount;
 }
 
 export function getPetModeLifeActionInterval(productivity: ProductivityLabel | null): number {

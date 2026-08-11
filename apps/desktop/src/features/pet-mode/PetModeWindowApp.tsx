@@ -32,11 +32,13 @@ import {
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_ENTRY_DURATION_MS,
+  PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
+  PET_MODE_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_SIT_MAX_MS,
   PET_MODE_SIT_MIN_MS,
@@ -70,8 +72,10 @@ export function PetModeWindowApp() {
     const reducedMotion = typeof window !== "undefined"
       && typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const entersOnLaunch = resolveInitialPetModeEnabled() && !reducedMotion;
+    const enabled = resolveInitialPetModeEnabled();
+    const entersOnLaunch = enabled && !reducedMotion;
     return {
+      enabled,
       phase: entersOnLaunch ? "entry" as const : "idle" as const,
       facing: entersOnLaunch ? "left" as const : "right" as const,
     };
@@ -80,6 +84,9 @@ export function PetModeWindowApp() {
   const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
   const [facing, setFacing] = useState<"left" | "right">(initialAppearance.facing);
   const [entrySequence, setEntrySequence] = useState(0);
+  const [preserveEntryLanding, setPreserveEntryLanding] = useState(false);
+  const [petModeEnabled, setPetModeEnabled] = useState(initialAppearance.enabled);
+  const [autonomousCycle, setAutonomousCycle] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
@@ -87,6 +94,10 @@ export function PetModeWindowApp() {
   const phaseRef = useRef<PetModeCatPhase>(initialPhase);
   const activeLabActionRef = useRef<PetModeLabAction | null>(null);
   const labLifeLoopEnabledRef = useRef(false);
+  const petModeEnabledRef = useRef(initialAppearance.enabled);
+  const autonomousCycleRef = useRef(0);
+  // This tracks temporary outing visibility, not the product toggle. Feature
+  // enablement has its own ref so Lab previews can still reveal the panel.
   const visibleRef = useRef(true);
   const sleepTouchRef = useRef(0);
   // The previous autonomous action is the scheduler's short-term context.
@@ -110,6 +121,10 @@ export function PetModeWindowApp() {
     reportLabState(nextPhase);
   }, [reportLabState]);
 
+  useEffect(() => {
+    if (phase !== "idle" && phase !== "entry") setPreserveEntryLanding(false);
+  }, [phase]);
+
   const setActiveLabAction = useCallback((action: PetModeLabAction | null) => {
     activeLabActionRef.current = action;
     reportLabState();
@@ -120,6 +135,16 @@ export function PetModeWindowApp() {
     setLabLifeLoopEnabled(enabled);
     reportLabState();
   }, [reportLabState]);
+
+  const restartAutonomousCycle = useCallback(() => {
+    // Show Pet begins a new residence period. Invalidate callbacks from the
+    // previous on/off cycle synchronously, then let both autonomous schedulers
+    // arm their full intervals from this boundary.
+    previousAutonomousActionRef.current = null;
+    const nextCycle = autonomousCycleRef.current + 1;
+    autonomousCycleRef.current = nextCycle;
+    setAutonomousCycle(nextCycle);
+  }, []);
 
   const finishManualDrag = useCallback((rememberPosition = true) => {
     if (
@@ -172,6 +197,30 @@ export function PetModeWindowApp() {
     document.documentElement.dataset.surface = "pet-mode";
     return () => { delete document.documentElement.dataset.surface; };
   }, []);
+
+  // The native panel remains mounted while Show Pet is off. Without mirroring
+  // the persisted toggle here, its autonomous timers keep aging behind the
+  // hidden window and can send the cat straight back out when it next enters.
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_STORAGE_KEY) return;
+      const enabled = resolveInitialPetModeEnabled();
+      if (enabled === petModeEnabledRef.current) return;
+
+      petModeEnabledRef.current = enabled;
+      visibleRef.current = enabled;
+      actionTokenRef.current += 1;
+      sleepTouchRef.current = 0;
+      restartAutonomousCycle();
+      setPetModeEnabled(enabled);
+      if (!enabled) {
+        setPreserveEntryLanding(false);
+        commitPhase("idle");
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [commitPhase, restartAutonomousCycle]);
 
   // The pet runs in its own webview, so it cannot read the settings hook that
   // owns the toggle. Both webviews share localStorage, and `storage` fires in
@@ -435,16 +484,39 @@ export function PetModeWindowApp() {
           || phaseRef.current === "release"
         ) return;
         if (event.motion === "entry") {
+          // Native cancellation normally prevents stale entry events after the
+          // toggle turns off. Re-check the shared setting here as a webview-side
+          // guard so a queued old event cannot resurrect the hidden pet.
+          if (!resolveInitialPetModeEnabled()) return;
           // A persisted cold-start pose may already be `entry`. Bump a separate
           // sequence so the gait restarts exactly when native screen movement
           // begins instead of continuing from the hidden mount time.
+          actionTokenRef.current += 1;
+          restartAutonomousCycle();
           setEntrySequence((sequence) => sequence + 1);
+          setPreserveEntryLanding(false);
+          petModeEnabledRef.current = true;
+          visibleRef.current = true;
+          setPetModeEnabled(true);
+        } else {
+          setPreserveEntryLanding(false);
         }
         commitPhase(event.motion);
         return;
       }
       if (event.kind === "entry_complete") {
-        if (phaseRef.current === "entry") commitPhase("idle");
+        if (!resolveInitialPetModeEnabled()) return;
+        const beganANewResidence = phaseRef.current === "entry" || !petModeEnabledRef.current;
+        petModeEnabledRef.current = true;
+        visibleRef.current = true;
+        setPetModeEnabled(true);
+        if (phaseRef.current === "entry") {
+          // Keep the exact final walk SVG mounted after the native window lands.
+          // This avoids any frame, canvas, or coordinate change at the handoff.
+          setPreserveEntryLanding(true);
+          commitPhase("idle");
+        }
+        if (beganANewResidence) restartAutonomousCycle();
         return;
       }
       if (event.kind === "preview_action") {
@@ -500,18 +572,22 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [commitPhase, playIntervention, playLifeAction, reportLabState, setActiveLabAction]);
+  }, [commitPhase, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
 
   useEffect(() => {
     if (phase !== "entry") return;
-    // Native completion is authoritative. The extra 500ms covers the native
+    // Native completion is authoritative. The recovery grace covers the native
     // visible paint hold plus scheduling slack; this only prevents a
     // stale gait if cold-start/HMR misses the completion event.
     const timerId = window.setTimeout(() => {
-      if (phaseRef.current === "entry") commitPhase("idle");
-    }, PET_MODE_ENTRY_DURATION_MS + 500);
+      if (phaseRef.current === "entry") {
+        setPreserveEntryLanding(true);
+        commitPhase("idle");
+        restartAutonomousCycle();
+      }
+    }, PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
     return () => window.clearTimeout(timerId);
-  }, [commitPhase, entrySequence, phase]);
+  }, [commitPhase, entrySequence, phase, restartAutonomousCycle]);
 
   useEffect(() => {
     if (!labLifeLoopEnabled) return;
@@ -538,8 +614,15 @@ export function PetModeWindowApp() {
   }, [labLifeLoopEnabled, playLifeAction]);
 
   useEffect(() => {
+    if (!petModeEnabled) return;
     let disposed = false;
     let timerId = 0;
+    const cycle = autonomousCycle;
+    const isCurrentCycle = () => (
+      !disposed
+      && petModeEnabledRef.current
+      && autonomousCycleRef.current === cycle
+    );
     // `schedule` re-arms the full presence window; `retry` only waits for the
     // pet to become interruptible. Re-arming on every retry made the outing
     // starve once sit/sleep started holding the pet out of `idle` for minutes:
@@ -547,12 +630,12 @@ export function PetModeWindowApp() {
     // firing as soon as the pet stood back up.
     const runOuting = () => {
       void playOuting(PET_MODE_AWAY_MS).finally(() => {
-        if (!disposed) schedule();
+        if (isCurrentCycle()) schedule();
       });
     };
     const retry = () => {
       timerId = window.setTimeout(() => {
-        if (disposed) return;
+        if (!isCurrentCycle()) return;
         if (phaseRef.current !== "idle" || !visibleRef.current) {
           retry();
           return;
@@ -562,7 +645,7 @@ export function PetModeWindowApp() {
     };
     const schedule = () => {
       timerId = window.setTimeout(() => {
-        if (disposed) return;
+        if (!isCurrentCycle()) return;
         if (phaseRef.current !== "idle" || !visibleRef.current) {
           retry();
           return;
@@ -575,11 +658,18 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [playOuting]);
+  }, [autonomousCycle, petModeEnabled, playOuting]);
 
   useEffect(() => {
+    if (!petModeEnabled) return;
     let disposed = false;
     let timerId = 0;
+    const cycle = autonomousCycle;
+    const isCurrentCycle = () => (
+      !disposed
+      && petModeEnabledRef.current
+      && autonomousCycleRef.current === cycle
+    );
     const roll = () => {
       // The pet stands back up between autonomous actions. Condition the next
       // roll on the previous autonomous pose rather than pretending the current
@@ -588,14 +678,14 @@ export function PetModeWindowApp() {
       const action = pickPetModeLifeAction(posture, Math.random());
       previousAutonomousActionRef.current = action;
       void playLifeAction(action, false).finally(() => {
-        if (!disposed) schedule();
+        if (isCurrentCycle()) schedule();
       });
     };
     // Same starvation guard as the outing timer: once the roll is due, wait for
     // an interruptible moment instead of restarting the whole interval.
     const retry = () => {
       timerId = window.setTimeout(() => {
-        if (disposed) return;
+        if (!isCurrentCycle()) return;
         if (phaseRef.current !== "idle" || !visibleRef.current) {
           retry();
           return;
@@ -609,7 +699,7 @@ export function PetModeWindowApp() {
         previousAutonomousActionRef.current,
       );
       timerId = window.setTimeout(() => {
-        if (disposed) return;
+        if (!isCurrentCycle()) return;
         if (phaseRef.current !== "idle" || !visibleRef.current) {
           retry();
           return;
@@ -622,7 +712,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [playLifeAction, snapshot?.productivity]);
+  }, [autonomousCycle, petModeEnabled, playLifeAction, snapshot?.productivity]);
 
   useEffect(() => {
     let disposed = false;
@@ -771,6 +861,7 @@ export function PetModeWindowApp() {
             facing={facing}
             pawFrame={pawFrame}
             entrySequence={entrySequence}
+            preserveEntryLanding={preserveEntryLanding}
           />
           <span
             ref={contactAnchorRef}

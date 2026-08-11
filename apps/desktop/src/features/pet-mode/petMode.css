@@ -217,6 +217,14 @@
   will-change: transform;
 }
 
+/* Entry completion reuses the exact SVG node and gait frame that was visible
+   on the preceding paint. Do not start idle breathing until a later action
+   replaces this landing hold, or the first stationary frame can still move. */
+.pet-mode-cat.is-entry-landed .pet-mode-cat__motion {
+  animation: none;
+  transform: none;
+}
+
 .pet-mode-cat--entry .pet-mode-cat__motion,
 .pet-mode-cat--walk .pet-mode-cat__motion,
 .pet-mode-cat--run .pet-mode-cat__motion,
@@ -259,6 +267,19 @@
 
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
+/* Measured in the fixed 121.2×92.4 cat box: the last 150×120 walk-frames-v2
+   vector sits 3.76px above and 6.383px right of the 797×581 paw/f001.png idle
+   raster. Register the visible silhouette rather than the unequal source
+   canvases. The parent facing mirror reverses the local X shift automatically. */
+.pet-mode-cat--entry .pet-mode-cat__vector,
+.pet-mode-cat--walk .pet-mode-cat__vector,
+.pet-mode-cat--run .pet-mode-cat__vector,
+.pet-mode-cat__landed-vector {
+  transform: translate(
+    var(--pet-gait-center-shift, -6.383px),
+    var(--pet-gait-baseline-shift, 3.76px)
+  );
+}
 .pet-mode-cat__sleep-pose { transform: translateY(-1px); }
 .pet-mode-cat__sit-pose { transform: translateY(-1px); }
 /* The blink scheduler swaps in the standing sprite, so it cannot drive a
@@ -423,9 +444,12 @@
   background: var(--pet-contact-shadow);
   filter: blur(5px);
   opacity: .65;
+  scale: 1 1;
 }
 
-.pet-mode-cat--entry .pet-mode-cat__shadow,
+.pet-mode-cat--entry .pet-mode-cat__shadow {
+  animation: pet-mode-entry-shadow var(--pet-entry-duration, 833ms) ease-in-out 1 both;
+}
 .pet-mode-cat--walk .pet-mode-cat__shadow { animation: pet-mode-shadow 480ms ease-in-out infinite; }
 .pet-mode-cat--run .pet-mode-cat__shadow { animation: pet-mode-shadow 240ms ease-in-out infinite; }
 .pet-mode-cat--drag .pet-mode-cat__shadow { opacity: 0; }
@@ -543,6 +567,12 @@
 @keyframes pet-mode-shadow {
   0%, 100% { scale: .94 1; opacity: .48; }
   50% { scale: 1.04 .88; opacity: .68; }
+}
+
+@keyframes pet-mode-entry-shadow {
+  0% { scale: .94 1; opacity: .48; }
+  50% { scale: 1.04 .88; opacity: .68; }
+  100% { scale: 1 1; opacity: .65; }
 }
 
 @keyframes pet-mode-heart {

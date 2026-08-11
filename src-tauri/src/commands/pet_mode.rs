@@ -38,11 +38,20 @@ const PET_MODE_RUN_SPEED: f64 = 300.0;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
-const PET_MODE_ENTRY_DURATION_MS: u64 = 420;
-const PET_MODE_ENTRY_INITIAL_VISIBLE_RATIO: f64 = 0.25;
+// Native translation duration only. The hidden pre-paint hold and renderer
+// handoff below happen before this clock starts.
+const PET_MODE_ENTRY_DURATION_MS: u64 = 833;
+const PET_MODE_ENTRY_ACCELERATION_RATIO: f64 = 0.10;
+const PET_MODE_ENTRY_DECELERATION_RATIO: f64 = 0.18;
+// Alpha-bound measurement across the idle PNG and all registered gait frames
+// leaves 24.329 base points of transparent leading-edge gutter in the 144-point
+// panel. Keep one extra base point outside the display so even antialiased edge
+// pixels begin hidden. Both values scale with the selected native panel size.
+const PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX: f64 = 24.329;
+const PET_MODE_ENTRY_HIDDEN_SAFETY_PX: f64 = 1.0;
 // AppKit can defer the first NSPanel composite while the settings toggle's
-// accessibility action is still unwinding. The full panel begins outside the
-// display with one quarter visible, then moves inward after this short hold.
+// accessibility action is still unwinding. The WebView paints during this
+// short hold, but every opaque cat pixel remains outside the display.
 const PET_MODE_ENTRY_PAINT_DELAY_MS: u64 = 120;
 // F12 source contact point (162.8751 / 150) scaled to the fixed 121.2-point
 // cat viewport and centered in the 144-point native panel.
@@ -366,9 +375,9 @@ pub fn pet_mode_set_enabled(
         let entry_start_x = entry.start_x;
         let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
         drop(async_runtime::spawn_blocking(move || {
-            // The display edge is the reveal boundary. Only one quarter of the
-            // full panel starts onscreen, so the first visible frame cannot be
-            // a complete cat floating in the middle of the desktop.
+            // The display edge is the reveal mask. Only the panel's transparent
+            // leading gutter starts onscreen; the first opaque cat pixel appears
+            // after native movement begins instead of holding as a static peek.
             thread::sleep(Duration::from_millis(PET_MODE_ENTRY_PAINT_DELAY_MS));
             if !pet_entry_motion_is_current(motion_revision) {
                 return;
@@ -412,7 +421,10 @@ fn animate_pet_entry_window(
             return Ok(());
         }
         let progress = (started_at.elapsed().as_secs_f64() / duration.as_secs_f64()).min(1.0);
-        let x = start_x + (home.x - start_x) * progress;
+        // Reach walking speed quickly, cruise for most of the visible trip, and
+        // come fully to rest before the renderer freezes the exact walk SVG.
+        let travel_progress = pet_entry_travel_progress(progress);
+        let x = start_x + (home.x - start_x) * travel_progress;
         window
             .set_position(LogicalPosition::new(x, home.y))
             .map_err(|error| error.to_string())?;
@@ -421,6 +433,29 @@ fn animate_pet_entry_window(
         }
         thread::sleep(Duration::from_millis(16));
     }
+}
+
+fn pet_entry_travel_progress(progress: f64) -> f64 {
+    let progress = progress.clamp(0.0, 1.0);
+    let acceleration_duration = PET_MODE_ENTRY_ACCELERATION_RATIO;
+    let deceleration_duration = PET_MODE_ENTRY_DECELERATION_RATIO;
+    let deceleration_start = 1.0 - deceleration_duration;
+    let cruise_duration = deceleration_start - acceleration_duration;
+    let travel_area = acceleration_duration / 2.0 + cruise_duration + deceleration_duration / 2.0;
+
+    if progress < acceleration_duration {
+        return progress * progress / (2.0 * acceleration_duration * travel_area);
+    }
+    if progress < deceleration_start {
+        let distance = acceleration_duration / 2.0 + progress - acceleration_duration;
+        return distance / travel_area;
+    }
+
+    let deceleration_elapsed = progress - deceleration_start;
+    let distance_before_deceleration = acceleration_duration / 2.0 + cruise_duration;
+    let deceleration_distance = deceleration_elapsed
+        - deceleration_elapsed * deceleration_elapsed / (2.0 * deceleration_duration);
+    (distance_before_deceleration + deceleration_distance) / travel_area
 }
 
 fn pet_entry_motion_is_current(motion_revision: u64) -> bool {
@@ -453,7 +488,7 @@ fn pet_entry_geometry(
     home_x: f64,
     pet_width: f64,
 ) -> PetEntryGeometry {
-    let visible_width = pet_width * PET_MODE_ENTRY_INITIAL_VISIBLE_RATIO;
+    let visible_width = pet_entry_transparent_visible_width(pet_width);
     let screen_center = screen_x + screen_width / 2.0;
     let pet_center = home_x + pet_width / 2.0;
     if pet_center < screen_center {
@@ -467,6 +502,11 @@ fn pet_entry_geometry(
             start_x: screen_x + screen_width - visible_width,
         }
     }
+}
+
+fn pet_entry_transparent_visible_width(pet_width: f64) -> f64 {
+    let base_visible_width = PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX - PET_MODE_ENTRY_HIDDEN_SAFETY_PX;
+    pet_width * base_visible_width / PET_MODE_WIDTH
 }
 
 #[tauri::command]
@@ -1924,26 +1964,37 @@ mod tests {
     use super::*;
 
     #[test]
-    fn entry_starts_partly_outside_the_nearest_display_edge() {
+    fn entry_starts_with_only_transparent_gutter_inside_the_display() {
+        for pet_width in [72.0, 108.0, 144.0, 180.0] {
+            let visible_width = pet_entry_transparent_visible_width(pet_width);
+            let scaled_gutter = pet_width * PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX / PET_MODE_WIDTH;
+            let scaled_safety = pet_width * PET_MODE_ENTRY_HIDDEN_SAFETY_PX / PET_MODE_WIDTH;
+            assert!((scaled_gutter - visible_width - scaled_safety).abs() < 1e-9);
+            assert!(visible_width < scaled_gutter);
+        }
+
+        let base_visible_width = pet_entry_transparent_visible_width(PET_MODE_WIDTH);
+        assert!((base_visible_width - 23.329).abs() < 1e-9);
+
         let right = pet_entry_geometry(0.0, 1440.0, 1272.0, 144.0);
         assert_eq!(right.facing, "left");
-        assert_eq!(right.start_x, 1404.0);
-        assert_eq!(1440.0 - right.start_x, 36.0);
+        assert!((right.start_x - 1416.671).abs() < 1e-9);
+        assert!((1440.0 - right.start_x - base_visible_width).abs() < 1e-9);
 
         let left = pet_entry_geometry(0.0, 1440.0, 24.0, 144.0);
         assert_eq!(left.facing, "right");
-        assert_eq!(left.start_x, -108.0);
-        assert_eq!(left.start_x + 144.0, 36.0);
+        assert!((left.start_x + 120.671).abs() < 1e-9);
+        assert!((left.start_x + 144.0 - base_visible_width).abs() < 1e-9);
 
         let negative_origin = pet_entry_geometry(-1440.0, 1440.0, -168.0, 144.0);
         assert_eq!(negative_origin.facing, "left");
-        assert_eq!(negative_origin.start_x, -36.0);
-        assert_eq!(0.0 - negative_origin.start_x, 36.0);
+        assert!((negative_origin.start_x + base_visible_width).abs() < 1e-9);
+        assert!((0.0 - negative_origin.start_x - base_visible_width).abs() < 1e-9);
 
         let offset_left = pet_entry_geometry(1512.0, 1920.0, 1536.0, 180.0);
         assert_eq!(offset_left.facing, "right");
-        assert_eq!(offset_left.start_x, 1377.0);
-        assert_eq!(offset_left.start_x + 180.0 - 1512.0, 45.0);
+        let large_visible_width = pet_entry_transparent_visible_width(180.0);
+        assert!((offset_left.start_x + 180.0 - 1512.0 - large_visible_width).abs() < 1e-9);
     }
 
     #[test]
@@ -1960,6 +2011,24 @@ mod tests {
         assert!(!pet_entry_motion_matches(8, 9, true, true));
         assert!(!pet_entry_motion_matches(8, 8, false, true));
         assert!(!pet_entry_motion_matches(8, 8, true, false));
+    }
+
+    #[test]
+    fn entry_walk_profile_matches_renderer_contract() {
+        assert_eq!(PET_MODE_ENTRY_DURATION_MS, 833);
+        assert_eq!(PET_MODE_ENTRY_ACCELERATION_RATIO, 0.10);
+        assert_eq!(PET_MODE_ENTRY_DECELERATION_RATIO, 0.18);
+        assert_eq!(pet_entry_travel_progress(-1.0), 0.0);
+        assert_eq!(pet_entry_travel_progress(0.0), 0.0);
+        assert!((pet_entry_travel_progress(0.05) - 0.014_534_883_720_930_234).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(0.10) - 0.058_139_534_883_720_93).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(0.25) - 0.232_558_139_534_883_72).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(0.5) - 0.523_255_813_953_488_4).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(0.75) - 0.813_953_488_372_093).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(0.82) - 0.895_348_837_209_302_4).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(0.91) - 0.973_837_209_302_325_5).abs() < 1e-12);
+        assert!((pet_entry_travel_progress(1.0) - 1.0).abs() < f64::EPSILON);
+        assert!((pet_entry_travel_progress(2.0) - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]

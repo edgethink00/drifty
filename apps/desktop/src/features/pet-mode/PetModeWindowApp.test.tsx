@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PetModeWindowApp } from "./PetModeWindowApp";
@@ -6,11 +7,20 @@ import {
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
+  PET_MODE_ENTRY_DURATION_MS,
+  PET_MODE_ENTRY_FALLBACK_GRACE_MS,
+  PET_MODE_GAIT_BASELINE_SHIFT_PX,
+  PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_LIFE_MOTION_DURATION_MS,
+  PET_MODE_PRESENT_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   type PetModeWindowEvent,
 } from "./petModeData";
+
+const walkFrames = (JSON.parse(
+  readFileSync("public/pet-mode/walk-frames-v2.json", "utf8"),
+) as { readonly frames: readonly string[] }).frames;
 
 function dispatchPointer(
   target: HTMLElement,
@@ -161,13 +171,17 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
   });
 
-  it("renders the dedicated entry gait and settles on the native idle signal", async () => {
+  it("holds the exact rendered entry SVG when native reports landing", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: async () => ({ frames: walkFrames, cycleSeconds: 1.25 }),
+    }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
     render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await act(async () => { await Promise.resolve(); });
 
     act(() => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
@@ -176,11 +190,110 @@ describe("PetModeWindowApp", () => {
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("entry");
     expect(cat.classList.contains("is-mirrored")).toBe(true);
+    expect(cat.style.getPropertyValue("--pet-entry-duration")).toBe(`${PET_MODE_ENTRY_DURATION_MS}ms`);
+    expect(cat.style.getPropertyValue("--pet-gait-baseline-shift")).toBe(`${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`);
+    expect(cat.style.getPropertyValue("--pet-gait-center-shift")).toBe(`${PET_MODE_GAIT_CENTER_SHIFT_PX}px`);
+    const entryVector = cat.querySelector(".pet-mode-cat__vector");
+    const entryPath = entryVector?.querySelector("path")?.getAttribute("d");
 
     act(() => {
       bridge.eventHandler?.({ kind: "entry_complete" });
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("is-entry-landed")).toBe(true);
+    const landedVector = cat.querySelector(".pet-mode-cat__landed-vector");
+    expect(landedVector).toBe(entryVector);
+    expect(landedVector?.querySelector("path")?.getAttribute("d")).toBe(entryPath);
+    expect(cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster")).toBeNull();
+  });
+
+  it("does not swap the landed raster when walk frames load after entry completion", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    let resolveFetch: ((response: { json: () => Promise<{ frames: readonly string[]; cycleSeconds: number }> }) => void) | null = null;
+    let resolvePayload: ((payload: { frames: readonly string[]; cycleSeconds: number }) => void) | null = null;
+    const fetchPromise = new Promise<{ json: () => Promise<{ frames: readonly string[]; cycleSeconds: number }> }>((resolve) => {
+      resolveFetch = resolve;
+    });
+    const payloadPromise = new Promise<{ frames: readonly string[]; cycleSeconds: number }>((resolve) => {
+      resolvePayload = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(fetchPromise));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+      bridge.eventHandler?.({ kind: "entry_complete" });
+    });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    const landedRaster = cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster");
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("is-entry-landed")).toBe(false);
+    expect(landedRaster).not.toBeNull();
+
+    await act(async () => {
+      resolveFetch?.({ json: () => payloadPromise });
+      await fetchPromise;
+      resolvePayload?.({ frames: walkFrames, cycleSeconds: 1.25 });
+      await payloadPromise;
+    });
+
+    expect(cat.querySelector(".pet-mode-cat__landed-vector")).toBeNull();
+    expect(cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster")).toBe(landedRaster);
+
+    // Prove the payload has reached component state, rather than allowing the
+    // idle assertion above to pass while the promise chain is still pending.
+    act(() => {
+      bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+    });
+    expect(cat.querySelector(".pet-mode-cat__vector")).not.toBeNull();
+  });
+
+  it("starts fresh autonomous clocks only after a newly shown pet has landed", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    // The renderer stays mounted behind the hidden native panel. Time spent
+    // with Show Pet off must not age either autonomous scheduler.
+    await act(async () => { await vi.advanceTimersByTimeAsync(13 * 60 * 1000); });
+    expect(bridge.exitNativePetScreen).not.toHaveBeenCalled();
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+
+    // Native normally cancels this event when the toggle turns off. The
+    // renderer must still reject a previously queued completion on its side.
+    act(() => {
+      bridge.eventHandler?.({ kind: "entry_complete" });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000); });
+    expect(bridge.exitNativePetScreen).not.toHaveBeenCalled();
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_MODE_STORAGE_KEY }));
+      bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+      bridge.eventHandler?.({ kind: "entry_complete" });
+    });
+    await act(async () => undefined);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS - 1); });
+    expect(bridge.exitNativePetScreen).not.toHaveBeenCalled();
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+
+    // A blink or tail flick that already owns the exact due frame may defer the
+    // outing to its existing one-second interruptibility retry.
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
   });
 
   it("does not synthesize a cold-start entry pose when reduced motion is requested", async () => {
@@ -207,7 +320,9 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("entry");
     expect(screen.getByRole("button").classList.contains("is-entering")).toBe(true);
 
-    act(() => { vi.advanceTimersByTime(921); });
+    act(() => {
+      vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+    });
     expect(cat.getAttribute("data-phase")).toBe("idle");
     expect(screen.getByRole("button").classList.contains("is-entering")).toBe(false);
   });
@@ -231,7 +346,9 @@ describe("PetModeWindowApp", () => {
     act(() => { vi.advanceTimersByTime(121); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
 
-    act(() => { vi.advanceTimersByTime(800); });
+    act(() => {
+      vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+    });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 

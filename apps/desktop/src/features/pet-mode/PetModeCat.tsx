@@ -1,9 +1,12 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { captureSentryException } from "../../lib/observability/sentryClient";
 import {
-  getPetModeGaitFramesPerSecond,
+  getPetModeGaitFrameIndex,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
+  PET_MODE_ENTRY_DURATION_MS,
+  PET_MODE_GAIT_BASELINE_SHIFT_PX,
+  PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
   PET_MODE_PAW_CONTACT_FRAME,
@@ -42,15 +45,18 @@ export function PetModeCat({
   facing,
   pawFrame,
   entrySequence = 0,
+  preserveEntryLanding = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
   readonly pawFrame: number;
   readonly entrySequence?: number;
+  readonly preserveEntryLanding?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
+  const renderedEntrySequenceRef = useRef<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -110,7 +116,11 @@ export function PetModeCat({
     const moving = phase === "entry" || phase === "walk" || phase === "run";
     if (!moving || walkFrames.length === 0) return undefined;
     setWalkFrame(0);
-    const framesPerSecond = getPetModeGaitFramesPerSecond(phase);
+    // Native emits `motion: entry` before its one-frame WebView handoff, and
+    // entrySequence restarts this renderer clock on that event. Both sides then
+    // use the same duration and distance-based travel progress; the final frame
+    // clamp absorbs the remaining compositor-frame skew before `entry_complete`.
+    const motion = phase === "run" ? "run" : phase === "walk" ? "walk" : "entry";
     const startedAt = performance.now();
     let displayedFrame = 0;
     let animationFrameId = 0;
@@ -118,7 +128,11 @@ export function PetModeCat({
       // The prototype advances gait in its requestAnimationFrame loop. Do the
       // same here: at run speed it may skip source indices, but it never queues
       // several full-silhouette React updates between display refreshes.
-      const nextFrame = Math.floor((now - startedAt) * framesPerSecond / 1000) % walkFrames.length;
+      const nextFrame = getPetModeGaitFrameIndex(
+        motion,
+        now - startedAt,
+        walkFrames.length,
+      );
       if (nextFrame !== displayedFrame) {
         displayedFrame = nextFrame;
         setWalkFrame(nextFrame);
@@ -153,15 +167,28 @@ export function PetModeCat({
   }, [phase]);
 
   const mirrored = facing === "left";
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}`;
+  const registerWalkVector = useCallback((node: SVGSVGElement | null) => {
+    if (node && phase === "entry") renderedEntrySequenceRef.current = entrySequence;
+  }, [entrySequence, phase]);
+  // Only hold a vector that was actually painted during this entry. On a cold
+  // asset load, completing on the raster and swapping to the vector later is
+  // a second, visible landing transition.
+  const holdsRenderedEntryVector = phase === "idle"
+    && preserveEntryLanding
+    && walkFrames.length > 0
+    && renderedEntrySequenceRef.current === entrySequence;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy";
   const lifeMotionAsset = isLifeMotionPhase(phase)
     ? LIFE_MOTION_ASSET_BY_PHASE[phase]
     : null;
-  const dragMotionDurations = {
+  const motionGeometry = {
     "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
     "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
+    "--pet-entry-duration": `${PET_MODE_ENTRY_DURATION_MS}ms`,
+    "--pet-gait-baseline-shift": `${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`,
+    "--pet-gait-center-shift": `${PET_MODE_GAIT_CENTER_SHIFT_PX}px`,
   } as CSSProperties;
   const walkVectorBody = (
     <>
@@ -170,7 +197,7 @@ export function PetModeCat({
     </>
   );
   return (
-    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} style={dragMotionDurations}>
+    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} style={motionGeometry}>
       <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
         {/* The baked frames are effectively two-tone: body pixels sit near
             luminance 226 and facial detail near 20, with only anti-aliasing in
@@ -350,8 +377,17 @@ export function PetModeCat({
           <PetModeSleepPose />
         ) : phase === "sit" ? (
           <PetModeSitPose />
+        ) : holdsRenderedEntryVector ? (
+          <svg
+            ref={registerWalkVector}
+            className="pet-mode-cat__vector pet-mode-cat__landed-vector"
+            viewBox="0 0 150 120"
+            aria-hidden="true"
+          >
+            {walkVectorBody}
+          </svg>
         ) : (phase === "entry" || phase === "walk" || phase === "run") && walkFrames.length > 0 ? (
-          <svg className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
+          <svg ref={registerWalkVector} className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
             {walkVectorBody}
           </svg>
         ) : (

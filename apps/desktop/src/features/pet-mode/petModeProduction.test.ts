@@ -5,6 +5,13 @@ import {
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_LEGACY_COAT_STORAGE_KEY,
   PET_MODE_LEGACY_STORAGE_KEY,
+  PET_MODE_ENTRY_DURATION_MS,
+  PET_MODE_ENTRY_ACCELERATION_RATIO,
+  PET_MODE_ENTRY_DECELERATION_RATIO,
+  PET_MODE_ENTRY_HIDDEN_SAFETY_PX,
+  PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX,
+  PET_MODE_GAIT_BASELINE_SHIFT_PX,
+  PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_SIZES,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
@@ -20,6 +27,58 @@ const app = readFileSync("src/App.tsx", "utf8");
 const accountMenu = readFileSync("src/features/auth/AccountMenu.tsx", "utf8");
 const devSettings = readFileSync("src/features/settings/DevSettingsSection.tsx", "utf8");
 const notifications = readFileSync("src/features/settings/NotificationsSettingsSection.tsx", "utf8");
+const petModeCatContract = readFileSync("src/features/pet-mode/PetModeCat.tsx", "utf8");
+const petModeCssContract = readFileSync("src/features/pet-mode/petMode.css", "utf8");
+const petModeRustContract = readFileSync("../../src-tauri/src/commands/pet_mode.rs", "utf8");
+
+describe("pet entry motion contract", () => {
+  it("keeps native travel and renderer motion constants aligned", () => {
+    const rustDuration = petModeRustContract.match(
+      /const PET_MODE_ENTRY_DURATION_MS: u64 = (\d+);/,
+    );
+    expect(rustDuration?.[1]).toBe(String(PET_MODE_ENTRY_DURATION_MS));
+    const rustAccelerationRatio = petModeRustContract.match(
+      /const PET_MODE_ENTRY_ACCELERATION_RATIO: f64 = ([\d.]+);/,
+    );
+    const rustDecelerationRatio = petModeRustContract.match(
+      /const PET_MODE_ENTRY_DECELERATION_RATIO: f64 = ([\d.]+);/,
+    );
+    expect(Number(rustAccelerationRatio?.[1])).toBe(PET_MODE_ENTRY_ACCELERATION_RATIO);
+    expect(Number(rustDecelerationRatio?.[1])).toBe(PET_MODE_ENTRY_DECELERATION_RATIO);
+    const rustTransparentGutter = petModeRustContract.match(
+      /const PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX: f64 = ([\d.]+);/,
+    );
+    const rustHiddenSafety = petModeRustContract.match(
+      /const PET_MODE_ENTRY_HIDDEN_SAFETY_PX: f64 = ([\d.]+);/,
+    );
+    expect(Number(rustTransparentGutter?.[1])).toBe(PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX);
+    expect(Number(rustHiddenSafety?.[1])).toBe(PET_MODE_ENTRY_HIDDEN_SAFETY_PX);
+    expect(petModeCssContract).toContain(
+      `var(--pet-entry-duration, ${PET_MODE_ENTRY_DURATION_MS}ms)`,
+    );
+    expect(petModeCssContract).toContain(
+      `var(--pet-gait-baseline-shift, ${PET_MODE_GAIT_BASELINE_SHIFT_PX}px)`,
+    );
+    expect(petModeCssContract).toContain(
+      `var(--pet-gait-center-shift, ${PET_MODE_GAIT_CENTER_SHIFT_PX}px)`,
+    );
+    expect(petModeCssContract).toContain(
+      ".pet-mode-cat.is-mirrored { transform: scaleX(-1); }",
+    );
+    for (const phase of ["entry", "walk", "run"]) {
+      expect(petModeCssContract).toContain(
+        `.pet-mode-cat--${phase} .pet-mode-cat__vector`,
+      );
+    }
+    expect(petModeCssContract).toContain(".pet-mode-cat__landed-vector");
+    expect(petModeCssContract).toContain("@keyframes pet-mode-entry-shadow");
+    expect(petModeCatContract).toContain('fetch("/pet-mode/walk-frames-v2.json")');
+    expect(petModeCatContract).toContain('className="pet-mode-cat__vector pet-mode-cat__landed-vector"');
+    expect(petModeCssContract).toContain(
+      ".pet-mode-cat.is-entry-landed .pet-mode-cat__motion",
+    );
+  });
+});
 
 describe("pet promoted out of Dev", () => {
   beforeEach(() => window.localStorage.clear());
