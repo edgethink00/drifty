@@ -2275,6 +2275,34 @@
   overflow-y: auto;
 }
 
+/* The calendar and Breakdown are the two intentional Week scroll regions.
+   Give both the same slim chrome so a short-window fallback never falls back
+   to WebKit's visually heavier native scrollbar. */
+.page--week-dashboard .week-v2-calendar__scroller,
+.page--week-dashboard .week-v2-side__content {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-soft) 34%, transparent) transparent;
+}
+
+.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar,
+.page--week-dashboard .week-v2-side__content::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-track,
+.page--week-dashboard .week-v2-side__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-thumb,
+.page--week-dashboard .week-v2-side__content::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-soft) 34%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
 .page--week-dashboard .week-v2-side__content > * {
   min-width: 0;
 }
@@ -2299,11 +2327,27 @@
 }
 
 .page--week-dashboard .week-v2-side__content .week-v2-side-card--weekly-breakdown {
-  padding: 13px 2px;
+  /* The KPI block has its own complete outline, so a divider plus a full
+     section gap here duplicated the boundary and tipped populated weeks into
+     overflow at the normal compact window size. */
+  padding: 13px 2px 6px;
+  border-bottom: 0;
 }
 
 .page--week-dashboard .week-v2-side__content .week-v2-side-card--weekly-breakdown > .label-mono {
   padding-left: 0;
+}
+
+.page--week-dashboard .week-v2-side__content .week-v2-side-card--weekly-breakdown .wt-plot {
+  height: 7.5rem;
+}
+
+.page--week-dashboard .week-v2-side__content > .kpi-row--insights {
+  margin-top: var(--space-2);
+}
+
+.page--week-dashboard .week-v2-side__content > .kpi-row--insights .metric-tile {
+  padding: 6px 10px 7px;
 }
 
 /* Week calendar = one rounded white bordered inner block that includes the
@@ -2319,25 +2363,6 @@
   border: 1px solid var(--line);
   border-radius: 0 0 var(--radius-md) var(--radius-md);
   background: var(--surface);
-  /* Slim scrollbar (~30% under the default width), styled like .content's. */
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--text-soft) 34%, transparent) transparent;
-}
-
-.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.page--week-dashboard .week-v2-calendar__scroller::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-soft) 34%, transparent);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
 }
 
 /* Plain date header row: no frame, no per-day separators, no today tint —
