@@ -167,6 +167,7 @@ export interface CurrentActivitySnapshot {
 export interface TrackerStatus {
   running?: boolean;
   isRunning?: boolean;
+  trackingPaused?: boolean;
   accessibilityGranted: boolean;
   lastEventAt?: string | null;
   databasePath?: string | null;

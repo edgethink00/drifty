@@ -1,8 +1,9 @@
 use super::*;
 use crate::tracker::{
-    apply_tracker_startup_state, degraded_tracker_status, tracker_start_error_message,
-    tracker_status_error_message, tracker_stop_error_message, TrackerError, TrackerStartupState,
-    TrackerStatus, TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS,
+    apply_tracker_startup_state, apply_tracking_pause_state, degraded_tracker_status,
+    tracker_start_error_message, tracker_status_error_message, tracker_stop_error_message,
+    TrackerError, TrackerStartupState, TrackerStatus, TRACKER_PAUSED_MESSAGE,
+    TRACKER_STARTUP_FAILURE_MESSAGE_MAX_CHARS,
 };
 
 #[test]
@@ -89,6 +90,7 @@ fn tracker_status(running: bool) -> TrackerStatus {
 
     TrackerStatus {
         running,
+        tracking_paused: false,
         accessibility_granted: true,
         last_event_at: Some("2026-07-12T12:00:00Z".into()),
         database_path: Some("tracker.sqlite3".into()),
@@ -96,6 +98,20 @@ fn tracker_status(running: bool) -> TrackerStatus {
         idle_seconds: Some(0.0),
         idle_detection_available: Some(true),
         message: Some(message.into()),
+    }
+}
+
+#[test]
+fn persisted_pause_is_authoritative_over_transient_running_or_degraded_status() {
+    for status in [
+        tracker_status(true),
+        degraded_tracker_status("status unavailable".into()),
+    ] {
+        let paused = apply_tracking_pause_state(status, true);
+        assert!(!paused.running);
+        assert!(paused.tracking_paused);
+        assert_eq!(paused.tracker_mode.as_deref(), Some("stopped"));
+        assert_eq!(paused.message.as_deref(), Some(TRACKER_PAUSED_MESSAGE));
     }
 }
 

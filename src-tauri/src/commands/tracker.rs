@@ -3,9 +3,10 @@ use tauri::async_runtime;
 use tauri::{AppHandle, Manager, State};
 
 use crate::tracker::{
-    apply_tracker_startup_state, degraded_tracker_status, tracker_start_error_message,
-    tracker_status_error_message, tracker_stop_error_message, AppIdentity,
-    DeveloperDiagnosticsSettings, TrackerController, TrackerStartupState, TrackerStatus,
+    apply_tracker_startup_state, apply_tracking_pause_state, degraded_tracker_status,
+    tracker_start_error_message, tracker_status_error_message, tracker_stop_error_message,
+    AppIdentity, DeveloperDiagnosticsSettings, TrackerController, TrackerStartupState,
+    TrackerStatus,
 };
 use crate::tracking_pause::{self, TrackingPauseState};
 use crate::tray;
@@ -314,11 +315,24 @@ pub async fn tracker_get_status(
 ) -> Result<TrackerStatus, String> {
     let controller = *controller.inner();
     async_runtime::spawn_blocking(move || {
+        let pause_state = app.state::<TrackingPauseState>();
+        let _operation = pause_state.lock_operation();
         let startup_state = app.state::<TrackerStartupState>();
+        let tracking_paused = pause_state.snapshot().is_active();
         match controller.get_status(&app) {
-            Ok(status) => Ok(apply_tracker_startup_state(&startup_state, status)),
+            Ok(status) => Ok(apply_tracking_pause_state(
+                apply_tracker_startup_state(&startup_state, status),
+                tracking_paused,
+            )),
             Err(_) => match startup_state.failure_message() {
-                Some(message) => Ok(degraded_tracker_status(message)),
+                Some(message) => Ok(apply_tracking_pause_state(
+                    degraded_tracker_status(message),
+                    tracking_paused,
+                )),
+                None if tracking_paused => Ok(apply_tracking_pause_state(
+                    degraded_tracker_status(tracker_status_error_message()),
+                    true,
+                )),
                 None => Err(tracker_status_error_message()),
             },
         }
@@ -338,12 +352,19 @@ pub async fn tracker_start(
         let pause_state = app.state::<TrackingPauseState>();
         let _operation = pause_state.lock_operation();
         let startup_state = app.state::<TrackerStartupState>();
+        if let Err(error) = tracking_pause::clear_for_manual_start(&app) {
+            let clear_error = crate::tracker::TrackerError::TrackerReturnedError(error);
+            startup_state.record_start_failure(generation, &clear_error);
+            return Err(tracker_start_error_message());
+        }
         match controller.start(&app) {
             Ok(status) if status.running => {
                 startup_state.complete_start_success(generation);
-                tracking_pause::clear_after_manual_start(&app);
                 tray::queue_tracking_controls_refresh(&app, Some(status.running));
-                Ok(status)
+                Ok(TrackerStatus {
+                    tracking_paused: false,
+                    ..status
+                })
             }
             Ok(status) => {
                 let error = crate::tracker::TrackerError::TrackerReturnedError(
@@ -378,20 +399,25 @@ pub async fn tracker_stop(
             eprintln!("[tracking-pause] Refusing an unpersisted manual stop: {error}");
             return Err(tracker_stop_error_message());
         }
-        match controller.stop(&app) {
-            Ok(status) if !status.running => {
+        match tracking_pause::finish_indefinite_pause_stop(&app, &controller, controller.stop(&app))
+        {
+            tracking_pause::IndefinitePauseStopOutcome::Paused(status) => {
                 startup_state.complete_stop_success(generation);
-                tracking_pause::commit_indefinite_pause(&app);
                 tray::queue_tracking_controls_refresh(&app, Some(status.running));
-                Ok(status)
+                Ok(TrackerStatus {
+                    tracking_paused: true,
+                    ..status
+                })
             }
-            Ok(status) => {
-                tracking_pause::abort_indefinite_pause(&app);
+            tracking_pause::IndefinitePauseStopOutcome::StillRunning(status) => {
                 tray::queue_tracking_controls_refresh(&app, Some(status.running));
                 Err(tracker_stop_error_message())
             }
-            Err(_) => {
-                tracking_pause::abort_indefinite_pause(&app);
+            tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
+                eprintln!(
+                    "[tracking-pause] Preserving manual pause after an ambiguous stop: {error}"
+                );
+                tray::queue_tracking_controls_refresh(&app, Some(false));
                 Err(tracker_stop_error_message())
             }
         }

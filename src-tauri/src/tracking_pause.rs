@@ -8,11 +8,11 @@ use std::{
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{async_runtime, AppHandle, Manager};
 use tauri_plugin_notification::NotificationExt;
 
 use crate::{
-    tracker::{TrackerController, TrackerError, TrackerStartupState},
+    tracker::{TrackerController, TrackerError, TrackerStartupState, TrackerStatus},
     tray,
 };
 
@@ -83,6 +83,12 @@ pub(crate) enum TrackingPauseSnapshot {
     Indefinite,
     Timed { resumes_at_unix_seconds: i64 },
     ResumeFailed { resumes_at_unix_seconds: i64 },
+}
+
+pub(crate) enum IndefinitePauseStopOutcome {
+    Paused(TrackerStatus),
+    StillRunning(TrackerStatus),
+    Ambiguous(TrackerError),
 }
 
 impl TrackingPauseSnapshot {
@@ -344,15 +350,53 @@ pub(crate) fn abort_indefinite_pause(app: &AppHandle) {
     }
 }
 
+pub(crate) fn finish_indefinite_pause_stop(
+    app: &AppHandle,
+    controller: &TrackerController,
+    stop_result: Result<TrackerStatus, TrackerError>,
+) -> IndefinitePauseStopOutcome {
+    let outcome = match stop_result {
+        Ok(status) if !status.running => IndefinitePauseStopOutcome::Paused(status),
+        Ok(status) => IndefinitePauseStopOutcome::StillRunning(status),
+        Err(stop_error) => match controller.get_status(app) {
+            Ok(status) if !status.running => IndefinitePauseStopOutcome::Paused(status),
+            Ok(status) => IndefinitePauseStopOutcome::StillRunning(status),
+            Err(_) => IndefinitePauseStopOutcome::Ambiguous(stop_error),
+        },
+    };
+
+    match &outcome {
+        IndefinitePauseStopOutcome::Paused(_) => commit_indefinite_pause(app),
+        IndefinitePauseStopOutcome::StillRunning(_) => abort_indefinite_pause(app),
+        IndefinitePauseStopOutcome::Ambiguous(_) => {
+            // A mutating sidecar request may complete even if its response is
+            // lost. Preserve the durable user intent and retry enforcement on
+            // a fresh sidecar instead of letting recovery restart tracking.
+            commit_indefinite_pause(app);
+            let enforcement_app = app.clone();
+            let _ = async_runtime::spawn_blocking(move || {
+                enforce_restored_pause(&enforcement_app);
+            });
+        }
+    }
+    outcome
+}
+
 pub(crate) fn snapshot(app: &AppHandle) -> TrackingPauseSnapshot {
     app.state::<TrackingPauseState>().snapshot()
 }
 
-pub(crate) fn clear_after_manual_start(app: &AppHandle) {
-    app.state::<TrackingPauseState>().cancel();
-    if let Err(error) = clear_persisted_pause(app) {
-        eprintln!("[tracking-pause] {error}");
-    }
+pub(crate) fn clear_for_manual_start(app: &AppHandle) -> Result<(), String> {
+    clear_pause_and_cancel(&app.state::<TrackingPauseState>(), &pause_state_path(app)?)
+}
+
+fn clear_pause_and_cancel(state: &TrackingPauseState, path: &Path) -> Result<(), String> {
+    // Keep the in-memory pause authoritative until the durable marker is gone.
+    // If clearing fails, callers can stop the just-started tracker and report a
+    // failed Resume without creating an active/durable split-brain state.
+    clear_pause_file(path)?;
+    state.cancel();
+    Ok(())
 }
 
 pub(crate) fn restore_on_startup(app: &AppHandle) -> bool {
@@ -396,15 +440,20 @@ pub(crate) fn restore_on_startup(app: &AppHandle) -> bool {
 
 pub(crate) fn enforce_restored_pause(app: &AppHandle) {
     let state = app.state::<TrackingPauseState>();
-    let _operation = state.lock_operation();
-    if !state.snapshot().is_active() {
-        return;
-    }
     let controller = *app.state::<TrackerController>();
-    match controller.stop(app) {
+    run_if_pause_still_active(&state, || match controller.stop(app) {
         Ok(status) => tray::queue_tracking_controls_refresh(app, Some(status.running)),
         Err(error) => eprintln!("[tracking-pause] Could not enforce restored pause: {error}"),
+    });
+}
+
+fn run_if_pause_still_active(state: &TrackingPauseState, action: impl FnOnce()) -> bool {
+    let _operation = state.lock_operation();
+    if !state.snapshot().is_active() {
+        return false;
     }
+    action();
+    true
 }
 
 pub(crate) fn pause_tracking_for(app: &AppHandle, minutes: u64) {
@@ -479,13 +528,20 @@ fn timed_resume_loop(app: AppHandle, generation: u64) {
     let controller = *app.state::<TrackerController>();
     let startup_state = app.state::<TrackerStartupState>();
     let startup_generation = startup_state.begin_start_attempt();
+    if let Err(error) = clear_persisted_pause(&app) {
+        let clear_error = TrackerError::TrackerReturnedError(error.clone());
+        startup_state.record_start_failure(startup_generation, &clear_error);
+        state.complete_due_resume(generation, false);
+        tray::queue_tracking_controls_refresh(&app, Some(false));
+        eprintln!(
+            "[tracking-pause] Automatic resume was skipped because its durable pause could not be cleared: {error}"
+        );
+        return;
+    }
     match controller.start(&app) {
         Ok(status) if status.running => {
             startup_state.complete_start_success(startup_generation);
             state.complete_due_resume(generation, true);
-            if let Err(error) = clear_persisted_pause(&app) {
-                eprintln!("[tracking-pause] {error}");
-            }
             tray::queue_tracking_controls_refresh(&app, Some(status.running));
             let _ = app
                 .notification()
@@ -602,6 +658,37 @@ mod tests {
     }
 
     #[test]
+    fn stale_restore_stop_cannot_run_after_manual_resume_wins_the_operation_lock() {
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+
+        let state = Arc::new(TrackingPauseState::default());
+        state.mark_indefinite();
+        let resume_operation = state.lock_operation();
+        let restore_state = Arc::clone(&state);
+        let stop_called = Arc::new(AtomicBool::new(false));
+        let restore_stop_called = Arc::clone(&stop_called);
+
+        let restore = std::thread::spawn(move || {
+            run_if_pause_still_active(&restore_state, || {
+                restore_stop_called.store(true, Ordering::Release);
+            })
+        });
+
+        // Manual Resume owns the operation lock while it clears durable and
+        // in-memory pause state, so a queued restore stop must re-check the
+        // state after the lock is released and skip its stale action.
+        state.cancel();
+        drop(resume_operation);
+
+        assert!(!restore.join().expect("restore thread joins"));
+        assert!(!stop_called.load(Ordering::Acquire));
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Inactive);
+    }
+
+    #[test]
     fn scheduler_failure_is_visible_without_waiting_for_the_deadline() {
         let state = TrackingPauseState::default();
         let generation = state.arm(TimedPause::new(100, 200));
@@ -664,6 +751,25 @@ mod tests {
             read_persisted_pause(&path).expect("read indefinite pause"),
             Some(PersistedTrackingPause::Indefinite(pause))
         );
+    }
+
+    #[test]
+    fn manual_resume_clears_disk_before_memory_and_preserves_pause_on_failure() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join(PAUSE_STATE_FILE_NAME);
+        let state = TrackingPauseState::default();
+        state.mark_indefinite();
+        write_indefinite_pause(&path, IndefinitePause::new(100)).expect("write pause");
+
+        clear_pause_and_cancel(&state, &path).expect("clear pause");
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Inactive);
+        assert!(!path.exists());
+
+        let failing_path = directory.path().join("not-a-file");
+        fs::create_dir(&failing_path).expect("create directory at pause path");
+        state.mark_indefinite();
+        assert!(clear_pause_and_cancel(&state, &failing_path).is_err());
+        assert_eq!(state.snapshot(), TrackingPauseSnapshot::Indefinite);
     }
 
     #[test]

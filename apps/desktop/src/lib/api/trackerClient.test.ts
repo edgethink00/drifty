@@ -98,6 +98,22 @@ describe("trackerClient", () => {
     });
   });
 
+  it("preserves native persisted-pause state in normalized status", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce({
+      running: true,
+      trackingPaused: true,
+      accessibilityGranted: true,
+      trackerMode: "stopped",
+    });
+
+    await expect(trackerClient.getStatus()).resolves.toMatchObject({
+      running: false,
+      trackingPaused: true,
+      trackerMode: "stopped",
+    });
+  });
+
   it("invokes tracker_delete_activity_segments with selected ids", async () => {
     const { trackerClient } = await import("./trackerClient");
     invoke.mockResolvedValueOnce({ deleted: 2 });

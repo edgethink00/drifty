@@ -68,8 +68,10 @@ function isTauriRuntime() {
 }
 
 function normalizeStatus(status: Record<string, unknown>): TrackerStatus {
+  const trackingPaused = Boolean(status.trackingPaused);
   return {
-    running: Boolean(status.running ?? status.isRunning),
+    running: trackingPaused ? false : Boolean(status.running ?? status.isRunning),
+    trackingPaused,
     accessibilityGranted: Boolean(status.accessibilityGranted),
     lastEventAt: (status.lastEventAt as string | null | undefined) ?? null,
     databasePath:

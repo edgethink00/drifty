@@ -33,6 +33,7 @@ pub(crate) const TRACKER_START_ERROR_MESSAGE: &str =
 pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str = "Activity tracking could not stop. Try again.";
 pub(crate) const TRACKER_STATUS_ERROR_MESSAGE: &str =
     "Activity tracking status is unavailable. Try again.";
+pub(crate) const TRACKER_PAUSED_MESSAGE: &str = "Tracking paused until you resume.";
 
 #[derive(Debug, Default)]
 struct TrackerStartupLifecycle {
@@ -67,6 +68,8 @@ pub struct DeveloperDiagnosticsSettings {
 #[serde(rename_all = "camelCase")]
 pub struct TrackerStatus {
     pub running: bool,
+    #[serde(default)]
+    pub tracking_paused: bool,
     pub accessibility_granted: bool,
     pub last_event_at: Option<String>,
     pub database_path: Option<String>,
@@ -204,9 +207,25 @@ pub(crate) fn apply_tracker_startup_state(
     status
 }
 
+pub(crate) fn apply_tracking_pause_state(
+    mut status: TrackerStatus,
+    tracking_paused: bool,
+) -> TrackerStatus {
+    status.tracking_paused = tracking_paused;
+    if tracking_paused {
+        // The persisted user choice is authoritative while startup finishes
+        // stopping a previously running daemon or status inspection degrades.
+        status.running = false;
+        status.tracker_mode = Some("stopped".into());
+        status.message = Some(TRACKER_PAUSED_MESSAGE.into());
+    }
+    status
+}
+
 pub(crate) fn degraded_tracker_status(failure_message: String) -> TrackerStatus {
     TrackerStatus {
         running: false,
+        tracking_paused: false,
         accessibility_granted: false,
         last_event_at: None,
         database_path: None,
@@ -1347,6 +1366,7 @@ mod tests {
     fn tracker_status_serializes_to_camel_case() {
         let status = TrackerStatus {
             running: true,
+            tracking_paused: false,
             accessibility_granted: false,
             last_event_at: None,
             database_path: Some("tracker.sqlite3".into()),
@@ -1358,6 +1378,8 @@ mod tests {
 
         let value = serde_json::to_value(status).expect("serializes");
         assert!(value.get("running").is_some());
+        assert!(value.get("trackingPaused").is_some());
+        assert!(value.get("tracking_paused").is_none());
         assert!(value.get("databasePath").is_some());
         assert!(value.get("trackerMode").is_some());
         assert!(value.get("idleSeconds").is_some());

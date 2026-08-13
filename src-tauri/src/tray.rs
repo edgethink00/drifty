@@ -467,34 +467,59 @@ pub(crate) fn toggle_tracking(app: &AppHandle) {
     let pause_state = app.state::<TrackingPauseState>();
     let _operation = pause_state.lock_operation();
     let controller = app.state::<TrackerController>();
+    let pause_active = pause_state.snapshot().is_active();
     let is_running = controller
         .get_status(app)
         .map(|status| status.running)
         .unwrap_or(false);
+
+    if pause_active {
+        if let Err(error) = tracking_pause::clear_for_manual_start(app) {
+            eprintln!("[tracking-pause] Refusing Resume while its durable pause remains: {error}");
+            return;
+        }
+        match controller.start(app) {
+            Ok(status) => refresh_tracking_controls(app, Some(status.running)),
+            Err(error) => {
+                eprintln!("[tracking-pause] Could not resume tracking: {error}");
+                let _ = refresh_tray_menu(app);
+                update_tray_icon(app);
+            }
+        }
+        return;
+    }
+
     if is_running {
         if let Err(error) = tracking_pause::prepare_indefinite_pause(app) {
             eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
             return;
         }
-    }
-    let next_status = if is_running {
-        controller.stop(app)
-    } else {
-        controller.start(app)
-    };
-    if let Ok(status) = next_status {
-        if is_running && !status.running {
-            tracking_pause::commit_indefinite_pause(app);
-        } else if is_running {
-            tracking_pause::abort_indefinite_pause(app);
-        } else if !is_running && status.running {
-            tracking_pause::clear_after_manual_start(app);
-        }
-        refresh_tracking_controls(app, Some(status.running));
+    } else if let Err(error) = tracking_pause::clear_for_manual_start(app) {
+        eprintln!("[tracking-pause] Refusing Resume while its durable pause remains: {error}");
         return;
     }
     if is_running {
-        tracking_pause::abort_indefinite_pause(app);
+        match tracking_pause::finish_indefinite_pause_stop(app, &controller, controller.stop(app)) {
+            tracking_pause::IndefinitePauseStopOutcome::Paused(status) => {
+                refresh_tracking_controls(app, Some(status.running));
+            }
+            tracking_pause::IndefinitePauseStopOutcome::StillRunning(status) => {
+                refresh_tracking_controls(app, Some(status.running));
+            }
+            tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
+                eprintln!(
+                    "[tracking-pause] Preserving tray pause after an ambiguous stop: {error}"
+                );
+                refresh_tracking_controls(app, Some(false));
+            }
+        }
+        return;
+    }
+
+    let next_status = controller.start(app);
+    if let Ok(status) = next_status {
+        refresh_tracking_controls(app, Some(status.running));
+        return;
     }
     let _ = refresh_tray_menu(app);
     update_tray_icon(app);
@@ -515,19 +540,18 @@ pub(crate) fn pause_tracking_forever(app: &AppHandle) {
         eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
         return;
     }
-    match controller.stop(app) {
-        Ok(status) if !status.running => {
-            tracking_pause::commit_indefinite_pause(app);
+    match tracking_pause::finish_indefinite_pause_stop(app, &controller, controller.stop(app)) {
+        tracking_pause::IndefinitePauseStopOutcome::Paused(_status) => {
             refresh_tracking_controls(app, Some(false));
         }
-        Ok(status) => {
-            tracking_pause::abort_indefinite_pause(app);
+        tracking_pause::IndefinitePauseStopOutcome::StillRunning(status) => {
             refresh_tracking_controls(app, Some(status.running));
         }
-        Err(error) => {
-            tracking_pause::abort_indefinite_pause(app);
-            eprintln!("[tracking-pause] Could not pause tracking forever: {error}");
-            let _ = refresh_tray_menu(app);
+        tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
+            eprintln!(
+                "[tracking-pause] Preserving timed-menu pause after an ambiguous stop: {error}"
+            );
+            refresh_tracking_controls(app, Some(false));
         }
     }
 }

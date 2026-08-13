@@ -2813,6 +2813,12 @@ export default function App() {
       autoStartAttemptedRef.current = true;
       return;
     }
+    // A persisted pause is an explicit user choice, not a failed startup. Only
+    // the Resume action may clear it; background recovery must leave it alone.
+    if (status.trackingPaused) {
+      autoStartAttemptedRef.current = true;
+      return;
+    }
     if (status.trackerMode === "unavailable") return;
 
     autoStartAttemptedRef.current = true;
