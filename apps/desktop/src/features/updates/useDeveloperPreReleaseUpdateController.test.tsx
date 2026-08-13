@@ -2,17 +2,14 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { invokeMock, relaunchMock } = vi.hoisted(() => ({
+const { invokeMock } = vi.hoisted(() => ({
   invokeMock: vi.fn(),
-  relaunchMock: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
   isTauri: () => false,
 }));
-vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: relaunchMock }));
-
 import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY } from "./updatePolicy";
 import { useDeveloperPreReleaseUpdateController } from "./useDeveloperPreReleaseUpdateController";
 
@@ -33,7 +30,6 @@ describe("useDeveloperPreReleaseUpdateController", () => {
       date: null,
       body: null,
     });
-    relaunchMock.mockResolvedValue(undefined);
   });
 
   it("checks the developer pre-release updater command", async () => {
@@ -101,7 +97,7 @@ describe("useDeveloperPreReleaseUpdateController", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Install latest build$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("developer_install_pre_release_update"));
-    await waitFor(() => expect(relaunchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update"));
     expect(window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
   });
 

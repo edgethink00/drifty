@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
 import { toErrorMessage } from "../../lib/formatting";
 import {
@@ -76,7 +76,7 @@ export function useUpdateController(): UseUpdateControllerResult {
     try {
       await updateToInstall.downloadAndInstall();
       markPostUpdateRelaunchFocusPending();
-      await relaunch();
+      await invoke<void>("app_restart_after_update");
     } catch (nextError) {
       clearPostUpdateRelaunchFocusPending();
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);

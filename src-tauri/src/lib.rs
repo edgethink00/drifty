@@ -319,6 +319,16 @@ fn app_reveal_main_window(app: AppHandle) {
     reveal_main_window(&app);
 }
 
+fn run_update_restart(cleanup: impl FnOnce(), restart: impl FnOnce()) {
+    cleanup();
+    restart();
+}
+
+#[tauri::command]
+fn app_restart_after_update(app: AppHandle) {
+    run_update_restart(|| shutdown_app_for_exit(&app), || app.restart());
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -459,6 +469,7 @@ pub fn run() {
             ai_classification_anthropic_chat,
             ai_classification_openai_chat,
             app_menu_set_dev_mode_checked,
+            app_restart_after_update,
             developer_check_pre_release_update,
             developer_install_pre_release_update,
             developer_tools_get_status,

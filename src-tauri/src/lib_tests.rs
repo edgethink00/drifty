@@ -407,3 +407,22 @@ fn app_exit_coordinator_waits_for_cleanup_in_progress() {
         .expect("second cleanup thread should complete");
     assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
+
+#[test]
+fn update_restart_runs_exit_cleanup_before_restart() {
+    let calls = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let restart_calls = std::sync::Arc::clone(&calls);
+
+    run_update_restart(
+        || push_exit_call(&calls, "cleanup"),
+        || push_exit_call(&restart_calls, "restart"),
+    );
+
+    assert_eq!(
+        calls
+            .lock()
+            .expect("update restart call log should not be poisoned")
+            .as_slice(),
+        ["cleanup", "restart"].as_slice()
+    );
+}

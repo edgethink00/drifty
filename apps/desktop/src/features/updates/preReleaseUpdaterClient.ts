@@ -1,5 +1,4 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { clearPostUpdateRelaunchFocusPending, markPostUpdateRelaunchFocusPending } from "./updatePolicy";
 
 export type DeveloperPreReleaseUpdate = {
@@ -30,7 +29,7 @@ export async function installAndRelaunchDeveloperPreReleaseUpdate(): Promise<boo
 
   markPostUpdateRelaunchFocusPending();
   try {
-    await relaunch();
+    await invoke<void>("app_restart_after_update");
     return true;
   } catch (error) {
     clearPostUpdateRelaunchFocusPending();
