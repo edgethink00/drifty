@@ -139,7 +139,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
         runtime: "web",
         channel: "development",
         analytics_schema_version: "v2",
-        app_version: "1.5.1",
+        app_version: "1.5.2",
         identity_scope: "install",
         reporting_time_zone: "Asia/Seoul",
         trigger: "manual",
