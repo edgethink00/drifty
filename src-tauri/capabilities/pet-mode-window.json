@@ -15,6 +15,7 @@
     "allow-pet-mode-return-home",
     "allow-pet-mode-set-presence",
     "allow-pet-mode-set-interactive",
+    "allow-pet-mode-update-hit-region",
     "allow-pet-mode-cancel-motion",
     "allow-pet-mode-begin-drag",
     "allow-pet-mode-report-drag-error",

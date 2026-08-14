@@ -88,7 +88,10 @@ pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
     let ns_window = unsafe { &*(ns_window.cast::<NSWindow>()) };
     ns_window.setStyleMask(ns_window.styleMask() | NSWindowStyleMask::NonactivatingPanel);
     ns_window.setLevel(NSStatusWindowLevel);
-    ns_window.setIgnoresMouseEvents(false);
+    // The versioned hit-region controller enables input only under a visible
+    // cat pixel. Starting click-through prevents the transparent panel from
+    // blocking the user's current app before the WebView publishes its frame.
+    ns_window.setIgnoresMouseEvents(true);
     ns_window.setOpaque(false);
     ns_window.setBackgroundColor(Some(&NSColor::clearColor()));
     Ok(())

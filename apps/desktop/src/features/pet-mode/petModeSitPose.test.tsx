@@ -41,7 +41,11 @@ vi.mock("./petModeBridge", () => ({
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
-  setNativePetInteractive: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("./petModeHitRegions", () => ({
+  preloadPetModeHitRegions: vi.fn().mockResolvedValue(undefined),
+  publishPetModeHitRegion: vi.fn().mockResolvedValue(undefined),
+  stagePetModeHitRegionTransition: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({

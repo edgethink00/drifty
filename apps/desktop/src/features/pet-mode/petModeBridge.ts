@@ -207,6 +207,20 @@ export async function setNativePetInteractive(interactive: boolean): Promise<voi
   await invoke("pet_mode_set_interactive", { interactive });
 }
 
+export type PetModeHitRegionUpdate = {
+  readonly generation: string;
+  readonly version: number;
+  readonly regionId: string;
+  readonly revision: number;
+  readonly mirrored: boolean;
+  readonly spans: readonly number[];
+};
+
+export async function updateNativePetHitRegion(update: PetModeHitRegionUpdate): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_mode_update_hit_region", { update });
+}
+
 export type PetModeNativeDragResult = {
   readonly moved: boolean;
   readonly startX: number;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { captureSentryException } from "../../lib/observability/sentryClient";
 import {
   getPetModeGaitFrameIndex,
@@ -11,6 +11,7 @@ import {
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
   PET_MODE_PAW_CONTACT_FRAME,
 } from "./petModeData";
+import { publishPetModeHitRegion, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 
 type PetModeCatPhase =
   | "idle"
@@ -46,12 +47,18 @@ export function PetModeCat({
   pawFrame,
   entrySequence = 0,
   preserveEntryLanding = false,
+  frameOverride,
+  hitRegionInteractive = false,
+  hitRegionCommitRevision = 0,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
   readonly pawFrame: number;
   readonly entrySequence?: number;
   readonly preserveEntryLanding?: boolean;
+  readonly frameOverride?: number;
+  readonly hitRegionInteractive?: boolean;
+  readonly hitRegionCommitRevision?: number;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -124,6 +131,9 @@ export function PetModeCat({
     const startedAt = performance.now();
     let displayedFrame = 0;
     let animationFrameId = 0;
+    let stagingReleaseFrameId = 0;
+    let stagingFrame = false;
+    let disposed = false;
     const render = (now: number) => {
       // The prototype advances gait in its requestAnimationFrame loop. Do the
       // same here: at run speed it may skip source indices, but it never queues
@@ -133,15 +143,39 @@ export function PetModeCat({
         now - startedAt,
         walkFrames.length,
       );
-      if (nextFrame !== displayedFrame) {
-        displayedFrame = nextFrame;
-        setWalkFrame(nextFrame);
+      if (nextFrame !== displayedFrame && !stagingFrame) {
+        const commitFrame = () => {
+          if (disposed) return;
+          displayedFrame = nextFrame;
+          setWalkFrame(nextFrame);
+          stagingReleaseFrameId = window.requestAnimationFrame(() => {
+            stagingFrame = false;
+          });
+        };
+        if (hitRegionInteractive) {
+          stagingFrame = true;
+          void stagePetModeHitRegionTransition({
+            regionId: `transition:gait:${nextFrame}`,
+            mirrored: facing === "left",
+          }).then(commitFrame, () => {
+            if (disposed) return;
+            stagingReleaseFrameId = window.requestAnimationFrame(() => {
+              stagingFrame = false;
+            });
+          });
+        } else {
+          commitFrame();
+        }
       }
       animationFrameId = window.requestAnimationFrame(render);
     };
     animationFrameId = window.requestAnimationFrame(render);
-    return () => window.cancelAnimationFrame(animationFrameId);
-  }, [entrySequence, phase, walkFrames.length]);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(animationFrameId);
+      window.cancelAnimationFrame(stagingReleaseFrameId);
+    };
+  }, [entrySequence, facing, hitRegionInteractive, phase, walkFrames.length]);
 
   useEffect(() => {
     if (!isLifeMotionPhase(phase)) return undefined;
@@ -149,22 +183,49 @@ export function PetModeCat({
     const startedAt = performance.now();
     let displayedFrame = 0;
     let animationFrameId = 0;
+    let stagingReleaseFrameId = 0;
+    let stagingFrame = false;
+    let disposed = false;
     const render = (now: number) => {
       const nextFrame = Math.min(
         PET_MODE_LIFE_MOTION_FRAME_COUNT - 1,
         Math.floor((now - startedAt) * PET_MODE_LIFE_MOTION_FPS / 1000),
       );
-      if (nextFrame !== displayedFrame) {
-        displayedFrame = nextFrame;
-        setLifeMotionFrame(nextFrame);
+      if (nextFrame !== displayedFrame && !stagingFrame) {
+        const commitFrame = () => {
+          if (disposed) return;
+          displayedFrame = nextFrame;
+          setLifeMotionFrame(nextFrame);
+          stagingReleaseFrameId = window.requestAnimationFrame(() => {
+            stagingFrame = false;
+          });
+        };
+        if (hitRegionInteractive) {
+          stagingFrame = true;
+          void stagePetModeHitRegionTransition({
+            regionId: `transition:${phase}:${nextFrame}`,
+            mirrored: facing === "left",
+          }).then(commitFrame, () => {
+            if (disposed) return;
+            stagingReleaseFrameId = window.requestAnimationFrame(() => {
+              stagingFrame = false;
+            });
+          });
+        } else {
+          commitFrame();
+        }
       }
       if (nextFrame < PET_MODE_LIFE_MOTION_FRAME_COUNT - 1) {
         animationFrameId = window.requestAnimationFrame(render);
       }
     };
     animationFrameId = window.requestAnimationFrame(render);
-    return () => window.cancelAnimationFrame(animationFrameId);
-  }, [phase]);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(animationFrameId);
+      window.cancelAnimationFrame(stagingReleaseFrameId);
+    };
+  }, [facing, hitRegionInteractive, phase]);
 
   const mirrored = facing === "left";
   const registerWalkVector = useCallback((node: SVGSVGElement | null) => {
@@ -190,14 +251,39 @@ export function PetModeCat({
     "--pet-gait-baseline-shift": `${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`,
     "--pet-gait-center-shift": `${PET_MODE_GAIT_CENTER_SHIFT_PX}px`,
   } as CSSProperties;
+  const renderedWalkFrame = frameOverride ?? walkFrame;
+  const renderedLifeMotionFrame = frameOverride ?? lifeMotionFrame;
   const walkVectorBody = (
     <>
-      <path d={walkFrames[walkFrame]} fill="currentColor" />
+      <path d={walkFrames[renderedWalkFrame]} fill="currentColor" />
       <PetModeWalkFace />
     </>
   );
+  const regionId = holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run"
+    ? (walkFrames.length > 0 ? `gait:${renderedWalkFrame}` : "idle")
+    : phase === "paw"
+      ? `paw:${pawFrame}`
+      : phase === "stretch" || phase === "tail"
+        ? `${phase}:${renderedLifeMotionFrame}`
+        : phase === "happy"
+          ? "happy"
+          : phase === "sit" || phase === "sleep" || phase === "drag" || phase === "release"
+          ? phase
+          : "idle";
+
+  useLayoutEffect(() => {
+    // Publish from the component that owns the rendered frame. Parent/child
+    // layout-effect ordering otherwise lets a parent briefly publish the prior
+    // frame id during the same commit.
+    void publishPetModeHitRegion({
+      regionId,
+      mirrored,
+      interactive: hitRegionInteractive,
+    });
+  }, [hitRegionCommitRevision, hitRegionInteractive, mirrored, regionId]);
+
   return (
-    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} style={motionGeometry}>
+    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} data-region-id={regionId} style={motionGeometry}>
       <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
         {/* The baked frames are effectively two-tone: body pixels sit near
             luminance 226 and facial detail near 20, with only anti-aliasing in
@@ -369,7 +455,7 @@ export function PetModeCat({
         ) : lifeMotionAsset ? (
           <img
             className="pet-mode-cat__raster pet-mode-cat__raster--life-motion"
-            src={`/pet-mode/life-motion/${lifeMotionAsset}/f${String(lifeMotionFrame + 1).padStart(3, "0")}.png`}
+            src={`/pet-mode/life-motion/${lifeMotionAsset}/f${String(renderedLifeMotionFrame + 1).padStart(3, "0")}.png`}
             alt=""
             draggable={false}
           />

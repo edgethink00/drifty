@@ -95,7 +95,9 @@ const bridge = vi.hoisted(() => ({
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
-  setNativePetInteractive: vi.fn().mockResolvedValue(undefined),
+  preloadPetModeHitRegions: vi.fn().mockResolvedValue(undefined),
+  stagePetModeHitRegionTransition: vi.fn().mockResolvedValue(undefined),
+  publishPetModeHitRegion: vi.fn().mockResolvedValue(undefined),
   onMoved: vi.fn().mockResolvedValue(vi.fn()),
 }));
 
@@ -118,7 +120,12 @@ vi.mock("./petModeBridge", () => ({
   roamNativePet: bridge.roamNativePet,
   rememberNativePetPosition: bridge.rememberNativePetPosition,
   setNativePetPresence: bridge.setNativePetPresence,
-  setNativePetInteractive: bridge.setNativePetInteractive,
+}));
+
+vi.mock("./petModeHitRegions", () => ({
+  preloadPetModeHitRegions: bridge.preloadPetModeHitRegions,
+  stagePetModeHitRegionTransition: bridge.stagePetModeHitRegionTransition,
+  publishPetModeHitRegion: bridge.publishPetModeHitRegion,
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -130,6 +137,7 @@ describe("PetModeWindowApp", () => {
     cleanup();
     vi.useRealTimers();
     vi.clearAllMocks();
+    bridge.stagePetModeHitRegionTransition.mockReset().mockResolvedValue(undefined);
     bridge.dragEndHandler = null;
     bridge.dragStartHandler = null;
     bridge.eventHandler = null;
@@ -171,6 +179,133 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
   });
 
+  it("does not paint a new facing until native has closed the previous hit region", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    let releaseStage: (() => void) | null = null;
+    bridge.stagePetModeHitRegionTransition.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      releaseStage = resolve;
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+    });
+    expect(bridge.stagePetModeHitRegionTransition).toHaveBeenCalledWith({
+      regionId: "transition:facing:left",
+      mirrored: true,
+    });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(false);
+
+    await act(async () => {
+      releaseStage?.();
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
+  });
+
+  it("keeps the rendered facing when native cannot close the prior hit region", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.stagePetModeHitRegionTransition.mockRejectedValueOnce(new Error("native unavailable"));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(false);
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
+  });
+
+  it("closes the old native silhouette before painting the entry pose", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    let releaseStage: (() => void) | null = null;
+    bridge.stagePetModeHitRegionTransition.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      releaseStage = resolve;
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+      await Promise.resolve();
+    });
+    expect(bridge.stagePetModeHitRegionTransition).toHaveBeenCalledWith({
+      regionId: "transition:entry",
+      mirrored: false,
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => {
+      releaseStage?.();
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
+  });
+
+  it("keeps input closed until overlapping pose and facing transitions both settle", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const releases: Array<() => void> = [];
+    bridge.stagePetModeHitRegionTransition.mockImplementation(() => new Promise<void>((resolve) => {
+      releases.push(resolve);
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+      bridge.eventHandler?.({ kind: "motion", motion: "run" });
+    });
+    expect(releases).toHaveLength(2);
+
+    await act(async () => {
+      releases[1]?.();
+      await Promise.resolve();
+    });
+    const publishCallsWhilePending = bridge.publishPetModeHitRegion.mock.calls;
+    expect(publishCallsWhilePending[publishCallsWhilePending.length - 1]?.[0]).toMatchObject({
+      regionId: "idle",
+      interactive: false,
+    });
+
+    await act(async () => {
+      releases[0]?.();
+      await Promise.resolve();
+    });
+    const publishCallsAfterSettled = bridge.publishPetModeHitRegion.mock.calls;
+    expect(publishCallsAfterSettled[publishCallsAfterSettled.length - 1]?.[0]).toMatchObject({
+      regionId: "idle",
+      mirrored: true,
+      interactive: true,
+    });
+  });
+
   it("holds the exact rendered entry SVG when native reports landing", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -183,9 +318,10 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => { await Promise.resolve(); });
 
-    act(() => {
+    await act(async () => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
       bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+      await Promise.resolve();
     });
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("entry");
@@ -196,8 +332,9 @@ describe("PetModeWindowApp", () => {
     const entryVector = cat.querySelector(".pet-mode-cat__vector");
     const entryPath = entryVector?.querySelector("path")?.getAttribute("d");
 
-    act(() => {
+    await act(async () => {
       bridge.eventHandler?.({ kind: "entry_complete" });
+      await Promise.resolve();
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
     expect(cat.classList.contains("is-entry-landed")).toBe(true);
@@ -225,9 +362,10 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    act(() => {
+    await act(async () => {
       bridge.eventHandler?.({ kind: "motion", motion: "entry" });
       bridge.eventHandler?.({ kind: "entry_complete" });
+      await Promise.resolve();
     });
     const cat = screen.getByLabelText("Drifty pet cat");
     const landedRaster = cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster");
@@ -247,8 +385,9 @@ describe("PetModeWindowApp", () => {
 
     // Prove the payload has reached component state, rather than allowing the
     // idle assertion above to pass while the promise chain is still pending.
-    act(() => {
+    await act(async () => {
       bridge.eventHandler?.({ kind: "motion", motion: "entry" });
+      await Promise.resolve();
     });
     expect(cat.querySelector(".pet-mode-cat__vector")).not.toBeNull();
   });
@@ -320,8 +459,9 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("entry");
     expect(screen.getByRole("button").classList.contains("is-entering")).toBe(true);
 
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+      await Promise.resolve();
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
     expect(screen.getByRole("button").classList.contains("is-entering")).toBe(false);
@@ -346,8 +486,9 @@ describe("PetModeWindowApp", () => {
     act(() => { vi.advanceTimersByTime(121); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("entry");
 
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+      await Promise.resolve();
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
@@ -900,7 +1041,7 @@ describe("PetModeWindowApp", () => {
     expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
   });
 
-  it("owns its compact native input surface immediately so the first press cannot click through", async () => {
+  it("publishes the committed silhouette instead of owning the full native rectangle", async () => {
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -908,6 +1049,10 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => { await Promise.resolve(); });
 
-    expect(bridge.setNativePetInteractive).toHaveBeenCalledWith(true);
+    expect(bridge.publishPetModeHitRegion).toHaveBeenCalledWith(expect.objectContaining({
+      regionId: "idle",
+      mirrored: false,
+      interactive: false,
+    }));
   });
 });

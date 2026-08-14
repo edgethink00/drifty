@@ -69,4 +69,27 @@ describe("pet mode enabled bridge", () => {
       height: 124,
     });
   });
+
+  it("publishes the versioned frame region to the native controller", async () => {
+    tauri.invoke.mockResolvedValueOnce(undefined);
+    const { updateNativePetHitRegion } = await import("./petModeBridge");
+    await updateNativePetHitRegion({
+      version: 1,
+      generation: "test-generation",
+      regionId: "tail:12",
+      revision: 7,
+      mirrored: true,
+      spans: [20, 10, 40],
+    });
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_update_hit_region", {
+      update: {
+        version: 1,
+        generation: "test-generation",
+        regionId: "tail:12",
+        revision: 7,
+        mirrored: true,
+        spans: [20, 10, 40],
+      },
+    });
+  });
 });

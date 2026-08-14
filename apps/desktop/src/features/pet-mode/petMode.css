@@ -111,7 +111,7 @@
 
 /* Size scales the reviewed 144x99 layout as a whole. Everything inside keeps
    its approved pixel geometry and simply renders larger or smaller, so the
-   cat, its clip-path hit target, and the motion offsets stay in proportion
+   cat, its generated native hit region, and the motion offsets stay in proportion
    instead of each needing its own set of numbers per size. The native panel is
    resized to match, so the pet's real footprint changes too. */
 .pet-mode-scale {
@@ -138,40 +138,10 @@
   touch-action: none;
 }
 
-/* The button still spans the panel so focus and layout are unchanged, but
-   pointer input is limited to the pet itself. Without this, roughly two
-   thirds of the panel was clickable empty space: the silhouette covers only
-   ~36% of the 144x99 window, so grabbing a far corner still dragged the cat.
-
-   `pet-mode-hit-shape` is the real target. It masks itself with the idle
-   frame, which measures as covering 75-100% of every other pose, and scales
-   slightly past the drawn cat so thin parts like the tail and the stretched
-   paw stay comfortably grabbable. */
-.pet-mode-hit-target { pointer-events: none; }
-
-.pet-mode-hit-shape {
-  position: absolute;
-  /* Matches `.pet-mode-cat` bounds so the clip lines up with the drawn cat. */
-  left: 11.4px;
-  top: 4.2px;
-  width: 121.2px;
-  height: 92.4px;
-  pointer-events: auto;
-  /* `clip-path` is used rather than `mask`: a mask hides pixels but still hit
-     tests the full box, which is exactly the bug being fixed here. The polygon
-     traces the idle frame's alpha, dilated so thin parts like the tail stay
-     grabbable, and simplified to ~46 points. */
-  clip-path: polygon(70.64% 99.83%, 72.02% 95.87%, 71.89% 91.74%, 71.77% 87.61%, 72.02% 83.48%, 72.65% 79.35%, 73.65% 75.22%, 74.65% 71.08%, 76.54% 66.95%, 81.68% 62.82%, 85.57% 58.69%, 87.70% 54.56%, 88.83% 50.43%, 89.21% 46.30%, 89.21% 42.17%, 88.96% 38.04%, 88.21% 33.91%, 87.08% 29.78%, 85.32% 25.65%, 83.31% 21.51%, 81.93% 17.38%, 80.30% 13.25%, 61.23% 9.12%, 58.34% 9.12%, 54.96% 13.25%, 53.32% 17.38%, 51.82% 21.51%, 0.00% 25.65%, 0.00% 29.78%, 0.00% 33.91%, 0.00% 38.04%, 1.51% 42.17%, 3.51% 46.30%, 6.40% 50.43%, 11.17% 54.56%, 11.04% 58.69%, 10.29% 62.82%, 9.66% 66.95%, 9.16% 71.08%, 8.91% 75.22%, 8.78% 79.35%, 8.78% 83.48%, 8.91% 87.61%, 9.28% 91.74%, 10.16% 95.87%, 12.42% 99.83%);
-}
-
-/* Do not expose a full-size invisible drag target while only part of the cat
-   has entered through the display boundary. Interaction begins as soon
-   as the native completion signal settles the resident pose. */
-.pet-mode-hit-target.is-entering .pet-mode-hit-shape { pointer-events: none; }
-
-/* The cat mirrors when it faces left, so the mask has to mirror with it or the
-   target would sit on the wrong side of the panel. */
-.pet-mode-hit-shape.is-mirrored { transform: scaleX(-1); }
+/* AppKit owns the silhouette hit test. The WebView only receives a pointer
+   after the native controller has matched it to the committed frame region,
+   so its full button is safe and cannot disagree with the grab cursor. */
+.pet-mode-hit-target { pointer-events: auto; }
 
 .pet-mode-hit-target:active { cursor: grabbing; }
 .pet-mode-contact-anchor {

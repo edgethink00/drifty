@@ -6,9 +6,8 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
-    async_runtime, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor,
-    PhysicalPosition as Point, PhysicalSize as Size, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    async_runtime, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl,
+    WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 #[cfg(target_os = "macos")]
@@ -16,6 +15,10 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSPoint;
 
+use super::pet_hit_region::{
+    install_pet_hit_region_monitor, pet_hit_region_pointer_inside,
+    refresh_pet_hit_region_for_window, reset_pet_hit_region, set_pet_window_interactive,
+};
 use super::pet_panel::{configure_pet_panel, perform_pet_panel_drag, show_pet_panel};
 
 #[cfg(target_os = "macos")]
@@ -264,9 +267,19 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
     .build()?;
 
     configure_pet_panel(&window)?;
-    // Keep hidden windows click-through. Once visible, this compact window owns
-    // its input rectangle so the first press cannot reach the dashboard below.
-    let _ = window.set_ignore_cursor_events(true);
+    install_pet_hit_region_monitor(app.handle())
+        .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
+    let hit_region_window = window.clone();
+    window.on_window_event(move |event| {
+        if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+            // The panel can walk underneath a stationary pointer, so mouse
+            // monitors alone are insufficient. Refresh at every native frame
+            // movement and size transition as well.
+            let _ = refresh_pet_hit_region_for_window(&hit_region_window);
+        }
+    });
+    // configure_pet_panel already leaves the hidden window click-through. Do
+    // not queue a second Tauri mutation that could race the first WebView mask.
     Ok(())
 }
 
@@ -289,7 +302,8 @@ pub fn pet_mode_set_enabled(
         cancel_pet_motion();
         let (width, height) = pet_size();
         let _ = window.set_min_size(Some(LogicalSize::new(width, height)));
-        let _ = window.set_ignore_cursor_events(true);
+        reset_pet_hit_region();
+        let _ = set_pet_window_interactive(&window, false);
         return window.hide().map_err(|error| error.to_string());
     }
 
@@ -305,9 +319,7 @@ pub fn pet_mode_set_enabled(
     window
         .set_visible_on_all_workspaces(true)
         .map_err(|error| error.to_string())?;
-    window
-        .set_ignore_cursor_events(false)
-        .map_err(|error| error.to_string())?;
+    refresh_pet_hit_region_for_window(&window)?;
 
     // React can legitimately re-send the enabled state while the panel is
     // already active (notably under Strict Mode). Reassert presentation without
@@ -517,12 +529,9 @@ pub fn pet_mode_update(app: AppHandle, snapshot: Value) -> Result<(), String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
-    // A visible enabled pet is always an input-owning surface. Reassert this
-    // invariant on tracker snapshots so a WebView/HMR replacement cannot
-    // leave the surviving native panel permanently click-through.
-    window
-        .set_ignore_cursor_events(false)
-        .map_err(|error| error.to_string())?;
+    // Tracker snapshots must preserve the current silhouette ownership rather
+    // than restoring the old full rectangular hit surface.
+    refresh_pet_hit_region_for_window(&window)?;
     emit_pet_event(&window, json!({ "kind": "snapshot", "snapshot": snapshot }))
 }
 
@@ -804,14 +813,14 @@ pub fn pet_mode_set_presence(app: AppHandle, visible: bool) -> Result<(), String
     };
     if visible && PET_MODE_ENABLED.load(Ordering::Relaxed) {
         position_pet_home(&app, &window, false)?;
-        window
-            .set_ignore_cursor_events(false)
-            .map_err(|error| error.to_string())?;
+        refresh_pet_hit_region_for_window(&window)?;
         show_pet_panel(&app, &window)
     } else {
-        window
-            .set_ignore_cursor_events(true)
-            .map_err(|error| error.to_string())?;
+        // Presence changes are a native lifecycle boundary. Clear the region
+        // as well as the current AppKit flag so a missed renderer update cannot
+        // resurrect a stale pose when the panel is shown again.
+        reset_pet_hit_region();
+        set_pet_window_interactive(&window, false)?;
         window.hide().map_err(|error| error.to_string())
     }
 }
@@ -821,9 +830,13 @@ pub fn pet_mode_set_interactive(app: AppHandle, interactive: bool) -> Result<(),
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
-    window
-        .set_ignore_cursor_events(!interactive)
-        .map_err(|error| error.to_string())
+    // Compatibility command for older WebViews: `true` now recomputes the
+    // published silhouette instead of reopening the complete panel rectangle.
+    if interactive {
+        refresh_pet_hit_region_for_window(&window)
+    } else {
+        set_pet_window_interactive(&window, false)
+    }
 }
 
 /// Resizes the pet panel so the user's size choice changes the pet's real
@@ -875,6 +888,7 @@ fn apply_pet_mode_size(window: &WebviewWindow, width: f64, height: f64) -> Resul
     if let Ok(mut current) = PET_MODE_SIZE.lock() {
         *current = (width, height);
     }
+    refresh_pet_hit_region_for_window(window)?;
     Ok(true)
 }
 
@@ -947,15 +961,10 @@ pub fn pet_mode_cursor_inside(app: AppHandle) -> bool {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return false;
     };
-    matches!(window.is_visible(), Ok(true))
-        && matches!(
-            (
-                app.cursor_position(),
-                window.outer_position(),
-                window.outer_size(),
-            ),
-            (Ok(cursor), Ok(position), Ok(size)) if is_cursor_inside_pet_rect(cursor, (position, size))
-        )
+    if !matches!(window.is_visible(), Ok(true)) {
+        return false;
+    }
+    refresh_pet_hit_region_for_window(&window).is_ok() && pet_hit_region_pointer_inside()
 }
 
 #[tauri::command]
@@ -1376,15 +1385,6 @@ fn fallback_target_point(monitor: &Monitor, diagnostic: &str) -> PetModeTargetPo
         confidence: PetModeTargetConfidence::Low,
         diagnostic: diagnostic.to_string(),
     }
-}
-
-fn is_cursor_inside_pet_rect(cursor: Point<f64>, rect: (Point<i32>, Size<u32>)) -> bool {
-    let (rect_position, rect_size) = rect;
-    let left = f64::from(rect_position.x);
-    let top = f64::from(rect_position.y);
-    let right = left + f64::from(rect_size.width);
-    let bottom = top + f64::from(rect_size.height);
-    (left..=right).contains(&cursor.x) && (top..=bottom).contains(&cursor.y)
 }
 
 #[cfg(target_os = "macos")]
@@ -2098,15 +2098,6 @@ mod tests {
             preferred_pet_position_after_drop(original_home, center, work_position, 1440.0, 775.0,),
             original_home,
         );
-    }
-
-    #[test]
-    fn cursor_hit_test_includes_pet_edges_and_rejects_points_outside() {
-        let rect = (Point::new(100, 24), Size::new(144, 99));
-        assert!(is_cursor_inside_pet_rect(Point::new(100.0, 24.0), rect));
-        assert!(is_cursor_inside_pet_rect(Point::new(244.0, 123.0), rect));
-        assert!(!is_cursor_inside_pet_rect(Point::new(99.9, 24.0), rect));
-        assert!(!is_cursor_inside_pet_rect(Point::new(244.1, 123.0), rect));
     }
 
     #[test]

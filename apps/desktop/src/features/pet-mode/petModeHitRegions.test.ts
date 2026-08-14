@@ -1,0 +1,105 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const bridge = vi.hoisted(() => ({
+  updateNativePetHitRegion: vi.fn(),
+}));
+
+vi.mock("./petModeBridge", () => ({
+  updateNativePetHitRegion: bridge.updateNativePetHitRegion,
+}));
+
+import { publishPetModeHitRegion, stagePetModeHitRegionTransition } from "./petModeHitRegions";
+
+describe("Pet Mode hit-region transitions", () => {
+  beforeEach(() => {
+    bridge.updateNativePetHitRegion.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("retries a lost transition acknowledgement with a newer empty revision", async () => {
+    bridge.updateNativePetHitRegion.mockRejectedValueOnce(new Error("acknowledgement lost"));
+
+    await stagePetModeHitRegionTransition({ regionId: "transition:gait:4", mirrored: true });
+
+    expect(bridge.updateNativePetHitRegion).toHaveBeenCalledTimes(2);
+    const first = bridge.updateNativePetHitRegion.mock.calls[0][0];
+    const second = bridge.updateNativePetHitRegion.mock.calls[1][0];
+    expect(first).toMatchObject({
+      version: 1,
+      regionId: "transition:gait:4",
+      mirrored: true,
+      spans: [],
+    });
+    expect(second).toMatchObject({
+      generation: first.generation,
+      version: 1,
+      regionId: "transition:gait:4",
+      mirrored: true,
+      spans: [],
+      revision: first.revision + 1,
+    });
+  });
+
+  it("rejects when native cannot confirm either fail-closed update", async () => {
+    bridge.updateNativePetHitRegion.mockRejectedValue(new Error("native unavailable"));
+
+    await expect(stagePetModeHitRegionTransition({
+      regionId: "transition:facing:left",
+      mirrored: true,
+    })).rejects.toThrow("native unavailable");
+    expect(bridge.updateNativePetHitRegion).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a delayed retry older than a transition that started later", async () => {
+    let rejectFirst!: (error: Error) => void;
+    const firstAttempt = new Promise<void>((_, reject) => { rejectFirst = reject; });
+    bridge.updateNativePetHitRegion
+      .mockImplementationOnce(() => firstAttempt)
+      .mockResolvedValue(undefined);
+
+    const earlier = stagePetModeHitRegionTransition({ regionId: "transition:gait:1", mirrored: false });
+    const later = stagePetModeHitRegionTransition({ regionId: "transition:gait:2", mirrored: false });
+    await later;
+    rejectFirst(new Error("late acknowledgement failure"));
+    await earlier;
+
+    const earlierFirst = bridge.updateNativePetHitRegion.mock.calls[0][0];
+    const laterFirst = bridge.updateNativePetHitRegion.mock.calls[1][0];
+    const earlierRetry = bridge.updateNativePetHitRegion.mock.calls[2][0];
+    expect(earlierFirst.revision).toBeLessThan(earlierRetry.revision);
+    expect(earlierRetry.revision).toBeLessThan(laterFirst.revision);
+  });
+
+  it("retries an artifact load after a transient failure", async () => {
+    const artifact = {
+      version: 1,
+      width: 288,
+      height: 198,
+      logicalWidth: 144,
+      logicalHeight: 99,
+      subpixelResolution: 2,
+      alphaThreshold: 16,
+      tolerancePx: 4,
+      mirrorResamplingToleranceXPx: 2,
+      regions: { idle: [20, 40, 60] },
+    };
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new Error("startup fetch failed"))
+      .mockResolvedValueOnce({ ok: true, json: async () => artifact });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await publishPetModeHitRegion({ regionId: "idle", mirrored: false, interactive: true });
+    await publishPetModeHitRegion({ regionId: "idle", mirrored: false, interactive: true });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const calls = bridge.updateNativePetHitRegion.mock.calls;
+    expect(calls[calls.length - 1]?.[0]).toMatchObject({
+      regionId: "idle",
+      spans: [20, 40, 60],
+    });
+  });
+});

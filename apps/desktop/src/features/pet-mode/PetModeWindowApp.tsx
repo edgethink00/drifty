@@ -21,8 +21,8 @@ import {
   returnNativePetHome,
   roamNativePet,
   setNativePetPresence,
-  setNativePetInteractive,
 } from "./petModeBridge";
+import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 import {
   PET_MODE_AWAY_MS,
   PET_MODE_BLINK_DURATION_MS,
@@ -86,12 +86,20 @@ export function PetModeWindowApp() {
   const [entrySequence, setEntrySequence] = useState(0);
   const [preserveEntryLanding, setPreserveEntryLanding] = useState(false);
   const [petModeEnabled, setPetModeEnabled] = useState(initialAppearance.enabled);
+  const [petVisible, setPetVisible] = useState(true);
+  const [hitRegionTransitionCount, setHitRegionTransitionCount] = useState(0);
+  const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const actionTokenRef = useRef(0);
   const phaseRef = useRef<PetModeCatPhase>(initialPhase);
+  const renderedPhaseRef = useRef<PetModeCatPhase>(initialPhase);
+  const facingRef = useRef<"left" | "right">(initialAppearance.facing);
+  const renderedFacingRef = useRef<"left" | "right">(initialAppearance.facing);
+  const poseTransitionRef = useRef(0);
+  const facingTransitionRef = useRef(0);
   const activeLabActionRef = useRef<PetModeLabAction | null>(null);
   const labLifeLoopEnabledRef = useRef(false);
   const petModeEnabledRef = useRef(initialAppearance.enabled);
@@ -115,11 +123,72 @@ export function PetModeWindowApp() {
     }).catch(() => undefined);
   }, []);
 
+  const beginHitRegionTransition = useCallback(() => {
+    setHitRegionTransitionCount((count) => count + 1);
+    let finished = false;
+    return () => {
+      if (finished) return;
+      finished = true;
+      setHitRegionTransitionCount((count) => Math.max(0, count - 1));
+    };
+  }, []);
+
   const commitPhase = useCallback((nextPhase: PetModeCatPhase) => {
     phaseRef.current = nextPhase;
-    setPhase(nextPhase);
     reportLabState(nextPhase);
-  }, [reportLabState]);
+    const transition = ++poseTransitionRef.current;
+    const commit = () => {
+      if (transition === poseTransitionRef.current && phaseRef.current === nextPhase) {
+        renderedPhaseRef.current = nextPhase;
+        setPhase(nextPhase);
+        setHitRegionCommitRevision((revision) => revision + 1);
+      }
+    };
+    const reject = () => {
+      if (transition !== poseTransitionRef.current || phaseRef.current !== nextPhase) return;
+      phaseRef.current = renderedPhaseRef.current;
+      reportLabState(renderedPhaseRef.current);
+    };
+    if (!petModeEnabledRef.current || !visibleRef.current) {
+      commit();
+      return;
+    }
+    const finishTransition = beginHitRegionTransition();
+    void stagePetModeHitRegionTransition({
+      regionId: `transition:${nextPhase}`,
+      mirrored: facingRef.current === "left",
+    }).then(commit, reject).finally(finishTransition);
+  }, [beginHitRegionTransition, reportLabState]);
+
+  const commitFacing = useCallback((nextFacing: "left" | "right") => {
+    facingRef.current = nextFacing;
+    const transition = ++facingTransitionRef.current;
+    const commit = () => {
+      if (transition === facingTransitionRef.current && facingRef.current === nextFacing) {
+        renderedFacingRef.current = nextFacing;
+        setFacing(nextFacing);
+        setHitRegionCommitRevision((revision) => revision + 1);
+      }
+    };
+    const reject = () => {
+      if (transition !== facingTransitionRef.current || facingRef.current !== nextFacing) return;
+      facingRef.current = renderedFacingRef.current;
+    };
+    if (!petModeEnabledRef.current || !visibleRef.current) {
+      commit();
+      return;
+    }
+    const finishTransition = beginHitRegionTransition();
+    void stagePetModeHitRegionTransition({
+      regionId: `transition:facing:${nextFacing}`,
+      mirrored: nextFacing === "left",
+    }).then(commit, reject).finally(finishTransition);
+  }, [beginHitRegionTransition]);
+
+  const commitVisibility = useCallback((visible: boolean) => {
+    visibleRef.current = visible;
+    setPetVisible(visible);
+  }, []);
 
   useEffect(() => {
     if (phase !== "idle" && phase !== "entry") setPreserveEntryLanding(false);
@@ -208,7 +277,7 @@ export function PetModeWindowApp() {
       if (enabled === petModeEnabledRef.current) return;
 
       petModeEnabledRef.current = enabled;
-      visibleRef.current = enabled;
+      commitVisibility(enabled);
       actionTokenRef.current += 1;
       sleepTouchRef.current = 0;
       restartAutonomousCycle();
@@ -220,7 +289,7 @@ export function PetModeWindowApp() {
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, [commitPhase, restartAutonomousCycle]);
+  }, [commitPhase, commitVisibility, restartAutonomousCycle]);
 
   // The pet runs in its own webview, so it cannot read the settings hook that
   // owns the toggle. Both webviews share localStorage, and `storage` fires in
@@ -303,21 +372,14 @@ export function PetModeWindowApp() {
   }, [finishManualDrag]);
 
   useEffect(() => {
-    // A compact pet is its own input surface. Delaying this behind a native
-    // hover poll leaves the first press click-through, which can activate the
-    // dashboard below before the pet renderer gets a chance to consume it.
-    // Do not disable input in this effect's cleanup: during Vite HMR, an old
-    // mount can finish that async cleanup after the replacement mount has
-    // enabled input and leave the still-visible panel click-through. Native
-    // presence/enable commands already disable input whenever the panel hides.
-    void setNativePetInteractive(true).catch(() => undefined);
+    void preloadPetModeHitRegions().catch(() => undefined);
   }, []);
 
   const revealForAction = useCallback(async () => {
     if (visibleRef.current) return;
-    visibleRef.current = true;
+    commitVisibility(true);
     await setNativePetPresence(true);
-  }, []);
+  }, [commitVisibility]);
 
   const playIntervention = useCallback(async (target: PetModeInterventionTarget) => {
     const token = ++actionTokenRef.current;
@@ -336,7 +398,7 @@ export function PetModeWindowApp() {
         return;
       }
       movedToTarget = true;
-      setFacing(resolved.facing);
+      commitFacing(resolved.facing);
       setPawFrame(0);
       commitPhase("paw");
 
@@ -358,6 +420,14 @@ export function PetModeWindowApp() {
           }
           if (token !== actionTokenRef.current) return;
         }
+        // Paw frames are advanced by this parent loop rather than the cat's
+        // internal animation clock. Close the old native silhouette before
+        // painting each new frame, matching the gait/life-motion contract.
+        await stagePetModeHitRegionTransition({
+          regionId: `transition:paw:${step.frame}`,
+          mirrored: facingRef.current === "left",
+        });
+        if (token !== actionTokenRef.current) return;
         setPawFrame(step.frame);
         if (!contacted && step.frame === PET_MODE_PAW_CONTACT_FRAME) {
           contacted = true;
@@ -385,7 +455,7 @@ export function PetModeWindowApp() {
       }
       if (token === actionTokenRef.current) commitPhase("idle");
     }
-  }, [commitPhase, revealForAction]);
+  }, [commitFacing, commitPhase, revealForAction]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     const token = ++actionTokenRef.current;
@@ -395,24 +465,24 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       const exitSide = await exitNativePetScreen();
       if (token !== actionTokenRef.current) return;
-      visibleRef.current = false;
+      commitVisibility(false);
       await setNativePetPresence(false);
       await delay(awayMilliseconds);
       if (token !== actionTokenRef.current) return;
-      visibleRef.current = true;
+      commitVisibility(true);
       commitPhase("walk");
       await returnNativePetFromOuting(exitSide);
     } finally {
       if (token === actionTokenRef.current && visibleRef.current) commitPhase("idle");
     }
-  }, [commitPhase, revealForAction]);
+  }, [commitPhase, commitVisibility, revealForAction]);
 
   const playLifeAction = useCallback(async (action: LifeAction, preview = true) => {
     if (action === "stop") {
       actionTokenRef.current += 1;
       sleepTouchRef.current = 0;
       setLifeLoopEnabled(false);
-      visibleRef.current = true;
+      commitVisibility(true);
       commitPhase("idle");
       return;
     }
@@ -463,7 +533,7 @@ export function PetModeWindowApp() {
     }
 
     if (token === actionTokenRef.current) commitPhase("idle");
-  }, [commitPhase, playOuting, revealForAction, setLifeLoopEnabled]);
+  }, [commitPhase, commitVisibility, playOuting, revealForAction, setLifeLoopEnabled]);
 
   useEffect(() => {
     let disposed = false;
@@ -474,7 +544,7 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "facing") {
-        setFacing(event.facing);
+        commitFacing(event.facing);
         return;
       }
       if (event.kind === "motion") {
@@ -496,7 +566,7 @@ export function PetModeWindowApp() {
           setEntrySequence((sequence) => sequence + 1);
           setPreserveEntryLanding(false);
           petModeEnabledRef.current = true;
-          visibleRef.current = true;
+          commitVisibility(true);
           setPetModeEnabled(true);
         } else {
           setPreserveEntryLanding(false);
@@ -508,7 +578,7 @@ export function PetModeWindowApp() {
         if (!resolveInitialPetModeEnabled()) return;
         const beganANewResidence = phaseRef.current === "entry" || !petModeEnabledRef.current;
         petModeEnabledRef.current = true;
-        visibleRef.current = true;
+        commitVisibility(true);
         setPetModeEnabled(true);
         if (phaseRef.current === "entry") {
           // Keep the exact final walk SVG mounted after the native window lands.
@@ -572,7 +642,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [commitPhase, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
+  }, [commitFacing, commitPhase, commitVisibility, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
 
   useEffect(() => {
     if (phase !== "entry") return;
@@ -852,16 +922,17 @@ export function PetModeWindowApp() {
           }}
           aria-label="Pet Drifty cat. Drag to move."
         >
-          <span
-            className={`pet-mode-hit-shape${facing === "left" ? " is-mirrored" : ""}`}
-            aria-hidden="true"
-          />
           <PetModeCat
             phase={phase}
             facing={facing}
             pawFrame={pawFrame}
             entrySequence={entrySequence}
             preserveEntryLanding={preserveEntryLanding}
+            hitRegionInteractive={petModeEnabled
+              && petVisible
+              && phase !== "entry"
+              && hitRegionTransitionCount === 0}
+            hitRegionCommitRevision={hitRegionCommitRevision}
           />
           <span
             ref={contactAnchorRef}
