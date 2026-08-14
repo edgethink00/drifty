@@ -31,18 +31,7 @@
   grid-template-rows: minmax(0, 1fr);
 }
 
-.history-view .settings-btn--danger {
-  background: var(--warn);
-  border-color: var(--warn);
-  color: var(--canvas);
-}
-
-.history-view .settings-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn) 88%, var(--text));
-  color: var(--canvas);
-}
-
-.history-view .settings-btn:disabled {
+.history-view .app-btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
   transform: none;
@@ -50,7 +39,7 @@
 
 /* While nothing is selected the destructive fill reads as noise next to the
    search field; keep the disabled state a quiet outline until it is usable. */
-.history-view .settings-btn--danger:disabled {
+.history-view .app-btn--danger:disabled {
   background: transparent;
   border-color: var(--line);
   color: var(--text-soft);
@@ -63,7 +52,7 @@
   gap: var(--space-2);
 }
 
-.history-view__toolbar .settings-btn {
+.history-view__toolbar .app-btn {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -352,7 +341,7 @@
     flex-direction: column;
   }
 
-  .history-view__toolbar .settings-btn,
+  .history-view__toolbar .app-btn,
   .history-confirm__actions .modal-btn {
     width: 100%;
   }

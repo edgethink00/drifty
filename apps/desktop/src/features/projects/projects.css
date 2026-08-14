@@ -141,7 +141,7 @@
   color: var(--text);
 }
 
-.projects-model-status .settings-btn {
+.projects-model-status .app-btn {
   flex: none;
   white-space: nowrap;
 }
@@ -460,7 +460,7 @@
   margin-left: auto;
 }
 
-.projects-page .projects-toolbar .settings-btn--primary {
+.projects-page .projects-toolbar .app-btn--primary {
   white-space: nowrap;
 }
 

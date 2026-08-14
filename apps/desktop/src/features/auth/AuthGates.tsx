@@ -21,7 +21,7 @@ export function AuthRequiredGate({ onSignIn }: { onSignIn: () => void }) {
         </div>
         <h2>Sign in to use Drifty</h2>
         <div className="auth-card__actions auth-card__actions--required">
-          <button type="button" className="secondary-button auth-card__action" onClick={onSignIn}>Sign in</button>
+          <button type="button" className="app-btn app-btn--primary auth-card__action" onClick={onSignIn}>Sign in</button>
         </div>
       </div>
     </main>

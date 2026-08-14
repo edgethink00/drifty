@@ -25,7 +25,7 @@ function HistoryDeferredFallback({ label }: { readonly label: string }) {
           <span className="loading-skeleton-icon" />
           <span className="loading-skeleton-line loading-skeleton-line--search" />
         </label>
-        <button className="settings-btn settings-btn--danger" disabled type="button">
+        <button className="app-btn app-btn--danger" disabled type="button">
           Delete selected
         </button>
       </div>

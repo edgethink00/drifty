@@ -239,7 +239,7 @@ export function TeamWorkspace({
             <div className="day-nav" aria-label="Dashboard time window">
               <div className="day-nav__current"><strong>{windowLabel}</strong></div>
               <button
-                className="ghost-button day-nav__step"
+                className="app-btn app-btn--quiet app-btn--compact day-nav__step"
                 type="button"
                 aria-label="Previous window"
                 onClick={() => setWindowOffset((offset) => offset + 1)}
@@ -247,7 +247,7 @@ export function TeamWorkspace({
                 &lsaquo;
               </button>
               <button
-                className="ghost-button day-nav__today"
+                className="app-btn app-btn--quiet app-btn--compact day-nav__today"
                 type="button"
                 disabled={atLatestWindow}
                 onClick={() => setWindowOffset(0)}
@@ -255,7 +255,7 @@ export function TeamWorkspace({
                 Latest
               </button>
               <button
-                className="ghost-button day-nav__step"
+                className="app-btn app-btn--quiet app-btn--compact day-nav__step"
                 type="button"
                 aria-label="Next window"
                 disabled={atLatestWindow}
@@ -296,7 +296,7 @@ export function TeamWorkspace({
           <strong>Sign in required</strong>
           <p>Use a drifty.so account before creating teams or joining with invites.</p>
           <div className="team-onboard__actions">
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onSignIn}>Open sign-in</button>
+            <button type="button" className="app-btn app-btn--primary" onClick={onSignIn}>Open sign-in</button>
           </div>
         </div>
       );
@@ -315,13 +315,13 @@ export function TeamWorkspace({
           <div className="team-onboard__actions">
             <button
               type="button"
-              className="settings-btn settings-btn--primary"
+              className="app-btn app-btn--primary"
               disabled={teamActionLoading}
               onClick={() => void onAcceptPendingInvite({ inviteKey: pendingInvite.inviteKey })}
             >
               Join team
             </button>
-            <button type="button" className="ghost-button" onClick={() => onPendingInviteClear?.()}>Dismiss</button>
+            <button type="button" className="app-btn app-btn--quiet" onClick={() => onPendingInviteClear?.()}>Dismiss</button>
           </div>
           {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
         </section>
@@ -340,11 +340,11 @@ export function TeamWorkspace({
             <strong>See where your team's time goes</strong>
             <p>Create a team or join one with an invite code. Define shared projects together — only aggregate time per project is ever shared.</p>
             <div className="team-onboard__actions">
-              <button type="button" className="settings-btn settings-btn--primary" onClick={() => openAdd("create")}>
+              <button type="button" className="app-btn app-btn--primary" onClick={() => openAdd("create")}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
                 Create a team
               </button>
-              <button type="button" className="ghost-button" onClick={() => openAdd("join")}>Join with code</button>
+              <button type="button" className="app-btn app-btn--secondary" onClick={() => openAdd("join")}>Join with code</button>
             </div>
           </div>
           {teamError ? <p className="team-message team-message--error">{teamError}</p> : null}

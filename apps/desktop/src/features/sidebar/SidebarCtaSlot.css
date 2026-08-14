@@ -104,7 +104,14 @@
   background: color-mix(in srgb, var(--text) 7%, transparent);
   color: var(--text);
   opacity: 1;
-  outline: none;
+}
+
+/* Keyboard focus needs its own signal. The shared hover background above is
+   identical for pointer hover, so on its own it does not tell a keyboard user
+   where focus currently sits. */
+.sidebar-cta-slot__dismiss:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
 }
 
 .sidebar-cta-slot__dismiss:disabled {

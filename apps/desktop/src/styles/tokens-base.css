@@ -11,6 +11,10 @@
   --font-ui: var(--font-sans);
   --type-overline-size: 0.5625rem;
   --type-control-size: 0.6875rem;
+  /* 액션 버튼 라벨 전용. --type-control-size 는 mono 로 조판되는 작은
+     컨트롤(칩·상태 라벨 등)이 함께 쓰므로 값을 바꾸지 않고, 버튼만
+     sans Sentence case 에 맞는 크기를 따로 갖는다. */
+  --type-button-size: 0.78rem;
   --type-setting-label-size: 0.8125rem;
   --type-setting-desc-size: 0.72rem;
   --type-setting-value-size: 0.72rem;

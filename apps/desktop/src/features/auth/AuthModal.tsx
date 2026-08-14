@@ -209,7 +209,7 @@ export function AuthModal({
 
             <button
               type="button"
-              className="secondary-button auth-modal__google"
+              className="modal-btn modal-btn--secondary modal-btn--block auth-modal__google"
               onClick={() => void handleGoogleSignIn()}
               disabled={isBusy}
             >

@@ -117,7 +117,7 @@ export function SocialProfileView({
             <h2>{displayName}</h2>
             <p>{draft.bio.trim() || "Add a short bio to make your public profile feel like yours."}</p>
             <ProfileSocialLinks profile={{ website_url: draft.websiteUrl, github_url: draft.githubUrl, linkedin_url: draft.linkedinUrl }} />
-            <button type="button" className="ghost-button social-profile-edit" onClick={publicProfile.onEditProfile}>
+            <button type="button" className="app-btn app-btn--quiet app-btn--compact social-profile-edit" onClick={publicProfile.onEditProfile}>
               <PencilIcon /> Edit profile
             </button>
           </div>
@@ -145,18 +145,18 @@ export function SocialProfileView({
           {profileUrl ? (
             <div className="social-profile-url">
               <span className="social-profile-url__value">{profileUrl}</span>
-              <button type="button" className="settings-btn settings-btn--primary" onClick={publicProfile.onCopyProfileLink}>Copy link</button>
+              <button type="button" className="app-btn app-btn--primary" onClick={publicProfile.onCopyProfileLink}>Copy link</button>
               {draft.isPublic ? <a href={profileUrl} target="_blank" rel="noreferrer" aria-label="Open public profile">↗</a> : null}
             </div>
           ) : (
-            <button type="button" className="settings-btn settings-btn--primary social-profile-setup" disabled={publicProfile.profileSaving} onClick={() => void publicProfile.onEnsureProfile()}>
+            <button type="button" className="app-btn app-btn--primary social-profile-setup" disabled={publicProfile.profileSaving} onClick={() => void publicProfile.onEnsureProfile()}>
               {publicProfile.profileSaving ? "Creating…" : "Create public link"}
             </button>
           )}
           <div className="social-profile-publish__actions">
             <button
               type="button"
-              className="settings-btn settings-btn--primary profile-btn hero-action-btn"
+              className="app-btn app-btn--primary profile-btn hero-action-btn"
               onClick={() => setEmbedsOpen(true)}
             >
               <EmbedIcon />
@@ -245,7 +245,7 @@ export function SocialProfileView({
               <p>Only filled fields appear. Remove a field to stop sharing it.</p>
               <div className="social-share-row__chips">{profileFieldLabels.map((label) => <span key={label}>{label}</span>)}</div>
             </div>
-            <button type="button" className="ghost-button" onClick={publicProfile.onEditProfile}>Edit</button>
+            <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={publicProfile.onEditProfile}>Edit</button>
           </div>
 
           <div className="social-share-group">
@@ -347,7 +347,7 @@ function SocialAccessState({ eyebrow, title, detail, actionLabel, onAction }: { 
       <span className="eyebrow">{eyebrow}</span>
       <strong>{title}</strong>
       <p>{detail}</p>
-      {actionLabel && onAction ? <button type="button" className="settings-btn settings-btn--primary" onClick={onAction}>{actionLabel}</button> : null}
+      {actionLabel && onAction ? <button type="button" className="app-btn app-btn--primary" onClick={onAction}>{actionLabel}</button> : null}
     </div>
   );
 }

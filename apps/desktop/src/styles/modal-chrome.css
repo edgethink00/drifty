@@ -226,10 +226,10 @@
   justify-content: center;
   gap: 0.4rem;
   padding: 0.48rem 1.02rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid transparent;
   font-family: var(--font-sans);
-  font-size: 0.78rem;
+  font-size: var(--type-button-size);
   font-weight: 600;
   line-height: 1;
   letter-spacing: 0;
@@ -238,11 +238,11 @@
   background: transparent;
   cursor: pointer;
   transition:
-    background 0.14s ease,
-    color 0.14s ease,
-    border-color 0.14s ease,
-    transform 0.14s ease,
-    box-shadow 0.14s ease;
+    background var(--transition-fast),
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .modal-btn svg {
@@ -254,6 +254,11 @@
 .modal-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.modal-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .modal-btn--ghost {
@@ -292,7 +297,7 @@
 .modal-btn--danger {
   background: var(--warn);
   border-color: var(--warn);
-  color: #fff;
+  color: var(--canvas);
 }
 
 .modal-btn--danger:hover:not(:disabled) {

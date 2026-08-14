@@ -137,7 +137,10 @@ describe("HistoryView", () => {
     expect(cssRule('.history-row[data-selected="true"]')).toContain("background: color-mix(in srgb, var(--text-soft) 14%, var(--surface));");
     expect(cssRule('.history-row[data-selected="true"]')).not.toContain("var(--warn)");
     expect(cssRule('.history-row[data-selected="true"]')).not.toContain("var(--accent-soft)");
-    expect(cssRule(".history-view .settings-btn--danger")).toMatch(/background:\s*var\(--warn\);[\s\S]*color:\s*var\(--canvas\);/);
+    // The danger fill is a system-level modifier, not a History-only rule: the
+    // same class is used elsewhere (e.g. the deferred tab fallback) and used to
+    // render with no danger signal at all outside this view.
+    expect(cssRule(".app-btn--danger")).toMatch(/background:\s*var\(--warn\);[\s\S]*color:\s*var\(--canvas\);/);
   });
 
   it("toggles history row selection when the row block is clicked", () => {

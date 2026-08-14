@@ -652,18 +652,6 @@
   color: var(--text);
   min-width: 180px;
 }
-.settings-btn {
-  font-family: var(--font-mono);
-  font-size: var(--type-control-size);
-  padding: 6px 14px;
-  background: var(--text);
-  color: var(--canvas);
-  border: none;
-  border-radius: var(--radius-pill);
-  cursor: pointer;
-}
-.settings-btn:hover { transform: translateY(-1px); }
-
 .settings-row--model-picker {
   align-items: flex-start;
 }
@@ -1074,20 +1062,6 @@
 }
 .notice--error { background: var(--warn-soft); color: var(--warn); border-color: var(--danger-line); }
 
-/* Ghost button */
-.ghost-button {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--text-soft);
-  cursor: pointer;
-}
-.ghost-button:hover:not(:disabled) { background: var(--bg-2); color: var(--text); }
-.ghost-button:disabled { opacity: 0.4; cursor: not-allowed; }
-
 /* Topbar override — minor adjustments */
 .topbar {
   display: flex;
@@ -1461,11 +1435,6 @@
   color: var(--text-soft);
   font-size: 0.8rem;
   line-height: 1.4;
-}
-
-.onboarding-modal__actions .secondary-button,
-.onboarding-modal__actions .ghost-button {
-  padding: .62rem .92rem;
 }
 
 @media (max-width: 860px) {

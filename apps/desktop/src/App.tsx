@@ -190,6 +190,7 @@ import {
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
 import { purgeCloudSyncData } from "./features/device-sync/deviceSyncApi";
+import { DeviceSyncPurgeConfirmation } from "./features/device-sync/DeviceSyncPurgeConfirmation";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
@@ -1154,11 +1155,17 @@ export default function App() {
     if (!deviceSyncActive) setDeviceTimelineFilter("all");
   }, [deviceSyncActive]);
   const [deviceSyncPurging, setDeviceSyncPurging] = useState(false);
-  const handlePurgeDeviceSyncData = useCallback(async () => {
-    const confirmed = window.confirm(
-      "Delete the cloud copy of your synced activity? Segments already merged on other Macs stay there, but nothing new will download until you sync again.",
-    );
-    if (!confirmed) return;
+  // Keep destructive confirmation inside the shared app modal system so its
+  // hierarchy and keyboard behavior match the rest of the product.
+  const [deviceSyncPurgeConfirmOpen, setDeviceSyncPurgeConfirmOpen] = useState(false);
+  const handlePurgeDeviceSyncData = useCallback(() => {
+    setDeviceSyncPurgeConfirmOpen(true);
+  }, []);
+  const cancelPurgeDeviceSyncData = useCallback(() => {
+    setDeviceSyncPurgeConfirmOpen(false);
+  }, []);
+  const confirmPurgeDeviceSyncData = useCallback(async () => {
+    setDeviceSyncPurgeConfirmOpen(false);
     setDeviceSyncPurging(true);
     try {
       await purgeCloudSyncData();
@@ -7323,6 +7330,13 @@ export default function App() {
         </Suspense>
       ) : null}
       {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}
+
+      {deviceSyncPurgeConfirmOpen ? (
+        <DeviceSyncPurgeConfirmation
+          onCancel={cancelPurgeDeviceSyncData}
+          onConfirm={confirmPurgeDeviceSyncData}
+        />
+      ) : null}
 
       {debugLogPreview ? (
         <Suspense fallback={null}>

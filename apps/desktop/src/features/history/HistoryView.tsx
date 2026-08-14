@@ -201,7 +201,7 @@ export function HistoryView({
           </label>
           <button
             type="button"
-            className="settings-btn settings-btn--danger"
+            className="app-btn app-btn--danger"
             disabled={selectedCount === 0 || deleting}
             onClick={() => setConfirmOpen(true)}
           >
@@ -210,7 +210,7 @@ export function HistoryView({
           {onOpenDeleteHistory ? (
             <button
               type="button"
-              className="settings-btn settings-btn--danger"
+              className="app-btn app-btn--danger"
               disabled={!hasAnySegments || deleting}
               onClick={onOpenDeleteHistory}
             >
@@ -257,7 +257,7 @@ export function HistoryView({
               <p className="history-load-more-error" role="alert">{loadMoreError}</p>
               <button
                 type="button"
-                className="settings-btn history-show-more"
+                className="app-btn app-btn--secondary history-show-more"
                 disabled={loadingMore}
                 onClick={() => loadMore()}
               >

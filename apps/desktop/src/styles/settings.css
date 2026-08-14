@@ -915,21 +915,12 @@
   opacity: 1;
 }
 
+/* Settings 전용의 조밀한 컨트롤 계약. 앱 표면 버튼은 `.app-btn`을 쓴다. */
 .settings-btn {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  padding: 7px 14px;
+  font-size: var(--type-control-size);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--line);
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-soft);
-  transition: all .15s;
 }
 
-.settings-btn:hover { background: var(--bg-2); color: var(--text); transform: none; }
 .settings-btn.danger {
   background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
   border-color: color-mix(in srgb, var(--warn) 14%, transparent);

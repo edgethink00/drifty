@@ -276,7 +276,7 @@ export function TeamDashboardsView({
       <div className="team-dash-section team-card team-card--stats editorial-panel editorial-panel--soft insight-chart-panel" aria-label="Team totals">
         <div className="insight-panel-head">
           <span className="label-mono">Totals</span>
-          <button type="button" className="ghost-button" onClick={onRefresh} disabled={loading}>
+          <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRefresh} disabled={loading}>
             {loading ? "Refreshing…" : "Refresh"}
           </button>
         </div>

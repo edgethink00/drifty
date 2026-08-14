@@ -42,7 +42,7 @@ export function ProjectCorrectionsCard({ events, onRevert, busy = false }: Proje
                 </div>
                 {event.reason ? <p className="corrections-item__reason">{event.reason}</p> : null}
               </div>
-              <button type="button" className="settings-btn corrections-item__revert" onClick={() => onRevert(event.id)} disabled={busy}>
+              <button type="button" className="app-btn app-btn--quiet app-btn--compact corrections-item__revert" onClick={() => onRevert(event.id)} disabled={busy}>
                 Revert
               </button>
             </li>

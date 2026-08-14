@@ -122,7 +122,7 @@ export function TeamProjectDetailView({
 
   return (
     <div className="project-detail">
-      <button type="button" className="ghost-button project-detail__back" onClick={onBack}>
+      <button type="button" className="app-btn app-btn--quiet app-btn--compact project-detail__back" onClick={onBack}>
         <span aria-hidden="true">&larr;</span> All projects
       </button>
 
@@ -135,8 +135,8 @@ export function TeamProjectDetailView({
           </div>
           {project.can_manage ? (
             <div className="project-detail__actions">
-              <button type="button" className="settings-btn" disabled={actionLoading} onClick={() => onEdit(project)}>Edit</button>
-              <button type="button" className="settings-btn" disabled={actionLoading} onClick={() => onArchive(project.id, !isArchived)}>
+              <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onEdit(project)}>Edit</button>
+              <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onArchive(project.id, !isArchived)}>
                 {isArchived ? "Restore" : "Archive"}
               </button>
             </div>

@@ -329,8 +329,8 @@ export function ClassificationPage({
                     <strong>No sources in this category yet</strong>
                     <p>Tracked apps and browser surfaces will appear here once this category has activity in the selected range.</p>
                     <div className="classification-panel-view__empty-actions">
-                      {!isCurrentClassificationRange ? <button type="button" className="settings-btn" onClick={onTodayClassificationRange}>Today</button> : null}
-                      <button type="button" className="settings-btn" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
+                      {!isCurrentClassificationRange ? <button type="button" className="app-btn app-btn--secondary" onClick={onTodayClassificationRange}>Today</button> : null}
+                      <button type="button" className="app-btn app-btn--secondary" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
                     </div>
                   </div>
                 )}
@@ -483,7 +483,7 @@ export function ClassificationPage({
                   <p>Choose a source from the middle panel to inspect its titles, pages, and time distribution.</p>
                   {firstSourceKey ? (
                     <div className="classification-panel-view__empty-actions">
-                      <button type="button" className="settings-btn" onClick={() => onSourceSelect(firstSourceKey)}>Open first source</button>
+                      <button type="button" className="app-btn app-btn--secondary" onClick={() => onSourceSelect(firstSourceKey)}>Open first source</button>
                     </div>
                   ) : null}
                 </div>
@@ -498,8 +498,8 @@ export function ClassificationPage({
             <strong>No category data yet</strong>
             <p>Category, source, and activity details will appear here once tracking captures activity for this range.</p>
             <div className="classification-panel-view__empty-actions">
-              {!isCurrentClassificationRange ? <button type="button" className="settings-btn" onClick={onTodayClassificationRange}>Today</button> : null}
-              <button type="button" className="settings-btn" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
+              {!isCurrentClassificationRange ? <button type="button" className="app-btn app-btn--secondary" onClick={onTodayClassificationRange}>Today</button> : null}
+              <button type="button" className="app-btn app-btn--secondary" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
             </div>
           </div>
         </section>

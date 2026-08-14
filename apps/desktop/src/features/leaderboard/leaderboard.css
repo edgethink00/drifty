@@ -149,9 +149,8 @@
   margin-top: var(--space-3);
 }
 
-.leaderboard-hero__actions .settings-btn,
-.leaderboard-hero__actions .ghost-button,
-.leaderboard-actions .settings-btn {
+.leaderboard-hero__actions .app-btn,
+.leaderboard-actions .app-btn {
   align-items: center;
   display: inline-flex;
   justify-content: center;
@@ -251,48 +250,39 @@
   align-items: center;
   border-radius: var(--radius-pill);
   display: inline-flex;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 620;
   justify-content: center;
-  letter-spacing: 0.08em;
   min-height: 1.9rem;
   padding: 0.36rem 0.82rem;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.leaderboard-public-profile .settings-btn.profile-btn,
-.leaderboard-public-profile .ghost-button.profile-btn,
-.leaderboard-panel .profile-embeds .settings-btn.profile-btn,
-.leaderboard-panel .profile-embeds .ghost-button.profile-btn {
+.leaderboard-public-profile .app-btn.profile-btn,
+.leaderboard-panel .profile-embeds .app-btn.profile-btn {
   background: color-mix(in srgb, var(--surface-strong) 64%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--line-strong) 66%, var(--line));
   color: var(--text-muted);
 }
 
-.leaderboard-public-profile .settings-btn.profile-btn:hover:not(:disabled),
-.leaderboard-public-profile .ghost-button.profile-btn:hover:not(:disabled),
-.leaderboard-panel .profile-embeds .settings-btn.profile-btn:hover:not(:disabled),
-.leaderboard-panel .profile-embeds .ghost-button.profile-btn:hover:not(:disabled) {
+.leaderboard-public-profile .app-btn.profile-btn:hover:not(:disabled),
+.leaderboard-panel .profile-embeds .app-btn.profile-btn:hover:not(:disabled) {
   background: var(--surface-strong);
   border-color: var(--line-strong);
   color: var(--text);
   transform: none;
 }
 
-.leaderboard-public-profile .settings-btn--primary.profile-btn,
-.leaderboard-panel .profile-embeds .settings-btn--primary.profile-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 26%, transparent);
-  color: var(--on-accent);
+.leaderboard-public-profile .app-btn--primary.profile-btn,
+.leaderboard-panel .profile-embeds .app-btn--primary.profile-btn {
+  background: var(--text);
+  border-color: var(--text);
+  box-shadow: none;
+  color: var(--canvas);
 }
 
-.leaderboard-public-profile .settings-btn--primary.profile-btn:hover:not(:disabled),
-.leaderboard-panel .profile-embeds .settings-btn--primary.profile-btn:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+.leaderboard-public-profile .app-btn--primary.profile-btn:hover:not(:disabled),
+.leaderboard-panel .profile-embeds .app-btn--primary.profile-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--on-accent);
   transform: none;
 }
@@ -879,7 +869,7 @@
   font-size: 1.15rem;
 }
 
-.leaderboard-panel .settings-btn {
+.leaderboard-panel .app-btn {
   border-color: color-mix(in srgb, var(--accent) 18%, var(--line));
   background: color-mix(in srgb, var(--surface) 88%, transparent);
 }
@@ -1152,10 +1142,9 @@
   font-weight: 620;
 }
 
-.leaderboard-hero__actions .settings-btn,
-.leaderboard-hero__actions .ghost-button,
-.leaderboard-hero__name-row .settings-btn,
-.leaderboard-actions .settings-btn {
+.leaderboard-hero__actions .app-btn,
+.leaderboard-hero__name-row .app-btn,
+.leaderboard-actions .app-btn {
   min-height: 1.75rem;
   padding: 0.34rem 0.62rem;
   border-color: var(--line);
@@ -1164,7 +1153,7 @@
   font-weight: 520;
 }
 
-.leaderboard-hero__actions .settings-btn.leaderboard-hero__profile-action {
+.leaderboard-hero__actions .app-btn.leaderboard-hero__profile-action {
   min-height: 2rem;
   padding: 0.42rem 1.05rem;
   border-color: color-mix(in srgb, var(--accent) 34%, var(--line-strong));
@@ -1174,14 +1163,14 @@
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
-.leaderboard-hero__actions .settings-btn.leaderboard-hero__profile-action:hover:not(:disabled) {
+.leaderboard-hero__actions .app-btn.leaderboard-hero__profile-action:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--line-strong));
   background: color-mix(in srgb, var(--accent-soft) 88%, var(--surface));
   color: var(--accent-strong);
   transform: translateY(-1px);
 }
 
-.leaderboard-hero__actions .settings-btn.leaderboard-hero__participation {
+.leaderboard-hero__actions .app-btn.leaderboard-hero__participation {
   min-height: 2rem;
   padding: 0.42rem 1.15rem;
   border-color: transparent;
@@ -1191,12 +1180,12 @@
   box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 
-.leaderboard-hero__actions .settings-btn.leaderboard-hero__participation:hover:not(:disabled) {
+.leaderboard-hero__actions .app-btn.leaderboard-hero__participation:hover:not(:disabled) {
   background: color-mix(in srgb, var(--accent) 86%, #000);
   transform: translateY(-1px);
 }
 
-.leaderboard-hero__actions .settings-btn.leaderboard-hero__participation:disabled {
+.leaderboard-hero__actions .app-btn.leaderboard-hero__participation:disabled {
   opacity: 0.62;
   cursor: default;
 }
@@ -1206,21 +1195,6 @@
   background: color-mix(in srgb, var(--accent-soft) 58%, transparent);
   color: color-mix(in srgb, var(--accent) 72%, var(--text));
   font-weight: 640;
-}
-
-.leaderboard-hero__actions .ghost-button.leaderboard-hero__participation--danger {
-  border-color: color-mix(in srgb, var(--warn) 38%, var(--line-strong));
-  background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));
-  color: var(--warn);
-  font-weight: 640;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface) 68%, transparent);
-}
-
-.leaderboard-hero__actions .ghost-button.leaderboard-hero__participation--danger:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--warn) 52%, var(--line-strong));
-  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
-  color: var(--warn);
-  transform: translateY(-1px);
 }
 
 .leaderboard-hero__status {
@@ -2441,44 +2415,48 @@
 
 .hero-action-btn > svg { color: var(--accent-strong); opacity: 0.9; flex: 0 0 auto; display: block; }
 
-.hero-action-btn:not(.settings-btn--primary):not(.leaderboard-hero__participation--danger) {
+.hero-action-btn:not(.app-btn--primary):not(.leaderboard-hero__participation--danger) {
   background: var(--surface);
   border: 1px solid color-mix(in srgb, var(--line-strong) 52%, var(--line));
   color: var(--text);
   box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
 }
 
-.hero-action-btn:not(.settings-btn--primary):not(.leaderboard-hero__participation--danger):hover {
+.hero-action-btn:not(.app-btn--primary):not(.leaderboard-hero__participation--danger):hover {
   border-color: color-mix(in srgb, var(--accent) 44%, var(--line-strong));
   background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface));
   color: var(--accent-strong);
   transform: translateY(-1px);
 }
 
-.hero-action-btn:not(.settings-btn--primary):not(.leaderboard-hero__participation--danger):hover > svg { opacity: 1; }
+.hero-action-btn:not(.app-btn--primary):not(.leaderboard-hero__participation--danger):hover > svg { opacity: 1; }
 
-.hero-action-btn.settings-btn--primary {
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
-  color: var(--accent-strong);
+/* Hero 의 주요 액션(Join)은 이 화면에서 사용자가 해야 할 단 하나의 일이다.
+   기존의 옅은 accent-soft 채움은 옆의 보조 액션과 무게 차이가 거의 없었다.
+   채움은 앱 전역 주요 액션과 같은 잉크색(--text)을 쓴다. accent 초록 채움은
+   이 화면에서만 튀는 별도 언어가 되므로 쓰지 않는다. */
+.hero-action-btn.app-btn--primary {
+  background: var(--text);
+  border: 1px solid var(--text);
+  color: var(--canvas);
   box-shadow: none;
 }
 
-.hero-action-btn.settings-btn--primary > svg { color: currentColor; opacity: 1; }
+.hero-action-btn.app-btn--primary > svg { color: currentColor; opacity: 1; }
 
-.hero-action-btn.settings-btn--primary:hover {
-  background: color-mix(in srgb, var(--accent-soft) 78%, var(--accent));
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--line-strong));
+.hero-action-btn.app-btn--primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
   transform: translateY(-1px);
 }
 
+/* `.hero-action-btn` base 는 이미 sans + Sentence case 인데, 여기서 다시
+   mono UPPERCASE 로 되돌리고 있었다. Join/Embed 만 앱의 다른 버튼과 다른
+   서체를 쓰던 원인이다. 서체 선언을 걷어내고 base 를 그대로 따르게 한다. */
 .leaderboard-hero__participation.hero-action-btn,
 .hero-action-btn--mono {
   min-width: 0;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* Edit pencil: bare glyph by default, soft ring-less green fill on hover (design ref). */
@@ -2495,20 +2473,6 @@
   border-color: transparent;
   color: var(--accent-strong);
   transform: none;
-}
-
-/* Leave-leaderboard danger pill (participation now lives outside .leaderboard-hero__actions) */
-.hero-action-btn.leaderboard-hero__participation--danger {
-  background: color-mix(in srgb, var(--warn-soft) 72%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--warn) 38%, var(--line-strong));
-  color: var(--warn);
-}
-
-.hero-action-btn.leaderboard-hero__participation--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn-soft) 88%, var(--surface));
-  border-color: color-mix(in srgb, var(--warn) 52%, var(--line-strong));
-  color: var(--warn);
-  transform: translateY(-1px);
 }
 
 /* ── Embeds modal ─────────────────────────────────────────────────────────── */
@@ -2623,7 +2587,7 @@
 .embeds-lock__icon svg { width: 17px; height: 17px; }
 .embeds-lock strong { font-size: 0.9rem; color: var(--text); }
 .embeds-lock p { margin: 0; max-width: 36ch; font-size: 0.75rem; line-height: 1.5; color: var(--text-soft); }
-.embeds-lock .settings-btn { margin-top: var(--space-1); }
+.embeds-lock .app-btn { margin-top: var(--space-1); }
 
 .embeds-rail {
   display: grid;
@@ -2683,7 +2647,7 @@
 .embeds-scope__desc { font-size: 0.65rem; color: var(--text-soft); line-height: 1.4; }
 .embeds-rail__hint { margin: 0; font-size: 0.68rem; line-height: 1.5; color: var(--text-soft); }
 
-.profile-copy-row .settings-btn { min-width: 4.9rem; white-space: nowrap; }
+.profile-copy-row .app-btn { min-width: 4.9rem; white-space: nowrap; }
 
 @media (max-width: 760px) {
   .embeds-layout { grid-template-columns: 1fr; }

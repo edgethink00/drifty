@@ -904,11 +904,8 @@
   max-width: 100%;
 }
 
-.classification-panel-view--empty-state .classification-panel-view__empty-actions .settings-btn {
+.classification-panel-view--empty-state .classification-panel-view__empty-actions .app-btn {
   min-height: 1.85rem;
-  border-color: color-mix(in srgb, var(--accent) 24%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
-  color: color-mix(in srgb, var(--accent) 76%, var(--text));
 }
 
 .content--classification .page:has(.classification-panel-view--empty-state) .clf-stat {

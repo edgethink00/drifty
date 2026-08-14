@@ -196,23 +196,16 @@
 }
 
 /* ── Buttons ──
-   Team uses the app-wide button language (settings-btn / settings-btn--primary
-   black pill / ghost-button). Only icon alignment is added here. */
+   Team uses the app-wide button language. Only icon alignment is local. */
 
-.content--team .settings-btn,
-.content--team .ghost-button,
-.team-modal .settings-btn,
-.team-modal .ghost-button {
+.content--team .app-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
 }
 
-.content--team .settings-btn > svg,
-.content--team .ghost-button > svg,
-.team-modal .settings-btn > svg,
-.team-modal .ghost-button > svg {
+.content--team .app-btn > svg {
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
@@ -1130,7 +1123,7 @@
   font-size: 0.72rem;
 }
 
-.team-copy-row .settings-btn {
+.team-copy-row .app-btn {
   flex: 0 0 auto;
   white-space: nowrap;
   min-width: 6.2rem;
@@ -1274,4 +1267,3 @@
 /* Color selection uses the shared ProjectColorToken component — the same
    control as Settings → Appearance; its modal-scoped styles live in
    styles/modal-chrome.css. */
-

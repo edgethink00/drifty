@@ -236,7 +236,7 @@ export function DashboardPage({
             {showShareButton ? (
               <button
                 type="button"
-                className="ghost-button dashboard-share-button"
+                className="app-btn app-btn--secondary app-btn--compact dashboard-share-button"
                 aria-haspopup="dialog"
                 onClick={() => setShareCardOpen(true)}
               >

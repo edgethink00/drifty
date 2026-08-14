@@ -16,42 +16,40 @@
   align-items: center;
   border-radius: var(--radius-pill);
   display: inline-flex;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-family: var(--font-sans);
+  font-size: var(--type-button-size);
   font-weight: 620;
   justify-content: center;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   min-height: 1.9rem;
   padding: 0.36rem 0.82rem;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
-.profile-page .settings-btn.profile-btn,
-.profile-page .ghost-button.profile-btn {
+.profile-page .app-btn.profile-btn {
   background: color-mix(in srgb, var(--surface-strong) 64%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--line-strong) 66%, var(--line));
   color: var(--text-muted);
 }
 
-.profile-page .settings-btn.profile-btn:hover:not(:disabled),
-.profile-page .ghost-button.profile-btn:hover:not(:disabled) {
+.profile-page .app-btn.profile-btn:hover:not(:disabled) {
   background: var(--surface-strong);
   border-color: var(--line-strong);
   color: var(--text);
   transform: none;
 }
 
-.profile-page .settings-btn--primary.profile-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 26%, transparent);
-  color: var(--on-accent);
+.profile-page .app-btn--primary.profile-btn {
+  background: var(--text);
+  border-color: var(--text);
+  box-shadow: none;
+  color: var(--canvas);
 }
 
-.profile-page .settings-btn--primary.profile-btn:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+.profile-page .app-btn--primary.profile-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--on-accent);
   transform: none;
 }
@@ -188,7 +186,7 @@
   font-weight: 540;
 }
 
-.profile-share__row--inline .ghost-button {
+.profile-share__row--inline .app-btn--quiet {
   margin-left: auto;
 }
 
@@ -523,48 +521,46 @@
 }
 
 /* ── Button system ─────────────────────────────────────────────────────────
-   Two tiers, applied consistently: a filled accent primary (Save, Make public,
+   Two tiers, applied consistently: a filled ink primary (Save, Make public,
    Copy link, Set up) and a quiet outline secondary (everything else). */
 .profile-page--v2 .profile-btn {
   align-items: center;
   border-radius: var(--radius-pill);
   display: inline-flex;
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-family: var(--font-sans);
+  font-size: var(--type-button-size);
   font-weight: 600;
   justify-content: center;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   min-height: 1.9rem;
   padding: 0.36rem 0.82rem;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
-.profile-page--v2 .settings-btn.profile-btn,
-.profile-page--v2 .ghost-button.profile-btn {
+.profile-page--v2 .app-btn.profile-btn {
   background: color-mix(in srgb, var(--surface-strong) 60%, transparent);
   border: 1px solid color-mix(in srgb, var(--line-strong) 60%, var(--line));
   color: var(--text-muted);
 }
 
-.profile-page--v2 .settings-btn.profile-btn:hover:not(:disabled),
-.profile-page--v2 .ghost-button.profile-btn:hover:not(:disabled) {
+.profile-page--v2 .app-btn.profile-btn:hover:not(:disabled) {
   background: var(--surface-strong);
   border-color: var(--line-strong);
   color: var(--text);
   transform: none;
 }
 
-.profile-page--v2 .settings-btn--primary.profile-btn {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--accent) 32%, transparent);
-  color: var(--on-accent);
+.profile-page--v2 .app-btn--primary.profile-btn {
+  background: var(--text);
+  border-color: var(--text);
+  box-shadow: none;
+  color: var(--canvas);
 }
 
-.profile-page--v2 .settings-btn--primary.profile-btn:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+.profile-page--v2 .app-btn--primary.profile-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
   color: var(--on-accent);
   transform: none;
 }
@@ -722,7 +718,7 @@
   font-weight: 540;
 }
 
-.profile-page--v2 .profile-share__row--inline .ghost-button {
+.profile-page--v2 .profile-share__row--inline .app-btn--quiet {
   margin-left: auto;
 }
 

@@ -83,8 +83,11 @@
   transform: translateX(var(--window-sidebar-toggle-shift));
 }
 
+/* Keyboard focus must stay visible. This previously cleared the ring outright,
+   which made the control reachable by Tab but invisible once focused. */
 .window-sidebar-toggle:focus-visible {
-  outline: none;
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .window-sidebar-toggle svg {
@@ -1225,28 +1228,13 @@
   letter-spacing: -0.03em;
 }
 
-.day-nav__step, .day-nav__today, .secondary-button, .ghost-button {
+.day-nav__step, .day-nav__today {
   padding: 0.38rem 0.52rem;
   border-radius: 999px;
 }
 
-.day-nav__step, .day-nav__today, .ghost-button {
+.day-nav__step, .day-nav__today {
   border-color: transparent;
-  color: var(--text-soft);
-}
-
-.ghost-button:hover {
-  background: var(--bg-2);
-  transform: none;
-}
-
-.secondary-button {
-  background: var(--text);
-  color: var(--canvas);
-}
-
-.secondary-button--ghost {
-  background: transparent;
   color: var(--text-soft);
 }
 

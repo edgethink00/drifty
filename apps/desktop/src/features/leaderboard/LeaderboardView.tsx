@@ -230,8 +230,8 @@ export function LeaderboardView({
                   <button
                     type="button"
                     className={isOptedIn
-                      ? "ghost-button leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
-                      : "settings-btn settings-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"}
+                      ? "app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                      : "app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"}
                     disabled
                   >
                     {isOptedIn ? "Leave leaderboard" : "Join leaderboard"}
@@ -239,7 +239,7 @@ export function LeaderboardView({
                 ) : isOptedIn ? (
                   <button
                     type="button"
-                    className="ghost-button leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                    className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
                     onClick={() => onOptOut?.()}
                     disabled={isActionLoading || !onOptOut}
                   >
@@ -248,7 +248,7 @@ export function LeaderboardView({
                 ) : (
                   <button
                     type="button"
-                    className="settings-btn settings-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
+                    className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
                     title="Publishes rank totals. Profile visibility is separate."
                     onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
                     disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
@@ -261,20 +261,20 @@ export function LeaderboardView({
                 {isLoading ? (
                   publicProfile ? (
                     <>
-                      <button type="button" className="settings-btn settings-btn--primary profile-btn hero-action-btn hero-action-btn--mono" disabled>
+                      <button type="button" className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono" disabled>
                         <EmbedIcon />
                         Embed
                       </button>
                       {!isParticipationResolved ? (
                         <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
                       ) : isOptedIn ? (
-                        <button type="button" className="ghost-button profile-btn hero-action-btn" disabled>
+                        <button type="button" className="app-btn app-btn--quiet profile-btn hero-action-btn" disabled>
                           <ShareIcon />
                           Share
                         </button>
                       ) : null}
                       {socialPills.map((pill) => (
-                        <span key={pill.key} className="ghost-button profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
+                        <span key={pill.key} className="app-btn app-btn--quiet profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
                           {pill.icon}
                           {pill.label}
                         </span>
@@ -285,7 +285,7 @@ export function LeaderboardView({
                   <>
                     <button
                       type="button"
-                      className="settings-btn settings-btn--primary profile-btn hero-action-btn hero-action-btn--mono"
+                      className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono"
                       onClick={() => setRankEmbedOpen(true)}
                       title={!publicRankReady ? "Join and make your profile public to activate this embed" : undefined}
                     >
@@ -295,7 +295,7 @@ export function LeaderboardView({
                     {!isParticipationResolved ? (
                       <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
                     ) : isOptedIn ? (
-                      <button type="button" className="ghost-button profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
+                      <button type="button" className="app-btn app-btn--quiet profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
                         <ShareIcon />
                         Share
                       </button>
@@ -303,7 +303,7 @@ export function LeaderboardView({
                   </>
                 ) : null}
                 {!isLoading && socialPills.map((pill) => (
-                  <a key={pill.key} href={pill.href} target="_blank" rel="noreferrer" className="ghost-button profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
+                  <a key={pill.key} href={pill.href} target="_blank" rel="noreferrer" className="app-btn app-btn--quiet profile-btn hero-action-btn" style={{ textDecoration: "none" }}>
                     {pill.icon}
                     {pill.label}
                   </a>

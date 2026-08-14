@@ -115,7 +115,7 @@ export function ProjectDetailView({
 
   return (
     <div className="project-detail">
-      <button type="button" className="ghost-button project-detail__back" onClick={onBack}>
+      <button type="button" className="app-btn app-btn--quiet app-btn--compact project-detail__back" onClick={onBack}>
         <span aria-hidden="true">&larr;</span> All projects
       </button>
 
@@ -127,8 +127,8 @@ export function ProjectDetailView({
             <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
           </div>
           <div className="project-detail__actions">
-            <button type="button" className="settings-btn" disabled={busy} onClick={() => setEditorOpen(true)}>Edit</button>
-            <button type="button" className="settings-btn" disabled={busy} onClick={toggleArchive}>
+            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={() => setEditorOpen(true)}>Edit</button>
+            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={toggleArchive}>
               {isArchived ? "Unarchive" : "Archive"}
             </button>
           </div>

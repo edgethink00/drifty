@@ -159,7 +159,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
           <div className="day-nav" aria-label="Trend time window">
             <div className="day-nav__current"><strong>{windowLabel}</strong></div>
             <button
-              className="ghost-button day-nav__step"
+              className="app-btn app-btn--quiet app-btn--compact day-nav__step"
               type="button"
               aria-label="Previous window"
               onClick={() => setWindowOffset((offset) => offset + 1)}
@@ -167,7 +167,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
               &lsaquo;
             </button>
             <button
-              className="ghost-button day-nav__today"
+              className="app-btn app-btn--quiet app-btn--compact day-nav__today"
               type="button"
               disabled={atLatestWindow}
               onClick={() => setWindowOffset(0)}
@@ -175,7 +175,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
               Latest
             </button>
             <button
-              className="ghost-button day-nav__step"
+              className="app-btn app-btn--quiet app-btn--compact day-nav__step"
               type="button"
               aria-label="Next window"
               disabled={atLatestWindow}
@@ -266,10 +266,10 @@ export function ProjectsPage(props: ProjectsPageProps) {
             {props.analysisConnected ? "Connected" : "Needs setup"}
           </span>
           <div className="projects-model-status__actions">
-            <button type="button" className="settings-btn" onClick={props.onConfigureModel}>AI setup</button>
+            <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>AI setup</button>
             <button
               type="button"
-              className="settings-btn settings-btn--primary"
+              className="app-btn app-btn--secondary"
               onClick={props.onRunAnalysis}
               disabled={props.running || !props.analysisConnected || activeProjects.length === 0}
             >

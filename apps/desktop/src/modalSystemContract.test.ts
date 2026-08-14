@@ -23,6 +23,7 @@ const modalSurfaces = [
   ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
   ["New shared project", "./features/team/TeamProjectsView.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
   ["Remove cloud device", "./features/cloud-devices/CloudDeviceManagementPanel.tsx", /className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact"/],
+  ["Delete synced cloud data", "./features/device-sync/DeviceSyncPurgeConfirmation.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Delete selected records", "./features/history/HistoryView.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Extreme nudge consent", "./features/onboarding/OnboardingDesignCodeContent.tsx", /className="dc-onb-confirm modal-shell" data-modal-variant="expressive"/],
   ["Command palette", "./features/command-bar/CommandBar.tsx", /className="cmd-box modal-shell"\s+data-modal-variant="utility"/],
@@ -46,11 +47,18 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every production popup surface under one explicit variant", () => {
-    expect(modalSurfaces).toHaveLength(22);
+    expect(modalSurfaces).toHaveLength(23);
 
     for (const [name, path, pattern] of modalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
     }
+  });
+
+  it("routes device-sync purge confirmation through the in-app modal", () => {
+    const app = read("./App.tsx");
+
+    expect(app).toContain("<DeviceSyncPurgeConfirmation");
+    expect(app).not.toContain("window.confirm(");
   });
 
   it("normalizes shell radius, inset, close placement, and generic header rhythm centrally", () => {

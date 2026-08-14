@@ -69,7 +69,7 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
           <div className="project-discovery-card__actions">
             <button
               type="button"
-              className="settings-btn settings-btn--primary"
+              className="app-btn app-btn--primary"
               onClick={onConnectModel}
               disabled={busy}
             >
@@ -108,7 +108,7 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
                 </div>
                 <button
                   type="button"
-                  className="settings-btn settings-btn--primary project-discovery-card__add"
+                  className="app-btn app-btn--primary app-btn--compact project-discovery-card__add"
                   aria-label={`Add ${candidate.name}`}
                   onClick={() => onAccept(candidate)}
                   disabled={busy}
@@ -123,7 +123,7 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
             <div className="project-discovery-card__actions">
               <button
                 type="button"
-                className="settings-btn"
+                className="app-btn app-btn--secondary"
                 onClick={onAcceptAll}
                 disabled={busy}
               >

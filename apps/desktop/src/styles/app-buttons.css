@@ -1,0 +1,103 @@
+/* App-surface button contract.
+   Settings keeps its own denser `.settings-btn` controls. */
+.app-btn {
+  --btn-h: 2rem;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  padding: 0 var(--space-4);
+  background: transparent;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: var(--type-button-size);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.app-btn > svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  display: block;
+}
+
+.app-btn--secondary {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.app-btn--secondary:hover:not(:disabled) {
+  background: var(--surface-strong);
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
+}
+
+.app-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.app-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* One filled action per action group. */
+.app-btn--primary {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--canvas);
+}
+
+.app-btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.app-btn--danger {
+  background: var(--warn);
+  border-color: var(--warn);
+  color: var(--canvas);
+}
+
+.app-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warn) 88%, var(--text));
+  border-color: color-mix(in srgb, var(--warn) 88%, var(--text));
+  color: var(--canvas);
+}
+
+.app-btn--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-soft);
+}
+
+.app-btn--quiet:hover:not(:disabled) {
+  background: var(--bg-2);
+  border-color: transparent;
+  color: var(--text);
+}
+
+/* Date navigation and dense toolbar controls. */
+.app-btn--compact {
+  --btn-h: 1.75rem;
+  padding-inline: var(--space-3);
+  font-size: 0.75rem;
+}

@@ -137,7 +137,7 @@ export function ProjectsManager({
           onChange={setStatusFilter}
         />
         <span className="projects-toolbar__spacer" />
-        <button type="button" className="settings-btn settings-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
+        <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
           + New project
         </button>
       </div>

@@ -101,7 +101,7 @@ export function CloudTrialStartedNotice({
       {onOpenAiSetup ? (
         <button
           type="button"
-          className="settings-btn settings-btn--primary cloud-trial-started-notice__action"
+          className="app-btn app-btn--primary cloud-trial-started-notice__action"
           onClick={onOpenAiSetup}
         >
           AI setup
