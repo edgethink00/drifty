@@ -185,6 +185,12 @@ import {
   buildDriftAlarmManualCorrectionRuleInput,
 } from "./features/companion/driftAlarmManualCorrection";
 import {
+  advanceDriftAlarmSessionProtection,
+  armDriftAlarmSessionProtection,
+  driftAlarmSessionSuppressionReason,
+  type DriftAlarmSessionProtection,
+} from "./features/companion/driftAlarmSessionProtection";
+import {
   CloudTrialStartedNotice,
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
@@ -1404,6 +1410,7 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  const driftAlarmSessionProtectionRef = useRef<DriftAlarmSessionProtection | null>(null);
   // Catching the cat buys one quiet round per drift stretch. Keyed by source
   // segment rather than alert key, because the alert key embeds `endedAt` and
   // rotates every poll while the same drift continues; keying on it would hand
@@ -1623,6 +1630,7 @@ export default function App() {
     lastEligibleDriftCandidateRef.current = null;
     pendingDriftAlarmTransientRef.current = null;
     lastDriftAlertSegmentRef.current = null;
+    driftAlarmSessionProtectionRef.current = null;
     clearPendingTransientRefresh();
   }
 
@@ -1630,6 +1638,7 @@ export default function App() {
     pendingDriftAlarmGateRef.current = null;
     lastEligibleDriftCandidateRef.current = null;
     pendingDriftAlarmTransientRef.current = null;
+    driftAlarmSessionProtectionRef.current = null;
     clearPendingTransientRefresh();
   }
 
@@ -1985,6 +1994,17 @@ export default function App() {
       });
       return;
     }
+
+    // The correction's durable writes can involve multiple tracker round trips.
+    // Arm the temporary guard first so the next poll cannot close another item
+    // on the same surface while those writes are still in flight. The guard
+    // intentionally preserves the user's intent even if persistence later fails.
+    driftAlarmSessionProtectionRef.current = armDriftAlarmSessionProtection(
+      driftAlarmSessionProtectionRef.current,
+      sourceSegment,
+      Date.now(),
+    );
+    pendingDriftAlarmGateRef.current = null;
 
     await trackerClient.saveClassifications([
       buildDriftAlarmManualCorrectionRecord({
@@ -3387,6 +3407,7 @@ export default function App() {
       publishEvaluationDriftAlarmTrayStatus({ kind: "disabled" }, null);
       pendingDriftAlarmGateRef.current = null;
       lastEligibleDriftCandidateRef.current = null;
+      driftAlarmSessionProtectionRef.current = null;
       clearPendingTransientDriftAlarm();
       return;
     }
@@ -3395,6 +3416,18 @@ export default function App() {
       clearPausedDriftAlarmRuntime();
       return;
     }
+
+    const checkedAtMs = checkedAt.getTime();
+    const previousSessionProtection = driftAlarmSessionProtectionRef.current;
+    driftAlarmSessionProtectionRef.current = advanceDriftAlarmSessionProtection(
+      previousSessionProtection,
+      alarmSnapshot,
+      Number.isFinite(checkedAtMs) ? checkedAtMs : Date.now(),
+    );
+    const justExpiredSessionProtection = previousSessionProtection !== null
+      && driftAlarmSessionProtectionRef.current === null
+      ? previousSessionProtection
+      : null;
 
     const systemTransientActivity = alarmSnapshot?.systemTransientActivity ?? null;
     const driftAlarmSegments = liveSegments.length > 0
@@ -3647,6 +3680,32 @@ export default function App() {
       getWatcherContextLabel(segment, category),
       segment.durationSeconds,
     );
+    const sessionProtectionReason = driftAlarmSessionSuppressionReason(
+      driftAlarmSessionProtectionRef.current,
+      justExpiredSessionProtection,
+      segment,
+    );
+    if (sessionProtectionReason) {
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_suppressed",
+        alertKey,
+        reason: sessionProtectionReason,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        currentSnapshot: summarizeDriftAlarmSnapshot(alarmSnapshot),
+        evaluation,
+      });
+      pendingDriftAlarmGateRef.current = null;
+      lastEligibleDriftCandidateRef.current = null;
+      lastDriftAlertSegmentRef.current = null;
+      petInterceptedSegmentRef.current = null;
+      clearPendingTransientDriftAlarm();
+      publishEvaluationDriftAlarmTrayStatus({
+        kind: "suppressed",
+        reason: sessionProtectionReason,
+        candidateDetail,
+      }, checkedAt);
+      return;
+    }
     const transientDecision = resolveDriftAlarmTransientDefer({
       pending: pendingDriftAlarmTransientRef.current,
       candidate: {

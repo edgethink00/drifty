@@ -1946,7 +1946,9 @@ function classifyAppActivity(segment: ActivitySegment): ActivityClassificationDe
   return unknownDetail("app", appEntry ? `Multipurpose app needs AI classification: ${appEntry.id}` : "No app registry match");
 }
 
-function isBrowserActivity(segment: ActivitySegment): boolean {
+export function isBrowserActivity(
+  segment: Pick<ActivitySegment, "appName" | "bundleId" | "siteDomain" | "browserName">,
+): boolean {
   const app = normalizeText(segment.appName);
   const bundle = normalizeText(segment.bundleId);
   return Boolean(segment.siteDomain || segment.browserName || KNOWN_BROWSER_APP_NAMES.includes(app) || KNOWN_BROWSER_BUNDLE_IDS.includes(bundle));
