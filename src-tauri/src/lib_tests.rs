@@ -70,16 +70,23 @@ fn macos_reopen_policy_reveals_only_without_visible_windows() {
 fn isolated_dev_activation_policy_requires_explicit_launcher_marker() {
     use std::ffi::OsStr;
 
-    assert!(should_use_isolated_dev_activation_policy(Some(OsStr::new(
-        "1"
-    ))));
-    assert!(!should_use_isolated_dev_activation_policy(None));
-    assert!(!should_use_isolated_dev_activation_policy(Some(
-        OsStr::new("0")
-    )));
-    assert!(!should_use_isolated_dev_activation_policy(Some(
-        OsStr::new("true")
-    )));
+    assert!(should_use_isolated_dev_activation_policy(
+        Some(OsStr::new("1")),
+        true,
+    ));
+    assert!(!should_use_isolated_dev_activation_policy(
+        Some(OsStr::new("1")),
+        false,
+    ));
+    assert!(!should_use_isolated_dev_activation_policy(None, true));
+    assert!(!should_use_isolated_dev_activation_policy(
+        Some(OsStr::new("0")),
+        true
+    ));
+    assert!(!should_use_isolated_dev_activation_policy(
+        Some(OsStr::new("true")),
+        true
+    ));
 }
 fn tracker_status(running: bool) -> TrackerStatus {
     let (tracker_mode, message) = if running {

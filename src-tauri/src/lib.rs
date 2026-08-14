@@ -302,8 +302,51 @@ fn should_reveal_main_window_on_reopen(has_visible_windows: bool) -> bool {
 }
 
 #[cfg(target_os = "macos")]
-fn should_use_isolated_dev_activation_policy(value: Option<&std::ffi::OsStr>) -> bool {
-    value == Some(std::ffi::OsStr::new("1"))
+fn should_use_isolated_dev_activation_policy(
+    value: Option<&std::ffi::OsStr>,
+    debug_build: bool,
+) -> bool {
+    debug_build && value == Some(std::ffi::OsStr::new("1"))
+}
+
+/// Prevent isolated dev from becoming active while Tauri creates and runs its
+/// windows. `Accessory` is still activatable, so background QA remains
+/// `Prohibited` for the whole session; plain `tauri:dev` is the attended path.
+#[cfg(target_os = "macos")]
+pub fn configure_isolated_dev_activation_policy() {
+    if !should_use_isolated_dev_activation_policy(
+        std::env::var_os("DRIFTY_ISOLATED_DEV").as_deref(),
+        cfg!(debug_assertions),
+    ) {
+        return;
+    }
+
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
+
+    let mtm = MainThreadMarker::new()
+        .expect("isolated dev activation policy must be configured on the main thread");
+    let app = NSApplication::sharedApplication(mtm);
+    let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn configure_isolated_dev_activation_policy() {}
+
+#[cfg(target_os = "macos")]
+fn reveal_isolated_main_window_without_activation(app: &AppHandle) -> tauri::Result<()> {
+    use objc2_app_kit::NSWindow;
+
+    let window = app
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| tauri::Error::WindowNotFound)?;
+    let raw_window = window.ns_window()?;
+    // SAFETY: Tauri owns this NSWindow and RunEvent::Ready is delivered on
+    // the AppKit event-loop thread. orderFront intentionally does not make it
+    // the key window or activate the application.
+    let ns_window = unsafe { &*(raw_window.cast::<NSWindow>()) };
+    ns_window.orderFront(None);
+    Ok(())
 }
 
 pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
@@ -396,14 +439,8 @@ pub fn run() {
         .manage(TrackerStartupState::default())
         .on_menu_event(|app, event| handle_app_menu_event(app, event.id().as_ref()));
 
-    if let Err(error) = builder
+    let app_result = builder
         .setup(|app| {
-            #[cfg(target_os = "macos")]
-            if should_use_isolated_dev_activation_policy(
-                std::env::var_os("DRIFTY_ISOLATED_DEV").as_deref(),
-            ) {
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-            }
             setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
             setup_companion_pill_window(app)?;
@@ -613,11 +650,45 @@ pub fn run() {
             pet_mode_return_from_outing,
             pet_mode_remember_position,
         ])
-        .run(tauri::generate_context!())
-    {
-        eprintln!("error while running Drifty: {error}");
-        std::process::exit(1);
+        .build(tauri::generate_context!());
+
+    let mut app = match app_result {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("error while building Drifty: {error}");
+            std::process::exit(1);
+        }
+    };
+
+    // Tauri/tao reapplies its own activation policy from runtime state when
+    // applicationDidFinishLaunching fires. Set that state before `run` so it
+    // cannot overwrite the prelaunch AppKit policy with the Regular default.
+    #[cfg(target_os = "macos")]
+    if should_use_isolated_dev_activation_policy(
+        std::env::var_os("DRIFTY_ISOLATED_DEV").as_deref(),
+        cfg!(debug_assertions),
+    ) {
+        app.set_activation_policy(tauri::ActivationPolicy::Prohibited);
     }
+
+    #[cfg(target_os = "macos")]
+    let isolated_dev = should_use_isolated_dev_activation_policy(
+        std::env::var_os("DRIFTY_ISOLATED_DEV").as_deref(),
+        cfg!(debug_assertions),
+    );
+    app.run(move |handle, event| {
+        #[cfg(target_os = "macos")]
+        if isolated_dev && matches!(event, tauri::RunEvent::Ready) {
+            // Launch finished under Prohibited with the main window hidden,
+            // so tao's key-window activation hack has already been skipped.
+            // Keep Prohibited for the whole background-QA session: the
+            // generated .app bundle gives Computer Use a stable identity
+            // without making the process activatable.
+            if let Err(error) = reveal_isolated_main_window_without_activation(handle) {
+                eprintln!("could not reveal isolated Drifty window: {error}");
+            }
+        }
+    });
 }
 
 #[cfg(test)]

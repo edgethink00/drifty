@@ -27,7 +27,15 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -105,11 +113,15 @@ export function buildConfigPatch(baseConf, isolation, port) {
     throw new Error(`tauri.conf.json app.windows must contain at least one window`);
   }
   const isolatedDevCsp = devCsp.replaceAll(`:${BASE_PORT}`, `:${port}`);
-  // Isolated dev is an agent/background QA surface. Launch focus is never
-  // needed: attended input can activate the ready window explicitly.
+  // Isolated dev is a background-only agent QA surface. Attended input uses
+  // plain tauri:dev instead of activating this process.
   const windows = (baseConf.app.windows ?? []).map((window) => ({
     ...window,
     focus: false,
+    // Tao makes every initially visible macOS window key during
+    // applicationDidFinishLaunching. Rust reveals this window later with
+    // NSWindow.orderFront, which does not activate the application.
+    visible: false,
   }));
 
   return {
@@ -134,6 +146,48 @@ export function buildChildEnv(inheritedEnv = process.env) {
   childEnv.DRIFTY_ISOLATED_DEV = "1";
   if (childEnv.SKIP_ONBOARDING === undefined) childEnv.SKIP_ONBOARDING = "1";
   return childEnv;
+}
+
+export function cargoRunnerEnvKey(platform = process.platform, architecture = process.arch) {
+  if (platform !== "darwin") return undefined;
+  if (architecture === "arm64") return "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER";
+  if (architecture === "x64") return "CARGO_TARGET_X86_64_APPLE_DARWIN_RUNNER";
+  throw new Error(`unsupported macOS architecture for isolated runner: ${architecture}`);
+}
+
+export function buildSessionManifest({
+  repoRoot,
+  isolation,
+  port,
+  appBundlePath,
+  launcherPid,
+  childPid,
+  startedAt,
+}) {
+  return {
+    schemaVersion: 1,
+    mode: "isolated-tauri-dev",
+    repoRoot,
+    identifier: isolation.identifier,
+    productName: isolation.productName,
+    port,
+    appBundlePath,
+    launcherPid,
+    childPid,
+    startedAt,
+  };
+}
+
+export function writeSessionManifest(manifestPath, manifest) {
+  mkdirSync(path.dirname(manifestPath), { recursive: true });
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  // writeFileSync's mode only applies when it creates a file. Re-assert it so
+  // a stale marker cannot keep broader permissions from a previous process.
+  chmodSync(manifestPath, 0o600);
+}
+
+export function removeSessionManifest(manifestPath) {
+  if (existsSync(manifestPath)) unlinkSync(manifestPath);
 }
 
 export function removeIsolatedDatabase(isolatedDb) {
@@ -279,9 +333,20 @@ function run() {
   const patchDir = path.join(os.tmpdir(), "drifty-isolated-dev");
   mkdirSync(patchDir, { recursive: true });
   const patchPath = path.join(patchDir, `${slug}.json`);
+  const manifestPath = path.join(patchDir, `${slug}.session.json`);
+  const appBundlePath = path.join(patchDir, `${slug}.app`);
+  rmSync(appBundlePath, { recursive: true, force: true });
   writeFileSync(patchPath, JSON.stringify(patch, null, 2));
 
   const childEnv = buildChildEnv();
+  const runnerKey = cargoRunnerEnvKey();
+  if (runnerKey) {
+    childEnv[runnerKey] = path.join(repoRoot, "scripts", "tauri-dev-macos-runner.sh");
+    childEnv.DRIFTY_ISOLATED_APP_BUNDLE = appBundlePath;
+    childEnv.DRIFTY_ISOLATED_IDENTIFIER = isolation.identifier;
+    childEnv.DRIFTY_ISOLATED_PRODUCT_NAME = isolation.productName;
+    childEnv.DRIFTY_ISOLATED_VERSION = String(baseConf.version ?? "0.0.0");
+  }
   console.log(`[tauri-dev-isolated] worktree:   ${repoRoot}`);
   console.log(`[tauri-dev-isolated] port:       ${port} (derived ${derivedPort})`);
   console.log(`[tauri-dev-isolated] identifier: ${identifier}`);
@@ -290,6 +355,7 @@ function run() {
     `[tauri-dev-isolated] cargo dir:  ${childEnv.CARGO_TARGET_DIR ?? "<worktree default>"}`,
   );
   console.log(`[tauri-dev-isolated] config:     ${patchPath}`);
+  console.log(`[tauri-dev-isolated] GUI app:    ${appBundlePath}`);
   if (process.env.SKIP_ONBOARDING === undefined) {
     console.log(
       `[tauri-dev-isolated] SKIP_ONBOARDING=1 (default for isolated mode; set SKIP_ONBOARDING=0 for onboarding QA)`,
@@ -300,7 +366,9 @@ function run() {
       `[tauri-dev-isolated] DRIFTY_ISOLATED_FOCUS is ignored; isolated windows always open unfocused.`,
     );
   }
-  console.log(`[tauri-dev-isolated] window opens unfocused; activate it only for attended input.`);
+  console.log(
+    `[tauri-dev-isolated] background-only window; use app-scoped Computer Use for input.`,
+  );
   console.log(
     `[tauri-dev-isolated] note: deep links / OAuth callbacks are not testable in dev instances.`,
   );
@@ -311,6 +379,19 @@ function run() {
     ["-c", `. "$HOME/.cargo/env" && npx tauri dev --config "$0" "$@"`, patchPath, ...extraArgs],
     { cwd: repoRoot, stdio: "inherit", env: childEnv },
   );
+  writeSessionManifest(
+    manifestPath,
+    buildSessionManifest({
+      repoRoot,
+      isolation,
+      port,
+      appBundlePath,
+      launcherPid: process.pid,
+      childPid: child.pid ?? null,
+      startedAt: new Date().toISOString(),
+    }),
+  );
+  console.log(`[tauri-dev-isolated] GUI target: ${manifestPath}`);
   const cleanupMarker = process.env.DRIFTY_ISOLATED_CLEANUP_MARKER;
   if (cleanupMarker) {
     const resolvedMarker = path.resolve(cleanupMarker);
@@ -339,10 +420,14 @@ function run() {
     });
   }
   child.on("error", (error) => {
+    removeSessionManifest(manifestPath);
+    rmSync(appBundlePath, { recursive: true, force: true });
     console.error(`[tauri-dev-isolated] failed to start Tauri: ${error.message}`);
     process.exit(1);
   });
   child.on("exit", (code, signal) => {
+    removeSessionManifest(manifestPath);
+    rmSync(appBundlePath, { recursive: true, force: true });
     if (!cleanupTracker()) {
       console.warn(
         `[tauri-dev-isolated] could not confirm isolated tracker shutdown; check ${isolatedDb}`,
