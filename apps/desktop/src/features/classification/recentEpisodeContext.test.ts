@@ -1,0 +1,127 @@
+import { describe, expect, it } from "vitest";
+import type { ActivitySegment } from "@drifty/domain";
+
+import { DEFAULT_AI_PRIVACY_REQUEST_SETTINGS } from "../settings/aiPrivacyRequestSettings";
+import { buildRecentEpisodeContext, episodeContextDigestMaterial } from "./recentEpisodeContext";
+
+function segment(input: Partial<ActivitySegment> & Pick<ActivitySegment, "id" | "startedAt" | "endedAt" | "appName">): ActivitySegment {
+  return {
+    durationSeconds: Math.max(0, (Date.parse(input.endedAt) - Date.parse(input.startedAt)) / 1_000),
+    platform: "macos",
+    source: "nsworkspace",
+    ...input,
+  };
+}
+
+describe("recent Episode context", () => {
+  it("compresses the continuous last 30 minutes into a bounded transition sequence", () => {
+    const segments = [
+      segment({ id: "code", startedAt: "2026-08-14T09:40:00.000Z", endedAt: "2026-08-14T09:50:00.000Z", appName: "Cursor", windowTitle: "Drifty classifier" }),
+      segment({ id: "search", startedAt: "2026-08-14T09:50:10.000Z", endedAt: "2026-08-14T09:55:00.000Z", appName: "Google Chrome", siteDomain: "google.com", siteTitle: "Instagram AI product marketing research" }),
+      segment({ id: "reel-a", startedAt: "2026-08-14T09:55:05.000Z", endedAt: "2026-08-14T09:58:00.000Z", appName: "Google Chrome", siteDomain: "instagram.com", siteTitle: "AI product launch reel" }),
+      segment({ id: "reel-b", startedAt: "2026-08-14T09:58:00.000Z", endedAt: "2026-08-14T10:00:00.000Z", appName: "Google Chrome", siteDomain: "instagram.com", siteTitle: "AI product launch reel" }),
+    ];
+
+    const episode = buildRecentEpisodeContext({
+      current: segments[3],
+      segments,
+      privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+
+    expect(episode.windowMinutes).toBe(30);
+    expect(episode.transitions).toHaveLength(3);
+    expect(episode.transitions[2]).toMatchObject({ domain: "instagram.com", durationSeconds: 295 });
+    expect(episode.currentSurfaceSeconds).toBe(295);
+    expect(episodeContextDigestMaterial(episode)).not.toContain("2026-08-14");
+  });
+
+  it("cuts context at a long gap and excludes another device", () => {
+    const old = segment({ id: "old", startedAt: "2026-08-14T09:30:00.000Z", endedAt: "2026-08-14T09:35:00.000Z", appName: "Cursor" });
+    const remote = segment({ id: "remote", startedAt: "2026-08-14T09:58:00.000Z", endedAt: "2026-08-14T09:59:00.000Z", appName: "Slack", deviceId: "other-mac" });
+    const current = segment({ id: "current", startedAt: "2026-08-14T09:59:00.000Z", endedAt: "2026-08-14T10:00:00.000Z", appName: "Safari", siteDomain: "instagram.com" });
+
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [old, remote, current],
+      privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+
+    expect(episode.transitions).toEqual([{ appName: "Safari", domain: "instagram.com", durationSeconds: 60 }]);
+  });
+
+  it("honors title privacy settings in every historical transition", () => {
+    const current = segment({
+      id: "current",
+      startedAt: "2026-08-14T09:59:00.000Z",
+      endedAt: "2026-08-14T10:00:00.000Z",
+      appName: "Safari",
+      siteDomain: "instagram.com",
+      siteTitle: "private launch title",
+      windowTitle: "private window title",
+    });
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [current],
+      privacySettings: {
+        ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+        optional: { ...DEFAULT_AI_PRIVACY_REQUEST_SETTINGS.optional, contentContext: false, windowTitle: false },
+      },
+    });
+
+    expect(JSON.stringify(episode)).not.toContain("private");
+  });
+
+  it("uses consented window titles for native communication context when no content title exists", () => {
+    const message = segment({
+      id: "message",
+      startedAt: "2026-08-14T09:58:00.000Z",
+      endedAt: "2026-08-14T09:59:00.000Z",
+      appName: "Messages",
+      windowTitle: "Jordan",
+    });
+    const current = segment({
+      id: "current",
+      startedAt: "2026-08-14T09:59:00.000Z",
+      endedAt: "2026-08-14T10:00:00.000Z",
+      appName: "Safari",
+      siteDomain: "instagram.com",
+      siteTitle: "Campaign reel",
+    });
+
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [message, current],
+      privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+
+    expect(episode.transitions[0]).toMatchObject({ appName: "Messages", title: "Jordan" });
+  });
+
+  it("clips observed durations to the exact past window and current endpoint", () => {
+    const spanning = segment({
+      id: "spanning",
+      startedAt: "2026-08-14T09:00:00.000Z",
+      endedAt: "2026-08-14T09:45:00.000Z",
+      appName: "Cursor",
+    });
+    const current = segment({
+      id: "current",
+      startedAt: "2026-08-14T09:45:00.000Z",
+      endedAt: "2026-08-14T10:00:00.000Z",
+      appName: "Safari",
+      siteDomain: "instagram.com",
+    });
+
+    const episode = buildRecentEpisodeContext({
+      current,
+      segments: [spanning, current],
+      privacySettings: DEFAULT_AI_PRIVACY_REQUEST_SETTINGS,
+    });
+
+    expect(episode.observedMinutes).toBe(30);
+    expect(episode.transitions).toEqual([
+      { appName: "Cursor", durationSeconds: 900 },
+      { appName: "Safari", domain: "instagram.com", durationSeconds: 900 },
+    ]);
+  });
+});

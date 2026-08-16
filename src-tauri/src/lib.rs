@@ -3,7 +3,9 @@ mod app_menu;
 mod auth_session_store;
 mod cloud_device_store;
 mod commands;
+mod correction_evidence_store;
 mod donut_icon;
+mod living_soul_store;
 mod observability;
 mod openrouter_key_store;
 mod shell_action;
@@ -20,24 +22,26 @@ use std::{
 use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_menu};
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
-    ai_classification_openai_chat, cloud_sync_http_post, developer_check_pre_release_update,
-    developer_install_pre_release_update, developer_tools_get_status, developer_tools_install_cli,
-    developer_tools_install_codex_skill, developer_tools_install_skill,
-    developer_tools_uninstall_cli, developer_tools_uninstall_codex_skill,
-    developer_tools_uninstall_skill, drift_alarm_action, drift_alarm_current, drift_alarm_dismiss,
-    drift_alarm_hide, drift_alarm_show, extreme_nudge_apply, focus_target_activate_browser_tab,
-    focus_target_browser_tab_exists, focus_target_open_app, managed_ai_catalog, managed_ai_delete,
-    managed_ai_install, managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
-    pet_mode_align_contact, pet_mode_begin_drag, pet_mode_cancel_motion, pet_mode_cursor_inside,
-    pet_mode_exit_screen, pet_mode_input_bounds, pet_mode_intervene, pet_mode_lab_apply_target,
-    pet_mode_lab_place_center, pet_mode_move_to_target, pet_mode_preview_action,
-    pet_mode_preview_intervention, pet_mode_remember_position, pet_mode_report_contact,
-    pet_mode_report_drag_error, pet_mode_report_pointer, pet_mode_return_from_outing,
-    pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
-    pet_mode_set_presence, pet_mode_set_size, pet_mode_update, pet_mode_update_hit_region,
-    sentry_capture_native_smoke, setup_companion_pill_window, setup_drift_alarm_window,
-    setup_pet_mode_window, setup_watcher_window, share_card_save_png,
-    startup_get_open_at_login_status, startup_set_open_at_login_enabled, system_open_settings_pane,
+    ai_classification_openai_chat, cloud_sync_http_post, correction_evidence_append,
+    developer_check_pre_release_update, developer_install_pre_release_update,
+    developer_tools_get_status, developer_tools_install_cli, developer_tools_install_codex_skill,
+    developer_tools_install_skill, developer_tools_uninstall_cli,
+    developer_tools_uninstall_codex_skill, developer_tools_uninstall_skill, drift_alarm_action,
+    drift_alarm_current, drift_alarm_dismiss, drift_alarm_hide, drift_alarm_show,
+    extreme_nudge_apply, focus_target_activate_browser_tab, focus_target_browser_tab_exists,
+    focus_target_open_app, living_soul_read, living_soul_write, managed_ai_catalog,
+    managed_ai_delete, managed_ai_install, managed_ai_start, managed_ai_status,
+    managed_ai_stop_runtime_for_app_exit, pet_mode_align_contact, pet_mode_begin_drag,
+    pet_mode_cancel_motion, pet_mode_cursor_inside, pet_mode_exit_screen, pet_mode_input_bounds,
+    pet_mode_intervene, pet_mode_lab_apply_target, pet_mode_lab_place_center,
+    pet_mode_move_to_target, pet_mode_preview_action, pet_mode_preview_intervention,
+    pet_mode_remember_position, pet_mode_report_contact, pet_mode_report_drag_error,
+    pet_mode_report_pointer, pet_mode_return_from_outing, pet_mode_return_home, pet_mode_roam,
+    pet_mode_set_enabled, pet_mode_set_interactive, pet_mode_set_presence, pet_mode_set_size,
+    pet_mode_update, pet_mode_update_hit_region, sentry_capture_native_smoke,
+    setup_companion_pill_window, setup_drift_alarm_window, setup_pet_mode_window,
+    setup_watcher_window, share_card_save_png, startup_get_open_at_login_status,
+    startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_apply_synced_deletions,
     tracker_apply_synced_segments, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_delete_project,
@@ -624,6 +628,9 @@ pub fn run() {
             drift_alarm_dismiss,
             drift_alarm_action,
             extreme_nudge_apply,
+            correction_evidence_append,
+            living_soul_read,
+            living_soul_write,
             pet_mode_set_enabled,
             pet_mode_set_size,
             pet_mode_update,

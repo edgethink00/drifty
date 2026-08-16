@@ -447,7 +447,7 @@ describe("runAiClassification cloud contract", () => {
     expect(AI_CLASSIFICATION_FOCUSED_IDLE_MS).toBe(20 * 60 * 1000);
   });
 
-  it("sends optional onboarding work profile context to classify-activity", async () => {
+  it("sends Soul plus the legacy profile for staggered Edge rollout compatibility", async () => {
     const segment = createUnknownSegment(1);
     writeOnboardingState("user-1", {
       jobType: "Coding, Writing",
@@ -463,6 +463,12 @@ describe("runAiClassification cloud contract", () => {
 
       const body = invoke.mock.calls[0]?.[1]?.body as Record<string, unknown>;
       expect(body.workProfile).toBe("Coding, Writing in AI");
+      expect(body.memoryContext).toMatchObject({
+        soul: {
+          revision: 1,
+          declared: { workActivities: ["Coding", "Writing"], workDomain: "AI" },
+        },
+      });
     } finally {
       cleanupServiceMocks();
     }
@@ -896,6 +902,41 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("keeps a worst-case 20-item contextual cloud request below the Edge body limit", async () => {
+    const long = "가".repeat(500);
+    const segments = Array.from({ length: 20 }, (_, index) => createUnknownSegment(index, {
+      appName: `App ${index} ${long}`,
+      siteDomain: `surface-${index}.${"d".repeat(180)}`,
+      siteUrl: `https://example.com/${index}/${"p".repeat(2_000)}`,
+      siteTitle: `Unique ${index} ${long}`,
+      windowTitle: `Window ${index} ${long}`,
+      youtubeChannelName: `Channel ${index} ${long}`,
+      youtubeCategory: `Category ${index} ${long}`,
+    }));
+    writeAiPrivacyRequestSettings({
+      siteUrl: true,
+      windowTitle: true,
+      contentContext: true,
+      workProfile: true,
+    });
+
+    try {
+      const { runAiClassification, invoke } = await importServiceWithSegments(segments, {
+        session: { access_token: "token", user: { id: "user-1" } },
+        timeline: segments,
+      });
+      await runAiClassification({ day: "2026-05-22" });
+
+      const bodies = invoke.mock.calls.map((call) => call[1]?.body as { items: Array<{ siteUrl?: string }> });
+      expect(bodies.length).toBeGreaterThan(1);
+      expect(bodies.reduce((total, body) => total + body.items.length, 0)).toBe(20);
+      expect(bodies.every((body) => new TextEncoder().encode(JSON.stringify(body)).byteLength <= 32_768)).toBe(true);
+      expect(bodies.flatMap((body) => body.items).every((item) => (item.siteUrl?.length ?? 0) <= 300)).toBe(true);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("includes allowed YouTube channel names and categories in cloud requests and cache fingerprints", async () => {
     const firstSegment = createUnknownSegment(1, {
       siteDomain: "example.com",
@@ -1236,7 +1277,7 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("includes sanitized Other work profile values in the local prompt", async () => {
+  it("includes sanitized Other work profile values in the local Living Soul prompt", async () => {
     const segment = createUnknownSegment(1);
     writeOnboardingState("local", {
       workType: "Other",
@@ -1252,7 +1293,7 @@ describe("runAiClassification cloud contract", () => {
       });
 
       const request = nativeInvoke.mock.calls[0]?.[1]?.request as { messages: Array<{ content: string }> };
-      expect(request.messages[0].content).toContain("User work profile: Other: AI product strategy in Other: developer tools.");
+      expect(request.messages[0].content).toContain('<living_soul>{"revision":1,"declared":{"workActivities":["AI product strategy"],"workDomain":"developer tools"');
       expect(request.messages[0].content).toContain("Do not include raw titles, domains, or work profile details in the reason.");
     } finally {
       cleanupServiceMocks();
@@ -1384,7 +1425,7 @@ describe("runAiClassification cloud contract", () => {
         segmentId: "segment-1",
         category: "shopping",
         productivity: "neutral",
-        promptVersion: "v8.2-intent-shopping-guard",
+        promptVersion: "v8.2-soul-episode-v2",
       })]);
     } finally {
       cleanupServiceMocks();
@@ -1806,7 +1847,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.2-intent-shopping-guard" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.2-soul-episode-v2" })]);
     } finally {
       cleanupServiceMocks();
     }
@@ -2561,6 +2602,17 @@ describe("classification level clustering", () => {
     // a+b merge (same domain+title); c and d separate -> 3 representatives
     expect(representatives.map((r) => r.segmentId).sort()).toEqual(["a", "c", "d"]);
     expect(membersByRepSegmentId?.get("a")?.map((m) => m.segmentId)).toEqual(["a", "b"]);
+  });
+
+  it("does not fan one contextual result across different recent Episodes", () => {
+    const payloads = [
+      payload("a", "instagram.com", "3 hooks", { contextFingerprint: "work-sequence" }),
+      payload("b", "instagram.com", "3 hooks", { contextFingerprint: "leisure-sequence" }),
+    ];
+
+    const clustered = clusterPayloadsByLevel(payloads, "normal");
+
+    expect(clustered.representatives).toHaveLength(2);
   });
 
   it("coarse clusters by domain only", () => {

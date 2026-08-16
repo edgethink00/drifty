@@ -1,6 +1,7 @@
 import type { ActivitySegment, DriftAlarmTrayStatus } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
+import type { ContextualGuardAuditEvent } from "../classification/contextualGuardAuditLog";
 import type { AiDebugLogInput, EnhancedContextDebugEvent } from "./debugLog";
 import { buildDebugLogPayload } from "./debugLog";
 
@@ -91,6 +92,24 @@ const driftAlarmDebugEvent: DriftAlarmDebugEvent = {
   trayResult: null,
   evaluation: null,
   candidateProbe: null,
+};
+
+const contextualGuardAuditEvent: ContextualGuardAuditEvent = {
+  schemaVersion: 1,
+  recordedAt: "2026-06-13T15:05:00.000Z",
+  route: "cloud",
+  outcome: "applied",
+  reason: "applied",
+  category: "social_media",
+  rawProductivity: "drift",
+  finalProductivity: "neutral",
+  rawConfidence: 0.91,
+  finalConfidence: 0.5,
+  evidenceCount: 5,
+  matchConfidence: "medium",
+  soulRevision: 4,
+  currentDurationBucket: "1_to_3m",
+  promptVersion: "v8.2-soul-episode-v2",
 };
 
 describe("buildDebugLogPayload", () => {
@@ -549,6 +568,7 @@ describe("buildDebugLogPayload", () => {
       currentSnapshot: null,
       driftAlarm,
       driftAlarmDebugEvents: [driftAlarmDebugEvent],
+      contextualGuardAuditEvents: [contextualGuardAuditEvent],
       segments: [],
       historySegments: [],
       leaderboardSegments: [],
@@ -557,6 +577,7 @@ describe("buildDebugLogPayload", () => {
     });
 
     expect(payload.driftAlarm.recentDebugEvents).toEqual([driftAlarmDebugEvent]);
+    expect(payload.contextualGuard.recentEvents).toEqual([contextualGuardAuditEvent]);
   });
 
   it("exports enhanced context diagnostics without raw context values", () => {

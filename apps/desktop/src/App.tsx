@@ -109,6 +109,7 @@ import { NO_PROJECT_COLOR, NO_PROJECT_LABEL as FLOW_NO_PROJECT_LABEL, projectCol
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
+import { readContextualGuardAuditEvents } from "./features/classification/contextualGuardAuditLog";
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
@@ -307,6 +308,9 @@ import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
 import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
 import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, type ClassificationCorrectionDraft, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
+import { captureCorrectionEvidence } from "./features/classification/correctionEvidence";
+import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
+import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findFreshCompactHistoryLoad, pruneStaleCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
 import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
@@ -352,6 +356,14 @@ const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 const PROJECT_PASS_SCHEDULE_INTERVAL_MS = 60 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
+
+function currentSoulLearningProvider(
+  localOptions: LocalAiClassificationOptions | null,
+  canUseCloud: boolean,
+): SoulLearningProvider {
+  if (localOptions) return { kind: "local", provider: localOptions.localProvider };
+  return canUseCloud ? { kind: "cloud" } : { kind: "none" };
+}
 function isLastCaptureJustNow(value: string, nowMs = Date.now()): boolean {
   const capturedAtMs = new Date(value).getTime();
   if (Number.isNaN(capturedAtMs)) return false;
@@ -402,6 +414,9 @@ function managedLocalAiTopbarLabel(status: ManagedLocalAiStatus | null): string 
 
 export default function App() {
   const localization = useLocalizationController();
+  useEffect(() => {
+    readContextualGuardAuditEvents();
+  }, []);
   const contentRef = useRef<HTMLElement>(null);
   const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
   const autoUpdateLaunchCheckScheduledRef = useRef(false);
@@ -2021,6 +2036,31 @@ export default function App() {
     });
     if (ruleInput) await saveClassificationRule(ruleInput);
 
+    const correctedRecord = buildDriftAlarmManualCorrectionRecord({
+      classifiedAt: new Date().toISOString(),
+      classificationOptions: selectedDayClassificationOptions,
+      segment: sourceSegment,
+    });
+    const feedback = {
+      kind: "not_drift" as const,
+      segment: sourceSegment,
+      correctedCategory: correctedRecord.category,
+      correctedProductivity: "neutral" as const,
+      occurredAt: correctedRecord.classifiedAt ?? new Date().toISOString(),
+    };
+    await captureCorrectionEvidence({
+      feedback,
+      correctionScope: "alarm",
+      contextSegments: segmentsRef.current,
+      classificationOptions: selectedDayClassificationOptions,
+      predictionBeforeFeedback: event?.decisionClassification,
+    }).catch((error) => console.warn("Unable to capture Not a drift evidence.", error));
+    void learnLivingSoulFromFeedback({
+      feedback,
+      contextSegments: segmentsRef.current,
+      provider: currentSoulLearningProvider(localAiClassificationOptions, canUseCloudAiClassification),
+    }).catch((error) => console.warn("Unable to learn from Not a drift feedback.", error));
+
     driftAlarmSourceSegmentsRef.current.delete(sourceSegmentId);
     await refresh(selectedDayRef.current);
   }
@@ -2342,10 +2382,12 @@ export default function App() {
 
     setClassificationCorrectionSaving(true);
     try {
+      let feedbackSegment: ActivitySegment | null = null;
       if (draft.scope === "detail" && draft.rowId) {
         const row = classificationActivityRows.find((item) => item.id === draft.rowId) ?? null;
         const classifiedAt = new Date().toISOString();
         if (row && row.segments.length > 0) {
+          feedbackSegment = row.segments[row.segments.length - 1] ?? null;
           await trackerClient.saveClassifications(row.segments.map((segment) => buildClassificationCorrectionRecord({
             category: draft.category,
             classifiedAt,
@@ -2353,10 +2395,36 @@ export default function App() {
             segment,
           })));
         }
+      } else {
+        feedbackSegment = [...segmentsRef.current].reverse().find((segment) => (
+          draft.targetKind === "site"
+            ? segment.siteDomain?.trim().toLocaleLowerCase() === draft.targetValue.trim().toLocaleLowerCase()
+            : (segment.bundleId?.trim() || segment.appName.trim()).toLocaleLowerCase() === draft.targetValue.trim().toLocaleLowerCase()
+        )) ?? null;
       }
 
       const saved = await saveClassificationRule(ruleInput);
       if (saved) {
+        if (feedbackSegment) {
+          const feedback = {
+            kind: "manual_correction" as const,
+            segment: feedbackSegment,
+            correctedCategory: draft.category,
+            correctedProductivity: draft.productivity,
+            occurredAt: new Date().toISOString(),
+          };
+          await captureCorrectionEvidence({
+            feedback,
+            correctionScope: draft.scope,
+            contextSegments: segmentsRef.current,
+            classificationOptions,
+          }).catch((error) => console.warn("Unable to capture classification correction evidence.", error));
+          void learnLivingSoulFromFeedback({
+            feedback,
+            contextSegments: segmentsRef.current,
+            provider: currentSoulLearningProvider(localAiClassificationOptions, canUseCloudAiClassification),
+          }).catch((error) => console.warn("Unable to learn from classification correction.", error));
+        }
         setClassificationCorrectionDraft(null);
         await refresh(selectedDayRef.current);
       }
@@ -3536,8 +3604,8 @@ export default function App() {
             evaluation,
           });
           const liveAiOptions = localAiClassificationOptions
-            ? { ...localAiClassificationOptions, persistLiveResult: true }
-            : { persistLiveResult: true };
+            ? { ...localAiClassificationOptions, persistLiveResult: true, contextSegments: driftAlarmSegments }
+            : { persistLiveResult: true, contextSegments: driftAlarmSegments };
           const liveAiProviderKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
           const refreshAfterLiveAiClassification = async () => {
             const alarmDay = currentDriftAlarmDay();
@@ -3677,6 +3745,7 @@ export default function App() {
     }
 
     const { alertKey, category, segment } = latestDrift;
+    let confirmedDecisionClassification = latestDrift.classification;
     const candidateDetail = buildDriftAlarmTrayCandidateDetail(
       getWatcherContextLabel(segment, category),
       segment.durationSeconds,
@@ -3789,6 +3858,7 @@ export default function App() {
         sourceIconSrc,
         copySettings: driftAlarmCopy,
         sourceSegmentId,
+        decisionClassification: confirmedDecisionClassification,
         petIntercepted,
       });
     };
@@ -3972,6 +4042,7 @@ export default function App() {
         classificationOptions: driftAlarmClassificationOptions,
         minimumDurationSeconds: driftAlertDelaySeconds,
       });
+      if (freshCandidate) confirmedDecisionClassification = freshCandidate.classification;
       const result = freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
       recordDriftAlarmDebugEvent({
         kind: "fresh_candidate_result",
@@ -4020,6 +4091,7 @@ export default function App() {
           sourceIconSrc: breakReturnIconSrc,
           copySettings: driftAlarmCopy,
           sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
+          decisionClassification: confirmedDecisionClassification,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,
           pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
           nextFocusLabel: focusTargets[0]?.label ?? "your focus",
@@ -6108,6 +6180,7 @@ export default function App() {
       currentSnapshot: snapshotForDebug,
       driftAlarm: driftAlarmTrayStatus,
       driftAlarmDebugEvents: readRecentDriftAlarmDebugEvents(),
+      contextualGuardAuditEvents: readContextualGuardAuditEvents(),
       segments,
       historySegments,
       leaderboardSegments,

@@ -4,6 +4,7 @@ import type { AiConnectionStatus, LocalAiProviderStatus } from "../ai-connection
 import type { BillingEntitlement } from "../billing/billingService";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "../classification/aiClassificationService";
 import type { ContentContextDropReason } from "../classification/contentContextEgressPolicy";
+import type { ContextualGuardAuditEvent } from "../classification/contextualGuardAuditLog";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS } from "./settingsStorage";
 import type {
@@ -232,6 +233,7 @@ type BuildDebugLogPayloadInput = {
   readonly currentSnapshot: CurrentActivitySnapshot | null;
   readonly driftAlarm: DriftAlarmTrayStatus;
   readonly driftAlarmDebugEvents: readonly DriftAlarmDebugEvent[];
+  readonly contextualGuardAuditEvents?: readonly ContextualGuardAuditEvent[];
   readonly segments: readonly ActivitySegment[];
   readonly historySegments: readonly ActivitySegment[];
   readonly leaderboardSegments: readonly ActivitySegment[];
@@ -353,6 +355,10 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
     driftAlarm: {
       ...input.driftAlarm,
       recentDebugEvents: input.driftAlarmDebugEvents,
+    },
+    contextualGuard: {
+      retentionDays: 14,
+      recentEvents: input.contextualGuardAuditEvents ?? [],
     },
     enhancedContext,
     ai: buildAiDebugSummary(input.ai),

@@ -133,6 +133,14 @@ describe("drift alarm debug log", () => {
     const candidate: DriftAlarmCandidate = {
       alertKey: "segment-1:2026-06-13T15:05:00.000Z",
       category: "entertainment",
+      classification: {
+        category: "entertainment",
+        productivity: "drift",
+        confidence: 0.95,
+        source: "llm",
+        surface: "browser",
+        reason: "Sensitive AI reason",
+      },
       sourceSegmentId: "raw-segment-1",
       segment: segment({
         siteDomain: "youtube.com",

@@ -1,4 +1,4 @@
-import { applyLiveShoppingEvidenceGuard, classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
+import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
@@ -6,6 +6,7 @@ import type {
   ActivitySegment,
   ClassificationMetrics,
   LiveActivityIntent,
+  LiveClassificationMemoryContext,
   LiveClassificationPromptItem,
   UnclassifiedSegmentsQuery,
   ProductivityLabel,
@@ -32,6 +33,12 @@ import { resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } f
 import { recordEnhancedContextDebugEvent, type EnhancedContextDebugReason, type EnhancedContextDebugStatus } from "../settings/debugLog";
 import { withClassificationActivity } from "./classificationActivity";
 import {
+  buildClassificationMemoryContext,
+  classificationMemoryFingerprintMaterial,
+  memoryContextForItems,
+} from "./classificationMemoryContext";
+import { recordContextualGuardAuditEvent } from "./contextualGuardAuditLog";
+import {
   openRouterConnectionFailureMessage,
   openRouterEmbeddedIssueKind,
   openRouterIssueKindFromResponse,
@@ -39,6 +46,7 @@ import {
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
+const CLOUD_CLASSIFICATION_BODY_TARGET_BYTES = 28_000;
 export const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD = 5;
 export const AI_CLASSIFICATION_FOCUSED_IDLE_MS = 20 * 60 * 1000;
@@ -46,7 +54,7 @@ const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
-const AI_CLASSIFICATION_PROMPT_VERSION = "v8.2-intent-shopping-guard";
+export const AI_CLASSIFICATION_PROMPT_VERSION = "v8.2-soul-episode-v2";
 const ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD = 0.55;
 const MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS = 512;
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
@@ -94,6 +102,7 @@ type EdgeClassification = {
   confidence?: unknown;
   reason?: unknown;
   model?: unknown;
+  contextualGuardAudit?: unknown;
 };
 
 type EdgeClassificationResponse = {
@@ -114,6 +123,7 @@ export type AiClassificationRunOptions = {
   localProvider?: LocalAiProviderConfig | null;
   persistLiveResult?: boolean;
   level?: ClassificationLevel;
+  contextSegments?: readonly ActivitySegment[];
 };
 
 type ClassificationCluster = {
@@ -125,10 +135,11 @@ type ClassificationCluster = {
 function classificationSignatureKey(payload: MinimizedActivityPayload, level: ClassificationLevel): string {
   const app = (payload.bundleId ?? payload.appName).toLowerCase().trim();
   const domain = (payload.siteDomain ?? hostnameFromUrl(payload.siteUrl) ?? "").toLowerCase().trim();
-  if (level === "coarse") return `${app}|${domain}`;
+  const context = payload.contextFingerprint ?? "";
+  if (level === "coarse") return `${app}|${domain}|${context}`;
   const rawTitle = (payload.siteTitle ?? payload.youtubeTitle ?? payload.windowTitle ?? "").toLowerCase().replace(/\s+/g, " ").trim();
   const titleStem = rawTitle.split(" ").slice(0, 3).join(" ");
-  return `${app}|${domain}|${titleStem}`;
+  return `${app}|${domain}|${titleStem}|${context}`;
 }
 
 export function clusterPayloadsByLevel(misses: MinimizedActivityPayload[], level: ClassificationLevel): ClassificationCluster {
@@ -325,8 +336,19 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     limit: selectedBatchSize,
   })).slice(0, selectedBatchSize);
   const privacySettings = readAiPrivacyRequestSettings();
-  const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
-  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile, privacySettings)));
+  const promptIdentity = privacySettings.optional.workProfile
+    ? await readClassificationPromptIdentity(Boolean(options.localProvider))
+    : { ownerId: null, workProfile: null };
+  const workProfile = promptIdentity.workProfile;
+  const memoryContext = await buildClassificationMemoryContext({
+    items: segments,
+    privacySettings,
+    useLocalFallback: Boolean(options.localProvider),
+    soulOwnerId: promptIdentity.ownerId,
+    contextSegments: options.contextSegments,
+  });
+  const promptWorkProfile = memoryContext.soul ? null : workProfile;
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext)));
 
   if (payload.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
@@ -378,7 +400,7 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
   const { representatives, membersByRepSegmentId } = clusterPayloadsByLevel(reusableResult.misses, options.level ?? "fine");
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, representatives, membersByRepSegmentId, options.localProvider, workProfile, adaptiveContextBySegmentId(segments));
+    return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, representatives, membersByRepSegmentId, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, representatives.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments));
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -392,19 +414,10 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     return partialSummary ?? { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
   }
 
-  const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-    body: await withCloudDevicePayload({
-      ...cloudApiClientMetadata,
-      ...(workProfile ? { workProfile } : {}),
-      items: toEdgeClassificationRequestItems(representatives),
-    }),
-  });
-
-  if (error) {
-    throw new Error(await edgeFunctionErrorMessage(error));
-  }
-
-  const aiRecords = expandClusterRecords(toClassificationRecords(data, representatives), membersByRepSegmentId);
+  const aiRecords = expandClusterRecords(
+    await classifyCloudPayloadBatches(cloudClient, representatives, workProfile, memoryContext),
+    membersByRepSegmentId,
+  );
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
@@ -442,8 +455,19 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
   const selectedBatchSize = EDGE_MAX_BATCH_SIZE;
   const segments = (await trackerClient.getUnclassifiedSegments({ ...query, limit: selectedBatchSize })).slice(0, selectedBatchSize);
   const privacySettings = readAiPrivacyRequestSettings();
-  const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
-  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, workProfile, privacySettings)));
+  const promptIdentity = privacySettings.optional.workProfile
+    ? await readClassificationPromptIdentity(Boolean(options.localProvider))
+    : { ownerId: null, workProfile: null };
+  const workProfile = promptIdentity.workProfile;
+  const memoryContext = await buildClassificationMemoryContext({
+    items: segments,
+    privacySettings,
+    useLocalFallback: Boolean(options.localProvider),
+    soulOwnerId: promptIdentity.ownerId,
+    contextSegments: options.contextSegments,
+  });
+  const promptWorkProfile = memoryContext.soul ? null : workProfile;
+  const payload = await Promise.all(segments.map((segment) => toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext)));
   const deterministicRecords = toDeterministicClassificationRecords(segments, payload);
   const deterministicSegmentIds = new Set(deterministicRecords.map((record) => record.segmentId));
   const deterministicSaveResult = deterministicRecords.length > 0
@@ -498,7 +522,7 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
   }
 
   if (options.localProvider) {
-    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, null, options.localProvider, workProfile, adaptiveContextBySegmentId(segments));
+    return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, null, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, reusableResult.misses.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments));
   }
 
   const cloudAvailability = await requireCloudAiClassification();
@@ -512,19 +536,12 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     return partialSummary ?? { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Supabase is not configured." };
   }
 
-  const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-    body: await withCloudDevicePayload({
-      ...cloudApiClientMetadata,
-      ...(workProfile ? { workProfile } : {}),
-      items: toEdgeClassificationRequestItems(reusableResult.misses),
-    }),
-  });
-
-  if (error) {
-    throw new Error(await edgeFunctionErrorMessage(error));
-  }
-
-  const aiRecords = toClassificationRecords(data, reusableResult.misses);
+  const aiRecords = await classifyCloudPayloadBatches(
+    cloudClient,
+    reusableResult.misses,
+    workProfile,
+    memoryContext,
+  );
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
     return {
@@ -554,8 +571,19 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
 export async function classifyLiveActivityWithAi(segment: ActivitySegment, options: AiClassificationRunOptions = {}): Promise<LiveAiClassificationResult> {
   try {
     const privacySettings = readAiPrivacyRequestSettings();
-    const workProfile = privacySettings.optional.workProfile ? await readClassificationWorkProfile(Boolean(options.localProvider)) : null;
-    const payload = await toMinimizedPayload(segment, workProfile, privacySettings);
+    const promptIdentity = privacySettings.optional.workProfile
+      ? await readClassificationPromptIdentity(Boolean(options.localProvider))
+      : { ownerId: null, workProfile: null };
+    const workProfile = promptIdentity.workProfile;
+    const memoryContext = await buildClassificationMemoryContext({
+      items: [segment],
+      privacySettings,
+      useLocalFallback: Boolean(options.localProvider),
+      soulOwnerId: promptIdentity.ownerId,
+      contextSegments: options.contextSegments,
+    });
+    const promptWorkProfile = memoryContext.soul ? null : workProfile;
+    const payload = await toMinimizedPayload(segment, promptWorkProfile, privacySettings, memoryContext);
     const systemRecord = toSystemSkippedClassificationRecord(segment, payload, new Date().toISOString());
     if (systemRecord) {
       await saveLiveClassificationIfRequested(systemRecord, options.persistLiveResult);
@@ -570,13 +598,13 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
 
     if (options.localProvider) {
       return await saveLiveResultIfRequested(
-        await classifyLivePayloadWithLocalAi(payload, options.localProvider, workProfile),
+        await classifyLivePayloadWithLocalAi(payload, options.localProvider, promptWorkProfile, memoryContext),
         options,
       );
     }
 
     return await saveLiveResultIfRequested(
-      await classifyLivePayloadWithCloudAi(payload, workProfile),
+      await classifyLivePayloadWithCloudAi(payload, workProfile, memoryContext),
       options,
     );
   } catch (error) {
@@ -713,7 +741,12 @@ export async function getAiClassificationUsageSummary(day: string): Promise<AiCl
   };
 }
 
-async function toMinimizedPayload(segment: ActivitySegment, workProfile: string | null, privacySettings: AiPrivacyRequestSettings): Promise<MinimizedActivityPayload> {
+export async function toMinimizedPayload(
+  segment: ActivitySegment,
+  workProfile: string | null,
+  privacySettings: AiPrivacyRequestSettings,
+  memoryContext: LiveClassificationMemoryContext,
+): Promise<MinimizedActivityPayload> {
   const siteUrl = privacySettings.optional.siteUrl ? sanitizeProviderSiteUrl(segment.siteUrl) : null;
   const siteDomain = cleanText(segment.siteDomain) ?? hostnameFromUrl(segment.siteUrl);
   const contentContextEnabled = privacySettings.optional.contentContext;
@@ -741,11 +774,14 @@ async function toMinimizedPayload(segment: ActivitySegment, workProfile: string 
     ...(youtubeCategory ? { youtubeCategory } : {}),
     ...(redditCommunity ? { redditCommunity } : {}),
     ...(workProfile ? { workProfile } : {}),
+    memoryContext: classificationMemoryFingerprintMaterial(memoryContext, segment.id),
   };
+  const contextFingerprint = await fingerprint(JSON.stringify(providerInput.memoryContext));
 
   return {
     segmentId: segment.id,
     inputFingerprint: await fingerprint(JSON.stringify(providerInput)),
+    contextFingerprint,
     startedAt: segment.startedAt,
     endedAt: segment.endedAt,
     durationSeconds: segment.durationSeconds,
@@ -772,6 +808,26 @@ function adaptiveContextBySegmentId(segments: readonly ActivitySegment[]): Reado
   return contexts;
 }
 
+export function toLiveClassificationPromptItem(
+  item: MinimizedActivityPayload,
+  id = item.segmentId,
+): LiveClassificationPromptItem {
+  const title = item.siteTitle ?? item.youtubeTitle;
+  return {
+    id,
+    appName: item.appName,
+    domain: item.siteDomain ?? undefined,
+    urlHost: item.siteDomain ?? undefined,
+    ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
+    ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
+    ...(title ? { title } : {}),
+    ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
+    ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
+    ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
+    durationSeconds: item.durationSeconds,
+  };
+}
+
 function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): Array<{
   id: string;
   inputFingerprint: string;
@@ -786,23 +842,14 @@ function toEdgeClassificationRequestItems(payload: MinimizedActivityPayload[]): 
   youtubeCategory?: string;
   durationSeconds: number;
 }> {
-  return payload.map((item) => {
-    const title = item.siteTitle ?? item.youtubeTitle;
-    return {
-      id: item.segmentId,
-      inputFingerprint: item.inputFingerprint,
-      appName: item.appName,
-      domain: item.siteDomain,
-      urlHost: item.siteDomain,
-      ...(item.siteUrl ? { siteUrl: item.siteUrl } : {}),
-      ...(item.windowTitle ? { windowTitle: item.windowTitle } : {}),
-      ...(title ? { title } : {}),
-      ...(item.redditCommunity ? { redditCommunity: item.redditCommunity } : {}),
-      ...(item.youtubeChannelName ? { youtubeChannelName: item.youtubeChannelName } : {}),
-      ...(item.youtubeCategory ? { youtubeCategory: item.youtubeCategory } : {}),
-      durationSeconds: item.durationSeconds,
-    };
-  });
+  return payload.map((item) => ({
+    ...toLiveClassificationPromptItem(item),
+    inputFingerprint: item.inputFingerprint,
+    appName: item.appName,
+    domain: item.siteDomain,
+    urlHost: item.siteDomain,
+    durationSeconds: item.durationSeconds,
+  }));
 }
 
 function sanitizeProviderSiteUrl(value: string | null | undefined): string | null {
@@ -812,7 +859,7 @@ function sanitizeProviderSiteUrl(value: string | null | undefined): string | nul
   parsedUrl.password = "";
   parsedUrl.search = "";
   parsedUrl.hash = "";
-  return `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`;
+  return `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname}`.slice(0, 300);
 }
 
 function hostnameFromUrl(value: string | null | undefined): string | null {
@@ -1141,7 +1188,12 @@ function finiteConfidence(confidence: number): number {
   return Number.isFinite(confidence) ? confidence : 0.5;
 }
 
-function toClassificationRecords(data: unknown, payload: MinimizedActivityPayload[]): ActivityClassificationRecord[] {
+function toClassificationRecords(
+  data: unknown,
+  payload: MinimizedActivityPayload[],
+  memoryContext: LiveClassificationMemoryContext | null = null,
+  route: "cloud" | "local" = "cloud",
+): ActivityClassificationRecord[] {
   const response = data as EdgeClassificationResponse | EdgeClassification[] | null;
   const classifications = Array.isArray(response)
     ? response
@@ -1164,17 +1216,26 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
         : "";
     const sourcePayload = payloadById.get(segmentId);
     if (!sourcePayload || !isActivityCategory(classification.category)) return [];
-    const productivity = resolveProviderProductivity(classification, classification.category, sourcePayload);
+    const withoutContext = resolveProviderProductivity(classification, classification.category, sourcePayload, null);
+    const productivity = resolveProviderProductivity(classification, classification.category, sourcePayload, memoryContext);
     if (!productivity) return [];
-
-    return [{
+    const providerConfidence = typeof classification.confidence === "number" ? classification.confidence : 0.5;
+    const contextDowngraded = withoutContext === "drift" && productivity === "neutral";
+    const serverAudit = normalizeContextualGuardServerAudit(classification.contextualGuardAudit);
+    const safetyReasonReturned = classification.reason === MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON;
+    const rawProductivity = serverAudit?.rawProductivity
+      ?? (safetyReasonReturned ? "drift" : withoutContext);
+    const finalConfidence = contextDowngraded ? Math.min(providerConfidence, 0.5) : providerConfidence;
+    const record: ActivityClassificationRecord = {
       segmentId,
       inputFingerprint: typeof classification.inputFingerprint === "string" ? classification.inputFingerprint : sourcePayload.inputFingerprint,
       category: classification.category,
       productivity,
       source: "llm",
-      confidence: typeof classification.confidence === "number" ? classification.confidence : 0.5,
-      reason: typeof classification.reason === "string" ? classification.reason : null,
+      confidence: finalConfidence,
+      reason: contextDowngraded
+        ? MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON
+        : typeof classification.reason === "string" ? classification.reason : null,
       model: typeof classification.model === "string" ? classification.model : model,
       promptVersion: AI_CLASSIFICATION_PROMPT_VERSION,
       taxonomyVersion: "v1",
@@ -1183,7 +1244,21 @@ function toClassificationRecords(data: unknown, payload: MinimizedActivityPayloa
       // (which stores none) stays distinguishable as "AI cache" downstream.
       latencyMs: responseLatencyMs(data) ?? 0,
       classifiedAt,
-    }];
+    };
+    if (rawProductivity) {
+      recordContextualGuardAuditEvent({
+        route,
+        category: classification.category,
+        rawProductivity,
+        finalProductivity: productivity,
+        rawConfidence: serverAudit?.rawConfidence ?? (safetyReasonReturned ? null : providerConfidence),
+        finalConfidence,
+        promptVersion: AI_CLASSIFICATION_PROMPT_VERSION,
+        item: toLiveClassificationPromptItem(sourcePayload),
+        memoryContext,
+      });
+    }
+    return [record];
   });
 }
 
@@ -1261,8 +1336,9 @@ async function classifyLivePayloadWithLocalAi(
   payload: MinimizedActivityPayload,
   provider: LocalAiProviderConfig,
   workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
 ): Promise<LiveAiClassificationResult> {
-  const providerRequest = toLocalProviderRequest(provider, [payload], workProfile);
+  const providerRequest = toLocalProviderRequest(provider, [payload], workProfile, memoryContext);
   if (!providerRequest) return unavailableLiveClassification("Local AI provider is not fully configured.");
 
   try {
@@ -1274,13 +1350,17 @@ async function classifyLivePayloadWithLocalAi(
     if (responseFailure) return unavailableLiveClassification(responseFailure);
 
     const data = toLocalClassificationResponse(response, providerRequest.model);
-    return firstLiveClassification(data, payload, "Local AI classification returned no usable classification.");
+    return firstLiveClassification(data, payload, "Local AI classification returned no usable classification.", memoryContext, "local");
   } catch (error) {
     return unavailableLiveClassification(messageFromUnknownError(error, "Local AI classification failed."));
   }
 }
 
-async function classifyLivePayloadWithCloudAi(payload: MinimizedActivityPayload, workProfile: string | null): Promise<LiveAiClassificationResult> {
+async function classifyLivePayloadWithCloudAi(
+  payload: MinimizedActivityPayload,
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+): Promise<LiveAiClassificationResult> {
   const cloudAvailability = await requireCloudAiClassification();
   if (cloudAvailability) return unavailableLiveClassification(cloudAvailability.message);
 
@@ -1289,22 +1369,106 @@ async function classifyLivePayloadWithCloudAi(payload: MinimizedActivityPayload,
 
   try {
     const { data, error } = await cloudClient.functions.invoke("classify-activity", {
-      body: await withCloudDevicePayload({
-        ...cloudApiClientMetadata,
-        ...(workProfile ? { workProfile } : {}),
-        items: toEdgeClassificationRequestItems([payload]),
-      }),
+      body: await withCloudDevicePayload(cloudClassificationRequestBody([payload], workProfile, memoryContext)),
     });
 
     if (error) return unavailableLiveClassification(await edgeFunctionErrorMessage(error));
-    return firstLiveClassification(data, payload, "AI classification returned no usable classification.");
+    return firstLiveClassification(data, payload, "AI classification returned no usable classification.", memoryContext, "cloud");
   } catch (error) {
     return unavailableLiveClassification(messageFromUnknownError(error, "AI classification failed."));
   }
 }
 
-function firstLiveClassification(data: unknown, payload: MinimizedActivityPayload, unavailableReason: string): LiveAiClassificationResult {
-  const records = toClassificationRecords(data, [payload]);
+async function classifyCloudPayloadBatches(
+  cloudClient: NonNullable<typeof supabase>,
+  payloads: readonly MinimizedActivityPayload[],
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+): Promise<ActivityClassificationRecord[]> {
+  const records: ActivityClassificationRecord[] = [];
+  for (const batch of partitionCloudPayloads(payloads, workProfile, memoryContext)) {
+    const { data, error } = await cloudClient.functions.invoke("classify-activity", {
+      body: await withCloudDevicePayload(cloudClassificationRequestBody(batch, workProfile, memoryContext)),
+    });
+    if (error) throw new Error(await edgeFunctionErrorMessage(error));
+    records.push(...toClassificationRecords(data, [...batch], memoryContext, "cloud"));
+  }
+  return records;
+}
+
+function partitionCloudPayloads(
+  payloads: readonly MinimizedActivityPayload[],
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+): MinimizedActivityPayload[][] {
+  const batches: MinimizedActivityPayload[][] = [];
+  let current: MinimizedActivityPayload[] = [];
+  for (const payload of payloads) {
+    const candidate = [...current, payload];
+    const candidateBytes = cloudClassificationRequestBytes(candidate, workProfile, memoryContext);
+    if (current.length > 0 && candidateBytes > CLOUD_CLASSIFICATION_BODY_TARGET_BYTES) {
+      batches.push(current);
+      current = [payload];
+    } else {
+      current = candidate;
+    }
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+function cloudClassificationRequestBytes(
+  payloads: readonly MinimizedActivityPayload[],
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+): number {
+  return new TextEncoder().encode(JSON.stringify(
+    cloudClassificationRequestBody(payloads, workProfile, memoryContext),
+  )).byteLength;
+}
+
+function cloudClassificationRequestBody(
+  payloads: readonly MinimizedActivityPayload[],
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+) {
+  const items = toEdgeClassificationRequestItems([...payloads]);
+  const segmentIds = payloads.map((payload) => payload.segmentId);
+  return {
+    ...cloudApiClientMetadata,
+    // Keep the legacy profile during a staggered app/Edge rollout. The v8.2
+    // Edge function suppresses it when Soul is present, while an older Edge
+    // can still classify with the profile instead of silently losing context.
+    ...(workProfile ? { workProfile } : {}),
+    memoryContext: memoryContextForCloudRequest(memoryContext, segmentIds, items, workProfile),
+    items,
+  };
+}
+
+function memoryContextForCloudRequest(
+  memoryContext: LiveClassificationMemoryContext,
+  segmentIds: readonly string[],
+  items: readonly Record<string, unknown>[],
+  workProfile: string | null,
+): LiveClassificationMemoryContext {
+  const baseBytes = new TextEncoder().encode(JSON.stringify({
+    ...cloudApiClientMetadata,
+    ...(workProfile ? { workProfile } : {}),
+    memoryContext: null,
+    items,
+  })).byteLength;
+  const memoryBudget = Math.max(0, CLOUD_CLASSIFICATION_BODY_TARGET_BYTES - baseBytes);
+  return memoryContextForItems(memoryContext, segmentIds, memoryBudget);
+}
+
+function firstLiveClassification(
+  data: unknown,
+  payload: MinimizedActivityPayload,
+  unavailableReason: string,
+  memoryContext: LiveClassificationMemoryContext,
+  route: "cloud" | "local",
+): LiveAiClassificationResult {
+  const records = toClassificationRecords(data, [payload], memoryContext, route);
   const classification = records[0];
   if (!classification) return unavailableLiveClassification(unavailableReason);
   return { kind: "classified", classification };
@@ -1326,9 +1490,10 @@ async function runLocalAiClassification(
   membersByRepSegmentId: Map<string, MinimizedActivityPayload[]> | null,
   provider: LocalAiProviderConfig,
   workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
   adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>,
 ): Promise<AiClassificationSummary> {
-  const providerRequest = toLocalProviderRequest(provider, representatives, workProfile);
+  const providerRequest = toLocalProviderRequest(provider, representatives, workProfile, memoryContext);
   if (!providerRequest) {
     return {
       status: "disabled",
@@ -1347,10 +1512,11 @@ async function runLocalAiClassification(
 
   const data = toLocalClassificationResponse(response, providerRequest.model);
   const representativeRecords = await selectLocalAiClassificationRecords({
-    firstPassRecords: toClassificationRecords(data, representatives),
+    firstPassRecords: toClassificationRecords(data, representatives, memoryContext, "local"),
     representatives,
     provider,
     workProfile,
+    memoryContext,
     adaptiveContextBySegmentId,
   });
   const aiRecords = expandClusterRecords(representativeRecords, membersByRepSegmentId);
@@ -1385,6 +1551,7 @@ async function selectLocalAiClassificationRecords(input: {
   readonly representatives: MinimizedActivityPayload[];
   readonly provider: LocalAiProviderConfig;
   readonly workProfile: string | null;
+  readonly memoryContext: LiveClassificationMemoryContext;
   readonly adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>;
 }): Promise<ActivityClassificationRecord[]> {
   const firstPassBySegmentId = new Map(input.firstPassRecords.map((record) => [record.segmentId, record]));
@@ -1397,6 +1564,7 @@ async function selectLocalAiClassificationRecords(input: {
       firstPassRecord,
       provider: input.provider,
       workProfile: input.workProfile,
+      memoryContext: input.memoryContext,
       adaptiveContextBySegmentId: input.adaptiveContextBySegmentId,
     });
     selectedRecords.push(selectPreferredAiRecord(firstPassRecord, enhancedRetryRecord));
@@ -1409,6 +1577,7 @@ async function classifyLocalEnhancedRetry(input: {
   readonly firstPassRecord: ActivityClassificationRecord;
   readonly provider: LocalAiProviderConfig;
   readonly workProfile: string | null;
+  readonly memoryContext: LiveClassificationMemoryContext;
   readonly adaptiveContextBySegmentId: ReadonlyMap<string, AdaptiveContentContext>;
 }): Promise<ActivityClassificationRecord | null> {
   const settings = resolveInitialEnhancedContextSettings();
@@ -1459,6 +1628,7 @@ async function classifyLocalEnhancedRetry(input: {
     provider: input.provider,
     payload: [enhancedPayload],
     workProfile: input.workProfile,
+    memoryContext: memoryContextForItems(input.memoryContext, [input.payload.segmentId]),
     enhancedRetryContext: egress.providerContext,
   });
   if (!providerRequest) {
@@ -1507,7 +1677,12 @@ async function classifyLocalEnhancedRetry(input: {
     }
 
     const data = toLocalClassificationResponse(response, providerRequest.model);
-    const enhancedRetryRecord = toClassificationRecords(data, [enhancedPayload])[0] ?? null;
+    const enhancedRetryRecord = toClassificationRecords(
+      data,
+      [enhancedPayload],
+      memoryContextForItems(input.memoryContext, [input.payload.segmentId]),
+      "local",
+    )[0] ?? null;
     if (debugLoggingEnabled && enhancedRetryRecord) {
       recordRetryDebugEvent({
         status: "selected",
@@ -1665,10 +1840,20 @@ function localProviderResponseFailure(
 }
 
 async function readClassificationWorkProfile(useLocalFallback: boolean): Promise<string | null> {
+  return (await readClassificationPromptIdentity(useLocalFallback)).workProfile;
+}
+
+async function readClassificationPromptIdentity(useLocalFallback: boolean): Promise<{
+  ownerId: string | null;
+  workProfile: string | null;
+}> {
   const signedInUserId = await readSignedInUserId();
   const onboardingUserId = signedInUserId ?? (useLocalFallback ? "local" : null);
-  if (!onboardingUserId) return null;
-  return normalizeOnboardingWorkProfile(readUserOnboardingState(onboardingUserId));
+  if (!onboardingUserId) return { ownerId: null, workProfile: null };
+  return {
+    ownerId: onboardingUserId,
+    workProfile: normalizeOnboardingWorkProfile(readUserOnboardingState(onboardingUserId)),
+  };
 }
 
 /**
@@ -1739,35 +1924,39 @@ function isProductivityLabel(value: unknown): value is ProductivityLabel {
   return typeof value === "string" && PRODUCTIVITY_LABELS.has(value as ProductivityLabel);
 }
 
+function normalizeContextualGuardServerAudit(value: unknown): {
+  readonly rawProductivity: ProductivityLabel;
+  readonly rawConfidence: number;
+} | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  if (!isProductivityLabel(candidate.rawProductivity)) return null;
+  if (typeof candidate.rawConfidence !== "number" || !Number.isFinite(candidate.rawConfidence)) return null;
+  return {
+    rawProductivity: candidate.rawProductivity,
+    rawConfidence: Math.min(1, Math.max(0, candidate.rawConfidence)),
+  };
+}
+
 function resolveProviderProductivity(
   classification: EdgeClassification,
   category: ActivityCategory,
   payload: MinimizedActivityPayload,
+  memoryContext: LiveClassificationMemoryContext | null,
 ): ProductivityLabel | null {
   const item = toLiveClassificationPromptItem(payload);
   if (isLiveActivityIntent(classification.intent)) {
-    return resolveLiveActivityClassificationProductivity(classification.intent, category, item);
+    return resolveLiveActivityClassificationProductivity(classification.intent, category, item, memoryContext);
   }
   if (!isProductivityLabel(classification.productivity)) return null;
   // Cloud responses and older local providers already contain productivity;
   // applying the narrow shopping gate again is deterministic and idempotent.
-  return applyLiveShoppingEvidenceGuard(classification.productivity, category, item);
-}
-
-function toLiveClassificationPromptItem(payload: MinimizedActivityPayload): LiveClassificationPromptItem {
-  return {
-    id: payload.segmentId,
-    appName: payload.appName,
-    domain: payload.siteDomain ?? undefined,
-    urlHost: payload.siteDomain ?? undefined,
-    siteUrl: payload.siteUrl ?? undefined,
-    windowTitle: payload.windowTitle ?? undefined,
-    title: payload.siteTitle ?? payload.youtubeTitle ?? undefined,
-    youtubeChannelName: payload.youtubeChannelName ?? undefined,
-    youtubeCategory: payload.youtubeCategory ?? undefined,
-    redditCommunity: payload.redditCommunity,
-    durationSeconds: payload.durationSeconds,
-  };
+  return applyMatchedContextualDriftSafetyGuard(
+    applyLiveShoppingEvidenceGuard(classification.productivity, category, item),
+    category,
+    item,
+    memoryContext,
+  );
 }
 
 async function edgeFunctionErrorMessage(error: unknown): Promise<string> {

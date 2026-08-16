@@ -2,6 +2,7 @@ import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
 import { saveUserOnboardingState } from "./onboardingCompletion";
 import type { SetupChoice } from "./onboardingFlow";
 import type { UserOnboardingState } from "./onboardingState";
+import { synchronizeLivingSoulDeclaredContextForUser } from "../classification/livingSoul";
 
 type CompleteOnboardingInput = {
   readonly cloudTrialStartedNoticePresent: boolean;
@@ -94,6 +95,9 @@ export async function completeOnboardingAction({
     setStorageError(result.error);
     return;
   }
+  void synchronizeLivingSoulDeclaredContextForUser(userId, result.state).catch((error) => {
+    console.warn("Unable to initialize Living Soul after onboarding.", error);
+  });
   if (setupChoice === "simple" && cloudTrialStartedNoticePresent) {
     onAcknowledgeCloudTrialStartedNotice();
   }

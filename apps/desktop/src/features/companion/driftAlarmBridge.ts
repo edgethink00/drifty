@@ -127,8 +127,23 @@ export function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
     && isNullableString(candidate.sourceIconSrc)
     && (candidate.copy === undefined || isDriftAlarmRenderedCopy(candidate.copy))
     && (candidate.sourceSegmentId === undefined || isNullableString(candidate.sourceSegmentId))
+    && (candidate.decisionClassification === undefined
+      || candidate.decisionClassification === null
+      || isDecisionClassification(candidate.decisionClassification))
     && isDriftAlarmModePayload(candidate)
   );
+}
+
+function isDecisionClassification(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.category === "string"
+    && typeof candidate.productivity === "string"
+    && typeof candidate.confidence === "number"
+    && Number.isFinite(candidate.confidence)
+    && candidate.confidence >= 0
+    && candidate.confidence <= 1
+    && typeof candidate.source === "string";
 }
 
 function isDriftAlarmRenderedCopy(value: unknown): boolean {

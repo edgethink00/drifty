@@ -47,6 +47,10 @@ describe("buildDriftAlarmCandidates", () => {
       alertKey: "active:seg-1",
       category: "entertainment",
       sourceSegmentId: "seg-1",
+      classification: expect.objectContaining({
+        category: "entertainment",
+        productivity: "drift",
+      }),
       segment: expect.objectContaining({
         id: "seg-1",
         durationSeconds: 600,

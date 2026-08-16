@@ -1,7 +1,7 @@
 import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
 import { isTauriRuntime } from "./watcherBridge";
 import { classifyActivity, classifyActivityDetailed } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
+import type { ActivityCategory, ActivityClassificationDetail, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { getLatestWatcherSegment } from "./watcherData";
 import { getActiveDriftAlarmSegment } from "./driftAlarmCurrentSegment";
@@ -92,6 +92,7 @@ export function hasDriftAlarmFocusTargetUpdate(currentEvent: DriftAlarmEvent, ne
 export type DriftAlarmCandidate = {
   alertKey: string;
   category: ActivityCategory;
+  classification: ActivityClassificationDetail;
   segment: ActivitySegment;
   sourceSegmentId: string | null;
 };
@@ -143,6 +144,7 @@ export function buildDriftAlarmCandidates({
       return [{
         alertKey,
         category: currentClassification.category,
+        classification: currentClassification,
         segment: currentSegment,
         sourceSegmentId,
       }];
@@ -175,6 +177,7 @@ export function buildDriftAlarmCandidates({
   return [{
     alertKey: `${latestSegment.id}:${latestSegment.endedAt}`,
     category: latestClassification.category,
+    classification: latestClassification,
     segment: latestSegment,
     sourceSegmentId: latestSegment.id,
   }];

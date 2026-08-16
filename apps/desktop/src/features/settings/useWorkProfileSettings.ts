@@ -5,6 +5,7 @@ import {
   saveUserWorkProfileSettings,
   type WorkProfileSettings,
 } from "../onboarding/onboardingState";
+import { synchronizeLivingSoulDeclaredContextForUser } from "../classification/livingSoul";
 
 export function useWorkProfileSettings(workProfileUserId: string) {
   const [workProfileDraft, setWorkProfileDraft] = useState(() => readUserWorkProfileSettings(workProfileUserId));
@@ -22,6 +23,10 @@ export function useWorkProfileSettings(workProfileUserId: string) {
       savedState ? "Work profile saved for future AI classification." : "Choose a role or field before saving.",
     );
     if (!savedState) return;
+
+    void synchronizeLivingSoulDeclaredContextForUser(workProfileUserId, savedState).catch((error) => {
+      console.warn("Unable to synchronize Living Soul work context.", error);
+    });
 
     const nextWorkProfile = readUserWorkProfileSettings(workProfileUserId);
     setWorkProfileDraft(nextWorkProfile);

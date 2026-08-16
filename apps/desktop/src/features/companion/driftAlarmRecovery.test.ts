@@ -106,14 +106,26 @@ describe("drift alarm break recovery", () => {
     expect(
       resolveBreakRecoveryOutcome({
         attempt,
-        driftCandidate: { alertKey: "active:youtube", category: "entertainment", segment: baseDriftSegment, sourceSegmentId: "youtube-drift" },
+        driftCandidate: {
+          alertKey: "active:youtube",
+          category: "entertainment",
+          classification: { category: "entertainment", productivity: "drift", confidence: 1, source: "manual", surface: "browser", reason: "test" },
+          segment: baseDriftSegment,
+          sourceSegmentId: "youtube-drift",
+        },
         nowMs: Date.parse("2026-06-12T09:24:00.000Z"),
       }),
     ).toBe("same_drift_continued");
     expect(
       resolveBreakRecoveryOutcome({
         attempt,
-        driftCandidate: { alertKey: "active:amazon", category: "shopping", segment: laterShoppingSegment, sourceSegmentId: "shopping-drift" },
+        driftCandidate: {
+          alertKey: "active:amazon",
+          category: "shopping",
+          classification: { category: "shopping", productivity: "drift", confidence: 1, source: "manual", surface: "browser", reason: "test" },
+          segment: laterShoppingSegment,
+          sourceSegmentId: "shopping-drift",
+        },
         nowMs: Date.parse("2026-06-12T09:24:00.000Z"),
       }),
     ).toBe("drift_shifted");

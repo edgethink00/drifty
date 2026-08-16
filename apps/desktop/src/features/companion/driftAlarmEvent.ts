@@ -1,3 +1,4 @@
+import type { ActivityClassificationDetail } from "@drifty/domain";
 import { buildDefaultDriftAlarmCopy, buildDriftAlarmCopy, type DriftAlarmCopySettingsValue, type DriftAlarmRenderedCopy } from "./driftAlarmCopy";
 
 export type DriftAlarmAction =
@@ -26,6 +27,11 @@ export type DriftAlarmBreakReturnDetails = {
   readonly nextFocusLabel: string;
 };
 
+export type DriftAlarmDecisionClassification = Pick<
+  ActivityClassificationDetail,
+  "category" | "productivity" | "confidence" | "source"
+>;
+
 type DriftAlarmEventBase = {
   readonly id: string;
   readonly contextLabel: string;
@@ -41,6 +47,7 @@ type DriftAlarmEventBase = {
   readonly sourceIconSrc: string | null;
   readonly copy?: DriftAlarmRenderedCopy;
   readonly sourceSegmentId?: string | null;
+  readonly decisionClassification?: DriftAlarmDecisionClassification | null;
 };
 
 export type DriftAlarmEvent = DriftAlarmEventBase & (
@@ -64,6 +71,7 @@ type DriftAlarmEventInput = {
      surface size, and stored interaction keeps working unchanged. */
   readonly petIntercepted?: boolean;
   readonly sourceSegmentId?: string | null;
+  readonly decisionClassification?: DriftAlarmDecisionClassification | null;
 };
 
 type BreakReturnAlarmEventInput = DriftAlarmEventInput & {
@@ -89,6 +97,7 @@ export function buildDriftAlarmEvent(input: DriftAlarmEventInput): DriftAlarmEve
     sourceSiteDomain: input.sourceSiteDomain?.trim() ?? null,
     sourceAppName: input.sourceAppName?.trim() || "Unknown app",
     sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
+    decisionClassification: normalizeDecisionClassification(input.decisionClassification),
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
       mode: input.petIntercepted ? "pet_intercept" : "drift",
       contextLabel: input.contextLabel,
@@ -120,6 +129,7 @@ export function buildBreakReturnAlarmEvent(input: BreakReturnAlarmEventInput): D
     sourceSiteDomain: input.sourceSiteDomain?.trim() ?? null,
     sourceAppName: input.sourceAppName?.trim() || "Unknown app",
     sourceIconSrc: input.sourceIconSrc?.trim() ?? null,
+    decisionClassification: normalizeDecisionClassification(input.decisionClassification),
     copy: buildDriftAlarmCopy(input.copySettings ?? buildDefaultDriftAlarmCopy(), {
       mode: "break_return",
       breakDurationLabel: breakReturn.breakDurationLabel,
@@ -157,6 +167,18 @@ function formatFocusStrike(seconds: number): string {
   if (minutes === 60) return "1-hour";
   if (minutes % 60 === 0) return `${minutes / 60}-hour`;
   return `${minutes}-minute`;
+}
+
+function normalizeDecisionClassification(
+  value: DriftAlarmDecisionClassification | null | undefined,
+): DriftAlarmDecisionClassification | null {
+  if (!value) return null;
+  return {
+    category: value.category,
+    productivity: value.productivity,
+    confidence: Math.min(1, Math.max(0, Number.isFinite(value.confidence) ? value.confidence : 0)),
+    source: value.source,
+  };
 }
 
 function formatDuration(seconds: number): string {
