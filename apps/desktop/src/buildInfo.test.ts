@@ -13,7 +13,7 @@ describe("buildInfo", () => {
     expect(createBuildInfo(commit)).toEqual({
       commit,
       shortCommit: "d1f00b6a2cc9",
-      version: "1.5.2",
+      version: "1.6.0",
     });
   });
 
