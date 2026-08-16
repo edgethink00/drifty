@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  canEvaluateCompanionDailyFocus,
   COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY,
   evaluateCompanionDailyFocusMilestones,
   initializeCompanionDailyFocusMilestones,
@@ -142,5 +143,53 @@ describe("Companion daily focus milestones", () => {
 
     window.localStorage.setItem(COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY, "{broken");
     expect(readCompanionDailyFocusMilestones()).toBeNull();
+  });
+
+  describe("canEvaluateCompanionDailyFocus", () => {
+    const loadedToday = {
+      loaded: true,
+      blocked: false,
+      viewingToday: true,
+      segmentsLoadedDay: "2026-08-15",
+      day: "2026-08-15",
+    } as const;
+
+    it("trusts the figure when the loaded segments belong to the evaluated day", () => {
+      expect(canEvaluateCompanionDailyFocus(loadedToday)).toBe(true);
+    });
+
+    /* The wall-clock day flips the instant the logical day rolls over, while the
+       loaded segments still describe the previous day until the refresh lands.
+       Celebrating there reports yesterday's focus under today's date. */
+    it("withholds the figure while the loaded day lags a rollover", () => {
+      expect(canEvaluateCompanionDailyFocus({
+        ...loadedToday,
+        segmentsLoadedDay: "2026-08-14",
+      })).toBe(false);
+    });
+
+    it("withholds the figure before any day has been loaded", () => {
+      expect(canEvaluateCompanionDailyFocus({
+        ...loadedToday,
+        segmentsLoadedDay: null,
+      })).toBe(false);
+    });
+
+    it("stays closed before the first load and while tracker access is blocked", () => {
+      expect(canEvaluateCompanionDailyFocus({ ...loadedToday, loaded: false })).toBe(false);
+      expect(canEvaluateCompanionDailyFocus({ ...loadedToday, blocked: true })).toBe(false);
+    });
+
+    /* Browsing history switches the snapshot to the today-pinned alarm segments,
+       so the day's own progress must keep being evaluated. Gating on
+       `segmentsLoadedDay` there would silence milestones for as long as the user
+       reads an earlier day. */
+    it("keeps evaluating today while the user browses an earlier day", () => {
+      expect(canEvaluateCompanionDailyFocus({
+        ...loadedToday,
+        viewingToday: false,
+        segmentsLoadedDay: "2026-08-10",
+      })).toBe(true);
+    });
   });
 });

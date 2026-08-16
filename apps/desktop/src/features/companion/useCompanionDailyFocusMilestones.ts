@@ -21,7 +21,15 @@ export function useCompanionDailyFocusMilestones({
   const progressRef = useRef<CompanionDailyFocusMilestoneProgress | null>(null);
 
   useEffect(() => {
-    if (!ready) return;
+    /* Losing readiness means the caller can no longer vouch for the figure (the
+       loaded day drifted away from the evaluated day, or tracker access closed).
+       Dropping the baseline forces the next ready render to re-establish it from
+       whatever is true then, so the gap is absorbed instead of being replayed as
+       a fresh crossing the moment the numbers come back. */
+    if (!ready) {
+      progressRef.current = null;
+      return;
+    }
 
     if (progressRef.current === null) {
       const initial = initializeCompanionDailyFocusMilestones(day, focusSecondsToday);

@@ -237,6 +237,7 @@ import {
   updateNativePetMode,
 } from "./features/pet-mode/petModeBridge";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
+import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
 import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
 import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
@@ -4810,6 +4811,15 @@ export default function App() {
     };
   }, []);
   useEffect(() => { segmentsRef.current = segments; }, [segments]);
+  /* Milestones may only read today's figure while the loaded segments are known
+     to belong to today; see canEvaluateCompanionDailyFocus. */
+  const companionDailyFocusEvaluable = canEvaluateCompanionDailyFocus({
+    loaded: hasLoadedOnce,
+    blocked: shouldBlockLocalTrackerAccess,
+    viewingToday: selectedDay === todayDay,
+    segmentsLoadedDay,
+    day: todayDay,
+  });
   const companionTodaySnapshot = useMemo(() => {
     const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
     if (currentSnapshot) {
@@ -4841,7 +4851,7 @@ export default function App() {
   ]);
 
   useCompanionDailyFocusMilestones({
-    ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    ready: companionDailyFocusEvaluable,
     day: todayDay,
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     /* Visibility controls only the resident capsule. A milestone is an alert,
@@ -4857,7 +4867,7 @@ export default function App() {
   });
 
   useCompanionFocusRunMilestones({
-    ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
+    ready: companionDailyFocusEvaluable,
     day: todayDay,
     startOfDayMinutes,
     currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,

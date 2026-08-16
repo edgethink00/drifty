@@ -57,4 +57,79 @@ describe("useCompanionDailyFocusMilestones", () => {
 
     expect(bridge.showMilestone).not.toHaveBeenCalled();
   });
+
+  /* A stale-day total that arrives under an unchanged day reads as a live
+     crossing: the baseline was taken while today was still empty, and the
+     same-day path has no rollover reset to absorb the jump. This is the shape
+     behind a "1 hour of focus" alert on a day that never had one. */
+  it("announces a stale-day total when the caller keeps vouching for it", () => {
+    const { rerender } = renderHook(
+      (props: { focusSecondsToday: number }) => (
+        useCompanionDailyFocusMilestones({
+          ready: true,
+          day: "2026-08-15",
+          focusSecondsToday: props.focusSecondsToday,
+          announcementsEnabled: true,
+        })
+      ),
+      { initialProps: { focusSecondsToday: 0 } },
+    );
+
+    // The loaded segments still describe the previous day (2h38m of focus).
+    rerender({ focusSecondsToday: 9_480 });
+
+    expect(bridge.showMilestone).toHaveBeenCalledOnce();
+  });
+
+  /* Readiness is the caller's promise that the figure describes the evaluated
+     day. Withdrawing it for the mismatched window must discard the baseline
+     rather than bridge across the gap, so the stale total is never announced
+     and the correct, much smaller total does not read as a crossing either. */
+  it("does not announce a stale-day total once the caller withdraws readiness", () => {
+    const { rerender } = renderHook(
+      (props: { ready: boolean; focusSecondsToday: number }) => (
+        useCompanionDailyFocusMilestones({
+          ready: props.ready,
+          day: "2026-08-15",
+          focusSecondsToday: props.focusSecondsToday,
+          announcementsEnabled: true,
+        })
+      ),
+      // Launch: today is empty, so the baseline records zero.
+      { initialProps: { ready: true, focusSecondsToday: 0 } },
+    );
+
+    // The loaded segments now describe the *previous* day (2h38m of focus). The
+    // caller detects the mismatch and withdraws readiness for that window.
+    rerender({ ready: false, focusSecondsToday: 9_480 });
+    expect(bridge.showMilestone).not.toHaveBeenCalled();
+
+    // Today's real segments land: only a few minutes of focus.
+    rerender({ ready: true, focusSecondsToday: 180 });
+    rerender({ ready: true, focusSecondsToday: 240 });
+
+    expect(bridge.showMilestone).not.toHaveBeenCalled();
+  });
+
+  it("still announces a genuine crossing after readiness returns", () => {
+    const { rerender } = renderHook(
+      (props: { ready: boolean; focusSecondsToday: number }) => (
+        useCompanionDailyFocusMilestones({
+          ready: props.ready,
+          day: "2026-08-15",
+          focusSecondsToday: props.focusSecondsToday,
+          announcementsEnabled: true,
+        })
+      ),
+      { initialProps: { ready: false, focusSecondsToday: 0 } },
+    );
+
+    rerender({ ready: true, focusSecondsToday: 3_540 });
+    rerender({ ready: true, focusSecondsToday: 3_600 });
+
+    expect(bridge.showMilestone).toHaveBeenCalledOnce();
+    expect(bridge.showMilestone).toHaveBeenCalledWith(expect.objectContaining({
+      id: "companion-daily-focus:2026-08-15:day1h",
+    }));
+  });
 });

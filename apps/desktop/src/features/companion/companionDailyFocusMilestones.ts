@@ -3,6 +3,43 @@ import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
 export const COMPANION_DAILY_FOCUS_MILESTONES_STORAGE_KEY =
   "drifty.companion.dailyFocusMilestones.v1";
 
+/**
+ * Whether a resident surface may treat today's focus figure as live progress.
+ *
+ * The evaluated day comes from the wall clock and flips the instant the logical
+ * day rolls over, while the loaded segments only catch up when the follow-up
+ * refresh lands. In that window the figure still describes the previous day, and
+ * a milestone would celebrate yesterday's focus under today's date. The same
+ * mismatch appears on launch, before the first day's segments have arrived.
+ *
+ * Which source backs the figure depends on what the user is looking at. While
+ * today is selected it comes from the dashboard's `segments`, so
+ * `segmentsLoadedDay` must name the evaluated day. Browsing an earlier day
+ * switches the snapshot to the drift-alarm base segments, which are only ever
+ * written for the current alarm day and reset on rollover — that source stays
+ * pinned to today, so milestones keep working while the user reads history.
+ */
+export function canEvaluateCompanionDailyFocus({
+  loaded,
+  blocked,
+  viewingToday,
+  segmentsLoadedDay,
+  day,
+}: {
+  readonly loaded: boolean;
+  readonly blocked: boolean;
+  /** True when the dashboard's selected day is the evaluated day. */
+  readonly viewingToday: boolean;
+  readonly segmentsLoadedDay: string | null;
+  readonly day: string;
+}): boolean {
+  if (!loaded || blocked) return false;
+  /* Reading history does not pause the day's own progress; that snapshot is
+     built from the today-pinned alarm segments rather than the browsed day. */
+  if (!viewingToday) return true;
+  return segmentsLoadedDay === day;
+}
+
 export type CompanionDailyFocusMilestoneId = "day1h" | "day3h" | "day8h";
 
 export type CompanionDailyFocusMilestoneProgress = {
