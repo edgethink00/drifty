@@ -352,19 +352,25 @@ export function CompanionWindowApp() {
   useEffect(() => {
     let isCurrent = true;
     let wasOverCapsule: boolean | null = null;
+    let timer: number | null = null;
     const sync = async () => {
       const overCapsule = await isNativeCompanionCursorOverCapsule();
-      if (!isCurrent || overCapsule === wasOverCapsule) return;
-      wasOverCapsule = overCapsule;
-      setIsPointerInside(overCapsule);
-      ignoreCompanionBridgePromise(setNativeCompanionClickThrough(!overCapsule));
+      if (!isCurrent) return;
+      if (overCapsule !== wasOverCapsule) {
+        wasOverCapsule = overCapsule;
+        setIsPointerInside(overCapsule);
+        ignoreCompanionBridgePromise(setNativeCompanionClickThrough(!overCapsule));
+      }
+      // Wait for the native query to settle before scheduling the next one. A
+      // fixed interval can otherwise queue bridge calls faster than Tauri
+      // answers them, and late responses may apply cursor state out of order.
+      timer = window.setTimeout(() => void sync(), 32);
     };
 
     void sync();
-    const timer = window.setInterval(() => void sync(), 32);
     return () => {
       isCurrent = false;
-      window.clearInterval(timer);
+      if (timer !== null) window.clearTimeout(timer);
       ignoreCompanionBridgePromise(setNativeCompanionClickThrough(false));
     };
   }, [pillState]);

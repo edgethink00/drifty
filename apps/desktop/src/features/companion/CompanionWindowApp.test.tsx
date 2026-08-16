@@ -167,6 +167,26 @@ describe("CompanionWindowApp", () => {
     expect(bridge.setNativeCompanionPillState).toHaveBeenLastCalledWith("collapsed");
   });
 
+  it("keeps native cursor polling single-flight while a query is pending", async () => {
+    vi.useFakeTimers();
+    let resolveFirstQuery!: (overCapsule: boolean) => void;
+    const firstQuery = new Promise<boolean>((resolve) => {
+      resolveFirstQuery = resolve;
+    });
+    bridge.isNativeCompanionCursorOverCapsule.mockReturnValueOnce(firstQuery);
+
+    render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(320));
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(1);
+
+    await act(async () => resolveFirstQuery(false));
+    act(() => vi.advanceTimersByTime(32));
+    expect(bridge.isNativeCompanionCursorOverCapsule).toHaveBeenCalledTimes(2);
+  });
+
   it("opens a native menu whose actions use the existing app routes", async () => {
     const { getByRole } = render(<CompanionWindowApp />);
     await act(async () => undefined);
