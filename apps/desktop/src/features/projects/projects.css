@@ -55,11 +55,12 @@
 }
 
 /* Chrome comes from the shared `.help-trigger`; only the hover-through-wrapper
-   behaviour is local, so pointing anywhere in the group lights the trigger. */
+   behaviour is local, so pointing anywhere in the group lights the trigger.
+   Values are inherited from that rule's hover state rather than restated. */
 .projects-help:hover .projects-help__trigger,
 .projects-help:focus-within .projects-help__trigger {
-  background: var(--surface);
-  border-color: var(--line-strong);
+  background: var(--bg-2);
+  border-color: var(--line);
   color: var(--text);
 }
 

@@ -1,12 +1,17 @@
 /* Inline help affordance.
 
-   One shape for "explain this label": a round `?` next to a heading or field
-   label, with its explanation in a tooltip. Surfaces previously each drew their
-   own — Projects used a mono `How it works` pill, Trends a mono `?` circle — so
-   the same affordance did not look like itself across the app.
+   One shape for "explain this label": a `?` next to a heading or field label,
+   with its explanation in a tooltip. Surfaces previously each drew their own —
+   Projects used a mono `How it works` pill, Trends a mono `?` circle — so the
+   same affordance did not look like itself across the app.
 
-   The label stays sans, matching the app-wide button language. Mono is the
-   app's voice for overlines and figures, not for UI controls.
+   It carries no chrome at rest. Help sits beside a heading it must not compete
+   with, so the resting state is a bare glyph and the pill only appears under
+   the pointer or keyboard focus, where the hit target has to read as clickable.
+   The 1.5rem box stays constant so nothing reflows when that happens.
+
+   The label is sans, matching the app-wide button language. Mono is the app's
+   voice for overlines and figures, not for UI controls.
 
    A `?` carries no readable label, so every trigger must supply its own
    `aria-label` naming what is being explained. */
@@ -17,13 +22,13 @@
   width: 1.5rem;
   height: 1.5rem;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  background: transparent;
   color: var(--text-muted);
   font-family: var(--font-sans);
-  font-size: var(--type-caption-size);
-  font-weight: 650;
+  font-size: 0.85rem;
+  font-weight: 600;
   line-height: 1;
   cursor: help;
   transition:
@@ -34,8 +39,8 @@
 
 .help-trigger:hover,
 .help-trigger:focus-visible {
-  background: var(--surface);
-  border-color: var(--line-strong);
+  background: var(--bg-2);
+  border-color: var(--line);
   color: var(--text);
 }
 
