@@ -236,7 +236,7 @@ export function DashboardPage({
             {showShareButton ? (
               <button
                 type="button"
-                className="app-btn app-btn--secondary app-btn--compact dashboard-share-button"
+                className="app-btn app-btn--secondary app-btn--header-action dashboard-share-button"
                 aria-haspopup="dialog"
                 onClick={() => setShareCardOpen(true)}
               >
@@ -458,7 +458,7 @@ export function DashboardPage({
 
 function ShareIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 3v12" />
       <path d="m8 6.5 4-3.5 4 3.5" />
       <path d="M6.5 10H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-.5" />

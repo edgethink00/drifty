@@ -339,40 +339,6 @@
   gap: var(--space-2);
 }
 
-/* Dashboard head-row Share button: it deliberately matches the DateNavigator
-   control height so the action reads as part of the same command row. */
-.dashboard-share-button {
-  align-items: center;
-  background: var(--surface);
-  border-color: color-mix(in srgb, var(--text) 13%, var(--line));
-  border-radius: 999px;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 8%, transparent);
-  color: var(--text);
-  display: inline-flex;
-  font-size: 0.76rem;
-  font-weight: 700;
-  gap: 0.38rem;
-  height: 30px;
-  letter-spacing: 0.025em;
-  line-height: 1;
-  padding: 0 0.76rem;
-  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
-}
-
-.dashboard-share-button:hover {
-  background: color-mix(in srgb, var(--surface) 94%, var(--accent));
-  border-color: color-mix(in srgb, var(--text) 20%, var(--line));
-  box-shadow: 0 4px 10px color-mix(in srgb, var(--text) 12%, transparent);
-  color: var(--text);
-  transform: translateY(-1px);
-}
-
-.dashboard-share-button svg {
-  height: 14px;
-  stroke-width: 2;
-  width: 14px;
-}
-
 @media (max-width: 760px) {
   .share-card-stage {
     min-height: 360px;

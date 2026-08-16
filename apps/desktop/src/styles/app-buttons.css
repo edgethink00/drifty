@@ -101,3 +101,13 @@
   padding-inline: var(--space-3);
   font-size: 0.75rem;
 }
+
+/* Page-header actions. A `.pg-head` action is a primary target in its row, so it
+   keeps the default 2rem height rather than shrinking to the 1.75rem date-nav
+   size. Declaring it here keeps every header action on one measurement instead
+   of letting each feature restate its own. */
+.app-btn--header-action {
+  --btn-h: 2rem;
+  padding-inline: var(--space-3);
+  font-size: var(--type-button-size);
+}
