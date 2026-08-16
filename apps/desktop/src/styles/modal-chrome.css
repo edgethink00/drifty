@@ -218,14 +218,27 @@
   padding-right: var(--space-3);
 }
 
-/* ── Pill button system (footer + inline modal actions) ─────────────────── */
+/* ── Modal actions ──────────────────────────────────────────────────────
+
+   A modal action is an app-surface button that happens to sit in a dialog, so
+   `.modal-btn` maps onto `.app-btn` instead of restating it. The two used to be
+   separate systems describing the same four ranks, and they had drifted: modal
+   buttons stood 29.8px to the app's 32px, and `--primary` resolved its label to
+   `--surface` where the app uses `--canvas`, so the same action rendered
+   differently depending on whether it was inside a dialog.
+
+   Only genuinely modal behaviour stays here: the second-click armed state and
+   the full-width `--block` variant. */
 .modal-btn {
+  --btn-h: 2rem;
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.48rem 1.02rem;
+  gap: var(--space-2);
+  height: var(--btn-h);
+  min-height: var(--btn-h);
+  padding: 0 var(--space-4);
   border-radius: var(--radius-pill);
   border: 1px solid transparent;
   font-family: var(--font-sans);
@@ -234,6 +247,7 @@
   line-height: 1;
   letter-spacing: 0;
   text-transform: none;
+  white-space: nowrap;
   color: var(--text);
   background: transparent;
   cursor: pointer;
@@ -241,19 +255,20 @@
     background var(--transition-fast),
     color var(--transition-fast),
     border-color var(--transition-fast),
-    transform var(--transition-fast),
-    box-shadow var(--transition-fast);
+    box-shadow var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .modal-btn svg {
   width: 14px;
   height: 14px;
+  flex: 0 0 auto;
   display: block;
 }
 
 .modal-btn:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.5;
 }
 
 .modal-btn:focus-visible {
@@ -262,36 +277,38 @@
 }
 
 .modal-btn--ghost {
+  background: transparent;
+  border-color: transparent;
   color: var(--text-soft);
 }
 
 .modal-btn--ghost:hover:not(:disabled) {
   background: var(--bg-2);
+  border-color: transparent;
   color: var(--text);
 }
 
 .modal-btn--secondary {
+  background: var(--surface);
   border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--surface-strong) 55%, transparent);
+  color: var(--text);
 }
 
 .modal-btn--secondary:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
   background: var(--surface-strong);
+  border-color: color-mix(in srgb, var(--text) 18%, var(--line));
 }
 
 .modal-btn--primary {
   background: var(--text);
   border-color: var(--text);
-  color: var(--surface);
+  color: var(--canvas);
 }
 
 .modal-btn--primary:hover:not(:disabled) {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 16%, transparent);
 }
 
 .modal-btn--danger {
@@ -301,10 +318,9 @@
 }
 
 .modal-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn) 85%, black);
-  border-color: color-mix(in srgb, var(--warn) 85%, black);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--text) 16%, transparent);
+  background: color-mix(in srgb, var(--warn) 88%, var(--text));
+  border-color: color-mix(in srgb, var(--warn) 88%, var(--text));
+  color: var(--canvas);
 }
 
 /* Armed (second-click confirmation) danger state — darker fill + pulsing ring. */
@@ -327,11 +343,7 @@
   }
 }
 
-.modal-btn:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: none;
-}
-
+/* Full-width actions in narrow dialogs and stacked footers. */
 .modal-btn--block {
   width: 100%;
 }
