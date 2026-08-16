@@ -55,6 +55,19 @@
   --radius-md: 14px;
   --radius-lg: 18px;
   --radius-pill: 999px;
+  /* Shared visual contract for vertical stacked-bar plots. Weekly Breakdown and
+     Projects allocation both consume these tokens so their plot frame and grid
+     cannot quietly drift into separate chart styles. */
+  --stacked-column-plot-radius: 12px;
+  --stacked-column-plot-border: var(--line);
+  --stacked-column-plot-background:
+    linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 58%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
+    color-mix(in srgb, var(--bg-2) 82%, var(--surface));
+  --stacked-column-plot-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--surface) 74%, transparent),
+    0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
+  --stacked-column-gridline: color-mix(in srgb, var(--text) 15%, transparent);
+  --stacked-column-vline: color-mix(in srgb, var(--text) 10%, transparent);
   /* Modal shell v2: the approved 125% curvature pass. These semantic tokens
      keep shell shape independent from the smaller card/control radii above. */
   --modal-radius-compact: 22.5px;

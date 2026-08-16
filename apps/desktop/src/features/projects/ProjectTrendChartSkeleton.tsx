@@ -5,6 +5,7 @@ import { PROJECT_TREND_CHART_BOUNDS } from "./projectTrendView";
 import "./project-trend-chart.css";
 
 type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
+type BarsGridStyle = CSSProperties & { readonly "--ptc-bar-columns": number };
 
 interface SkeletonTick {
   readonly id: string;
@@ -70,6 +71,8 @@ export interface ProjectTrendChartSkeletonProps {
   readonly startDay: string;
   readonly endDay: string;
   readonly startOfDayMinutes: number;
+  readonly variant?: "detail" | "overview";
+  readonly onOpenTrends?: () => void;
 }
 
 /**
@@ -84,35 +87,61 @@ export function ProjectTrendChartSkeleton({
   startDay,
   endDay,
   startOfDayMinutes,
+  variant = "detail",
+  onOpenTrends,
 }: ProjectTrendChartSkeletonProps): JSX.Element {
   const ticks = isDayMode ? hourTicks(startOfDayMinutes) : dayTicks(startDay, endDay);
+  const isOverview = variant === "overview";
+  const overviewRangeLabel = windowLabel.toLowerCase();
+  const overviewTicks = buildIsoDayList(startDay, endDay).map((day) => ({ id: day, label: compactDayLabel(day), x: 0 }));
+  const visibleTicks = isOverview ? overviewTicks : ticks;
 
   return (
-    <section className="editorial-panel editorial-panel--soft insight-chart-panel ptc-panel" aria-label="Project time trend loading" aria-busy="true">
+    <section className={`editorial-panel editorial-panel--soft insight-chart-panel ptc-panel${isOverview ? " ptc-panel--overview" : ""}`} aria-label={isOverview ? `${windowLabel} project overview loading` : "Project time trend loading"} aria-busy="true">
       <div className="insight-panel-head">
-        <span className="label-mono">Project time &middot; {windowLabel}</span>
-        {legendProjects.length > 0 ? (
-          <div className="insight-panel-head__legend">
-            {legendProjects.map((project) => (
-              <span className="chip ptc-chip" key={project.id}>
-                <span className="sw" style={{ background: project.color }} />
-                {project.name}
-              </span>
+        <span className="label-mono">{isOverview ? `Project allocation · ${overviewRangeLabel}` : <>Project time &middot; {windowLabel}</>}</span>
+        <div className="ptc-panel__head-actions">
+          {legendProjects.length > 0 ? (
+            <div className="insight-panel-head__legend">
+              {legendProjects.map((project) => (
+                <span className="chip ptc-chip" key={project.id}>
+                  <span className="sw" style={{ background: project.color }} />
+                  {project.name}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {isOverview && onOpenTrends ? (
+            <button type="button" className="app-btn app-btn--quiet app-btn--compact ptc-overview__link" onClick={onOpenTrends}>
+              Explore in Trends <span aria-hidden="true">&rarr;</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className={isOverview ? "ptc-bars ptc-bars--loading" : "ptc-chart"}>
+        <div className={isOverview ? "ptc-bars__plot" : "ptc-plot projects-chart-skeleton"}>
+          {isOverview ? (
+            <div className="ptc-bars__columns" style={{ "--ptc-bar-columns": visibleTicks.length } as BarsGridStyle} aria-hidden="true">
+              {visibleTicks.map((tick, index) => (
+                <div className="ptc-bars__column" key={tick.id}>
+                  <div className="ptc-bars__zone"><span className="ptc-bars__placeholder" style={{ height: `${44 + ((index * 11) % 42)}%` }} /></div>
+                  <span className="ptc-bars__day">{tick.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <svg className="ptc-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <path className="ptc-grid" d={PLACEHOLDER_GRID} />
+            </svg>
+          )}
+        </div>
+        {!isOverview ? (
+          <div className="ptc-axis" aria-hidden="true">
+            {ticks.map((tick) => (
+              <span style={{ "--ptc-axis-x": `${tick.x}%` } as AxisTickStyle} key={tick.id}>{tick.label}</span>
             ))}
           </div>
         ) : null}
-      </div>
-      <div className="ptc-chart">
-        <div className="ptc-plot projects-chart-skeleton">
-          <svg className="ptc-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            <path className="ptc-grid" d={PLACEHOLDER_GRID} />
-          </svg>
-        </div>
-        <div className="ptc-axis" aria-hidden="true">
-          {ticks.map((tick) => (
-            <span style={{ "--ptc-axis-x": `${tick.x}%` } as AxisTickStyle} key={tick.id}>{tick.label}</span>
-          ))}
-        </div>
       </div>
     </section>
   );

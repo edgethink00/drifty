@@ -78,9 +78,9 @@ export interface ProjectTrendView {
   readonly gridPath: string;
   readonly bounds: ProjectTrendChartBounds;
   readonly maxDaySeconds: number;
-  /** Compact label for the trimmed, data-fitted window, e.g. "7/1 – 7/7". */
+  /** Compact label for the complete selected window, e.g. "7/1 – 7/7". */
   readonly spanLabel: string;
-  /** Number of days actually plotted after trimming empty leading/trailing days. */
+  /** Number of selected days or intraday windows plotted. */
   readonly visibleDayCount: number;
 }
 
@@ -215,15 +215,13 @@ export function buildProjectTrendView(params: BuildProjectTrendViewParams): Proj
     ? [...activeSeries, { key: NO_PROJECT_KEY, label: NO_PROJECT_LABEL, color: NO_PROJECT_COLOR }]
     : activeSeries;
 
-  // Scale the plot to PROJECT time (excluding the "No project" bucket) so the
-  // actual projects fill the chart instead of being crushed under a dominant gray
-  // unassigned band. The unassigned band still renders (faint, clamped to the top)
-  // for context.
+  // Every visible band uses the same y-scale. A previous version excluded the
+  // "No project" bucket from the scale and then clamped its geometry, which made
+  // the gray area impossible to compare honestly with project time.
   return buildTrendGeometry({
     dayList,
     series,
     secondsFor: (day, key) => buckets.get(day)?.get(key) ?? 0,
-    axisKeys: series.filter((item) => item.key !== NO_PROJECT_KEY).map((item) => item.key),
   });
 }
 
@@ -233,8 +231,6 @@ export interface TrendGeometryParams {
   /** Bands bottom → top (largest first by convention). */
   readonly series: readonly ProjectTrendSeriesItem[];
   readonly secondsFor: (day: string, seriesKey: string) => number;
-  /** Series keys that set the y-scale; other bands render clamped for context. Defaults to all series. */
-  readonly axisKeys?: readonly string[];
 }
 
 /**
@@ -248,24 +244,10 @@ export function buildTrendGeometry(params: TrendGeometryParams): ProjectTrendVie
   const dayTotals = dayList.map((day) => series.reduce((sum, item) => sum + secondsFor(day, item.key), 0));
   const maxDaySeconds = dayTotals.reduce((max, value) => Math.max(max, value), 0);
 
-  // Fit the plotted window to the days that actually have tracked time so the
-  // curve spans the panel edge-to-edge instead of trailing off into the empty
-  // history before tracking began. Interior zero-days stay (they are real gaps);
-  // only leading/trailing empties are trimmed. Falls back to the full window when
-  // nothing has data (the caller renders an empty state in that case anyway).
-  let firstIdx = dayTotals.findIndex((total) => total > 0);
-  let lastIdx = -1;
-  for (let index = dayTotals.length - 1; index >= 0; index -= 1) {
-    if (dayTotals[index]! > 0) {
-      lastIdx = index;
-      break;
-    }
-  }
-  if (firstIdx === -1 || lastIdx < firstIdx) {
-    firstIdx = 0;
-    lastIdx = dayList.length - 1;
-  }
-  const visibleDays = dayList.slice(firstIdx, lastIdx + 1);
+  // Keep the complete selected calendar window on the x-axis. Trimming empty
+  // leading/trailing days visually stretched a few active days across Week or
+  // Month and made the chart imply activity continuity that was not present.
+  const visibleDays = [...dayList];
   const visibleCount = visibleDays.length;
   const fallbackDay = dayList[dayList.length - 1] ?? "";
   const spanLabel =
@@ -273,12 +255,7 @@ export function buildTrendGeometry(params: TrendGeometryParams): ProjectTrendVie
       ? compactDayLabel(visibleDays[0] ?? fallbackDay)
       : `${compactDayLabel(visibleDays[0]!)} – ${compactDayLabel(visibleDays[visibleCount - 1]!)}`;
 
-  // Fall back to total time on days that have no axis-basis series time.
-  const axisKeys = params.axisKeys ?? series.map((item) => item.key);
-  const maxProjectDaySeconds = dayList.reduce((max, day) => {
-    return Math.max(max, axisKeys.reduce((sum, key) => sum + secondsFor(day, key), 0));
-  }, 0);
-  const axisBasisSeconds = maxProjectDaySeconds > 0 ? maxProjectDaySeconds : maxDaySeconds;
+  const axisBasisSeconds = maxDaySeconds;
 
   // Same nice-hour-step gridline machinery as the weekly trend chart, so the two
   // charts read consistently. The busiest day fills ~97% of the plot height so the
@@ -380,10 +357,10 @@ function chooseIntradayMinuteStep(maxMinutes: number): number {
 /**
  * Single-day variant of the trend model in the SAME ProjectTrendView shape:
  * segments bucket into 30-minute windows instead of days, so Day mode renders
- * through the identical smooth stacked-area panel as Week/Month. Leading and
- * trailing idle windows are trimmed (like empty days in the multi-day view),
- * the y-scale switches to minutes-per-window while a window's peak stays under
- * an hour, and x-ticks land on clock-hour boundaries.
+ * through the identical smooth stacked-area panel as Week/Month. The complete
+ * logical day stays on the x-axis so the position of activity remains comparable
+ * with the Day dashboard; the y-scale switches to minutes-per-window while a
+ * window's peak stays under an hour, and x-ticks land on clock-hour boundaries.
  */
 export function buildProjectIntradayTrendView(params: BuildProjectIntradayTrendViewParams): ProjectTrendView {
   const { segments, projectBySegmentId, projects } = params;
@@ -424,18 +401,8 @@ export function buildProjectIntradayTrendView(params: BuildProjectIntradayTrendV
   const windowTotals = buckets.map((bucket) => [...bucket.values()].reduce((sum, value) => sum + value, 0));
   const maxDaySeconds = windowTotals.reduce((max, value) => Math.max(max, value), 0);
 
-  let firstIdx = windowTotals.findIndex((total) => total > 0);
-  let lastIdx = -1;
-  for (let index = windowTotals.length - 1; index >= 0; index -= 1) {
-    if (windowTotals[index]! > 0) {
-      lastIdx = index;
-      break;
-    }
-  }
-  if (firstIdx === -1 || lastIdx < firstIdx) {
-    firstIdx = 0;
-    lastIdx = INTRADAY_WINDOW_COUNT - 1;
-  }
+  const firstIdx = 0;
+  const lastIdx = INTRADAY_WINDOW_COUNT - 1;
   const visibleCount = lastIdx - firstIdx + 1;
   const xFor = (visibleIndex: number): number => {
     const { left, right } = PROJECT_TREND_CHART_BOUNDS;
@@ -443,13 +410,9 @@ export function buildProjectIntradayTrendView(params: BuildProjectIntradayTrendV
     return left + (visibleIndex / (visibleCount - 1)) * (right - left);
   };
 
-  // Project-only basis (gray band clamps) with a minute scale under one hour.
-  const axisBasisWindow = buckets.reduce((max, bucket) => {
-    let projectSeconds = 0;
-    for (const [key, value] of bucket) if (key !== NO_PROJECT_KEY) projectSeconds += value;
-    return Math.max(max, projectSeconds);
-  }, 0);
-  const axisBasisSeconds = axisBasisWindow > 0 ? axisBasisWindow : maxDaySeconds;
+  // Use the same scale for project and unassigned time so every band remains
+  // quantitatively comparable.
+  const axisBasisSeconds = maxDaySeconds;
   const axisSeconds = axisBasisSeconds > 0 ? axisBasisSeconds / 0.97 : 3600;
 
   const yAxis: ProjectTrendYAxisTick[] = [];

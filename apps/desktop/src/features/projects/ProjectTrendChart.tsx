@@ -20,6 +20,9 @@ export interface ProjectTrendChartProps {
   /** Render a single day bucketed into 30-minute windows instead of day columns. */
   readonly intraday?: boolean;
   readonly startOfDayMinutes?: number;
+  /** Compact, fixed-window summary used on the project library. */
+  readonly variant?: "detail" | "overview";
+  readonly onOpenTrends?: () => void;
 }
 
 interface HoverRow {
@@ -39,6 +42,7 @@ interface HoverState {
 
 type ScaleTickStyle = CSSProperties & { readonly "--ptc-scale-y": string };
 type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
+type BarsGridStyle = CSSProperties & { readonly "--ptc-bar-columns": number };
 
 function scaleTickStyle(y: number): ScaleTickStyle {
   return { "--ptc-scale-y": `${y}%` };
@@ -49,14 +53,13 @@ function axisTickStyle(x: number): AxisTickStyle {
 }
 
 /**
- * Multi-day project trend rendered as a SMOOTH stacked area over the last N days
- * (x = days oldest→newest, y = tracked seconds/day). Each project is a soft
- * translucent band capped by a crisp line, stacked largest-at-the-bottom with a
- * gray "No project" band on top — mirroring the app's Focus/Drift area chart
- * (editorial panel, label-mono eyebrow, pill legend, hour y-scale, day x-axis).
+ * Project assignment trend. Detail ranges use the app's smooth stacked-area
+ * language; the fixed project-library overview uses the shared stacked-column
+ * language so it stays comparable with Weekly Breakdown.
  */
 export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
   const days = props.days ?? 14;
+  const isOverview = props.variant === "overview";
   const [hover, setHover] = useState<HoverState | null>(null);
   const view = props.intraday
     ? buildProjectIntradayTrendView({
@@ -75,10 +78,20 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
       });
 
   const hasData = view.series.length > 0 && view.maxDaySeconds > 0;
+  const overviewRangeLabel = `latest ${days} days`;
   const labelByKey = new Map(view.series.map((item) => [item.key, item.label]));
+  const overviewAccessibleSummary = view.columns.map((column) => {
+    const fullDay = formatDayLabel(column.day);
+    if (column.segments.length === 0) return `${fullDay}: no tracked time`;
+    const segments = column.segments.map((segment) => {
+      const label = labelByKey.get(segment.key) ?? NO_PROJECT_LABEL;
+      return `${label} ${formatCompactDurationFromSeconds(segment.seconds)}`;
+    });
+    return `${fullDay}: ${segments.join(", ")}`;
+  }).join("; ");
   const { left, right, top, bottom } = view.bounds;
 
-  function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
+  function showHover(column: ProjectTrendColumn, event: MouseEvent<Element>) {
     const fullDay = column.hoverLabel ?? formatDayLabel(column.day);
     const rows: HoverRow[] = column.segments.map((segment) => ({
       key: segment.key,
@@ -97,24 +110,79 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
 
   return (
     <section
-      className="editorial-panel editorial-panel--soft insight-chart-panel ptc-panel"
-      aria-label={`Project time trend, ${view.spanLabel}`}
+      className={`editorial-panel editorial-panel--soft insight-chart-panel ptc-panel${isOverview ? " ptc-panel--overview" : ""}`}
+      aria-label={isOverview ? `Latest ${days} days project overview, ${view.spanLabel}` : `Project assignment trend, ${view.spanLabel}`}
     >
       <div className="insight-panel-head">
-        <span className="label-mono">Project time &middot; {view.spanLabel}</span>
-        {view.series.length > 0 ? (
-          <div className="insight-panel-head__legend">
-            {view.series.map((item) => (
-              <span className={`chip ptc-chip${item.key === NO_PROJECT_KEY ? " ptc-chip--none" : ""}`} key={item.key}>
-                <span className="sw" style={{ background: item.color }} />
-                {item.label}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        <span className="label-mono">{isOverview ? `Project allocation · ${overviewRangeLabel}` : <>Project time &middot; {view.spanLabel}</>}</span>
+        <div className="ptc-panel__head-actions">
+          {view.series.length > 0 ? (
+            <div className="insight-panel-head__legend">
+              {view.series.map((item) => (
+                <span className={`chip ptc-chip${item.key === NO_PROJECT_KEY ? " ptc-chip--none" : ""}`} key={item.key}>
+                  <span className="sw" style={{ background: item.color }} />
+                  {item.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {isOverview && props.onOpenTrends ? (
+            <button type="button" className="app-btn app-btn--quiet app-btn--compact ptc-overview__link" onClick={props.onOpenTrends}>
+              Explore in Trends <span aria-hidden="true">&rarr;</span>
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {hasData ? (
+      {hasData && isOverview ? (
+        <div
+          className="ptc-bars"
+          role="img"
+          aria-label={`Project and unassigned time by day, ${view.spanLabel}. ${overviewAccessibleSummary}`}
+        >
+          <div className="ptc-bars__plot">
+            <div className="ptc-bars__grid" aria-hidden="true">
+              {view.yAxis.map((tick) => (
+                <span className="ptc-bars__gridline" style={scaleTickStyle(tick.y)} key={tick.label}><i>{tick.label}</i></span>
+              ))}
+              {view.columns.slice(1).map((column, index) => (
+                <span
+                  className="ptc-bars__vline"
+                  style={{ left: `${((index + 1) / view.columns.length) * 100}%` }}
+                  key={`vline-${column.day}`}
+                />
+              ))}
+            </div>
+            <div className="ptc-bars__columns" style={{ "--ptc-bar-columns": view.columns.length } as BarsGridStyle}>
+              {view.columns.map((column) => {
+                const stackHeight = column.segments.reduce((sum, segment) => sum + segment.heightPct, 0);
+                return (
+                  <div className="ptc-bars__column" key={column.day}>
+                    <div className="ptc-bars__zone">
+                      <div
+                        className="ptc-bars__stack"
+                        style={{ height: `${Math.min(stackHeight, 100)}%` }}
+                        onMouseEnter={(event) => showHover(column, event)}
+                        onMouseMove={(event) => showHover(column, event)}
+                        onMouseLeave={() => setHover(null)}
+                      >
+                        {column.segments.map((segment) => (
+                          <span
+                            className={`ptc-bars__segment${segment.key === NO_PROJECT_KEY ? " ptc-bars__segment--none" : ""}`}
+                            style={{ height: `${(segment.seconds / Math.max(column.totalSeconds, 1)) * 100}%`, background: segment.color }}
+                            key={segment.key}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <span className="ptc-bars__day">{column.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ) : hasData ? (
         <div className="ptc-chart">
           <div className="ptc-plot">
             <svg
@@ -122,7 +190,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
               role="img"
-              aria-label={`Stacked project time by day, ${view.spanLabel}`}
+              aria-label={`Project and unassigned time by day, ${view.spanLabel}`}
             >
               <path className="ptc-grid" d={view.gridPath} />
               <g className="ptc-areas">
@@ -166,8 +234,8 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
                     >
                       <title>
                         {column.segments.length === 0
-                          ? `${fullDay}: no tracked project time`
-                          : `${fullDay}: ${formatCompactDurationFromSeconds(column.totalSeconds)} of tracked project time`}
+                          ? `${fullDay}: no tracked time`
+                          : `${fullDay}: ${formatCompactDurationFromSeconds(column.totalSeconds)} tracked time`}
                       </title>
                     </rect>
                   );

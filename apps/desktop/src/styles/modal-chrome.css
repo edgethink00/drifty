@@ -377,8 +377,7 @@
 /* Field labels read as mono eyebrows; inputs use the body font, mono only for
    code / URLs (opt in with .modal-code). Scoped to .auth-modal so the settings
    pages keep their own input styling. */
-.auth-modal .auth-modal__field > span,
-.auth-modal .projects-field__label {
+.auth-modal .auth-modal__field > span {
   font-family: var(--font-mono);
   font-size: 0.56rem;
   letter-spacing: 0.14em;

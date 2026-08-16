@@ -33,7 +33,6 @@ export interface ProjectDetailViewProps {
   readonly windowProjectSeconds: number;
   readonly lastActivityLabel: string;
   readonly busy?: boolean;
-  readonly onBack: () => void;
   readonly onSave: (input: ProjectInput) => void;
 }
 
@@ -60,7 +59,6 @@ export function ProjectDetailView({
   windowProjectSeconds,
   lastActivityLabel,
   busy = false,
-  onBack,
   onSave,
 }: ProjectDetailViewProps): JSX.Element {
   const [editorOpen, setEditorOpen] = useState(false);
@@ -83,7 +81,10 @@ export function ProjectDetailView({
     const totals = new Map<string, { label: string; seconds: number }>();
     for (const segment of projectSegments) {
       const label = segment.siteDomain ?? segment.appName;
-      const key = segment.siteDomain ? `site:${segment.siteDomain}` : `app:${segment.bundleId ?? segment.appName}`;
+      // Rows are identified by the label users actually see. The old app/domain
+      // keys could render duplicate labels (for example two separate "drifty"
+      // rows), which made the breakdown look like duplicated data.
+      const key = label.trim().toLowerCase() || "unknown";
       const existing = totals.get(key);
       totals.set(key, { label, seconds: (existing?.seconds ?? 0) + segment.durationSeconds });
     }
@@ -115,17 +116,9 @@ export function ProjectDetailView({
 
   return (
     <div className="project-detail">
-      <button type="button" className="app-btn app-btn--quiet app-btn--compact project-detail__back" onClick={onBack}>
-        <span aria-hidden="true">&larr;</span> All projects
-      </button>
-
       <section className="editorial-panel editorial-panel--soft insight-chart-panel project-detail__head-panel" aria-label={`Project ${project.name}`}>
         <div className="project-detail__head">
-          <div className="project-detail__identity">
-            <span className="pt-swatch" style={{ background: project.color }} aria-hidden="true" />
-            <h2 className="project-detail__name">{project.name}</h2>
-            <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
-          </div>
+          <span className="label-mono">Project overview</span>
           <div className="project-detail__actions">
             <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={() => setEditorOpen(true)}>Edit</button>
             <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={toggleArchive}>
@@ -144,11 +137,11 @@ export function ProjectDetailView({
             <strong>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</strong>
           </div>
           <div className="project-detail__stat">
-            <span className="label-mono">Share of project time</span>
+            <span className="label-mono">Share of assigned time</span>
             <strong>{totalSeconds > 0 ? `${sharePct}%` : "—"}</strong>
           </div>
           <div className="project-detail__stat">
-            <span className="label-mono">Last activity</span>
+            <span className="label-mono">Last activity in range</span>
             <strong>{lastActivityLabel}</strong>
           </div>
         </div>

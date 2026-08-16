@@ -28,7 +28,7 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
     projects: [project()],
     totalSecondsByProject: new Map([["p1", 5 * 3600 + 30 * 60]]),
     lastActivityByProject: new Map([["p1", "2026-07-10"]]),
-    totalCaption: "Last 14 days",
+    totalCaption: "Latest 7 days",
     onSave: vi.fn(),
     onDelete: vi.fn(),
     onOpenProject: vi.fn(),
@@ -37,16 +37,18 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
 }
 
 describe("ProjectsManager", () => {
-  it("renders a table row with last activity, status, and windowed total (no signals column)", () => {
+  it("renders a labeled project list with the fixed seven-day activity window", () => {
     render(<ProjectsManager {...baseProps()} />);
 
-    const table = screen.getByRole("table", { name: "Projects" });
-    expect(within(table).getByText("Drifty")).toBeTruthy();
-    expect(within(table).getByText("Jul 10, 2026")).toBeTruthy();
-    expect(within(table).getByText("Active")).toBeTruthy();
-    expect(within(table).getByText("Last 14 days")).toBeTruthy();
-    expect(within(table).getByText("5h 30m")).toBeTruthy();
-    expect(within(table).queryByText(/signals?$/i)).toBeNull();
+    const projectList = screen.getByRole("region", { name: "Projects" });
+    expect(within(projectList).getByText("Last activity")).toBeTruthy();
+    expect(within(projectList).getByText("Time · Latest 7 days")).toBeTruthy();
+    expect(within(projectList).queryAllByText("Latest 7 days")).toHaveLength(0);
+    expect(within(projectList).getByText("Drifty")).toBeTruthy();
+    expect(within(projectList).getByText("Jul 10, 2026")).toBeTruthy();
+    expect(within(projectList).getByText("Active")).toBeTruthy();
+    expect(within(projectList).getByText("5h 30m")).toBeTruthy();
+    expect(within(projectList).queryByText(/signals?$/i)).toBeNull();
   });
 
   it("opens the project detail on row click instead of expanding", () => {
@@ -78,7 +80,7 @@ describe("ProjectsManager", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
 
     const dialog = screen.getByRole("dialog", { name: "Edit project" });
-    const nameInput = within(dialog).getByLabelText("Project name") as HTMLInputElement;
+    const nameInput = within(dialog).getByLabelText("Name") as HTMLInputElement;
     expect(nameInput.value).toBe("Drifty");
 
     fireEvent.change(nameInput, { target: { value: "Drifty Mac" } });

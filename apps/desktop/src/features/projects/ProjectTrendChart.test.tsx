@@ -62,6 +62,29 @@ describe("ProjectTrendChart", () => {
     expect(screen.getByText("No project")).toBeTruthy();
   });
 
+  it("renders the library overview as a compact 14-day fixed-window panel", () => {
+    const { container } = render(
+      <ProjectTrendChart
+        segments={SEGMENTS}
+        projectBySegmentId={ASSIGNMENTS}
+        projects={PROJECTS}
+        days={14}
+        endDay="2026-07-06"
+        variant="overview"
+      />,
+    );
+
+    expect(screen.getByText(/Project allocation · latest 14 days/i)).toBeTruthy();
+    expect(container.querySelector(".ptc-panel--overview")).toBeTruthy();
+    expect(container.querySelectorAll(".ptc-bars__column")).toHaveLength(14);
+    expect(container.querySelectorAll(".ptc-bars__vline")).toHaveLength(13);
+    expect(screen.getByText("6/23")).toBeTruthy();
+    expect(screen.getByText("7/6")).toBeTruthy();
+    expect(container.querySelectorAll(".ptc-area")).toHaveLength(0);
+    expect(screen.getByRole("img", { name: /Project Alpha 1h/i })).toBeTruthy();
+    expect(screen.getByRole("img", { name: /No project 20m/i })).toBeTruthy();
+  });
+
   it("draws one smooth stacked area band (fill + line) per active series", () => {
     const { container } = render(
       <ProjectTrendChart
@@ -92,7 +115,8 @@ describe("ProjectTrendChart", () => {
       />,
     );
 
-    // Every visible day (7/4–7/6) gets its own compact "M/D" tick.
+    // Every day in the selected seven-day window stays visible, including idle days.
+    expect(screen.getByText("6/30")).toBeTruthy();
     expect(screen.getByText("7/4")).toBeTruthy();
     expect(screen.getByText("7/5")).toBeTruthy();
     expect(screen.getByText("7/6")).toBeTruthy();
@@ -112,13 +136,13 @@ describe("ProjectTrendChart", () => {
       />,
     );
 
-    // The window fits to real data: its oldest day (6/27) is only in range under
-    // the 14-day default, and the eyebrow shows the fitted span, not a fixed count.
+    // The oldest active day is only in range under the 14-day default, and the
+    // eyebrow keeps the complete selected calendar span.
     expect(screen.getByText("6/27")).toBeTruthy();
-    expect(screen.getByText(/6\/27 – 7\/6/)).toBeTruthy();
+    expect(screen.getByText(/6\/23 – 7\/6/)).toBeTruthy();
   });
 
-  it("fits the window edge-to-edge to the days that have data", () => {
+  it("preserves idle days at the edges of the selected window", () => {
     // 14-day window ending 7/6, but the segments only cover 7/4–7/6.
     render(
       <ProjectTrendChart
@@ -130,9 +154,8 @@ describe("ProjectTrendChart", () => {
       />,
     );
 
-    // Eyebrow shows the trimmed data span, and empty leading days are dropped.
-    expect(screen.getByText(/7\/4 – 7\/6/)).toBeTruthy();
-    expect(screen.queryByText("6/25")).toBeNull();
+    expect(screen.getByText(/6\/23 – 7\/6/)).toBeTruthy();
+    expect(screen.getByText("6/23")).toBeTruthy();
   });
 
   it("omits the No project band when every segment is assigned", () => {
@@ -152,7 +175,7 @@ describe("ProjectTrendChart", () => {
     expect(container.querySelectorAll(".ptc-area")).toHaveLength(2);
   });
 
-  it("scales the y-axis to project time, not the dominant unassigned band", () => {
+  it("uses one honest y-axis for project and unassigned time", () => {
     // 1h of project time under a 5h unassigned pile on the same day.
     const segs: ActivitySegment[] = [
       seg("p1", "2026-07-06T09:00:00", 3600), // 1h → Alpha
@@ -168,10 +191,10 @@ describe("ProjectTrendChart", () => {
       />,
     );
 
-    // Axis tops out near the 1h project total; a 6h-total scale would show these.
-    expect(screen.queryByText("4h")).toBeNull();
-    expect(screen.queryByText("6h")).toBeNull();
-    // The unassigned band still renders (faint) for context.
+    // The six-hour stacked total drives the scale, so the gray band is comparable
+    // with the project band instead of being clamped at the chart ceiling.
+    expect(screen.getByText("1.5h")).toBeTruthy();
+    expect(screen.getByText("6h")).toBeTruthy();
     expect(screen.getByText("No project")).toBeTruthy();
   });
 
@@ -217,10 +240,11 @@ describe("ProjectTrendChart", () => {
     expect(container.querySelectorAll("path.ptc-area").length).toBe(3);
     // Minute-scale y ticks (busiest window is 15m → 5m steps).
     const scale = [...container.querySelectorAll(".ptc-scale span")].map((node) => node.textContent);
-    expect(scale).toEqual(["5m", "10m"]);
-    // X axis labels are clock hours within the trimmed active span.
+    expect(scale).toEqual(["5m", "10m", "15m"]);
+    // X axis labels cover the complete logical day.
     const axis = [...container.querySelectorAll(".ptc-axis span")].map((node) => node.textContent);
     expect(axis.length).toBeGreaterThan(0);
     expect(axis.every((label) => /(am|pm)/i.test(label ?? ""))).toBe(true);
+    expect(axis).toContain("12am");
   });
 });

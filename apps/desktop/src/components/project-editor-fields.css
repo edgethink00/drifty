@@ -1,0 +1,22 @@
+.project-editor-fields {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.project-editor-field {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.project-editor-field > .settings-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.project-editor-field__textarea {
+  min-height: 6rem;
+  padding: 0.58rem 0.7rem;
+  line-height: 1.48;
+  resize: vertical;
+}

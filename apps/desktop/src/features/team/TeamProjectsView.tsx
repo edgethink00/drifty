@@ -4,7 +4,7 @@ import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
-import { ProjectColorToken } from "../../components/ProjectColorToken";
+import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import type { TeamProject, TeamProjectAnchor, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
 import type { TeamProjectsWindow } from "./useTeamProjects";
@@ -38,19 +38,6 @@ export type TeamProjectsViewProps = {
   readonly onArchive: (projectId: string, archived: boolean) => void;
 };
 
-const COLOR_SWATCHES = [
-  { color: "#6366f1", name: "Indigo" },
-  { color: "#ec4899", name: "Pink" },
-  { color: "#f59e0b", name: "Amber" },
-  { color: "#10b981", name: "Emerald" },
-  { color: "#3b82f6", name: "Blue" },
-  { color: "#8b5cf6", name: "Violet" },
-  { color: "#ef4444", name: "Red" },
-  { color: "#14b8a6", name: "Teal" },
-  { color: "#f97316", name: "Orange" },
-  { color: "#84cc16", name: "Lime" },
-] as const;
-
 type StatusFilter = "all" | "active" | "archived";
 
 type EditorState = {
@@ -78,7 +65,7 @@ function ProjectEditorModal({
   const project = state.project;
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
-  const [color, setColor] = useState(project?.color || COLOR_SWATCHES[0].color);
+  const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
 
   useModalDismiss(onClose, { disabled: actionLoading });
 
@@ -98,7 +85,7 @@ function ProjectEditorModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section
-        className="auth-modal modal-shell profile-modal team-modal team-editor-modal"
+        className="auth-modal modal-shell profile-modal team-modal project-editor-modal"
         data-modal-variant="standard"
         role="dialog"
         aria-modal="true"
@@ -112,40 +99,16 @@ function ProjectEditorModal({
             <p>{teamName} · shared project</p>
           </div>
         </div>
-        <div className="team-modal__body">
-          <div className="team-modal__field">
-            <span className="label-mono">Name</span>
-            <input
-              className="settings-input"
-              type="text"
-              value={name}
-              maxLength={120}
-              autoFocus
-              placeholder="e.g. Q3 launch"
-              aria-label="Project name"
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="team-modal__field">
-            <span className="label-mono">Description</span>
-            <textarea
-              className="settings-input"
-              value={description}
-              maxLength={2000}
-              placeholder="What counts toward this project? Drifty matches activity from this."
-              aria-label="Project description"
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </div>
-          <div className="team-modal__field">
-            <span className="label-mono" id="team-editor-color-label">Color</span>
-            <ProjectColorToken
-              value={color}
-              swatches={COLOR_SWATCHES}
-              ariaLabel="Project color"
-              onPick={setColor}
-            />
-          </div>
+        <div className="team-modal__body project-editor-modal__body">
+          <ProjectEditorFields
+            idPrefix="team-project"
+            name={name}
+            description={description}
+            color={color}
+            onNameChange={setName}
+            onDescriptionChange={setDescription}
+            onColorChange={setColor}
+          />
           {actionError ? <p className="team-message team-message--error">{actionError}</p> : null}
           <div className="modal-foot team-modal__actions">
             <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
@@ -214,6 +177,15 @@ export function TeamProjectsView({
     };
     document.addEventListener("mousedown", onMouseDown);
     return () => document.removeEventListener("mousedown", onMouseDown);
+  }, [menuFor]);
+
+  useEffect(() => {
+    if (menuFor === null) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuFor(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [menuFor]);
 
   // Close the editor once its save round-trip finishes without an error.
@@ -329,12 +301,12 @@ export function TeamProjectsView({
         {error ? <p className="team-message team-message--error">{error}</p> : null}
         {actionError && !editor ? <p className="team-message team-message--error">{actionError}</p> : null}
 
-        <div className="projects-table" role="table" aria-label="Shared projects">
-          <div className="projects-table__head" role="row">
+        <div className="projects-table" role="region" aria-label="Shared projects">
+          <div className="projects-table__head">
             <span>Project</span>
             <span>Status</span>
-            <span>Team time</span>
-            <span />
+            <span>Team time in range</span>
+            <span><span className="sr-only">Actions</span></span>
           </div>
           {filtered.map((project) => {
             const isArchived = project.status === "archived";
@@ -345,7 +317,7 @@ export function TeamProjectsView({
                 className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`}
                 key={project.id}
               >
-                <div className="projects-table__row" role="row" onClick={() => setSelectedProjectId(project.id)}>
+                <div className="projects-table__row" onClick={() => setSelectedProjectId(project.id)}>
                   <div className="pt-proj">
                     <span className="pt-swatch" style={{ background: project.color }} />
                     <button
@@ -415,7 +387,7 @@ export function TeamProjectsView({
               </div>
             );
           })}
-          {filtered.length === 0 ? <div className="projects-table__empty">{emptyLabel}</div> : null}
+          {filtered.length === 0 ? <div className="projects-table__empty"><span>{emptyLabel}</span></div> : null}
         </div>
       </div>
 

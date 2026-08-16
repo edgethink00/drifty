@@ -3,6 +3,7 @@ import type { ActivitySegment, Project, ProjectAssignmentRecord, ProjectInput } 
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
 import { describeRelativeDay, isoDateFromTimestamp } from "../../lib/formatting";
+import { DateNavigator } from "../../components/DateNavigator";
 import { ProjectDetailView } from "./ProjectDetailView";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
@@ -13,6 +14,8 @@ import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../setting
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 const LAST_ACTIVITY_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+const PROJECT_LIBRARY_WINDOW_DAYS = 7;
 
 type TrendRangeMode = "day" | "week" | "month";
 
@@ -68,11 +71,74 @@ export interface ProjectsPageProps {
   readonly consentStoresCloudSamples: boolean;
   readonly onTrendWindowChange: (range: { readonly startDay: string; readonly endDay: string }) => void;
   readonly onConfigureModel: () => void;
+  readonly onOpenTrends: () => void;
   readonly onSaveProject: (input: ProjectInput) => void;
   readonly onDeleteProject: (id: string) => void;
   readonly onRunAnalysis: () => void;
   readonly onConsentConfirm: () => void;
   readonly onConsentCancel: () => void;
+}
+
+interface ProjectMatchingCardProps {
+  readonly activeProjectCount: number;
+  readonly analysisConnected: boolean;
+  readonly analysisSetup: AnalysisAiSetupState;
+  readonly layout: "strip" | "card";
+  readonly running: boolean;
+  readonly onConfigureModel: () => void;
+  readonly onRunAnalysis: () => void;
+}
+
+function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
+  const modelLabel = analysisModelLabel(props.analysisSetup);
+  return (
+    <div
+      className={`projects-model-status projects-model-status--${props.layout}${props.analysisConnected ? " is-connected" : " is-disconnected"}`}
+      role="group"
+      aria-label="Project matching model"
+    >
+      <div className="projects-model-status__info">
+        <span className="projects-model-status__label">Project matching</span>
+        <span className="projects-model-status__value">
+          {props.layout === "strip"
+            ? <>Uses {modelLabel} to refresh the latest 7 days. Live activity classification is configured separately.</>
+            : <>Refresh project assignments without changing live activity classification.</>}
+        </span>
+        {props.layout !== "strip" ? (
+          <dl className="projects-model-status__meta">
+            <div><dt>Model</dt><dd>{modelLabel}</dd></div>
+            <div><dt>Refresh scope</dt><dd>Latest 7 days</dd></div>
+          </dl>
+        ) : null}
+      </div>
+      {props.layout === "card" ? (
+        <span className={`projects-model-status__readiness${props.analysisConnected ? " is-connected" : ""}`}>
+          <span className="projects-model-status__readiness-dot" aria-hidden="true" />
+          {props.analysisConnected ? "Ready" : "Setup required"}
+        </span>
+      ) : (
+        <span className={`projects-model-status__chip${props.analysisConnected ? " is-connected" : ""}`}>
+          {props.analysisConnected ? "Project model ready" : "Project model setup required"}
+        </span>
+      )}
+      <div className="projects-model-status__actions">
+        <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>Model settings</button>
+        <button
+          type="button"
+          className="app-btn app-btn--secondary"
+          onClick={props.onRunAnalysis}
+          disabled={props.running || !props.analysisConnected || props.activeProjectCount === 0}
+        >
+          {props.running ? "Refreshing…" : "Refresh latest 7 days"}
+        </button>
+      </div>
+      {props.activeProjectCount === 0 ? (
+        <p className="projects-model-status__reason">Create at least one active project before refreshing assignments.</p>
+      ) : !props.analysisConnected ? (
+        <p className="projects-model-status__reason">Connect a project matching model before refreshing assignments.</p>
+      ) : null}
+    </div>
+  );
 }
 
 export function ProjectsPage(props: ProjectsPageProps) {
@@ -81,11 +147,15 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   const activeProjects = props.projects.filter((project) => project.status === "active");
+  const selectedProject = selectedProjectId
+    ? props.projects.find((project) => project.id === selectedProjectId) ?? null
+    : null;
 
   const windowDays = windowDaysFor(rangeMode);
+  const dataWindowDays = selectedProject ? windowDays : PROJECT_LIBRARY_WINDOW_DAYS;
   const isDayMode = rangeMode === "day";
-  const endDay = shiftIsoDate(props.selectedDay, -windowOffset * windowDays);
-  const startDay = shiftIsoDate(endDay, -(windowDays - 1));
+  const endDay = shiftIsoDate(props.selectedDay, -windowOffset * dataWindowDays);
+  const startDay = shiftIsoDate(endDay, -(dataWindowDays - 1));
   const atLatestWindow = windowOffset === 0;
   const relativeDayLabel = describeRelativeDay(endDay, props.startOfDayMinutes);
   const windowLabel = isDayMode
@@ -113,14 +183,30 @@ export function ProjectsPage(props: ProjectsPageProps) {
     return { totalSecondsByProject: totals, lastActivityByProject: lastDays };
   }, [props.trendSegments, props.trendProjectBySegmentId]);
 
-  const totalCaption = isDayMode ? windowLabel : atLatestWindow ? `Last ${windowDays} days` : windowLabel;
+  // Project rows, overview chart, and assignment refresh share one seven-day window.
+  const librarySummaryStartDay = shiftIsoDate(endDay, -(PROJECT_LIBRARY_WINDOW_DAYS - 1));
+  const { libraryTotalSecondsByProject, libraryLastActivityByProject } = useMemo(() => {
+    const totals = new Map<string, number>();
+    const lastDays = new Map<string, string>();
+    for (const segment of props.trendSegments) {
+      const day = isoDateFromTimestamp(segment.startedAt);
+      if (!day || day < librarySummaryStartDay || day > endDay) continue;
+      const projectId = props.trendProjectBySegmentId.get(segment.id);
+      if (!projectId) continue;
+      totals.set(projectId, (totals.get(projectId) ?? 0) + segment.durationSeconds);
+      if (day > (lastDays.get(projectId) ?? "")) lastDays.set(projectId, day);
+    }
+    return { libraryTotalSecondsByProject: totals, libraryLastActivityByProject: lastDays };
+  }, [endDay, librarySummaryStartDay, props.trendSegments, props.trendProjectBySegmentId]);
 
-  const selectedProject = selectedProjectId
-    ? props.projects.find((project) => project.id === selectedProjectId) ?? null
-    : null;
+  const totalCaption = isDayMode ? windowLabel : atLatestWindow ? `Last ${windowDays} days` : windowLabel;
   // If the open project gets deleted elsewhere, fall back to the list.
   useEffect(() => {
-    if (selectedProjectId && !selectedProject) setSelectedProjectId(null);
+    if (selectedProjectId && !selectedProject) {
+      setSelectedProjectId(null);
+      setRangeMode("week");
+      setWindowOffset(0);
+    }
   }, [selectedProjectId, selectedProject]);
 
   // Only draw the chart once the loaded segments actually cover the selected
@@ -128,64 +214,84 @@ export function ProjectsPage(props: ProjectsPageProps) {
   // window's data at the new scale (flicker), then snap when the fetch lands.
   const trendReady = props.trendLoadedRange?.startDay === startDay && props.trendLoadedRange?.endDay === endDay;
 
+  const returnToProjectLibrary = () => {
+    setSelectedProjectId(null);
+    setRangeMode("week");
+    setWindowOffset(0);
+  };
+
+  const openProject = (projectId: string) => {
+    setRangeMode("week");
+    setWindowOffset(0);
+    setSelectedProjectId(projectId);
+  };
+
   return (
     <div className="page projects-page">
       <div className="pg-head projects-page__head">
-        <div className="projects-page__title">
-          <h1>Projects</h1>
-          <span className="projects-help">
-            <button type="button" className="projects-help__trigger" aria-label="What are projects?">How it works</button>
-            <span className="projects-help__tip" role="tooltip">Group your tracked time by what it was for. Describe a project in plain language and Drifty's analysis model attributes your activity to it.</span>
-          </span>
-        </div>
-        <div className="classification-range-controls trends-range-controls">
-          <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Range granularity">
-            {RANGE_MODE_OPTIONS.map((option) => (
-              <button
-                type="button"
-                className={rangeMode === option.key ? "settings-mode-option is-active" : "settings-mode-option"}
-                role="radio"
-                aria-checked={rangeMode === option.key}
-                key={option.key}
-                onClick={() => {
-                  setRangeMode(option.key);
-                  setWindowOffset(0);
-                }}
-              >
-                <span>{option.label}</span>
-              </button>
-            ))}
+        {selectedProject ? (
+          <div className="projects-page__detail-title">
+            <button type="button" className="app-btn app-btn--quiet app-btn--compact projects-page__back" onClick={returnToProjectLibrary}>
+              <span aria-hidden="true">&larr;</span> Projects
+            </button>
+            <div className="projects-page__project-identity">
+              <span className="pt-swatch" style={{ background: selectedProject.color }} aria-hidden="true" />
+              <h1>{selectedProject.name}</h1>
+              <span className={`chip${selectedProject.status === "archived" ? " gray" : " green"}`}>
+                {selectedProject.status === "archived" ? "Archived" : "Active"}
+              </span>
+            </div>
           </div>
-          <div className="day-nav" aria-label="Trend time window">
-            <div className="day-nav__current"><strong>{windowLabel}</strong></div>
-            <button
-              className="app-btn app-btn--quiet app-btn--compact day-nav__step"
-              type="button"
-              aria-label="Previous window"
-              onClick={() => setWindowOffset((offset) => offset + 1)}
-            >
-              &lsaquo;
-            </button>
-            <button
-              className="app-btn app-btn--quiet app-btn--compact day-nav__today"
-              type="button"
-              disabled={atLatestWindow}
-              onClick={() => setWindowOffset(0)}
-            >
-              Latest
-            </button>
-            <button
-              className="app-btn app-btn--quiet app-btn--compact day-nav__step"
-              type="button"
-              aria-label="Next window"
-              disabled={atLatestWindow}
-              onClick={() => setWindowOffset((offset) => Math.max(0, offset - 1))}
-            >
-              &rsaquo;
-            </button>
+        ) : (
+          <div className="projects-page__heading-copy">
+            <div className="projects-page__title">
+              <h1>Projects</h1>
+              <span className="projects-help">
+                <button type="button" className="projects-help__trigger" aria-describedby="projects-help-tip">How it works</button>
+                <span className="projects-help__tip" id="projects-help-tip" role="tooltip">Describe the work that belongs together. Drifty uses that description to group matching activity into a project.</span>
+              </span>
+            </div>
+            <p>Define the work Drifty should group your activity into.</p>
           </div>
-        </div>
+        )}
+        {selectedProject ? (
+          <div className="classification-range-controls trends-range-controls">
+            <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Project detail range">
+              {RANGE_MODE_OPTIONS.map((option) => (
+                <button
+                  type="button"
+                  className={rangeMode === option.key ? "settings-mode-option is-active" : "settings-mode-option"}
+                  role="radio"
+                  aria-checked={rangeMode === option.key}
+                  key={option.key}
+                  onClick={() => {
+                    setRangeMode(option.key);
+                    setWindowOffset(0);
+                  }}
+                >
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+            <DateNavigator
+              ariaLabel="Project detail time window"
+              label={windowLabel}
+              todayLabel="Latest"
+              isTodayDisabled={atLatestWindow}
+              isNextDisabled={atLatestWindow}
+              onPrevious={() => setWindowOffset((offset) => offset + 1)}
+              onToday={() => setWindowOffset(0)}
+              onNext={() => setWindowOffset((offset) => Math.max(0, offset - 1))}
+              previousLabel="Show previous project window"
+              nextLabel="Show next project window"
+            />
+          </div>
+        ) : null}
       </div>
+
+      {props.runError ? (
+        <div className="projects-page__banner projects-page__banner--error" role="alert">{props.runError}</div>
+      ) : null}
 
       {selectedProject ? (
         <ProjectDetailView
@@ -210,79 +316,73 @@ export function ProjectsPage(props: ProjectsPageProps) {
             return Number.isNaN(parsed.getTime()) ? "—" : LAST_ACTIVITY_FORMAT.format(parsed);
           })()}
           busy={props.running || props.projectsLoading}
-          onBack={() => setSelectedProjectId(null)}
           onSave={props.onSaveProject}
         />
       ) : (
         <>
           <ProjectsManager
             projects={props.projects}
-            totalSecondsByProject={totalSecondsByProject}
-            lastActivityByProject={lastActivityByProject}
-            totalCaption={totalCaption}
+            totalSecondsByProject={libraryTotalSecondsByProject}
+            lastActivityByProject={libraryLastActivityByProject}
+            totalCaption="Latest 7 days"
             onSave={props.onSaveProject}
             onDelete={props.onDeleteProject}
-            onOpenProject={setSelectedProjectId}
+            onOpenProject={openProject}
             busy={props.running || props.projectsLoading}
           />
-
           {activeProjects.length > 0 ? (
-            <div className="projects-charts">
-              {!trendReady ? (
-                <ProjectTrendChartSkeleton
-                  windowLabel={windowLabel}
-                  legendProjects={activeProjects}
-                  isDayMode={isDayMode}
-                  startDay={startDay}
-                  endDay={endDay}
-                  startOfDayMinutes={props.startOfDayMinutes}
-                />
-              ) : (
-                <ProjectTrendChart
-                  segments={props.trendSegments}
-                  projectBySegmentId={props.trendProjectBySegmentId}
-                  projects={props.projects}
-                  days={windowDays}
-                  endDay={endDay}
-                  intraday={isDayMode}
-                  startOfDayMinutes={props.startOfDayMinutes}
-                />
-              )}
+            <div className="projects-overview-layout">
+              <div className="projects-charts projects-charts--overview">
+                {trendReady ? (
+                  <ProjectTrendChart
+                    segments={props.trendSegments}
+                    projectBySegmentId={props.trendProjectBySegmentId}
+                    projects={props.projects}
+                    days={PROJECT_LIBRARY_WINDOW_DAYS}
+                    endDay={endDay}
+                    variant="overview"
+                    onOpenTrends={props.onOpenTrends}
+                  />
+                ) : (
+                  <ProjectTrendChartSkeleton
+                    windowLabel={`Latest ${PROJECT_LIBRARY_WINDOW_DAYS} days`}
+                    legendProjects={activeProjects}
+                    isDayMode={false}
+                    startDay={startDay}
+                    endDay={endDay}
+                    startOfDayMinutes={props.startOfDayMinutes}
+                    variant="overview"
+                    onOpenTrends={props.onOpenTrends}
+                  />
+                )}
+              </div>
+              <ProjectMatchingCard
+                activeProjectCount={activeProjects.length}
+                analysisConnected={props.analysisConnected}
+                analysisSetup={props.analysisSetup}
+                layout="card"
+                running={props.running}
+                onConfigureModel={props.onConfigureModel}
+                onRunAnalysis={props.onRunAnalysis}
+              />
             </div>
           ) : null}
         </>
       )}
 
-      <div className="projects-page__footer">
-        {props.runError ? (
-          <div className="projects-page__banner projects-page__banner--error" role="alert">Analysis failed: {props.runError}</div>
-        ) : null}
-        <div className={`projects-model-status${props.analysisConnected ? " is-connected" : " is-disconnected"}`} role="group" aria-label="Project analysis model">
-          <div className="projects-model-status__info">
-            <span className="projects-model-status__label">Project analysis</span>
-            <span className="projects-model-status__value">{analysisModelLabel(props.analysisSetup)}</span>
-          </div>
-          <span className={`projects-model-status__chip${props.analysisConnected ? " is-connected" : ""}`}>
-            {props.analysisConnected ? "Connected" : "Needs setup"}
-          </span>
-          <div className="projects-model-status__actions">
-            <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>AI setup</button>
-            <button
-              type="button"
-              className="app-btn app-btn--secondary"
-              onClick={props.onRunAnalysis}
-              disabled={props.running || !props.analysisConnected || activeProjects.length === 0}
-            >
-              {props.running ? "Analyzing…" : "Analyze last 7 days"}
-            </button>
-          </div>
-          {activeProjects.length === 0 ? (
-            <p className="projects-model-status__reason">Create at least one active project before running analysis.</p>
-          ) : !props.analysisConnected ? (
-            <p className="projects-model-status__reason">Connect an analysis model before running analysis.</p>
-          ) : null}
+      {!selectedProject && activeProjects.length === 0 ? (
+        <div className="projects-page__footer">
+          <ProjectMatchingCard
+            activeProjectCount={activeProjects.length}
+            analysisConnected={props.analysisConnected}
+            analysisSetup={props.analysisSetup}
+            layout="strip"
+            running={props.running}
+            onConfigureModel={props.onConfigureModel}
+            onRunAnalysis={props.onRunAnalysis}
+          />
         </div>
-      </div>
+      ) : null}
 
       <ProjectPassConsentModal
         open={props.consentOpen}

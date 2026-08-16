@@ -1260,7 +1260,8 @@
 
 /* ── Project editor modal ── */
 
-.team-editor-modal {
+.team-editor-modal,
+.project-editor-modal {
   max-width: 30rem;
 }
 

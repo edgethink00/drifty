@@ -6929,6 +6929,7 @@ export default function App() {
               setSettingsSection("aiSetup");
               setAiSetupRequestedTab("intelligence");
             }}
+            onOpenTrends={() => navigateToTab("trends")}
             onSaveProject={(input) => void projectClassification.saveProject(input)}
             onDeleteProject={(id) => void projectClassification.deleteProject(id)}
             onRunAnalysis={() => requestProjectPassRun()}

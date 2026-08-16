@@ -16,7 +16,7 @@ export interface ProjectsManagerProps {
   readonly totalSecondsByProject: ReadonlyMap<string, number>;
   /** Latest ISO day with attributed activity per project (within the loaded window). */
   readonly lastActivityByProject: ReadonlyMap<string, string>;
-  /** Caption above the per-project total, e.g. "Last 14 days". */
+  /** Caption in the per-project time column, e.g. "Latest 7 days". */
   readonly totalCaption: string;
   readonly onSave: (input: ProjectInput) => void;
   readonly onDelete: (id: string) => void;
@@ -107,49 +107,68 @@ export function ProjectsManager({
     });
   };
 
-  const emptyLabel = projects.length === 0
-    ? "No projects yet. Create a project, then run analysis — descriptions guide the analysis model."
-    : "No projects match.";
-
   return (
     <div className="projects-manager">
-      <div className="projects-toolbar" aria-label="Project filters">
-        <span className="projects-search">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
-          <input
-            className="settings-input"
-            type="text"
-            aria-label="Search project name"
-            placeholder="Search project name…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </span>
-        <SettingsSelect
-          ariaLabel="Filter by status"
-          className="projects-status-filter"
-          value={statusFilter}
-          options={[
-            { value: "all", label: "All statuses" },
-            { value: "active", label: "Active" },
-            { value: "archived", label: "Archived" },
-          ]}
-          onChange={setStatusFilter}
-        />
-        <span className="projects-toolbar__spacer" />
-        <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
-          + New project
-        </button>
-      </div>
+      {projects.length === 0 ? (
+        <section className="projects-first-run" aria-labelledby="projects-first-run-title">
+          <div className="projects-first-run__mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 8 4.3-8 4.3-8-4.3L12 3Z" /><path d="m4 12.3 8 4.3 8-4.3M4 17.1l8 4.3 8-4.3" /></svg>
+          </div>
+          <div className="projects-first-run__copy">
+            <span className="label-mono">Start with a definition</span>
+            <h2 id="projects-first-run-title">Create your first project</h2>
+            <p>Name the outcome, then describe the apps, sites, and work that belong to it. Drifty uses the description when matching activity.</p>
+            <ol>
+              <li><span>1</span><strong>Name the work</strong></li>
+              <li><span>2</span><strong>Describe what counts</strong></li>
+              <li><span>3</span><strong>Refresh recent assignments</strong></li>
+            </ol>
+          </div>
+          <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            Create project
+          </button>
+        </section>
+      ) : (
+        <>
+          <div className="projects-toolbar" aria-label="Project filters">
+            <span className="projects-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+              <input
+                className="settings-input"
+                type="text"
+                aria-label="Search project name"
+                placeholder="Search project name…"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </span>
+            <SettingsSelect
+              ariaLabel="Filter by status"
+              className="projects-status-filter"
+              value={statusFilter}
+              options={[
+                { value: "all", label: "All statuses" },
+                { value: "active", label: "Active" },
+                { value: "archived", label: "Archived" },
+              ]}
+              onChange={setStatusFilter}
+            />
+            <span className="projects-toolbar__spacer" />
+            <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              New project
+            </button>
+          </div>
 
-      <div className="projects-table" role="table" aria-label="Projects">
-        <div className="projects-table__head" role="row">
-          <span>Project</span>
-          <span>Last activity</span>
-          <span>Status</span>
-          <span>Total time</span>
-          <span />
-        </div>
+          <div className="projects-table" role="region" aria-label="Projects">
+            <div className="projects-table__head">
+              <span>Project</span>
+              <span>Last activity</span>
+              <span>Status</span>
+              <span>{`Time · ${totalCaption}`}</span>
+              <span><span className="sr-only">Actions</span></span>
+            </div>
         {filtered.map((project) => {
           const isArchived = project.status === "archived";
           const totalSeconds = totalSecondsByProject.get(project.id) ?? 0;
@@ -158,7 +177,7 @@ export function ProjectsManager({
               className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`}
               key={project.id}
             >
-              <div className="projects-table__row" role="row" onClick={() => onOpenProject(project.id)}>
+              <div className="projects-table__row" onClick={() => onOpenProject(project.id)}>
                 <div className="pt-proj">
                   <span className="pt-swatch" style={{ background: project.color || DEFAULT_PROJECT_COLOR }} />
                   <button
@@ -177,7 +196,6 @@ export function ProjectsManager({
                 <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id))}</span>
                 <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
                 <div className="pt-total">
-                  <small>{totalCaption}</small>
                   <b>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</b>
                 </div>
                 <span className="pt-menu-slot">
@@ -241,8 +259,15 @@ export function ProjectsManager({
             </div>
           );
         })}
-        {filtered.length === 0 ? <div className="projects-table__empty">{emptyLabel}</div> : null}
-      </div>
+            {filtered.length === 0 ? (
+              <div className="projects-table__empty">
+                <span>No projects match these filters.</span>
+                <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={() => { setQuery(""); setStatusFilter("all"); }}>Clear filters</button>
+              </div>
+            ) : null}
+          </div>
+        </>
+      )}
 
       {editing !== null ? (
         <ProjectEditorModal

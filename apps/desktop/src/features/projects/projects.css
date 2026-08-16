@@ -3,7 +3,19 @@
 .projects-page__head {
   align-items: flex-start;
   gap: 1rem;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-4);
+}
+
+.projects-page__heading-copy {
+  display: grid;
+  gap: 0.32rem;
+}
+
+.projects-page__heading-copy > p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.4;
 }
 
 /* The intro copy moved behind a "?" so it doesn't take a permanent block. */
@@ -11,6 +23,30 @@
   display: flex;
   align-items: center;
   gap: 0.55rem;
+}
+
+.projects-page__detail-title {
+  display: grid;
+  gap: 0.32rem;
+  min-width: 0;
+}
+
+.projects-page__back {
+  justify-self: start;
+  margin-left: calc(var(--space-3) * -1);
+}
+
+.projects-page__project-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
+  min-width: 0;
+}
+
+.projects-page__project-identity h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .projects-help {
@@ -88,7 +124,7 @@
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 1rem;
-  padding: 0.7rem 0.9rem;
+  padding: 0.8rem 0.9rem;
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -115,8 +151,10 @@
 }
 
 .projects-model-status__value {
-  font-size: 0.86rem;
-  color: var(--text);
+  max-width: 52rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  color: var(--text-soft);
 }
 
 .projects-model-status__chip {
@@ -141,6 +179,28 @@
   color: var(--text);
 }
 
+.projects-model-status__readiness {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption-size);
+  font-weight: 620;
+  white-space: nowrap;
+}
+
+.projects-model-status__readiness-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
+.projects-model-status__readiness.is-connected .projects-model-status__readiness-dot {
+  background: var(--accent);
+}
+
 .projects-model-status .app-btn {
   flex: none;
   white-space: nowrap;
@@ -152,6 +212,71 @@
   color: var(--text-soft);
   font-size: 0.76rem;
   line-height: 1.35;
+}
+
+.projects-model-status__meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+  margin: 0.65rem 0 0;
+}
+
+.projects-model-status__meta > div {
+  min-width: 0;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line);
+}
+
+.projects-model-status__meta dt {
+  margin: 0 0 0.12rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.projects-model-status__meta dd {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-model-status--card {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "info"
+    "actions";
+  align-content: start;
+  align-items: start;
+  padding: 0.85rem;
+  background: var(--stacked-column-plot-background);
+  box-shadow: var(--stacked-column-plot-shadow);
+}
+
+.projects-model-status--card .projects-model-status__info {
+  grid-area: info;
+  gap: 0.22rem;
+}
+
+.projects-model-status--card .projects-model-status__label {
+  padding-right: 7.5rem;
+}
+
+.projects-model-status--card .projects-model-status__readiness {
+  position: absolute;
+  top: 0.86rem;
+  right: 0.9rem;
+}
+
+.projects-model-status--card .projects-model-status__actions {
+  grid-area: actions;
+  justify-content: flex-start;
+  width: 100%;
 }
 
 /* ── Banners ── */
@@ -183,12 +308,28 @@
   margin-bottom: 1rem;
 }
 
+.projects-charts--overview {
+  margin-top: 0;
+}
+
+.projects-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(17rem, 0.9fr);
+  align-items: stretch;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.projects-overview-layout .projects-charts {
+  margin-bottom: 0;
+}
+
 /* ── Unified project list + editor ── */
 .projects-manager {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 /* Bottom zone: setup banners + the analysis-model strip (with Configure + Analyze). */
@@ -206,79 +347,99 @@
   flex: none;
 }
 
-/* Empty state */
-.projects-empty {
+/* First-run state: teach the definition → matching workflow instead of leaving
+   a single sentence inside an otherwise empty table. */
+.projects-first-run {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 12rem;
+  padding: var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--accent-soft) 70%, transparent), transparent 36%),
+    var(--surface);
+}
+
+.projects-first-run__mark {
+  display: grid;
+  place-items: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--accent-soft) 52%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.projects-first-run__mark svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+.projects-first-run__copy {
+  display: grid;
+  gap: 0.5rem;
+  max-width: 46rem;
+}
+
+.projects-first-run__copy h2,
+.projects-first-run__copy p {
   margin: 0;
-  padding: 1.5rem 1.2rem;
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-strong) 45%, var(--surface));
-  color: var(--text-soft);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  text-align: center;
 }
 
-/* Editor card */
-.projects-editor__heading {
-  margin: 0 0 0.7rem;
-  color: var(--text);
+.projects-first-run__copy h2 {
   font-family: var(--font-display);
-  font-size: 0.98rem;
-  font-weight: 620;
-  letter-spacing: -0.01em;
+  font-size: 1.12rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
-/* The create/edit form lives inside a modal now, so the card is just the field
-   stack (the modal supplies the surface + padding). */
-.projects-editor__card {
+.projects-first-run__copy p {
+  max-width: 62ch;
+  color: var(--text-soft);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.projects-first-run__copy ol {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.projects-editor-modal {
-  width: min(42rem, 92vw);
-  max-width: 42rem;
+.projects-first-run__copy li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: var(--text-soft);
+  font-size: 0.7rem;
 }
 
-.projects-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.34rem;
-}
-
-.projects-field__label {
+.projects-first-run__copy li span {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--bg-2);
   color: var(--text);
-  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+}
+
+.projects-first-run__copy li strong {
   font-weight: 560;
 }
 
-.projects-editor__card .settings-input {
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.projects-editor__card .projects-field__textarea {
-  min-height: 5.5rem;
-  padding: 0.5rem 0.7rem;
-  line-height: 1.5;
-  resize: vertical;
-}
-
-.projects-editor__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 1.1rem;
-}
-
-.projects-manager__title {
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text);
+.project-editor-modal {
+  width: min(30rem, 92vw);
+  max-width: 30rem;
 }
 
 /* ── Project pass cost (dev) ── */
@@ -394,10 +555,34 @@
   white-space: nowrap;
 }
 
+@media (max-width: 760px) {
+  .projects-overview-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 640px) {
   .projects-model-status {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .projects-model-status--card {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "info"
+      "readiness"
+      "actions";
+  }
+
+  .projects-model-status--card .projects-model-status__readiness {
+    grid-area: readiness;
+    justify-self: start;
+    position: static;
+  }
+
+  .projects-model-status--card .projects-model-status__label {
+    padding-right: 0;
   }
 }
 
@@ -474,7 +659,7 @@
 .projects-page .projects-table__head,
 .projects-page .projects-table__row {
   display: grid;
-  grid-template-columns: minmax(8rem, 1.7fr) minmax(5rem, 8.2rem) minmax(4.6rem, 6.2rem) minmax(5rem, 7rem) 2.2rem;
+  grid-template-columns: minmax(8rem, 1.7fr) minmax(5rem, 8.2rem) minmax(4.6rem, 6.2rem) minmax(8rem, 8.5rem) 2.2rem;
   gap: var(--space-2);
   align-items: center;
   padding: 0.55rem var(--space-3);
@@ -497,6 +682,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
+  white-space: nowrap;
 }
 
 .projects-page .projects-table__rowwrap {
@@ -582,16 +768,8 @@
 }
 
 .projects-page .pt-total {
-  display: grid;
-  gap: 0.05rem;
-}
-
-.projects-page .pt-total small {
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  display: flex;
+  align-items: center;
 }
 
 .projects-page .pt-total b {
@@ -693,8 +871,11 @@
 }
 
 .projects-page .projects-table__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   padding: var(--space-5);
-  text-align: center;
   color: var(--text-muted);
   font-size: 0.82rem;
 }
@@ -727,38 +908,12 @@
   margin-bottom: 1.5rem;
 }
 
-.project-detail__back {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
 .project-detail__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   flex-wrap: wrap;
-}
-
-.project-detail__identity {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  min-width: 0;
-}
-
-.project-detail__name {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.18rem;
-  font-weight: 620;
-  letter-spacing: -0.01em;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .project-detail__actions {
@@ -768,7 +923,7 @@
 }
 
 .project-detail__desc {
-  margin: 0.35rem 0 0;
+  margin: 0.65rem 0 0;
   max-width: 70ch;
   color: var(--text-soft);
   font-size: 0.84rem;
@@ -780,17 +935,20 @@
 }
 
 .project-detail__stats {
-  display: flex;
-  gap: var(--space-6);
-  flex-wrap: wrap;
-  margin-top: 0.8rem;
-  padding-top: 0.7rem;
-  border-top: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-4);
 }
 
 .project-detail__stat {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.38rem;
+  min-width: 0;
+  padding: 0.72rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface-strong) 52%, var(--surface));
 }
 
 .project-detail__stat .label-mono {
@@ -805,19 +963,48 @@
   letter-spacing: -0.01em;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Top sources — same format as the Trends "Top categories" breakdown. */
 .project-detail__sources {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.34rem;
   margin-top: 0.27rem;
-  max-width: 34rem;
 }
 
 .project-detail__source {
   display: grid;
   gap: 0.16rem;
+  min-width: 0;
+  padding: 0.46rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-strong) 34%, transparent);
+}
+
+@media (max-width: 760px) {
+  .projects-first-run {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .projects-first-run__mark {
+    width: 3.5rem;
+    height: 3.5rem;
+  }
+
+  .projects-first-run > .app-btn {
+    justify-self: start;
+  }
+
+  .project-detail__stats,
+  .project-detail__sources {
+    grid-template-columns: 1fr;
+  }
 }
 
 .project-detail__source-meta {

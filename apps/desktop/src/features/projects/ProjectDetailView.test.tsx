@@ -50,7 +50,6 @@ function baseProps(overrides: Partial<ProjectDetailViewProps> = {}): ProjectDeta
     totalSeconds: 5400,
     windowProjectSeconds: 6000,
     lastActivityLabel: "Jul 10, 2026",
-    onBack: vi.fn(),
     onSave: vi.fn(),
     ...overrides,
   };
@@ -60,7 +59,7 @@ describe("ProjectDetailView", () => {
   it("shows the project header, window stats, and share", () => {
     render(<ProjectDetailView {...baseProps()} />);
 
-    expect(screen.getByRole("heading", { name: "Drifty" })).toBeTruthy();
+    expect(screen.getByText("Project overview")).toBeTruthy();
     expect(screen.getByText("The Drifty desktop app.")).toBeTruthy();
     expect(screen.getByText("1h 30m")).toBeTruthy();
     expect(screen.getByText("90%")).toBeTruthy();
@@ -77,14 +76,11 @@ describe("ProjectDetailView", () => {
     expect(within(sources).queryByText("Figma")).toBeNull();
   });
 
-  it("navigates back and toggles archive through onSave", () => {
+  it("toggles archive through onSave", () => {
     const props = baseProps();
     render(<ProjectDetailView {...props} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Archive" }));
     expect(props.onSave).toHaveBeenCalledWith(expect.objectContaining({ id: "p1", status: "archived" }));
-
-    fireEvent.click(screen.getByRole("button", { name: /All projects/ }));
-    expect(props.onBack).toHaveBeenCalled();
   });
 });

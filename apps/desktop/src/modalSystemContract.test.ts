@@ -14,14 +14,14 @@ const modalSurfaces = [
   ["Edit profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace"/],
   ["Profile embed", "./features/profile/ProfileEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal profile-embeds-modal"\s+data-modal-variant="workspace"/],
   ["Rank embed", "./features/leaderboard/RankEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal rank-embeds-modal"\s+data-modal-variant="workspace"/],
-  ["New project", "./features/projects/ProjectEditorModal.tsx", /className="auth-modal modal-shell projects-editor-modal"\s+data-modal-variant="workspace"/],
+  ["New project", "./features/projects/ProjectEditorModal.tsx", /className="auth-modal modal-shell project-editor-modal"\s+data-modal-variant="standard"/],
   ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
   ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
   ["Delete local model", "./features/settings/DeleteManagedModelModal.tsx", /className="auth-modal modal-shell ai-delete-model-modal"\s+data-modal-variant="compact"/],
   ["Invite to team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal"\s+data-modal-variant="standard"/],
   ["Team settings", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-settings-modal"\s+data-modal-variant="workspace"/],
   ["Add a team", "./features/team/TeamWorkspace.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
-  ["New shared project", "./features/team/TeamProjectsView.tsx", /className="auth-modal modal-shell profile-modal team-modal team-editor-modal"\s+data-modal-variant="standard"/],
+  ["New shared project", "./features/team/TeamProjectsView.tsx", /className="auth-modal modal-shell profile-modal team-modal project-editor-modal"\s+data-modal-variant="standard"/],
   ["Remove cloud device", "./features/cloud-devices/CloudDeviceManagementPanel.tsx", /className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Delete synced cloud data", "./features/device-sync/DeviceSyncPurgeConfirmation.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Delete selected records", "./features/history/HistoryView.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
@@ -69,6 +69,12 @@ describe("modal system v2 contract", () => {
     expect(chrome).toContain(".modal-shell .modal-x");
     expect(chrome).toContain(".modal-shell .modal-head__copy h2");
     expect(chrome).toContain(".cloud-device-confirm__panel.modal-shell .cloud-device-confirm__eyebrow");
+  });
+
+  it("keeps both team creation and project editors on the compact standard width", () => {
+    const teamStyles = read("./features/team/team.css");
+
+    expect(teamStyles).toMatch(/\.team-editor-modal,\s*\.project-editor-modal\s*\{\s*max-width: 30rem;/);
   });
 
   it("keeps tall auth-family dialogs reachable at the minimum app height", () => {
