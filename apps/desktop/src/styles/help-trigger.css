@@ -1,0 +1,45 @@
+/* Inline help affordance.
+
+   One shape for "explain this label": a round `?` next to a heading or field
+   label, with its explanation in a tooltip. Surfaces previously each drew their
+   own — Projects used a mono `How it works` pill, Trends a mono `?` circle — so
+   the same affordance did not look like itself across the app.
+
+   The label stays sans, matching the app-wide button language. Mono is the
+   app's voice for overlines and figures, not for UI controls.
+
+   A `?` carries no readable label, so every trigger must supply its own
+   `aria-label` naming what is being explained. */
+.help-trigger {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 5%, var(--surface));
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption-size);
+  font-weight: 650;
+  line-height: 1;
+  cursor: help;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.help-trigger:hover,
+.help-trigger:focus-visible {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.help-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}

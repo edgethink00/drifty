@@ -247,7 +247,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             <div className="projects-page__title">
               <h1>Projects</h1>
               <span className="projects-help">
-                <button type="button" className="projects-help__trigger" aria-describedby="projects-help-tip">How it works</button>
+                <button type="button" className="help-trigger projects-help__trigger" aria-label="What are projects?" aria-describedby="projects-help-tip">?</button>
                 <span className="projects-help__tip" id="projects-help-tip" role="tooltip">Describe the work that belongs together. Drifty uses that description to group matching activity into a project.</span>
               </span>
             </div>

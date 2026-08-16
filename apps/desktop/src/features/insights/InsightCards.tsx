@@ -691,7 +691,7 @@ export function ProductivityPersonaCard({
           <div className="persona-radar-card__head">
             <span className="label-mono insight-section__label">Focus profile</span>
             <span className="persona-radar-card__help-wrap">
-              <button type="button" className="persona-radar-card__help" aria-label="Focus profile help" aria-describedby="focus-profile-help-tooltip">?</button>
+              <button type="button" className="help-trigger persona-radar-card__help" aria-label="What is the focus profile?" aria-describedby="focus-profile-help-tooltip">?</button>
               <span className="persona-radar-card__tooltip" id="focus-profile-help-tooltip" role="tooltip">{FOCUS_PROFILE_HELP}</span>
             </span>
           </div>

@@ -661,37 +661,12 @@
   margin-bottom: 0;
 }
 
-.persona-radar-card__help {
-  width: 1.42rem;
-  height: 1.42rem;
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  color: var(--text-soft);
-  cursor: help;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  line-height: 1;
-  transition: border-color var(--transition-fast), color var(--transition-fast), background var(--transition-fast);
-}
-
+/* Chrome comes from the shared `.help-trigger`. */
 .persona-radar-card__help-wrap {
   position: relative;
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-}
-
-.persona-radar-card__help:hover,
-.persona-radar-card__help:focus-visible {
-  background: var(--surface);
-  border-color: var(--line-strong);
-  color: var(--text);
-  outline: none;
 }
 
 .persona-radar-card__tooltip {

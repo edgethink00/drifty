@@ -54,29 +54,13 @@
   display: inline-flex;
 }
 
-.projects-help__trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.45rem;
-  padding: 0 var(--space-2);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: help;
-  transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
-}
-
-.projects-help__trigger:hover,
+/* Chrome comes from the shared `.help-trigger`; only the hover-through-wrapper
+   behaviour is local, so pointing anywhere in the group lights the trigger. */
+.projects-help:hover .projects-help__trigger,
 .projects-help:focus-within .projects-help__trigger {
-  color: var(--text);
+  background: var(--surface);
   border-color: var(--line-strong);
-  background: color-mix(in srgb, var(--surface-strong) 62%, transparent);
+  color: var(--text);
 }
 
 .projects-help__tip {
