@@ -97,6 +97,8 @@ vi.mock("./features/leaderboard/leaderboardService", () => ({
   LEADERBOARD_PERIODS: ["daily", "weekly", "monthly"],
   fetchGlobalLeaderboard: leaderboardMocks.fetchGlobalLeaderboard,
   fetchOwnLeaderboardEntry: leaderboardMocks.fetchOwnLeaderboardEntry,
+  fetchOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  publishOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: true }),
   optOutLeaderboard: leaderboardMocks.optOutLeaderboard,
 }));
 vi.mock("@tauri-apps/api/core", () => ({

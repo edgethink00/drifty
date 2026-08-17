@@ -178,6 +178,8 @@ vi.mock("./features/leaderboard/leaderboardService", () => ({
   LEADERBOARD_PERIODS: ["daily", "weekly", "monthly"],
   fetchGlobalLeaderboard: vi.fn().mockResolvedValue({ success: true, error: null, data: [] }),
   fetchOwnLeaderboardEntry: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  fetchOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  publishOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: true }),
   optOutLeaderboard: vi.fn().mockResolvedValue({ success: true, error: null }),
   publishOwnFocusTotal: vi.fn().mockResolvedValue({ success: true, error: null, data: { opted_in: true, rank: null } }),
 }));

@@ -215,7 +215,7 @@ describe("CompanionWindowApp", () => {
       id: "preview-rank-1",
       milestoneKind: "rank",
       tier: 3,
-      title: "#1 in focus today",
+      title: "#1 in focus last week",
       subtitle: "You reached the top of today's leaderboard",
       destination: "leaderboard",
     }));
@@ -235,7 +235,7 @@ describe("CompanionWindowApp", () => {
     /* Confetti scales with the tier: 6 sparks for a routine win, 16 for a
        record, 26 for a rare one, matching the prototype's celebration. */
     expect(container.querySelectorAll(".sparks i")).toHaveLength(26);
-    expect(container.textContent).toContain("#1 in focus today");
+    expect(container.textContent).toContain("#1 in focus last week");
 
     /* The stylesheet reveals the kind glyph through `[data-kind-icon]`, so a
        missing marker renders an empty mark even though the SVG is present. */

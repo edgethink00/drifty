@@ -28,6 +28,15 @@ export type LeaderboardPublishPayloads = {
   readonly payloads: readonly LeaderboardPublishPayload[];
 };
 
+export type BuildLeaderboardCheckpointPayloadInput = {
+  readonly period: Extract<LeaderboardPeriod, "daily" | "weekly">;
+  readonly profileDisplayName: string;
+  readonly windowEndDay: string;
+  readonly timezone: string;
+  readonly startOfDayMinutes: number;
+  readonly showAiClassificationImpact: boolean;
+};
+
 export type PublishLeaderboardPeriodsInput = {
   readonly mode: LeaderboardPublishMode;
   readonly profileDisplayName: string;
@@ -62,6 +71,28 @@ export async function buildLeaderboardPublishPayloads(input: Omit<PublishLeaderb
       leaderboardWindowEndDay,
     })),
   };
+}
+
+export async function buildLeaderboardCheckpointPayload(
+  input: BuildLeaderboardCheckpointPayloadInput,
+): Promise<LeaderboardPublishPayload> {
+  const windowStartDay = getLeaderboardWindowStartDay(input.windowEndDay, input.period);
+  const fetchedSegments = await trackerClient.getTimeline(getLogicalDayRange(
+    windowStartDay,
+    input.windowEndDay,
+    input.startOfDayMinutes,
+  ));
+  const publishableSegments = fetchedSegments.filter(
+    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+  );
+
+  return buildLeaderboardPublishPayload(input.period, publishableSegments, {
+    profileDisplayName: input.profileDisplayName,
+    leaderboardWindowEndDay: input.windowEndDay,
+    timezone: input.timezone,
+    startOfDayMinutes: input.startOfDayMinutes,
+    showAiClassificationImpact: input.showAiClassificationImpact,
+  });
 }
 
 export async function publishLeaderboardPayloads(

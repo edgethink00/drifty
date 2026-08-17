@@ -1,30 +1,34 @@
 import { useEffect, useRef } from "react";
-import { LEADERBOARD_AUTO_PUBLISH_SLOT_MS } from "../leaderboard/leaderboardAutoPublishState";
-import { fetchOwnLeaderboardEntry } from "../leaderboard/leaderboardService";
+import { fetchOwnLeaderboardCheckpoint } from "../leaderboard/leaderboardService";
 import type { StartOfWeek } from "../settings/settingsStorage";
 import {
-  evaluateCompanionLeaderboardMilestones,
-  getCompanionWeeklyRankClosingDay,
+  evaluateCompanionWeeklyLeaderboardMilestone,
+  getCompanionWeeklyResultWindowEndDay,
   initializeCompanionLeaderboardMilestones,
   persistCompanionLeaderboardMilestones,
+  WEEKLY_LEADERBOARD_RESULT_MINUTE,
   type CompanionLeaderboardMilestoneProgress,
 } from "./companionLeaderboardMilestones";
 import { isTauriRuntime, showNativeCompanionMilestone } from "./watcherBridge";
 
-const COMPANION_LEADERBOARD_FOCUS_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
+const COMPANION_WEEKLY_RESULT_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
 
 export function useCompanionLeaderboardMilestones({
   ready,
   userScopeKey,
-  day,
+  calendarDay,
+  startOfDayMinutes,
   startOfWeek,
   announcementsEnabled,
+  publishCheckpoint,
 }: {
   readonly ready: boolean;
   readonly userScopeKey: string | null;
-  readonly day: string;
+  readonly calendarDay: string;
+  readonly startOfDayMinutes: number;
   readonly startOfWeek: StartOfWeek;
   readonly announcementsEnabled: boolean;
+  readonly publishCheckpoint: (period: "weekly", windowEndDay: string) => Promise<boolean>;
 }) {
   const progressRef = useRef<CompanionLeaderboardMilestoneProgress | null>(null);
   const lastRefreshAtRef = useRef(0);
@@ -39,42 +43,48 @@ export function useCompanionLeaderboardMilestones({
 
     let cancelled = false;
     let inFlight = false;
-    let hourTimer = 0;
-    progressRef.current = initializeCompanionLeaderboardMilestones(userScopeKey, day);
+    let nextMorningTimer = 0;
+    progressRef.current = initializeCompanionLeaderboardMilestones(userScopeKey);
 
     const refresh = async (respectCooldown = false) => {
-      if (cancelled || inFlight) return;
-      if (respectCooldown && Date.now() - lastRefreshAtRef.current < COMPANION_LEADERBOARD_FOCUS_REFRESH_COOLDOWN_MS) return;
+      if (cancelled || inFlight || !progressRef.current) return;
+      if (
+        respectCooldown
+        && Date.now() - lastRefreshAtRef.current < COMPANION_WEEKLY_RESULT_REFRESH_COOLDOWN_MS
+      ) return;
+
+      const now = new Date();
+      const currentMinuteOfDay = now.getHours() * 60 + now.getMinutes();
+      const windowEndDay = getCompanionWeeklyResultWindowEndDay(
+        calendarDay,
+        currentMinuteOfDay,
+        startOfWeek,
+        startOfDayMinutes,
+      );
+      if (!windowEndDay) return;
+      if (
+        progressRef.current.lastWeeklyWindowEndDay
+        && progressRef.current.lastWeeklyWindowEndDay >= windowEndDay
+      ) return;
+
       inFlight = true;
       try {
-        const now = new Date();
-        const currentMinuteOfDay = now.getHours() * 60 + now.getMinutes();
-        const dueWeeklyClosingDay = getCompanionWeeklyRankClosingDay(day, currentMinuteOfDay, startOfWeek);
-        const currentProgress = progressRef.current;
-        const shouldFetchWeekly = dueWeeklyClosingDay !== null
-          && (currentProgress?.weeklyClosingDay !== dueWeeklyClosingDay || currentProgress.bestWeeklyRank !== 1);
-        const [dailyResult, weeklyResult] = await Promise.all([
-          fetchOwnLeaderboardEntry("daily"),
-          shouldFetchWeekly ? fetchOwnLeaderboardEntry("weekly") : Promise.resolve(null),
-        ]);
-        if (cancelled || !progressRef.current) return;
+        const published = await publishCheckpoint("weekly", windowEndDay);
+        if (cancelled || !published) return;
+        const result = await fetchOwnLeaderboardCheckpoint("weekly", windowEndDay);
+        if (cancelled || !progressRef.current || !result.success) return;
         lastRefreshAtRef.current = Date.now();
-        const dailyEntry = dailyResult.success ? dailyResult.data ?? null : null;
-        const weeklyEntry = weeklyResult?.success ? weeklyResult.data ?? null : null;
-        const result = evaluateCompanionLeaderboardMilestones({
+        const evaluation = evaluateCompanionWeeklyLeaderboardMilestone({
           progress: progressRef.current,
-          day,
-          currentMinuteOfDay,
-          startOfWeek,
-          dailyEntry,
-          weeklyEntry,
+          windowEndDay,
+          entry: result.data ?? null,
           announce: announcementsEnabledRef.current && isTauriRuntime(),
         });
-        progressRef.current = result.progress;
-        persistCompanionLeaderboardMilestones(result.progress);
-        for (const event of result.events) {
-          void showNativeCompanionMilestone(event).catch((error: unknown) => {
-            console.warn("Failed to show a Companion leaderboard milestone", error);
+        progressRef.current = evaluation.progress;
+        persistCompanionLeaderboardMilestones(evaluation.progress);
+        if (evaluation.event) {
+          void showNativeCompanionMilestone(evaluation.event).catch((error: unknown) => {
+            console.warn("Failed to show a finalized Companion weekly leaderboard result", error);
           });
         }
       } finally {
@@ -82,15 +92,22 @@ export function useCompanionLeaderboardMilestones({
       }
     };
 
-    const scheduleNextHour = () => {
+    const scheduleNextMorning = () => {
       if (cancelled) return;
-      const delay = LEADERBOARD_AUTO_PUBLISH_SLOT_MS
-        - (Date.now() % LEADERBOARD_AUTO_PUBLISH_SLOT_MS)
-        + 30_000;
-      hourTimer = window.setTimeout(() => {
+      const now = new Date();
+      const next = new Date(now);
+      const resultMinute = Math.max(WEEKLY_LEADERBOARD_RESULT_MINUTE, startOfDayMinutes);
+      next.setHours(
+        Math.floor(resultMinute / 60),
+        resultMinute % 60,
+        30,
+        0,
+      );
+      if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+      nextMorningTimer = window.setTimeout(() => {
         void refresh();
-        scheduleNextHour();
-      }, delay);
+        scheduleNextMorning();
+      }, next.getTime() - now.getTime());
     };
     const refreshAfterAttention = () => void refresh(true);
     const refreshAfterVisibility = () => {
@@ -98,15 +115,15 @@ export function useCompanionLeaderboardMilestones({
     };
 
     void refresh();
-    scheduleNextHour();
+    scheduleNextMorning();
     window.addEventListener("focus", refreshAfterAttention);
     document.addEventListener("visibilitychange", refreshAfterVisibility);
 
     return () => {
       cancelled = true;
-      window.clearTimeout(hourTimer);
+      window.clearTimeout(nextMorningTimer);
       window.removeEventListener("focus", refreshAfterAttention);
       document.removeEventListener("visibilitychange", refreshAfterVisibility);
     };
-  }, [day, ready, startOfWeek, userScopeKey]);
+  }, [calendarDay, publishCheckpoint, ready, startOfDayMinutes, startOfWeek, userScopeKey]);
 }

@@ -31,11 +31,13 @@ import {
   fetchGlobalLeaderboard,
   fetchOwnLeaderboardEntry,
   optOutLeaderboard,
+  publishOwnLeaderboardCheckpoint,
   type LeaderboardPeriod,
   type LeaderboardRow,
   type OwnLeaderboardEntry,
 } from "./leaderboardService";
 import {
+  buildLeaderboardCheckpointPayload,
   buildLeaderboardPublishPayloads,
   publishLeaderboardPayloads,
   publishLeaderboardPeriods,
@@ -118,6 +120,10 @@ type UseLeaderboardProfileControllerResult = {
   readonly handleViewOwnLeaderboardProfile: () => Promise<void>;
   readonly openProfileEditor: () => void;
   readonly refreshLeaderboardData: () => Promise<void>;
+  readonly publishLeaderboardCheckpoint: (
+    period: Extract<LeaderboardPeriod, "daily" | "weekly">,
+    windowEndDay: string,
+  ) => Promise<boolean>;
   readonly syncLeaderboardPublication: (reason: LeaderboardAutoPublishReason, options?: LeaderboardAutoPublishOptions) => Promise<void>;
   readonly removeProfilePhoto: () => void;
   readonly setActiveLeaderboardPeriod: Dispatch<SetStateAction<LeaderboardPeriod>>;
@@ -341,6 +347,7 @@ export function useLeaderboardProfileController({
   const leaderboardHasLoadedOnceRef = useRef(false);
   const leaderboardOwnEntryScopeRef = useRef<string | null>(null);
   const leaderboardAutoPublishInFlightRef = useRef(false);
+  const leaderboardCheckpointPublishInFlightRef = useRef(false);
   const leaderboardManualActionInFlightRef = useRef(false);
   const leaderboardOptInCacheRef = useRef<LeaderboardOptInCache | null>(null);
   const leaderboardAutoPublishDayRef = useRef<string | null>(null);
@@ -669,6 +676,46 @@ export function useLeaderboardProfileController({
     if (!optedIn) clearLeaderboardAutoPublishRecordsForUser(leaderboardOwnEntryScopeKey);
     return { optedIn, failed: false, entries } satisfies LeaderboardOptInConfirmation;
   }, [activeTab, leaderboardOwnEntryScopeKey, scopedOwnLeaderboardEntry?.opted_in]);
+
+  const publishLeaderboardCheckpoint = useCallback(async (
+    period: Extract<LeaderboardPeriod, "daily" | "weekly">,
+    windowEndDay: string,
+  ): Promise<boolean> => {
+    if (!isSupabaseConfigured || shouldUsePreviewData()) return false;
+    if (!isPolicySignedIn || !user || leaderboardOwnEntryScopeKey === "signed-out") return false;
+    if (leaderboardManualActionInFlightRef.current || leaderboardCheckpointPublishInFlightRef.current) return false;
+    if (profileReadyUserId !== user.id || profileLoading || profileError) return false;
+
+    const profileDisplayName = profile?.display_name.trim();
+    if (!profileDisplayName) return false;
+
+    leaderboardCheckpointPublishInFlightRef.current = true;
+    try {
+      const optInConfirmation = await confirmLeaderboardOptInForAutoPublish(true);
+      if (!optInConfirmation.optedIn) return false;
+
+      const payload = await buildLeaderboardCheckpointPayload({
+        period,
+        profileDisplayName,
+        windowEndDay,
+        timezone: leaderboardTimezone,
+        startOfDayMinutes,
+        showAiClassificationImpact,
+      });
+      const result = await publishOwnLeaderboardCheckpoint({
+        period,
+        focusSeconds: payload.focusSeconds,
+        windowStartDay: payload.windowStartDay,
+        windowEndDay: payload.windowEndDay,
+        timezone: payload.timezone,
+      });
+      return result.success && result.data === true;
+    } catch {
+      return false;
+    } finally {
+      leaderboardCheckpointPublishInFlightRef.current = false;
+    }
+  }, [confirmLeaderboardOptInForAutoPublish, isPolicySignedIn, isSupabaseConfigured, leaderboardOwnEntryScopeKey, leaderboardTimezone, profile?.display_name, profileError, profileLoading, profileReadyUserId, showAiClassificationImpact, startOfDayMinutes, user]);
 
   const syncLeaderboardPublication = useCallback(async (
     reason: LeaderboardAutoPublishReason,
@@ -1245,6 +1292,7 @@ export function useLeaderboardProfileController({
     handleShareLeaderboardProfile,
     handleViewOwnLeaderboardProfile,
     openProfileEditor,
+    publishLeaderboardCheckpoint,
     refreshLeaderboardData,
     syncLeaderboardPublication,
     removeProfilePhoto,

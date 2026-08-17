@@ -51,9 +51,11 @@ vi.mock("../../lib/supabase/client", () => ({
 }));
 
 import {
+  fetchOwnLeaderboardCheckpoint,
   fetchOwnLeaderboardEntry,
   fetchGlobalLeaderboard,
   optOutLeaderboard,
+  publishOwnLeaderboardCheckpoint,
   publishOwnFocusTotal,
 } from "./leaderboardService";
 
@@ -308,6 +310,79 @@ describe("leaderboardService", () => {
 
     expect(client.rpc).toHaveBeenCalledWith("get_own_leaderboard_entry", { period_name: "weekly" });
     expect(result).toEqual({ success: true, error: null, data: null });
+  });
+
+  it("reads a real-account-only exact-window checkpoint", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-2", email: "alex@example.com" } satisfies AuthUser },
+      error: null,
+    });
+    client.rpc.mockResolvedValue({
+      data: [{
+        rank: 2,
+        participant_count: 14,
+        display_name: "Alex",
+        period: "daily",
+        focus_seconds: 12_600,
+        window_start_date: "2026-08-17",
+        window_end_date: "2026-08-17",
+        timezone: "Asia/Seoul",
+        opted_in: true,
+        updated_at: "2026-08-17T11:00:00.000Z",
+      }],
+      error: null,
+    });
+
+    const result = await fetchOwnLeaderboardCheckpoint("daily", "2026-08-17", client);
+
+    expect(client.rpc).toHaveBeenCalledWith("get_own_leaderboard_checkpoint", {
+      period_name: "daily",
+      window_end_day: "2026-08-17",
+    });
+    expect(result).toEqual({
+      success: true,
+      error: null,
+      data: {
+        rank: 2,
+        participant_count: 14,
+        display_name: "Alex",
+        period: "daily",
+        focus_seconds: 12_600,
+        focus_seconds_7d: 12_600,
+        window_start_date: "2026-08-17",
+        window_end_date: "2026-08-17",
+        timezone: "Asia/Seoul",
+        opted_in: true,
+        updated_at: "2026-08-17T11:00:00.000Z",
+      },
+    });
+  });
+
+  it("publishes an exact aggregate checkpoint through the owner RPC", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-2", email: "alex@example.com" } satisfies AuthUser },
+      error: null,
+    });
+    client.rpc.mockResolvedValue({ data: [{ published: true }], error: null });
+
+    const result = await publishOwnLeaderboardCheckpoint({
+      period: "weekly",
+      focusSeconds: 12_600.4,
+      windowStartDay: "2026-08-10",
+      windowEndDay: "2026-08-16",
+      timezone: "Asia/Seoul",
+    }, client);
+
+    expect(client.rpc).toHaveBeenCalledWith("publish_own_leaderboard_checkpoint", {
+      period_name: "weekly",
+      checkpoint_focus_seconds: 12_600,
+      window_start_day: "2026-08-10",
+      window_end_day: "2026-08-16",
+      timezone_name: "Asia/Seoul",
+    });
+    expect(result).toEqual({ success: true, error: null, data: true });
   });
 
   it("opts out by zeroing the aggregate and clearing opted_in", async () => {

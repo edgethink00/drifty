@@ -5,6 +5,7 @@ import { DismissIcon, SettingsIcon } from "./DriftAlarmIcons";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
 import type { CompanionDayReviewLayout } from "./companionPillLayout";
+import type { LeaderboardCelebration } from "./companionLeaderboardMilestones";
 
 type ReviewBreakdownKey = "focus" | "drift" | "other";
 
@@ -63,6 +64,7 @@ export type EndOfDayReviewEvent = {
   highlightLabel?: string;
   comparison?: EndOfDayReviewComparison;
   dailySignals?: EndOfDayReviewDailySignals;
+  leaderboardCelebration?: LeaderboardCelebration;
   isMock?: boolean;
 };
 
@@ -118,12 +120,14 @@ export function buildEndOfDayReviewSummary({
   generatedAt,
   segments,
   appIcons = {},
+  leaderboardCelebration,
   isMock = false,
 }: {
   day: string;
   generatedAt: string;
   segments: ActivitySegment[];
   appIcons?: AppIconMap;
+  leaderboardCelebration?: LeaderboardCelebration;
   isMock?: boolean;
 }): EndOfDayReviewEvent {
   const totalSeconds = segments.reduce((total, segment) => total + segment.durationSeconds, 0);
@@ -131,6 +135,13 @@ export function buildEndOfDayReviewSummary({
   const focusSeconds = productivityDurations.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const driftSeconds = productivityDurations.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0;
   const dailySignals = buildEndOfDayReviewDailySignals(segments);
+  const resolvedLeaderboardCelebration = leaderboardCelebration ?? (isMock ? {
+    period: "daily" as const,
+    rank: 2 as const,
+    participantCount: 14,
+    focusSeconds,
+    windowEndDay: day,
+  } : undefined);
 
   return {
     kind: "endOfDayReview",
@@ -150,13 +161,16 @@ export function buildEndOfDayReviewSummary({
     /* Cross-day comparison data is not yet part of the live summary input.
        Keep production honest, while the deterministic Dev preview reproduces
        the reviewed card state instead of silently dropping those rows. */
-    highlightLabel: isMock ? "Best this week" : undefined,
+    highlightLabel: resolvedLeaderboardCelebration
+      ? `#${resolvedLeaderboardCelebration.rank} of ${resolvedLeaderboardCelebration.participantCount} · 8 PM`
+      : isMock ? "Best this week" : undefined,
     comparison: isMock ? {
       focusDeltaSeconds: 38 * 60,
       driftDeltaSeconds: -9 * 60,
       otherDeltaSeconds: 5 * 60,
     } : undefined,
     dailySignals,
+    leaderboardCelebration: resolvedLeaderboardCelebration,
     isMock: isMock || undefined,
   };
 }
@@ -252,6 +266,10 @@ export function EndOfDayReview({
         </div>
       </div>
 
+      {event.leaderboardCelebration?.period === "daily" ? (
+        <DailyLeaderboardCheckpoint celebration={event.leaderboardCelebration} />
+      ) : null}
+
       {hasTrackedTime ? (
         <div className="end-of-day-review__tracked">
           <ReviewMetrics event={event} />
@@ -284,6 +302,19 @@ export function EndOfDayReview({
       </div>
       {breakdownHover ? <ReviewBreakdownHoverCard hover={breakdownHover} /> : null}
     </aside>
+  );
+}
+
+function DailyLeaderboardCheckpoint({ celebration }: { celebration: LeaderboardCelebration }) {
+  return (
+    <section className="eodr-rank-checkpoint" aria-label="8 PM leaderboard checkpoint">
+      <span className="eodr-rank-checkpoint__eyebrow">8 PM checkpoint</span>
+      <strong>
+        #{celebration.rank}
+        <small>of {celebration.participantCount} active people</small>
+      </strong>
+      <p>Today’s leaderboard as of 8:00 PM</p>
+    </section>
   );
 }
 

@@ -105,7 +105,13 @@ describe("buildEndOfDayReviewDailySignals", () => {
       isMock: true,
     });
 
-    expect(preview.highlightLabel).toBe("Best this week");
+    expect(preview.highlightLabel).toBe("#2 of 14 · 8 PM");
+    expect(preview.leaderboardCelebration).toMatchObject({
+      period: "daily",
+      rank: 2,
+      participantCount: 14,
+      windowEndDay: reviewDay,
+    });
     expect(preview.comparison).toEqual({
       focusDeltaSeconds: 38 * 60,
       driftDeltaSeconds: -9 * 60,
@@ -121,6 +127,29 @@ describe("buildEndOfDayReviewDailySignals", () => {
 });
 
 describe("EndOfDayReview", () => {
+  it("renders an honest 8 PM checkpoint instead of final daily-rank copy", () => {
+    const event = buildEndOfDayReviewSummary({
+      day: reviewDay,
+      generatedAt,
+      segments: [],
+      leaderboardCelebration: {
+        period: "daily",
+        rank: 2,
+        participantCount: 14,
+        focusSeconds: 7_200,
+        windowEndDay: reviewDay,
+      },
+    });
+
+    render(<EndOfDayReview event={event} />);
+
+    const checkpoint = screen.getByRole("region", { name: /8 PM leaderboard checkpoint/i });
+    expect(within(checkpoint).getByText("#2")).toBeTruthy();
+    expect(within(checkpoint).getByText("of 14 active people")).toBeTruthy();
+    expect(within(checkpoint).getByText(/as of 8:00 PM/i)).toBeTruthy();
+    expect(checkpoint.textContent?.toLowerCase()).not.toContain("final");
+  });
+
   it("builds and renders a deterministic local day review", () => {
     const event = buildReviewEvent([
       buildSegment({

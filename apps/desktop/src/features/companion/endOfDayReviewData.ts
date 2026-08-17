@@ -1,16 +1,21 @@
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
+import {
+  DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
+  type LeaderboardCelebration,
+} from "./companionLeaderboardMilestones";
 
 export type EndOfDayReviewSummaryInput = {
   day: string;
   generatedAt: string;
   segments: ActivitySegment[];
+  leaderboardCelebration?: LeaderboardCelebration;
   isMock?: boolean;
 };
 
 export const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDate";
 
-export const END_OF_DAY_REVIEW_TRIGGER_MINUTE = 18 * 60;
+export const END_OF_DAY_REVIEW_TRIGGER_MINUTE = DAILY_LEADERBOARD_CHECKPOINT_MINUTE;
 
 export function collectMissingEndOfDayReviewIconRequests(event: EndOfDayReviewEvent): AppIdentity[] {
   return (event.sourceSummaries ?? []).flatMap((source) => {

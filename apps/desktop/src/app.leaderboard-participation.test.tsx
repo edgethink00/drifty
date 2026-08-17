@@ -11,6 +11,8 @@ const {
   authState,
   fetchGlobalLeaderboard,
   fetchOwnLeaderboardEntry,
+  fetchOwnLeaderboardCheckpoint,
+  publishOwnLeaderboardCheckpoint,
   publishOwnFocusTotal,
   optOutLeaderboard,
   fetchOwnProfile,
@@ -40,6 +42,8 @@ const {
   },
   fetchGlobalLeaderboard: vi.fn(),
   fetchOwnLeaderboardEntry: vi.fn(),
+  fetchOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  publishOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: true }),
   publishOwnFocusTotal: vi.fn(),
   optOutLeaderboard: vi.fn(),
   fetchOwnProfile: vi.fn(),
@@ -63,6 +67,8 @@ vi.mock("./features/leaderboard/leaderboardService", () => ({
   LEADERBOARD_PERIODS: ["daily", "weekly", "monthly"],
   fetchGlobalLeaderboard,
   fetchOwnLeaderboardEntry,
+  fetchOwnLeaderboardCheckpoint,
+  publishOwnLeaderboardCheckpoint,
   publishOwnFocusTotal,
   optOutLeaderboard,
 }));
@@ -227,6 +233,8 @@ describe("App leaderboard participation", () => {
     vi.clearAllMocks();
     fetchGlobalLeaderboard.mockReset().mockResolvedValue({ success: true, error: null, data: [] });
     fetchOwnLeaderboardEntry.mockReset().mockResolvedValue({ success: true, error: null, data: null });
+    fetchOwnLeaderboardCheckpoint.mockReset().mockResolvedValue({ success: true, error: null, data: null });
+    publishOwnLeaderboardCheckpoint.mockReset().mockResolvedValue({ success: true, error: null, data: true });
     publishOwnFocusTotal.mockReset().mockResolvedValue({ success: true, error: null });
     optOutLeaderboard.mockReset().mockResolvedValue({ success: true, error: null });
     window.localStorage.clear();
@@ -556,7 +564,7 @@ describe("App leaderboard participation", () => {
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
-  it("skips automatic leaderboard publishing when every local period record is in the current slot", async () => {
+  it("keeps current-slot publishing suppressed while materializing a due closed weekly result", async () => {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
     const sameSlotSuccessAt = new Date(2026, 5, 2, 13, 5, 0, 0).toISOString();
 
@@ -588,6 +596,11 @@ describe("App leaderboard participation", () => {
       })),
     ));
     getTimeline.mockReset().mockResolvedValue([]);
+    fetchOwnLeaderboardEntry.mockImplementation(async (period: LeaderboardPeriod = "weekly") => ({
+      success: true,
+      error: null,
+      data: makeOwnLeaderboardEntry(period),
+    }));
 
     render(<App />);
 
@@ -596,9 +609,15 @@ describe("App leaderboard participation", () => {
     });
     await vi.advanceTimersByTimeAsync(100);
 
-    // Production Companion milestones independently read rank and focus
-    // history; the publishing path itself must remain idle in this slot.
-    expect(fetchOwnLeaderboardEntry.mock.calls.map(([period]) => period).sort()).toEqual(["daily", "weekly"]);
+    // Public rows remain slot-gated, while the separate owner checkpoint path
+    // computes the closed window without replacing the current board row.
+    expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("daily");
+    expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("weekly");
+    expect(fetchOwnLeaderboardEntry).toHaveBeenCalledWith("monthly");
+    expect(publishOwnLeaderboardCheckpoint).toHaveBeenCalledWith(expect.objectContaining({
+      period: "weekly",
+      windowEndDay: "2026-05-31",
+    }));
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 

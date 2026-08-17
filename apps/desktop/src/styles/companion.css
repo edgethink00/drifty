@@ -2252,6 +2252,48 @@ html[data-surface="watcher"] .end-of-day-review,
   min-width: 0;
 }
 
+.eodr-rank-checkpoint {
+  background: color-mix(in srgb, var(--accent) 9%, var(--review-block));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+}
+
+.eodr-rank-checkpoint__eyebrow {
+  color: var(--accent-strong);
+  font-size: .68rem;
+  font-weight: 760;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.eodr-rank-checkpoint strong {
+  align-items: baseline;
+  color: var(--text);
+  display: flex;
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  gap: 8px;
+  letter-spacing: -.04em;
+  line-height: 1;
+}
+
+.eodr-rank-checkpoint strong small {
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.eodr-rank-checkpoint p {
+  color: var(--text-soft);
+  font-size: .72rem;
+  margin: 0;
+}
+
 .eodr-brand {
   align-items: center;
   display: flex;

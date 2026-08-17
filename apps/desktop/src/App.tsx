@@ -37,6 +37,7 @@ import {
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
+import { fetchOwnLeaderboardCheckpoint } from "./features/leaderboard/leaderboardService";
 import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
 import { useAccountStatsPublisher } from "./features/account-stats/useAccountStatsPublisher";
@@ -241,6 +242,7 @@ import { useCompanionDailyFocusMilestones } from "./features/companion/useCompan
 import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
 import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
+import { toLeaderboardCelebration, type LeaderboardCelebration } from "./features/companion/companionLeaderboardMilestones";
 import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
@@ -278,7 +280,7 @@ import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
-import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
+import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
 import { activityNav, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
@@ -1289,6 +1291,7 @@ export default function App() {
     handleSelectLeaderboardProfile,
     handleShareLeaderboardProfile,
     openProfileEditor,
+    publishLeaderboardCheckpoint,
     refreshLeaderboardData,
     syncLeaderboardPublication,
     removeProfilePhoto,
@@ -1444,6 +1447,7 @@ export default function App() {
   const watcherRequestInFlightRef = useRef(false);
   const watcherRecoveryTimeoutRef = useRef(0);
   const endOfDayReviewQueryPreviewShownRef = useRef(false);
+  const endOfDayReviewAutomaticInFlightRef = useRef(false);
   const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
@@ -4950,9 +4954,11 @@ export default function App() {
   useCompanionLeaderboardMilestones({
     ready: isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
     userScopeKey: user?.id ?? null,
-    day: todayDay,
+    calendarDay: localDateKey(new Date()),
+    startOfDayMinutes,
     startOfWeek,
     announcementsEnabled: true,
+    publishCheckpoint: publishLeaderboardCheckpoint,
   });
 
   useEffect(() => {
@@ -5135,15 +5141,41 @@ export default function App() {
     if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
     if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
     if (segments.length === 0) return;
+    if (endOfDayReviewAutomaticInFlightRef.current) return;
 
-    void buildEndOfDayReviewEvent({
-      day: todayDay,
-      generatedAt: new Date().toISOString(),
-      segments,
-    }).then(showEndOfDayReview).then((shown) => {
+    endOfDayReviewAutomaticInFlightRef.current = true;
+    void (async () => {
+      let leaderboardCelebration: LeaderboardCelebration | undefined;
+      if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+        // Keep the current public board fresh, then materialize the exact local
+        // aggregate separately. The checkpoint write bypasses unchanged-score
+        // suppression without temporarily replacing the public board row.
+        await syncLeaderboardPublication("slot");
+        const published = await publishLeaderboardCheckpoint("daily", todayDay);
+        const checkpoint = published
+          ? await fetchOwnLeaderboardCheckpoint("daily", todayDay)
+          : null;
+        if (checkpoint?.success) {
+          leaderboardCelebration = toLeaderboardCelebration(
+            checkpoint.data ?? null,
+            "daily",
+            todayDay,
+          ) ?? undefined;
+        }
+      }
+
+      const event = await buildEndOfDayReviewEvent({
+        day: todayDay,
+        generatedAt: new Date().toISOString(),
+        segments,
+        leaderboardCelebration,
+      });
+      const shown = await showEndOfDayReview(event);
       if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
+    })().finally(() => {
+      endOfDayReviewAutomaticInFlightRef.current = false;
     });
-  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, syncLeaderboardPublication, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(

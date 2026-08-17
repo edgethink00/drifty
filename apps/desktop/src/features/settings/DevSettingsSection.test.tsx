@@ -186,12 +186,12 @@ describe("DevSettingsSection", () => {
   it("previews production milestones through the active notification surface", () => {
     const props = renderProductionDevSettings();
     fireEvent.click(screen.getByRole("button", { name: "30-day record" }));
-    fireEvent.click(screen.getByRole("button", { name: "Daily #1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Weekly #1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Weekly final #2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Weekly final #1" }));
 
     expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(1, "record-30d");
-    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(2, "daily-rank-1");
-    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(3, "weekly-rank-1");
+    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(2, "weekly-final-rank-2");
+    expect(props.onPreviewCompanionMilestone).toHaveBeenNthCalledWith(3, "weekly-final-rank-1");
   });
 
   it("keeps production placement choices out of the Dev Companion Lab", () => {

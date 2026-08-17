@@ -1,168 +1,122 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
-import type { LeaderboardPeriod, OwnLeaderboardEntry } from "../leaderboard/leaderboardService";
+import type { LeaderboardCheckpointEntry } from "../leaderboard/leaderboardService";
 import {
   COMPANION_LEADERBOARD_MILESTONES_STORAGE_KEY,
-  evaluateCompanionLeaderboardMilestones,
-  getCompanionWeeklyRankClosingDay,
+  DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
+  evaluateCompanionWeeklyLeaderboardMilestone,
+  getCompanionWeeklyResultWindowEndDay,
   initializeCompanionLeaderboardMilestones,
-  isCompanionWeeklyRankDue,
   persistCompanionLeaderboardMilestones,
   readCompanionLeaderboardMilestones,
+  toLeaderboardCelebration,
+  WEEKLY_LEADERBOARD_RESULT_MINUTE,
 } from "./companionLeaderboardMilestones";
 
-function entry(period: LeaderboardPeriod, rank: number, day = "2026-08-03"): OwnLeaderboardEntry {
+function entry(
+  period: "daily" | "weekly",
+  rank: number,
+  day: string,
+  overrides: Partial<LeaderboardCheckpointEntry> = {},
+): LeaderboardCheckpointEntry {
   return {
     rank,
+    participant_count: 14,
     display_name: "Drifty",
     period,
     focus_seconds: period === "daily" ? 14_400 : 58_000,
     focus_seconds_7d: period === "daily" ? 14_400 : 58_000,
-    window_start_date: period === "daily" ? day : "2026-07-28",
+    window_start_date: period === "daily" ? day : "2026-07-27",
     window_end_date: day,
     timezone: "Asia/Seoul",
     opted_in: true,
-    updated_at: `${day}T09:00:00.000Z`,
+    updated_at: `${day}T11:00:00.000Z`,
+    ...overrides,
   };
 }
 
-describe("Companion leaderboard milestones", () => {
+describe("Companion leaderboard celebration policy", () => {
   afterEach(() => window.localStorage.clear());
 
-  it("announces daily #3, #2 and #1 only as the rank improves", () => {
-    let progress = initializeCompanionLeaderboardMilestones("user-1", "2026-08-03", null);
-    const titles: string[] = [];
-    for (const rank of [3, 3, 2, 4, 1]) {
-      const result = evaluateCompanionLeaderboardMilestones({
-        progress,
-        day: "2026-08-03",
-        currentMinuteOfDay: 12 * 60,
-        startOfWeek: "monday",
-        dailyEntry: entry("daily", rank),
-        weeklyEntry: null,
-        announce: true,
-      });
-      progress = result.progress;
-      titles.push(...result.events.map((event) => event.title));
-    }
-
-    expect(titles).toEqual([
-      "#3 in focus today",
-      "#2 in focus today",
-      "#1 in focus today",
-    ]);
+  it("uses an 8 PM daily checkpoint and a 9 AM weekly result", () => {
+    expect(DAILY_LEADERBOARD_CHECKPOINT_MINUTE).toBe(20 * 60);
+    expect(WEEKLY_LEADERBOARD_RESULT_MINUTE).toBe(9 * 60);
   });
 
-  it("announces only #1 when the observed rank jumps directly from #4", () => {
-    let progress = initializeCompanionLeaderboardMilestones("user-1", "2026-08-03", null);
-    const outsidePodium = evaluateCompanionLeaderboardMilestones({
+  it("celebrates only real-account checkpoint entries in the top three with at least ten active people", () => {
+    expect(toLeaderboardCelebration(entry("daily", 2, "2026-08-03"), "daily", "2026-08-03")).toMatchObject({
+      rank: 2,
+      participantCount: 14,
+      windowEndDay: "2026-08-03",
+    });
+    expect(toLeaderboardCelebration(entry("daily", 4, "2026-08-03"), "daily", "2026-08-03")).toBeNull();
+    expect(toLeaderboardCelebration(entry("daily", 2, "2026-08-03", { participant_count: 9 }), "daily", "2026-08-03")).toBeNull();
+    expect(toLeaderboardCelebration(entry("daily", 2, "2026-08-03", { focus_seconds: 0 }), "daily", "2026-08-03")).toBeNull();
+    expect(toLeaderboardCelebration(entry("daily", 2, "2026-08-02"), "daily", "2026-08-03")).toBeNull();
+  });
+
+  it("makes the closed weekly window available at 9 AM on the following day", () => {
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-03", 8 * 60 + 59, "monday")).toBeNull();
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-03", 9 * 60, "monday")).toBe("2026-08-02");
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-04", 12 * 60, "monday")).toBe("2026-08-02");
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-02", 20 * 60, "monday")).toBeNull();
+  });
+
+  it("maps weekly closing days from the user's start-of-week setting", () => {
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-03", 9 * 60, "monday")).toBe("2026-08-02");
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-02", 9 * 60, "sunday")).toBe("2026-08-01");
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-01", 9 * 60, "saturday")).toBe("2026-07-31");
+  });
+
+  it("does not finalize before a logical day boundary later than 9 AM", () => {
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-03", 9 * 60, "monday", 12 * 60)).toBeNull();
+    expect(getCompanionWeeklyResultWindowEndDay("2026-08-03", 12 * 60, "monday", 12 * 60)).toBe("2026-08-02");
+  });
+
+  it("announces one finalized weekly result and consumes that closed window", () => {
+    const progress = initializeCompanionLeaderboardMilestones("user-1", null);
+    const first = evaluateCompanionWeeklyLeaderboardMilestone({
       progress,
-      day: "2026-08-03",
-      currentMinuteOfDay: 12 * 60,
-      startOfWeek: "monday",
-      dailyEntry: entry("daily", 4),
-      weeklyEntry: null,
+      windowEndDay: "2026-08-02",
+      entry: entry("weekly", 2, "2026-08-02"),
       announce: true,
     });
-    progress = outsidePodium.progress;
-    const firstPlace = evaluateCompanionLeaderboardMilestones({
+    const duplicate = evaluateCompanionWeeklyLeaderboardMilestone({
+      progress: first.progress,
+      windowEndDay: "2026-08-02",
+      entry: entry("weekly", 1, "2026-08-02"),
+      announce: true,
+    });
+
+    expect(first.event).toMatchObject({
+      id: "companion-leaderboard-final:weekly:2026-08-02:rank2",
+      title: "#2 in focus last week",
+      subtitle: "Final rank among 14 active people",
+    });
+    expect(duplicate.event).toBeNull();
+  });
+
+  it("consumes an ineligible completed window without retrying a non-celebration", () => {
+    const progress = initializeCompanionLeaderboardMilestones("user-1", null);
+    const result = evaluateCompanionWeeklyLeaderboardMilestone({
       progress,
-      day: "2026-08-03",
-      currentMinuteOfDay: 12 * 60 + 5,
-      startOfWeek: "monday",
-      dailyEntry: entry("daily", 1),
-      weeklyEntry: null,
+      windowEndDay: "2026-08-02",
+      entry: entry("weekly", 7, "2026-08-02"),
       announce: true,
     });
 
-    expect(outsidePodium.events).toEqual([]);
-    expect(firstPlace.events.map((event) => event.title)).toEqual(["#1 in focus today"]);
+    expect(result.event).toBeNull();
+    expect(result.progress.lastWeeklyWindowEndDay).toBe("2026-08-02");
   });
 
-  it("shows the weekly rank only after 18:00 on the configured final weekday", () => {
-    const progress = initializeCompanionLeaderboardMilestones("user-1", "2026-08-02", null);
-    const before = evaluateCompanionLeaderboardMilestones({
-      progress,
-      day: "2026-08-02",
-      currentMinuteOfDay: 17 * 60 + 59,
-      startOfWeek: "monday",
-      dailyEntry: null,
-      weeklyEntry: entry("weekly", 2, "2026-08-02"),
-      announce: true,
-    });
-    const after = evaluateCompanionLeaderboardMilestones({
-      progress: before.progress,
-      day: "2026-08-02",
-      currentMinuteOfDay: 18 * 60,
-      startOfWeek: "monday",
-      dailyEntry: null,
-      weeklyEntry: entry("weekly", 2, "2026-08-02"),
-      announce: true,
-    });
-
-    expect(before.events).toEqual([]);
-    expect(after.events[0]).toMatchObject({
-      title: "#2 in focus this week",
-      statLabel: "7 days",
-    });
-  });
-
-  it("maps the weekly closing day to the user's start-of-week setting", () => {
-    expect(isCompanionWeeklyRankDue("2026-08-02", 18 * 60, "monday")).toBe(true); // Sunday
-    expect(isCompanionWeeklyRankDue("2026-08-01", 18 * 60, "sunday")).toBe(true); // Saturday
-    expect(isCompanionWeeklyRankDue("2026-07-31", 18 * 60, "saturday")).toBe(true); // Friday
-  });
-
-  it("carries an unseen weekly result into the next day", () => {
-    const progress = initializeCompanionLeaderboardMilestones("user-1", "2026-08-03", null);
-    const result = evaluateCompanionLeaderboardMilestones({
-      progress,
-      day: "2026-08-03", // Monday
-      currentMinuteOfDay: 9 * 60,
-      startOfWeek: "monday",
-      dailyEntry: null,
-      weeklyEntry: entry("weekly", 2, "2026-08-02"),
-      announce: true,
-    });
-
-    expect(getCompanionWeeklyRankClosingDay("2026-08-03", 9 * 60, "monday")).toBe("2026-08-02");
-    expect(result.progress.weeklyClosingDay).toBe("2026-08-02");
-    expect(result.events.map((event) => event.title)).toEqual(["#2 in focus this week"]);
-  });
-
-  it("consumes a muted rank without replaying it when announcements resume", () => {
-    const progress = initializeCompanionLeaderboardMilestones("user-1", "2026-08-03", null);
-    const muted = evaluateCompanionLeaderboardMilestones({
-      progress,
-      day: "2026-08-03",
-      currentMinuteOfDay: 12 * 60,
-      startOfWeek: "monday",
-      dailyEntry: entry("daily", 3),
-      weeklyEntry: null,
-      announce: false,
-    });
-    const shown = evaluateCompanionLeaderboardMilestones({
-      progress: muted.progress,
-      day: "2026-08-03",
-      currentMinuteOfDay: 12 * 60 + 5,
-      startOfWeek: "monday",
-      dailyEntry: entry("daily", 3),
-      weeklyEntry: null,
-      announce: true,
-    });
-
-    expect(muted.events).toEqual([]);
-    expect(shown.events).toEqual([]);
-  });
-
-  it("persists only safe top-three progress and ignores corrupt storage", () => {
-    const progress = initializeCompanionLeaderboardMilestones("user-1", "2026-08-03", null);
-    persistCompanionLeaderboardMilestones({ ...progress, bestDailyRank: 2 });
-    expect(readCompanionLeaderboardMilestones()?.bestDailyRank).toBe(2);
+  it("persists only the user-scoped finalized weekly checkpoint", () => {
+    const progress = { userScopeKey: "user-1", lastWeeklyWindowEndDay: "2026-08-02" };
+    persistCompanionLeaderboardMilestones(progress);
+    expect(readCompanionLeaderboardMilestones()).toEqual(progress);
 
     window.localStorage.setItem(COMPANION_LEADERBOARD_MILESTONES_STORAGE_KEY, JSON.stringify({
-      ...progress,
-      bestDailyRank: 8,
+      userScopeKey: "user-1",
+      lastWeeklyWindowEndDay: 8,
     }));
     expect(readCompanionLeaderboardMilestones()).toBeNull();
   });

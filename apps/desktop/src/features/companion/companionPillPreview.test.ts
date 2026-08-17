@@ -9,18 +9,15 @@ import {
 } from "./companionPillPreview";
 
 describe("companion milestone previews", () => {
-  it("covers routine, record, and daily/weekly podium celebration tiers", () => {
+  it("covers routine, record, and finalized weekly celebration tiers", () => {
     const events = COMPANION_MILESTONE_PREVIEW_OPTIONS.map((option) =>
       buildCompanionMilestonePreview(option.id, 123),
     );
 
-    expect(events.map((event) => event.tier)).toEqual([1, 3, 3, 3, 3, 3, 3, 3]);
+    expect(events.map((event) => event.tier)).toEqual([1, 3, 3, 3, 3]);
     expect(events.map((event) => event.milestoneKind)).toEqual([
       "total",
       "record",
-      "rank",
-      "rank",
-      "rank",
       "rank",
       "rank",
       "rank",
@@ -28,12 +25,9 @@ describe("companion milestone previews", () => {
     expect(events.map((event) => event.id)).toEqual([
       "companion-preview-focus-1h-123",
       "companion-preview-record-30d-123",
-      "companion-preview-daily-rank-3-123",
-      "companion-preview-daily-rank-2-123",
-      "companion-preview-daily-rank-1-123",
-      "companion-preview-weekly-rank-3-123",
-      "companion-preview-weekly-rank-2-123",
-      "companion-preview-weekly-rank-1-123",
+      "companion-preview-weekly-final-rank-3-123",
+      "companion-preview-weekly-final-rank-2-123",
+      "companion-preview-weekly-final-rank-1-123",
     ]);
   });
 });
@@ -105,9 +99,6 @@ describe("milestone stat values", () => {
     expect(stats).toEqual([
       62 * 60,
       81 * 60,
-      4 * 3600 + 48 * 60,
-      5 * 3600 + 48 * 60,
-      6 * 3600 + 48 * 60,
       13 * 3600 + 12 * 60,
       14 * 3600 + 12 * 60,
       15 * 3600 + 12 * 60,

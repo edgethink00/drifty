@@ -6,12 +6,9 @@ import { buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmEvent 
 export const COMPANION_MILESTONE_PREVIEW_OPTIONS = [
   { id: "focus-1h", label: "1h focus" },
   { id: "record-30d", label: "30-day record" },
-  { id: "daily-rank-3", label: "Daily #3" },
-  { id: "daily-rank-2", label: "Daily #2" },
-  { id: "daily-rank-1", label: "Daily #1" },
-  { id: "weekly-rank-3", label: "Weekly #3" },
-  { id: "weekly-rank-2", label: "Weekly #2" },
-  { id: "weekly-rank-1", label: "Weekly #1" },
+  { id: "weekly-final-rank-3", label: "Weekly final #3" },
+  { id: "weekly-final-rank-2", label: "Weekly final #2" },
+  { id: "weekly-final-rank-1", label: "Weekly final #1" },
 ] as const;
 
 export type CompanionMilestonePreviewId =
@@ -131,38 +128,19 @@ export function buildCompanionMilestonePreview(
         destination: "insights",
         statSeconds: 81 * 60,
       };
-    case "daily-rank-1":
-    case "daily-rank-2":
-    case "daily-rank-3": {
+    case "weekly-final-rank-1":
+    case "weekly-final-rank-2":
+    case "weekly-final-rank-3": {
       const rank = Number(previewId.slice(-1));
       return {
         ...base,
         milestoneKind: "rank",
         tier: 3,
-        title: `#${rank} in focus today`,
-        subtitle: rank === 1
-          ? "You reached the top of today's leaderboard"
-          : rank === 2
-            ? "You moved into second place today"
-            : "You entered today's top three",
-        destination: "leaderboard",
-        statSeconds: (7 - rank) * 3600 + 48 * 60,
-        statLabel: "today",
-      };
-    }
-    case "weekly-rank-1":
-    case "weekly-rank-2":
-    case "weekly-rank-3": {
-      const rank = Number(previewId.slice(-1));
-      return {
-        ...base,
-        milestoneKind: "rank",
-        tier: 3,
-        title: `#${rank} in focus this week`,
-        subtitle: `Your rolling 7-day focus is #${rank}`,
+        title: `#${rank} in focus last week`,
+        subtitle: `Final rank among 14 active people`,
         destination: "leaderboard",
         statSeconds: (16 - rank) * 3600 + 12 * 60,
-        statLabel: "7 days",
+        statLabel: "last week",
       };
     }
   }

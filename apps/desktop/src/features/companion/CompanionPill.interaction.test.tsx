@@ -100,7 +100,7 @@ describe("CompanionPill native interactions", () => {
     };
 
     expect(resolveCompanionPillAutoDismissMs(passingMilestone)).toBe(4_000);
-    expect(resolveCompanionPillAutoDismissMs(buildCompanionMilestonePreview("daily-rank-1", 1))).toBe(6_000);
+    expect(resolveCompanionPillAutoDismissMs(buildCompanionMilestonePreview("weekly-final-rank-1", 1))).toBe(6_000);
     expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "drift" })).toBe(10_000);
     expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "break_return" })).toBe(8_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "full" })).toBe(12_000);
@@ -449,7 +449,7 @@ describe("CompanionPill native interactions", () => {
     const { container } = render(
       <CompanionPill
         peekEvent={null}
-        momentEvent={buildCompanionMilestonePreview("daily-rank-3", 1)}
+        momentEvent={buildCompanionMilestonePreview("weekly-final-rank-3", 1)}
         onDismissMoment={vi.fn()}
         onOpenDashboard={vi.fn()}
         onOpenMilestoneDestination={onOpenDestination}
@@ -494,7 +494,7 @@ describe("CompanionPill native interactions", () => {
     const { container } = render(
       <CompanionPill
         peekEvent={null}
-        momentEvent={buildCompanionMilestonePreview("daily-rank-3", 2)}
+        momentEvent={buildCompanionMilestonePreview("weekly-final-rank-3", 2)}
         onDismissMoment={vi.fn()}
         onOpenDashboard={vi.fn()}
         onOpenMilestoneDestination={onOpenDestination}

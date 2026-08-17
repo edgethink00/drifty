@@ -77,11 +77,11 @@ const passiveDriftEvent = buildEvent({
 
 const milestoneEvent = {
   kind: "milestone" as const,
-  id: "daily-rank-3",
+  id: "weekly-final-rank-3",
   milestoneKind: "rank" as const,
   tier: 3 as const,
-  title: "#3 in focus today",
-  subtitle: "You entered today's top three",
+  title: "#3 in focus last week",
+  subtitle: "Final rank among 14 active people",
   destination: "leaderboard" as const,
   statSeconds: 4 * 3600 + 48 * 60,
   statLabel: "today",
@@ -199,7 +199,7 @@ describe("WatcherWindowApp", () => {
     act(() => bridge.showHandler?.(milestoneEvent));
 
     expect(container.querySelector(".companion-pill-surface")?.getAttribute("data-state")).toBe("milestone");
-    expect(screen.getByText("#3 in focus today")).toBeTruthy();
+    expect(screen.getByText("#3 in focus last week")).toBeTruthy();
     expect(screen.getByText("4:48")).toBeTruthy();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
 

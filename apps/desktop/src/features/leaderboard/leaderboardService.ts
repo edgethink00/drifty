@@ -37,6 +37,14 @@ export interface OwnLeaderboardEntry {
   updated_at: string;
 }
 
+/**
+ * Real-account rank for one exact leaderboard window.
+ */
+export type LeaderboardCheckpointEntry = OwnLeaderboardEntry & {
+  rank: number;
+  participant_count: number;
+};
+
 export interface LeaderboardPayload {
   profileDisplayName?: string | null;
   period?: LeaderboardPeriod;
@@ -55,6 +63,14 @@ export interface LeaderboardResult<T = undefined> {
 
 export type PublishOwnFocusTotalOptions = {
   readonly updateProfile?: boolean;
+};
+
+export type LeaderboardCheckpointPayload = {
+  readonly period: "daily" | "weekly";
+  readonly focusSeconds: number;
+  readonly windowStartDay: string;
+  readonly windowEndDay: string;
+  readonly timezone: string;
 };
 
 type LeaderboardTable = "leaderboard_focus_totals" | "profiles";
@@ -98,8 +114,15 @@ type LeaderboardClient = {
     };
   };
   rpc: (
-    procedure: "get_global_focus_leaderboard" | "get_own_leaderboard_entry",
-    args?: { period_name?: LeaderboardPeriod; limit_count?: number },
+    procedure: "get_global_focus_leaderboard" | "get_own_leaderboard_entry" | "get_own_leaderboard_checkpoint" | "publish_own_leaderboard_checkpoint",
+    args?: {
+      period_name?: LeaderboardPeriod;
+      limit_count?: number;
+      window_end_day?: string;
+      checkpoint_focus_seconds?: number;
+      window_start_day?: string;
+      timezone_name?: string;
+    },
   ) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
 };
 type LeaderboardRpcRow = {
@@ -165,7 +188,12 @@ function toLeaderboardErrorMessage(error: { message: string } | Error | unknown)
         : String(error);
 
   if (
-    (message.includes("get_global_focus_leaderboard") || message.includes("get_own_leaderboard_entry")) &&
+    (
+      message.includes("get_global_focus_leaderboard")
+      || message.includes("get_own_leaderboard_entry")
+      || message.includes("get_own_leaderboard_checkpoint")
+      || message.includes("publish_own_leaderboard_checkpoint")
+    ) &&
     message.toLowerCase().includes("schema cache")
   ) {
     return "Leaderboard RPC is missing in Supabase. Re-run apps/desktop/supabase/schema.sql in your Supabase SQL Editor, then refresh the app.";
@@ -306,6 +334,91 @@ export async function fetchOwnLeaderboardEntry(
       success: true,
       error: null,
       data: normalizeOwnLeaderboardRow(row),
+    };
+  } catch (err) {
+    return { success: false, error: toLeaderboardErrorMessage(err) };
+  }
+}
+
+export async function fetchOwnLeaderboardCheckpoint(
+  period: Extract<LeaderboardPeriod, "daily" | "weekly">,
+  windowEndDay: string,
+  client?: LeaderboardClient | null,
+): Promise<LeaderboardResult<LeaderboardCheckpointEntry | null>> {
+  if (shouldUsePreviewData()) return { success: true, error: null, data: null };
+  const resolvedClient = resolveClient(client);
+  if (!resolvedClient) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { user } = await getCurrentUser(resolvedClient);
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  try {
+    const { data, error } = await resolvedClient.rpc("get_own_leaderboard_checkpoint", {
+      period_name: period,
+      window_end_day: windowEndDay,
+    });
+
+    if (error) {
+      return { success: false, error: toLeaderboardErrorMessage(error) };
+    }
+
+    const row = data?.[0] as OwnLeaderboardRpcRow | undefined;
+    if (!row) return { success: true, error: null, data: null };
+
+    const normalized = normalizeOwnLeaderboardRow(row);
+    const participantCount = normalized.participant_count ?? null;
+    if (normalized.rank === null || participantCount === null) {
+      return { success: true, error: null, data: null };
+    }
+
+    return {
+      success: true,
+      error: null,
+      data: {
+        ...normalized,
+        rank: normalized.rank,
+        participant_count: participantCount,
+      },
+    };
+  } catch (err) {
+    return { success: false, error: toLeaderboardErrorMessage(err) };
+  }
+}
+
+export async function publishOwnLeaderboardCheckpoint(
+  payload: LeaderboardCheckpointPayload,
+  client?: LeaderboardClient | null,
+): Promise<LeaderboardResult<boolean>> {
+  if (shouldUsePreviewData()) return { success: true, error: null, data: false };
+  const resolvedClient = resolveClient(client);
+  if (!resolvedClient) {
+    return { success: false, error: "Supabase is not configured" };
+  }
+
+  const { user } = await getCurrentUser(resolvedClient);
+  if (!user) {
+    return { success: false, error: "Not authenticated" };
+  }
+
+  try {
+    const { data, error } = await resolvedClient.rpc("publish_own_leaderboard_checkpoint", {
+      period_name: payload.period,
+      checkpoint_focus_seconds: Math.max(0, Math.round(payload.focusSeconds)),
+      window_start_day: payload.windowStartDay,
+      window_end_day: payload.windowEndDay,
+      timezone_name: payload.timezone,
+    });
+    if (error) return { success: false, error: toLeaderboardErrorMessage(error) };
+
+    const row = data?.[0] as { published?: boolean | string } | undefined;
+    return {
+      success: true,
+      error: null,
+      data: row?.published === true || row?.published === "true",
     };
   } catch (err) {
     return { success: false, error: toLeaderboardErrorMessage(err) };

@@ -21,7 +21,7 @@ vi.mock("./leaderboardService", async (importOriginal) => {
   };
 });
 
-import { buildLeaderboardPublishPayloads, publishLeaderboardPeriods } from "./leaderboardPublisher";
+import { buildLeaderboardCheckpointPayload, buildLeaderboardPublishPayloads, publishLeaderboardPeriods } from "./leaderboardPublisher";
 
 function makeSegment(day: string, durationSeconds: number): ActivitySegment {
   const startedAt = new Date(`${day}T09:00:00.000Z`);
@@ -154,5 +154,27 @@ describe("leaderboardPublisher", () => {
       undefined,
       { updateProfile: false },
     );
+  });
+
+  it("builds an exact closed weekly checkpoint without replacing it with today", async () => {
+    vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
+    const closedDay = "2026-07-05";
+    getTimeline.mockResolvedValue([makeSegment(closedDay, 3600)]);
+
+    const payload = await buildLeaderboardCheckpointPayload({
+      period: "weekly",
+      profileDisplayName: "Alex",
+      windowEndDay: closedDay,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+    });
+
+    expect(payload).toMatchObject({
+      period: "weekly",
+      focusSeconds: 3600,
+      windowStartDay: "2026-06-29",
+      windowEndDay: closedDay,
+    });
   });
 });
