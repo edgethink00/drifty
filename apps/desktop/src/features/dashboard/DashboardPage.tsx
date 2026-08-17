@@ -7,12 +7,12 @@ import { FlowChartView } from "../flow-chart/FlowChartView";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
-import { UI_LOCALE, formatCompactDurationFromSeconds, logicalTodayIsoDate } from "../../lib/formatting";
+import { formatCompactDurationFromSeconds, logicalTodayIsoDate } from "../../lib/formatting";
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
 import { buildCompactClassificationBreakdown } from "./compactChartBreakdown";
-import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
+import { BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import type { CompactRingEntry } from "./CompactRingChart";
 import { HistoryCalendarPanel } from "./HistoryCalendarPanel";
 import { WeekDashboard } from "./WeekDashboard";
@@ -26,6 +26,7 @@ import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState"
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
+import { DashboardPageHeader } from "./DashboardPageHeader";
 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
@@ -45,8 +46,6 @@ type DashboardPageProps = {
     readonly startDay: string;
     readonly endDay: string;
   };
-  readonly dashboardTitle: string;
-  readonly dashboardTitleDuration: string;
   readonly dashPeriod: DashboardPeriod;
   readonly flowBlocks: FlowBlock[];
   readonly flowIntervalMinutes: FlowIntervalMinutes;
@@ -59,21 +58,18 @@ type DashboardPageProps = {
   readonly flowProjectCenterPercent?: number;
   readonly focusDriftSection: ReactNode;
   readonly dayBreakdownTiles: ReactNode;
-  readonly dayFocusDeltaPercent: number | null;
   readonly dayFocusDeltaSeconds: number | null;
   readonly hasTimelineData: boolean;
   readonly historyClassificationOptions: ClassificationOptions;
   readonly historySegments: ActivitySegment[];
   readonly browserHistoryBootstrapNotice: BrowserHistoryBootstrapNoticeModel | null;
   readonly initialDataLoading: boolean;
-  readonly isPreviewSurface: boolean;
   readonly selectedDay: string;
   readonly selectedDayLabel: string;
   readonly startOfDayMinutes: number;
   readonly statusRunning: boolean;
   readonly totalSeconds: number;
   readonly weekCalendarEvents: Map<string, WeekCalendarEvent[]>;
-  readonly weekFocusDeltaPercent: number | null;
   readonly weekFocusDeltaSeconds: number | null;
   readonly weekRefreshStatus: "idle" | "loading" | "error";
   readonly weekRows: WeekDayRow[];
@@ -103,8 +99,6 @@ export function DashboardPage({
   dashboardProductivityTotals,
   dashboardReplay,
   dashboardRange,
-  dashboardTitle,
-  dashboardTitleDuration,
   dashPeriod,
   flowBlocks,
   flowIntervalMinutes,
@@ -117,21 +111,18 @@ export function DashboardPage({
   flowProjectCenterPercent,
   focusDriftSection,
   dayBreakdownTiles,
-  dayFocusDeltaPercent,
   dayFocusDeltaSeconds,
   hasTimelineData,
   historyClassificationOptions,
   historySegments,
   browserHistoryBootstrapNotice,
   initialDataLoading,
-  isPreviewSurface,
   selectedDay,
   selectedDayLabel,
   startOfDayMinutes,
   statusRunning,
   totalSeconds,
   weekCalendarEvents,
-  weekFocusDeltaPercent,
   weekFocusDeltaSeconds,
   weekRefreshStatus,
   weekRows,
@@ -163,17 +154,13 @@ export function DashboardPage({
     initialDataLoading ? "page--loading-skeleton" : null,
   ].filter(Boolean).join(" ");
   const isDashboardReplayActive = dashboardReplay !== null;
-  const hasMeasuredDayActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
+  const hasMeasuredActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
     ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused or unavailable. Start the tracker, then activity will appear here.");
-  const todayDay = logicalTodayIsoDate(startOfDayMinutes);
-  const weekIncludesToday = dashboardRange.startDay <= todayDay && todayDay <= dashboardRange.endDay;
-  const weekTitle = weekIncludesToday
-    ? "This week"
-    : `Week of ${new Date(`${dashboardRange.startDay}T12:00:00`).toLocaleDateString(UI_LOCALE, { month: "short", day: "numeric" })}`;
-  const headTitle = dashPeriod === "Week" ? weekTitle : dashboardTitle;
-  const headDuration = dashPeriod === "Today" && !hasMeasuredDayActivity ? "—" : dashboardTitleDuration;
-  const dayFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
+  const focusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
+  const focusDuration = hasMeasuredActivity
+    ? (focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m")
+    : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
   const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals);
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardEffectiveProductivityTotals);
@@ -183,7 +170,7 @@ export function DashboardPage({
   // the page. Loading and Month keep the classic top placement.
   const headInsideBlock = !initialDataLoading && (dashPeriod === "Today" || dashPeriod === "Week");
   const showShareButton = !initialDataLoading && !isDashboardReplayActive && (
-    (dashPeriod === "Today" && hasMeasuredDayActivity)
+    (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
   );
   // Share cards are assembled only after the modal opens. The shape is aggregate-only:
@@ -219,35 +206,23 @@ export function DashboardPage({
     };
   }, [dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, flowBlocks, selectedDay, shareCardOpen, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
   const pageHead = (
-    <div className={`pg-head dashboard-page-head${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
-        <div className="dashboard-page-head__row">
-          <div>
-            <h1
-              aria-label={initialDataLoading ? "Loading dashboard data" : `${headTitle} ${headDuration}`}
-              className="dashboard-page-head__title"
-            >
-              <span className="dashboard-page-head__title-value">{headTitle}</span>
-              <span className={`dashboard-page-head__title-value dashboard-page-head__title-duration${initialDataLoading ? " dashboard-page-head__title-duration--loading" : ""}`}>
-                {initialDataLoading ? <span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /> : headDuration}
-              </span>
-            </h1>
-          </div>
-          <div className="dashboard-page-head__side">
-            {showShareButton ? (
-              <button
-                type="button"
-                className="app-btn app-btn--secondary app-btn--header-action dashboard-share-button"
-                aria-haspopup="dialog"
-                onClick={() => setShareCardOpen(true)}
-              >
-                <ShareIcon />
-                <span>Share</span>
-              </button>
-            ) : null}
-            {dashboardDateNavigator}
-          </div>
-        </div>
-    </div>
+    <DashboardPageHeader
+      dashPeriod={dashPeriod}
+      initialDataLoading={initialDataLoading}
+      dateNavigator={dashboardDateNavigator}
+      focusDuration={focusDuration}
+      headerAction={showShareButton ? (
+        <button
+          type="button"
+          className="app-btn app-btn--secondary app-btn--header-action dashboard-share-button"
+          aria-haspopup="dialog"
+          onClick={() => setShareCardOpen(true)}
+        >
+          <ShareIcon />
+          <span>Share</span>
+        </button>
+      ) : null}
+    />
   );
 
   return (
@@ -310,9 +285,7 @@ export function DashboardPage({
           categoryEntries={dashboardCategoryTotals}
           productivityEntries={dashboardProductivityTotals}
           totalSeconds={totalSeconds}
-          focusDeltaPercent={isPreviewSurface ? 21 : weekFocusDeltaPercent}
           refreshStatus={weekRefreshStatus}
-          isPreviewSurface={isPreviewSurface}
           startOfDayMinutes={startOfDayMinutes}
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
@@ -386,18 +359,7 @@ export function DashboardPage({
             ariaLabel="Day breakdown"
             toggleSubject="day breakdown"
           >
-            <BreakdownHeroCard
-              ariaLabel="Focus total today"
-              eyebrow={dashboardTitle === "Today" ? "Focus today" : "Focus"}
-              value={hasMeasuredDayActivity
-                ? dayFocusSeconds > 0
-                  ? formatCompactDurationFromSeconds(dayFocusSeconds)
-                  : "0m"
-                : "—"}
-              deltaPercent={hasMeasuredDayActivity ? dayFocusDeltaPercent : null}
-              deltaComparisonLabel={dashboardTitle === "Today" ? "vs yesterday" : "vs previous day"}
-            />
-            {!hasMeasuredDayActivity ? (
+            {!hasMeasuredActivity ? (
               <div className="empty-state" role="status" aria-label="Breakdown availability">
                 <span className="eyebrow">No activity data</span>
                 <strong>Breakdown unavailable</strong>

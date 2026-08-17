@@ -1851,63 +1851,6 @@
   margin-bottom: var(--space-2);
 }
 
-.week-v2-side__hero .label-mono {
-  color: var(--accent-strong);
-}
-
-.week-v2-side__hero-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.week-v2-side__hero-value {
-  font-family: var(--font-display);
-  font-size: 29px;
-  font-weight: 660;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  color: var(--text);
-  white-space: nowrap;
-}
-
-.week-v2-side__hero-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--line));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  color: var(--accent-strong);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-/* Placeholder shown before the vs-previous-period delta is available: neutral
-   tone so it reads as "pending", while reserving the row's height. */
-.week-v2-side__hero-badge--empty {
-  border-color: var(--line);
-  color: var(--text-soft);
-}
-
-.week-v2-side__hero-sub {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 8px 0 0;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  line-height: 1;
-  color: var(--text-soft);
-  white-space: nowrap;
-}
-
 /* Side-panel variants of the compact split-chart cards */
 .week-v2-side__content .flow-compact-split-chart__panel {
   border-radius: var(--radius-md);
@@ -2128,10 +2071,6 @@
   white-space: nowrap;
 }
 
-.day-split__main > .pg-head .dashboard-page-head__title-duration {
-  white-space: nowrap;
-}
-
 .day-split__main > .pg-head .day-nav {
   flex-wrap: nowrap;
   flex-shrink: 0;
@@ -2186,10 +2125,6 @@
   padding: 13px 2px;
 }
 
-.week-v2-grid--day .week-v2-side__content > .week-v2-side__hero {
-  padding-top: 2px;
-}
-
 .week-v2-grid--day .week-v2-side__content > .kpi-row--insights,
 .page--week-dashboard .week-v2-side__content > .kpi-row--insights {
   border: 1px solid var(--line);
@@ -2234,10 +2169,6 @@
 
 .page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__title {
   flex-wrap: nowrap;
-  white-space: nowrap;
-}
-
-.page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__title-duration {
   white-space: nowrap;
 }
 
@@ -2315,10 +2246,6 @@
   border-radius: 0;
   box-shadow: none;
   padding: 13px 2px;
-}
-
-.page--week-dashboard .week-v2-side__content > .week-v2-side__hero {
-  padding-top: 2px;
 }
 
 .page--week-dashboard .week-v2-side__content > .week-v2-side-card:last-child,

@@ -5034,14 +5034,6 @@ export default function App() {
     () => buildProductivityQualityPercent(classificationProductivityTotals),
     [classificationProductivityTotals],
   );
-  const dashboardTrackedTimeLabel = totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m";
-  const dashboardTitle =
-    selectedDayContext === "Today"
-      ? selectedDayContext
-      : selectedDayContext === "Yesterday"
-        ? selectedDayContext
-        : selectedDayLabel;
-  const dashboardTitleDuration = dashboardTrackedTimeLabel;
   const lastCaptureDistanceLabel = status?.lastEventAt ? formatRelativeTime(status.lastEventAt) : "No captures yet";
   const uniqueAppsCount = useMemo(() => new Set(effectiveDashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [effectiveDashboardSegments]);
   const averageSessionMinutes = effectiveDashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / effectiveDashboardSegments.length) : 0;
@@ -5487,12 +5479,10 @@ export default function App() {
   const previousWeekFocusSeconds = dashPeriod === "Week" && dashboardPreviousWeekFocusLoad?.key === dashboardPreviousWeekFocusKey
     ? dashboardPreviousWeekFocusLoad.focusSeconds
     : null;
-  const weekFocusDeltaPercent = previousWeekFocusSeconds !== null && previousWeekFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousWeekFocusSeconds) / previousWeekFocusSeconds) * 100) : null;
   const weekFocusDeltaSeconds = previousWeekFocusSeconds !== null ? dashboardFocusSeconds - previousWeekFocusSeconds : null;
   const previousDayFocusSeconds = dashPeriod === "Today" && dashboardPreviousDayFocusLoad?.key === dashboardPreviousDayFocusKey
     ? dashboardPreviousDayFocusLoad.focusSeconds
     : null;
-  const dayFocusDeltaPercent = previousDayFocusSeconds !== null && previousDayFocusSeconds > 0 ? Math.round(((dashboardFocusSeconds - previousDayFocusSeconds) / previousDayFocusSeconds) * 100) : null;
   const dayFocusDeltaSeconds = previousDayFocusSeconds !== null ? dashboardFocusSeconds - previousDayFocusSeconds : null;
   const weekDashboardModel = useMemo(() => {
     if (dashPeriod !== "Week") return emptyWeekDashboardModel();
@@ -6338,7 +6328,6 @@ export default function App() {
   const stickyDashboardEffectiveProductivityTotals = useStickyDuringLoad(dashboardEffectiveProductivityTotals, isDayBreakdownLoading);
   const stickyDashboardAppUsage = useStickyDuringLoad(dashboardAppUsage, isDayBreakdownLoading);
   const stickyTotalSeconds = useStickyDuringLoad(totalSeconds, isDayBreakdownLoading);
-  const stickyDayFocusDeltaPercent = useStickyDuringLoad(dayFocusDeltaPercent, isDayBreakdownLoading);
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
 
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
@@ -6891,8 +6880,6 @@ export default function App() {
             dashboardProductivityTotals={stickyDashboardProductivityTotals}
             dashboardReplay={dashboardReplay}
             dashboardRange={effectiveDashboardRange}
-            dashboardTitle={dashboardTitle}
-            dashboardTitleDuration={dashboardTitleDuration}
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
             flowIntervalMinutes={flowIntervalMinutes}
@@ -6905,20 +6892,17 @@ export default function App() {
             flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
             dayBreakdownTiles={stickyDayBreakdownTiles}
-            dayFocusDeltaPercent={isPreviewSurface ? 12 : stickyDayFocusDeltaPercent}
             dayFocusDeltaSeconds={isPreviewSurface ? 48 * 60 : dayFocusDeltaSeconds}
             hasTimelineData={hasTimelineData}
             historyClassificationOptions={historyClassificationOptions}
             historySegments={historySegments}
             initialDataLoading={loading && !hasLoadedOnce}
-            isPreviewSurface={isPreviewSurface}
             selectedDay={selectedDay}
             selectedDayLabel={selectedDayLabel}
             startOfDayMinutes={startOfDayMinutes}
             statusRunning={status?.running === true}
             totalSeconds={stickyTotalSeconds}
             weekCalendarEvents={weekCalendarEvents}
-            weekFocusDeltaPercent={weekFocusDeltaPercent}
             weekFocusDeltaSeconds={isPreviewSurface ? 3 * 3600 + 5 * 60 : weekFocusDeltaSeconds}
             weekRefreshStatus={weekRefreshStatus}
             weekRows={weekRows}

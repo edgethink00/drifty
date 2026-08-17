@@ -12,7 +12,7 @@ import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
-import { BreakdownHeroCard, BreakdownSidePanel } from "./BreakdownSidePanelChrome";
+import { BreakdownSidePanel } from "./BreakdownSidePanelChrome";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
 import { buildWeekBreakdownHoverRows } from "./weekBreakdownHover";
@@ -211,9 +211,7 @@ type WeekDashboardProps = {
   readonly categoryEntries: CategoryDuration[];
   readonly productivityEntries: ProductivityDuration[];
   readonly totalSeconds: number;
-  readonly focusDeltaPercent: number | null;
   readonly refreshStatus: "idle" | "loading" | "error";
-  readonly isPreviewSurface?: boolean;
   readonly startOfDayMinutes: number;
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
@@ -245,9 +243,7 @@ export function WeekDashboard({
   categoryEntries,
   productivityEntries,
   totalSeconds,
-  focusDeltaPercent,
   refreshStatus,
-  isPreviewSurface = false,
   startOfDayMinutes,
   currentCalendarDay,
   currentMinuteOfDay,
@@ -272,7 +268,6 @@ export function WeekDashboard({
     setCalendarBodyElement(element);
   }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
-  const focusSeconds = productivityEntries.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const refreshStatusLabel = refreshStatus === "loading" ? "Updating" : refreshStatus === "error" ? "Update failed" : null;
   const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
   const productivityRingEntries = buildProductivityRingEntries(productivityEntries);
@@ -548,13 +543,6 @@ export function WeekDashboard({
           ariaLabel="Week time breakdown"
           toggleSubject="week breakdown"
         >
-          <BreakdownHeroCard
-            ariaLabel="Focus total this week"
-            eyebrow="Focus this week"
-            value={isPreviewSurface ? "40h 40m" : focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m"}
-            deltaPercent={focusDeltaPercent}
-            deltaComparisonLabel="vs last week"
-          />
           <CompactRingChart
             title="Productivity"
             entries={productivityRingEntries}

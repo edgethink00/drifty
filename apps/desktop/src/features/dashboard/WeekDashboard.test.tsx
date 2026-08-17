@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
+
+afterEach(cleanup);
 
 const weekRows: WeekDayRow[] = [
   "2024-01-01",
@@ -129,7 +131,6 @@ function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
       classificationOptions={{ includeAiClassifications: false }}
       categoryEntries={categoryEntries}
       endDay="2024-01-07"
-      focusDeltaPercent={null}
       productivityEntries={productivityEntries}
       refreshStatus="idle"
       rows={rows}
@@ -260,7 +261,6 @@ describe("WeekDashboard breakdown panel", () => {
         classificationOptions={{ includeAiClassifications: false }}
         categoryEntries={categoryEntries}
         endDay="2024-01-07"
-        focusDeltaPercent={null}
         productivityEntries={productivityEntries}
         refreshStatus="idle"
         rows={tiedRows}

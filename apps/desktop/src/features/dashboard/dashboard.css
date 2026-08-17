@@ -391,8 +391,29 @@
   column-gap: calc(var(--space-1) * 1.5);
 }
 
-.dashboard-page-head__title-value {
+/* Focus-only concepts intentionally use one readable sentence-sized line.
+   They do not add a second metric row, chart, or comparison treatment. */
+.dashboard-page-head__summary {
+  display: grid;
+  min-width: 0;
+}
+
+.dashboard-page-head__focus-value {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: inherit;
+  font-weight: 680;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
+}
+
+.dashboard-page-head__focus-word {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: inherit;
+  font-weight: 570;
+  letter-spacing: -0.025em;
+  white-space: nowrap;
 }
 
 .dashboard-page-head--today {

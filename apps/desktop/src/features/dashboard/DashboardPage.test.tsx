@@ -16,7 +16,6 @@ type DashboardPageFixtureOptions = {
   readonly dashboardDateNavigator?: ComponentProps<typeof DashboardPage>["dashboardDateNavigator"];
   readonly dashboardProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardProductivityTotals"];
   readonly dashboardReplay?: ComponentProps<typeof DashboardPage>["dashboardReplay"];
-  readonly dashboardTitleDuration?: string;
   readonly dashPeriod?: ComponentProps<typeof DashboardPage>["dashPeriod"];
   readonly hasTimelineData?: boolean;
   readonly initialDataLoading?: boolean;
@@ -41,20 +40,16 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       dashboardProductivityTotals={options.dashboardProductivityTotals ?? []}
       dashboardReplay={options.dashboardReplay === undefined ? { phase: "playing", progress: 0, onRestart: noop, onStop: noop } : options.dashboardReplay}
       dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
-      dashboardTitle="Today"
-      dashboardTitleDuration={options.dashboardTitleDuration ?? "0m"}
       dashPeriod={options.dashPeriod ?? "Today"}
       flowBlocks={[]}
       flowIntervalMinutes={3}
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
       dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
-      dayFocusDeltaPercent={null}
       dayFocusDeltaSeconds={null}
       hasTimelineData={options.hasTimelineData ?? false}
       historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       historySegments={[]}
       initialDataLoading={options.initialDataLoading ?? false}
-      isPreviewSurface={false}
       selectedDay="2026-06-29"
       selectedDayLabel="Mon, Jun 29"
       startOfDayMinutes={4 * 60}
@@ -63,7 +58,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       weekCalendarEvents={new Map()}
       weekCurrentCalendarDay={null}
       weekCurrentMinuteOfDay={null}
-      weekFocusDeltaPercent={null}
       weekFocusDeltaSeconds={null}
       weekRefreshStatus="idle"
       weekRows={[]}
@@ -142,8 +136,7 @@ describe("DashboardPage day metrics without measured activity", () => {
   it("uses an unavailable treatment instead of measured zeros", () => {
     renderDashboardWithNoData({ dashboardReplay: null });
 
-    expect(screen.getByRole("heading", { name: "Today —" })).toBeTruthy();
-    expect(screen.getByLabelText("Focus total today").textContent).toContain("Focus today—");
+    expect(screen.getByRole("heading", { name: "No focus recorded" })).toBeTruthy();
     expect(screen.getByRole("status", { name: "Breakdown availability" }).textContent).toContain("No activity data");
     // The breakdown donut/bar are absent (the flow chart's own Category/Productivity
     // colour toggle renders regardless, so assert on the breakdown panels' labels).
@@ -156,17 +149,50 @@ describe("DashboardPage day metrics without measured activity", () => {
       dashboardReplay: null,
       dashboardEffectiveProductivityTotals: [{ productivity: "drift", totalSeconds: 1_800, segments: 1, ratio: 1 }],
       dashboardProductivityTotals: [{ productivity: "drift", totalSeconds: 1_800, segments: 1, ratio: 1 }],
-      dashboardTitleDuration: "30m",
       hasTimelineData: true,
       totalSeconds: 1_800,
     });
 
-    expect(screen.getByRole("heading", { name: "Today 30m" })).toBeTruthy();
-    expect(screen.getByLabelText("Focus total today").textContent).toContain("Focus today0m");
+    expect(screen.getByRole("heading", { name: "Focused for 0m" })).toBeTruthy();
     expect(screen.queryByText("No activity data")).toBeNull();
     // The breakdown Productivity donut is shown (measured activity exists); scope
     // to its panel label so it isn't confused with the flow chart's colour toggle.
     expect(screen.getByLabelText("Productivity compact classification")).toBeTruthy();
+  });
+});
+
+describe("DashboardPage header concepts", () => {
+  it("uses focus duration, not total captured time, as the Day heading", () => {
+    renderDashboardWithNoData({
+      dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+      hasTimelineData: true,
+      totalSeconds: 3_600,
+    });
+
+    expect(screen.getByRole("heading", { name: "Focused for 1h" }).textContent).toBe("Focused for1h");
+    expect(screen.queryByRole("heading", { name: /Today/ })).toBeNull();
+  });
+
+  it("uses the same focus summary sentence for Week", () => {
+    renderDashboardWithNoData({
+      dashPeriod: "Week",
+      dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+      totalSeconds: 7_200,
+    });
+
+    expect(screen.getByRole("heading", { name: "Focused for 1h" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /This week/ })).toBeNull();
+  });
+
+  it("does not repeat the focus total or period comparison in Breakdown", () => {
+    renderDashboardWithNoData({
+      dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+      hasTimelineData: true,
+      totalSeconds: 3_600,
+    });
+
+    expect(screen.queryByLabelText("Focus total today")).toBeNull();
+    expect(screen.queryByText("vs yesterday")).toBeNull();
   });
 });
 
@@ -176,7 +202,6 @@ describe("DashboardPage share card", () => {
       dashboardReplay: null,
       dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
       dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
-      dashboardTitleDuration: "1h",
       hasTimelineData: true,
       totalSeconds: 3_600,
     });
