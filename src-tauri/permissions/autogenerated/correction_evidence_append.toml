@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-correction-evidence-append"
+description = "Enables the correction_evidence_append command without any pre-configured scope."
+commands.allow = ["correction_evidence_append"]
+
+[[permission]]
+identifier = "deny-correction-evidence-append"
+description = "Denies the correction_evidence_append command without any pre-configured scope."
+commands.deny = ["correction_evidence_append"]

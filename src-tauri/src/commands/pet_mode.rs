@@ -1704,8 +1704,27 @@ fn clamp_pet_position(
     work_width: f64,
     work_height: f64,
 ) -> LogicalPosition<f64> {
-    let max_x = work_position.x + (work_width - pet_width()).max(0.0);
-    let max_y = work_position.y + (work_height - pet_height()).max(0.0);
+    let (width, height) = pet_size();
+    clamp_pet_position_for_size(
+        target,
+        work_position,
+        work_width,
+        work_height,
+        width,
+        height,
+    )
+}
+
+fn clamp_pet_position_for_size(
+    target: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_width: f64,
+    work_height: f64,
+    pet_width: f64,
+    pet_height: f64,
+) -> LogicalPosition<f64> {
+    let max_x = work_position.x + (work_width - pet_width).max(0.0);
+    let max_y = work_position.y + (work_height - pet_height).max(0.0);
     LogicalPosition::new(
         target.x.clamp(work_position.x, max_x),
         target.y.clamp(work_position.y, max_y),
@@ -2180,9 +2199,14 @@ mod tests {
         let far_off_screen = LogicalPosition::new(9999.0, 9999.0);
 
         for (width, height) in [(72.0, 50.0), (144.0, 99.0), (180.0, 124.0)] {
-            *PET_MODE_SIZE.lock().unwrap() = (width, height);
-            let clamped =
-                clamp_pet_position(far_off_screen, work_position, work_width, work_height);
+            let clamped = clamp_pet_position_for_size(
+                far_off_screen,
+                work_position,
+                work_width,
+                work_height,
+                width,
+                height,
+            );
             assert!(
                 clamped.x + width <= work_width + f64::EPSILON,
                 "{width}x{height} pet overflows the right edge by {}",
@@ -2194,8 +2218,6 @@ mod tests {
                 clamped.y + height - work_height
             );
         }
-
-        *PET_MODE_SIZE.lock().unwrap() = (PET_MODE_WIDTH, PET_MODE_HEIGHT);
     }
 
     #[test]
