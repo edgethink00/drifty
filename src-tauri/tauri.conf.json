@@ -57,9 +57,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/drifty-tracker"
-    ],
     "resources": {
       "../integrations/skills/drifty/SKILL.md": "integrations/skills/drifty/SKILL.md",
       "../integrations/skills/drifty/agents/openai.yaml": "integrations/skills/drifty/agents/openai.yaml"

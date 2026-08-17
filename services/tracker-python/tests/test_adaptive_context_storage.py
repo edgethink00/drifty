@@ -12,6 +12,7 @@ if str(SERVICE_ROOT) not in sys.path:
 
 from app.storage.db import TrackerDatabase
 from app.tracker.macos_workspace import Snapshot
+from tests.support_cleanup import temp_dir_closing_databases
 
 ADAPTIVE_CONTEXT_FIXTURE: Final = {
     "version": 1,
@@ -49,7 +50,7 @@ class AdaptiveContextStorageTests(unittest.TestCase):
     def test_old_rows_parse_without_adaptive_context(self) -> None:
         # Given: an existing local activity row created before adaptive context storage.
         started_at = "2026-07-08T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -76,7 +77,7 @@ class AdaptiveContextStorageTests(unittest.TestCase):
     def test_inserted_context_round_trips_through_timeline_serialization(self) -> None:
         # Given: a row with locally stored derived, policy-labeled adaptive context.
         started_at = "2026-07-08T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -142,7 +143,7 @@ class AdaptiveContextStorageTests(unittest.TestCase):
             "localStorage": "stored_local",
             "rawFullPageText": "Full page text must stay out of bridge output.",
         }
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -186,7 +187,7 @@ class AdaptiveContextStorageTests(unittest.TestCase):
     def test_record_snapshot_persists_adaptive_context_when_present(self) -> None:
         # Given: a future adapter has already produced derived context on a snapshot.
         started_at = "2026-07-08T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.record_snapshot(
                 Snapshot(
@@ -215,7 +216,7 @@ class AdaptiveContextStorageTests(unittest.TestCase):
     def test_record_snapshot_bypasses_adaptive_context_when_absent(self) -> None:
         # Given: normal capture has no adaptive context.
         started_at = "2026-07-08T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.record_snapshot(
                 Snapshot(

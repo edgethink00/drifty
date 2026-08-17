@@ -15,7 +15,9 @@ class TestPackagedPythonCompat(unittest.TestCase):
         app_dir = pathlib.Path(__file__).resolve().parent.parent / "app"
         offenders = []
         for path in app_dir.rglob("*.py"):
-            text = path.read_text()
+            # Source files are UTF-8 regardless of the host locale; reading
+            # them with the platform default fails on a Korean Windows box.
+            text = path.read_text(encoding="utf-8")
             if re.search(r"@dataclass\([^)]*\bslots\s*=", text):
                 offenders.append(str(path))
         self.assertEqual(offenders, [], f"slots=True needs Python 3.10+: {offenders}")

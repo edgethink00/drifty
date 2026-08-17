@@ -18,8 +18,13 @@ from app.tracker.macos_workspace import (
     adaptive_content_context_for_capture,
     current_snapshot,
 )
+from tests.support_cleanup import temp_dir_closing_databases
 
 
+_MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS foreground capture stack")
+
+
+@_MACOS_ONLY
 class AdaptiveContextExtractorTests(unittest.TestCase):
     def test_current_snapshot_extracts_notion_context_from_production_metadata(self) -> None:
         # Given: a browser snapshot sees a Notion-like page with only URL/title metadata.
@@ -61,7 +66,7 @@ class AdaptiveContextExtractorTests(unittest.TestCase):
 
     def test_current_snapshot_extracts_obsidian_path_frontmatter_and_headings(self) -> None:
         # Given: an Obsidian snapshot exposes a Markdown path in the active window title.
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             note_path = Path(tempdir) / "Work" / "Client Alpha" / "Daily.md"
             note_path.parent.mkdir(parents=True)
             note_path.write_text(

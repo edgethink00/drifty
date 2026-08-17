@@ -1,4 +1,4 @@
-import { accessSync, chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { accessSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -10,6 +10,32 @@ const trackerEntry = resolve(repoRoot, "services/tracker-python/app/main.py");
 const trackerPythonRoot = resolve(repoRoot, "services/tracker-python");
 const binariesDir = resolve(repoRoot, "src-tauri/binaries");
 const artifactBaseName = "drifty-tracker";
+// Tauri resolves a macOS externalBin as `<name>-<triple><exeSuffix>`, so the
+// suffix has to match the host or the build succeeds and then fails at bundle
+// time with a missing resource.
+const exeSuffix = process.platform === "win32" ? ".exe" : "";
+
+// Windows builds a directory bundle (--onedir), not a single file. A onefile
+// executable self-extracts to a fresh temp directory on every launch, and the
+// Windows tracker spawns itself repeatedly (request process, daemon, status
+// polls), so every spawn paid a full re-extract plus a Defender scan of the
+// new files: measured 1.6s for one get_status and 17.7s for start_tracking on
+// the test host, against a 3s recovery budget in the app. onedir keeps the
+// runtime as stable on-disk files, so a spawn pays only a normal process
+// start. macOS keeps --onefile: its single extraction is fast enough there
+// and the externalBin flow expects one file.
+const useOneDir = process.platform === "win32";
+
+// PyInstaller follows imports, and `tzdata` is a data-only package that
+// nothing imports by name - `zoneinfo` discovers it at runtime. Without an
+// explicit collection the frozen Windows sidecar would ship with an empty
+// TZPATH and fail every zone lookup, exactly as an unpackaged interpreter does.
+function extraPyInstallerArgs() {
+  if (process.platform !== "win32") {
+    return [];
+  }
+  return ["--collect-data", "tzdata", "--hidden-import", "tzdata"];
+}
 
 function fail(message, exitCode = 1) {
   console.error(`ERROR: ${message}`);
@@ -87,6 +113,19 @@ function defaultPython() {
   if (process.env.DRIFTY_TRACKER_BUILD_PYTHON) {
     return process.env.DRIFTY_TRACKER_BUILD_PYTHON;
   }
+  if (process.platform === "win32") {
+    // `python3` on Windows is usually the WindowsApps execution-alias stub,
+    // which is not an interpreter: it exits 9009 and offers to open the
+    // Store. The `py` launcher is the documented way to find a real one.
+    // Mirrors resolve_python_bin() in src-tauri/src/tracker.rs.
+    for (const candidate of ["py", "python"]) {
+      const probe = spawnSync(candidate, ["--version"], { stdio: "ignore" });
+      if (!probe.error && probe.status === 0) {
+        return candidate;
+      }
+    }
+    return "python";
+  }
   if (process.platform === "darwin") {
     try {
       accessSync("/usr/bin/python3", constants.X_OK);
@@ -112,6 +151,11 @@ async function assertExecutable(path) {
   const stats = statSync(path);
   if (!stats.isFile()) {
     fail(`sidecar output is not a file: ${path}`);
+  }
+  // Windows has no execute permission bit; X_OK degrades to a read check and
+  // reports success for any readable file, so the check is not meaningful there.
+  if (process.platform === "win32") {
+    return;
   }
   await access(path, constants.X_OK).catch(() => {
     fail(`sidecar output is not executable: ${path}`);
@@ -156,12 +200,17 @@ async function main() {
 
   const pythonBin = defaultPython();
   const pyInstallerVersion = assertPyInstaller(pythonBin);
-  const outputPath = resolve(binariesDir, `${artifactBaseName}-${target}`);
+  const outputPath = resolve(binariesDir, `${artifactBaseName}-${target}${useOneDir ? "" : exeSuffix}`);
+  const outputExecutable = useOneDir
+    ? resolve(outputPath, `${artifactBaseName}${exeSuffix}`)
+    : outputPath;
   const tempRoot = mkdtempSync(resolve(tmpdir(), "drifty-tracker-sidecar-"));
   const distPath = resolve(tempRoot, "dist");
   const buildPath = resolve(tempRoot, "build");
   const specPath = resolve(tempRoot, "spec");
-  const builtBinary = resolve(distPath, artifactBaseName);
+  const builtBinary = useOneDir
+    ? resolve(distPath, artifactBaseName, `${artifactBaseName}${exeSuffix}`)
+    : resolve(distPath, `${artifactBaseName}${exeSuffix}`);
 
   console.log(`target=${target}`);
   console.log(`python=${pythonBin}`);
@@ -172,7 +221,7 @@ async function main() {
 
   try {
     mkdirSync(binariesDir, { recursive: true });
-    rmSync(outputPath, { force: true });
+    rmSync(outputPath, { recursive: true, force: true });
 
     const env = {
       ...process.env,
@@ -184,7 +233,7 @@ async function main() {
       [
         "-m",
         "PyInstaller",
-        "--onefile",
+        useOneDir ? "--onedir" : "--onefile",
         "--clean",
         "--noconfirm",
         "--name",
@@ -197,6 +246,7 @@ async function main() {
         buildPath,
         "--specpath",
         specPath,
+        ...extraPyInstallerArgs(),
         trackerEntry,
       ],
       { env },
@@ -208,10 +258,16 @@ async function main() {
     if (!existsSync(builtBinary) || !statSync(builtBinary).isFile()) {
       fail(`PyInstaller did not produce expected binary: ${builtBinary}`);
     }
-    copyFileSync(builtBinary, outputPath);
-    chmodSync(outputPath, 0o755);
-    await assertExecutable(outputPath);
-    assertSmokeTest(outputPath);
+    if (useOneDir) {
+      // The exe is useless without its `_internal` runtime, so ship the whole
+      // directory PyInstaller produced.
+      cpSync(dirname(builtBinary), outputPath, { recursive: true });
+    } else {
+      copyFileSync(builtBinary, outputPath);
+      chmodSync(outputPath, 0o755);
+    }
+    await assertExecutable(outputExecutable);
+    assertSmokeTest(outputExecutable);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

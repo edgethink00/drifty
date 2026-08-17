@@ -19,6 +19,10 @@ from app.tracker.macos_workspace import (
 
 
 class BrowserAutomationDiagnosticsTests(unittest.TestCase):
+    @unittest.skipUnless(
+        sys.platform == "darwin",
+        "/usr/bin/python3 is the macOS system interpreter this guard is about",
+    )
     def test_accessibility_address_bar_imports_with_system_python(self) -> None:
         env = {**os.environ, "PYTHONPATH": str(SERVICE_ROOT)}
 

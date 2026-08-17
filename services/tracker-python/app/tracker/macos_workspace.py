@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 from typing import Final, Literal
 
 from app.permissions.accessibility import read_front_window_title
+from app.tracker.capture_contract import (  # re-exported: this module was the
+    FrontmostCaptureSource,  # original home of the capture contract, and callers
+    Snapshot,  # still import it from here.
+    utc_now_iso,
+)
 from app.tracker.adaptive_context import (
     AdaptiveContentContextPayload,
     AdaptiveContextCaptureInput,
@@ -44,48 +49,12 @@ from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
 # thread, so a plain module-level instance is safe and cost-free.
 _youtube_video_id_memory = YouTubeVideoIdMemory()
 
-FrontmostCaptureSource = Literal["system-events", "lsappinfo", "unavailable"]
 OSASCRIPT_TIMEOUT_SECONDS: Final = 3.0
 # Generous enough for the first `swift -e` invocation, which pays JIT warmup cost.
 COMMAND_TIMEOUT_SECONDS: Final = 5.0
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
 FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: Final = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 _BROWSER_HISTORY_FALLBACK_STATUSES: Final = frozenset({"denied", "empty_result", "stale", "unavailable"})
-
-
-def utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-@dataclass
-class Snapshot:
-    observed_at: str
-    app_name: str
-    bundle_id: str | None
-    window_title: str | None
-    source: str
-    browser_name: str | None = None
-    site_domain: str | None = None
-    site_title: str | None = None
-    site_url: str | None = None
-    youtube_video_id: str | None = None
-    youtube_playlist_id: str | None = None
-    youtube_is_shorts: bool | None = None
-    site_source: str | None = None
-    capture_confidence: float = 1.0
-    browser_automation_status: BrowserAutomationStatus | None = None
-    browser_automation_error: str | None = None
-    browser_history_status: str | None = None
-    browser_history_reason: str | None = None
-    browser_history_database_found: bool | None = None
-    browser_history_profile_count: int | None = None
-    browser_history_candidate_count: int | None = None
-    browser_history_error_count: int | None = None
-    system_transient_activity: SystemTransientActivity | None = None
-    frontmost_capture_source: FrontmostCaptureSource | None = None
-    frontmost_capture_error: str | None = None
-    frontmost_fallback_error: str | None = None
-    adaptive_content_context: AdaptiveContentContextPayload | None = None
 
 
 def _run_osascript(script: str) -> str:

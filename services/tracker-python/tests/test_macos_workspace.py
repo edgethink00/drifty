@@ -22,6 +22,10 @@ from app.tracker.macos_workspace import (
 )
 
 
+_MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS foreground capture stack")
+
+
+@_MACOS_ONLY
 class MacosWorkspaceTests(unittest.TestCase):
     def test_browser_script_matrix(self) -> None:
         safari_script = _browser_script("Safari")

@@ -392,6 +392,11 @@ pub fn run() {
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
                 .on_event(|app, event| match event {
+                    // `Opened` only exists on Apple platforms. Windows delivers a
+                    // deep link by launching a second process with the URL in argv,
+                    // which the single-instance callback below routes through the
+                    // same `remember_auth_deep_links` filter.
+                    #[cfg(any(target_os = "macos", target_os = "ios"))]
                     tauri::RunEvent::Opened { urls } => {
                         let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
                     }

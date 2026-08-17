@@ -18,6 +18,7 @@ from app.tracker.browser_history import (
     is_browser_history_supported_app,
     is_firefox_family_browser,
 )
+from tests.support_cleanup import cleanup_temp_dir
 
 
 class BrowserHistoryTests(unittest.TestCase):
@@ -26,7 +27,7 @@ class BrowserHistoryTests(unittest.TestCase):
         self.root = Path(self.tempdir.name)
 
     def tearDown(self) -> None:
-        self.tempdir.cleanup()
+        cleanup_temp_dir(self.tempdir)
 
     def test_browser_history_imports_with_system_python(self) -> None:
         system_python = Path("/usr/bin/python3")
@@ -124,6 +125,10 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertEqual(metadata.browser_history_error_count, 0)
 
     def test_browser_history_metadata_reads_aside_chromium_profile(self) -> None:
+        # Aside is a macOS-only browser; its profile root exists in the macOS
+        # table and deliberately not in the Windows one.
+        if sys.platform != "darwin":
+            self.skipTest("Aside ships on macOS only")
         self._write_chromium_history(
             "Default",
             [("https://docs.example.test/aside", "Aside Docs", 50)],

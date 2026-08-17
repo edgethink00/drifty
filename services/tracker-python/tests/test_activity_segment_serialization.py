@@ -12,6 +12,7 @@ if str(SERVICE_ROOT) not in sys.path:
 
 from app.storage.db import TrackerDatabase
 from app.tracker.macos_workspace import Snapshot
+from tests.support_cleanup import temp_dir_closing_databases
 
 
 class ActivitySegmentSerializationTests(unittest.TestCase):
@@ -36,7 +37,7 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
 
     def test_fetch_timeline_includes_browser_automation_diagnostics(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -68,7 +69,7 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
 
     def test_fetch_timeline_includes_browser_history_diagnostics(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -106,7 +107,7 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
 
     def test_fetch_timeline_includes_frontmost_capture_diagnostics(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -138,7 +139,7 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
 
     def test_record_snapshot_persists_frontmost_capture_diagnostics(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.record_snapshot(
                 Snapshot(
@@ -170,7 +171,7 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
 
     def test_fetch_timeline_hides_uncertain_front_fallback_site_context(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {
@@ -201,7 +202,7 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
 
     def test_fetch_timeline_hides_front_fallback_site_context_without_window_title(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
-        with TemporaryDirectory() as tempdir:
+        with temp_dir_closing_databases() as tempdir:
             database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
             database.insert_segment(
                 {

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -25,6 +24,11 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.platform_locks import (
+    lock_exclusive,
+    lock_exclusive_nonblocking,
+    unlock,
+)
 from app.tracker.adaptive_context.developer_diagnostics import (
     ADAPTIVE_CONTEXT_SOURCE_FAMILIES_ENV,
     ENABLE_ADAPTIVE_CONTEXT_CAPTURE_ENV,
@@ -58,6 +62,14 @@ DATABASE_BACKUP_CHECK_SECONDS = 60 * 60
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 TRACKER_EXIT_TIMEOUT_SECONDS = 3.0
 TRACKER_EXIT_POLL_SECONDS = 0.05
+# A frozen Windows daemon spends most of its first second in the bootloader
+# (plus a Defender look at the fresh files) before it can write its pid
+# record, so a fixed post-spawn sleep misreports a healthy start as
+# "Tracker daemon did not start" whenever the host is busy. Poll instead.
+# Bounded to stay inside the app's 3s recovery budget together with the
+# parent's own cold start (~1s measured for the frozen sidecar).
+TRACKER_START_TIMEOUT_SECONDS = 1.5
+TRACKER_START_POLL_SECONDS = 0.1
 _YOUTUBE_METADATA_IN_FLIGHT: set[str] = set()
 _YOUTUBE_METADATA_LOCK = threading.Lock()
 RuntimeMode = Literal["source", "frozen"]
@@ -128,26 +140,24 @@ def ensure_state_dir() -> None:
 def tracker_lifecycle_lock():
     ensure_state_dir()
     with lifecycle_lock_path().open("a+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        lock_exclusive(lock_file)
         try:
             yield
         finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            unlock(lock_file)
 
 
 def _acquire_tracker_daemon_lock():
     ensure_state_dir()
     lock_file = daemon_lock_path().open("a+")
-    try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    if not lock_exclusive_nonblocking(lock_file):
         lock_file.close()
         return None
     return lock_file
 
 
 def _release_tracker_daemon_lock(lock_file) -> None:
-    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    unlock(lock_file)
     lock_file.close()
 
 
@@ -171,11 +181,11 @@ def tracker_pid_lock():
 
     ensure_state_dir()
     with pid_lock_path().open("a+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        lock_exclusive(lock_file)
         try:
             yield
         finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            unlock(lock_file)
 
 
 _DATABASE_CACHE: TrackerDatabase | None = None
@@ -209,7 +219,7 @@ def seconds_since_last_input() -> float | None:
 
 
 def current_snapshot(include_system_transient: bool = True) -> Snapshot:
-    from app.tracker.macos_workspace import current_snapshot as read_current_snapshot
+    from app.tracker.platform_workspace import current_snapshot as read_current_snapshot
 
     return read_current_snapshot(include_system_transient=include_system_transient)
 
@@ -376,7 +386,10 @@ def is_running() -> bool:
 
 def _read_tracker_pid_unlocked() -> int | None:
     try:
-        pid = int(pid_path().read_text().strip())
+        # Explicit encoding: Python's text default follows the system locale,
+        # which is cp949 on a Korean Windows install and would make this
+        # record's readability depend on the user's regional settings.
+        pid = int(pid_path().read_text(encoding="utf-8").strip())
     except Exception:
         return None
     return pid if pid > 0 else None
@@ -389,7 +402,7 @@ def _read_tracker_pid() -> int | None:
 
 def _write_tracker_pid(pid: int) -> None:
     with tracker_pid_lock():
-        pid_path().write_text(str(pid))
+        pid_path().write_text(str(pid), encoding="utf-8")
 
 
 def _remove_pid_record_if_owned(pid: int) -> bool:
@@ -407,6 +420,12 @@ def _remove_pid_record_if_owned(pid: int) -> bool:
 
 
 def _process_exists(pid: int) -> bool:
+    # os.kill(pid, 0) reports success for an already-exited process on Windows
+    # while any handle to it stays open, so liveness needs the real API there.
+    if sys.platform == "win32":
+        from app.windows_process_liveness import windows_process_is_alive
+
+        return windows_process_is_alive(pid)
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -419,6 +438,11 @@ def _process_exists(pid: int) -> bool:
 
 
 def _process_command(pid: int) -> str | None:
+    if sys.platform == "win32":
+        from app.windows_process_table import windows_process_command
+
+        return windows_process_command(pid)
+
     try:
         result = subprocess.run(
             ["ps", "-p", str(pid), "-o", "command="],
@@ -435,6 +459,14 @@ def _process_command(pid: int) -> str | None:
 
 def _process_table() -> dict[int, str] | None:
     """Return an untruncated process snapshot or ``None`` when inspection fails."""
+
+    # Windows has no ps(1); command lines come from CIM instead. Both backends
+    # return the same pid -> full-command-line shape, and both report failure
+    # as None so a caller never mistakes an unreadable table for an empty one.
+    if sys.platform == "win32":
+        from app.windows_process_table import windows_process_table
+
+        return windows_process_table()
 
     try:
         result = subprocess.run(
@@ -455,6 +487,37 @@ def _process_table() -> dict[int, str] | None:
             continue
         processes[int(match.group(1))] = match.group(2)
     return processes
+
+
+def _invalidate_process_table() -> None:
+    """Force the next snapshot to be queried fresh.
+
+    The Windows backend caches briefly so one lifecycle operation does not pay
+    several subprocess round trips. Wherever we act on a process and then check
+    the result, that cache would answer from before the action, so the
+    confirmation read has to start cold.
+    """
+    if sys.platform == "win32":
+        from app.windows_process_table import invalidate_process_table_cache
+
+        invalidate_process_table_cache()
+
+
+def _detached_spawn_kwargs() -> dict:
+    """Popen options that outlive the caller without showing a console.
+
+    ``start_new_session`` is POSIX-only; on Windows it is ignored, so the
+    daemon would inherit the launching console and flash a window at the user
+    on every start. The Windows equivalent is a creation-flag pair:
+    ``DETACHED_PROCESS`` so the child does not share our console, and
+    ``CREATE_NEW_PROCESS_GROUP`` so a Ctrl-C in the parent's group does not
+    reach the tracker.
+    """
+    if sys.platform == "win32":
+        return {
+            "creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        }
+    return {"start_new_session": True}
 
 
 def _current_script_path() -> str:
@@ -519,10 +582,67 @@ def _tracker_process_ownership(pid: int) -> TrackerProcessOwnership:
 
 
 def _command_arguments(command: str) -> list[str] | None:
+    """Split a process command line into arguments.
+
+    ``shlex`` implements POSIX shell quoting, where a backslash escapes the
+    next character. Windows command lines are full of unquoted backslashes, so
+    POSIX splitting silently eats them: ``C:\\Users\\alex\\python.exe``
+    becomes ``C:Usersalexpython.exe``. That mangled path then fails to match
+    the daemon's real runtime path, so ownership reads as unrelated and the
+    tracker refuses to stop its own daemon.
+
+    Windows quoting rules are different enough to need their own splitter,
+    which the stdlib does not provide, so a small one lives below.
+    """
+    if sys.platform == "win32":
+        return _windows_command_arguments(command)
     try:
         return shlex.split(command)
     except ValueError:
         return None
+
+
+def _windows_command_arguments(command: str) -> list[str] | None:
+    """Split a Windows command line the way CommandLineToArgvW would.
+
+    Only the rules that matter here are implemented: a double quote toggles
+    quoting, a run of backslashes is halved and escapes a following quote only
+    when the run is odd, and unquoted whitespace separates arguments. That is
+    enough to recover paths and ``--db`` values intact.
+    """
+    arguments: list[str] = []
+    current: list[str] = []
+    backslashes = 0
+    quoted = False
+    started = False
+
+    for character in command:
+        if character == "\\":
+            backslashes += 1
+            continue
+        if character == '"':
+            current.append("\\" * (backslashes // 2))
+            if backslashes % 2:
+                current.append('"')
+            else:
+                quoted = not quoted
+                started = True
+            backslashes = 0
+            continue
+        current.append("\\" * backslashes)
+        backslashes = 0
+        if character.isspace() and not quoted:
+            if "".join(current) or started:
+                arguments.append("".join(current))
+                current = []
+                started = False
+            continue
+        current.append(character)
+
+    current.append("\\" * backslashes)
+    if "".join(current) or started:
+        arguments.append("".join(current))
+    return arguments
 
 
 def _resolve_command_path(raw_path: str) -> Path | None:
@@ -540,6 +660,20 @@ def _resolve_command_path(raw_path: str) -> Path | None:
         return None
 
 
+# The packaged executable is named drifty-tracker[-<triple>][.exe]: a macOS
+# externalBin carries the target triple in the file name, the Windows onedir
+# exe is drifty-tracker.exe inside a triple-named directory, and the plain
+# name is the fallback on both platforms. A name that misses here makes the
+# parent blind to its own frozen daemon: get_status reports stopped, every
+# start attempt spawns a replacement that instantly exits on the daemon
+# lock, and the reconciliation pass deletes the healthy daemon's pid record.
+_TRACKER_EXECUTABLE_NAME = re.compile(
+    r"drifty-tracker"
+    r"(?:-(?:aarch64|x86_64)-(?:apple-darwin|pc-windows-msvc))?"
+    r"(?:\.exe)?"
+)
+
+
 def _tracker_runtime_from_prefix(prefix: str) -> tuple[RuntimeMode, Path] | None:
     """Recognize source or packaged Drifty tracker runtime command prefixes.
 
@@ -552,7 +686,7 @@ def _tracker_runtime_from_prefix(prefix: str) -> tuple[RuntimeMode, Path] | None
     if arguments:
         if len(arguments) == 1:
             executable = Path(arguments[0]).expanduser().resolve()
-            if re.fullmatch(r"drifty-tracker(?:-(?:aarch64|x86_64)-apple-darwin)?", executable.name):
+            if _TRACKER_EXECUTABLE_NAME.fullmatch(executable.name):
                 return "frozen", executable
             if executable.as_posix().endswith("/services/tracker-python/app/main.py"):
                 return "source", executable
@@ -576,7 +710,7 @@ def _tracker_runtime_from_prefix(prefix: str) -> tuple[RuntimeMode, Path] | None
     # The packaged executable path itself can also contain spaces in an app or
     # updater directory. Its basename remains stable across those locations.
     executable = Path(prefix).expanduser().resolve()
-    if re.fullmatch(r"drifty-tracker(?:-(?:aarch64|x86_64)-apple-darwin)?", executable.name):
+    if _TRACKER_EXECUTABLE_NAME.fullmatch(executable.name):
         return "frozen", executable
     return None
 
@@ -616,6 +750,14 @@ def _reconcile_pid_record(daemon_pids: list[int]) -> None:
 
 
 def _process_has_exited(pid: int) -> bool:
+    # Windows has no wait/zombie model: os.waitpid and os.WNOHANG do not exist,
+    # and a terminated process is simply gone from the table rather than
+    # lingering until reaped. Liveness alone is the whole answer there, and
+    # asking anything further raises AttributeError, which previously escaped
+    # through _wait_for_process_exit and made every stop look like a failure
+    # even when the daemon had already exited.
+    if sys.platform == "win32":
+        return not _process_exists(pid)
     try:
         waited_pid, _ = os.waitpid(pid, os.WNOHANG)
     except (ChildProcessError, OSError):
@@ -731,6 +873,7 @@ def _start_tracking_locked():
     if stop_errors:
         return response(False, get_status()["data"], " ".join(stop_errors))
 
+    _invalidate_process_table()
     remaining_processes = _process_table()
     if remaining_processes is None:
         return response(False, get_status()["data"], "Unable to confirm that old tracker daemons exited.")
@@ -744,13 +887,16 @@ def _start_tracking_locked():
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         stdin=subprocess.DEVNULL,
-        start_new_session=True,
+        **_detached_spawn_kwargs(),
     )
-    time.sleep(0.25)
-    status = get_status()["data"]
-    if not status.get("running"):
-        return response(False, status, "Tracker daemon did not start.")
-    return response(True, status)
+    deadline = time.monotonic() + TRACKER_START_TIMEOUT_SECONDS
+    while True:
+        time.sleep(TRACKER_START_POLL_SECONDS)
+        status = get_status()["data"]
+        if status.get("running"):
+            return response(True, status)
+        if time.monotonic() >= deadline:
+            return response(False, status, "Tracker daemon did not start.")
 
 
 def stop_tracking():
@@ -773,6 +919,7 @@ def _stop_tracking_locked():
     if stop_errors:
         return response(False, get_status()["data"], " ".join(stop_errors))
 
+    _invalidate_process_table()
     remaining_processes = _process_table()
     if remaining_processes is None:
         return response(False, get_status()["data"], "Unable to confirm that tracker daemons exited.")

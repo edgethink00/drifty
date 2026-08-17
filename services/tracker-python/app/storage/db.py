@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 from app.storage.classification_rule_url import canonicalize_classification_rule_site_url
+from app.capture_platform import CAPTURE_PLATFORM
 from app.storage.activity_segment_serialization import (
     json_list,
     sanitized_raw_context_json,
@@ -919,7 +920,7 @@ class TrackerDatabase:
                     snapshot.youtube_is_shorts,
                     snapshot.browser_name,
                     snapshot.site_source,
-                    "macos",
+                    CAPTURE_PLATFORM,
                     snapshot.source,
                     getattr(snapshot, "capture_confidence", 1.0),
                     self._snapshot_raw_context_json(snapshot),

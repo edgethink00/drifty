@@ -10,6 +10,10 @@ if str(SERVICE_ROOT) not in sys.path:
 from app.tracker.macos_workspace import BrowserMetadata, current_snapshot
 
 
+_MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS foreground capture stack")
+
+
+@_MACOS_ONLY
 class MacosSnapshotBrowserSourceTests(unittest.TestCase):
     def test_current_snapshot_marks_accessibility_address_bar_source(self) -> None:
         metadata = BrowserMetadata(

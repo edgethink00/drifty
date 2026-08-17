@@ -11,6 +11,10 @@ if str(SERVICE_ROOT) not in sys.path:
 from app.permissions.accessibility import accessibility_granted
 
 
+_MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS accessibility APIs")
+
+
+@_MACOS_ONLY
 class AccessibilityPermissionTests(unittest.TestCase):
     def test_accessibility_granted_when_front_window_title_returns_non_empty_title(self) -> None:
         completed = subprocess.CompletedProcess(

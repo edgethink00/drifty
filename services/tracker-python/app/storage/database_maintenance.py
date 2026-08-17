@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import os
 import shutil
 import sqlite3
@@ -10,6 +9,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from app.platform_locks import lock_exclusive, unlock
 
 
 DEFAULT_BACKUP_INTERVAL_SECONDS = 24 * 60 * 60
@@ -48,11 +49,11 @@ def _maintenance_lock_path(db_path: Path) -> Path:
 def _maintenance_lock(db_path: Path):
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with _maintenance_lock_path(db_path).open("a+") as lock_file:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        lock_exclusive(lock_file)
         try:
             yield
         finally:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            unlock(lock_file)
 
 
 def _is_confirmed_corruption_error(error: sqlite3.DatabaseError) -> bool:

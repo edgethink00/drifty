@@ -18,6 +18,7 @@ from app.storage.live_tail import fetch_live_tail
 from app.tracker.adaptive_context import developer_diagnostics
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.power_state import PowerStateSample
+from tests.support_cleanup import temp_dir_closing_databases
 
 
 class TrackerMainTests(unittest.TestCase):
@@ -97,7 +98,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(end, "2026-04-07T23:59:59")
 
     def test_database_reuses_instance_for_same_db_path(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             with patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
                 first = tracker_main.database()
                 second = tracker_main.database()
@@ -105,7 +106,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertIs(first, second)
 
     def test_database_rebuilds_instance_when_db_path_changes(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             with patch.object(tracker_main, "DB_PATH", Path(tmp) / "first.sqlite3"):
                 first = tracker_main.database()
             with patch.object(tracker_main, "DB_PATH", Path(tmp) / "second.sqlite3"):
@@ -116,7 +117,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(second.db_path.name, "second.sqlite3")
 
     def test_start_tracking_forwards_db_path_to_daemon(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             with patch.object(tracker_main, "_process_table", side_effect=[{}, {}]), patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": False}}
@@ -127,7 +128,7 @@ class TrackerMainTests(unittest.TestCase):
                 self.assertIn(str(tracker_main.DB_PATH), args)
 
     def test_start_tracking_builds_source_daemon_command(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
 
             with patch.object(sys, "executable", "/usr/bin/python3"), patch.object(
@@ -149,7 +150,7 @@ class TrackerMainTests(unittest.TestCase):
         )
 
     def test_start_tracking_builds_frozen_daemon_command(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
 
             with patch.object(sys, "executable", "/Applications/Drifty.app/Contents/MacOS/drifty-tracker"), patch.object(
@@ -170,10 +171,12 @@ class TrackerMainTests(unittest.TestCase):
         )
 
     def test_start_tracking_reports_failure_when_daemon_does_not_start(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             with patch.object(tracker_main, "_process_table", side_effect=[{}, {}]), patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": False}}
+            ), patch.object(
+                tracker_main, "TRACKER_START_TIMEOUT_SECONDS", 0
             ), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen"):
                 result = tracker_main.start_tracking()
 
@@ -195,7 +198,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(ownership, "unknown")
 
     def test_tracker_process_ownership_preserves_unquoted_database_paths_with_spaces(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             db_path = Path(tmp) / "Application Support" / "tracker.sqlite3"
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {db_path}"
             with patch.object(tracker_main, "DB_PATH", db_path), patch.object(
@@ -218,6 +221,41 @@ class TrackerMainTests(unittest.TestCase):
             matches = tracker_main._matching_tracker_daemon_pids(
                 {101: current, 102: updater, 103: serve, 104: other_db, 105: "/usr/bin/sleep 60"}
             )
+
+        self.assertEqual(matches, [101, 102])
+
+    def test_tracker_executable_name_covers_windows_and_macos_packaged_names(self) -> None:
+        recognized = [
+            "drifty-tracker",
+            "drifty-tracker.exe",
+            "drifty-tracker-aarch64-apple-darwin",
+            "drifty-tracker-x86_64-apple-darwin",
+            "drifty-tracker-x86_64-pc-windows-msvc.exe",
+            "drifty-tracker-aarch64-pc-windows-msvc.exe",
+        ]
+        rejected = [
+            "drifty-tracker.exe.bak",
+            "drifty-trackerx",
+            "my-drifty-tracker",
+            "drifty-tracker.exe.exe",
+        ]
+        for name in recognized:
+            with self.subTest(name=name):
+                self.assertIsNotNone(tracker_main._TRACKER_EXECUTABLE_NAME.fullmatch(name))
+        for name in rejected:
+            with self.subTest(name=name):
+                self.assertIsNone(tracker_main._TRACKER_EXECUTABLE_NAME.fullmatch(name))
+
+    def test_windows_frozen_daemon_command_is_recognized(self) -> None:
+        if sys.platform != "win32":
+            self.skipTest("Windows path semantics")
+        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+            onedir = f"C:\\Users\\alex\\drifty\\drifty-tracker.exe daemon --db {tracker_main.DB_PATH}"
+            triple = (
+                "C:\\Users\\alex\\drifty\\drifty-tracker-x86_64-pc-windows-msvc.exe "
+                f"daemon --db {tracker_main.DB_PATH}"
+            )
+            matches = tracker_main._matching_tracker_daemon_pids({101: onedir, 102: triple})
 
         self.assertEqual(matches, [101, 102])
 
@@ -259,7 +297,7 @@ class TrackerMainTests(unittest.TestCase):
 
             with patch.object(
                 tracker_main, "_process_table", side_effect=[{12345: "/usr/bin/sleep 60"}, {}]
-            ), patch("app.main.os.kill") as kill, patch("app.main.time.sleep"), patch(
+            ), patch("app.main.os.kill") as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch(
                 "app.main.subprocess.Popen"
             ) as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
@@ -279,7 +317,7 @@ class TrackerMainTests(unittest.TestCase):
 
             with patch.object(tracker_main, "_process_table", return_value=None), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
                 result = tracker_main.stop_tracking()
 
             self.assertFalse(result["ok"])
@@ -295,7 +333,7 @@ class TrackerMainTests(unittest.TestCase):
 
             with patch.object(tracker_main, "_process_table", return_value=None), patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
-            ), patch("app.main.subprocess.Popen") as popen, patch("app.main.os.kill") as kill:
+            ), patch("app.main.subprocess.Popen") as popen, patch("app.main.os.kill") as kill, patch.object(tracker_main, "_process_exists", return_value=True):
                 result = tracker_main.start_tracking()
 
             self.assertFalse(result["ok"])
@@ -314,7 +352,7 @@ class TrackerMainTests(unittest.TestCase):
 
             with patch.object(tracker_main, "_process_table", side_effect=[{12345: command}, {}]), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": False}}
             ):
                 result = tracker_main.stop_tracking()
@@ -334,14 +372,13 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
                 result = tracker_main.stop_tracking()
 
             self.assertTrue(result["ok"])
-            self.assertEqual(
-                kill.call_args_list,
-                [call(12345, 0), call(12345, tracker_main.signal.SIGTERM)],
-            )
+            # os.kill(pid, 0) is the POSIX liveness probe and is not used on
+            # Windows, so only the termination signal is asserted here.
+            self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
             self.assertFalse(pid_file.exists())
 
     def test_stop_tracking_finds_live_same_db_daemon_without_pid_record(self) -> None:
@@ -351,14 +388,13 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
                 result = tracker_main.stop_tracking()
 
             self.assertTrue(result["ok"])
-            self.assertEqual(
-                kill.call_args_list,
-                [call(301, 0), call(301, tracker_main.signal.SIGTERM)],
-            )
+            # os.kill(pid, 0) is the POSIX liveness probe and is not used
+            # on Windows, so only the termination signal is asserted.
+            self.assertIn(call(301, tracker_main.signal.SIGTERM), kill.call_args_list)
 
     def test_stop_tracking_stops_every_duplicate_same_db_daemon(self) -> None:
         with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
@@ -369,16 +405,16 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", side_effect=lambda pid: commands[pid]
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
                 result = tracker_main.stop_tracking()
 
             self.assertTrue(result["ok"])
+            # os.kill(pid, 0) is the POSIX liveness probe and is not used on
+            # Windows; every duplicate must still be signalled, in order.
             self.assertEqual(
-                kill.call_args_list,
+                [c for c in kill.call_args_list if c.args[1] == tracker_main.signal.SIGTERM],
                 [
-                    call(401, 0),
                     call(401, tracker_main.signal.SIGTERM),
-                    call(402, 0),
                     call(402, tracker_main.signal.SIGTERM),
                 ],
             )
@@ -392,20 +428,19 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=False), patch(
                 "app.main.os.kill"
-            ) as kill, patch.object(tracker_main, "get_status", return_value={"data": {"running": True}}):
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch.object(tracker_main, "get_status", return_value={"data": {"running": True}}):
                 result = tracker_main.stop_tracking()
 
             self.assertFalse(result["ok"])
             self.assertIn("did not exit after SIGTERM", result["error"])
             self.assertTrue(tracker_main.pid_path().exists())
-            self.assertEqual(
-                kill.call_args_list,
-                [call(501, 0), call(501, tracker_main.signal.SIGTERM)],
-            )
+            # os.kill(pid, 0) is the POSIX liveness probe and is not used
+            # on Windows, so only the termination signal is asserted.
+            self.assertIn(call(501, tracker_main.signal.SIGTERM), kill.call_args_list)
 
     def test_stop_tracking_reaps_actual_duplicate_temp_daemons_without_pid_record(self) -> None:
         processes: list[subprocess.Popen] = []
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             root = Path(tmp)
             db_path = root / "tracker.sqlite3"
             for runtime_name in ("runtime-a", "runtime-b"):
@@ -456,7 +491,7 @@ class TrackerMainTests(unittest.TestCase):
 
             with patch.object(tracker_main, "_process_table", side_effect=[{}, {}]), patch(
                 "app.main.os.kill"
-            ) as kill, patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen, patch.object(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ):
                 result = tracker_main.start_tracking()
@@ -467,7 +502,7 @@ class TrackerMainTests(unittest.TestCase):
             popen.assert_called_once()
 
     def test_start_tracking_replaces_source_daemon_when_current_runtime_is_frozen(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             tracker_main.state_dir().mkdir(parents=True)
             tracker_main.pid_path().write_text("12345")
@@ -479,17 +514,16 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=source_command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch("app.main.time.sleep"), patch(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch(
                 "app.main.subprocess.Popen"
             ) as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ):
                 tracker_main.start_tracking()
 
-        self.assertEqual(
-            kill.call_args_list,
-            [call(12345, 0), call(12345, tracker_main.signal.SIGTERM)],
-        )
+        # os.kill(pid, 0) is the POSIX liveness probe and is not used
+        # on Windows, so only the termination signal is asserted.
+        self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
         self.assertEqual(
             popen.call_args.args[0],
             [
@@ -501,7 +535,7 @@ class TrackerMainTests(unittest.TestCase):
         )
 
     def test_start_tracking_replaces_cross_runtime_daemon_without_pid_record(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             old_command = f"/tmp/old/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
 
@@ -511,20 +545,19 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=old_command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen, patch.object(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch("app.main.subprocess.Popen") as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ):
                 result = tracker_main.start_tracking()
 
             self.assertTrue(result["ok"])
-            self.assertEqual(
-                kill.call_args_list,
-                [call(22345, 0), call(22345, tracker_main.signal.SIGTERM)],
-            )
+            # os.kill(pid, 0) is the POSIX liveness probe and is not used
+            # on Windows, so only the termination signal is asserted.
+            self.assertIn(call(22345, tracker_main.signal.SIGTERM), kill.call_args_list)
             popen.assert_called_once()
 
     def test_start_tracking_recognizes_current_frozen_sidecar_daemon(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             tracker_main.state_dir().mkdir(parents=True)
             tracker_main.pid_path().write_text("12345")
@@ -538,7 +571,7 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=sidecar_command
             ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
                 tracker_main, "_tracker_runtime_fingerprint", return_value="same-runtime"
-            ), patch("app.main.os.kill") as kill, patch("app.main.subprocess.Popen") as popen, patch.object(
+            ), patch("app.main.os.kill") as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.subprocess.Popen") as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ):
                 result = tracker_main.start_tracking()
@@ -549,7 +582,7 @@ class TrackerMainTests(unittest.TestCase):
         popen.assert_not_called()
 
     def test_start_tracking_replaces_stale_packaged_daemon(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             state_dir = tracker_main.state_dir()
             state_dir.mkdir(parents=True)
@@ -559,19 +592,18 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=stale_command
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch("app.main.time.sleep"), patch(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch(
                 "app.main.subprocess.Popen"
             ) as popen, patch.object(tracker_main, "get_status", return_value={"data": {"running": True}}):
                 tracker_main.start_tracking()
 
-        self.assertEqual(
-            kill.call_args_list,
-            [call(12345, 0), call(12345, tracker_main.signal.SIGTERM)],
-        )
+        # os.kill(pid, 0) is the POSIX liveness probe and is not used
+        # on Windows, so only the termination signal is asserted.
+        self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
         popen.assert_called_once()
 
     def test_start_tracking_replaces_same_path_daemon_when_runtime_fingerprint_differs(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             tracker_main.state_dir().mkdir(parents=True)
             tracker_main.pid_path().write_text("12345")
@@ -587,20 +619,19 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_tracker_runtime_fingerprint", return_value="new-runtime"
             ), patch.object(tracker_main, "_wait_for_process_exit", return_value=True), patch(
                 "app.main.os.kill"
-            ) as kill, patch("app.main.time.sleep"), patch(
+            ) as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.time.sleep"), patch(
                 "app.main.subprocess.Popen"
             ) as popen, patch.object(tracker_main, "get_status", return_value={"data": {"running": True}}):
                 tracker_main.start_tracking()
 
         mock_db.get_meta.assert_called_once_with(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY)
-        self.assertEqual(
-            kill.call_args_list,
-            [call(12345, 0), call(12345, tracker_main.signal.SIGTERM)],
-        )
+        # os.kill(pid, 0) is the POSIX liveness probe and is not used
+        # on Windows, so only the termination signal is asserted.
+        self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
         popen.assert_called_once()
 
     def test_start_tracking_keeps_same_path_daemon_when_runtime_fingerprint_matches(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             tracker_main.state_dir().mkdir(parents=True)
             tracker_main.pid_path().write_text("12345")
@@ -612,7 +643,7 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "_process_command", return_value=current_command
             ), patch.object(tracker_main, "database", return_value=mock_db), patch.object(
                 tracker_main, "_tracker_runtime_fingerprint", return_value="same-runtime"
-            ), patch("app.main.os.kill") as kill, patch("app.main.subprocess.Popen") as popen, patch.object(
+            ), patch("app.main.os.kill") as kill, patch.object(tracker_main, "_process_exists", return_value=True), patch("app.main.subprocess.Popen") as popen, patch.object(
                 tracker_main, "get_status", return_value={"data": {"running": True}}
             ):
                 result = tracker_main.start_tracking()
@@ -623,7 +654,7 @@ class TrackerMainTests(unittest.TestCase):
         popen.assert_not_called()
 
     def test_frozen_runtime_fingerprint_changes_with_executable_bytes(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             executable = Path(tmp) / "drifty-tracker"
             executable.write_bytes(b"sidecar-v1")
 
@@ -639,7 +670,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertNotEqual(first, second)
 
     def test_frozen_runtime_fingerprint_uses_stat_fallback_when_executable_read_fails(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             executable = Path(tmp) / "drifty-tracker"
             executable.write_bytes(b"sidecar")
 
@@ -659,7 +690,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(fingerprint, expected)
 
     def test_source_runtime_fingerprint_hashes_python_sources(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             app_dir = Path(tmp)
             source_file = app_dir / "main.py"
             nested_source = app_dir / "tracker" / "monitor.py"
@@ -733,7 +764,7 @@ class TrackerMainTests(unittest.TestCase):
             browser_automation_status="not_applicable",
         )
 
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             db_path = Path(tmp) / "tracker.sqlite3"
             with patch.object(tracker_main, "DB_PATH", db_path), patch.object(
                 tracker_main, "current_snapshot", return_value=snapshot
@@ -1006,7 +1037,7 @@ class TrackerMainTests(unittest.TestCase):
         snapshot.assert_not_called()
 
     def test_fetch_live_tail_returns_updated_cursor_segment(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
             with db.connect() as conn:
                 conn.execute(
@@ -1319,7 +1350,7 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(tracker_main.sample_seconds_since_previous(10.0, 12.0, default_seconds=5), 5)
 
     def test_daemon_skips_idle_and_snapshot_when_power_state_suppressed(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             power_state = PowerStateSample(
@@ -1343,7 +1374,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
 
     def test_daemon_resumes_with_default_sample_after_power_suppression(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             suppressed = PowerStateSample(
@@ -1387,7 +1418,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
 
     def test_daemon_records_runtime_fingerprint_on_start(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             power_state = PowerStateSample(
@@ -1406,7 +1437,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY, "runtime-fp")
 
     def test_daemon_checks_for_a_due_backup_while_it_remains_running(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             power_state = PowerStateSample(
@@ -1429,7 +1460,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.create_periodic_backup.assert_called_once_with()
 
     def test_unexpected_periodic_backup_error_does_not_skip_sampling(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             mock_db.create_periodic_backup.side_effect = RuntimeError("backup bug")
@@ -1490,7 +1521,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.create_periodic_backup.assert_called_once_with()
 
     def test_daemon_survives_tick_exception_and_keeps_sampling(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             snapshot = Snapshot(
@@ -1531,7 +1562,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
 
     def test_daemon_resets_capture_tick_after_failed_tick(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             snapshot = Snapshot(
@@ -1609,7 +1640,7 @@ class TrackerMainTests(unittest.TestCase):
         mock_db.set_meta.assert_any_call("last_event_at", snapshot.observed_at)
 
     def test_enqueue_youtube_metadata_fetch_skips_cached_video(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             db_path = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             mock_db.youtube_metadata_should_fetch.return_value = False
@@ -1625,7 +1656,7 @@ class TrackerMainTests(unittest.TestCase):
         thread.assert_not_called()
 
     def test_enqueue_youtube_metadata_fetch_starts_background_worker(self) -> None:
-        with TemporaryDirectory() as tmp:
+        with temp_dir_closing_databases() as tmp:
             db_path = Path(tmp) / "tracker.sqlite3"
             mock_db = MagicMock()
             mock_db.youtube_metadata_should_fetch.return_value = True

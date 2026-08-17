@@ -22,6 +22,7 @@ from app.storage.database_maintenance import (
     quick_check_database,
 )
 from app.storage.db import TrackerDatabase
+from tests.support_cleanup import cleanup_temp_dir
 
 
 class DatabaseMaintenanceTests(unittest.TestCase):
@@ -30,7 +31,7 @@ class DatabaseMaintenanceTests(unittest.TestCase):
         self.db_path = Path(self.tempdir.name) / "tracker.sqlite3"
 
     def tearDown(self) -> None:
-        self.tempdir.cleanup()
+        cleanup_temp_dir(self.tempdir)
 
     @staticmethod
     def _insert_marker(database: TrackerDatabase, value: str) -> None:

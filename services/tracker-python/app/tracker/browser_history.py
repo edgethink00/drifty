@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import shutil
 import sqlite3
+import sys
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import closing
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ _HISTORY_TIMESTAMP_MICROSECONDS: Final = 1_000_000
 BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS: Final = 3 * 60
 _VALID_URL_SCHEMES: Final = frozenset({"http", "https"})
 _GENERIC_TITLES: Final = frozenset({"", "new tab", "새 탭", "dashboard", "inbox", "home", "untitled"})
-_BROWSER_ROOTS: Final[dict[str, Path]] = {
+_MACOS_BROWSER_ROOTS: Final[dict[str, Path]] = {
     "Google Chrome": Path.home() / "Library/Application Support/Google/Chrome",
     "Google Chrome Canary": Path.home() / "Library/Application Support/Google/Chrome Canary",
     "Microsoft Edge": Path.home() / "Library/Application Support/Microsoft Edge",
@@ -43,6 +44,23 @@ _BROWSER_ROOTS: Final[dict[str, Path]] = {
     # and only readable with Full Disk Access.
     "Safari": Path.home() / "Library/Safari",
 }
+
+
+def _platform_browser_roots() -> dict[str, Path]:
+    """Profile roots for the running platform.
+
+    Only the paths differ across platforms: the schemas, the WAL-sidecar copy,
+    the title match and the candidate scoring below are shared. Windows roots
+    live in their own module so the macOS table stays exactly as it shipped.
+    """
+    if sys.platform == "win32":
+        from app.tracker.windows_browser_history import windows_browser_roots
+
+        return windows_browser_roots()
+    return dict(_MACOS_BROWSER_ROOTS)
+
+
+_BROWSER_ROOTS: Final[dict[str, Path]] = _platform_browser_roots()
 
 # Firefox-family browsers use profiles.ini-style profile directories with a
 # places.sqlite history database and unix-microsecond visit timestamps, unlike
@@ -135,6 +153,29 @@ def firefox_history_paths_for_root(root: Path) -> list[Path]:
 
 
 def match_browser_history_title(
+    window_title: str | None,
+    candidates: Iterable[BrowserHistoryCandidate],
+    observed_at: str | None = None,
+) -> BrowserHistoryMatchResult:
+    # Windows browsers decorate the window title with profile names and
+    # localized tab-count fragments that macOS never adds, so a single exact
+    # or prefix compare misses every page. Try progressively less decorated
+    # forms of the same title instead of loosening the matcher, which would
+    # weaken macOS matching too.
+    if sys.platform == "win32":
+        from app.tracker.windows_window_titles import windows_page_title_candidates
+
+        pool = tuple(candidates)
+        result = BrowserHistoryMatchResult(candidate=None, reason="missing_window_title")
+        for variant in windows_page_title_candidates(window_title):
+            result = _match_browser_history_title(variant, pool, observed_at)
+            if result.candidate is not None:
+                return result
+        return result
+    return _match_browser_history_title(window_title, candidates, observed_at)
+
+
+def _match_browser_history_title(
     window_title: str | None,
     candidates: Iterable[BrowserHistoryCandidate],
     observed_at: str | None = None,

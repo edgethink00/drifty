@@ -22,6 +22,7 @@ from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
 from app.tracker.browser_automation import BrowserMetadata
 from app.tracker.macos_workspace import Snapshot
 from app.tracker.youtube_metadata import YouTubeVideoMetadata
+from tests.support_cleanup import cleanup_temp_dir
 
 
 class ClassificationRuleUrlTests(unittest.TestCase):
@@ -39,7 +40,7 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.database = TrackerDatabase(self.db_path)
 
     def tearDown(self) -> None:
-        self.tempdir.cleanup()
+        cleanup_temp_dir(self.tempdir)
 
     def test_database_context_does_not_leak_connections_or_resource_warnings(self) -> None:
         with warnings.catch_warnings(record=True) as captured:
@@ -959,6 +960,13 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertEqual(rows[0]["app_name"], "Google Chrome")
 
     def test_timeline_range_filters_treat_naive_bounds_as_local_time(self) -> None:
+        # TZ + tzset() is the Unix way to pin a process timezone; Windows has
+        # no tzset and ignores TZ here. The behaviour under test (naive bounds
+        # resolve against local time) is platform-neutral, but only this
+        # mechanism for forcing a known zone is not, so the check runs where
+        # the zone can actually be pinned.
+        if not hasattr(time, "tzset"):
+            self.skipTest("TZ/tzset zone pinning is unavailable on this platform")
         previous_tz = os.environ.get("TZ")
         os.environ["TZ"] = "Asia/Seoul"
         time.tzset()

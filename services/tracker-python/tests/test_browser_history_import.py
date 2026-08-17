@@ -32,6 +32,7 @@ from app.tracker.browser_history_import import (  # noqa: E402
     preview_browser_history_import,
 )
 from app import main as tracker_main  # noqa: E402
+from tests.support_cleanup import cleanup_temp_dir
 
 CHROMIUM_EPOCH_OFFSET_SECONDS = 11_644_473_600
 COCOA_EPOCH_OFFSET_SECONDS = 978_307_200
@@ -76,7 +77,7 @@ class BrowserHistoryImportTests(unittest.TestCase):
         self.now = datetime(2026, 7, 3, 12, 0, tzinfo=timezone.utc)
 
     def tearDown(self) -> None:
-        self.tempdir.cleanup()
+        cleanup_temp_dir(self.tempdir)
 
     def _write_chromium_history(self, rows: list[tuple[str, str, datetime]]) -> Path:
         history_path = self.root / "Default" / "History"
@@ -495,7 +496,7 @@ class BrowserHistoryEnvironmentTests(unittest.TestCase):
         self.now = datetime(2026, 7, 3, 12, 0, tzinfo=timezone.utc)
 
     def tearDown(self) -> None:
-        self.tempdir.cleanup()
+        cleanup_temp_dir(self.tempdir)
 
     def _write_plist(self, name: str, data: object) -> Path:
         plist_path = self.root / name

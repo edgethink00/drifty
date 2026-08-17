@@ -13,6 +13,7 @@ if str(SERVICE_ROOT) not in sys.path:
 from app.storage.database_maintenance import database_backup_dir, quick_check_database
 from app.storage.db import TrackerDatabase
 from app.tracker.macos_workspace import Snapshot
+from tests.support_cleanup import cleanup_temp_dir
 
 
 REMOTE_DEVICE_ID = "11111111-2222-3333-4444-555555555555"
@@ -30,7 +31,7 @@ class DeviceSyncTestCase(unittest.TestCase):
         self.database = TrackerDatabase(self.db_path)
 
     def tearDown(self) -> None:
-        self.tempdir.cleanup()
+        cleanup_temp_dir(self.tempdir)
 
     def _insert_local_segment(self, index: int, *, started_at: str | None = None, ended_at: str | None = None, **overrides) -> None:
         default_started_at = datetime(2026, 7, 6, 9, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=index)

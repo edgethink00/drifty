@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 
 OSASCRIPT_TIMEOUT_SECONDS = 5.0
 
 
 def read_front_window_title() -> str | None:
+    # osascript is macOS-only. Calling it unconditionally raised WinError 2 out
+    # of every get_status on Windows, which surfaced as the sidecar reporting
+    # ok=false for a request that has nothing to do with accessibility.
+    if sys.platform != "darwin":
+        return None
+
     script = """
     tell application "System Events"
       set frontApp to name of first application process whose frontmost is true
@@ -36,6 +43,18 @@ def read_front_window_title() -> str | None:
 
 
 def accessibility_granted() -> bool:
+    """Whether the OS grants this process the access foreground capture needs.
+
+    On macOS this is a real gate: reading another app's window title requires
+    the Accessibility permission, and the probe above is how we detect it.
+
+    Windows has no equivalent grant. ``GetForegroundWindow`` and
+    ``GetWindowTextW`` work for any process in the user's own session, so
+    reporting "granted" is the honest answer rather than an optimistic one -
+    there is no permission the user could be asked to enable.
+    """
+    if sys.platform == "win32":
+        return True
     return read_front_window_title() is not None
 
 

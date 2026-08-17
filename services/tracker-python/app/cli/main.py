@@ -92,6 +92,14 @@ def _iso_day(value: str) -> str:
 
 
 def _local_zone() -> tuple[Any, str]:
+    """The zone to resolve day/range bounds in, plus a label for the output.
+
+    ``TZ`` wins when it names a zone this interpreter can load. That lookup can
+    fail even for a valid key: Windows ships no IANA tzdata, so ``zoneinfo``
+    resolves nothing unless the optional ``tzdata`` package is installed, and
+    an unresolvable ``TZ`` must not silently fall through to a different zone
+    than the caller asked for.
+    """
     configured = os.environ.get("TZ")
     if configured and ZoneInfo is not None:
         try:
@@ -99,8 +107,35 @@ def _local_zone() -> tuple[Any, str]:
         except Exception:
             pass
     local = datetime.now().astimezone().tzinfo
-    name = getattr(local, "key", None) or datetime.now().astimezone().tzname() or "local"
+    name = getattr(local, "key", None) or _stable_zone_name(local)
     return local, str(name)
+
+
+def _stable_zone_name(local: Any) -> str:
+    """A machine-readable zone label when no IANA key is available.
+
+    ``tzname()`` returns a *localized display* string, not an identifier:
+    Windows reports "Eastern Standard Time" in English and
+    "\ub300\ud55c\ubbfc\uad6d \ud45c\uc900\uc2dc" on a Korean install for the same zone that macOS
+    reports as "Asia/Seoul". Emitting that into a machine-read ``timezone``
+    field makes the CLI's output depend on the user's regional settings.
+
+    ``zoneinfo`` cannot resolve a Windows zone to an IANA key on its own (that
+    needs the Windows-to-IANA mapping ``tzlocal`` carries), and this service is
+    stdlib-only. So rather than emit a localized name that no consumer can
+    parse, fall back to the unambiguous UTC offset.
+    """
+    now = datetime.now().astimezone()
+    key = getattr(now.tzinfo, "key", None)
+    if key:
+        return str(key)
+    offset = now.utcoffset()
+    if offset is None:
+        return "local"
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    hours, minutes = divmod(abs(total_minutes), 60)
+    return f"UTC{sign}{hours:02d}:{minutes:02d}"
 
 
 def _day_query(day_value: str) -> dict[str, str]:

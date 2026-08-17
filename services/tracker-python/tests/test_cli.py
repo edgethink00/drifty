@@ -19,6 +19,17 @@ from app.cli.main import CLI_VERSION, run_cli
 from app.storage.db import TrackerDatabase
 
 
+def _iana_zones_available() -> bool:
+    """Whether this interpreter can resolve IANA zone keys."""
+    try:
+        from zoneinfo import ZoneInfo
+
+        ZoneInfo("Asia/Seoul")
+    except Exception:
+        return False
+    return True
+
+
 class DriftyCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = TemporaryDirectory()
@@ -147,10 +158,18 @@ class DriftyCliTests(unittest.TestCase):
         self.assertFalse(missing.parent.exists())
 
     def test_cli_version_matches_root_package(self) -> None:
-        package = json.loads((SERVICE_ROOT.parents[1] / "package.json").read_text())
+        package_path = SERVICE_ROOT.parents[1] / "package.json"
+        if not package_path.is_file():
+            self.skipTest("root package.json is outside this checkout")
+        package = json.loads(package_path.read_text(encoding="utf-8"))
         self.assertEqual(CLI_VERSION, package["version"])
 
     def test_summary_returns_deterministic_totals_and_local_bounds(self) -> None:
+        # The fixtures are written in KST and the assertions below name the
+        # zone, so this needs TZ=Asia/Seoul to actually resolve. Windows has
+        # no IANA tzdata unless the optional `tzdata` package is installed.
+        if not _iana_zones_available():
+            self.skipTest("IANA tzdata unavailable; install the tzdata package")
         exit_code, result = self.invoke("summary", "--day", "2026-07-29")
 
         self.assertEqual(exit_code, 0)

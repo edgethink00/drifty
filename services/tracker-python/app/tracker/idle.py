@@ -34,6 +34,8 @@ def _idle_reader() -> IdleReader | None:
         return _reader
 
     _reader = _make_quartz_reader() or _make_ctypes_reader()
+    if _reader is None:
+        _reader = _make_windows_reader()
     _reader_initialized = True
     return _reader
 
@@ -72,5 +74,29 @@ def _make_ctypes_reader() -> IdleReader | None:
 
     def read() -> float:
         return function(_HID_SYSTEM_STATE, _ANY_INPUT_EVENT_TYPE)
+
+    return read
+
+
+def _make_windows_reader() -> IdleReader | None:
+    """Idle reader backed by GetLastInputInfo.
+
+    Without this the tracker has no idle signal on Windows at all: every
+    reader above is macOS-only, ``seconds_since_last_input`` returns None, and
+    an unattended machine records as continuously active. The wraparound and
+    sleep-gap arithmetic lives in ``windows_idle`` and is unit-tested there.
+    """
+    if sys.platform != "win32":
+        return None
+
+    from app.tracker.windows_idle import read_idle_sample
+
+    def read() -> float:
+        sample = read_idle_sample()
+        if not sample.available or sample.idle_seconds is None:
+            # Signals "no reading" to seconds_since_last_input, which rejects
+            # negatives, rather than reporting a fabricated zero.
+            return -1.0
+        return sample.idle_seconds
 
     return read

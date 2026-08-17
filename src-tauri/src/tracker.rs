@@ -299,16 +299,11 @@ impl TrackerController {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
             Err(error) => return Err(TrackerError::CommandFailed(error.to_string())),
         };
-        let output = Command::new("ps")
-            .args(["-p", &pid.to_string(), "-o", "command="])
-            .output()
-            .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
-        if !output.status.success() {
+        let Some(command) = daemon_process_command_line(pid)? else {
             return Ok(false);
-        }
-        let command = String::from_utf8_lossy(&output.stdout);
+        };
         Ok(tracker_daemon_command_matches(
-            command.trim(),
+            &command,
             &runtime,
             &db_path,
         ))
@@ -663,6 +658,52 @@ fn tracker_daemon_command_matches(command: &str, runtime: &TrackerRuntime, db: &
             .first()
             .is_some_and(|script| prefix.ends_with(script.to_string_lossy().as_ref())),
     }
+}
+
+/// Full command line of the daemon process, or None when the pid is gone.
+///
+/// macOS keeps the historical ps probe; Windows goes through sysinfo
+/// because there is no ps there - the hardcoded call surfaced as
+/// "program not found" in the recovery loop and made daemon inspection
+/// structurally impossible on that platform.
+#[cfg(unix)]
+fn daemon_process_command_line(pid: u32) -> Result<Option<String>, TrackerError> {
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .output()
+        .map_err(|error| TrackerError::CommandFailed(error.to_string()))?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    Ok(Some(
+        String::from_utf8_lossy(&output.stdout).trim().to_string(),
+    ))
+}
+
+#[cfg(windows)]
+fn daemon_process_command_line(pid: u32) -> Result<Option<String>, TrackerError> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+
+    let system_pid = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[system_pid]),
+        true,
+        ProcessRefreshKind::nothing().with_cmd(UpdateKind::OnlyIfNotSet),
+    );
+    let Some(process) = system.process(system_pid) else {
+        return Ok(None);
+    };
+    let cmd = process.cmd();
+    if cmd.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(
+        cmd.iter()
+            .map(|part| part.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" "),
+    ))
 }
 
 fn invoke_one_shot(
@@ -1082,7 +1123,25 @@ pub fn shutdown_serve_process() {
     }
     let pid = SERVE_CHILD_PID.swap(0, Ordering::SeqCst);
     if pid != 0 {
-        let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+        force_kill_pid(pid);
+    }
+}
+
+#[cfg(unix)]
+fn force_kill_pid(pid: u32) {
+    let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
+}
+
+/// No kill -9 on Windows; sysinfo terminates the process by pid.
+#[cfg(windows)]
+fn force_kill_pid(pid: u32) {
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+
+    let system_pid = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_processes(ProcessesToUpdate::Some(&[system_pid]), true);
+    if let Some(process) = system.process(system_pid) {
+        process.kill();
     }
 }
 
@@ -1196,19 +1255,60 @@ fn packaged_sidecar_candidates(resource_dir: &Path) -> Vec<PathBuf> {
         }
     }
 
-    candidates.push(resource_dir.join("drifty-tracker"));
-    candidates.push(resource_dir.join("binaries").join("drifty-tracker"));
+    // Windows executables carry an extension, and Tauri names the bundled
+    // sidecar `drifty-tracker.exe`. Without the suffixed candidates the
+    // lookup misses a sidecar sitting right next to the app.
+    for name in sidecar_file_names() {
+        candidates.push(resource_dir.join(&name));
+        candidates.push(resource_dir.join("binaries").join(&name));
+    }
 
-    if let Some(target_triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
-        candidates.push(resource_dir.join(format!("drifty-tracker-{target_triple}")));
-        candidates.push(
-            resource_dir
-                .join("binaries")
-                .join(format!("drifty-tracker-{target_triple}")),
-        );
+    // The Windows sidecar is a PyInstaller onedir bundle: a directory holding
+    // the exe and its runtime, because onefile self-extraction made every
+    // spawn too slow for the recovery budget.
+    for rel in sidecar_bundle_paths() {
+        candidates.push(resource_dir.join(&rel));
+        candidates.push(resource_dir.join("binaries").join(&rel));
+    }
+
+    // A Windows install keeps the sidecar beside the executable rather than
+    // under a resource directory.
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            for name in sidecar_file_names() {
+                candidates.push(exe_dir.join(&name));
+                candidates.push(exe_dir.join("binaries").join(&name));
+            }
+            for rel in sidecar_bundle_paths() {
+                candidates.push(exe_dir.join(&rel));
+                candidates.push(exe_dir.join("binaries").join(&rel));
+            }
+        }
     }
 
     candidates
+}
+
+/// Sidecar file names to try, most specific first.
+fn sidecar_file_names() -> Vec<String> {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let mut names = Vec::new();
+    if let Some(target_triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
+        names.push(format!("drifty-tracker-{target_triple}{suffix}"));
+    }
+    names.push(format!("drifty-tracker{suffix}"));
+    names
+}
+
+/// Paths of the exe inside a onedir sidecar bundle, most specific first.
+fn sidecar_bundle_paths() -> Vec<PathBuf> {
+    let exe_name = format!("drifty-tracker{}", std::env::consts::EXE_SUFFIX);
+    let mut paths = Vec::new();
+    if let Some(target_triple) = option_env!("TAURI_ENV_TARGET_TRIPLE") {
+        paths.push(PathBuf::from(format!("drifty-tracker-{target_triple}")).join(&exe_name));
+    }
+    paths.push(PathBuf::from("drifty-tracker").join(&exe_name));
+    paths
 }
 
 fn is_packaged_resource_dir(resource_dir: &Path) -> bool {
@@ -1220,23 +1320,36 @@ fn resolve_source_tracker_script(cwd: &Path) -> PathBuf {
         return PathBuf::from(path);
     }
 
-    for base in cwd.ancestors().take(4) {
-        let candidate = base
-            .join("services")
-            .join("tracker-python")
-            .join("app")
-            .join("main.py");
-        if candidate.exists() {
-            return candidate;
-        }
+    // The working directory is not a reliable anchor. A Windows process
+    // launched from Explorer or a scheduled task inherits C:\WINDOWS\system32,
+    // so a cwd-only search reported the script missing at a system path that
+    // was never plausible. The executable's own location is stable, so search
+    // from there as well.
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf));
+    let roots = std::iter::once(cwd.to_path_buf()).chain(exe_dir);
 
-        let resource_candidate = base
-            .join("resources")
-            .join("tracker-python")
-            .join("app")
-            .join("main.py");
-        if resource_candidate.exists() {
-            return resource_candidate;
+    for root in roots {
+        // Deep enough to climb out of target/<profile>/ in a dev build.
+        for base in root.ancestors().take(5) {
+            let candidate = base
+                .join("services")
+                .join("tracker-python")
+                .join("app")
+                .join("main.py");
+            if candidate.exists() {
+                return candidate;
+            }
+
+            let resource_candidate = base
+                .join("resources")
+                .join("tracker-python")
+                .join("app")
+                .join("main.py");
+            if resource_candidate.exists() {
+                return resource_candidate;
+            }
         }
     }
 
@@ -1273,12 +1386,48 @@ fn resolve_python_bin() -> String {
         return path;
     }
 
+    // `python3` is a Unix convention. On Windows it usually resolves to the
+    // WindowsApps execution-alias stub, which is not an interpreter: it exits
+    // 9009 and offers to open the Store. Measured on the test host, where the
+    // stub shadows a perfectly good Python 3.14 install. The `py` launcher is
+    // the documented way to find a real interpreter, with `python` as the
+    // fallback for installs that skipped it.
+    if cfg!(windows) {
+        for candidate in ["py", "python"] {
+            if python_candidate_runs(candidate) {
+                return candidate.to_string();
+            }
+        }
+        return "python".to_string();
+    }
+
     let system_python = PathBuf::from("/usr/bin/python3");
     if system_python.exists() {
         return system_python.display().to_string();
     }
 
     "python3".to_string()
+}
+
+/// Whether `candidate` is a real interpreter rather than a Store alias stub.
+///
+/// Presence on PATH is not enough to decide this: the stub is on PATH and only
+/// reveals itself by failing when actually run.
+fn python_candidate_runs(candidate: &str) -> bool {
+    let mut command = std::process::Command::new(candidate);
+    command.arg("--version");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW: never flash a console while probing.
+        command.creation_flags(0x0800_0000);
+    }
+    command
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

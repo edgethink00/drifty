@@ -10,6 +10,10 @@ if str(SERVICE_ROOT) not in sys.path:
 from app.tracker.macos_frontmost import frontmost_via_system_events
 
 
+_MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS foreground capture stack")
+
+
+@_MACOS_ONLY
 class MacosFrontmostScriptTests(unittest.TestCase):
     def test_frontmost_script_recovers_aside_main_title_from_exact_synthetic_window_shape(self) -> None:
         run_osascript = Mock(return_value="Aside\ncom.example.aside\nRecovered title")
