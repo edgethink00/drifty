@@ -23,6 +23,7 @@ use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_m
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     ai_classification_openai_chat, cloud_sync_http_post, correction_evidence_append,
+    companion_informational_moments_suppressed,
     developer_check_pre_release_update, developer_install_pre_release_update,
     developer_tools_get_status, developer_tools_install_cli, developer_tools_install_codex_skill,
     developer_tools_install_skill, developer_tools_uninstall_cli,
@@ -70,7 +71,8 @@ use commands::{
     watcher_companion_set_enabled, watcher_companion_set_state,
     watcher_companion_set_surface_policy, watcher_companion_update,
     watcher_companion_visibility_action, watcher_peek_cursor_inside, watcher_peek_dismiss,
-    watcher_peek_end_of_day_review_action, watcher_peek_extreme_nudge_action, watcher_peek_hide,
+    watcher_peek_end_of_day_review_action, watcher_peek_end_of_day_review_displayed,
+    watcher_peek_extreme_nudge_action, watcher_peek_hide,
     watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
     window_set_onboarding_presentation, DriftAlarmState,
 };
@@ -510,6 +512,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             accessibility_get_status,
             accessibility_request_access,
+            companion_informational_moments_suppressed,
             sentry_capture_native_smoke,
             share_card_save_png,
             ai_classification_anthropic_chat,
@@ -616,6 +619,7 @@ pub fn run() {
             watcher_peek_cursor_inside,
             watcher_peek_respond,
             watcher_peek_end_of_day_review_action,
+            watcher_peek_end_of_day_review_displayed,
             watcher_peek_extreme_nudge_action,
             watcher_companion_set_enabled,
             watcher_companion_set_surface_policy,

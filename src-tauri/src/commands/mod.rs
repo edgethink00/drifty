@@ -1,6 +1,7 @@
 mod accessibility;
 mod ai;
 mod cloud_sync;
+mod companion_context;
 mod companion_panel;
 mod correction_evidence;
 mod developer_tools;
@@ -25,6 +26,7 @@ mod window_chrome;
 pub use accessibility::*;
 pub use ai::*;
 pub use cloud_sync::*;
+pub use companion_context::*;
 pub use correction_evidence::*;
 pub use developer_tools::*;
 pub use developer_updates::*;

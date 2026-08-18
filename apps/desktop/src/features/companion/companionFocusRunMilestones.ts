@@ -198,6 +198,7 @@ function buildFocusRecordEvent(
       : "Your first meaningful focus record",
     destination: "insights",
     statSeconds: currentRunSeconds,
+    generatedAt: new Date().toISOString(),
   };
 }
 

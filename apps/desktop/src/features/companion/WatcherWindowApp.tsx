@@ -9,6 +9,13 @@ import {
 } from "./CompanionPillMoment";
 import type { CompanionReentryEvent } from "./companionReentry";
 import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
+import { isCompanionMomentStale } from "./companionMomentFreshness";
+import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
+import {
+  isInformationalMomentEvent,
+  isInformationalMomentSuppressedNow,
+  refreshInformationalMomentSuppression,
+} from "./informationalMomentSuppression";
 import {
   dismissNativeWatcherPeek,
   hideNativeWatcherPeek,
@@ -37,11 +44,28 @@ export function WatcherWindowApp() {
     };
   }, []);
 
+  /* Informational moments never pop over a fullscreen app; on this legacy
+     surface a suppressed moment is dropped (the main window re-presents a
+     due review after its cooldown), while interventions always go through. */
+  const handleNativeShow = useCallback((nextEvent: CompanionPillWindowEvent) => {
+    if (!("kind" in nextEvent) || !isInformationalMomentEvent(nextEvent)) {
+      setEvent(nextEvent);
+      return;
+    }
+    /* Never queue what is already stale; it would flash for a frame before
+       the surface's own freshness check consumed it. */
+    if (isCompanionMomentStale(nextEvent)) return;
+    /* Decide on the last known suppression state so the show path stays
+       synchronous; the background refresh keeps the next read honest. */
+    void refreshInformationalMomentSuppression();
+    if (!isInformationalMomentSuppressedNow()) setEvent(nextEvent);
+  }, []);
+
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
-    void listenToNativeWatcherShow(setEvent).then((nextUnlisten) => {
+    void listenToNativeWatcherShow(handleNativeShow).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
         return;
@@ -53,12 +77,34 @@ export function WatcherWindowApp() {
       disposed = true;
       cleanupTauriEventListener(unlisten);
     };
-  }, []);
+  }, [handleNativeShow]);
 
   const handleDismiss = useCallback(() => {
+    /* A deliberate close inside the reporter's dwell window still proves the
+       card was seen. */
+    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
     setEvent(null);
     ignoreWatcherBridgePromise(dismissNativeWatcherPeek());
-  }, []);
+  }, [event]);
+
+  /* The auto-dismiss budget freezes while macOS sleeps, so without a
+     wall-clock expiry a card fired seconds before sleep would greet the user
+     the next morning as if it had just happened. Consume stale moments
+     silently; producers rebuild them on the next evaluation. */
+  useEffect(() => {
+    const moment = event && "kind" in event
+      ? (event.kind === "companionDriftAlarm" ? event.alarm : event)
+      : null;
+    if (!moment) return undefined;
+    const consumeIfStale = () => {
+      if (!isCompanionMomentStale(moment)) return;
+      setEvent(null);
+      ignoreWatcherBridgePromise(hideNativeWatcherPeek());
+    };
+    consumeIfStale();
+    const interval = window.setInterval(consumeIfStale, 30_000);
+    return () => window.clearInterval(interval);
+  }, [event]);
 
   const handleToastDismiss = useCallback(() => {
     setEvent(null);
@@ -70,16 +116,19 @@ export function WatcherWindowApp() {
   }, []);
 
   const handleOpenDashboard = useCallback(() => {
+    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard"));
-  }, []);
+  }, [event]);
 
   const handleViewDetails = useCallback(() => {
+    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("viewDetails"));
-  }, []);
+  }, [event]);
 
   const handleOpenNotificationSettings = useCallback(() => {
+    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openNotificationSettings"));
-  }, []);
+  }, [event]);
 
   const handleExtremeNudgeAction = useCallback((action: Parameters<typeof triggerNativeExtremeNudgeAction>[0]) => {
     setEvent(null);
@@ -110,6 +159,10 @@ export function WatcherWindowApp() {
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
   const isMilestone = isMilestoneEvent(event);
   const isReentry = isReentryEvent(event);
+
+  /* The once-a-day review slot is marked only when this surface confirms an
+     actual visible display, not when the payload was shipped. */
+  useEndOfDayReviewDisplayedReporter(isReviewEvent ? event : null);
 
   useEffect(() => {
     if (isReviewEvent || isExtremeNudgeToastEvent || isMilestone || isReentry) {

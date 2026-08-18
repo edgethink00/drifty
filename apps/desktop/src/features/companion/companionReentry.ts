@@ -3,6 +3,7 @@ import { isBrowserHistoryImportSegment, isRemoteDeviceSegment, type ActivitySegm
 export const COMPANION_REENTRY_MIN_GAP_MS = 6 * 60 * 60 * 1000;
 export const COMPANION_REENTRY_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
 export const COMPANION_REENTRY_FRESHNESS_MS = 15 * 60 * 1000;
+export const COMPANION_REENTRY_MIN_RETURN_ACTIVITY_MS = 30_000;
 export const COMPANION_REENTRY_STORAGE_KEY = "drifty.companion.reentry.v1";
 
 export type CompanionReentryEvent = {
@@ -58,6 +59,17 @@ export function buildCompanionReentryEvent({
 
     const awayMs = returned.startMs - previous.endMs;
     if (awayMs < COMPANION_REENTRY_MIN_GAP_MS || awayMs > COMPANION_REENTRY_LOOKBACK_MS) continue;
+
+    /* A lid-open blip or a stray wake writes one tiny segment; that is the
+       machine waking, not the person returning. Require sustained local
+       activity at or after the candidate return, otherwise keep scanning so
+       the real return later is still available. */
+    let returnActivityMs = 0;
+    for (const candidate of localSegments) {
+      if (candidate.startMs < returned.startMs) continue;
+      returnActivityMs += candidate.endMs - candidate.startMs;
+    }
+    if (returnActivityMs < COMPANION_REENTRY_MIN_RETURN_ACTIVITY_MS) continue;
 
     const awaySeconds = Math.floor(awayMs / 1000);
     const lastActiveAt = new Date(previous.endMs).toISOString();

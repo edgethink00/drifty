@@ -111,6 +111,34 @@ describe("companion re-entry", () => {
     storage.setItem("drifty.companion.reentry.v1", "not-an-event");
     expect(readHandledCompanionReentry(storage)).toBeNull();
   });
+
+  it("ignores a brief wake blip and waits for a sustained return", () => {
+    // A 5s lid-open blip hours after real activity must not consume the
+    // reentry; the real return later still gets its moment.
+    const blip = buildCompanionReentryEvent({
+      nowMs: NOW,
+      locale: "en-US",
+      segments: [
+        segment("late-work", new Date(2026, 7, 5, 0, 55).getTime(), new Date(2026, 7, 5, 1, 18).getTime()),
+        segment("blip", new Date(2026, 7, 5, 9, 29).getTime(), new Date(2026, 7, 5, 9, 29, 5).getTime()),
+      ],
+    });
+    expect(blip).toBeNull();
+
+    const sustained = buildCompanionReentryEvent({
+      nowMs: NOW,
+      locale: "en-US",
+      segments: [
+        segment("late-work", new Date(2026, 7, 5, 0, 55).getTime(), new Date(2026, 7, 5, 1, 18).getTime()),
+        segment("blip", new Date(2026, 7, 5, 9, 20).getTime(), new Date(2026, 7, 5, 9, 20, 5).getTime()),
+        segment("real-return", new Date(2026, 7, 5, 9, 25).getTime(), new Date(2026, 7, 5, 9, 29).getTime()),
+      ],
+    });
+    expect(sustained).not.toBeNull();
+    // The return anchors at the first post-gap activity (the blip) because
+    // sustained usage followed it; the gap is still measured from real work.
+    expect(sustained?.lastActiveAt).toBe(new Date(2026, 7, 5, 1, 18).toISOString());
+  });
 });
 
 function segment(id: string, startedAt: string | number, endedAt: string | number): ActivitySegment {

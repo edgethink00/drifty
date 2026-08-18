@@ -17,6 +17,31 @@ export const END_OF_DAY_REVIEW_STORAGE_KEY = "drifty.endOfDayReview.lastShownDat
 
 export const END_OF_DAY_REVIEW_TRIGGER_MINUTE = DAILY_LEADERBOARD_CHECKPOINT_MINUTE;
 
+export const END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY =
+  "drifty.endOfDayReview.leaderboardCheckpointDate";
+
+/**
+ * A review of a day that barely happened is not a review; it is the app
+ * telling the user their day was empty, with a ring, top apps and signals
+ * that are all noise. The automatic card waits until the day has enough
+ * tracked time to say anything honest about, then fires at the moment the
+ * day crosses the bar (from the evening trigger minute until the logical
+ * day rolls over). Days that never cross it are skipped silently — the
+ * dashboard remains the place to look at them.
+ */
+export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;
+
+/**
+ * When a presentation went out but no display was ever confirmed (the
+ * machine slept through it), wait before building another one so a sleeping
+ * machine does not churn a fresh event every minute.
+ */
+export const END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS = 15 * 60 * 1000;
+
+export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegment[]): number {
+  return segments.reduce((total, segment) => total + Math.max(0, segment.durationSeconds), 0);
+}
+
 export function collectMissingEndOfDayReviewIconRequests(event: EndOfDayReviewEvent): AppIdentity[] {
   return (event.sourceSummaries ?? []).flatMap((source) => {
     if (source.iconSrc) return [];

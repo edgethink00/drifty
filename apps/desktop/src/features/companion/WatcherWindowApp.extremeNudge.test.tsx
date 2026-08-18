@@ -25,6 +25,7 @@ vi.mock("./watcherBridge", () => ({
   respondNativeWatcherPeek: bridge.respondNativeWatcherPeek,
   setNativeWatcherInteractive: bridge.setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
+  notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
   triggerNativeExtremeNudgeAction: bridge.triggerNativeExtremeNudgeAction,
 }));
 
@@ -32,7 +33,9 @@ const extremeNudgeToastEvent: ExtremeNudgeToastEvent = {
   kind: "extremeNudgeToast",
   placement: "top-right",
   id: "extreme-toast-1",
-  generatedAt: "2026-05-20T13:16:20.000Z",
+  // Fresh build time: moments older than the staleness window are consumed
+  // silently, so fixtures must read as "just fired".
+  generatedAt: new Date().toISOString(),
   title: "Removed youtube.com",
   closedLabel: "youtube.com",
   focusLabel: "docs.drifty.so",
@@ -72,10 +75,10 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(screen.getByRole("button", { name: "Take a break" })).toBeTruthy();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
     expect(toast.getAttribute("data-phase")).toBe("visible");
-    expect(toast.style.getPropertyValue("--extreme-toast-visible-duration")).toBe("6000ms");
+    expect(toast.style.getPropertyValue("--extreme-toast-visible-duration")).toBe("14000ms");
 
     act(() => {
-      vi.advanceTimersByTime(5_999);
+      vi.advanceTimersByTime(13_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -108,7 +111,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
 
     fireEvent.pointerLeave(toast);
     act(() => {
-      vi.advanceTimersByTime(1_999);
+      vi.advanceTimersByTime(9_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -139,7 +142,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(1_999);
+      vi.advanceTimersByTime(9_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -195,7 +198,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(toast.hasAttribute("data-timer-paused")).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(1_999);
+      vi.advanceTimersByTime(9_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -221,7 +224,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(toast.hasAttribute("data-timer-paused")).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(3_999);
+      vi.advanceTimersByTime(11_999);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 

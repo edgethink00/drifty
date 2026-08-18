@@ -6,6 +6,7 @@ import type { DriftAlarmAction } from "./driftAlarmEvent";
 import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import { PillDismissIcon, PillMilestoneKindIcon, PillOpenArrowIcon, PillReentryIcon, PillTrophyIcon } from "./CompanionPillIcons";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
+import { isCompanionMomentStale } from "./companionMomentFreshness";
 
 /**
  * Moments the pill grows into.
@@ -36,6 +37,9 @@ export type CompanionPillMilestoneEvent = {
   statSeconds?: number | null;
   /** Overrides the kind default for weekly or other non-daily figures. */
   statLabel?: string | null;
+  /** When the win was earned; drives staleness so a celebration cannot
+      survive a sleep cycle and greet the user about yesterday. */
+  generatedAt?: string;
 };
 
 export type CompanionPillDriftEvent = {
@@ -49,6 +53,9 @@ export type CompanionPillDriftEvent = {
   returnTargetId: string | null;
   breakLabel: string;
   correctionLabel: string;
+  /** When the alarm fired; drives staleness so a drift card cannot survive
+      a sleep cycle and describe a session that ended hours ago. */
+  generatedAt?: string;
 };
 
 export type CompanionPillMomentEvent =
@@ -62,11 +69,11 @@ export type CompanionPillDismissReason = "auto" | "explicit";
 
 const COMPANION_BREAK_OPTIONS = [5, 15, 30, 60] as const;
 
-/** Material guidance for transient messages is 4-10s; the review earns more. */
+/** Informational cards stay short; decision cards stay long enough to act. */
 export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
   milestone: 4_000,
   reentry: 8_000,
-  driftAlarm: 10_000,
+  driftAlarm: 16_000,
   extremeNudgeToast: EXTREME_NUDGE_TOAST_VISIBLE_MS,
   endOfDayReview: 12_000,
 };
@@ -75,7 +82,7 @@ export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
 export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEvent): number {
   if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
   if (event.kind === "reentry") return 8_000;
-  if (event.kind === "driftAlarm") return event.mode === "break_return" ? 8_000 : 10_000;
+  if (event.kind === "driftAlarm") return event.mode === "break_return" ? 14_000 : 16_000;
   if (event.kind === "endOfDayReview") {
     if (event.layout === "full") return 12_000;
     return event.layout === "compact" ? 10_000 : 8_000;
@@ -205,6 +212,22 @@ export function CompanionPillMoment({
   const isPaused = isLocallyHovered || isPointerInside || isDragging;
   const remainingMsRef = useRef(budgetMs);
   const startedAtRef = useRef<number | null>(null);
+
+  /* Wall-clock expiry, independent of the pauseable budget: the budget freezes
+     with the machine, so without this a card fired seconds before sleep would
+     still be "fresh" at the next lid-open hours later. Stale moments are
+     consumed silently; producers rebuild them on the next evaluation. */
+  useEffect(() => {
+    if (!isActive) return undefined;
+    if (isCompanionMomentStale(event)) {
+      onDismiss("auto");
+      return undefined;
+    }
+    const interval = window.setInterval(() => {
+      if (isCompanionMomentStale(event)) onDismiss("auto");
+    }, 5_000);
+    return () => window.clearInterval(interval);
+  }, [event, isActive, onDismiss]);
 
   useEffect(() => {
     if (!isActive || isPaused) return undefined;

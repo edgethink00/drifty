@@ -80,6 +80,7 @@ vi.mock("./watcherBridge", () => ({
   presentPreparedNativeCompanionMoment: bridge.presentPreparedNativeCompanionMoment,
   setNativeCompanionClickThrough: bridge.setNativeCompanionClickThrough,
   triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
+  notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
   triggerNativeCompanionVisibilityAction: bridge.triggerNativeCompanionVisibilityAction,
   triggerNativeExtremeNudgeAction: bridge.triggerNativeExtremeNudgeAction,
 }));
@@ -104,7 +105,9 @@ const focusSnapshot: WatcherPeekEvent = {
 const reviewMoment: EndOfDayReviewEvent = {
   kind: "endOfDayReview",
   day: "2026-08-03",
-  generatedAt: "2026-08-03T18:00:00.000Z",
+  // Fresh build time: moments older than the staleness window are consumed
+  // silently, so fixtures must read as "just fired".
+  generatedAt: new Date().toISOString(),
   trackedLabel: "6h tracked",
   focusLabel: "4h focus",
   driftLabel: "1h drift",
@@ -361,7 +364,8 @@ describe("CompanionWindowApp", () => {
     const { container } = render(<CompanionWindowApp />);
     await act(async () => undefined);
 
-    act(() => bridge.showHandler?.(buildCompanionReentryPreview(123)));
+    const reentry = buildCompanionReentryPreview();
+    act(() => bridge.showHandler?.(reentry));
     act(() => bridge.transitionHandler?.({ state: "reentry", phase: "started", anchor: "center" }));
     act(() => vi.advanceTimersByTime(180));
 
@@ -373,11 +377,11 @@ describe("CompanionWindowApp", () => {
     act(() => vi.advanceTimersByTime(160));
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
       "openActivityDay",
-      buildCompanionReentryPreview(123).lastActiveAt,
+      reentry.lastActiveAt,
     );
     expect(readCompanionEngagementMetrics()).toMatchObject({ reentry_opened: 1 });
 
-    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview(456)));
+    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview()));
     expect(container.textContent).toContain("Closed YouTube for you.");
     expect(container.textContent).not.toContain("Back after 8h 12m");
   });
@@ -389,7 +393,7 @@ describe("CompanionWindowApp", () => {
 
     act(() => bridge.showHandler?.(focusMilestone));
     expect(container.textContent).toContain("1 hour of focus today");
-    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview(123)));
+    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview()));
 
     expect(container.textContent).toContain("Closed YouTube for you.");
     expect(container.textContent).not.toContain("1 hour of focus today");
@@ -411,7 +415,7 @@ describe("CompanionWindowApp", () => {
 
     act(() => bridge.showHandler?.(reviewMoment));
     expect(container.textContent).toContain("Day review");
-    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview(456)));
+    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview()));
 
     expect(container.textContent).toContain("Closed YouTube for you.");
     expect(container.textContent).not.toContain("Day review");

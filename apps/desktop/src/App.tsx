@@ -161,6 +161,7 @@ import {
   isTauriRuntime,
   listenToNativeCompanionVisibilityAction,
   listenToNativeEndOfDayReviewAction,
+  listenToNativeEndOfDayReviewDisplayed,
   listenToNativeWatcherDismissed,
   listenToNativeWatcherResponse,
   setNativeCompanionSurfacePolicy,
@@ -246,7 +247,7 @@ import { toLeaderboardCelebration, type LeaderboardCelebration } from "./feature
 import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
-import { END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons } from "./features/companion/endOfDayReviewData";
+import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, buildWatcherSnapshotFromCurrent, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
@@ -1448,6 +1449,7 @@ export default function App() {
   const watcherRecoveryTimeoutRef = useRef(0);
   const endOfDayReviewQueryPreviewShownRef = useRef(false);
   const endOfDayReviewAutomaticInFlightRef = useRef(false);
+  const endOfDayReviewLastPresentedAtRef = useRef<number | null>(null);
   const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
@@ -3386,6 +3388,17 @@ export default function App() {
       unlisteners.push(unlisten);
     });
 
+    void listenToNativeEndOfDayReviewDisplayed((day) => {
+      window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, day);
+    }).then((unlisten) => {
+      if (!unlisten) return;
+      if (disposed) {
+        cleanupTauriEventListener(unlisten);
+        return;
+      }
+      unlisteners.push(unlisten);
+    });
+
     void listenToNativeCompanionVisibilityAction(handleCompanionVisibilityAction).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -5131,29 +5144,61 @@ export default function App() {
     if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
     if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
-    if (window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay) return;
-    if (segments.length === 0) return;
     if (endOfDayReviewAutomaticInFlightRef.current) return;
+
+    const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay;
+    const leaderboardCheckpointDone =
+      window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay;
+    if (reviewShown && leaderboardCheckpointDone) return;
+    if (segments.length === 0) return;
+
+    /* The review waits until the day has enough tracked time to say anything
+       honest about; from the evening trigger until the logical day rolls
+       over, the first evaluation that finds the bar crossed fires. Thin days
+       are skipped silently. The leaderboard checkpoint keeps its own once-a-
+       day marker so a skipped review never suppresses the publish. */
+    const trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
+    const reviewDue = !reviewShown && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
+    if (!reviewDue && leaderboardCheckpointDone) return;
+
+    if (reviewDue) {
+      const lastPresentedAt = endOfDayReviewLastPresentedAtRef.current;
+      if (lastPresentedAt !== null && Date.now() - lastPresentedAt < END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS) return;
+    }
 
     endOfDayReviewAutomaticInFlightRef.current = true;
     void (async () => {
-      let leaderboardCelebration: LeaderboardCelebration | undefined;
-      if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
-        // Keep the current public board fresh, then materialize the exact local
-        // aggregate separately. The checkpoint write bypasses unchanged-score
-        // suppression without temporarily replacing the public board row.
-        await syncLeaderboardPublication("slot");
-        const published = await publishLeaderboardCheckpoint("daily", todayDay);
-        const checkpoint = published
-          ? await fetchOwnLeaderboardCheckpoint("daily", todayDay)
-          : null;
-        if (checkpoint?.success) {
-          leaderboardCelebration = toLeaderboardCelebration(
-            checkpoint.data ?? null,
-            "daily",
-            todayDay,
-          ) ?? undefined;
+      if (!leaderboardCheckpointDone) {
+        try {
+          if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+            // Keep the current public board fresh, then materialize the exact
+            // local aggregate separately. The checkpoint write bypasses
+            // unchanged-score suppression without temporarily replacing the
+            // public board row.
+            await syncLeaderboardPublication("slot");
+            await publishLeaderboardCheckpoint("daily", todayDay);
+          }
+        } finally {
+          window.localStorage.setItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, todayDay);
         }
+      }
+
+      if (!reviewDue) return;
+
+      let leaderboardCelebration: LeaderboardCelebration | undefined;
+      try {
+        if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+          const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", todayDay);
+          if (checkpoint?.success) {
+            leaderboardCelebration = toLeaderboardCelebration(
+              checkpoint.data ?? null,
+              "daily",
+              todayDay,
+            ) ?? undefined;
+          }
+        }
+      } catch {
+        leaderboardCelebration = undefined;
       }
 
       const event = await buildEndOfDayReviewEvent({
@@ -5162,8 +5207,17 @@ export default function App() {
         segments,
         leaderboardCelebration,
       });
+      endOfDayReviewLastPresentedAtRef.current = Date.now();
       const shown = await showEndOfDayReview(event);
-      if (shown) window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
+      /* The day is marked shown only when a surface confirms an actual
+         visible display: in Tauri the pill/watcher overlay reports it (see
+         useEndOfDayReviewDisplayedReporter), while the browser fallback
+         renders the overlay into the visible main window, so a successful
+         show is the confirmation. A presentation nobody saw leaves the day
+         open for a fresh retry. */
+      if (shown && !isTauriRuntime()) {
+        window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, todayDay);
+      }
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });

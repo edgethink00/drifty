@@ -19,7 +19,15 @@ import {
   type CompanionPillState,
 } from "./companionPillLayout";
 import { openNativeCompanionPillMenu } from "./companionPillNativeMenu";
-import { buildCompanionReentryPreview } from "./companionPillPreview";
+import { buildCompanionDayReviewPreview, buildCompanionReentryPreview } from "./companionPillPreview";
+import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
+import { isCompanionMomentStale } from "./companionMomentFreshness";
+import {
+  INFORMATIONAL_MOMENT_DEFER_RETRY_MS,
+  isInformationalMomentKind,
+  isInformationalMomentSuppressedNow,
+  refreshInformationalMomentSuppression,
+} from "./informationalMomentSuppression";
 import {
   dismissNativeCompanionMoment,
   isTauriRuntime,
@@ -51,6 +59,12 @@ export function CompanionWindowApp() {
   const [peekEvent, setPeekEvent] = useState<WatcherPeekEvent | null>(null);
   const [momentEvent, setMomentEvent] = useState<CompanionPillMomentEvent | null>(resolveDevelopmentPreviewMoment);
   const momentEventRef = useRef<CompanionPillMomentEvent | null>(null);
+  /* The once-a-day review slot is marked only when this surface confirms an
+     actual visible display; shipping the payload is not enough (see the
+     reporter hook). */
+  useEndOfDayReviewDisplayedReporter(
+    momentEvent?.kind === "endOfDayReview" ? momentEvent : null,
+  );
   const [isPointerInside, setIsPointerInside] = useState(false);
   const momentQueueRef = useRef<CompanionPillMomentEvent[]>([]);
   const momentQueueTimerRef = useRef<number | null>(null);
@@ -74,7 +88,7 @@ export function CompanionWindowApp() {
     setMomentEvent(nextMoment);
   }, []);
 
-  const enqueueMoment = useCallback((nextMoment: CompanionPillMomentEvent) => {
+  const enqueueMomentNow = useCallback((nextMoment: CompanionPillMomentEvent) => {
     const current = momentEventRef.current;
     const nextKey = companionMomentIdentity(nextMoment);
     if (current && companionMomentIdentity(current) === nextKey) return;
@@ -117,6 +131,66 @@ export function CompanionWindowApp() {
 
     momentQueueRef.current.push(nextMoment);
   }, [activateMoment]);
+
+  /* Informational moments never pop over a fullscreen app (a keynote, a
+     film, a game): they wait in a side queue and retry once a minute until
+     the fullscreen ends, and are consumed silently when they outlive their
+     own freshness. Interventions bypass the gate entirely. */
+  const deferredInformationalRef = useRef<CompanionPillMomentEvent[]>([]);
+  const deferredInformationalTimerRef = useRef<number | null>(null);
+
+  const flushDeferredInformationalMoments = useCallback(() => {
+    void (async () => {
+      await refreshInformationalMomentSuppression();
+      const suppressed = isInformationalMomentSuppressedNow();
+      const remaining: CompanionPillMomentEvent[] = [];
+      for (const event of deferredInformationalRef.current) {
+        if (isCompanionMomentStale(event)) continue;
+        if (suppressed) {
+          remaining.push(event);
+          continue;
+        }
+        enqueueMomentNow(event);
+      }
+      deferredInformationalRef.current = remaining;
+      if (remaining.length === 0 && deferredInformationalTimerRef.current !== null) {
+        window.clearInterval(deferredInformationalTimerRef.current);
+        deferredInformationalTimerRef.current = null;
+      }
+    })();
+  }, [enqueueMomentNow]);
+
+  useEffect(() => () => {
+    if (deferredInformationalTimerRef.current !== null) {
+      window.clearInterval(deferredInformationalTimerRef.current);
+    }
+  }, []);
+
+  const enqueueMoment = useCallback((nextMoment: CompanionPillMomentEvent) => {
+    if (!isInformationalMomentKind(nextMoment.kind)) {
+      enqueueMomentNow(nextMoment);
+      return;
+    }
+    /* Never queue what is already stale; it would flash for a frame before
+       the pill's own freshness check consumed it. */
+    if (isCompanionMomentStale(nextMoment)) return;
+    /* Keep the cache honest for the next read, then decide on the last known
+       state so the show path stays synchronous. */
+    void refreshInformationalMomentSuppression();
+    if (!isInformationalMomentSuppressedNow()) {
+      enqueueMomentNow(nextMoment);
+      return;
+    }
+    const nextKey = companionMomentIdentity(nextMoment);
+    if (deferredInformationalRef.current.some((queued) => companionMomentIdentity(queued) === nextKey)) return;
+    deferredInformationalRef.current.push(nextMoment);
+    if (deferredInformationalTimerRef.current === null) {
+      deferredInformationalTimerRef.current = window.setInterval(
+        flushDeferredInformationalMoments,
+        INFORMATIONAL_MOMENT_DEFER_RETRY_MS,
+      );
+    }
+  }, [enqueueMomentNow, flushDeferredInformationalMoments]);
 
   const finishCurrentMoment = useCallback(() => {
     activateMoment(null);
@@ -213,6 +287,8 @@ export function CompanionWindowApp() {
 
   const handleOpenDashboard = useCallback(() => {
     recordCompanionEngagementMetric("dashboard_opened");
+    const current = momentEventRef.current;
+    if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
     ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard"));
   }, []);
 
@@ -265,10 +341,15 @@ export function CompanionWindowApp() {
 
   const handleDismiss = useCallback((reason: CompanionPillDismissReason) => {
     const kind = momentEvent?.kind;
+    /* A deliberate dismiss inside the reporter's dwell window still proves
+       the card was seen; auto dismissals never do. */
+    if (reason !== "auto" && kind === "endOfDayReview" && momentEvent?.kind === "endOfDayReview") {
+      reportEndOfDayReviewInteraction(momentEvent);
+    }
     finishCurrentMoment();
     recordCompanionEngagementMetric(reason === "auto" ? "moment_auto_dismissed" : "moment_dismissed");
     if (kind) ignoreCompanionBridgePromise(dismissNativeCompanionMoment(kind));
-  }, [finishCurrentMoment, momentEvent?.kind]);
+  }, [finishCurrentMoment, momentEvent]);
 
   const handleStateChange = useCallback((state: Parameters<typeof setNativeCompanionPillState>[0]) => {
     setPillState(state);
@@ -482,6 +563,7 @@ function toCompanionPillMoment(event: CompanionPillWindowEvent): CompanionPillMo
       returnTargetId: target?.targetId ?? null,
       breakLabel: alarm.copy?.breakChoiceLabel ?? "Take a break",
       correctionLabel: alarm.copy?.manualCorrectionLabel ?? "Not a drift",
+      generatedAt: alarm.generatedAt,
     };
   }
   return null;
@@ -529,7 +611,9 @@ function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   const language = new URLSearchParams(window.location.search).get("driftyCompanionLanguage") === "ko"
     ? "ko"
     : "en";
-  return preview === "reentry" ? buildCompanionReentryPreview(Date.now(), language) : null;
+  if (preview === "reentry") return buildCompanionReentryPreview(Date.now(), language);
+  if (preview === "dayReview") return buildCompanionDayReviewPreview();
+  return null;
 }
 
 function isDevelopmentPreview(): string | null {

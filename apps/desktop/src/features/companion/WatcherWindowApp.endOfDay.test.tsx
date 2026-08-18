@@ -23,6 +23,7 @@ vi.mock("./watcherBridge", () => ({
   respondNativeWatcherPeek: bridge.respondNativeWatcherPeek,
   setNativeWatcherInteractive: bridge.setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
+  notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
   triggerNativeExtremeNudgeAction: bridge.triggerNativeExtremeNudgeAction,
 }));
 
@@ -30,7 +31,9 @@ const endOfDayReviewEvent: EndOfDayReviewEvent = {
   kind: "endOfDayReview",
   placement: "top-right",
   day: "2026-05-20",
-  generatedAt: "2026-05-20T18:05:00.000Z",
+  // Fresh build time: moments older than the staleness window are consumed
+  // silently, so fixtures must read as "just fired".
+  generatedAt: new Date().toISOString(),
   trackedLabel: "2h 15m tracked",
   focusLabel: "1h 40m focus",
   driftLabel: "35m drift",

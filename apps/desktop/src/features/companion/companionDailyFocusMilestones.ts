@@ -199,6 +199,7 @@ function buildDailyFocusMilestoneEvent(
     subtitle: milestone.subtitle,
     destination: "dashboard",
     statSeconds: focusSecondsToday,
+    generatedAt: new Date().toISOString(),
   };
 }
 

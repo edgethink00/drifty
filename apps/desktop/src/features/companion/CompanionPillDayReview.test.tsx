@@ -49,7 +49,10 @@ describe("CompanionPillDayReview", () => {
     );
 
     expect(screen.getByText("Best this week")).toBeTruthy();
-    expect(screen.getByText("▲38m vs yesterday")).toBeTruthy();
+    // The headline is the whole tracked day (6:34), not focus-only, and the
+    // delta sums all three buckets: +38m focus, -9m drift, +5m other.
+    expect(screen.getByText("6:34")).toBeTruthy();
+    expect(screen.getByText("▲34m vs yesterday")).toBeTruthy();
     expect(screen.getByText("0:58")).toBeTruthy();
     expect(screen.getByText("0:44")).toBeTruthy();
     expect(screen.getByText("▼9m")).toBeTruthy();

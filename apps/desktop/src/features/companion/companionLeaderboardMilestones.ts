@@ -137,6 +137,7 @@ function buildWeeklyLeaderboardResultEvent(
     destination: "leaderboard",
     statSeconds: celebration.focusSeconds,
     statLabel: "last week",
+    generatedAt: new Date().toISOString(),
   };
 }
 

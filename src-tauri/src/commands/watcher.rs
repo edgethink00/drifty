@@ -819,6 +819,27 @@ pub fn watcher_peek_end_of_day_review_action(
     Ok(())
 }
 
+/// The pill/watcher surface confirmed the review actually rendered while
+/// visible; the main window marks the day as shown from this signal rather
+/// than from the fire-and-forget show invoke, so an unseen presentation
+/// (lid closed, machine asleep) never burns the once-a-day slot.
+#[tauri::command]
+pub fn watcher_peek_end_of_day_review_displayed(app: AppHandle, day: String) -> Result<(), String> {
+    let valid_day = day.len() == 10
+        && day
+            .chars()
+            .enumerate()
+            .all(|(index, ch)| if index == 4 || index == 7 { ch == '-' } else { ch.is_ascii_digit() });
+    if !valid_day {
+        return Err(format!("invalid day format: {day}"));
+    }
+    if let Some(main) = app.get_webview_window("main") {
+        main.emit("end-of-day-review-displayed", serde_json::json!({ "day": day }))
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
+}
+
 fn position_watcher_window(app: &AppHandle, payload: &Value) -> Result<(), String> {
     let Some(window) = app.get_webview_window(WATCHER_PEEK_WINDOW_LABEL) else {
         return Ok(());

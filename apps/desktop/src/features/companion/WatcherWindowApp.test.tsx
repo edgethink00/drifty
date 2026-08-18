@@ -44,6 +44,7 @@ vi.mock("./watcherBridge", () => ({
   respondNativeWatcherPeek: bridge.respondNativeWatcherPeek,
   setNativeWatcherInteractive: bridge.setNativeWatcherInteractive,
   triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
+  notifyNativeEndOfDayReviewDisplayed: vi.fn().mockResolvedValue(undefined),
   triggerNativeExtremeNudgeAction: bridge.triggerNativeExtremeNudgeAction,
 }));
 
@@ -212,7 +213,7 @@ describe("WatcherWindowApp", () => {
       bridge.showHandler = handler;
       return vi.fn();
     });
-    const reentry = buildCompanionReentryPreview(123);
+    const reentry = buildCompanionReentryPreview();
 
     render(<WatcherWindowApp />);
     await act(async () => undefined);

@@ -13,6 +13,8 @@
     "allow-watcher-peek-cursor-inside",
     "allow-watcher-peek-respond",
     "allow-watcher-peek-end-of-day-review-action",
+    "allow-watcher-peek-end-of-day-review-displayed",
+    "allow-companion-informational-moments-suppressed",
     "allow-watcher-peek-extreme-nudge-action"
   ]
 }

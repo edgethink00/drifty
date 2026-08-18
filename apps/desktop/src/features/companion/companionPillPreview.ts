@@ -2,6 +2,9 @@ import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { CompanionReentryEvent } from "./companionReentry";
 import { buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmEvent } from "./driftAlarmEvent";
+import { buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./EndOfDayReview";
+import { buildMockEndOfDayReviewSegments } from "./endOfDayReviewData";
+import { logicalTodayIsoDate } from "../../lib/formatting";
 
 export const COMPANION_MILESTONE_PREVIEW_OPTIONS = [
   { id: "focus-1h", label: "1h focus" },
@@ -96,6 +99,23 @@ export function buildCompanionReentryPreview(
     title: language === "ko" ? "8시간 12분 만에 돌아왔어요" : "Back after 8h 12m",
     subtitle: language === "ko" ? "마지막 활동은 오전 1:18에 끝났어요" : "Last activity ended at 1:18 AM",
     actionLabel: language === "ko" ? "마지막 기록 보기" : "See last session",
+  };
+}
+
+/* The day review is the one moment whose headline had to be re-read against
+   real thin days, so it gets the same on-demand treatment as the decision
+   cards: the same mock segments the Dev settings preview uses, laid out the
+   way the pill renders the automatic evening slot. */
+export function buildCompanionDayReviewPreview(now = Date.now()): EndOfDayReviewEvent {
+  const day = logicalTodayIsoDate();
+  return {
+    ...buildEndOfDayReviewSummary({
+      day,
+      generatedAt: new Date(now).toISOString(),
+      segments: buildMockEndOfDayReviewSegments(day),
+      isMock: true,
+    }),
+    layout: "minimal",
   };
 }
 

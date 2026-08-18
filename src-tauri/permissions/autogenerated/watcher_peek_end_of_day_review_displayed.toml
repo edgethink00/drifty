@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-watcher-peek-end-of-day-review-displayed"
+description = "Enables the watcher_peek_end_of_day_review_displayed command without any pre-configured scope."
+commands.allow = ["watcher_peek_end_of_day_review_displayed"]
+
+[[permission]]
+identifier = "deny-watcher-peek-end-of-day-review-displayed"
+description = "Denies the watcher_peek_end_of_day_review_displayed command without any pre-configured scope."
+commands.deny = ["watcher_peek_end_of_day_review_displayed"]

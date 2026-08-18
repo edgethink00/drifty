@@ -6,9 +6,12 @@ import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
 /**
  * The day review as the pill shows it: one slab per idea, densest last.
  *
- * Work hours answers "how did today go" before anything else; the ring breaks
- * that into focus, drift and other; the pair below names what a good stretch
- * looked like; top apps says where the time actually went.
+ * Work hours answers "how did today go" before anything else, and it means the
+ * whole tracked day, not only focus — reading "3 minutes worked" off a
+ * focus-only number under a work-hours label was a lie the card told thin
+ * days. The ring then breaks that total into focus, drift and other; the pair
+ * below names what a good stretch looked like; top apps says where the time
+ * actually went.
  */
 
 type RingStyle = CSSProperties & { "--seg"?: string };
@@ -31,6 +34,9 @@ export function CompanionPillDayReview({
   const focusPercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
   const driftPercent = totalSeconds > 0 ? (driftSeconds / totalSeconds) * 100 : 0;
   const otherPercent = Math.max(0, 100 - focusPercent - driftPercent);
+  const totalDeltaSeconds = event.comparison
+    ? event.comparison.focusDeltaSeconds + event.comparison.driftDeltaSeconds + event.comparison.otherDeltaSeconds
+    : 0;
   const sources = (event.sourceSummaries ?? []).slice(0, 3);
   const topShare = sources[0]?.percent ?? 0;
   const signals = event.dailySignals;
@@ -53,9 +59,9 @@ export function CompanionPillDayReview({
       <div className="eodv eodv--12" data-sensitive>
         <div className="eodv12b eodv12b--head">
           <span className="eodsec">Work hours</span>
-          <b>{formatReviewClockDuration(focusSeconds)}</b>
+          <b>{formatReviewClockDuration(totalSeconds)}</b>
           {event.comparison ? (
-            <ReviewDelta seconds={event.comparison.focusDeltaSeconds} tone="good" suffix=" vs yesterday" />
+            <ReviewDelta seconds={totalDeltaSeconds} tone="good" suffix=" vs yesterday" />
           ) : null}
         </div>
 

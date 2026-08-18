@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-companion-informational-moments-suppressed"
+description = "Enables the companion_informational_moments_suppressed command without any pre-configured scope."
+commands.allow = ["companion_informational_moments_suppressed"]
+
+[[permission]]
+identifier = "deny-companion-informational-moments-suppressed"
+description = "Denies the companion_informational_moments_suppressed command without any pre-configured scope."
+commands.deny = ["companion_informational_moments_suppressed"]

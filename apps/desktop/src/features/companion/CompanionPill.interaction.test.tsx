@@ -80,7 +80,7 @@ describe("CompanionPill native interactions", () => {
     const review = {
       kind: "endOfDayReview" as const,
       day: "2026-08-03",
-      generatedAt: "2026-08-03T18:00:00.000Z",
+      generatedAt: new Date().toISOString(),
       trackedLabel: "6:34 tracked",
       focusLabel: "4:12 focus",
       driftLabel: "0:58 drift",
@@ -101,12 +101,12 @@ describe("CompanionPill native interactions", () => {
 
     expect(resolveCompanionPillAutoDismissMs(passingMilestone)).toBe(4_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionMilestonePreview("weekly-final-rank-1", 1))).toBe(6_000);
-    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "drift" })).toBe(10_000);
-    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "break_return" })).toBe(8_000);
+    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "drift" })).toBe(16_000);
+    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "break_return" })).toBe(14_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "full" })).toBe(12_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "compact" })).toBe(10_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "minimal" })).toBe(8_000);
-    expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(6_000);
+    expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(14_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionReentryPreview(1))).toBe(8_000);
   });
 
@@ -116,7 +116,7 @@ describe("CompanionPill native interactions", () => {
     const { container } = render(
       <CompanionPill
         peekEvent={null}
-        momentEvent={buildCompanionReentryPreview(1)}
+        momentEvent={buildCompanionReentryPreview()}
         onDismissMoment={vi.fn()}
         onOpenDashboard={vi.fn()}
         onOpenReentry={onOpenReentry}
@@ -241,7 +241,7 @@ describe("CompanionPill native interactions", () => {
     expect(onDismiss).not.toHaveBeenCalled();
 
     fireEvent.pointerLeave(view!);
-    act(() => vi.advanceTimersByTime(5_999));
+    act(() => vi.advanceTimersByTime(11_999));
     expect(onDismiss).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
     expect(onDismiss).toHaveBeenCalledOnce();
@@ -342,12 +342,12 @@ describe("CompanionPill native interactions", () => {
   });
 
   it.each([
-    ["re-entry", buildCompanionReentryPreview(1), ".view--reentry .reentry__copy"],
-    ["extreme nudge", buildCompanionExtremeNudgePreview(1), ".view--nudge .card__copy"],
+    ["re-entry", buildCompanionReentryPreview(), ".view--reentry .reentry__copy"],
+    ["extreme nudge", buildCompanionExtremeNudgePreview(), ".view--nudge .card__copy"],
     ["day review", {
       kind: "endOfDayReview" as const,
       day: "2026-08-03",
-      generatedAt: "2026-08-03T18:00:00.000Z",
+      generatedAt: new Date().toISOString(),
       trackedLabel: "6:34 tracked",
       focusLabel: "4:12 focus",
       driftLabel: "0:58 drift",
@@ -387,7 +387,7 @@ describe("CompanionPill native interactions", () => {
       kind: "endOfDayReview" as const,
       layout: "compact" as const,
       day: "2026-08-03",
-      generatedAt: "2026-08-03T18:00:00.000Z",
+      generatedAt: new Date().toISOString(),
       trackedLabel: "6:34 tracked",
       focusLabel: "4:12 focus",
       driftLabel: "0:58 drift",
@@ -591,7 +591,7 @@ describe("CompanionPill native interactions", () => {
     expect(onMomentAction).toHaveBeenCalledWith({ type: "settings" });
 
     onMomentAction.mockClear();
-    rerender(<CompanionPill {...props} momentEvent={buildCompanionExtremeNudgePreview(2)} />);
+    rerender(<CompanionPill {...props} momentEvent={buildCompanionExtremeNudgePreview()} />);
     paintMomentFrame();
     fireEvent.click(getByRole("button", { name: "Open alert settings" }));
     act(() => vi.advanceTimersByTime(160));
@@ -608,7 +608,7 @@ describe("CompanionPill native interactions", () => {
           kind: "extremeNudgeToast",
           placement: "top-right",
           id: "extreme-break-options",
-          generatedAt: "2026-08-03T18:00:00.000Z",
+          generatedAt: new Date().toISOString(),
           title: "Closed YouTube for you.",
           closedLabel: "YouTube",
           focusLabel: "VS Code",
@@ -762,7 +762,7 @@ describe("CompanionPill native interactions", () => {
 
     rerender(<CompanionPill {...props} isPointerInside={false} />);
     expect(driftView?.dataset.auto).toBe("running");
-    act(() => vi.advanceTimersByTime(9_999));
+    act(() => vi.advanceTimersByTime(15_999));
     expect(onDismissMoment).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
     expect(onDismissMoment).not.toHaveBeenCalled();
