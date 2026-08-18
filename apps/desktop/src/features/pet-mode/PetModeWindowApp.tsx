@@ -979,7 +979,7 @@ export function PetModeWindowApp() {
             className={`pet-mode-contact-anchor pet-mode-contact-anchor--${facing}`}
             aria-hidden="true"
           />
-          {((phase === "drag" || manualDragRef.current) && dragProbe) ? (
+          {guidesEnabled && (phase === "drag" || manualDragRef.current) && dragProbe ? (
             <div className={`pet-mode-drag-probe-badge pet-mode-drag-probe-badge--${getDragProbeKind(dragProbe)}`} aria-hidden="true">
               <span className="pet-mode-drag-probe-dot" />
               <span className="pet-mode-drag-probe-text">{getDragProbeLabel(dragProbe)}</span>

@@ -1133,11 +1133,16 @@ describe("PetModeWindowApp", () => {
     }));
   });
 
-  it("renders a live drop target preview badge while dragging", async () => {
+  it("keeps the live drop preview badge off unless Dev guide lines are on", async () => {
     vi.useFakeTimers();
     let probeHandler: ((probe: any) => void) | null = null;
+    let guidesHandler: ((event: { kind: "guides"; enabled: boolean }) => void) | null = null;
     bridge.listenToNativePetDragProbe.mockImplementationOnce(async (handler) => {
       probeHandler = handler;
+      return vi.fn();
+    });
+    bridge.listenToNativePetModeEvent.mockImplementationOnce(async (handler) => {
+      guidesHandler = handler;
       return vi.fn();
     });
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
@@ -1149,19 +1154,22 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
     act(() => { bridge.dragStartHandler?.(); });
 
-    // Probe 1: Catch drop onto Safari
     act(() => {
+      probeHandler?.({ kind: "catch", distance: 52, durationMs: 140, targetY: 210, ledge: "Safari" });
+    });
+    expect(screen.queryByText("낙하: Safari (52pt)")).toBeNull();
+
+    act(() => {
+      guidesHandler?.({ kind: "guides", enabled: true });
       probeHandler?.({ kind: "catch", distance: 52, durationMs: 140, targetY: 210, ledge: "Safari" });
     });
     expect(screen.getByText("낙하: Safari (52pt)")).toBeDefined();
 
-    // Probe 2: Top home band
     act(() => {
       probeHandler?.({ kind: "stay_top", distance: 0, durationMs: 0, targetY: 40, ledge: "menubar" });
     });
     expect(screen.getByText("상단 집 (안 떨어짐)")).toBeDefined();
 
-    // Probe 3: Hop
     act(() => {
       probeHandler?.({ kind: "hop", distance: 4, durationMs: 29, targetY: 300, ledge: "hop" });
     });
