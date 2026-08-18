@@ -8,11 +8,14 @@ import {
   cancelNativePetMotion,
   exitNativePetScreen,
   listenToNativePetDragEnd,
+  listenToNativePetDragProbe,
   listenToNativePetDragStart,
   listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest,
   moveNativePetToTarget,
   rememberNativePetPosition,
+  resolveNativePetDrop,
+  type PetDropPlan,
   reportNativePetContact,
   reportNativePetDragError,
   reportNativePetModeLabState,
@@ -40,6 +43,7 @@ import {
   PET_MODE_PRESENT_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
+  PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_SIT_MAX_MS,
   PET_MODE_SIT_MIN_MS,
   PET_MODE_SLEEP_MAX_MS,
@@ -93,6 +97,14 @@ export function PetModeWindowApp() {
   const [pawFrame, setPawFrame] = useState(0);
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
+  const [dragProbe, setDragProbe] = useState<PetDropPlan | null>(null);
+  const [guidesEnabled, setGuidesEnabled] = useState(() => {
+    try {
+      return window.localStorage.getItem(PET_MODE_GUIDES_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
   const actionTokenRef = useRef(0);
   const phaseRef = useRef<PetModeCatPhase>(initialPhase);
   const renderedPhaseRef = useRef<PetModeCatPhase>(initialPhase);
@@ -221,13 +233,18 @@ export function PetModeWindowApp() {
       && phaseRef.current !== "drag"
     ) return;
     manualDragRef.current = false;
+    setDragProbe(null);
     const releaseToken = ++actionTokenRef.current;
 
     void (async () => {
       if (!prefersReducedMotion()) {
         flushSync(() => commitPhase("release"));
-        await delay(PET_MODE_DRAG_SETTLE_MS);
+        const plan = await resolveNativePetDrop().catch(() => null);
         if (releaseToken !== actionTokenRef.current) return;
+        if (plan?.kind !== "catch") {
+          await delay(PET_MODE_DRAG_SETTLE_MS);
+          if (releaseToken !== actionTokenRef.current) return;
+        }
       }
 
       if (releaseToken === actionTokenRef.current) commitPhase("idle");
@@ -241,6 +258,25 @@ export function PetModeWindowApp() {
       }
     })();
   }, [commitPhase]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetDragProbe((probe) => {
+      if (disposed) return;
+      setDragProbe(probe);
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -541,6 +577,10 @@ export function PetModeWindowApp() {
     void listenToNativePetModeEvent((event) => {
       if (event.kind === "snapshot") {
         setSnapshot(event.snapshot);
+        return;
+      }
+      if (event.kind === "guides") {
+        setGuidesEnabled(event.enabled);
         return;
       }
       if (event.kind === "facing") {
@@ -939,6 +979,22 @@ export function PetModeWindowApp() {
             className={`pet-mode-contact-anchor pet-mode-contact-anchor--${facing}`}
             aria-hidden="true"
           />
+          {((phase === "drag" || manualDragRef.current) && dragProbe) ? (
+            <div className={`pet-mode-drag-probe-badge pet-mode-drag-probe-badge--${getDragProbeKind(dragProbe)}`} aria-hidden="true">
+              <span className="pet-mode-drag-probe-dot" />
+              <span className="pet-mode-drag-probe-text">{getDragProbeLabel(dragProbe)}</span>
+            </div>
+          ) : null}
+          {guidesEnabled ? (
+            <div className="pet-mode-guides" aria-hidden="true">
+              <div className="pet-mode-guide-line pet-mode-guide-line--feet">
+                <span className="pet-mode-guide-label">발 93pt</span>
+              </div>
+              <div className="pet-mode-guide-marker pet-mode-guide-marker--slab-left" />
+              <div className="pet-mode-guide-marker pet-mode-guide-marker--slab-right" />
+              <div className="pet-mode-guide-box" />
+            </div>
+          ) : null}
         </button>
       </div>
     </main>
@@ -956,4 +1012,36 @@ function randomBetween(minimum: number, maximum: number): number {
 
 function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
+
+function getDragProbeKind(probe: PetDropPlan): "stay" | "ledge" | "catch" | "hop" {
+  switch (probe.kind) {
+    case "stay_top":
+    case "stay_floor":
+      return "stay";
+    case "already_on":
+      return "ledge";
+    case "catch":
+      return "catch";
+    case "hop":
+    default:
+      return "hop";
+  }
+}
+
+function getDragProbeLabel(probe: PetDropPlan): string {
+  switch (probe.kind) {
+    case "stay_top":
+      return "상단 집 (안 떨어짐)";
+    case "stay_floor":
+      return "하단 집 (안 떨어짐)";
+    case "already_on":
+      return `${probe.ledge} 위 (밀착)`;
+    case "catch":
+      return `낙하: ${probe.ledge} (${Math.round(probe.distance)}pt)`;
+    case "hop":
+    default:
+      return "일반 낙하 (4pt 홉)";
+  }
 }

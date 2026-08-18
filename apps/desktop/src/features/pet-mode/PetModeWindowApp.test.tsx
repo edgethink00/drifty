@@ -75,6 +75,7 @@ const bridge = vi.hoisted(() => ({
     bridge.dragStartHandler = handler;
     return vi.fn();
   }),
+  listenToNativePetDragProbe: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetModeEvent: vi.fn(),
   listenToNativePetModeLabStateRequest: vi.fn().mockResolvedValue(vi.fn()),
   moveNativePetToTarget: vi.fn().mockResolvedValue({
@@ -94,6 +95,7 @@ const bridge = vi.hoisted(() => ({
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
+  resolveNativePetDrop: vi.fn().mockResolvedValue({ kind: "hop", distance: 4, durationMs: 16, targetY: 0, ledge: "hop" }),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
   preloadPetModeHitRegions: vi.fn().mockResolvedValue(undefined),
   stagePetModeHitRegionTransition: vi.fn().mockResolvedValue(undefined),
@@ -107,6 +109,7 @@ vi.mock("./petModeBridge", () => ({
   cancelNativePetMotion: bridge.cancelNativePetMotion,
   listenToNativePetDragEnd: bridge.listenToNativePetDragEnd,
   listenToNativePetDragStart: bridge.listenToNativePetDragStart,
+  listenToNativePetDragProbe: bridge.listenToNativePetDragProbe,
   listenToNativePetModeEvent: bridge.listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest: bridge.listenToNativePetModeLabStateRequest,
   moveNativePetToTarget: bridge.moveNativePetToTarget,
@@ -119,6 +122,7 @@ vi.mock("./petModeBridge", () => ({
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
   roamNativePet: bridge.roamNativePet,
   rememberNativePetPosition: bridge.rememberNativePetPosition,
+  resolveNativePetDrop: bridge.resolveNativePetDrop,
   setNativePetPresence: bridge.setNativePetPresence,
 }));
 
@@ -1041,6 +1045,79 @@ describe("PetModeWindowApp", () => {
     expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the shipped settle when drop resolution hops", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 21, clientX: 18, clientY: 18 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => { bridge.dragStartHandler?.(); });
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+    dispatchPointer(pet, "pointerup", { pointerId: 21, clientX: 40, clientY: 18 });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(bridge.resolveNativePetDrop).toHaveBeenCalled();
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("waits for a catch drop before returning to idle", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    let finishDrop!: (value: { kind: string; distance: number; durationMs: number; targetY: number; ledge: string }) => void;
+    bridge.resolveNativePetDrop.mockImplementationOnce(() => new Promise((resolve) => {
+      finishDrop = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 22, clientX: 18, clientY: 18 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => { bridge.dragStartHandler?.(); });
+    dispatchPointer(pet, "pointerup", { pointerId: 22, clientX: 40, clientY: 18 });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => {
+      finishDrop({ kind: "catch", distance: 80, durationMs: 180, targetY: 220, ledge: "Safari" });
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
   it("publishes the committed silhouette instead of owning the full native rectangle", async () => {
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -1054,5 +1131,41 @@ describe("PetModeWindowApp", () => {
       mirrored: false,
       interactive: false,
     }));
+  });
+
+  it("renders a live drop target preview badge while dragging", async () => {
+    vi.useFakeTimers();
+    let probeHandler: ((probe: any) => void) | null = null;
+    bridge.listenToNativePetDragProbe.mockImplementationOnce(async (handler) => {
+      probeHandler = handler;
+      return vi.fn();
+    });
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 23, clientX: 18, clientY: 18 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => { bridge.dragStartHandler?.(); });
+
+    // Probe 1: Catch drop onto Safari
+    act(() => {
+      probeHandler?.({ kind: "catch", distance: 52, durationMs: 140, targetY: 210, ledge: "Safari" });
+    });
+    expect(screen.getByText("낙하: Safari (52pt)")).toBeDefined();
+
+    // Probe 2: Top home band
+    act(() => {
+      probeHandler?.({ kind: "stay_top", distance: 0, durationMs: 0, targetY: 40, ledge: "menubar" });
+    });
+    expect(screen.getByText("상단 집 (안 떨어짐)")).toBeDefined();
+
+    // Probe 3: Hop
+    act(() => {
+      probeHandler?.({ kind: "hop", distance: 4, durationMs: 29, targetY: 300, ledge: "hop" });
+    });
+    expect(screen.getByText("일반 낙하 (4pt 홉)")).toBeDefined();
+    vi.useRealTimers();
   });
 });

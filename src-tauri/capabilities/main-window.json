@@ -140,6 +140,7 @@
     "allow-watcher-companion-update",
     "allow-drift-alarm-show",
     "allow-drift-alarm-hide",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "allow-pet-mode-resolve-drop"
   ]
 }

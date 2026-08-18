@@ -18,6 +18,7 @@ vi.mock("./petModeBridge", () => ({
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),
   listenToNativePetDragEnd: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetDragStart: vi.fn().mockResolvedValue(vi.fn()),
+  listenToNativePetDragProbe: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetModeEvent: vi.fn().mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
     bridge.eventHandler = handler;
     return vi.fn();
@@ -40,6 +41,7 @@ vi.mock("./petModeBridge", () => ({
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
+  resolveNativePetDrop: vi.fn().mockResolvedValue(null),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("./petModeHitRegions", () => ({

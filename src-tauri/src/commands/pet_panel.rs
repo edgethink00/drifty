@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, WebviewWindow};
 
-use super::pet_mode::PET_MODE_WINDOW_LABEL;
+use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan, PET_MODE_WINDOW_LABEL};
 
 /// Configure the desktop pet as the same kind of non-activating macOS panel
 /// used by the resident Companion pill. A regular transparent Tauri window can
@@ -302,6 +302,7 @@ pub fn perform_pet_panel_drag(
     let mut moved = false;
     let mut pickup_started_at: Option<Instant> = None;
     let pickup_delay = Duration::from_millis(pickup_delay_ms.min(500));
+    let mut last_probe_at = Instant::now();
 
     loop {
         let pointer = app.cursor_position().map_err(|error| error.to_string())?;
@@ -323,6 +324,14 @@ pub fn perform_pet_panel_drag(
             pickup_started_at.is_some_and(|started_at| started_at.elapsed() >= pickup_delay);
         if pickup_finished {
             dispatch_apply(false)?;
+            if last_probe_at.elapsed() >= Duration::from_millis(40) {
+                last_probe_at = Instant::now();
+                if let Ok(pos) = current_pet_logical_position(window) {
+                    if let Ok(plan) = probe_pet_drop_plan(app, window, pos) {
+                        let _ = window.emit("pet-mode-drag-probe", &plan);
+                    }
+                }
+            }
         }
         // SAFETY: CGEventSourceButtonState is a process-independent CoreGraphics
         // query and accepts the documented combined-session/left-button enum

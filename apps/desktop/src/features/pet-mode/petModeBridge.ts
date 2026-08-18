@@ -298,3 +298,35 @@ export async function returnNativePetFromOuting(side: "left" | "right"): Promise
 export async function rememberNativePetPosition(): Promise<void> {
   await invoke("pet_mode_remember_position");
 }
+
+export type PetDropKind = "hold" | "stay_top" | "stay_floor" | "already_on" | "catch" | "hop";
+
+export type PetDropPlan = {
+  readonly kind: PetDropKind;
+  readonly distance: number;
+  readonly durationMs: number;
+  readonly targetY: number;
+  readonly ledge: string;
+};
+
+export async function resolveNativePetDrop(): Promise<PetDropPlan | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    return await invoke<PetDropPlan>("pet_mode_resolve_drop");
+  } catch (error) {
+    console.error("[pet-drop] invoke failed:", error);
+    return null;
+  }
+}
+
+export async function setNativePetModeGuides(enabled: boolean): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await emit("pet-mode-event", { kind: "guides", enabled });
+}
+
+export async function listenToNativePetDragProbe(
+  onProbe: (probe: PetDropPlan | null) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<PetDropPlan | null>("pet-mode-drag-probe", ({ payload }) => onProbe(payload));
+}

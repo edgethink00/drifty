@@ -226,6 +226,7 @@ import {
   buildPetModePreviewInterventionTarget,
   buildPetModeSnapshot,
   getPetModeWindowSize,
+  PET_MODE_GUIDES_STORAGE_KEY,
 } from "./features/pet-mode/petModeData";
 import {
   applyNativePetModeLabTarget,
@@ -237,6 +238,7 @@ import {
   previewNativePetModeAction,
   previewNativePetModeIntervention,
   setNativePetModeEnabled,
+  setNativePetModeGuides,
   updateNativePetMode,
 } from "./features/pet-mode/petModeBridge";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
@@ -654,6 +656,23 @@ export default function App() {
   const petModeActive = petModeEnabled;
   const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
   const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
+  const [petModeGuidesEnabled, setPetModeGuidesEnabled] = useState(() => {
+    try {
+      return window.localStorage.getItem(PET_MODE_GUIDES_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const handleTogglePetModeGuides = useCallback(() => {
+    setPetModeGuidesEnabled((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(PET_MODE_GUIDES_STORAGE_KEY, next ? "1" : "0");
+      } catch {}
+      void setNativePetModeGuides(next);
+      return next;
+    });
+  }, []);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
     const enabled = driftAlertsEnabled;
@@ -7480,6 +7499,8 @@ export default function App() {
                     onPreviewPetModeAction={(action) => {
                       void previewNativePetModeAction(action);
                     }}
+                    petModeGuidesEnabled={petModeGuidesEnabled}
+                    onTogglePetModeGuides={handleTogglePetModeGuides}
                     teamsBetaEnabled={teamsBetaEnabled}
                     profileBetaEnabled={profileBetaEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}

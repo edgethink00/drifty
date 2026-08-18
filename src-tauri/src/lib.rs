@@ -37,12 +37,12 @@ use commands::{
     pet_mode_intervene, pet_mode_lab_apply_target, pet_mode_lab_place_center,
     pet_mode_move_to_target, pet_mode_preview_action, pet_mode_preview_intervention,
     pet_mode_remember_position, pet_mode_report_contact, pet_mode_report_drag_error,
-    pet_mode_report_pointer, pet_mode_return_from_outing, pet_mode_return_home, pet_mode_roam,
-    pet_mode_set_enabled, pet_mode_set_interactive, pet_mode_set_presence, pet_mode_set_size,
-    pet_mode_update, pet_mode_update_hit_region, sentry_capture_native_smoke,
-    setup_companion_pill_window, setup_drift_alarm_window, setup_pet_mode_window,
-    setup_watcher_window, share_card_save_png, startup_get_open_at_login_status,
-    startup_set_open_at_login_enabled, system_open_settings_pane,
+    pet_mode_report_pointer, pet_mode_resolve_drop, pet_mode_return_from_outing,
+    pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
+    pet_mode_set_presence, pet_mode_set_size, pet_mode_update, pet_mode_update_hit_region,
+    sentry_capture_native_smoke, setup_companion_pill_window, setup_drift_alarm_window,
+    setup_pet_mode_window, setup_watcher_window, share_card_save_png,
+    startup_get_open_at_login_status, startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_apply_synced_deletions,
     tracker_apply_synced_segments, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_delete_project,
@@ -665,6 +665,7 @@ pub fn run() {
             pet_mode_exit_screen,
             pet_mode_return_from_outing,
             pet_mode_remember_position,
+            pet_mode_resolve_drop,
         ])
         .build(tauri::generate_context!());
 

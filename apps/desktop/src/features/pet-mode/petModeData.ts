@@ -168,7 +168,8 @@ export type PetModeWindowEvent =
   | { readonly kind: "motion"; readonly motion: PetModeMotionKind }
   | { readonly kind: "entry_complete" }
   | { readonly kind: "preview_action"; readonly action: PetModePreviewAction }
-  | { readonly kind: "intervention"; readonly target: PetModeInterventionTarget };
+  | { readonly kind: "intervention"; readonly target: PetModeInterventionTarget }
+  | { readonly kind: "guides"; readonly enabled: boolean };
 
 export type PetModeResolvedTarget = {
   readonly facing: "left" | "right";
@@ -390,6 +391,7 @@ export const PET_MODE_SIZES = [50, 75, 100, 125] as const;
 export type PetModeSize = (typeof PET_MODE_SIZES)[number];
 export const PET_MODE_DEFAULT_SIZE: PetModeSize = 100;
 export const PET_MODE_SIZE_STORAGE_KEY = "drifty.pet.size";
+export const PET_MODE_GUIDES_STORAGE_KEY = "drifty.pet.guides";
 
 export function isPetModeSize(value: unknown): value is PetModeSize {
   return typeof value === "number" && (PET_MODE_SIZES as readonly number[]).includes(value);

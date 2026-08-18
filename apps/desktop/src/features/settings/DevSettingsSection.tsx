@@ -90,6 +90,8 @@ type DevSettingsSectionProps = {
   readonly onPreviewPetModeBrowserTabClose: () => void;
   readonly onPreviewPetModeDriftyWindowClose: () => void;
   readonly onPlacePetModeCenter: () => void;
+  readonly petModeGuidesEnabled?: boolean;
+  readonly onTogglePetModeGuides?: () => void;
   readonly onPreviewPetModeAction: (action: PetModePreviewAction) => void;
   readonly onCheckLatestBuild: () => void;
   readonly onInstallLatestBuild: () => void;
@@ -169,6 +171,8 @@ export function DevSettingsSection({
   onPreviewPetModeBrowserTabClose,
   onPreviewPetModeDriftyWindowClose,
   onPlacePetModeCenter,
+  petModeGuidesEnabled,
+  onTogglePetModeGuides,
   onPreviewPetModeAction,
   onCheckLatestBuild,
   onInstallLatestBuild,
@@ -305,6 +309,7 @@ export function DevSettingsSection({
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
               <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
+              <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact and drop calibration guides" title="Toggle feet contact line (93pt) and calibration guides on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
             </div>
           </div>
           </div>

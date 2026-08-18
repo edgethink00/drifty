@@ -11,6 +11,8 @@ mod extreme_nudge;
 mod living_soul;
 mod managed_ai;
 mod native_update_dialog;
+mod pet_drop;
+mod pet_drop_windows;
 mod pet_hit_region;
 mod pet_mode;
 mod pet_panel;

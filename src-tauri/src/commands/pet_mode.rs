@@ -15,6 +15,8 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSPoint;
 
+use super::pet_drop::{plan_pet_drop, PetDropKind, PetDropPlan, PetRect};
+use super::pet_drop_windows::{inferred_bottom_dock, list_on_screen_ledges};
 use super::pet_hit_region::{
     install_pet_hit_region_monitor, pet_hit_region_pointer_inside,
     refresh_pet_hit_region_for_window, reset_pet_hit_region, set_pet_window_interactive,
@@ -1092,6 +1094,182 @@ pub async fn pet_mode_return_from_outing(app: AppHandle, side: String) -> Result
     .map_err(|error| error.to_string())?
 }
 
+pub fn current_pet_logical_position(
+    window: &WebviewWindow,
+) -> Result<LogicalPosition<f64>, String> {
+    let position = window.outer_position().map_err(|error| error.to_string())?;
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    Ok(position.to_logical(scale_factor))
+}
+
+pub fn probe_pet_drop_plan(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    pos: LogicalPosition<f64>,
+) -> Result<PetDropPlan, String> {
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| resolve_pet_home_monitor(app))
+        .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+    let scale_factor = monitor.scale_factor();
+    let work_area = monitor.work_area();
+    let work_position = work_area.position.to_logical::<f64>(scale_factor);
+    let work_size = work_area.size.to_logical::<f64>(scale_factor);
+    let (width, height) = pet_size();
+    let pet = PetRect {
+        x: pos.x,
+        y: pos.y,
+        width,
+        height,
+    };
+    let work = PetRect {
+        x: work_position.x,
+        y: work_position.y,
+        width: work_size.width,
+        height: work_size.height,
+    };
+    let pet_window_number = macos_window_number(window);
+    let screen_position = monitor.position().to_logical::<f64>(scale_factor);
+    let screen_size = monitor.size().to_logical::<f64>(scale_factor);
+    let screen = PetRect {
+        x: screen_position.x,
+        y: screen_position.y,
+        width: screen_size.width,
+        height: screen_size.height,
+    };
+    let inferred_dock = inferred_bottom_dock(&work, &screen);
+    let listed = list_on_screen_ledges(pet_window_number);
+    let plan = match &listed {
+        Ok((rects, dock)) => {
+            let named: Vec<(&str, PetRect)> = rects
+                .iter()
+                .map(|(name, rect)| (name.as_str(), rect.clone()))
+                .collect();
+            plan_pet_drop(
+                false,
+                &pet,
+                &work,
+                &named,
+                dock.as_ref().or(inferred_dock.as_ref()),
+            )
+        }
+        Err(_) => plan_pet_drop(false, &pet, &work, &[], inferred_dock.as_ref()),
+    };
+    Ok(plan)
+}
+
+#[tauri::command]
+pub async fn pet_mode_resolve_drop(app: AppHandle) -> Result<PetDropPlan, String> {
+    if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+        return Err("Pet Mode is disabled".to_string());
+    }
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    let start = current_pet_logical_position(&window)?;
+    let plan = probe_pet_drop_plan(&app, &window, start)?;
+
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| resolve_pet_home_monitor(&app))
+        .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+    let scale_factor = monitor.scale_factor();
+    let work_area = monitor.work_area();
+    let work_position = work_area.position.to_logical::<f64>(scale_factor);
+    let work_size = work_area.size.to_logical::<f64>(scale_factor);
+    let screen_position = monitor.position().to_logical::<f64>(scale_factor);
+    let screen_size = monitor.size().to_logical::<f64>(scale_factor);
+
+    #[cfg(debug_assertions)]
+    {
+        eprintln!(
+            "[pet-drop] kind={:?} ledge={} air={:.1} target_y={:.1} pet=({:.1},{:.1})",
+            plan.kind, plan.ledge, plan.distance, plan.target_y, start.x, start.y,
+        );
+    }
+    let dock_landing = plan.ledge == "Dock";
+    let (clamp_position, clamp_width, clamp_height) = if dock_landing {
+        (screen_position, screen_size.width, screen_size.height)
+    } else {
+        (work_position, work_size.width, work_size.height)
+    };
+    let target = clamp_pet_position(
+        LogicalPosition::new(start.x, plan.target_y),
+        clamp_position,
+        clamp_width,
+        clamp_height,
+    );
+    if matches!(plan.kind, PetDropKind::AlreadyOn) && (target.y - start.y).abs() >= 1.0 {
+        window
+            .set_position(target)
+            .map_err(|error| error.to_string())?;
+    }
+    let should_animate = matches!(plan.kind, PetDropKind::Catch | PetDropKind::Hop)
+        && (target.y - start.y).abs() >= 1.0;
+    if should_animate {
+        cancel_pet_motion();
+        let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
+        let duration_ms = plan.duration_ms;
+        let drop_window = window.clone();
+        async_runtime::spawn_blocking(move || {
+            animate_pet_window_drop(&drop_window, start, target, duration_ms, motion_revision)
+        })
+        .await
+        .map_err(|error| format!("Pet Mode drop task failed: {error}"))??;
+    }
+    Ok(plan)
+}
+
+fn animate_pet_window_drop(
+    window: &WebviewWindow,
+    start: LogicalPosition<f64>,
+    target: LogicalPosition<f64>,
+    duration_ms: u64,
+    motion_revision: u64,
+) -> Result<(), String> {
+    let duration = Duration::from_millis(duration_ms.max(1));
+    let started = Instant::now();
+    loop {
+        if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
+            return Ok(());
+        }
+        let t = (started.elapsed().as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
+        let eased = t * t;
+        window
+            .set_position(LogicalPosition::new(
+                start.x + (target.x - start.x) * eased,
+                start.y + (target.y - start.y) * eased,
+            ))
+            .map_err(|error| error.to_string())?;
+        if t >= 1.0 {
+            break;
+        }
+        thread::sleep(Duration::from_millis(16));
+    }
+    Ok(())
+}
+
+fn macos_window_number(window: &WebviewWindow) -> i64 {
+    #[cfg(target_os = "macos")]
+    {
+        window
+            .ns_window()
+            .ok()
+            .and_then(|ptr| unsafe {
+                let ns_window: &NSWindow = &*ptr.cast::<NSWindow>();
+                Some(ns_window.windowNumber() as i64)
+            })
+            .unwrap_or(-1)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        -1
+    }
+}
+
 #[tauri::command]
 pub fn pet_mode_remember_position(app: AppHandle) -> Result<(), String> {
     let window = app
@@ -1762,12 +1940,6 @@ fn preferred_pet_position_after_drop(
     } else {
         current
     }
-}
-
-fn current_pet_logical_position(window: &WebviewWindow) -> Result<LogicalPosition<f64>, String> {
-    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
-    let position = window.outer_position().map_err(|error| error.to_string())?;
-    Ok(position.to_logical::<f64>(scale_factor))
 }
 
 fn animate_pet_window_toward(
