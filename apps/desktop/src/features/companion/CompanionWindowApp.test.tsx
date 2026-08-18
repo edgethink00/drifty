@@ -260,6 +260,23 @@ describe("CompanionWindowApp", () => {
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard");
   });
 
+  it("opens View day from a one-hour focus milestone", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.(focusMilestone));
+    act(() => bridge.transitionHandler?.({ state: "milestone", phase: "started", anchor: "center" }));
+    act(() => vi.advanceTimersByTime(180));
+
+    expect(container.textContent).toContain("1 hour of focus today");
+    expect(container.querySelector(".mile__action")?.textContent).toContain("View day");
+    fireEvent.click(container.querySelector(".mile__action")!);
+    expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(160));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard");
+  });
+
   it("reveals a hidden menu-bar moment only after its final card is committed", async () => {
     let resolveNativePresentation: (() => void) | undefined;
     const animationFrames: FrameRequestCallback[] = [];

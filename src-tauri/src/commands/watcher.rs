@@ -744,11 +744,7 @@ pub fn watcher_peek_dismiss(app: AppHandle) -> Result<(), String> {
 }
 
 fn reveal_main_window_for_review_action(app: &AppHandle) {
-    if let Some(main) = app.get_webview_window("main") {
-        let _ = main.unminimize();
-        let _ = main.show();
-        let _ = main.set_focus();
-    }
+    crate::reveal_main_window(app);
 }
 
 #[tauri::command]
@@ -802,8 +798,8 @@ pub fn watcher_peek_end_of_day_review_action(
     action: String,
     activity_at: Option<String>,
 ) -> Result<(), String> {
-    watcher_peek_hide(app.clone())?;
     reveal_main_window_for_review_action(&app);
+    let _ = watcher_peek_hide(app.clone());
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit(

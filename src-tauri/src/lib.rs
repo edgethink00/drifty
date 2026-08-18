@@ -355,11 +355,34 @@ fn reveal_isolated_main_window_without_activation(app: &AppHandle) -> tauri::Res
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn activate_drifty_application<R: Runtime>(app: &AppHandle<R>) {
+    use objc2_app_kit::NSApplication;
+    use objc2_foundation::MainThreadMarker;
+
+    let activate = || {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let application = NSApplication::sharedApplication(mtm);
+        #[allow(deprecated)]
+        application.activateIgnoringOtherApps(true);
+    };
+
+    if MainThreadMarker::new().is_some() {
+        activate();
+    } else {
+        let _ = app.run_on_main_thread(activate);
+    }
+}
+
 pub(crate) fn reveal_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        #[cfg(target_os = "macos")]
+        activate_drifty_application(app);
     }
 }
 
