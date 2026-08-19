@@ -1,41 +1,44 @@
+import { createPortal } from "react-dom";
 import type { PreReleaseUpdateStatus } from "./useDeveloperPreReleaseUpdateController";
 
+export const MANUAL_UPDATE_CHECK_FAILED_PREFIX = "Update check failed: ";
+
 export type AppStatusNoticeModel = {
+  readonly compact?: boolean;
   readonly detail: string;
   readonly role: "status" | "alert";
   readonly title: string;
 };
 
-export function buildManualUpdateStatusNotice(
-  checking: boolean,
-  message: string | null,
-  error: string | null,
-): AppStatusNoticeModel | null {
+export function buildManualUpdateStatusNotice({
+  checking,
+  error,
+  hasAvailableUpdate,
+  message,
+}: {
+  readonly checking: boolean;
+  readonly error: string | null;
+  readonly hasAvailableUpdate: boolean;
+  readonly message: string | null;
+}): AppStatusNoticeModel | null {
   if (error) {
     return {
-      detail: error,
+      detail: error.startsWith(MANUAL_UPDATE_CHECK_FAILED_PREFIX)
+        ? error.slice(MANUAL_UPDATE_CHECK_FAILED_PREFIX.length)
+        : error,
       role: "alert",
       title: "Update check failed",
     };
   }
 
-  if (checking) {
-    return {
-      detail: message ?? "Checking signed update metadata.",
-      role: "status",
-      title: "Checking for updates",
-    };
-  }
+  if (checking || hasAvailableUpdate || !message) return null;
 
-  if (message) {
-    return {
-      detail: message,
-      role: "status",
-      title: "Update check complete",
-    };
-  }
-
-  return null;
+  return {
+    compact: true,
+    detail: message,
+    role: "status",
+    title: "Update check complete",
+  };
 }
 
 export function buildLatestBuildStatusNotice(
@@ -106,15 +109,19 @@ export function buildLatestBuildStatusNotice(
 }
 
 export function AppStatusNotice({ notice }: { readonly notice: AppStatusNoticeModel }) {
-  return (
+  const showTitle = !notice.compact;
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <section
-      className={notice.role === "alert" ? "notice notice--error app-status-notice" : "notice app-status-notice"}
+      className={notice.role === "alert" ? "app-status-notice app-status-notice--error" : "app-status-notice"}
       role={notice.role}
-      aria-label={notice.title}
+      aria-label={showTitle ? notice.title : notice.detail}
     >
-      <strong>{notice.title}</strong>
+      {showTitle ? <strong>{notice.title}</strong> : null}
       <span>{notice.detail}</span>
-    </section>
+    </section>,
+    document.body,
   );
 }
 

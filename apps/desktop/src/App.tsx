@@ -939,13 +939,11 @@ export default function App() {
     navigateToTab("dashboard", "Today");
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
-  const handleTrayCheckForUpdates = useCallback(() => {
+  const handleManualCheckForUpdates = useCallback(() => {
     setManualUpdateNoticeVisible(true);
-    setSettingsSection("general");
-    navigateToTab("settings");
     setAccountMenuOpen(false);
     void handleCheckForUpdates();
-  }, [handleCheckForUpdates, navigateToTab]);
+  }, [handleCheckForUpdates]);
 
   const handleAppMenuCheckLatestBuild = useCallback(() => {
     setLatestBuildNoticeVisible(true);
@@ -3317,7 +3315,7 @@ export default function App() {
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
-    void listen("tray-check-for-updates", handleTrayCheckForUpdates).then((nextUnlisten) => {
+    void listen("tray-check-for-updates", handleManualCheckForUpdates).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
         return;
@@ -3329,7 +3327,7 @@ export default function App() {
       disposed = true;
       cleanupTauriEventListener(unlisten);
     };
-  }, [handleTrayCheckForUpdates]);
+  }, [handleManualCheckForUpdates]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -6328,7 +6326,12 @@ export default function App() {
   }, [debugLogPreview]);
 
   const manualUpdateStatusNotice = manualUpdateNoticeVisible
-    ? buildManualUpdateStatusNotice(updaterChecking, updaterMessage, updaterError)
+    ? buildManualUpdateStatusNotice({
+      checking: updaterChecking,
+      error: updaterError,
+      hasAvailableUpdate: availableUpdate !== null,
+      message: updaterMessage,
+    })
     : null;
   const latestBuildStatusNotice = latestBuildNoticeVisible
     ? buildLatestBuildStatusNotice(
@@ -6912,7 +6915,7 @@ export default function App() {
               setPetModeEnabled((enabled) => !enabled);
             }}
             onCheckForUpdates={() => {
-              handleTrayCheckForUpdates();
+              handleManualCheckForUpdates();
             }}
             onFeedback={() => {
               setFeedbackModalOpen(true);
