@@ -14,6 +14,11 @@ import { normalizeClassificationRuleDetail } from "./classificationViewData";
 
 export type ClassificationCorrectionScope = "surface" | "detail";
 
+export type ClassificationCorrectionNotice = {
+  readonly kind: "success" | "error";
+  readonly message: string;
+};
+
 export type ClassificationCorrectionDraft = {
   readonly scope: ClassificationCorrectionScope;
   readonly rowId: string | null;
@@ -21,7 +26,7 @@ export type ClassificationCorrectionDraft = {
   readonly targetValue: string;
   readonly detailKind: ClassificationRuleDetailKind | null;
   readonly detailValue: string | null;
-  readonly detailDisplayLabel: string | null;
+  readonly displayLabel: string | null;
   readonly category: ActivityCategory;
   readonly productivity: ProductivityLabel;
 };
@@ -61,13 +66,13 @@ export function buildClassificationCorrectionDraft({
   scope,
   segment,
   classificationOptions,
-  detailDisplayLabel,
+  displayLabel,
 }: {
   readonly rowId: string | null;
   readonly scope: ClassificationCorrectionScope;
   readonly segment: ActivitySegment;
   readonly classificationOptions: ClassificationOptions;
-  readonly detailDisplayLabel: string | null;
+  readonly displayLabel: string | null;
 }): ClassificationCorrectionDraft | null {
   const target = classificationRuleTargetForSegment(segment);
   if (!target) return null;
@@ -82,7 +87,7 @@ export function buildClassificationCorrectionDraft({
     targetValue: urlDetail?.targetValue ?? target.targetValue,
     detailKind: detail.detailKind,
     detailValue: detail.detailValue,
-    detailDisplayLabel: scope === "detail" ? detailDisplayLabel : null,
+    displayLabel,
     category: classification.category,
     productivity: classification.productivity,
   };

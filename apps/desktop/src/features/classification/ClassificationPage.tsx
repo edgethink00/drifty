@@ -6,13 +6,12 @@ import {
   type ClassificationOptions,
   type ProductivityLabel,
 } from "@drifty/domain";
-import type { ClassificationCorrectionDraft } from "./classificationCorrection";
-import type { CSSProperties } from "react";
+import type { ClassificationCorrectionDraft, ClassificationCorrectionNotice } from "./classificationCorrection";
+import { useEffect, type CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { SettingsSelect } from "../settings/SettingsSelect";
 import { formatCompactDurationFromSeconds, formatDuration, formatTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
@@ -52,6 +51,7 @@ type ClassificationPageProps = {
   readonly expandedClassificationActivityRows: ReadonlySet<string>;
   readonly isCurrentClassificationRange: boolean;
   readonly classificationCorrectionDraft: ClassificationCorrectionDraft | null;
+  readonly classificationCorrectionNotice: ClassificationCorrectionNotice | null;
   readonly classificationCorrectionSaving: boolean;
   readonly selectedClassificationBreakdown: ClassificationCategoryBreakdown | null;
   readonly selectedClassificationSourceSummary: ClassificationSourceSummary | null;
@@ -79,6 +79,16 @@ function ClassificationEditGlyph() {
   );
 }
 
+function moveClassificationRadioValue<T>(values: readonly T[], current: T, key: string): T | null {
+  if (!values.length) return null;
+  const index = Math.max(0, values.indexOf(current));
+  if (key === "ArrowRight" || key === "ArrowDown") return values[(index + 1) % values.length] ?? current;
+  if (key === "ArrowLeft" || key === "ArrowUp") return values[(index - 1 + values.length) % values.length] ?? current;
+  if (key === "Home") return values[0] ?? current;
+  if (key === "End") return values[values.length - 1] ?? current;
+  return null;
+}
+
 export function ClassificationPage({
   appIcons,
   canShiftClassificationForward,
@@ -101,6 +111,7 @@ export function ClassificationPage({
   expandedClassificationActivityRows,
   isCurrentClassificationRange,
   classificationCorrectionDraft,
+  classificationCorrectionNotice,
   classificationCorrectionSaving,
   selectedClassificationBreakdown,
   selectedClassificationSourceSummary,
@@ -119,54 +130,118 @@ export function ClassificationPage({
   onStartClassificationSurfaceCorrection,
   onTodayClassificationRange,
 }: ClassificationPageProps) {
+  useEffect(() => {
+    if (!classificationCorrectionDraft) return;
+    const activeGroup = document.activeElement instanceof HTMLElement
+      ? document.activeElement.closest('[role="radiogroup"]')
+      : null;
+    if (!activeGroup || !activeGroup.closest('.classification-correction')) return;
+    const next = activeGroup.querySelector<HTMLButtonElement>('.classification-correction__chip[data-selected="true"]');
+    if (next && document.activeElement !== next) next.focus();
+  }, [classificationCorrectionDraft]);
+
   const renderClassificationCorrection = (placement: "surface" | "detail") => {
+
     if (!classificationCorrectionDraft) return null;
 
-    const correctionSummaryLabel = classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailKind === "siteUrl"
-      ? classificationCorrectionDraft.detailDisplayLabel ?? classificationCorrectionDraft.targetValue
-      : classificationCorrectionDraft.targetValue;
+    const correctionSummaryLabel = classificationCorrectionDraft.displayLabel ?? classificationCorrectionDraft.targetValue;
+    const categoryValues = CATEGORY_ORDER.filter((category) => category !== "unknown");
+
+    const isDetailCorrection = classificationCorrectionDraft.scope === "detail";
+    const targetLabel = classificationRuleTargetLabel(classificationCorrectionDraft.targetKind).toLowerCase();
+    const scopeDescription = isDetailCorrection
+      ? `Applies to this ${classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind).toLowerCase()} from now on.`
+      : `Applies to all future ${targetLabel} activity. Existing manual corrections stay.`;
 
     return (
       <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"} style={{ "--correction-tone": CATEGORY_COLORS[classificationCorrectionDraft.category] } as CSSProperties}>
-        <div className="classification-correction__summary">
-          <span className="classification-correction__summary-eyebrow label-mono">
-            <span className="classification-correction__summary-dot" aria-hidden="true" />
-            {classificationCorrectionDraft.scope === "detail" ? "Reclassify detail" : `Reclassify ${classificationRuleTargetLabel(classificationCorrectionDraft.targetKind).toLowerCase()}`}
-          </span>
-          <strong title={correctionSummaryLabel}>{correctionSummaryLabel}</strong>
-          {classificationCorrectionDraft.scope === "detail" && classificationCorrectionDraft.detailValue ? (
-            <p className="classification-correction__detail-value">{classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind)}: {classificationCorrectionDraft.detailValue}</p>
+        <div className="classification-correction__identity">
+          <p>{scopeDescription}</p>
+          {isDetailCorrection && classificationCorrectionDraft.detailValue && classificationCorrectionDraft.detailValue !== correctionSummaryLabel ? (
+            <span className="classification-correction__match">{classificationCorrectionDraft.detailValue}</span>
           ) : null}
         </div>
-        <div className="classification-correction__fields">
-          <label className="classification-correction__field">
-            <span className="label-mono">Category</span>
-            <SettingsSelect
-              ariaLabel="Category"
-              className="classification-correction__picker"
-              value={classificationCorrectionDraft.category}
-              options={CATEGORY_ORDER.map((category) => ({ value: category, label: categoryLabel(category), accentColor: CATEGORY_COLORS[category] }))}
-              onChange={onClassificationCorrectionCategoryChange}
-            />
-          </label>
-          <label className="classification-correction__field">
-            <span className="label-mono">Productivity</span>
-            <SettingsSelect
-              ariaLabel="Productivity"
-              className="classification-correction__picker"
-              value={classificationCorrectionDraft.productivity}
-              options={PRODUCTIVITY_ORDER.map((productivity) => ({ value: productivity, label: productivityLabel(productivity), accentColor: PRODUCTIVITY_COLORS[productivity] }))}
-              onChange={onClassificationCorrectionProductivityChange}
-            />
-          </label>
+        <div
+          className="classification-correction__palette"
+          role="radiogroup"
+          aria-label="Category"
+          onKeyDown={(event) => {
+            const next = moveClassificationRadioValue(categoryValues, classificationCorrectionDraft.category, event.key);
+            if (!next || next === classificationCorrectionDraft.category) return;
+            event.preventDefault();
+            onClassificationCorrectionCategoryChange(next);
+          }}
+        >
+          {categoryValues.map((category) => {
+            const selected = category === classificationCorrectionDraft.category;
+            return (
+              <button
+                key={category}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                className="classification-correction__chip"
+                data-selected={String(selected)}
+                style={{ "--chip-tone": CATEGORY_COLORS[category] } as CSSProperties}
+                onClick={() => onClassificationCorrectionCategoryChange(category)}
+              >
+                {categoryLabel(category)}
+              </button>
+            );
+          })}
         </div>
+        <div
+          className="classification-correction__productivity"
+          role="radiogroup"
+          aria-label="Productivity"
+          onKeyDown={(event) => {
+            const next = moveClassificationRadioValue(PRODUCTIVITY_ORDER, classificationCorrectionDraft.productivity, event.key);
+            if (!next || next === classificationCorrectionDraft.productivity) return;
+            event.preventDefault();
+            onClassificationCorrectionProductivityChange(next);
+          }}
+        >
+          {PRODUCTIVITY_ORDER.map((productivity) => {
+            const selected = productivity === classificationCorrectionDraft.productivity;
+            return (
+              <button
+                key={productivity}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                className="classification-correction__chip"
+                data-selected={String(selected)}
+                style={{ "--chip-tone": PRODUCTIVITY_COLORS[productivity] } as CSSProperties}
+                onClick={() => onClassificationCorrectionProductivityChange(productivity)}
+              >
+                {productivityLabel(productivity)}
+              </button>
+            );
+          })}
+        </div>
+        {classificationCorrectionNotice?.kind === "error" ? (
+          <div className="classification-correction__notice classification-correction__notice--error" role="alert">
+            <span>{classificationCorrectionNotice.message}</span>
+          </div>
+        ) : null}
         <div className="classification-correction__actions">
-          <button type="button" className="classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>Cancel</button>
-          <button type="button" className="classification-correction__save-button" onClick={onSaveClassificationCorrection} disabled={classificationCorrectionSaving}>{classificationCorrectionSaving ? "Saving..." : "Save correction"}</button>
+          <button type="button" className="app-btn app-btn--quiet app-btn--compact classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>Cancel</button>
+          <button type="button" className="app-btn app-btn--secondary app-btn--compact classification-correction__save-button" onClick={onSaveClassificationCorrection} disabled={classificationCorrectionSaving}>
+            {classificationCorrectionSaving ? <span className="classification-correction__spinner" aria-hidden="true" /> : null}
+            {classificationCorrectionSaving ? "Applying" : "Apply"}
+          </button>
         </div>
       </div>
     );
   };
+
+  const renderCorrectionNotice = () => classificationCorrectionNotice?.kind === "success" ? (
+    <div className="classification-correction-result" role="status">
+      {classificationCorrectionNotice.message}
+    </div>
+  ) : null;
   const firstSource = classificationSourceSummaries[0];
   const firstSourceKey = firstSource ? classifySourceKey(firstSource) : null;
   const alternateRange: ClassificationRange = classificationRange === "Day" ? "Week" : "Day";
@@ -219,6 +294,8 @@ export function ClassificationPage({
         </div>
         <div className="clf-stat"><span className="eyebrow">Quality</span><strong>{classificationQualityPercent}%</strong></div>
       </div>
+
+      {classificationCategoryBreakdowns.length === 0 && !classificationCorrectionDraft ? renderCorrectionNotice() : null}
 
       {classificationCategoryBreakdowns.length > 0 ? (
         <section className="classification-panel-view" aria-label="Classification panel view" style={classificationPanelStyle}>
@@ -344,9 +421,16 @@ export function ClassificationPage({
                   <header className="classification-panel-view__panel-header panel-header">
                     <div className="panel-header__left">
                       <span className="label-mono">Activity details</span>
-                      <strong className="panel-header__title">
-                        {selectedClassificationSourceSummary.label}
-                      </strong>
+                      <div className="classification-panel-view__detail-title">
+                        <span className="classification-panel-view__detail-icon">
+                          {selectedClassificationSourceSummary.usageKind === "site" && selectedClassificationSourceSummary.siteDomain
+                            ? <SiteFavicon domain={selectedClassificationSourceSummary.siteDomain} size={22} fallbackIconSrc={appIcons[selectedClassificationSourceSummary.appName] ?? null} />
+                            : <AppGlyph appName={selectedClassificationSourceSummary.usageKind === "site" ? selectedClassificationSourceSummary.label : selectedClassificationSourceSummary.appName} iconSrc={appIcons[selectedClassificationSourceSummary.appName] ?? null} size="sm" />}
+                        </span>
+                        <strong className="panel-header__title">
+                          {selectedClassificationSourceSummary.label}
+                        </strong>
+                      </div>
                     </div>
                     <div className="panel-header__right classification-panel-view__detail-header-actions">
                       <div className="classification-panel-view__detail-meta">
@@ -357,7 +441,7 @@ export function ClassificationPage({
                       </div>
                       <button
                         type="button"
-                        className="classification-correction__surface-button"
+                        className="app-btn app-btn--quiet app-btn--compact classification-correction__surface-button"
                         aria-label={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
                         title={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
                         aria-expanded={classificationCorrectionDraft?.scope === "surface"}
@@ -370,6 +454,7 @@ export function ClassificationPage({
                     </div>
                   </header>
                   {classificationCorrectionDraft?.scope === "surface" ? renderClassificationCorrection("surface") : null}
+                  {!classificationCorrectionDraft ? renderCorrectionNotice() : null}
                   </div>
                   <div className="classification-panel-view__panel-body">
                     <div className="classification-panel-view__list" role="list">
@@ -413,7 +498,7 @@ export function ClassificationPage({
                               )}
                               <button
                                 type="button"
-                                className="classification-correction__detail-button"
+                                className="app-btn app-btn--quiet app-btn--compact classification-correction__detail-button"
                                 aria-label={`Correct this detail: ${row.label}`}
                                 title={`Correct this detail: ${row.label}`}
                                 aria-expanded={classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id}

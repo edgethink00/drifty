@@ -108,7 +108,7 @@ describe("Settings content styles", () => {
     const styles = readAppStyles();
     const modeControlRule = cssRule(styles, ".classification-rule-mode-control");
     const selectedUrlRule = cssRule(styles, ".classification-rule-selected--url");
-    const correctionDetailRule = cssRule(styles, ".classification-correction__summary .classification-correction__detail-value");
+    const correctionDetailRule = cssRule(styles, ".classification-correction__match");
 
     expect(modeControlRule).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
     expect(modeControlRule).toContain("width: 100%;");

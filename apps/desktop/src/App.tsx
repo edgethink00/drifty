@@ -282,7 +282,7 @@ import { LocalizationProvider, useLocalizationController } from "./features/loca
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
-import { CATEGORY_COLORS } from "./lib/activityLabels";
+import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
@@ -312,7 +312,7 @@ import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
 import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
-import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, type ClassificationCorrectionDraft, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
+import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, type ClassificationCorrectionDraft, type ClassificationCorrectionNotice, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
 import { captureCorrectionEvidence } from "./features/classification/correctionEvidence";
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
@@ -485,6 +485,7 @@ export default function App() {
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
   const [classificationCorrectionDraft, setClassificationCorrectionDraft] = useState<ClassificationCorrectionDraft | null>(null);
+  const [classificationCorrectionNotice, setClassificationCorrectionNotice] = useState<ClassificationCorrectionNotice | null>(null);
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const {
@@ -2329,6 +2330,11 @@ export default function App() {
     }
   }
   function startClassificationCorrection(scope: ClassificationCorrectionScope, rowId: string | null = null) {
+    if (classificationCorrectionDraft?.scope === scope && classificationCorrectionDraft.rowId === rowId) {
+      setClassificationCorrectionDraft(null);
+      setClassificationCorrectionNotice(null);
+      return;
+    }
     const sourceRow = rowId ? classificationActivityRows.find((row) => row.id === rowId) ?? null : null;
     const sourceSegment = sourceRow?.segments[0]
       ?? (rowId ? null : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null);
@@ -2338,9 +2344,10 @@ export default function App() {
       scope,
       segment: sourceSegment,
       classificationOptions,
-      detailDisplayLabel: sourceRow?.label ?? null,
+      displayLabel: sourceRow?.label ?? selectedClassificationSourceSummary?.label ?? null,
     });
     if (!draft) return;
+    setClassificationCorrectionNotice(null);
     setClassificationCorrectionDraft(draft);
     if (scope === "detail" && rowId) {
       setExpandedClassificationActivityRows((current) => {
@@ -2352,6 +2359,7 @@ export default function App() {
   }
 
   function updateClassificationCorrectionDraft(next: Partial<Pick<ClassificationCorrectionDraft, "category" | "productivity">>) {
+    setClassificationCorrectionNotice(null);
     setClassificationCorrectionDraft((current) => current ? { ...current, ...next } : current);
   }
 
@@ -2371,20 +2379,15 @@ export default function App() {
       confidence: 1,
     };
 
+    setClassificationCorrectionNotice(null);
     setClassificationCorrectionSaving(true);
+    let ruleSaved = false;
     try {
       let feedbackSegment: ActivitySegment | null = null;
       if (draft.scope === "detail" && draft.rowId) {
         const row = classificationActivityRows.find((item) => item.id === draft.rowId) ?? null;
-        const classifiedAt = new Date().toISOString();
         if (row && row.segments.length > 0) {
           feedbackSegment = row.segments[row.segments.length - 1] ?? null;
-          await trackerClient.saveClassifications(row.segments.map((segment) => buildClassificationCorrectionRecord({
-            category: draft.category,
-            classifiedAt,
-            productivity: draft.productivity,
-            segment,
-          })));
         }
       } else {
         feedbackSegment = [...segmentsRef.current].reverse().find((segment) => (
@@ -2395,30 +2398,62 @@ export default function App() {
       }
 
       const saved = await saveClassificationRule(ruleInput);
-      if (saved) {
-        if (feedbackSegment) {
-          const feedback = {
-            kind: "manual_correction" as const,
-            segment: feedbackSegment,
-            correctedCategory: draft.category,
-            correctedProductivity: draft.productivity,
-            occurredAt: new Date().toISOString(),
-          };
-          await captureCorrectionEvidence({
-            feedback,
-            correctionScope: draft.scope,
-            contextSegments: segmentsRef.current,
-            classificationOptions,
-          }).catch((error) => console.warn("Unable to capture classification correction evidence.", error));
-          void learnLivingSoulFromFeedback({
-            feedback,
-            contextSegments: segmentsRef.current,
-            provider: currentSoulLearningProvider(localAiClassificationOptions, canUseCloudAiClassification),
-          }).catch((error) => console.warn("Unable to learn from classification correction.", error));
-        }
-        setClassificationCorrectionDraft(null);
-        await refresh(selectedDayRef.current);
+      if (!saved) {
+        setClassificationCorrectionNotice({
+          kind: "error",
+          message: "We couldn’t finish applying this correction. Your choices are still here, so you can try again.",
+        });
+        return;
       }
+      ruleSaved = true;
+
+      if (draft.scope === "detail" && draft.rowId) {
+        const row = classificationActivityRows.find((item) => item.id === draft.rowId) ?? null;
+        if (row && row.segments.length > 0) {
+          const classifiedAt = new Date().toISOString();
+          await trackerClient.saveClassifications(row.segments.map((segment) => buildClassificationCorrectionRecord({
+            category: draft.category,
+            classifiedAt,
+            productivity: draft.productivity,
+            segment,
+          })));
+        }
+      }
+
+      if (feedbackSegment) {
+        const feedback = {
+          kind: "manual_correction" as const,
+          segment: feedbackSegment,
+          correctedCategory: draft.category,
+          correctedProductivity: draft.productivity,
+          occurredAt: new Date().toISOString(),
+        };
+        await captureCorrectionEvidence({
+          feedback,
+          correctionScope: draft.scope,
+          contextSegments: segmentsRef.current,
+          classificationOptions,
+        }).catch((error) => console.warn("Unable to capture classification correction evidence.", error));
+        void learnLivingSoulFromFeedback({
+          feedback,
+          contextSegments: segmentsRef.current,
+          provider: currentSoulLearningProvider(localAiClassificationOptions, canUseCloudAiClassification),
+        }).catch((error) => console.warn("Unable to learn from classification correction.", error));
+      }
+      setClassificationCorrectionDraft(null);
+      setClassificationCorrectionNotice({
+        kind: "success",
+        message: `${draft.displayLabel ?? draft.targetValue} is now ${categoryLabel(draft.category)} · ${productivityLabel(draft.productivity)}.`,
+      });
+      await refresh(selectedDayRef.current);
+    } catch (nextError) {
+      console.warn("Unable to finish classification correction.", toErrorMessage(nextError));
+      setClassificationCorrectionNotice({
+        kind: "error",
+        message: ruleSaved
+          ? "The rule was saved, but this activity couldn’t be fully updated. Try again to finish the correction."
+          : "We couldn’t save this correction. Your choices are still here, so you can try again.",
+      });
     } finally {
       setClassificationCorrectionSaving(false);
     }
@@ -5520,7 +5555,14 @@ export default function App() {
     if (activeTab !== "classification") return;
     setExpandedClassificationActivityRows(new Set());
     setClassificationCorrectionDraft(null);
-  }, [activeTab, classificationRange, selectedDay, effectiveClassifyCategoryId, effectiveClassifySourceId]);
+    setClassificationCorrectionNotice(null);
+  }, [activeTab, classificationRange, selectedDay]);
+  useEffect(() => {
+    if (activeTab !== "classification") return;
+    setExpandedClassificationActivityRows(new Set());
+    setClassificationCorrectionDraft(null);
+    setClassificationCorrectionNotice(null);
+  }, [activeTab, effectiveClassifyCategoryId, effectiveClassifySourceId]);
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
@@ -6999,6 +7041,7 @@ export default function App() {
             expandedClassificationActivityRows={expandedClassificationActivityRows}
             isCurrentClassificationRange={isCurrentClassificationRange}
             classificationCorrectionDraft={classificationCorrectionDraft}
+            classificationCorrectionNotice={classificationCorrectionNotice}
             classificationCorrectionSaving={classificationCorrectionSaving}
             selectedClassificationBreakdown={selectedClassificationBreakdown}
             selectedClassificationSourceSummary={selectedClassificationSourceSummary}
@@ -7015,7 +7058,10 @@ export default function App() {
               setClassifySelectedCategoryId(category);
               setClassifySelectedSourceId(null);
             }}
-            onCancelClassificationCorrection={() => setClassificationCorrectionDraft(null)}
+            onCancelClassificationCorrection={() => {
+              setClassificationCorrectionDraft(null);
+              setClassificationCorrectionNotice(null);
+            }}
             onClassificationCorrectionCategoryChange={(category) => updateClassificationCorrectionDraft({ category })}
             onClassificationCorrectionProductivityChange={(productivity) => updateClassificationCorrectionDraft({ productivity })}
             onNextClassificationRange={() => {
