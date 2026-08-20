@@ -205,7 +205,7 @@ import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
-import { DRIFT_ALARM_PREVIEW_OPTIONS, buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
+import { buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
@@ -279,7 +279,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistWeekDashboardAxisScalePercent, resetDemoDashboardReplaySettings, resetWeekDashboardAxisScalePercent, resolveEffectiveWeekDashboardAxisScalePercent, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, resolveInitialWeekDashboardAxisScalePercent } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS } from "./lib/activityLabels";
@@ -423,7 +423,6 @@ export default function App() {
     readContextualGuardAuditEvents();
   }, []);
   const contentRef = useRef<HTMLElement>(null);
-  const endOfDayReviewSettingsRowRef = useRef<HTMLDivElement>(null);
   const autoUpdateLaunchCheckScheduledRef = useRef(false);
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
@@ -525,7 +524,6 @@ export default function App() {
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
-  const [weekDashboardAxisScalePercent, setWeekDashboardAxisScalePercent] = useState(resolveInitialWeekDashboardAxisScalePercent);
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
   const [companionMenuBarDisplayMode, setCompanionMenuBarDisplayMode] = useState(resolveInitialCompanionMenuBarDisplayMode);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
@@ -605,7 +603,6 @@ export default function App() {
     if (typeof client.updateTrayIconStyle !== "function") return;
     void client.updateTrayIconStyle(iconStyle).catch(() => undefined);
   }, [effectiveCompanionSurfacePolicy]);
-  const effectiveWeekDashboardAxisScalePercent = resolveEffectiveWeekDashboardAxisScalePercent(isDevModeActive, weekDashboardAxisScalePercent);
   // Project classification is a Dev-mode preview control (opt-in, off by default):
   // the Dev-settings toggle is the sole gate, so it is available in any build —
   // including public/prerelease binaries — only after the user turns it on.
@@ -635,8 +632,6 @@ export default function App() {
     petModeEnabled,
     petModeCoat,
     petModeSize,
-    handleWatcherPeriodicMaxChange,
-    handleWatcherPeriodicMinChange,
     setDriftAlertDelaySeconds,
     setDriftAlarmCopy,
     setDriftAlertsEnabled,
@@ -644,8 +639,6 @@ export default function App() {
     setPetModeEnabled,
     setPetModeCoat,
     setPetModeSize,
-    setWatcherMode,
-    setWatcherPeekEnabled,
     watcherMode,
     watcherPeekEnabled,
     watcherPeriodicMaxMinutes,
@@ -855,14 +848,6 @@ export default function App() {
   function handleResetDemoDashboardReplaySettings() {
     stopDashboardDemoReplay();
     setDemoDashboardReplaySettings(resetDemoDashboardReplaySettings());
-  }
-
-  function handleWeekDashboardAxisScalePercentChange(scalePercent: number) {
-    setWeekDashboardAxisScalePercent(persistWeekDashboardAxisScalePercent(scalePercent));
-  }
-
-  function handleResetWeekDashboardAxisScalePercent() {
-    setWeekDashboardAxisScalePercent(resetWeekDashboardAxisScalePercent());
   }
 
   const navigateBack = useCallback(() => {
@@ -1467,7 +1452,6 @@ export default function App() {
   const endOfDayReviewQueryPreviewShownRef = useRef(false);
   const endOfDayReviewAutomaticInFlightRef = useRef(false);
   const endOfDayReviewLastPresentedAtRef = useRef<number | null>(null);
-  const shouldFocusEndOfDayReviewSettingsRef = useRef(false);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
@@ -1633,7 +1617,6 @@ export default function App() {
 
     setDriftAlarmTrayStatus(nextStatus);
   }, [driftAlertsEnabled, isDevModeActive, status?.running]);
-  const driftAlarmPreviewCounterRef = useRef(0);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
@@ -1920,22 +1903,6 @@ export default function App() {
       if (pendingEvent) showDriftAlarm(pendingEvent);
     });
   }, [clearDriftAlarmEvent, companionUsesMomentSurface]);
-
-  const previewDriftAlarm = useCallback((option: typeof DRIFT_ALARM_PREVIEW_OPTIONS[number]) => {
-    driftAlarmPreviewCounterRef.current += 1;
-    showDriftAlarm(buildDriftAlarmEvent({
-      id: `drift-alarm-preview-${option.id}-${Date.now()}-${driftAlarmPreviewCounterRef.current}`,
-      contextLabel: option.contextLabel,
-      driftDurationSeconds: option.driftDurationSeconds,
-      preservedFocusStrikeSeconds: option.preservedFocusStrikeSeconds,
-      generatedAt: new Date().toISOString(),
-      focusTargets: availableDriftAlarmFocusTargets,
-      sourceSiteDomain: option.sourceSiteDomain,
-      sourceAppName: option.sourceAppName,
-      sourceIconSrc: option.sourceIconSrc,
-      copySettings: driftAlarmCopy,
-    }));
-  }, [availableDriftAlarmFocusTargets, driftAlarmCopy, showDriftAlarm]);
 
   const previewCompanionMilestone = useCallback((previewId: CompanionMilestonePreviewId) => {
     void showNativeCompanionMilestone(buildCompanionMilestonePreview(previewId))
@@ -3248,16 +3215,6 @@ export default function App() {
   useEffect(() => { watcherEventRef.current = watcherEvent; }, [watcherEvent]);
 
   useEffect(() => () => clearWatcherRecoveryTimer(), [clearWatcherRecoveryTimer]);
-
-  useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "dev") return;
-    if (!shouldFocusEndOfDayReviewSettingsRef.current) return;
-
-    shouldFocusEndOfDayReviewSettingsRef.current = false;
-    const row = endOfDayReviewSettingsRowRef.current;
-    if (typeof row?.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
-    row?.focus();
-  }, [activeTab, settingsSection]);
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
@@ -6984,7 +6941,6 @@ export default function App() {
             weekRows={weekRows}
             weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
             weekCurrentMinuteOfDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveCurrentMinuteOfDay : null}
-            weekDashboardAxisScalePercent={effectiveWeekDashboardAxisScalePercent}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}
@@ -7413,7 +7369,6 @@ export default function App() {
                     sidebarCtaPreviewCase={sidebarCtaPreviewCase}
                     demoDashboardReplaySettings={demoDashboardReplaySettings}
                     projectPassRuns={projectClassification.passRuns}
-                    endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
                     enhancedContextSettings={effectiveEnhancedContextSettings}
                     forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
                     forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
@@ -7426,16 +7381,11 @@ export default function App() {
                     petModeEnabled={petModeEnabled}
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
-                    weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
                     floatingCompanionDevEnabled={floatingCompanionDevEnabled}
                     onFloatingCompanionDevEnabledChange={handleFloatingCompanionDevEnabledChange}
                     onPreviewCompanionMilestone={previewCompanionMilestone}
                     onPreviewCompanionMoment={previewCompanionMoment}
                     onPreviewCompanionDayReview={handleEndOfDayReviewPreview}
-                    watcherMode={watcherMode}
-                    watcherPeekEnabled={watcherPeekEnabled}
-                    watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
-                    watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
                     preReleaseUpdateStatus={developerPreReleaseUpdateController.status}
                     preReleaseUpdateMessage={developerPreReleaseUpdateController.message}
                     preReleaseUpdateError={developerPreReleaseUpdateController.error}
@@ -7446,7 +7396,6 @@ export default function App() {
                     onSidebarCtaPreviewCaseChange={setSidebarCtaPreviewCase}
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
                     onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
-                    onEndOfDayReviewPreview={handleEndOfDayReviewPreview}
                     onEnhancedContextCaptureLocalChange={handleEnhancedContextCaptureLocalChange}
                     onEnhancedContextDebugLoggingChange={handleEnhancedContextDebugLoggingChange}
                     onEnhancedContextEnabledChange={handleEnhancedContextEnabledChange}
@@ -7509,16 +7458,8 @@ export default function App() {
                     onTeamsBetaChange={setTeamsBetaEnabled}
                     onProfileBetaChange={setProfileBetaEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}
-                    onPreviewDriftAlarm={previewDriftAlarm}
                     onReplayDashboardDemo={handleStartDashboardDemoReplay}
                     onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}
-                    onResetWeekDashboardAxisScalePercent={handleResetWeekDashboardAxisScalePercent}
-                    onShowWatcherPeek={showWatcherPeek}
-                    onWeekDashboardAxisScalePercentChange={handleWeekDashboardAxisScalePercentChange}
-                    onWatcherModeChange={setWatcherMode}
-                    onWatcherPeekEnabledChange={setWatcherPeekEnabled}
-                    onWatcherPeriodicMaxChange={handleWatcherPeriodicMaxChange}
-                    onWatcherPeriodicMinChange={handleWatcherPeriodicMinChange}
                   />
                 )}
             </div>

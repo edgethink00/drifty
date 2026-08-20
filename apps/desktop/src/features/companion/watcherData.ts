@@ -30,8 +30,6 @@ export const WATCHER_PERIODIC_MAX_STORAGE_KEY = "drifty.companion.periodicMaxMin
 
 export const WATCHER_RESPONSE_STORAGE_KEY = "drifty.companion.watcherResponses";
 
-export const WATCHER_PEEK_SETTINGS_VISIBLE = false;
-
 export const DEFAULT_WATCHER_PERIODIC_RANGE_MINUTES = { min: 10, max: 30 };
 
 export const WATCHER_PERIODIC_MIN_LIMIT_MINUTES = 10;

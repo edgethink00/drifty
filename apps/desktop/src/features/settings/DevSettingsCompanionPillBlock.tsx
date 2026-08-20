@@ -39,13 +39,6 @@ export function DevSettingsCompanionPillBlock({
       </div>
       <div className="settings-row settings-row--companion-previews">
         <div>
-          <div className="lbl">Day review</div>
-          <div className="desc">V3 is final: work hours and productivity mix stay in the passing card; deeper detail opens in See full day.</div>
-        </div>
-        <div className="ctrl"><span className="settings-beta-badge">V3 final</span></div>
-      </div>
-      <div className="settings-row settings-row--companion-previews">
-        <div>
           <div className="lbl">Celebration previews</div>
           <div className="desc">
             Fire the real milestone event. With Companion off, it appears as a standalone alert.

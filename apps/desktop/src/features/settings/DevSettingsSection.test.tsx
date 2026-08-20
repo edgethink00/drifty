@@ -36,7 +36,6 @@ vi.mock("../../appFeatureSwitches", () => ({
     return featureSwitches.demoDashboardReplayDevToolEnabled;
   },
   DEVELOPER_PRE_RELEASE_UPDATES_ENABLED: false,
-  DRIFT_ALARM_PANEL_PREVIEWS_ENABLED: false,
   END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED: false,
   REPLAY_ONBOARDING_DEV_TOOL_ENABLED: false,
 }));
@@ -107,7 +106,7 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("radiogroup", { name: "Pet size" })).toBeNull();
 
     cleanup();
-    const enabledProps = renderProductionDevSettings(75, { petModeEnabled: true });
+    const enabledProps = renderProductionDevSettings({ petModeEnabled: true });
     fireEvent.click(screen.getByRole("button", { name: /Intervention/ }));
     expect(enabledProps.onPreviewPetModeIntervention).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Stretch Flow Stretch C/ }));
@@ -127,7 +126,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("shows the real pet phase and prevents overlapping Lab actions", async () => {
-    renderProductionDevSettings(75, { petModeEnabled: true });
+    renderProductionDevSettings({ petModeEnabled: true });
     await act(async () => undefined);
 
     act(() => {
@@ -149,7 +148,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("keeps the floating Companion behind an explicit Dev toggle", () => {
-    const props = renderProductionDevSettings(75, { floatingCompanionDevEnabled: false });
+    const props = renderProductionDevSettings({ floatingCompanionDevEnabled: false });
 
     expect(screen.getByText(/production uses the menu-bar Companion/i)).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Floating" })).toBeNull();
@@ -201,10 +200,11 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("radiogroup", { name: "Menu bar display" })).toBeNull();
   });
 
-  it("locks the Companion Day review to final V3", () => {
+  it("keeps the Companion Day review as a moment preview without a version picker", () => {
     renderProductionDevSettings();
 
-    expect(screen.getByText("V3 final")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Day review" })).toBeTruthy();
+    expect(screen.queryByText("V3 final")).toBeNull();
     expect(screen.queryByRole("radio", { name: "Full" })).toBeNull();
     expect(screen.queryByRole("radio", { name: "V2" })).toBeNull();
   });
@@ -225,7 +225,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("shows pre-release update status and disables the check while busy", () => {
-    renderProductionDevSettings(75, {
+    renderProductionDevSettings({
       preReleaseUpdateStatus: "checking" as const,
       preReleaseUpdateMessage: "Checking latest build...",
       preReleaseUpdateBusy: true,
@@ -239,7 +239,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("calls the browser history fallback handler when toggled", () => {
-    const props = renderProductionDevSettings(80);
+    const props = renderProductionDevSettings();
     fireEvent.click(screen.getByRole("button", { name: /^AX fallback diagnostics/ }));
     fireEvent.click(screen.getByRole("switch", { name: "Force browser history URL fallback" }));
 
@@ -247,7 +247,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("does not expose the isolated onboarding v2.1 preview", () => {
-    renderProductionDevSettings(80);
+    renderProductionDevSettings();
 
     expect(screen.queryByText(/^Onboarding v2\.1 preview$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
@@ -280,21 +280,11 @@ describe("DevSettingsSection", () => {
     expect(props.onResetDemoDashboardReplaySettings).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Your Week y-axis scale slider relative to the compressed default", () => {
-    const props = renderProductionDevSettings();
-    const scaleInput = screen.getByLabelText("Your Week y-axis scale percent");
+  it("does not expose the retired Week y-axis scale control", () => {
+    renderProductionDevSettings();
 
-    fireEvent.change(scaleInput, { target: { value: "120" } });
-
-    expect(screen.getByRole("heading", { name: "Dashboard layout" })).toBeTruthy();
-    expect(screen.getByText("Your Week y-axis scale")).toBeTruthy();
-    expect(screen.getByLabelText("Current Your Week y-axis scale").textContent).toBe("100%");
-    expect(scaleInput.getAttribute("min")).toBe("60");
-    expect(scaleInput.getAttribute("max")).toBe("140");
-    expect(scaleInput.getAttribute("step")).toBe("1");
-    expect(scaleInput.getAttribute("value")).toBe("100");
-    expect(screen.getByRole("button", { name: "Reset" }).getAttribute("disabled")).toBe("");
-    expect(props.onWeekDashboardAxisScalePercentChange).toHaveBeenCalledWith(90);
+    expect(screen.queryByRole("heading", { name: "Dashboard layout" })).toBeNull();
+    expect(screen.queryByLabelText("Your Week y-axis scale percent")).toBeNull();
   });
 
   it("keeps the project classification diagnostics in the Dev section without an enable toggle", () => {

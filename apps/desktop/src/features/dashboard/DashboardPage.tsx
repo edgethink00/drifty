@@ -75,7 +75,6 @@ type DashboardPageProps = {
   readonly weekRows: WeekDayRow[];
   readonly weekCurrentCalendarDay: string | null;
   readonly weekCurrentMinuteOfDay: number | null;
-  readonly weekDashboardAxisScalePercent?: number;
   readonly onDismissDashboardAiRecovery: () => void;
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
@@ -128,7 +127,6 @@ export function DashboardPage({
   weekRows,
   weekCurrentCalendarDay,
   weekCurrentMinuteOfDay,
-  weekDashboardAxisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
   onDismissDashboardAiRecovery,
   onFlowIntervalChange,
   onOpenDashboardAiSetup,
@@ -289,7 +287,7 @@ export function DashboardPage({
           startOfDayMinutes={startOfDayMinutes}
           currentCalendarDay={weekCurrentCalendarDay ?? undefined}
           currentMinuteOfDay={weekCurrentMinuteOfDay ?? undefined}
-          axisScalePercent={weekDashboardAxisScalePercent}
+          axisScalePercent={WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT}
           sideOpen={breakdownOpen}
           onToggleSide={toggleBreakdown}
         />

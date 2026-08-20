@@ -1,18 +1,15 @@
-import { useEffect, useState, type ChangeEvent, type RefObject } from "react";
+import { useEffect, useState } from "react";
 import { Toggle } from "../../components/Toggle";
-import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
+import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
 import { SIDEBAR_CTA_PREVIEW_OPTIONS, type SidebarCtaPreviewCase } from "../sidebar/sidebarCtaSlotPreview";
-import { WATCHER_PEEK_SETTINGS_VISIBLE, type WatcherMode } from "../companion/watcherData";
 import { formatDayLabel } from "../../lib/formatting";
 import { type DemoDashboardReplayKind, DashboardDemoReplayControls } from "./DashboardDemoReplayControls";
-import { DevPreviewControls, type DriftAlarmPreviewOption } from "./DevPreviewControls";
 import type { AiReviewEvent, ProjectPassRun } from "@drifty/domain";
 import type { DemoDashboardReplaySettings } from "./settingsStorage";
 import type { PreReleaseUpdateStatus } from "../updates/useDeveloperPreReleaseUpdateController";
 import { PreReleaseUpdatesSettingsRow } from "./PreReleaseUpdatesSettingsRow";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
-import { DevSettingsDashboardLayoutBlock } from "./DevSettingsDashboardLayoutBlock";
 import { DevSettingsDeviceSyncBlock } from "./DevSettingsDeviceSyncBlock";
 import { DevSettingsCompanionPillBlock } from "./DevSettingsCompanionPillBlock";
 import { DevSettingsAxFallbackCard, DevSettingsDebugLogsBlock } from "./DevSettingsDiagnosticsBlock";
@@ -36,7 +33,6 @@ type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
   readonly sidebarCtaPreviewCase: SidebarCtaPreviewCase | null;
   readonly demoDashboardReplaySettings?: DemoDashboardReplaySettings;
-  readonly endOfDayReviewSettingsRowRef: RefObject<HTMLDivElement>;
   readonly enhancedContextSettings: EnhancedContextSettings;
   readonly forceBrowserHistoryUrlFallbackEnabled: boolean;
   readonly forceChromiumAxCaptureEnabled: boolean;
@@ -50,16 +46,11 @@ type DevSettingsSectionProps = {
   readonly petModeEnabled: boolean;
   readonly petModeLabPointerStatus: string | null;
   readonly petModeLabInputBounds: string | null;
-  readonly weekDashboardAxisScalePercent: number;
   readonly floatingCompanionDevEnabled: boolean;
   readonly onFloatingCompanionDevEnabledChange: (enabled: boolean) => void;
   readonly onPreviewCompanionMilestone: (previewId: CompanionMilestonePreviewId) => void;
   readonly onPreviewCompanionMoment: (previewId: CompanionMomentPreviewId) => void;
   readonly onPreviewCompanionDayReview: () => void;
-  readonly watcherMode: WatcherMode;
-  readonly watcherPeekEnabled: boolean;
-  readonly watcherPeriodicMaxMinutes: number;
-  readonly watcherPeriodicMinMinutes: number;
   readonly preReleaseUpdateStatus: PreReleaseUpdateStatus;
   readonly preReleaseUpdateMessage: string | null;
   readonly preReleaseUpdateError: string | null;
@@ -70,7 +61,6 @@ type DevSettingsSectionProps = {
   readonly onSidebarCtaPreviewCaseChange: (previewCase: SidebarCtaPreviewCase | null) => void;
   readonly onDemoDashboardReplayDurationSecondsChange?: (value: number) => void;
   readonly onDemoDashboardReplayPreRollSecondsChange?: (value: number) => void;
-  readonly onEndOfDayReviewPreview: () => void;
   readonly onEnhancedContextCaptureLocalChange: (enabled: boolean) => void;
   readonly onEnhancedContextDebugLoggingChange: (enabled: boolean) => void;
   readonly onEnhancedContextEnabledChange: (enabled: boolean) => void;
@@ -100,16 +90,8 @@ type DevSettingsSectionProps = {
   readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onProfileBetaChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
-  readonly onPreviewDriftAlarm: (option: DriftAlarmPreviewOption) => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
-  readonly onResetWeekDashboardAxisScalePercent: () => void;
-  readonly onShowWatcherPeek: (force?: boolean) => void;
-  readonly onWeekDashboardAxisScalePercentChange: (scalePercent: number) => void;
-  readonly onWatcherModeChange: (mode: WatcherMode) => void;
-  readonly onWatcherPeekEnabledChange: (enabled: boolean) => void;
-  readonly onWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
-  readonly onWatcherPeriodicMinChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
 export function DevSettingsSection({
@@ -117,7 +99,6 @@ export function DevSettingsSection({
   dashboardAiUnavailablePreviewCase,
   sidebarCtaPreviewCase,
   demoDashboardReplaySettings,
-  endOfDayReviewSettingsRowRef,
   enhancedContextSettings,
   forceBrowserHistoryUrlFallbackEnabled,
   forceChromiumAxCaptureEnabled,
@@ -131,16 +112,11 @@ export function DevSettingsSection({
   petModeEnabled,
   petModeLabPointerStatus,
   petModeLabInputBounds,
-  weekDashboardAxisScalePercent,
   floatingCompanionDevEnabled,
   onFloatingCompanionDevEnabledChange,
   onPreviewCompanionMilestone,
   onPreviewCompanionMoment,
   onPreviewCompanionDayReview,
-  watcherMode,
-  watcherPeekEnabled,
-  watcherPeriodicMaxMinutes,
-  watcherPeriodicMinMinutes,
   preReleaseUpdateStatus,
   preReleaseUpdateMessage,
   preReleaseUpdateError,
@@ -151,7 +127,6 @@ export function DevSettingsSection({
   onSidebarCtaPreviewCaseChange,
   onDemoDashboardReplayDurationSecondsChange,
   onDemoDashboardReplayPreRollSecondsChange,
-  onEndOfDayReviewPreview,
   onEnhancedContextCaptureLocalChange,
   onEnhancedContextDebugLoggingChange,
   onEnhancedContextEnabledChange,
@@ -181,18 +156,9 @@ export function DevSettingsSection({
   onTeamsBetaChange,
   onProfileBetaChange,
   onPreviewDashboardAiUnavailableCase,
-  onPreviewDriftAlarm,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
-  onResetWeekDashboardAxisScalePercent,
-  onShowWatcherPeek,
-  onWeekDashboardAxisScalePercentChange,
-  onWatcherModeChange,
-  onWatcherPeekEnabledChange,
-  onWatcherPeriodicMaxChange,
-  onWatcherPeriodicMinChange,
 }: DevSettingsSectionProps) {
-  const showWatcherPeekSettings = WATCHER_PEEK_SETTINGS_VISIBLE;
   const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
 
@@ -365,11 +331,6 @@ export function DevSettingsSection({
       />
 
       {/* Dev-only tools and previews, all merged under one Dev block at the end */}
-      <DevSettingsDashboardLayoutBlock
-        weekDashboardAxisScalePercent={weekDashboardAxisScalePercent}
-        onResetWeekDashboardAxisScalePercent={onResetWeekDashboardAxisScalePercent}
-        onWeekDashboardAxisScalePercentChange={onWeekDashboardAxisScalePercentChange}
-      />
       <DevSettingsCompanionPillBlock
         floatingEnabled={floatingCompanionDevEnabled}
         onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
@@ -470,22 +431,17 @@ export function DevSettingsSection({
             ) : null}
           </div>
         </div>
-        <DevPreviewControls
-          endOfDayReviewSettingsRowRef={endOfDayReviewSettingsRowRef}
-          showWatcherPeekSettings={showWatcherPeekSettings}
-          watcherMode={watcherMode}
-          watcherPeekEnabled={watcherPeekEnabled}
-          watcherPeriodicMaxMinutes={watcherPeriodicMaxMinutes}
-          watcherPeriodicMinMinutes={watcherPeriodicMinMinutes}
-          onEndOfDayReviewPreview={onEndOfDayReviewPreview}
-          onOpenReplayOnboarding={onOpenReplayOnboarding}
-          onPreviewDriftAlarm={onPreviewDriftAlarm}
-          onShowWatcherPeek={onShowWatcherPeek}
-          onWatcherModeChange={onWatcherModeChange}
-          onWatcherPeekEnabledChange={onWatcherPeekEnabledChange}
-          onWatcherPeriodicMaxChange={onWatcherPeriodicMaxChange}
-          onWatcherPeriodicMinChange={onWatcherPeriodicMinChange}
-        />
+        {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
+          <div className="settings-row">
+            <div>
+              <div className="lbl">Replay onboarding</div>
+              <div className="desc">Open the setup flow again without clearing saved onboarding state.</div>
+            </div>
+            <div className="ctrl">
+              <button type="button" className="settings-btn" onClick={onOpenReplayOnboarding}>Open onboarding</button>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

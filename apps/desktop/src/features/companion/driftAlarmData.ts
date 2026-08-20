@@ -41,12 +41,6 @@ export const DRIFT_ALERT_DELAY_OPTIONS = [
   { value: "1800", seconds: 1800, label: "30m", detail: "After 30 minutes of drift" },
 ] as const satisfies ReadonlyArray<{ value: DriftAlertDelayValue; seconds: DriftAlertDelaySeconds; label: string; detail: string }>;
 
-export const DRIFT_ALARM_PREVIEW_OPTIONS = [
-  { id: "youtube-5m", label: "YouTube 5m", contextLabel: "youtube.com", sourceSiteDomain: "youtube.com", sourceAppName: "Google Chrome", sourceIconSrc: null, driftDurationSeconds: 5 * 60, preservedFocusStrikeSeconds: 30 * 60 },
-  { id: "x-12m", label: "X 12m", contextLabel: "x.com", sourceSiteDomain: "x.com", sourceAppName: "Google Chrome", sourceIconSrc: null, driftDurationSeconds: 12 * 60, preservedFocusStrikeSeconds: 60 * 60 },
-  { id: "no-context-1h", label: "No context 1h", contextLabel: "", sourceSiteDomain: null, sourceAppName: "Some App", sourceIconSrc: null, driftDurationSeconds: 60 * 60, preservedFocusStrikeSeconds: 2 * 60 * 60 },
-] as const;
-
 export function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIconMap): DriftAlarmFocusTarget {
   const appName = segment.appName.trim() || "Unknown app";
   const bundleId = segment.bundleId?.trim() || null;

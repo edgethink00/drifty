@@ -3,7 +3,6 @@ declare const __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__: boolean;
 declare const __DRIFTY_DEV_FORCE_ONBOARDING__: boolean;
 declare const __DRIFTY_DEV_ALLOW_ONBOARDING_AUTH_SKIP__: boolean;
 
-export const DRIFT_ALARM_PANEL_PREVIEWS_ENABLED = true;
 export const AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED = true;
 export const DEV_SETTINGS_ENABLED = true;
 export const DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED = true;

@@ -11,7 +11,6 @@ describe("app feature switches", () => {
 
     const switches = await import("./appFeatureSwitches");
 
-    expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
     expect(switches.AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED).toBe(true);
     expect(switches.DEV_SETTINGS_ENABLED).toBe(true);
     expect(switches.DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED).toBe(true);
@@ -26,7 +25,6 @@ describe("app feature switches", () => {
 
     const switches = await import("./appFeatureSwitches");
 
-    expect(switches.DRIFT_ALARM_PANEL_PREVIEWS_ENABLED).toBe(true);
     expect(switches.AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED).toBe(true);
     expect(switches.DEV_SETTINGS_ENABLED).toBe(true);
     expect(switches.DEVELOPER_PRE_RELEASE_UPDATES_ENABLED).toBe(true);

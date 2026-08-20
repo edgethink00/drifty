@@ -7,7 +7,7 @@ import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
-import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, clampWeekDashboardAxisScalePercent, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
+import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
@@ -292,7 +292,7 @@ export function WeekDashboard({
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
-  const effectiveAxisScalePercent = clampWeekDashboardAxisScalePercent(axisScalePercent);
+  const effectiveAxisScalePercent = axisScalePercent;
   const calendarHourHeight = weekDashboardAxisScalePercentToHourHeight(effectiveAxisScalePercent);
   const calendarHours = Array.from({ length: calendarEndHour - calendarStartHour }, (_, index) => calendarStartHour + index);
   const calendarRows = rows;

@@ -15,21 +15,12 @@ import {
   DEFAULT_START_OF_DAY_MINUTES,
   MENU_BAR_ICON_STYLE_STORAGE_KEY,
   START_OF_DAY_STORAGE_KEY,
-  WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
-  WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT,
-  WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT,
-  WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY,
   clampDemoDashboardReplaySettings,
-  clampWeekDashboardAxisScalePercent,
   persistDemoDashboardReplaySettings,
-  persistWeekDashboardAxisScalePercent,
   resetDemoDashboardReplaySettings,
-  resetWeekDashboardAxisScalePercent,
-  resolveEffectiveWeekDashboardAxisScalePercent,
   resolveInitialDemoDashboardReplaySettings,
   resolveInitialMenuBarIconStyle,
   resolveInitialStartOfDayMinutes,
-  resolveInitialWeekDashboardAxisScalePercent,
 } from "./settingsStorage";
 
 describe("settingsStorage existing behavior", () => {
@@ -162,42 +153,5 @@ describe("demo dashboard replay settings", () => {
     });
     expect(window.localStorage.getItem(DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY)).toBeNull();
     expect(window.localStorage.getItem(DEMO_DASHBOARD_REPLAY_DURATION_SECONDS_STORAGE_KEY)).toBeNull();
-  });
-});
-
-describe("week dashboard axis scale settings", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  it("resolves the default scale when storage is missing or malformed", () => {
-    expect(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT).toBe(75);
-    expect(WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT).toBe(45);
-    expect(WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT).toBe(105);
-
-    window.localStorage.removeItem(WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY);
-
-    expect(resolveInitialWeekDashboardAxisScalePercent()).toBe(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);
-
-    window.localStorage.setItem(WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY, "not-a-number");
-
-    expect(resolveInitialWeekDashboardAxisScalePercent()).toBe(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);
-  });
-
-  it("clamps, persists, resets, and Dev-gates the effective scale", () => {
-    expect(clampWeekDashboardAxisScalePercent(WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT - 10)).toBe(WEEK_DASHBOARD_AXIS_SCALE_MIN_PERCENT);
-    expect(clampWeekDashboardAxisScalePercent(WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT + 10)).toBe(WEEK_DASHBOARD_AXIS_SCALE_MAX_PERCENT);
-
-    const persistedScale = persistWeekDashboardAxisScalePercent(80);
-
-    expect(persistedScale).toBe(80);
-    expect(window.localStorage.getItem(WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY)).toBe("80");
-    expect(resolveEffectiveWeekDashboardAxisScalePercent(true, persistedScale)).toBe(80);
-    expect(resolveEffectiveWeekDashboardAxisScalePercent(false, persistedScale)).toBe(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);
-
-    const resetScale = resetWeekDashboardAxisScalePercent();
-
-    expect(resetScale).toBe(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);
-    expect(window.localStorage.getItem(WEEK_DASHBOARD_AXIS_SCALE_STORAGE_KEY)).toBeNull();
   });
 });
