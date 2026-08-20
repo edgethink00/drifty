@@ -67,6 +67,11 @@ export const UNIFIED_STORY_OPTIONS: ReadonlyArray<{
 type UnifiedMetrics = {
   RANK: number;
   WEEK_RANK: number;
+  RANK_IS_LIVE: boolean;
+  WEEK_RANK_IS_LIVE: boolean;
+  IS_CURRENT_PERIOD: boolean;
+  DATE_LABEL: string;
+  WEEK_LABEL: string;
   LIVE_RANK_PERCENT: number;
   RANK_PLACE: number;
   WEEK_RANK_PLACE: number;
@@ -85,11 +90,20 @@ type UnifiedMetrics = {
   TOTAL_USERS: number;
   AVG_DAILY_FOCUS_MINUTES: number;
   WEEK_DAY_MINUTES: number[];
-  categorySlices: ReadonlyArray<{ key: string; label: string; pct: number }>;
+  categorySlices: ReadonlyArray<{ key: string; label: string; pct: number; minutes: number }>;
+  productivitySlices: ReadonlyArray<{ key: string; label: string; pct: number; minutes: number }>;
 };
 
 function finiteNonNegative(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function validLiveRank(rank: ShareCardLiveRank | null | undefined): ShareCardLiveRank | null {
+  if (!rank) return null;
+  if (!Number.isFinite(rank.rank) || rank.rank < 1) return null;
+  if (!Number.isFinite(rank.participantCount) || rank.participantCount < rank.rank) return null;
+  if (!Number.isFinite(rank.topPercent) || rank.topPercent <= 0 || rank.topPercent > 100) return null;
+  return rank;
 }
 
 function percentage(value: number | null | undefined): number {
@@ -116,22 +130,33 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks): 
   const focusMinutes = minutesFromSeconds(data.focusSeconds);
   const totalMinutes = minutesFromSeconds(data.totalSeconds);
   const { focus: focusPct, neutral: neutralPct, drift: driftPct } = productivityPercentages(data);
-  const rank = liveRanks?.daily;
-  const weekRank = liveRanks?.weekly;
+  const rank = validLiveRank(liveRanks?.daily);
+  const weekRank = validLiveRank(liveRanks?.weekly);
   const hours = data.hours ?? [];
   const sessionCount = hours.filter((h) => h.focusSeconds > 10 * 60).length;
-  const slices = (data.slices ?? []).slice(0, 4).map((s) => ({
+  const categorySlices = (data.slices ?? []).slice(0, 5).map((s) => ({
     key: String(s.key),
     label: s.label,
-    pct: Math.max(1, Math.round(finiteNonNegative(s.ratio) * 100)),
+    pct: Math.min(100, finiteNonNegative(s.ratio) * 100),
+    minutes: minutesFromSeconds(s.seconds),
   }));
-  const sum = slices.reduce((acc, s) => acc + s.pct, 0) || 1;
-  const categorySlices = slices.map((s) => ({ ...s, pct: Math.max(1, Math.round((s.pct / sum) * 100)) }));
+  const productivityLabels = { focus: "Focus", neutral: "Neutral", drift: "Drift" } as const;
+  const productivitySlices = (data.productivitySlices ?? []).map((slice) => ({
+    key: slice.key,
+    label: productivityLabels[slice.key] ?? "Other",
+    pct: Math.min(100, finiteNonNegative(slice.ratio) * 100),
+    minutes: minutesFromSeconds(slice.seconds),
+  }));
   return {
-    // Top n% is modeled from this local aggregate so it is available without
-    // leaderboard opt-in. The precise place card below remains live-only.
-    RANK: estimateFocusTopPercent(data.focusSeconds, "daily"),
-    WEEK_RANK: estimateFocusTopPercent(data.focusSeconds, "weekly"),
+    // Prefer a matching opted-in aggregate fact; otherwise label and render
+    // the elapsed-time comparison model as an estimate.
+    RANK: rank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "daily", data.comparisonProgress),
+    WEEK_RANK: weekRank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "weekly", data.comparisonProgress),
+    RANK_IS_LIVE: Boolean(rank),
+    WEEK_RANK_IS_LIVE: Boolean(weekRank),
+    IS_CURRENT_PERIOD: data.isCurrentPeriod,
+    DATE_LABEL: data.dateLabel,
+    WEEK_LABEL: "",
     LIVE_RANK_PERCENT: rank?.topPercent ?? 100,
     RANK_PLACE: rank?.rank ?? 0,
     WEEK_RANK_PLACE: weekRank?.rank ?? 0,
@@ -151,6 +176,7 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks): 
     AVG_DAILY_FOCUS_MINUTES: 0,
     WEEK_DAY_MINUTES: [],
     categorySlices,
+    productivitySlices,
   };
 }
 
@@ -160,15 +186,23 @@ function deriveWeekMetrics(data: ShareWeekCardData, liveRanks?: ShareCardLiveRan
     totalSeconds: data.totalSeconds,
     focusPercent: data.focusPercent,
     productivitySlices: data.productivitySlices,
+    comparisonProgress: data.comparisonProgress,
+    isCurrentPeriod: data.isCurrentPeriod,
+    dateLabel: "",
     hours: [],
     slices: data.slices ?? [],
   } as ShareCardData, liveRanks);
   const weekMinutes = minutesFromSeconds(data.focusSeconds);
   const days = (data.days ?? []).map((d) => minutesFromSeconds(d.focusSeconds));
+  const weekRank = validLiveRank(liveRanks?.weekly);
   return {
     ...day,
-    RANK: estimateFocusTopPercent(data.focusSeconds, "weekly"),
-    WEEK_RANK: estimateFocusTopPercent(data.focusSeconds, "weekly"),
+    RANK: weekRank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "weekly", data.comparisonProgress),
+    WEEK_RANK: weekRank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "weekly", data.comparisonProgress),
+    RANK_IS_LIVE: Boolean(weekRank),
+    WEEK_RANK_IS_LIVE: Boolean(weekRank),
+    IS_CURRENT_PERIOD: data.isCurrentPeriod,
+    WEEK_LABEL: data.weekLabel,
     WEEK_MINUTES: weekMinutes,
     AVG_DAILY_FOCUS_MINUTES: minutesFromSeconds(data.avgDailyFocusSeconds),
     WEEK_DAY_MINUTES: days,
@@ -193,6 +227,7 @@ const TITLE_WEIGHT = 500;
 const TITLE_SIZE = 61;
 let selectedSurface = 'ink'; // ink | paper — collapses color-only card variants
 let categoryOverride = null;
+let productivityOverride = null;
 
 const lightBase = { bg: '#f3f1e8', paper: '#eceae0', ink: '#181914', soft: '#6d6e65', olive: '#617641', pale: '#d6dfbe', glow: '#b9c998', card: '#fbfaf4' };
 const darkBase = { bg: '#171914', paper: '#20231b', ink: '#f1f0e7', soft: '#a6a79c', olive: '#b7d572', pale: '#536143', glow: '#73845e', card: '#23261c' };
@@ -382,6 +417,11 @@ const formatDuration = (minutes) => {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 let RANK = 0.4; // today top-%
 let WEEK_RANK = 1.2; // week top-% (separate default)
+let RANK_IS_LIVE = false;
+let WEEK_RANK_IS_LIVE = false;
+let IS_CURRENT_PERIOD = false;
+let DATE_LABEL = '';
+let WEEK_LABEL = '';
 let LIVE_RANK_PERCENT = 100;
 let RANK_PLACE = 0;
 let WEEK_RANK_PLACE = 0;
@@ -442,10 +482,10 @@ const youPill = (p, x, dotY, pillY, r = 12) => `
   <rect x="${x - 52}" y="${pillY}" width="104" height="46" rx="23" fill="${p.olive}"/>
   ${tx(x, pillY + 33, 'YOU', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 2.2, anchor: 'middle' })}`;
 function curveCard(p, id) { const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055); const pillMode = s.x < 640 && s.y < (652 + RANK_DY); return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, "Today's focus percentile")}
+  ${chromeTitle(p, RANK_IS_LIVE ? "Today's focus percentile" : "Estimated focus percentile")}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(112, 420 + RANK_DY, `${pctLabel(RANK)}%`, { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 540 + RANK_DY, 'from your focus time today.', { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
+  ${tx(120, 540 + RANK_DY, RANK_IS_LIVE ? 'from today’s live leaderboard.' : IS_CURRENT_PERIOD ? 'from your focus pace so far today.' : 'from your focus time that day.', { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY} L 1080 ${668 + RANK_DY} L 120 ${668 + RANK_DY} Z" fill="${p.pale}" opacity=".55"/>
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY}" fill="none" stroke="${p.olive}" stroke-opacity=".45" stroke-width="3"/>
   ${pillMode ? youPill(p, s.x, s.y - 8, Math.min(s.y + 18, 660 + RANK_DY), 11) : youLollipop(p, s.x, s.y, 50, 11)}
@@ -456,7 +496,7 @@ function wideStatement(p, id) { return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, 'Focus time')}
   ${panel(p, id, 70, 188, 1060, 510, 36)}
   ${tx(600, 480, metric(), { font: F.serif, size: 240, fill: p.ink, spacing: -13, anchor: 'middle' })}
-  ${tx(600, 640, 'of focused work today.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5, anchor: 'middle' })}
+  ${tx(600, 640, IS_CURRENT_PERIOD ? 'of focused work today.' : `of focused work on ${DATE_LABEL}.`, { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5, anchor: 'middle' })}
   ${footer(p)}`, 'Wide Statement'); }
 
 
@@ -481,10 +521,10 @@ function dayDots(p, id) {
 
 
 function rankStatement(p, id) { return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, "Today's focus percentile")}
+  ${chromeTitle(p, RANK_IS_LIVE ? "Today's focus percentile" : "Estimated focus percentile")}
   ${surfacePanel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(600, 450 + RANK_DY, `Top ${pctLabel(RANK)}%`, { font: F.serif, size: 180, fill: surfaceInk(p), spacing: -8, anchor: 'middle' })}
-  ${tx(600, 600 + RANK_DY, 'from today’s focus time', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: surfaceSoft(p), anchor: 'middle', spacing: -.5 })}
+  ${tx(600, 600 + RANK_DY, RANK_IS_LIVE ? 'from today’s live leaderboard' : IS_CURRENT_PERIOD ? 'from today’s focus pace' : 'from that day’s focus time', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: surfaceSoft(p), anchor: 'middle', spacing: -.5 })}
   ${footer(p)}`, 'Rank Statement'); }
 
 
@@ -509,11 +549,11 @@ function headCount(p, id) {
 
 function weekAverage(p, id) {
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, 'This week')}
+  ${chromeTitle(p, IS_CURRENT_PERIOD ? 'This week' : WEEK_LABEL)}
   ${panel(p, id, 70, 188, 1060, 510, 36)}
-  ${tx(112, 300, 'DAILY AVG', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.2 })}
+  ${tx(112, 300, 'TRACKED-DAY AVG', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.2 })}
   ${tx(112, 500, formatDuration(dailyAverageMinutes()), { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 610, 'focused per day this week.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
+  ${tx(120, 610, IS_CURRENT_PERIOD ? 'focused per tracked day this week.' : 'focused per tracked day that week.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
   ${footer(p)}`, 'Week Average');
 }
 
@@ -548,10 +588,10 @@ function weeklyCurve(p, id) {
   const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055, WEEK_RANK);
   const pillMode = s.x < 640 && s.y < (652 + RANK_DY);
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, 'This week’s focus percentile')}
+  ${chromeTitle(p, WEEK_RANK_IS_LIVE ? 'This week’s focus percentile' : 'Estimated weekly percentile')}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(112, 420 + RANK_DY, `${pctLabel(WEEK_RANK)}%`, { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 540 + RANK_DY, 'from your focus time this week.', { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
+  ${tx(120, 540 + RANK_DY, WEEK_RANK_IS_LIVE ? 'from the live weekly leaderboard.' : IS_CURRENT_PERIOD ? 'from your focus pace this week.' : 'from your focus time that week.', { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY} L 1080 ${668 + RANK_DY} L 120 ${668 + RANK_DY} Z" fill="${p.pale}" opacity=".55"/>
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY}" fill="none" stroke="${p.olive}" stroke-opacity=".45" stroke-width="3"/>
   ${pillMode ? youPill(p, s.x, s.y - 8, Math.min(s.y + 18, 660 + RANK_DY), 11) : youLollipop(p, s.x, s.y, 50, 11)}
@@ -562,14 +602,14 @@ function weeklyCurve(p, id) {
 function comboFocus(p, id) {
   // Hours stay the hero; rank becomes a compact olive seal.
   // Ink/Paper surface is controlled by the global toggle (not a separate card).
-  const chipText = `TOP ${pctLabel(RANK)}%`;
+  const chipText = `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`;
   const chipW = Math.max(236, 56 + chipText.length * 22);
   const chipX = 140;
   const chipY = 552;
   return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, 'Focus time')}
   ${surfacePanel(p, id, 70, 188, 1060, 510, 36)}
-  ${tx(140, 286, 'TODAY', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.4 })}
+  ${tx(140, 286, IS_CURRENT_PERIOD ? 'TODAY' : DATE_LABEL.toUpperCase(), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.4 })}
   ${tx(140, 488, metric(), { font: F.serif, size: 168, fill: surfaceInk(p), spacing: -8.5 })}
   <rect x="${chipX}" y="${chipY}" width="${chipW}" height="64" rx="32" fill="${p.olive}"/>
   ${tx(chipX + chipW / 2, chipY + 42, chipText, { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 1.8, anchor: 'middle' })}
@@ -584,12 +624,16 @@ const CATEGORY_COLORS_LIGHT = {
   learning: '#2f7f78',
   communication: '#476f8f',
   utility: '#66707a',
+  other: '#8b877e',
+  unknown: '#b2aea5',
 };
 const CATEGORY_COLORS_DARK = {
   workspace: '#9bbf5a',
   learning: '#5fb7ad',
   communication: '#7fa2c2',
   utility: '#8a98a4',
+  other: '#77756e',
+  unknown: '#5f5e58',
 };
 const PRODUCTIVITY_COLORS_LIGHT = {
   focus: '#4f751e',
@@ -635,8 +679,9 @@ const categoryEntries = () => (categoryOverride ?? []).map((entry) => ({
   key: entry.key,
   label: entry.label,
   pct: entry.pct,
+  minutes: entry.minutes,
 }));
-const productivityEntries = () => ([
+const productivityEntries = () => productivityOverride ?? ([
   { key: 'focus', label: 'Focus', pct: PROD_FOCUS },
   { key: 'neutral', label: 'Neutral', pct: PROD_NEUTRAL },
   { key: 'drift', label: 'Drift', pct: PROD_DRIFT },
@@ -648,7 +693,6 @@ const categoryColorsForEntries = (p, entries) => {
     : ['#4f751e', '#476f8f', '#a96e42', '#8a4b68'];
   return Object.fromEntries(entries.map((entry, index) => [entry.key, palette[entry.key] ?? fallback[index % fallback.length]]));
 };
-const minutesForPct = (pct) => Math.round((TOTAL_MINUTES * pct) / 100);
 const compactStackedBar = (p, id, x, y, w, h, entries, colors, getPct) => {
   let cursor = x;
   const segments = entries.map((entry) => {
@@ -672,7 +716,7 @@ const PANEL_MID_Y = PANEL_TOP + PANEL_H / 2;
 const compactLegendRows = (p, x, y, entries, colors, getPct, formatValue, rowGap = 72, valueX = 540, labelSize = 36, valueSize = 30, swatchR = 10) => entries.map((entry, i) => {
   const ly = y + i * rowGap;
   const pct = getPct(entry);
-  const value = formatValue(pct);
+  const value = formatValue(pct, entry);
   return `
   <circle cx="${x}" cy="${ly}" r="${swatchR}" fill="${colors[entry.key]}"/>
   ${tx(x + 32 + (swatchR - 10), ly + 10, entry.label, { font: F.sans, size: labelSize, floor: labelSize, fill: p.ink, spacing: -.2 })}
@@ -721,7 +765,7 @@ function dashCategory(p, id) {
   const legendY = barY + barH + barLegendGap;
   const content = entries.length > 0
     ? `${compactStackedBar(p, id, innerX, barY, innerW, barH, entries, colors, (entry) => entry.pct)}
-  ${compactLegendRows(p, innerX, legendY, entries, colors, (entry) => entry.pct, (pct) => formatDuration(minutesForPct(pct)), rowGap, valueX)}`
+  ${compactLegendRows(p, innerX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatDuration(entry.minutes), rowGap, valueX)}`
     : `${tx(600, PANEL_MID_Y + 12, 'No categorized activity yet.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, anchor: 'middle' })}`;
   return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, 'Categories')}
@@ -751,7 +795,7 @@ function dashProductivity(p, id) {
   ${panel(p, id, 70, PANEL_TOP, 1060, PANEL_H, 36)}
   ${compactDonut(p, entries, colors, dialCx, dialCy, dialSize)}
   ${tx(dialCx, dialCy + 18, `${PROD_FOCUS}%`, { font: F.mono, size: 58, floor: 58, fill: p.ink, weight: 760, anchor: 'middle' })}
-  ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (pct) => formatHoursDecimal(minutesForPct(pct)), rowGap, valueX, 48, 44, 14)}
+  ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatHoursDecimal(entry.minutes), rowGap, valueX, 48, 44, 14)}
   ${footer(p)}`, 'Productivity');
 }
 
@@ -972,12 +1016,12 @@ function richBoard(p, id) {
       title: 'PRODUCTIVITY',
       body: (x, y) => `${compactDonut(p, prodEntries, prodColors, x + 130, y + 220, 220)}
       ${tx(x + 130, y + 236, `${PROD_FOCUS}%`, { font: F.mono, size: 42, floor: 42, fill: p.ink, weight: 760, anchor: 'middle' })}
-      ${compactLegendRows(p, x + 270, y + 160, prodEntries, prodColors, (e) => e.pct, (pct) => formatHoursDecimal(minutesForPct(pct)), 64, x + tileW - 36, 34, 30, 10)}`,
+      ${compactLegendRows(p, x + 270, y + 160, prodEntries, prodColors, (e) => e.pct, (_pct, entry) => formatHoursDecimal(entry.minutes), 64, x + tileW - 36, 34, 30, 10)}`,
     },
     {
       title: 'CATEGORIES',
       body: (x, y) => `${compactStackedBar(p, id + '-b', x + 40, y + 150, tileW - 80, 52, entries, colors, (e) => e.pct)}
-      ${compactLegendRows(p, x + 40, y + 240, entries, colors, (e) => e.pct, (pct) => formatDuration(minutesForPct(pct)), 52, x + tileW - 36, 28, 26, 8)}`,
+      ${compactLegendRows(p, x + 40, y + 240, entries, colors, (e) => e.pct, (_pct, entry) => formatDuration(entry.minutes), 52, x + tileW - 36, 28, 26, 8)}`,
     },
     {
       title: 'WEEK SNAPSHOT',
@@ -1086,6 +1130,11 @@ const RENDERERS: Record<UnifiedShareStoryId, (p: typeof light, id: string) => st
 function applyMetrics(metrics: UnifiedMetrics) {
   RANK = metrics.RANK;
   WEEK_RANK = metrics.WEEK_RANK;
+  RANK_IS_LIVE = metrics.RANK_IS_LIVE;
+  WEEK_RANK_IS_LIVE = metrics.WEEK_RANK_IS_LIVE;
+  IS_CURRENT_PERIOD = metrics.IS_CURRENT_PERIOD;
+  DATE_LABEL = metrics.DATE_LABEL;
+  WEEK_LABEL = metrics.WEEK_LABEL;
   LIVE_RANK_PERCENT = metrics.LIVE_RANK_PERCENT;
   RANK_PLACE = metrics.RANK_PLACE;
   WEEK_RANK_PLACE = metrics.WEEK_RANK_PLACE;
@@ -1105,6 +1154,7 @@ function applyMetrics(metrics: UnifiedMetrics) {
   AVG_DAILY_FOCUS_MINUTES = metrics.AVG_DAILY_FOCUS_MINUTES;
   WEEK_DAY_MINUTES = [...metrics.WEEK_DAY_MINUTES];
   categoryOverride = metrics.categorySlices;
+  productivityOverride = metrics.productivitySlices;
 }
 
 function applyLook(theme: ShareCardTheme, lookIndex: number) {

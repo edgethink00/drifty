@@ -15,7 +15,9 @@ const DAY: ShareCardData = {
   dateLabel: "Jul 17",
   totalSeconds: 7 * 3600,
   focusSeconds: 5 * 3600 + 42 * 60,
+  isCurrentPeriod: true,
   focusPercent: 72,
+  comparisonProgress: 1,
   productivitySlices: [
     { key: "focus", seconds: 5 * 3600 + 42 * 60, ratio: 0.72 },
     { key: "neutral", seconds: 4_320, ratio: 0.17 },
@@ -43,8 +45,10 @@ const WEEK: ShareWeekCardData = {
   rangeLabel: "Jul 13 – 19",
   totalSeconds: 28 * 3600,
   focusSeconds: 22 * 3600 + 40 * 60,
+  isCurrentPeriod: true,
   avgDailyFocusSeconds: 3 * 3600 + 14 * 60,
   focusPercent: 74,
+  comparisonProgress: 1,
   productivitySlices: [
     { key: "focus", seconds: 22 * 3600 + 40 * 60, ratio: 0.74 },
     { key: "neutral", seconds: 6_480, ratio: 0.06 },
@@ -74,7 +78,7 @@ describe("renderShareCardSvg", () => {
     expect(svg).toContain(`width="${SHARE_CARD_EXPORT_SIZES.landscape.width}"`);
     expect(svg).toContain(`height="${SHARE_CARD_EXPORT_SIZES.landscape.height}"`);
     expect(svg).toContain(`viewBox="0 0 ${SHARE_CARD_UNIFIED_SIZE.width} ${SHARE_CARD_UNIFIED_SIZE.height}"`);
-    expect(svg).toContain("Today's focus percentile");
+    expect(svg).toContain("Estimated focus percentile");
     expect(svg).toContain("drifty.so");
   });
 
@@ -100,7 +104,7 @@ describe("renderShareCardSvg", () => {
     const focus = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "F1", lookIndex: 4 });
     const streak = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "S1", lookIndex: 8 });
 
-    expect(curve).toContain("Today's focus percentile");
+    expect(curve).toContain("Estimated focus percentile");
     expect(curve).toContain("%");
     expect(focus).toContain("Focus time");
     expect(focus).toMatch(/\d+h|\d+m/);
@@ -161,13 +165,123 @@ describe("renderShareCardSvg", () => {
     expect(svg).not.toContain("NaN");
     expect(svg).not.toContain("Infinity");
   });
+
+  it("uses elapsed-day progress for the estimated percentile", () => {
+    const svg = renderShareCardSvg({
+      data: { ...DAY, focusSeconds: 100 * 60, comparisonProgress: 0.5 },
+      format: "landscape",
+      theme: "light",
+      story: "R1c",
+    });
+
+    expect(svg).toContain(">50%<");
+    expect(svg).toContain("focus pace so far today");
+  });
+
+  it("prefers a matching live daily leaderboard percentile over the estimate", () => {
+    const svg = renderShareCardSvg({
+      data: { ...DAY, focusSeconds: 100 * 60, comparisonProgress: 0.5 },
+      format: "landscape",
+      theme: "light",
+      story: "R1c",
+      liveRanks: {
+        daily: {
+          rank: 9,
+          participantCount: 100,
+          topPercent: 9,
+          windowStartDay: DAY.day,
+          windowEndDay: DAY.day,
+        },
+        weekly: null,
+      },
+    });
+
+    expect(svg).toContain("Today's focus percentile");
+    expect(svg).toContain(">9%<");
+    expect(svg).toContain("live leaderboard");
+    expect(svg).not.toContain("Estimated focus percentile");
+  });
+
+  it("uses historical copy for a completed selected day", () => {
+    const percentile = renderShareCardSvg({
+      data: { ...DAY, isCurrentPeriod: false },
+      format: "landscape",
+      theme: "light",
+      story: "R1c",
+    });
+    const focus = renderShareCardSvg({
+      data: { ...DAY, isCurrentPeriod: false },
+      format: "landscape",
+      theme: "light",
+      story: "F1",
+    });
+
+    expect(percentile).toContain("focus time that day");
+    expect(percentile).not.toContain("so far today");
+    expect(focus).toContain("focused work on Jul 17");
+  });
+
+  it("rejects a malformed live percentile instead of labeling an estimate live", () => {
+    const svg = renderShareCardSvg({
+      data: { ...DAY, focusSeconds: 100 * 60, comparisonProgress: 0.5 },
+      format: "landscape",
+      theme: "light",
+      story: "R1c",
+      liveRanks: {
+        daily: {
+          rank: 9,
+          participantCount: 100,
+          topPercent: Number.NaN,
+          windowStartDay: DAY.day,
+          windowEndDay: DAY.day,
+        },
+        weekly: null,
+      },
+    });
+
+    expect(svg).toContain("Estimated focus percentile");
+    expect(svg).toContain(">50%<");
+    expect(svg).not.toContain("live leaderboard");
+  });
+
+  it("renders category durations from exact seconds instead of rounded shares", () => {
+    const svg = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "X4" });
+
+    expect(svg).toContain(">4h<");
+    expect(svg).toContain(">1h 30m<");
+    expect(svg).not.toContain(">5h 07m<");
+  });
+
+  it("renders productivity shares and durations against classified time", () => {
+    const svg = renderShareCardSvg({
+      data: {
+        ...DAY,
+        totalSeconds: 10 * 3600,
+        focusSeconds: 5 * 3600,
+        focusPercent: 63,
+        productivitySlices: [
+          { key: "focus", seconds: 5 * 3600, ratio: 0.625 },
+          { key: "neutral", seconds: 2 * 3600, ratio: 0.25 },
+          { key: "drift", seconds: 1 * 3600, ratio: 0.125 },
+        ],
+      },
+      format: "landscape",
+      theme: "light",
+      story: "X5",
+    });
+
+    expect(svg).toContain(">63%<");
+    expect(svg).toContain(">5.0h<");
+    expect(svg).toContain(">2.0h<");
+    expect(svg).toContain(">1.0h<");
+  });
 });
 
 describe("renderShareWeekCardSvg", () => {
   it("renders the weekly unified percentile curve card", () => {
     const svg = renderShareWeekCardSvg({ data: WEEK, format: "landscape", theme: "dark", story: "WR1" });
     expect(svg).toContain(`viewBox="0 0 ${SHARE_CARD_UNIFIED_SIZE.width} ${SHARE_CARD_UNIFIED_SIZE.height}"`);
-    expect(svg).toContain("This week\u2019s focus percentile");
+    expect(svg).toContain("Estimated weekly percentile");
     expect(svg).toContain("drifty.so");
   });
 
@@ -177,5 +291,25 @@ describe("renderShareWeekCardSvg", () => {
     expect(productivity).toContain("Productivity");
     expect(streak).toContain("Focus streak");
     expect(productivity).not.toEqual(streak);
+  });
+
+  it("uses historical copy and an explicit tracked-day average", () => {
+    const percentile = renderShareWeekCardSvg({
+      data: { ...WEEK, isCurrentPeriod: false },
+      format: "landscape",
+      theme: "light",
+      story: "WR1",
+    });
+    const average = renderShareWeekCardSvg({
+      data: { ...WEEK, isCurrentPeriod: false },
+      format: "landscape",
+      theme: "light",
+      story: "W5",
+    });
+
+    expect(percentile).toContain("focus time that week");
+    expect(average).toContain("Week 29");
+    expect(average).toContain("TRACKED-DAY AVG");
+    expect(average).toContain("tracked day that week");
   });
 });

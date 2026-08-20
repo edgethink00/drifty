@@ -80,6 +80,8 @@ const card = {
     dateLabel: "Aug 6",
     totalSeconds: 21_600,
     focusSeconds: 18_000,
+    isCurrentPeriod: true,
+    comparisonProgress: 1,
     focusPercent: 83,
     productivitySlices: [{ key: "focus" as const, seconds: 18_000, ratio: 0.83 }],
     deltaSeconds: null,
@@ -155,6 +157,37 @@ describe("ShareCardModal feedback", () => {
 
     expect(screen.queryByText("Join the leaderboard to unlock your live rank cards.")).toBeNull();
     expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("rejects a live daily rank whose start day does not match the card", () => {
+    const mismatchedRank = {
+        rank: 11,
+        participantCount: 2_858,
+        topPercent: 0.4,
+        windowStartDay: "2026-08-01",
+        windowEndDay: card.data.day,
+    };
+    rankMocks.state = {
+      daily: {
+        availability: "ready",
+        rank: mismatchedRank,
+      },
+      weekly: { availability: "not_joined", rank: null },
+    };
+    rankMocks.liveRanks = { daily: mismatchedRank, weekly: null };
+    render(
+      <ShareCardModal
+        card={card}
+        defaultTheme="light"
+        onJoinLeaderboard={() => Promise.resolve()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Place Rank" }));
+
+    expect(screen.getByText("Live rank cards are available for the current leaderboard window.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Copy image" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("keeps the selected story stable while an image export is in progress", async () => {

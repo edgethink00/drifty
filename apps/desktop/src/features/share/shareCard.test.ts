@@ -47,7 +47,23 @@ describe("buildShareCardData", () => {
     expect(data.deltaSeconds).toBeNull();
   });
 
-  it("keeps top categories and folds the rest (incl. unknown) into other", () => {
+  it("preserves the classified-time productivity denominator used by the dashboard", () => {
+    const data = buildShareCardData(BASE_INPUT);
+
+    expect(data.productivitySlices.find((slice) => slice.key === "focus")?.ratio).toBe(0.727);
+    expect(data.productivitySlices.find((slice) => slice.key === "drift")?.ratio).toBe(0.09);
+  });
+
+  it("sanitizes non-finite productivity ratios at the aggregate boundary", () => {
+    const data = buildShareCardData({
+      ...BASE_INPUT,
+      productivityTotals: [productivity("focus", 2400, Number.NaN)],
+    });
+
+    expect(data.productivitySlices).toEqual([{ key: "focus", seconds: 2400, ratio: 0 }]);
+  });
+
+  it("keeps unclassified separate from named-category overflow", () => {
     const data = buildShareCardData({
       ...BASE_INPUT,
       categoryTotals: [
@@ -55,20 +71,31 @@ describe("buildShareCardData", () => {
         category("communication", 900),
         category("learning", 600),
         category("music", 300),
+        category("utility", 100),
         category("unknown", 200),
       ],
-      totalSeconds: 4000,
+      totalSeconds: 4100,
     });
-    expect(data.slices.map((slice) => slice.key)).toEqual(["workspace", "communication", "learning", "other"]);
-    const other = data.slices[data.slices.length - 1];
-    expect(other?.seconds).toBe(500);
+
+    expect(data.slices.map((slice) => slice.key)).toEqual(["workspace", "communication", "learning", "other", "unknown"]);
+    expect(data.slices.find((slice) => slice.key === "other")?.seconds).toBe(400);
+    expect(data.slices.find((slice) => slice.key === "unknown")?.seconds).toBe(200);
     expect(data.slices.reduce((sum, slice) => sum + slice.ratio, 0)).toBeCloseTo(1);
   });
 
-  it("omits the other slice when three or fewer categories exist", () => {
+  it("omits other when all named categories fit", () => {
     const data = buildShareCardData(BASE_INPUT);
-    expect(data.slices.map((slice) => slice.key)).toEqual(["workspace", "communication", "other"]);
-    expect(data.slices[data.slices.length - 1]?.seconds).toBe(300);
+    expect(data.slices.map((slice) => slice.key)).toEqual(["workspace", "communication", "unknown"]);
+  });
+
+  it("combines duplicate unclassified aggregates without dropping time", () => {
+    const data = buildShareCardData({
+      ...BASE_INPUT,
+      categoryTotals: [category("workspace", 2400), category("unknown", 200), category("unknown", 100)],
+      totalSeconds: 2700,
+    });
+
+    expect(data.slices.find((slice) => slice.key === "unknown")?.seconds).toBe(300);
   });
 
   it("buckets flow blocks into hourly tone totals", () => {
@@ -147,12 +174,12 @@ describe("buildShareCardData", () => {
   });
 });
 
-function weekRow(day: string, dayName: string, focusSeconds: number): WeekDayRow {
+function weekRow(day: string, dayName: string, focusSeconds: number, totalSeconds = focusSeconds): WeekDayRow {
   return {
     day,
     dayName,
     dayNumber: day.slice(-2),
-    totalSeconds: focusSeconds,
+    totalSeconds,
     focusSeconds,
     focusScore: 0,
     slices: [],
@@ -213,10 +240,13 @@ describe("buildShareWeekCardData", () => {
     expect(data.focusPercent).toBe(80);
   });
 
-  it("averages daily focus over active days only", () => {
-    const data = buildShareWeekCardData(WEEK_INPUT);
-    // 16h across 5 active days (Sat/Sun are zero) → 3h 12m.
-    expect(data.avgDailyFocusSeconds).toBe((16 * 3600) / 5);
+  it("averages daily focus over tracked days, including a zero-focus activity day", () => {
+    const weekRows = WEEK_INPUT.weekRows.map((row) => (
+      row.day === "2026-07-18" ? { ...row, totalSeconds: 3600 } : row
+    ));
+    const data = buildShareWeekCardData({ ...WEEK_INPUT, weekRows });
+    // 16h across six tracked days; Saturday counts even though it had no Focus.
+    expect(data.avgDailyFocusSeconds).toBe((16 * 3600) / 6);
   });
 
   it("spans months in the range label", () => {

@@ -12,6 +12,7 @@ import {
   SHARE_CARD_UNIFIED_SIZE,
   UNIFIED_STORY_OPTIONS,
   renderLockedShareRankSvg,
+  type ShareCardLiveRanks,
   type UnifiedShareStoryId,
 } from "./shareCardUnifiedSvg";
 import { copyShareCardPng, openShareComposer, saveShareCardWithDialog, shareCardSvgDataUrl } from "./shareCardExport";
@@ -40,6 +41,13 @@ const WEEK_STORIES = new Set<UnifiedShareStoryId>(["WR1", "W5", "X4", "X5"]);
 const EXACT_RANK_STORY_PERIOD: Partial<Record<UnifiedShareStoryId, "daily" | "weekly">> = {
   R4: "daily",
 };
+const LIVE_RANK_STORY_PERIOD: Partial<Record<UnifiedShareStoryId, "daily" | "weekly">> = {
+  R1c: "daily",
+  R2: "daily",
+  C1: "daily",
+  R4: "daily",
+  WR1: "weekly",
+};
 
 type ExportState =
   | { readonly kind: "idle" }
@@ -59,7 +67,9 @@ function rankMatchesCard(
   rank: ShareCardLiveRanksState["daily"],
 ): boolean {
   if (rank.availability !== "ready" || !rank.rank) return false;
-  if (card.kind === "day") return rank.rank.windowEndDay === card.data.day;
+  if (card.kind === "day") {
+    return rank.rank.windowStartDay === card.data.day && rank.rank.windowEndDay === card.data.day;
+  }
   return rank.rank.windowStartDay === card.data.startDay && rank.rank.windowEndDay === card.data.endDay;
 }
 
@@ -98,11 +108,16 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
   const storyOption = storyOptions.find((option) => option.value === selectedStoryId) ?? storyOptions[0] ?? STORY_OPTIONS[0];
   const storyIndex = Math.max(0, storyOptions.findIndex((option) => option.value === storyOption.value));
   const rankStoryPeriod = EXACT_RANK_STORY_PERIOD[storyOption.value];
-  // The aggregate rank RPC is needed only for the one slide that makes an
-  // exact placement claim. Top n% cards stay local and do not trigger it.
-  const { state: liveRankState, liveRanks, refresh: refreshLiveRanks } = useShareCardLiveRanks(Boolean(onJoinLeaderboard && rankStoryPeriod));
+  const liveRankStoryPeriod = LIVE_RANK_STORY_PERIOD[storyOption.value];
+  // Rank stories prefer an opted-in aggregate leaderboard fact for the exact
+  // matching window. The local elapsed-time model remains the fallback.
+  const { state: liveRankState, refresh: refreshLiveRanks } = useShareCardLiveRanks(Boolean(onJoinLeaderboard && liveRankStoryPeriod));
   const rankGate = rankGateForStory(card, storyOption.value, liveRankState);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
+  const matchingLiveRanks = useMemo<ShareCardLiveRanks>(() => ({
+    daily: card.kind === "day" && rankMatchesCard(card, liveRankState.daily) ? liveRankState.daily.rank : null,
+    weekly: card.kind === "week" && rankMatchesCard(card, liveRankState.weekly) ? liveRankState.weekly.rank : null,
+  }), [card, liveRankState.daily, liveRankState.weekly]);
 
   useModalDismiss(onClose);
 
@@ -115,9 +130,9 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       });
     }
     return card.kind === "week"
-      ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks })
-      : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks });
-  }, [card, defaultTheme, liveRanks, lockedRankPeriod, storyIndex, storyOption.value]);
+      ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks })
+      : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks });
+  }, [card, defaultTheme, matchingLiveRanks, lockedRankPeriod, storyIndex, storyOption.value]);
   const previewAlt = card.kind === "week"
     ? `Share card preview for ${card.data.weekLabel} (${card.data.rangeLabel})`
     : `Share card preview for ${card.data.weekdayLabel} ${card.data.dateLabel}`;

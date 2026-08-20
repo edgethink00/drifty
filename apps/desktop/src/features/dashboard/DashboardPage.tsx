@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, FlowIntervalMinutes, ProductivityDuration } from "@drifty/domain";
+import { logicalMinuteOfDay, type ActivitySegment, type AppIconMap, type CategoryDuration, type ClassificationOptions, type DeviceTimelineFilter, type FlowBlock, type FlowIntervalMinutes, type ProductivityDuration } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
@@ -21,6 +21,7 @@ import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type ThemeMode } from "../settings/settingsStorage";
 import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
 import { buildShareCardData, buildShareWeekCardData } from "../share/shareCard";
+import { dailyFocusComparisonProgress, weeklyFocusComparisonProgress } from "../share/focusPercentile";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
@@ -171,6 +172,10 @@ export function DashboardPage({
     (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
   );
+  const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
+  const currentLogicalMinute = currentMinuteOfDay === null
+    ? 24 * 60
+    : logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes);
   // Share cards are assembled only after the modal opens. The shape is aggregate-only:
   // category/productivity totals and derived hourly/daily rhythm, never raw activity rows.
   const shareCard = useMemo<ShareCardModalCard | null>(() => {
@@ -187,6 +192,13 @@ export function DashboardPage({
           weekRows,
           calendarEvents: weekCalendarEvents,
           deltaSeconds: weekFocusDeltaSeconds,
+          comparisonProgress: weeklyFocusComparisonProgress(
+            dashboardRange.startDay,
+            dashboardRange.endDay,
+            logicalToday,
+            currentLogicalMinute,
+          ),
+          isCurrentPeriod: logicalToday >= dashboardRange.startDay && logicalToday <= dashboardRange.endDay,
         }),
       };
     }
@@ -200,9 +212,11 @@ export function DashboardPage({
         productivityTotals: dashboardProductivityTotals,
         flowBlocks,
         deltaSeconds: dayFocusDeltaSeconds,
+        comparisonProgress: dailyFocusComparisonProgress(selectedDay, logicalToday, currentLogicalMinute),
+        isCurrentPeriod: selectedDay === logicalToday,
       }),
     };
-  }, [dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, flowBlocks, selectedDay, shareCardOpen, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
+  }, [currentLogicalMinute, dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, flowBlocks, logicalToday, selectedDay, shareCardOpen, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
   const pageHead = (
     <DashboardPageHeader
       dashPeriod={dashPeriod}

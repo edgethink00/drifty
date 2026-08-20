@@ -44,13 +44,17 @@ export interface ShareCardData {
   readonly dateLabel: string;
   readonly totalSeconds: number;
   readonly focusSeconds: number;
+  /** Whether the selected day is the current logical day. */
+  readonly isCurrentPeriod: boolean;
+  /** Elapsed share of the comparison period, 0..1; 1 for completed periods. */
+  readonly comparisonProgress: number;
   /** Focus share of classified time, 0..100 rounded. */
   readonly focusPercent: number;
   /** Exact aggregate productivity mix for the selected day. */
   readonly productivitySlices: readonly ShareCardProductivitySlice[];
   /** Focus delta vs the previous day in seconds; null when unknown. */
   readonly deltaSeconds: number | null;
-  /** Top categories (up to 3) plus a trailing "other" slice when remainder exists. */
+  /** Up to five categories; unclassified stays explicit and named overflow becomes "other". */
   readonly slices: readonly ShareCardCategorySlice[];
   /** 24 hour buckets of focus/drift/neutral seconds. */
   readonly hours: readonly ShareCardHour[];
@@ -66,9 +70,11 @@ export interface BuildShareCardDataInput {
   readonly productivityTotals: readonly ProductivityDuration[];
   readonly flowBlocks: readonly FlowBlock[];
   readonly deltaSeconds: number | null;
+  readonly comparisonProgress?: number;
+  readonly isCurrentPeriod?: boolean;
 }
 
-const TOP_SLICE_LIMIT = 3;
+const MAX_CATEGORY_SLICES = 5;
 /** Focus stretches separated by less than this still count as one session. */
 const FOCUS_RUN_MAX_GAP_SECONDS = 5 * 60;
 const PEAK_WINDOW_HOURS = 2;
@@ -80,6 +86,8 @@ export function buildShareCardData({
   productivityTotals,
   flowBlocks,
   deltaSeconds,
+  comparisonProgress = 1,
+  isCurrentPeriod = false,
 }: BuildShareCardDataInput): ShareCardData {
   const parsed = new Date(`${day}T12:00:00`);
   const weekdayLabel = parsed.toLocaleDateString(UI_LOCALE, { weekday: "long" });
@@ -100,8 +108,10 @@ export function buildShareCardData({
     dateLabel,
     totalSeconds: trackedSeconds,
     focusSeconds,
+    isCurrentPeriod,
+    comparisonProgress,
     focusPercent,
-    productivitySlices: buildProductivitySlices(productivityTotals, trackedSeconds),
+    productivitySlices: buildProductivitySlices(productivityTotals),
     deltaSeconds,
     slices: buildSlices(categoryTotals, trackedSeconds),
     hours: buildHours(flowBlocks),
@@ -112,18 +122,17 @@ export function buildShareCardData({
 
 function buildProductivitySlices(
   productivityTotals: readonly ProductivityDuration[],
-  trackedSeconds: number,
 ): ShareCardProductivitySlice[] {
   return productivityTotals
     .filter((entry) => entry.totalSeconds > 0)
     .map((entry) => ({
       key: entry.productivity,
       seconds: entry.totalSeconds,
-      ratio: trackedSeconds > 0 ? entry.totalSeconds / trackedSeconds : 0,
+      ratio: Number.isFinite(entry.ratio) ? Math.max(0, Math.min(1, entry.ratio)) : 0,
     }));
 }
 
-/** Top non-unknown categories by duration; the remainder (incl. unclassified) folds into "other". */
+/** Keep unclassified explicit; only named-category overflow folds into "other". */
 function buildSlices(
   categoryTotals: readonly CategoryDuration[],
   trackedSeconds: number,
@@ -132,9 +141,14 @@ function buildSlices(
   const named = active
     .filter((entry) => entry.category !== "unknown")
     .sort((a, b) => b.totalSeconds - a.totalSeconds);
-  const top = named.slice(0, TOP_SLICE_LIMIT);
-  const otherSeconds = active.reduce((sum, entry) => sum + entry.totalSeconds, 0)
-    - top.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const unknownSeconds = active
+    .filter((entry) => entry.category === "unknown")
+    .reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const namedSlots = MAX_CATEGORY_SLICES - (unknownSeconds > 0 ? 1 : 0);
+  const needsOther = named.length > namedSlots;
+  const visibleNamedCount = needsOther ? Math.max(0, namedSlots - 1) : named.length;
+  const top = named.slice(0, visibleNamedCount);
+  const otherSeconds = named.slice(visibleNamedCount).reduce((sum, entry) => sum + entry.totalSeconds, 0);
 
   const ratioOf = (seconds: number) => (trackedSeconds > 0 ? seconds / trackedSeconds : 0);
   const slices: ShareCardCategorySlice[] = top.map((entry) => ({
@@ -145,6 +159,14 @@ function buildSlices(
   }));
   if (otherSeconds > 0) {
     slices.push({ key: "other", label: "Other", seconds: otherSeconds, ratio: ratioOf(otherSeconds) });
+  }
+  if (unknownSeconds > 0) {
+    slices.push({
+      key: "unknown",
+      label: categoryLabel("unknown"),
+      seconds: unknownSeconds,
+      ratio: ratioOf(unknownSeconds),
+    });
   }
   return slices;
 }
@@ -209,7 +231,10 @@ export interface ShareWeekCardData {
   readonly rangeLabel: string;
   readonly totalSeconds: number;
   readonly focusSeconds: number;
-  /** Average focus per active day (days with any focus); 0 on an empty week. */
+  /** Whether the selected range contains the current logical day. */
+  readonly isCurrentPeriod: boolean;
+  readonly comparisonProgress: number;
+  /** Average focus per tracked day (including tracked zero-focus days). */
   readonly avgDailyFocusSeconds: number;
   readonly focusPercent: number;
   /** Exact aggregate productivity mix for the selected week. */
@@ -232,6 +257,8 @@ export interface BuildShareWeekCardDataInput {
   readonly weekRows: readonly WeekDayRow[];
   readonly calendarEvents: ReadonlyMap<string, readonly WeekCalendarEvent[]>;
   readonly deltaSeconds: number | null;
+  readonly comparisonProgress?: number;
+  readonly isCurrentPeriod?: boolean;
 }
 
 export function buildShareWeekCardData({
@@ -243,6 +270,8 @@ export function buildShareWeekCardData({
   weekRows,
   calendarEvents,
   deltaSeconds,
+  comparisonProgress = 1,
+  isCurrentPeriod = false,
 }: BuildShareWeekCardDataInput): ShareWeekCardData {
   const trackedSeconds = Math.max(
     totalSeconds,
@@ -260,7 +289,7 @@ export function buildShareWeekCardData({
     focusSeconds: row.focusSeconds,
     isBest: bestRow !== null && row.day === bestRow.day,
   }));
-  const activeDays = days.filter((day) => day.focusSeconds > 0).length;
+  const activeDays = weekRows.filter((day) => day.totalSeconds > 0).length;
   const dayFocusSum = days.reduce((sum, day) => sum + day.focusSeconds, 0);
 
   return {
@@ -270,9 +299,11 @@ export function buildShareWeekCardData({
     rangeLabel: buildWeekRangeLabel(startDay, endDay),
     totalSeconds: trackedSeconds,
     focusSeconds: focusEntry?.totalSeconds ?? 0,
+    isCurrentPeriod,
+    comparisonProgress,
     avgDailyFocusSeconds: activeDays > 0 ? Math.round(dayFocusSum / activeDays) : 0,
     focusPercent: Math.round((focusEntry?.ratio ?? 0) * 100),
-    productivitySlices: buildProductivitySlices(productivityTotals, trackedSeconds),
+    productivitySlices: buildProductivitySlices(productivityTotals),
     deltaSeconds,
     days,
     bestDayLabel: bestRow
