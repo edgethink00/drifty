@@ -358,10 +358,12 @@ export function DashboardPage({
             toggleSubject="day breakdown"
           >
             {!hasMeasuredActivity ? (
-              <div className="empty-state" role="status" aria-label="Breakdown availability">
-                <span className="eyebrow">No activity data</span>
-                <strong>Breakdown unavailable</strong>
-                <p>Breakdown metrics appear after activity is recorded for this day.</p>
+              <div className="dashboard-breakdown-empty" role="status" aria-label="Breakdown availability">
+                <span className="dashboard-breakdown-empty__marker" aria-hidden="true">—</span>
+                <div>
+                  <strong>No activity recorded</strong>
+                  <p>This breakdown will fill in after activity is recorded for this day.</p>
+                </div>
               </div>
             ) : (
               <>

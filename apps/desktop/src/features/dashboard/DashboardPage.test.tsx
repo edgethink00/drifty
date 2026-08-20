@@ -137,7 +137,7 @@ describe("DashboardPage day metrics without measured activity", () => {
     renderDashboardWithNoData({ dashboardReplay: null });
 
     expect(screen.getByRole("heading", { name: "No focus recorded" })).toBeTruthy();
-    expect(screen.getByRole("status", { name: "Breakdown availability" }).textContent).toContain("No activity data");
+    expect(screen.getByRole("status", { name: "Breakdown availability" }).textContent).toContain("No activity recorded");
     // The breakdown donut/bar are absent (the flow chart's own Category/Productivity
     // colour toggle renders regardless, so assert on the breakdown panels' labels).
     expect(screen.queryByLabelText("Productivity compact classification")).toBeNull();
@@ -154,7 +154,7 @@ describe("DashboardPage day metrics without measured activity", () => {
     });
 
     expect(screen.getByRole("heading", { name: "Focused for 0m" })).toBeTruthy();
-    expect(screen.queryByText("No activity data")).toBeNull();
+    expect(screen.queryByText("No activity recorded")).toBeNull();
     // The breakdown Productivity donut is shown (measured activity exists); scope
     // to its panel label so it isn't confused with the flow chart's colour toggle.
     expect(screen.getByLabelText("Productivity compact classification")).toBeTruthy();

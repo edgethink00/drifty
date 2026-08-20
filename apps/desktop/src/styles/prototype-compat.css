@@ -1016,27 +1016,6 @@
 }
 .metric-tile p { font-size: var(--type-caption-size); color: var(--text-soft); margin: 0; }
 
-/* Empty state */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 28px 24px;
-  text-align: center;
-  background: var(--bg-2);
-  border-radius: var(--radius-md);
-  border: 1px dashed var(--line-strong);
-}
-.empty-state .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--text-soft);
-}
-.empty-state strong { font-size: var(--type-empty-title-size); color: var(--text); font-weight: 600; }
-.empty-state p { font-size: 11.5px; color: var(--text-soft); margin: 0; }
-
 /* Meta grid (insights archive) */
 .meta-grid--archive {
   display: grid;

@@ -145,14 +145,40 @@
 
 /* ── Empty state / App glyph ── */
 .empty-state {
-  gap: 0.35rem;
-  padding: var(--space-4);
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
   border-radius: var(--radius-md);
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+}
+
+.empty-state .eyebrow {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-overline-size);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .empty-state strong {
+  color: var(--text);
   font-family: var(--font-display);
   font-size: var(--type-empty-title-size);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.empty-state p {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
 }
 
 .usage-identity-icon {
