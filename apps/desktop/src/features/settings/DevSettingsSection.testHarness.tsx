@@ -71,6 +71,8 @@ export function renderProductionDevSettings(
     profileBetaEnabled: false,
     onTeamsBetaChange: vi.fn(),
     onProfileBetaChange: vi.fn(),
+    legacyShellBlurPreviewEnabled: false,
+    onLegacyShellBlurPreviewEnabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onReplayDashboardDemo: vi.fn(),
     onResetDemoDashboardReplaySettings: vi.fn(),

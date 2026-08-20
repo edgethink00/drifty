@@ -24,6 +24,12 @@
         "titleBarStyle": "Overlay",
         "transparent": true,
         "backgroundColor": "#00000000",
+        "windowEffects": {
+          "effects": [
+            "hudWindow"
+          ],
+          "state": "active"
+        },
         "trafficLightPosition": {
           "x": 14,
           "y": 19

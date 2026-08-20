@@ -49,6 +49,10 @@ objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSString", "NSUR
 security-framework = "3.7"
 security-framework-sys = "2.15"
 smappservice-rs = "0.1.3"
+# Tauri's clearEffects() is a silent no-op on macOS (its vibrancy module only
+# clears on Windows), so the Dev A/B blur toggle drives window-vibrancy
+# directly. Same crate/version Tauri itself embeds; adds no new build weight.
+window-vibrancy = "0.6"
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "18ffb9a201fbf6fedfaa382fd4b92315ea30ab1" }
 
 [target."cfg(windows)".dependencies]

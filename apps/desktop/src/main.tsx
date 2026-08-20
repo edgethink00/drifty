@@ -41,6 +41,10 @@ window.__DRIFTY_SET_BOOT_STATUS__ = (message: string) => {
 window.__DRIFTY_SET_BOOT_STATUS__?.("main.tsx loaded");
 const initialSurface = resolveLocationSurface(window.location);
 if (initialSurface !== "app") document.documentElement.dataset.surface = initialSurface;
+// Browser-only builds (dev:web QA, static demo) have no native window material,
+// so the shell keeps a CSS blur fallback. Marking the document here lets the
+// stylesheet scope that fallback without touching the packaged app path.
+if (!("__TAURI_INTERNALS__" in window)) document.documentElement.dataset.runtime = "browser";
 
 class BootstrapErrorBoundary extends React.Component<
   React.PropsWithChildren,

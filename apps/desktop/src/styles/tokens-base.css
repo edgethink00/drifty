@@ -104,7 +104,12 @@
   --text-soft: #79776f;
   --window-chrome-icon: #383834;
   --window-chrome-icon-hover: #1c1c19;
-  --shell-glass-bg: rgba(237, 239, 236, 0.78);
+  /* The native window material supplies the frost, so this tint only shapes
+     brightness and colour on top of it. The pre-fix value (0.78) assumed a CSS
+     blur that contributed no frost of its own; stacking that alpha on the
+     material read as an opaque panel. Tuned against the legacy shell over a
+     saturated backdrop; the legacy preview pins the original value back. */
+  --shell-glass-bg: rgba(236, 240, 230, 0.64);
   --shell-glass-control: #fafaf8;
   --shell-glass-control-strong: #fafaf8;
   --shell-floating-surface: rgba(250,250,248,.62);
@@ -166,7 +171,8 @@
   --text-soft: #8a8780;
   --window-chrome-icon: #f1efe7;
   --window-chrome-icon-hover: #fffaf0;
-  --shell-glass-bg: rgba(33, 34, 31, 0.74);
+  /* See the light-theme note: the material carries the frost here too. */
+  --shell-glass-bg: rgba(38, 40, 35, 0.64);
   --shell-glass-control: #151513;
   --shell-glass-control-strong: #171715;
   --shell-floating-surface: rgba(21,21,19,.62);

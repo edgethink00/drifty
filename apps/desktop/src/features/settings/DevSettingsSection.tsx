@@ -89,6 +89,8 @@ type DevSettingsSectionProps = {
   readonly profileBetaEnabled: boolean;
   readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onProfileBetaChange: (enabled: boolean) => void;
+  readonly legacyShellBlurPreviewEnabled: boolean;
+  readonly onLegacyShellBlurPreviewEnabledChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
   readonly onReplayDashboardDemo?: (kind: DemoDashboardReplayKind) => void;
   readonly onResetDemoDashboardReplaySettings?: () => void;
@@ -155,6 +157,8 @@ export function DevSettingsSection({
   profileBetaEnabled,
   onTeamsBetaChange,
   onProfileBetaChange,
+  legacyShellBlurPreviewEnabled,
+  onLegacyShellBlurPreviewEnabledChange,
   onPreviewDashboardAiUnavailableCase,
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
@@ -317,6 +321,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Legacy shell blur (before/after)</div>
+            <div className="desc">Compare the sidebar glass before and after the flicker fix. Off (default) renders the new native under-window blur. On restores the previous CSS backdrop-filter implementation — including its intermittent flicker on the transparent window. Comparison only; never ships as the default.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={legacyShellBlurPreviewEnabled} onChange={onLegacyShellBlurPreviewEnabledChange} ariaLabel="Toggle legacy shell blur preview" />
           </div>
         </div>
       </div>

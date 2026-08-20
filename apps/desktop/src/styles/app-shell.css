@@ -6,10 +6,43 @@
   overflow: visible;
   padding-top: var(--window-chrome-height);
   background: var(--shell-glass-bg);
-  backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
-  -webkit-backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
+  /* Desktop blur comes from the native window effect configured in
+     tauri.conf.json (app.windows[].windowEffects). A CSS backdrop-filter on a
+     transparent macOS webview intermittently loses its sampled backdrop during
+     window compositing and read as sidebar flicker; see the drift-alarm
+     precedent in src-tauri/src/commands/drift_alarm.rs. Keep only the tint
+     here so the material and the tint never both apply frost. */
   isolation: isolate;
   transition: grid-template-columns var(--sidebar-duration) var(--sidebar-ease);
+}
+
+/* Dev-only before/after preview: the retired CSS blur, reinstated only while
+   Dev settings set data-legacy-shell-blur. This is the implementation that
+   flickered on the transparent webview; it exists so the old and new glass
+   can be compared live and must never ship as the default. */
+:root[data-legacy-shell-blur="true"] .app-shell {
+  /* Pre-fix values: the CSS blur added no frost, so the tint carried it. */
+  --shell-glass-bg: rgba(237, 239, 236, 0.78);
+  backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
+  -webkit-backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
+}
+
+:root[data-theme="dark"][data-legacy-shell-blur="true"] .app-shell {
+  --shell-glass-bg: rgba(33, 34, 31, 0.74);
+}
+
+/* Browser-only fallback: outside the native shell there is no window material,
+   so without this the sidebar would render as a flat tint. The compositing bug
+   this change works around is specific to the transparent native webview, so
+   the CSS blur is safe here (same split as the drift-alarm browser backdrop). */
+:root[data-runtime="browser"] .app-shell {
+  --shell-glass-bg: rgba(237, 239, 236, 0.78);
+  backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
+  -webkit-backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
+}
+
+:root[data-theme="dark"][data-runtime="browser"] .app-shell {
+  --shell-glass-bg: rgba(33, 34, 31, 0.74);
 }
 
 .app-shell--sidebar-collapsed {

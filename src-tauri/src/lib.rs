@@ -74,7 +74,8 @@ use commands::{
     watcher_peek_end_of_day_review_action, watcher_peek_end_of_day_review_displayed,
     watcher_peek_extreme_nudge_action, watcher_peek_hide,
     watcher_peek_respond, watcher_peek_set_interactive, watcher_peek_show,
-    window_set_onboarding_presentation, DriftAlarmState,
+    window_set_native_shell_blur, window_set_onboarding_presentation, window_set_theme_appearance,
+    DriftAlarmState,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
@@ -634,7 +635,9 @@ pub fn run() {
             startup_get_open_at_login_status,
             startup_set_open_at_login_enabled,
             system_open_settings_pane,
+            window_set_native_shell_blur,
             window_set_onboarding_presentation,
+            window_set_theme_appearance,
             watcher_peek_show,
             watcher_peek_hide,
             watcher_peek_dismiss,
