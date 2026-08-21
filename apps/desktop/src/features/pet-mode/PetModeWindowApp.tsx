@@ -34,8 +34,10 @@ import {
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
-  PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
+  getPetModeDefaultEntryTravelDistance,
+  getPetModeWindowSize,
+  resolvePetModeEntryDurationMs,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
@@ -88,6 +90,12 @@ export function PetModeWindowApp() {
   const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
   const [facing, setFacing] = useState<"left" | "right">(initialAppearance.facing);
   const [entrySequence, setEntrySequence] = useState(0);
+  const [entryTravelDistance, setEntryTravelDistance] = useState<number | undefined>(undefined);
+  const [entryDurationMs, setEntryDurationMs] = useState(() => {
+    const { width } = getPetModeWindowSize(resolveInitialPetModeSize());
+    return resolvePetModeEntryDurationMs(getPetModeDefaultEntryTravelDistance(width));
+  });
+  const [petModeSize, setPetModeSize] = useState(resolveInitialPetModeSize);
   const [preserveEntryLanding, setPreserveEntryLanding] = useState(false);
   const [petModeEnabled, setPetModeEnabled] = useState(initialAppearance.enabled);
   const [petVisible, setPetVisible] = useState(true);
@@ -354,6 +362,7 @@ export function PetModeWindowApp() {
   useEffect(() => {
     const applySize = (size: PetModeSize) => {
       document.documentElement.style.setProperty("--pet-size-scale", String(size / 100));
+      setPetModeSize(size);
     };
     applySize(resolveInitialPetModeSize());
     const handleStorage = (event: StorageEvent) => {
@@ -603,6 +612,8 @@ export function PetModeWindowApp() {
           // begins instead of continuing from the hidden mount time.
           actionTokenRef.current += 1;
           restartAutonomousCycle();
+          setEntryTravelDistance(event.travelDistance);
+          setEntryDurationMs(resolvePetModeEntryDurationMs(event.travelDistance, event.durationMs));
           setEntrySequence((sequence) => sequence + 1);
           setPreserveEntryLanding(false);
           petModeEnabledRef.current = true;
@@ -695,9 +706,9 @@ export function PetModeWindowApp() {
         commitPhase("idle");
         restartAutonomousCycle();
       }
-    }, PET_MODE_ENTRY_DURATION_MS + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
+    }, entryDurationMs + PET_MODE_ENTRY_FALLBACK_GRACE_MS);
     return () => window.clearTimeout(timerId);
-  }, [commitPhase, entrySequence, phase, restartAutonomousCycle]);
+  }, [commitPhase, entryDurationMs, entrySequence, phase, restartAutonomousCycle]);
 
   useEffect(() => {
     if (!labLifeLoopEnabled) return;
@@ -967,6 +978,9 @@ export function PetModeWindowApp() {
             facing={facing}
             pawFrame={pawFrame}
             entrySequence={entrySequence}
+            entryTravelDistance={entryTravelDistance}
+            entryDurationMs={entryDurationMs}
+            sizeScale={petModeSize / 100}
             preserveEntryLanding={preserveEntryLanding}
             hitRegionInteractive={petModeEnabled
               && petVisible

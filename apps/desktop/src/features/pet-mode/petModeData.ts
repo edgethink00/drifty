@@ -21,20 +21,28 @@ export const PET_MODE_SIT_MIN_MS = 2.5 * 60 * 1000;
 export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
 export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
 export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
+// The pet's approved geometry is 144x99 with the cat drawn at 121.2x92.4
+// inside it. Size is expressed as a percentage of that reviewed layout so the
+// cat, its hit target, and the native panel all scale by one factor instead of
+// each carrying its own numbers.
+export const PET_MODE_BASE_WIDTH = 144;
+export const PET_MODE_BASE_HEIGHT = 99;
 export const PET_MODE_WALK_SPEED = 20.8;
 export const PET_MODE_WALK_STRIDE = 26;
 export const PET_MODE_RUN_SPEED = 300;
 export const PET_MODE_RUN_STRIDE = 72;
 export const PET_MODE_GAIT_CADENCE = 0.9;
 export const PET_MODE_GAIT_FRAME_COUNT = 30;
-// Translation duration only; native separately owns the hidden pre-paint hold
-// and one-frame renderer handoff. The panel starts with every opaque cat pixel
-// outside the display, and the extra distance over the former peek entrance is
-// matched by this slightly longer travel so walking speed does not regress.
-export const PET_MODE_ENTRY_DURATION_MS = 833;
-// Reach walking speed quickly, hold it for most of the entrance, then reserve
-// a slightly longer slowdown for an exact, quiet landing. This reads as animal
-// locomotion instead of a UI element easing for the entire trip.
+export const PET_MODE_HOME_EDGE_INSET = 24;
+// Native translation duration only. The hidden pre-paint hold and renderer
+// handoff happen before this clock starts. Default-home travel at 100% size is
+// one short run at PET_MODE_RUN_SPEED; farther remembered homes still finish
+// inside the max so Show Pet never turns into a cross-screen walk.
+export const PET_MODE_ENTRY_MIN_DURATION_MS = 180;
+export const PET_MODE_ENTRY_MAX_DURATION_MS = 700;
+export const PET_MODE_ENTRY_DURATION_MS = 482;
+// Reach running speed quickly, hold it for most of the entrance, then reserve
+// a slightly longer slowdown for an exact, quiet landing.
 export const PET_MODE_ENTRY_ACCELERATION_RATIO = 0.1;
 export const PET_MODE_ENTRY_DECELERATION_RATIO = 0.18;
 // In the 144-point base panel, all idle and registered gait silhouettes leave
@@ -165,7 +173,12 @@ export type PetModeInterventionTarget = {
 export type PetModeWindowEvent =
   | { readonly kind: "snapshot"; readonly snapshot: PetModeSnapshot }
   | { readonly kind: "facing"; readonly facing: "left" | "right" }
-  | { readonly kind: "motion"; readonly motion: PetModeMotionKind }
+  | {
+    readonly kind: "motion";
+    readonly motion: PetModeMotionKind;
+    readonly travelDistance?: number;
+    readonly durationMs?: number;
+  }
   | { readonly kind: "entry_complete" }
   | { readonly kind: "preview_action"; readonly action: PetModePreviewAction }
   | { readonly kind: "intervention"; readonly target: PetModeInterventionTarget }
@@ -192,19 +205,72 @@ export type PetModeContactAlignment = {
   readonly diagnostic: string;
 };
 
-export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number {
-  if (motion === "entry") {
-    return PET_MODE_GAIT_FRAME_COUNT * 1000 / PET_MODE_ENTRY_DURATION_MS;
-  }
-  const speed = motion === "run" ? PET_MODE_RUN_SPEED : PET_MODE_WALK_SPEED;
-  const stride = motion === "run" ? PET_MODE_RUN_STRIDE : PET_MODE_WALK_STRIDE;
-  return PET_MODE_GAIT_FRAME_COUNT * speed * PET_MODE_GAIT_CADENCE / stride;
+export function getPetModeGaitStride(motion: PetModeMotionKind): number {
+  const stride = motion === "walk" ? PET_MODE_WALK_STRIDE : PET_MODE_RUN_STRIDE;
+  return stride / PET_MODE_GAIT_CADENCE;
 }
 
-export function getPetModeEntryProgress(elapsedMilliseconds: number): number {
+export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number {
+  const speed = motion === "walk" ? PET_MODE_WALK_SPEED : PET_MODE_RUN_SPEED;
+  return PET_MODE_GAIT_FRAME_COUNT * speed / getPetModeGaitStride(motion);
+}
+
+export function getPetModeEntryVisibleWidth(petWidth = PET_MODE_BASE_WIDTH): number {
+  return petWidth * (PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX - PET_MODE_ENTRY_HIDDEN_SAFETY_PX) / PET_MODE_BASE_WIDTH;
+}
+
+export function getPetModeDefaultEntryTravelDistance(petWidth = PET_MODE_BASE_WIDTH): number {
+  return petWidth + PET_MODE_HOME_EDGE_INSET - getPetModeEntryVisibleWidth(petWidth);
+}
+
+export function getPetModeEntryMaxTravelDistance(petWidth = PET_MODE_BASE_WIDTH): number {
+  return Math.max(
+    getPetModeDefaultEntryTravelDistance(petWidth),
+    PET_MODE_RUN_SPEED * PET_MODE_ENTRY_MAX_DURATION_MS / 1000,
+  );
+}
+
+export function getPetModeEntryDurationMs(travelDistance: number): number {
+  if (!Number.isFinite(travelDistance) || travelDistance <= 0) return PET_MODE_ENTRY_DURATION_MS;
+  return Math.round(
+    Math.min(
+      PET_MODE_ENTRY_MAX_DURATION_MS,
+      Math.max(PET_MODE_ENTRY_MIN_DURATION_MS, travelDistance / PET_MODE_RUN_SPEED * 1000),
+    ),
+  );
+}
+
+export function resolvePetModeEntryDurationMs(
+  travelDistance?: number,
+  durationMs?: number,
+): number {
+  if (typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0) {
+    return Math.round(durationMs);
+  }
+  if (typeof travelDistance === "number" && Number.isFinite(travelDistance) && travelDistance > 0) {
+    return getPetModeEntryDurationMs(travelDistance);
+  }
+  return PET_MODE_ENTRY_DURATION_MS;
+}
+
+export function getPetModeClampedEntryTravelDistance(
+  travelDistance: number,
+  petWidth = PET_MODE_BASE_WIDTH,
+): number {
+  if (!Number.isFinite(travelDistance) || travelDistance <= 0) {
+    return getPetModeDefaultEntryTravelDistance(petWidth);
+  }
+  return Math.min(travelDistance, getPetModeEntryMaxTravelDistance(petWidth));
+}
+
+export function getPetModeEntryProgress(
+  elapsedMilliseconds: number,
+  durationMs = PET_MODE_ENTRY_DURATION_MS,
+): number {
+  const duration = durationMs > 0 ? durationMs : PET_MODE_ENTRY_DURATION_MS;
   const linearProgress = Math.min(
     1,
-    Math.max(0, elapsedMilliseconds) / PET_MODE_ENTRY_DURATION_MS,
+    Math.max(0, elapsedMilliseconds) / duration,
   );
   const accelerationDuration = PET_MODE_ENTRY_ACCELERATION_RATIO;
   const decelerationDuration = PET_MODE_ENTRY_DECELERATION_RATIO;
@@ -233,16 +299,26 @@ export function getPetModeGaitFrameIndex(
   motion: PetModeMotionKind,
   elapsedMilliseconds: number,
   frameCount = PET_MODE_GAIT_FRAME_COUNT,
+  options?: {
+    readonly travelDistance?: number;
+    readonly durationMs?: number;
+    readonly sizeScale?: number;
+  },
 ): number {
   if (!Number.isInteger(frameCount) || frameCount < 1) return 0;
   if (motion === "entry") {
-    // Native X uses this same travel profile. Advancing the gait from distance
-    // instead of linear time keeps the paws planted through the short launch,
-    // long walking plateau, and final slowdown.
-    return Math.min(
-      frameCount - 1,
-      Math.floor(getPetModeEntryProgress(elapsedMilliseconds) * frameCount),
+    // Native X uses this same travel profile. Advancing the gait from actual
+    // distance, not a single 0-1 cycle, keeps the paws planted at run stride.
+    const sizeScale = options?.sizeScale && options.sizeScale > 0 ? options.sizeScale : 1;
+    const petWidth = PET_MODE_BASE_WIDTH * sizeScale;
+    const travelDistance = getPetModeClampedEntryTravelDistance(
+      options?.travelDistance ?? getPetModeDefaultEntryTravelDistance(petWidth),
+      petWidth,
     );
+    const durationMs = resolvePetModeEntryDurationMs(travelDistance, options?.durationMs);
+    const distance = getPetModeEntryProgress(elapsedMilliseconds, durationMs) * travelDistance;
+    const stride = getPetModeGaitStride("run") * sizeScale;
+    return Math.floor(distance / stride * frameCount) % frameCount;
   }
   const rawFrame = Math.floor(
     Math.max(0, elapsedMilliseconds) * getPetModeGaitFramesPerSecond(motion) / 1000,
@@ -381,12 +457,6 @@ export function getPetModeCoatSpec(coat: PetModeCoat): PetModeCoatSpec {
   return PET_MODE_COAT_SPECS.find((spec) => spec.value === coat) ?? PET_MODE_COAT_SPECS[0];
 }
 
-// The pet's approved geometry is 144x99 with the cat drawn at 121.2x92.4
-// inside it. Size is expressed as a percentage of that reviewed layout so the
-// cat, its hit target, and the native panel all scale by one factor instead of
-// each carrying its own numbers.
-export const PET_MODE_BASE_WIDTH = 144;
-export const PET_MODE_BASE_HEIGHT = 99;
 export const PET_MODE_SIZES = [50, 75, 100, 125] as const;
 export type PetModeSize = (typeof PET_MODE_SIZES)[number];
 export const PET_MODE_DEFAULT_SIZE: PetModeSize = 100;

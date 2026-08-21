@@ -418,7 +418,7 @@
 }
 
 .pet-mode-cat--entry .pet-mode-cat__shadow {
-  animation: pet-mode-entry-shadow var(--pet-entry-duration, 833ms) ease-in-out 1 both;
+  animation: pet-mode-entry-shadow var(--pet-entry-duration, 482ms) ease-in-out 1 both;
 }
 .pet-mode-cat--walk .pet-mode-cat__shadow { animation: pet-mode-shadow 480ms ease-in-out infinite; }
 .pet-mode-cat--run .pet-mode-cat__shadow { animation: pet-mode-shadow 240ms ease-in-out infinite; }

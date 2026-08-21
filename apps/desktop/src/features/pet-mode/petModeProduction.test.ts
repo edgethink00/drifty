@@ -37,6 +37,10 @@ describe("pet entry motion contract", () => {
       /const PET_MODE_ENTRY_DURATION_MS: u64 = (\d+);/,
     );
     expect(rustDuration?.[1]).toBe(String(PET_MODE_ENTRY_DURATION_MS));
+    expect(petModeRustContract).toContain('"travelDistance": entry_travel');
+    expect(petModeRustContract).toContain('"durationMs": entry_duration_ms');
+    expect(petModeRustContract).toContain('clamp_pet_entry_destination');
+    expect(petModeCatContract).toContain('travelDistance: entryTravelDistance');
     const rustAccelerationRatio = petModeRustContract.match(
       /const PET_MODE_ENTRY_ACCELERATION_RATIO: f64 = ([\d.]+);/,
     );

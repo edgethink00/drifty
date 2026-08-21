@@ -348,6 +348,28 @@ describe("PetModeWindowApp", () => {
     expect(cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster")).toBeNull();
   });
 
+  it("uses native travel distance for the short run entrance", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: async () => ({ frames: walkFrames, cycleSeconds: 1.25 }),
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+      bridge.eventHandler?.({ kind: "motion", motion: "entry", travelDistance: 90, durationMs: 300 });
+      await Promise.resolve();
+    });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+    expect(cat.style.getPropertyValue("--pet-entry-duration")).toBe("300ms");
+  });
+
   it("does not swap the landed raster when walk frames load after entry completion", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     let resolveFetch: ((response: { json: () => Promise<{ frames: readonly string[]; cycleSeconds: number }> }) => void) | null = null;

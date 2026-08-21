@@ -44,8 +44,16 @@ const PET_MODE_WALK_SPEED: f64 = 20.8;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
 // Native translation duration only. The hidden pre-paint hold and renderer
-// handoff below happen before this clock starts.
-const PET_MODE_ENTRY_DURATION_MS: u64 = 833;
+// handoff below happen before this clock starts. Default-home travel at the
+// 144-point panel is one short run at PET_MODE_RUN_SPEED; remembered homes
+// farther inland still finish inside the max so Show Pet never becomes a
+// cross-screen walk.
+const PET_MODE_ENTRY_MIN_DURATION_MS: u64 = 180;
+const PET_MODE_ENTRY_MAX_DURATION_MS: u64 = 700;
+// Documented 100% default-home duration. Live travel uses distance / run speed,
+// which equals this value at the reviewed 144-point panel.
+#[allow(dead_code)]
+const PET_MODE_ENTRY_DURATION_MS: u64 = 482;
 const PET_MODE_ENTRY_ACCELERATION_RATIO: f64 = 0.10;
 const PET_MODE_ENTRY_DECELERATION_RATIO: f64 = 0.18;
 // Alpha-bound measurement across the idle PNG and all registered gait frames
@@ -355,12 +363,20 @@ pub fn pet_mode_set_enabled(
     cancel_pet_motion();
     let monitor = resolve_pet_home_monitor(&app)
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
-    let home = calculate_pet_home_position(&monitor);
+    let remembered_home = calculate_pet_home_position(&monitor);
     let (final_width, final_height) = pet_size();
     let scale_factor = monitor.scale_factor();
     let screen_position = monitor.position().to_logical::<f64>(scale_factor);
     let screen_size = monitor.size().to_logical::<f64>(scale_factor);
+    let home = clamp_pet_entry_destination(
+        remembered_home,
+        screen_position.x,
+        screen_size.width,
+        final_width,
+    );
     let entry = pet_entry_geometry(screen_position.x, screen_size.width, home.x, final_width);
+    let entry_travel = pet_entry_travel_distance(entry.start_x, home.x);
+    let entry_duration_ms = pet_entry_duration_ms(entry_travel);
     emit_pet_event(&window, json!({ "kind": "facing", "facing": entry.facing }))?;
 
     if reduced_motion {
@@ -398,7 +414,12 @@ pub fn pet_mode_set_enabled(
             }
             let _ = emit_pet_event(
                 &entry_window,
-                json!({ "kind": "motion", "motion": "entry" }),
+                json!({
+                    "kind": "motion",
+                    "motion": "entry",
+                    "travelDistance": entry_travel,
+                    "durationMs": entry_duration_ms,
+                }),
             );
             // Give the WebView one frame to switch from its held inward-facing
             // idle pose to the first gait frame before native movement begins.
@@ -406,7 +427,13 @@ pub fn pet_mode_set_enabled(
             if !pet_entry_motion_is_current(motion_revision) {
                 return;
             }
-            let _ = animate_pet_entry_window(&entry_window, entry_start_x, home, motion_revision);
+            let _ = animate_pet_entry_window(
+                &entry_window,
+                entry_start_x,
+                home,
+                entry_duration_ms,
+                motion_revision,
+            );
             if !pet_entry_motion_is_current(motion_revision)
                 || !PET_MODE_ENTRY_ACTIVE.swap(false, Ordering::Relaxed)
             {
@@ -426,10 +453,11 @@ fn animate_pet_entry_window(
     window: &WebviewWindow,
     start_x: f64,
     home: LogicalPosition<f64>,
+    duration_ms: u64,
     motion_revision: u64,
 ) -> Result<(), String> {
     let started_at = Instant::now();
-    let duration = Duration::from_millis(PET_MODE_ENTRY_DURATION_MS);
+    let duration = Duration::from_millis(duration_ms);
     loop {
         if !pet_entry_motion_is_current(motion_revision) {
             return Ok(());
@@ -521,6 +549,28 @@ fn pet_entry_geometry(
 fn pet_entry_transparent_visible_width(pet_width: f64) -> f64 {
     let base_visible_width = PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX - PET_MODE_ENTRY_HIDDEN_SAFETY_PX;
     pet_width * base_visible_width / PET_MODE_WIDTH
+}
+
+fn pet_entry_travel_distance(start_x: f64, home_x: f64) -> f64 {
+    (home_x - start_x).abs()
+}
+
+fn pet_entry_max_travel_distance(pet_width: f64) -> f64 {
+    pet_entry_default_travel_distance(pet_width).max(
+        PET_MODE_RUN_SPEED * PET_MODE_ENTRY_MAX_DURATION_MS as f64 / 1000.0,
+    )
+}
+
+fn pet_entry_duration_ms(travel_distance: f64) -> u64 {
+    if !travel_distance.is_finite() || travel_distance <= 0.0 {
+        return PET_MODE_ENTRY_MIN_DURATION_MS;
+    }
+    ((travel_distance / PET_MODE_RUN_SPEED) * 1000.0)
+        .round()
+        .clamp(
+            PET_MODE_ENTRY_MIN_DURATION_MS as f64,
+            PET_MODE_ENTRY_MAX_DURATION_MS as f64,
+        ) as u64
 }
 
 #[tauri::command]
@@ -1815,6 +1865,29 @@ fn calculate_pet_home_position(monitor: &Monitor) -> LogicalPosition<f64> {
     )
 }
 
+fn pet_entry_default_travel_distance(pet_width: f64) -> f64 {
+    pet_width + PET_MODE_HOME_EDGE_INSET - pet_entry_transparent_visible_width(pet_width)
+}
+
+fn clamp_pet_entry_destination(
+    preferred: LogicalPosition<f64>,
+    screen_x: f64,
+    screen_width: f64,
+    pet_width: f64,
+) -> LogicalPosition<f64> {
+    let unconstrained = pet_entry_geometry(screen_x, screen_width, preferred.x, pet_width);
+    let max_travel = pet_entry_max_travel_distance(pet_width);
+    let travel = pet_entry_travel_distance(unconstrained.start_x, preferred.x);
+    if travel <= max_travel {
+        return preferred;
+    }
+    let direction = if unconstrained.facing == "left" { -1.0 } else { 1.0 };
+    // Show Pet stays a short run from the nearest edge. Remembered inland homes
+    // remain the resident target for later walks; they just do not stretch this
+    // entrance into a cross-screen slide.
+    LogicalPosition::new(unconstrained.start_x + direction * max_travel, preferred.y)
+}
+
 fn default_pet_home_x(work_x: f64, work_width: f64, pet_width: f64) -> f64 {
     work_x + (work_width - pet_width - PET_MODE_HOME_EDGE_INSET).max(0.0)
 }
@@ -2205,10 +2278,30 @@ mod tests {
     }
 
     #[test]
-    fn entry_walk_profile_matches_renderer_contract() {
-        assert_eq!(PET_MODE_ENTRY_DURATION_MS, 833);
+    fn entry_run_profile_matches_renderer_contract() {
+        assert_eq!(PET_MODE_ENTRY_DURATION_MS, 482);
+        assert_eq!(PET_MODE_ENTRY_MIN_DURATION_MS, 180);
+        assert_eq!(PET_MODE_ENTRY_MAX_DURATION_MS, 700);
         assert_eq!(PET_MODE_ENTRY_ACCELERATION_RATIO, 0.10);
         assert_eq!(PET_MODE_ENTRY_DECELERATION_RATIO, 0.18);
+        assert!((pet_entry_default_travel_distance(144.0) - 144.671).abs() < 1e-9);
+        assert_eq!(pet_entry_duration_ms(144.671), 482);
+        assert_eq!(pet_entry_duration_ms(54.0), 180);
+        assert_eq!(pet_entry_duration_ms(900.0), 700);
+        let inland = clamp_pet_entry_destination(
+            LogicalPosition::new(700.0, 14.0),
+            0.0,
+            1440.0,
+            144.0,
+        );
+        assert!((inland.x - (1416.671 - 210.0)).abs() < 1e-9);
+        let default_home = clamp_pet_entry_destination(
+            LogicalPosition::new(1272.0, 14.0),
+            0.0,
+            1440.0,
+            144.0,
+        );
+        assert_eq!(default_home.x, 1272.0);
         assert_eq!(pet_entry_travel_progress(-1.0), 0.0);
         assert_eq!(pet_entry_travel_progress(0.0), 0.0);
         assert!((pet_entry_travel_progress(0.05) - 0.014_534_883_720_930_234).abs() < 1e-12);

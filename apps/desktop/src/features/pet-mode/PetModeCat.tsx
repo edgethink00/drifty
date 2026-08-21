@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { captureSentryException } from "../../lib/observability/sentryClient";
 import {
+  resolvePetModeEntryDurationMs,
   getPetModeGaitFrameIndex,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
@@ -47,6 +48,9 @@ export function PetModeCat({
   pawFrame,
   entrySequence = 0,
   preserveEntryLanding = false,
+  entryTravelDistance,
+  entryDurationMs,
+  sizeScale = 1,
   frameOverride,
   hitRegionInteractive = false,
   hitRegionCommitRevision = 0,
@@ -56,6 +60,9 @@ export function PetModeCat({
   readonly pawFrame: number;
   readonly entrySequence?: number;
   readonly preserveEntryLanding?: boolean;
+  readonly entryTravelDistance?: number;
+  readonly entryDurationMs?: number;
+  readonly sizeScale?: number;
   readonly frameOverride?: number;
   readonly hitRegionInteractive?: boolean;
   readonly hitRegionCommitRevision?: number;
@@ -128,6 +135,10 @@ export function PetModeCat({
     // use the same duration and distance-based travel progress; the final frame
     // clamp absorbs the remaining compositor-frame skew before `entry_complete`.
     const motion = phase === "run" ? "run" : phase === "walk" ? "walk" : "entry";
+    const resolvedEntryDurationMs = resolvePetModeEntryDurationMs(
+      entryTravelDistance,
+      entryDurationMs,
+    );
     const startedAt = performance.now();
     let displayedFrame = 0;
     let animationFrameId = 0;
@@ -142,6 +153,13 @@ export function PetModeCat({
         motion,
         now - startedAt,
         walkFrames.length,
+        motion === "entry"
+          ? {
+            travelDistance: entryTravelDistance,
+            durationMs: resolvedEntryDurationMs,
+            sizeScale,
+          }
+          : undefined,
       );
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
@@ -175,7 +193,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [entrySequence, facing, hitRegionInteractive, phase, walkFrames.length]);
+  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, sizeScale, walkFrames.length]);
 
   useEffect(() => {
     if (!isLifeMotionPhase(phase)) return undefined;
@@ -247,7 +265,7 @@ export function PetModeCat({
   const motionGeometry = {
     "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
     "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
-    "--pet-entry-duration": `${PET_MODE_ENTRY_DURATION_MS}ms`,
+    "--pet-entry-duration": `${entryDurationMs ?? PET_MODE_ENTRY_DURATION_MS}ms`,
     "--pet-gait-baseline-shift": `${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`,
     "--pet-gait-center-shift": `${PET_MODE_GAIT_CENTER_SHIFT_PX}px`,
   } as CSSProperties;
