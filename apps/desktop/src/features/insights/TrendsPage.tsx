@@ -4,7 +4,7 @@ import { DateNavigator } from "../../components/DateNavigator";
 import type { BreakRecoveryInsight } from "../companion/driftAlarmRecovery";
 import { INSIGHT_RANGE_OPTIONS, type InsightRange } from "../dashboard/dashboardPeriods";
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
-import type { WeeklyChartProjectSeriesItem } from "./weeklyChartView";
+import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 
 const TrendsPageBody = lazy(async () => ({
   default: (await import("./TrendsPageBody")).TrendsPageBody,
@@ -31,11 +31,14 @@ type TrendsPageProps = {
   readonly weeklyProjectSeries?: readonly WeeklyChartProjectSeriesItem[];
   readonly weeklyProjectMeta?: ReadonlyMap<string, { readonly label: string; readonly color: string }>;
   readonly weeklyProjectBySegmentId?: ReadonlyMap<string, string>;
+  readonly weeklyProjectSegments: readonly ActivitySegment[];
   readonly projectModeAvailable?: boolean;
+  readonly weeklyChartMode: WeeklyChartMode;
   readonly onNextInsightRange: () => void;
   readonly onPreviousInsightRange: () => void;
   readonly onTodayInsightRange: () => void;
   readonly onTrendsRangeChange: (range: InsightRange) => void;
+  readonly onWeeklyChartModeChange: (mode: WeeklyChartMode) => void;
 };
 
 export function TrendsPage({
@@ -59,11 +62,14 @@ export function TrendsPage({
   weeklyProjectSeries,
   weeklyProjectMeta,
   weeklyProjectBySegmentId,
+  weeklyProjectSegments,
   projectModeAvailable,
+  weeklyChartMode,
   onNextInsightRange,
   onPreviousInsightRange,
   onTodayInsightRange,
   onTrendsRangeChange,
+  onWeeklyChartModeChange,
 }: TrendsPageProps) {
   const productivityTotals = {
     focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
@@ -119,7 +125,10 @@ export function TrendsPage({
             projectSeries={weeklyProjectSeries}
             projectMeta={weeklyProjectMeta}
             projectBySegmentId={weeklyProjectBySegmentId}
+            projectSegments={weeklyProjectSegments}
             projectModeAvailable={projectModeAvailable}
+            weeklyChartMode={weeklyChartMode}
+            onWeeklyChartModeChange={onWeeklyChartModeChange}
             productivityPersonaReport={productivityPersonaReport}
             attentionRhythm={attentionRhythm}
             driftSourceLists={driftSourceLists}

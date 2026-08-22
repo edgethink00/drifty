@@ -180,7 +180,10 @@ export function WeeklyCategoryRow({
   projectSeries,
   projectMeta,
   projectBySegmentId,
+  projectSegments,
   projectModeAvailable = false,
+  mode,
+  onModeChange,
 }: {
   weekly: WeeklyBreakdownDay[];
   categoryTotals: Array<{ category: ActivityCategory; totalSeconds: number }>;
@@ -191,11 +194,14 @@ export function WeeklyCategoryRow({
   projectSeries?: readonly WeeklyChartProjectSeriesItem[];
   projectMeta?: ReadonlyMap<string, { readonly label: string; readonly color: string }>;
   projectBySegmentId?: ReadonlyMap<string, string>;
+  projectSegments: readonly ActivitySegment[];
   projectModeAvailable?: boolean;
+  mode: WeeklyChartMode;
+  onModeChange: (mode: WeeklyChartMode) => void;
 }) {
-  const [mode, setMode] = useState<WeeklyChartMode>("category");
   // A vanished project set (or an empty range) must not strand the chart in project mode.
   const effectiveMode: WeeklyChartMode = mode === "project" && !projectModeAvailable ? "category" : mode;
+  const hoverSegments = effectiveMode === "project" ? projectSegments : segments;
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const categorySeries = useMemo<DonutCategorySlice[]>(
     () => categoryTotals.map((entry) => ({ category: entry.category, seconds: entry.totalSeconds })),
@@ -210,7 +216,7 @@ export function WeeklyCategoryRow({
     const entries = new Map<string, CompactClassificationHoverPayload>();
 
     function buildBreakdown(matchesSegment: (segment: ActivitySegment) => boolean) {
-      return buildCompactActivityBreakdown(segments.filter(matchesSegment));
+      return buildCompactActivityBreakdown(hoverSegments.filter(matchesSegment));
     }
 
     if (effectiveMode === "productivity") {
@@ -242,7 +248,7 @@ export function WeeklyCategoryRow({
         ? !projectBySegmentId?.get(segment.id) && classifyActivity(segment, classificationOptions).category !== "unknown"
         : projectBySegmentId?.get(segment.id) === key;
       const projectSecondsByKey = new Map<string, number>();
-      for (const segment of segments) {
+      for (const segment of hoverSegments) {
         const projectId = projectBySegmentId?.get(segment.id);
         if (projectId) {
           projectSecondsByKey.set(projectId, (projectSecondsByKey.get(projectId) ?? 0) + segment.durationSeconds);
@@ -282,7 +288,7 @@ export function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [categoryTotals, classificationOptions, effectiveMode, productivityTotals, segments, projectSeries, projectMeta, projectBySegmentId]);
+  }, [categoryTotals, classificationOptions, effectiveMode, hoverSegments, productivityTotals, projectSeries, projectMeta, projectBySegmentId]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -294,7 +300,7 @@ export function WeeklyCategoryRow({
     const payload = hoverPayloads.get(segment.key);
     if (!payload) return;
     const weekdayDates = new Set<string>();
-    const bucketSegments = segments.filter((activitySegment) => {
+    const bucketSegments = hoverSegments.filter((activitySegment) => {
       const started = new Date(activitySegment.startedAt);
       if (Number.isNaN(started.getTime()) || weekdayOrderIndex(started) !== weekdayIndex) return false;
       weekdayDates.add(localDateKey(started));
@@ -331,7 +337,7 @@ export function WeeklyCategoryRow({
         mode={effectiveMode}
         projectModeAvailable={projectModeAvailable}
         onHideSegmentHover={() => setHoveredSegment(null)}
-        onModeChange={setMode}
+        onModeChange={onModeChange}
         onMoveSegmentHover={moveSegmentHover}
         onShowSegmentHover={showWeeklySegmentHover}
       />

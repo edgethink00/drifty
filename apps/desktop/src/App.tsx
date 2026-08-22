@@ -271,7 +271,7 @@ import { buildSelectedDashboardReplayAnchor } from "./features/dashboard/dashboa
 import type { DemoDashboardReplayKind } from "./features/dashboard/demoDashboardReplay";
 import { buildSelectedDayDashboardClassificationOptions, isDashboardDemoReplayUpdateDialogBlocking, resolveDashboardDemoReplayEffectiveData } from "./features/dashboard/dashboardDemoReplayEffectiveData";
 import { buildDashboardDemoReplaySidebarCard } from "./features/dashboard/dashboardDemoReplaySidebarCard";
-import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown, NO_PROJECT_KEY, NO_PROJECT_LABEL } from "./features/insights/insightData";
+import { buildAttentionRhythm, buildInsightSourceLists, buildWeeklyBreakdown, NO_PROJECT_KEY, NO_PROJECT_LABEL, type WeeklyChartMode } from "./features/insights/insightData";
 import { selectInsightSegments } from "./features/insights/insightSegments";
 import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
@@ -481,6 +481,7 @@ export default function App() {
   const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
   const [classificationRange, setClassificationRange] = useState<ClassificationRange>("Day");
   const [trendsRange, setTrendsRange] = useState<InsightRange>("Week");
+  const [weeklyChartMode, setWeeklyChartMode] = useState<WeeklyChartMode>("category");
   const [classifySelectedCategoryId, setClassifySelectedCategoryId] = useState<ActivityCategory | null>(null);
   const [classifySelectedSourceId, setClassifySelectedSourceId] = useState<string | null>(null);
   const [expandedClassificationActivityRows, setExpandedClassificationActivityRows] = useState<Set<string>>(() => new Set());
@@ -790,6 +791,12 @@ export default function App() {
       return { entries: [...entries, { tabId, dashPeriod: nextDashPeriod }], index: entries.length };
     });
   }, [dashPeriod]);
+
+  const openProjectTrends = useCallback(() => {
+    setTrendsRange("Week");
+    setWeeklyChartMode("project");
+    navigateToTab("trends");
+  }, [navigateToTab]);
 
   useEffect(() => {
     if (activeTab !== "team" || canOpenTeamsBeta) return;
@@ -7131,7 +7138,7 @@ export default function App() {
               setSettingsSection("aiSetup");
               setAiSetupRequestedTab("intelligence");
             }}
-            onOpenTrends={() => navigateToTab("trends")}
+            onOpenTrends={openProjectTrends}
             onSaveProject={(input) => void projectClassification.saveProject(input)}
             onDeleteProject={(id) => void projectClassification.deleteProject(id)}
             onRunAnalysis={() => requestProjectPassRun()}
@@ -7163,13 +7170,16 @@ export default function App() {
             weeklyProjectSeries={weeklyProjectChart.series}
             weeklyProjectMeta={weeklyProjectChart.meta}
             weeklyProjectBySegmentId={insightProjectBySegmentId}
+            weeklyProjectSegments={insightProjectProjection.segments}
             projectModeAvailable={weeklyProjectChart.available}
+            weeklyChartMode={weeklyChartMode}
             onNextInsightRange={() => {
               if (canShiftInsightForward) selectDay((p) => shiftInsightPeriodDay(p, trendsRange, 1));
             }}
             onPreviousInsightRange={() => selectDay((p) => shiftInsightPeriodDay(p, trendsRange, -1))}
             onTodayInsightRange={() => selectDay(todayDay)}
             onTrendsRangeChange={setTrendsRange}
+            onWeeklyChartModeChange={setWeeklyChartMode}
           />
         ) : null}
 

@@ -14,7 +14,7 @@ import {
   WeeklyCategoryRow,
 } from "./InsightCards";
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
-import type { WeeklyChartProjectSeriesItem } from "./weeklyChartView";
+import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
 
 type TrendsPageBodyProps = {
   readonly appIcons: AppIconMap;
@@ -33,9 +33,12 @@ type TrendsPageBodyProps = {
   readonly projectBySegmentId?: ReadonlyMap<string, string>;
   readonly projectMeta?: ReadonlyMap<string, { readonly label: string; readonly color: string }>;
   readonly projectModeAvailable?: boolean;
+  readonly projectSegments: readonly ActivitySegment[];
   readonly projectSeries?: readonly WeeklyChartProjectSeriesItem[];
   readonly segments: ActivitySegment[];
   readonly weekly: WeeklyBreakdownDay[];
+  readonly weeklyChartMode: WeeklyChartMode;
+  readonly onWeeklyChartModeChange: (mode: WeeklyChartMode) => void;
 };
 
 export function TrendsPageBody({
@@ -51,9 +54,12 @@ export function TrendsPageBody({
   projectBySegmentId,
   projectMeta,
   projectModeAvailable,
+  projectSegments,
   projectSeries,
   segments,
   weekly,
+  weeklyChartMode,
+  onWeeklyChartModeChange,
 }: TrendsPageBodyProps) {
   return (
     <>
@@ -67,7 +73,10 @@ export function TrendsPageBody({
         projectSeries={projectSeries}
         projectMeta={projectMeta}
         projectBySegmentId={projectBySegmentId}
+        projectSegments={projectSegments}
         projectModeAvailable={projectModeAvailable}
+        mode={weeklyChartMode}
+        onModeChange={onWeeklyChartModeChange}
       />
 
       <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
