@@ -39,11 +39,11 @@ describe("sidebar motion styles", () => {
 
   it("collapses sidebar text and footer copy with max-size transitions", () => {
     const styles = readStyles();
-    const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)");
+    const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)");
     const collapsedBrandBlock = cssBlock(styles, ".sidebar--collapsed .brand");
     const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
     const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
-    const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > span:not(.nav-item__hover-label)");
+    const collapsedNavTextBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge)");
     const collapsedLivePillBlock = cssBlock(styles, ".sidebar--collapsed .live-pill");
     const collapsedLiveStatusBlock = cssBlock(styles, ".sidebar--collapsed .live-pill .k");
     const collapsedLiveCopyBlock =
@@ -97,7 +97,7 @@ describe("sidebar motion styles", () => {
     const styles = readStyles();
     const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
     const navItemMotionBlock = cssBlock(styles, ".nav-item", "last");
-    const navLabelMotionBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label)", "last");
+    const navLabelMotionBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)", "last");
     const collapsedRailWidthBlock =
       styles.match(/\.sidebar--collapsed \.brand,\s*\.sidebar--collapsed \.nav-label,\s*\.sidebar--collapsed \.sidebar-nav,\s*\.sidebar--collapsed \.settings-sidebar-back,\s*\.sidebar--collapsed \.settings-nav,\s*\.sidebar--collapsed \.sidebar-foot\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
 

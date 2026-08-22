@@ -27,7 +27,7 @@ export function NudgesStep({
         <li className={`dc-onb-row${extremeNudgeEnabled ? " dc-onb-row--extreme-on" : ""}`}>
           <div className="dc-onb-row__copy">
             <span className="dc-onb-row__title dc-onb-row__title--with-badge">
-              {t("onboarding.nudges.extreme")} <span className="dc-onb-beta">{t("common.beta")}</span>
+              {t("onboarding.nudges.extreme")} <span className="status-badge status-badge--beta">{t("common.beta")}</span>
             </span>
             <span className="dc-onb-row__desc">{t("onboarding.nudges.extremeDescription")}</span>
           </div>

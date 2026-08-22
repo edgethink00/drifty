@@ -10,6 +10,7 @@ import type { TrayDisplayMode } from "@drifty/domain";
 import { SettingsSelect } from "./SettingsSelect";
 import { PetSettings } from "./PetCoatPicker";
 import type { PetModeCoat, PetModeSize } from "../pet-mode/petModeData";
+import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 type NotificationsSettingsSectionProps = {
@@ -31,6 +32,7 @@ type NotificationsSettingsSectionProps = {
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
   readonly petModeSize: PetModeSize;
+  readonly showPetNewBadge?: boolean;
   readonly onPetModeEnabledChange: (enabled: boolean) => void;
   readonly onPetModeCoatChange: (coat: PetModeCoat) => void;
   readonly onPetModeSizeChange: (size: PetModeSize) => void;
@@ -55,6 +57,7 @@ export function NotificationsSettingsSection({
   petModeEnabled,
   petModeCoat,
   petModeSize,
+  showPetNewBadge = false,
   onPetModeEnabledChange,
   onPetModeCoatChange,
   onPetModeSizeChange,
@@ -181,7 +184,7 @@ export function NotificationsSettingsSection({
         </div>
         <div className={`settings-row${driftAlertsEnabled ? "" : " settings-row--disabled"}`}>
           <div>
-            <div className="lbl settings-label-with-badge">{t("settings.notifications.extreme")} <span className="settings-beta-badge">{t("common.beta")}</span></div>
+            <div className="lbl settings-label-with-badge">{t("settings.notifications.extreme")} <span className="status-badge status-badge--beta">{t("common.beta")}</span></div>
             <div className="desc">
               {driftAlertsEnabled
                 ? t("settings.notifications.extremeOnDescription")
@@ -219,7 +222,7 @@ export function NotificationsSettingsSection({
           it is the most optional of the three: the pill and drift alerts are
           core to how Drifty nudges, while the pet is decoration you opt into. */}
       <div className="settings-block">
-        <h3>{t("settings.pet.title")}</h3>
+        <h3 className={showPetNewBadge ? "settings-block__title-with-badge" : undefined}>{t("settings.pet.title")}{showPetNewBadge ? <FeatureNewBadge /> : null}</h3>
         <PetSettings
           enabled={petModeEnabled}
           onEnabledChange={onPetModeEnabledChange}

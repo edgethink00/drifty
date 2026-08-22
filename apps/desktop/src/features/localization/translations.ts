@@ -8,6 +8,7 @@ export const ENGLISH_TRANSLATIONS = {
   "common.enabled": "Enabled",
   "common.english": "English",
   "common.korean": "Korean",
+  "common.new": "New",
   "common.off": "Off",
   "common.on": "On",
   "common.optional": "Optional",
@@ -934,7 +935,7 @@ export type TranslationKey = keyof typeof ENGLISH_TRANSLATIONS;
 
 export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "common.back": "뒤로",
-  "common.beta": "베타",
+  "common.beta": "Beta",
   "common.continue": "계속",
   "common.dev": "개발자",
   "common.disabled": "꺼짐",
@@ -942,6 +943,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "common.enabled": "켜짐",
   "common.english": "English",
   "common.korean": "한국어",
+  "common.new": "New",
   "common.off": "끔",
   "common.on": "켬",
   "common.optional": "선택",

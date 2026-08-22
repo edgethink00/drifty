@@ -114,6 +114,7 @@ import { readContextualGuardAuditEvents } from "./features/classification/contex
 import {
   OnboardingModal,
   hasCompletedUserOnboarding,
+  readUserOnboardingState,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
@@ -287,6 +288,7 @@ import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromS
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
 import { activityNav, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
+import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import {
   captureAiClassificationRun,
   toAiProviderAnalytics,
@@ -1112,6 +1114,10 @@ export default function App() {
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
   } = useAuth();
+  const featureNewBadges = useFeatureNewBadges(
+    readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt,
+    petModeEnabled,
+  );
   const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
   const isEffectiveAuthRequired = isAuthRequired;
   const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !isEffectiveAuthRequired;
@@ -6926,6 +6932,7 @@ export default function App() {
             userEmail={user?.email ?? null}
             isDarkMode={theme === "dark"}
             isPetVisible={petModeEnabled}
+            showPetNewBadge={featureNewBadges.showPet}
             onToggle={() => setAccountMenuOpen((open) => !open)}
             showProfile={canOpenProfileBeta}
             onProfile={() => {
@@ -7415,6 +7422,7 @@ export default function App() {
                     petModeEnabled={petModeEnabled}
                     petModeCoat={petModeCoat}
                     petModeSize={petModeSize}
+                    showPetNewBadge={featureNewBadges.showPet}
                     onPetModeEnabledChange={setPetModeEnabled}
                     onPetModeCoatChange={setPetModeCoat}
                     onPetModeSizeChange={setPetModeSize}

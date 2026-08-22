@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { CSSProperties, SVGProps } from "react";
 import { createPortal } from "react-dom";
 import { useLocalization } from "../localization/LocalizationContext";
+import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 
 const menuIconProps: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -128,6 +129,7 @@ type AccountMenuProps = {
   readonly userEmail: string | null;
   readonly isDarkMode: boolean;
   readonly isPetVisible: boolean;
+  readonly showPetNewBadge?: boolean;
   readonly onToggle: () => void;
   readonly onProfile: () => void;
   /** Profile is a Dev-mode beta surface; hide the item when the gate is off. */
@@ -149,6 +151,7 @@ export function AccountMenu({
   userEmail,
   isDarkMode,
   isPetVisible,
+  showPetNewBadge = false,
   onToggle,
   onProfile,
   showProfile = true,
@@ -284,6 +287,7 @@ export function AccountMenu({
       >
         <span className="account-menu-icon"><PetIcon /></span>
         <span>{t("settings.pet.show")}</span>
+        {showPetNewBadge ? <FeatureNewBadge /> : null}
         <span className="account-menu-toggle" data-on={isPetVisible} aria-hidden="true">
           <span className="account-menu-toggle__knob" />
         </span>

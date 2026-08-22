@@ -356,6 +356,33 @@
   text-transform: uppercase;
 }
 
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-height: 1.15rem;
+  padding: 2px 9px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--type-chip-size);
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
+.account-menu-item > .status-badge {
+  margin-left: 0;
+}
+.settings-block__title-with-badge .status-badge,
+.settings-block__title-with-badge .settings-beta-badge {
+  translate: 0 .02rem;
+}
+
 .content--settings .settings-row .desc {
   max-width: min(120ch, 100%);
   font-size: var(--type-setting-desc-size);

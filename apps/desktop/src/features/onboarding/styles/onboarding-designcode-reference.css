@@ -703,15 +703,8 @@
   opacity: 0.5;
 }
 
-.dc-onb-beta {
-  padding: 2px 6px;
-  border-radius: 5px;
-  background: var(--dc-onb-warn-soft);
-  color: var(--dc-onb-warn);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+.dc-onb-row__title--with-badge .status-badge {
+  translate: 0 .02rem;
 }
 
 .dc-onb-toggle {

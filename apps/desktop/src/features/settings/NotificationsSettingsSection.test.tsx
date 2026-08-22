@@ -81,10 +81,22 @@ describe("NotificationsSettingsSection", () => {
     expect(props.onCompanionMenuBarDisplayModeChange).toHaveBeenCalledWith("donutFocusTime");
   });
 
+
+  it("shows a persistent Beta status label on Extreme nudge", () => {
+    renderSettings();
+    const beta = screen.getByText("Beta");
+    expect(beta.className).toContain("status-badge--beta");
+    expect(beta.getAttribute("aria-hidden")).toBeNull();
+  });
+
   it("localizes the production pet settings in Korean", () => {
-    renderSettings({}, "ko");
+    renderSettings({ showPetNewBadge: true }, "ko");
 
     expect(screen.getByRole("heading", { name: "데스크톱 펫" })).toBeTruthy();
+    expect(screen.getByText("New")).toBeTruthy();
+    expect(screen.getByText("Beta")).toBeTruthy();
+    expect(screen.queryByText("신규")).toBeNull();
+    expect(screen.queryByText("베타")).toBeNull();
     expect(screen.getByText("펫 표시")).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "펫 크기" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "아이보리" })).toBeTruthy();

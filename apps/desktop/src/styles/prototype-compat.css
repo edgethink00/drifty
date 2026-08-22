@@ -33,7 +33,7 @@
   box-shadow: none;
 }
 .nav-item svg { width: 14px; height: 14px; flex-shrink: 0; }
-.nav-item > span:not(.nav-item__hover-label) {
+.nav-item > span:not(.nav-item__hover-label):not(.status-badge) {
   max-width: 9rem;
   min-width: 0;
   overflow: hidden;

@@ -106,7 +106,7 @@
 .brand__logo,
 .nav-label,
 .nav-item,
-.nav-item > span:not(.nav-item__hover-label),
+.nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .tracker-control,
 .live-pill,
 .live-pill .k,
@@ -149,7 +149,7 @@
     color var(--transition-fast);
 }
 
-.nav-item > span:not(.nav-item__hover-label),
+.nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .settings-sidebar-back span,
 .settings-nav-item__label,
 .live-pill__summary-copy,
@@ -186,7 +186,7 @@
 }
 
 .app-shell:not(.app-shell--sidebar-collapsed) .nav-label,
-.app-shell:not(.app-shell--sidebar-collapsed) .nav-item > span:not(.nav-item__hover-label),
+.app-shell:not(.app-shell--sidebar-collapsed) .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .k,
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill__summary-copy,
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-name,
@@ -197,7 +197,7 @@
 }
 
 .sidebar--collapsed .nav-label,
-.sidebar--collapsed .nav-item > span:not(.nav-item__hover-label),
+.sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .sidebar--collapsed .settings-sidebar-back span,
 .sidebar--collapsed .settings-sidebar-heading,
 .sidebar--collapsed .live-pill .k,
@@ -254,7 +254,7 @@
     border-radius: 10px;
   }
 
-  .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label) {
+  .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge) {
     max-width: 0;
     opacity: 0;
     overflow: hidden;
@@ -575,7 +575,7 @@
   .brand__logo,
   .nav-label,
   .nav-item,
-  .nav-item > span:not(.nav-item__hover-label),
+  .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
   .nav-item__hover-label,
   .settings-nav-item__label,
   .tracker-control,
