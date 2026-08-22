@@ -289,22 +289,23 @@ describe("AiSetupPanel", () => {
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
     const requiredFields = screen.getByRole("list", { name: /Required AI classification fields/i });
     const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
-    expect(within(requiredFields).getByText(/App name and basic app context/i)).toBeTruthy();
-    expect(within(requiredFields).getByText(/Activity duration/i)).toBeTruthy();
-    expect(within(requiredFields).getByText(/Browser or site domain/i)).toBeTruthy();
-    expect(within(requiredFields).queryByRole("switch", { name: /Browser or site domain/i })).toBeNull();
+    // The receipt states each always-sent field by name, with the value that would
+    // actually leave this Mac for the worked example.
+    expect(within(requiredFields).getByText(/^App$/i)).toBeTruthy();
+    expect(within(requiredFields).getByText(/^Duration$/i)).toBeTruthy();
+    expect(within(requiredFields).getByText(/^Site domain$/i)).toBeTruthy();
+    expect(within(requiredFields).queryByRole("switch", { name: /Site domain/i })).toBeNull();
     expect(within(requiredFields).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(requiredFields).getAllByText(/^Required$/i)).toHaveLength(3);
-    expect(within(optionalFields).getByRole("switch", { name: /Site URL/i })).toBeTruthy();
+    expect(within(requiredFields).getAllByText(/^Always sent$/i)).toHaveLength(3);
+    // The fixture must never read as the user's own captured activity.
+    expect(screen.getByText(/Example segment .* not your activity/i)).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /Page address/i })).toBeTruthy();
     expect(within(optionalFields).getByRole("switch", { name: /Window title/i })).toBeTruthy();
     expect(within(optionalFields).getByRole("switch", { name: /^Content context$/i })).toBeTruthy();
-    const contentContextHelp = within(optionalFields).getByRole("button", { name: /Content context details/i });
-    const contentContextTooltipId = contentContextHelp.getAttribute("aria-describedby");
-    expect(contentContextTooltipId).toBeTruthy();
-    const contentContextTooltip = document.getElementById(contentContextTooltipId ?? "");
-    expect(contentContextTooltip?.getAttribute("role")).toBe("tooltip");
-    expect(contentContextTooltip?.textContent).toContain("YouTube channel name");
-    expect(within(optionalFields).getByRole("switch", { name: /Your saved work profile/i })).toBeTruthy();
+    expect(within(optionalFields).getByRole("switch", { name: /^Work profile$/i })).toBeTruthy();
+    // Both truncation limits are disclosed, not just the page address one.
+    expect(within(optionalFields).getByText(/cut to 300 characters/i)).toBeTruthy();
+    expect(within(optionalFields).getByText(/Cut to 160 characters/i)).toBeTruthy();
     const optionalSwitches = within(optionalFields).getAllByRole("switch");
     expect(optionalSwitches).toHaveLength(4);
     for (const optionalSwitch of optionalSwitches) {
@@ -315,7 +316,7 @@ describe("AiSetupPanel", () => {
       expect(screen.queryByText(helperCopy)).toBeNull();
     }
 
-    const siteUrlSwitch = within(optionalFields).getByRole("switch", { name: /Site URL/i });
+    const siteUrlSwitch = within(optionalFields).getByRole("switch", { name: /Page address/i });
     fireEvent.click(siteUrlSwitch);
     expect(JSON.parse(window.localStorage.getItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY) ?? "{}")).toMatchObject({
       version: 1,
@@ -332,7 +333,7 @@ describe("AiSetupPanel", () => {
     const optionalFieldLists = screen.getAllByRole("list", { name: /Optional AI classification fields/i });
     const privacyOptionalFields = optionalFieldLists[optionalFieldLists.length - 1];
     if (!privacyOptionalFields) throw new Error("Privacy settings should render optional AI classification fields.");
-    const sharedSiteUrlSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Site URL/i });
+    const sharedSiteUrlSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Page address/i });
     const sharedWindowTitleSwitch = within(privacyOptionalFields).getByRole("switch", { name: /Window title/i });
     const sharedContentContextSwitch = within(privacyOptionalFields).getByRole("switch", { name: /^Content context$/i });
     if (!(sharedSiteUrlSwitch instanceof HTMLInputElement) || !(sharedWindowTitleSwitch instanceof HTMLInputElement) || !(sharedContentContextSwitch instanceof HTMLInputElement)) {
@@ -346,6 +347,47 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByRole("button", { name: /Reset optional/i })).toBeNull();
     expect(screen.getAllByText(/Raw timeline rows/i)).toHaveLength(2);
     expect(screen.getAllByText(/YouTube descriptions/i)).toHaveLength(2);
+  });
+
+  it("explains every receipt row and every never-sent claim in the two disclosure details", () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
+
+    // Glossary: one definition per row the receipt shows, including the two rows that are
+    // not switchable (recent-activity and enhanced context).
+    const glossary = screen.getByText("What each row means").closest("details");
+    if (!(glossary instanceof HTMLDetailsElement)) throw new Error("The glossary should render as a details block.");
+    const glossaryTerms = Array.from(glossary.querySelectorAll("dt"), (term) => term.textContent);
+    expect(glossaryTerms).toEqual([
+      "App",
+      "Duration",
+      "Site domain",
+      "Page address",
+      "Window title",
+      "Content context",
+      "Work profile",
+      "Recent-activity context",
+      "Enhanced context",
+    ]);
+    // The channel name is a real outbound field; it lost its only assertion when the
+    // per-row tooltip was removed, so the glossary carries that coverage now.
+    expect(within(glossary).getByText(/YouTube channel name/i)).toBeTruthy();
+    expect(within(glossary).getByText(/only appears on a second attempt|only on a second attempt/i)).toBeTruthy();
+
+    // Never-sent: every excluded claim is stated in receipt-grade wording.
+    const neverSent = screen.getByText("What is never sent as classification data").closest("details");
+    if (!(neverSent instanceof HTMLDetailsElement)) throw new Error("The never-sent list should render as a details block.");
+    const neverSentTerms = Array.from(neverSent.querySelectorAll("dt"), (term) => term.textContent);
+    expect(neverSentTerms).toEqual([
+      "Raw timeline rows",
+      "Full session history",
+      "Raw document and message bodies",
+      "YouTube descriptions",
+      "Provider API keys",
+    ]);
+    expect(within(neverSent).getByText(/The description never is/i)).toBeTruthy();
+    expect(within(neverSent).getByText(/macOS Keychain/i)).toBeTruthy();
   });
 
   it("falls back to enabled optional AI privacy controls when persisted settings are malformed", () => {

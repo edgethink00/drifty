@@ -1,487 +1,408 @@
+/* AI privacy review — the "receipt" of an outgoing classification request.
+   Labeled rows carry the value that would actually leave this Mac for a worked
+   example, four of them switchable, and a row that is switched off states in
+   place what the classifier loses by not having it. A row that is on costs
+   nothing, so it says nothing. */
+
 .ai-privacy-review {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  display: grid;
-  gap: var(--space-3);
-  min-width: 0;
-  padding: 0;
-}
-
-/* Every chip inside the card shares one chrome so the guarantees strip, the
-   zone meta badges, and the Required badges read as a single badge family in
-   both themes (green accent per the app's chip conventions, gray for neutral). */
-.ai-privacy-review .chip {
-  border: 1px solid transparent;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.ai-privacy-review .chip.green {
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
-}
-
-.ai-privacy-review .chip.gray {
-  border-color: color-mix(in srgb, var(--text) 16%, var(--line-strong));
-  color: var(--text);
-}
-
-/* Data-boundary layout: what stays on this Mac (left) vs what crosses into
-   AI requests (right), split by a dashed boundary with a lock badge. */
-.ai-privacy-review__flow {
-  align-items: stretch;
-  display: grid;
-  gap: var(--space-3);
-  grid-template-columns: minmax(0, 5fr) auto minmax(0, 7fr);
-  min-width: 0;
-}
-
-.ai-privacy-review__zone {
-  align-content: start;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  display: grid;
-  gap: var(--space-2);
-  min-width: 0;
-  padding: var(--space-3);
-}
-
-/* The local zone sits slightly recessed and muted: it is the side that never
-   crosses the boundary. The list centers in the remaining height so the card
-   stays balanced against the denser sent zone. */
-.ai-privacy-review__zone--local {
-  background: color-mix(in srgb, var(--text) 2.5%, var(--surface));
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-/* The sent zone shares the local zone's chrome so the two sides of the
-   boundary read as one symmetric structure; its brighter fill marks it as the
-   active, crossing side. */
-.ai-privacy-review__zone--sent {
-  background: var(--surface);
-}
-
-/* Zone headers adopt the settings refresh sub-section title treatment, with
-   the state chip pinned right so label and meta never collide. */
-.ai-privacy-review__zone-header {
-  align-items: center;
-  color: var(--text-soft);
-  column-gap: var(--space-2);
-  display: flex;
-  flex-wrap: wrap;
-  font-size: 0.94rem;
-  font-weight: 620;
-  justify-content: space-between;
-  line-height: 1.2;
-  min-width: 0;
-  row-gap: var(--space-1);
-}
-
-.ai-privacy-review__zone-header--spaced {
-  margin-top: var(--space-2);
-}
-
-.ai-privacy-review__zone-title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-/* Boundary: dashed hairline with a centered lock badge — only the minimized
-   fields on the right cross it. */
-.ai-privacy-review__boundary {
-  align-items: center;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  min-height: 100%;
-  position: relative;
-  width: 2.25rem;
-}
-
-.ai-privacy-review__boundary::before {
-  border-left: 1px dashed color-mix(in srgb, var(--text) 34%, transparent);
-  bottom: 0;
-  content: "";
-  left: 50%;
-  position: absolute;
-  top: 0;
-}
-
-.ai-privacy-review__boundary-lock {
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--text) 30%, transparent);
-  border-radius: 0.55rem;
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 18%, transparent);
-  flex: 0 0 auto;
-  height: 1.875rem;
-  position: relative;
-  width: 1.875rem;
-  z-index: 1;
-}
-
-.ai-privacy-review__boundary-lock::before {
-  border: 0.12rem solid var(--text);
-  border-bottom: 0;
-  border-radius: 999px 999px 0 0;
-  content: "";
-  height: 0.4rem;
-  left: 50%;
-  position: absolute;
-  top: 0.37rem;
-  transform: translateX(-50%);
-  width: 0.64rem;
-}
-
-.ai-privacy-review__boundary-lock::after {
-  background: var(--text);
-  border-radius: 0.18rem;
-  content: "";
-  height: 0.64rem;
-  left: 50%;
-  position: absolute;
-  top: 0.82rem;
-  transform: translateX(-50%);
-  width: 0.86rem;
-}
-
-/* Local list: compact quiet rows with a small lock marker, separated by
-   hairlines instead of cards. */
-.ai-privacy-review__local-list {
-  align-self: center;
-  display: grid;
-  list-style: none;
-  margin: 0;
+  gap: var(--space-2);
   min-width: 0;
-  padding: 0;
-  width: 100%;
-}
-
-.ai-privacy-review__local-item {
-  align-items: start;
-  column-gap: var(--space-2);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  min-width: 0;
-  padding: 0.34rem 0;
-}
-
-.ai-privacy-review__local-item:not(:last-child) {
-  border-bottom: 1px solid var(--line);
-}
-
-.ai-privacy-review__local-lock {
-  flex: 0 0 auto;
-  height: 0.8rem;
-  margin-top: 0.14rem;
-  position: relative;
-  width: 0.8rem;
-}
-
-.ai-privacy-review__local-lock::before {
-  border: 0.075rem solid var(--text-soft);
-  border-bottom: 0;
-  border-radius: 999px 999px 0 0;
-  content: "";
-  height: 0.24rem;
-  left: 50%;
-  position: absolute;
-  top: 0.08rem;
-  transform: translateX(-50%);
-  width: 0.36rem;
-}
-
-.ai-privacy-review__local-lock::after {
-  background: var(--text-soft);
-  border-radius: 0.1rem;
-  content: "";
-  height: 0.36rem;
-  left: 50%;
-  position: absolute;
-  top: 0.36rem;
-  transform: translateX(-50%);
-  width: 0.5rem;
-}
-
-.ai-privacy-review__local-text {
-  display: grid;
-  gap: 0.06rem;
-  min-width: 0;
-}
-
-.ai-privacy-review__local-text strong {
   color: var(--text);
-  display: block;
-  font-size: var(--type-setting-desc-size);
-  font-weight: 620;
-  letter-spacing: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
-.ai-privacy-review__local-text small {
+.ai-privacy-review__lede {
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
   color: var(--text-muted);
-  display: block;
-  font-size: var(--type-setting-desc-size);
-  line-height: 1.35;
-  min-width: 0;
-  overflow-wrap: anywhere;
+  max-width: 62ch;
 }
 
-/* Required fields: "always included" token bars that read as already through
-   the boundary — accent-tinted, no toggle, Required badge pinned right. */
-.ai-privacy-review__tokens {
-  display: grid;
-  gap: 0.5rem;
-  list-style: none;
-  margin: 0;
-  min-width: 0;
-  padding: 0;
+/* Korean wraps by character by default, which breaks words mid-syllable-block.
+   keep-all wraps on word boundaries; the URL value keeps anywhere-breaking so a
+   long address still folds instead of overflowing. */
+.ai-privacy-review__lede,
+.ai-privacy-review__row-note,
+.ai-privacy-review__row-cost,
+.ai-privacy-review__footnote,
+.ai-privacy-review__glossary-item dd {
+  word-break: keep-all;
 }
 
-.ai-privacy-review__token {
-  align-items: center;
-  background: color-mix(in srgb, var(--accent-soft) 42%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 0.625rem;
-  column-gap: var(--space-2);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 2.1rem;
+/* ---- the receipt ------------------------------------------------------- */
+
+.ai-privacy-review__receipt {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: var(--space-1) var(--space-3);
   min-width: 0;
-  padding: 0.34rem 0.5rem 0.34rem 0.75rem;
 }
 
-.ai-privacy-review__token-label {
-  color: var(--text);
+.ai-privacy-review__receipt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  padding-block: var(--space-2) var(--space-1);
+}
+
+/* The heading says "example" in words: a user with Chrome open and a saved work
+   profile must never read these fixed values as their own captured activity. */
+.ai-privacy-review__receipt-title {
   font-size: var(--type-setting-label-size);
   font-weight: 600;
-  line-height: 1.25;
-  min-width: 0;
-  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
-.ai-privacy-review__list {
-  display: grid;
-  gap: 0.5rem;
+.ai-privacy-review__receipt-count {
+  font-size: var(--type-setting-desc-size);
+  color: var(--text-muted);
+}
+
+.ai-privacy-review__rows {
   list-style: none;
+  display: flex;
+  flex-direction: column;
   margin: 0;
-  min-width: 0;
   padding: 0;
 }
 
 .ai-privacy-review__row {
+  border-top: 1px solid var(--line);
+}
+
+.ai-privacy-review__rows:first-of-type > .ai-privacy-review__row:first-child {
+  border-top: 0;
+}
+
+.ai-privacy-review__row-inner {
+  display: flex;
   align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding-block: var(--space-1);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+/* The whole row is the pointer target, so the row highlights as a whole. Text
+   stays selectable: activation is suppressed when a drag actually selected it. */
+.ai-privacy-review__row:not(.ai-privacy-review__row--always) {
+  cursor: pointer;
+}
+
+.ai-privacy-review__row:not(.ai-privacy-review__row--always):hover .ai-privacy-review__row-inner {
+  background: var(--surface-strong);
+}
+
+.ai-privacy-review__row-body {
   display: grid;
-  gap: var(--space-2);
-  grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
-}
-
-.ai-privacy-review__row--optional {
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
-  border-radius: 0.625rem;
-  cursor: default;
-  min-height: 2.75rem;
-  padding: 0.5rem 0.875rem;
-}
-
-.ai-privacy-review__zone--sent .ai-privacy-review__row--optional {
-  background: color-mix(in srgb, var(--text) 2%, var(--surface));
-}
-
-.ai-privacy-review__row--optional:hover {
-  background: var(--settings-control-bg-hover, color-mix(in srgb, var(--surface-strong) 88%, var(--surface)));
-  border-color: var(--settings-control-border, color-mix(in srgb, var(--text) 12%, var(--line)));
-}
-
-.ai-privacy-review__row:has(.ai-privacy-review__switch input:focus-visible) {
-  box-shadow: 0 0 0 2px var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
-}
-
-.ai-privacy-review__row-text {
-  display: block;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  flex: 1 1 auto;
   min-width: 0;
 }
 
-.ai-privacy-review__row-heading {
-  align-items: center;
-  display: inline-flex;
-  gap: var(--space-1);
-  max-width: 100%;
-  min-width: 0;
-  position: relative;
-  vertical-align: middle;
-}
-
-.ai-privacy-review__row-text strong {
-  color: var(--text);
-  display: block;
+.ai-privacy-review__row-label {
   font-size: var(--type-setting-label-size);
   font-weight: 600;
-  letter-spacing: 0;
-  line-height: 1.25;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.ai-privacy-review__help-wrap {
-  align-items: center;
-  display: inline-flex;
-  flex: 0 0 auto;
-  margin-left: var(--space-1);
-  position: relative;
-}
-
-.ai-privacy-review__help {
-  align-items: center;
-  background: color-mix(in srgb, var(--text) 5%, var(--surface));
-  border: 1px solid color-mix(in srgb, var(--text) 20%, transparent);
-  border-radius: var(--radius-pill);
-  color: var(--text-muted);
-  cursor: help;
-  display: inline-flex;
-  font-family: var(--font-display);
-  font-size: var(--type-caption-size);
-  font-weight: 650;
-  min-height: 1.5rem;
-  justify-content: center;
-  line-height: 1.1;
-  margin: 0;
-  padding: 0 var(--space-2);
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-  white-space: nowrap;
-}
-
-.ai-privacy-review__help:hover,
-.ai-privacy-review__help:focus-visible {
-  background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 44%, var(--line));
   color: var(--text);
-  outline: none;
 }
 
-.ai-privacy-review__tooltip {
-  background: var(--text);
-  border: 1px solid color-mix(in srgb, var(--surface) 24%, transparent);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 0.875rem 2rem rgb(0 0 0 / 38%);
-  color: var(--surface);
-  font-size: var(--type-setting-desc-size);
-  font-weight: 450;
-  line-height: 1.35;
-  left: calc(100% + 0.5rem);
-  max-width: min(17rem, calc(100vw - 3rem));
-  opacity: 0;
-  padding: var(--space-2) var(--space-3);
-  pointer-events: none;
-  position: absolute;
-  text-align: left;
-  top: 50%;
-  transform: translate(0.25rem, -50%) scale(0.98);
-  transition:
-    opacity var(--transition-fast),
-    transform var(--transition-fast),
-    visibility var(--transition-fast);
-  visibility: hidden;
-  width: max-content;
-  z-index: 10;
+.ai-privacy-review__row-value {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: var(--type-setting-value-size);
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  user-select: text;
 }
 
-.ai-privacy-review__help-wrap:hover .ai-privacy-review__tooltip,
-.ai-privacy-review__help-wrap:focus-within .ai-privacy-review__tooltip {
-  opacity: 1;
-  transform: translate(0, -50%) scale(1);
-  visibility: visible;
+.ai-privacy-review__row-note {
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+  color: var(--text-muted);
 }
+
+.ai-privacy-review__row--off .ai-privacy-review__row-label {
+  color: var(--text-muted);
+}
+
+/* ---- the price on the line --------------------------------------------
+   Drawn only while the row is off, directly under the value it replaced, so
+   cause and effect are never separated. */
+
+.ai-privacy-review__row-cost {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: 2px;
+  font-size: var(--type-caption-size);
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-width: 66ch;
+  animation: ai-privacy-cost-in var(--transition-fast) both;
+}
+
+.ai-privacy-review__cost-mark {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  /* Sits on the first line rather than centring on the wrapped block, so a
+     three-line Korean string does not leave the mark floating mid-paragraph. */
+  margin-top: 0.67em;
+  width: 10px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: var(--text-soft);
+}
+
+@keyframes ai-privacy-cost-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ai-privacy-review__row-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-height: 44px;
+  min-width: 44px;
+  justify-content: flex-end;
+}
+
+.ai-privacy-review__row-state {
+  font-size: var(--type-caption-size);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 4.2rem;
+  text-align: right;
+}
+
+.ai-privacy-review__row-state--always {
+  font-weight: 500;
+  flex: 0 0 auto;
+}
+
+/* ---- switch ------------------------------------------------------------
+   Platform convention preserved: filled + knob right = on = sent. State is
+   carried by knob position, track fill, a persistent border and the adjacent
+   word, never by hue alone. */
 
 .ai-privacy-review__switch {
-  display: inline-grid;
-  height: 1.25rem;
-  justify-self: end;
   position: relative;
-  width: 2.25rem;
+  display: inline-flex;
+  flex: 0 0 auto;
 }
 
-.ai-privacy-review__switch input {
-  cursor: pointer;
-  height: 100%;
+.ai-privacy-review__switch-input {
+  position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
   opacity: 0;
-  position: absolute;
-  width: 100%;
-  z-index: 1;
+  cursor: pointer;
 }
 
-.ai-privacy-review__switch > span {
+.ai-privacy-review__switch-track {
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 22px;
+  padding: 2px;
+  border: 1px solid var(--text-soft);
+  border-radius: var(--radius-pill);
   background: var(--bg-2);
-  border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  display: block;
-  height: 100%;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast);
-  width: 100%;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
-.ai-privacy-review__switch > span::after {
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
-  border-radius: 999px;
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--text) 14%, transparent);
-  content: "";
-  height: 0.875rem;
-  left: 0.125rem;
-  position: absolute;
-  top: 0.125rem;
-  transition:
-    transform var(--transition-fast),
-    border-color var(--transition-fast);
-  width: 0.96rem;
+.ai-privacy-review__switch-knob {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--text-soft);
+  border: 1px solid transparent;
+  transform: translateX(0);
+  transition: transform var(--transition-fast), background var(--transition-fast);
 }
 
-.ai-privacy-review__switch input:checked + span {
+.ai-privacy-review__switch-input:checked + .ai-privacy-review__switch-track {
   background: var(--accent);
-  border-color: var(--accent);
+  border-color: var(--accent-strong);
 }
 
-.ai-privacy-review__switch input:checked + span::after {
-  border-color: color-mix(in srgb, var(--accent) 24%, transparent);
-  transform: translateX(1rem);
+.ai-privacy-review__switch-input:checked + .ai-privacy-review__switch-track .ai-privacy-review__switch-knob {
+  transform: translateX(16px);
+  background: var(--on-accent);
+  border-color: color-mix(in srgb, var(--accent-strong) 60%, transparent);
 }
 
-.ai-privacy-review__switch input:focus-visible + span {
-  box-shadow: 0 0 0 2px var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+.ai-privacy-review__switch-input:focus-visible + .ai-privacy-review__switch-track {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
 }
 
-/* Stacked below ~620px: local zone on top, boundary turns horizontal, the
-   sent zone follows. */
+.ai-privacy-review__footnote {
+  font-size: var(--type-caption-size);
+  line-height: 1.4;
+  color: var(--text-muted);
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--line);
+  max-width: 74ch;
+}
+
+/* The visible count, each row's state word and the newly drawn cost line all
+   report the change on screen, so the live region only needs to exist for
+   screen readers — but it must carry the cost sentence too, or switching a
+   field off would announce less than it draws. */
+.ai-privacy-review__status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* ---- disclosures ------------------------------------------------------- */
+
+.ai-privacy-review__more-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ai-privacy-review__more {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.ai-privacy-review__more-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  list-style: none;
+  transition: background var(--transition-fast);
+}
+
+.ai-privacy-review__more-summary::-webkit-details-marker {
+  display: none;
+}
+
+.ai-privacy-review__more-summary:hover {
+  background: var(--surface-strong);
+}
+
+.ai-privacy-review__more-summary:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
+}
+
+.ai-privacy-review__more-label {
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ai-privacy-review__chevron {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--text-soft);
+  border-bottom: 1.5px solid var(--text-soft);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform var(--transition-fast);
+}
+
+.ai-privacy-review__more[open] .ai-privacy-review__chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.ai-privacy-review__glossary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-3) var(--space-3);
+  margin: 0;
+}
+
+.ai-privacy-review__glossary-item {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+}
+
+.ai-privacy-review__glossary-item dt {
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ai-privacy-review__glossary-item dd {
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+/* ---- narrow ------------------------------------------------------------ */
+
 @media (max-width: 620px) {
-  .ai-privacy-review__flow {
+  .ai-privacy-review__more-pair,
+  .ai-privacy-review__row-body,
+  .ai-privacy-review__glossary-item {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .ai-privacy-review__boundary {
-    flex-direction: row;
-    height: 1.75rem;
-    min-height: 0;
-    width: 100%;
+  .ai-privacy-review__row-inner {
+    gap: var(--space-2);
   }
 
-  .ai-privacy-review__boundary::before {
-    border-left: 0;
-    border-top: 1px dashed color-mix(in srgb, var(--text) 34%, transparent);
-    left: 0;
-    right: 0;
-    top: 50%;
+  .ai-privacy-review__row-state {
+    min-width: 0;
+    white-space: normal;
+  }
+}
+
+@media (max-width: 420px) {
+  .ai-privacy-review__row-control {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-privacy-review__switch-knob,
+  .ai-privacy-review__chevron {
+    transition: none;
+  }
+
+  .ai-privacy-review__row-cost {
+    animation: none;
   }
 }
