@@ -32,6 +32,16 @@ export type PetModeInputBounds = {
   readonly visible: boolean;
 };
 
+export type PetModeCursorSample = {
+  readonly cursorX: number;
+  readonly cursorY: number;
+  readonly windowX: number;
+  readonly windowY: number;
+  readonly windowWidth: number;
+  readonly windowHeight: number;
+  readonly visible: boolean;
+};
+
 // Native travel can legitimately use the full six-second cap before the paw
 // reaches its reviewed contact frame. Keep the listener alive through both.
 const PET_MODE_CONTACT_TIMEOUT_MS = 8_000;
@@ -264,6 +274,15 @@ export async function isNativePetCursorInside(): Promise<boolean | null> {
   if (!isTauriRuntime()) return null;
   try {
     return await invoke<boolean>("pet_mode_cursor_inside");
+  } catch {
+    return null;
+  }
+}
+
+export async function sampleNativePetCursor(): Promise<PetModeCursorSample | null> {
+  if (!isTauriRuntime()) return null;
+  try {
+    return await invoke<PetModeCursorSample>("pet_mode_cursor_sample");
   } catch {
     return null;
   }

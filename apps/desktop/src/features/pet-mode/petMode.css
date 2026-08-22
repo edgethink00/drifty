@@ -372,6 +372,59 @@
 }
 .pet-mode-cat__eyes--open ellipse,
 .pet-mode-cat__eyes--blink ellipse { fill: currentColor; }
+
+/* Idle pupils live on the contained 797×581 rect, not the 121.2×92.4 cat
+   box. The idle raster is wider than the box, so object-fit:contain
+   letterboxes vertically; placing pupils in box percentages put them off
+   the sockets. Never use the inset shorthand after left/top: it resets both. */
+.pet-mode-cat__idle-pupils {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  width: 100%;
+  top: calc((92.4px - (121.2px * 581 / 797)) / 2);
+  height: calc(121.2px * 581 / 797);
+  pointer-events: none;
+  overflow: visible;
+}
+.pet-mode-cat__pupil {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+  object-fit: fill;
+  filter: var(--pet-raster-filter);
+  transform: translate(var(--pet-gaze-x, 0px), var(--pet-gaze-y, 0px));
+}
+.pet-mode-cat__pupil--left {
+  left: calc(569 / 797 * 100%);
+  top: calc(241 / 581 * 100%);
+  width: calc(26 / 797 * 100%);
+  height: calc(27 / 581 * 100%);
+}
+.pet-mode-cat__pupil--right {
+  left: calc(669 / 797 * 100%);
+  top: calc(231 / 581 * 100%);
+  width: calc(22 / 797 * 100%);
+  height: calc(27 / 581 * 100%);
+}
+.pet-mode-cat--blink .pet-mode-cat__idle-pupils,
+.pet-mode-cat--happy .pet-mode-cat__idle-pupils {
+  opacity: 0;
+}
+.pet-mode-cat--idle .pet-mode-cat__motion {
+  animation: pet-mode-idle-breathe 3.6s ease-in-out infinite;
+}
+.pet-mode-cat--sit .pet-mode-cat__motion {
+  animation: pet-mode-sleep-breathe 3.4s ease-in-out infinite;
+}
+.pet-mode-cat__vector-eyes--gaze {
+  transform: translate(var(--pet-gaze-x, 0px), var(--pet-gaze-y, 0px));
+  transition: transform 160ms ease-out;
+}
+.pet-mode-cat__sit-eye-open.pet-mode-cat__vector-eye--gaze {
+  animation: none;
+  opacity: 1;
+}
 .pet-mode-cat__eyes path { stroke-width: 8; }
 .pet-mode-cat__blink-lid path { stroke-width: 5.5; }
 .pet-mode-cat__expression-mouth { stroke-width: 8; opacity: .96; }
@@ -471,8 +524,8 @@
 }
 
 @keyframes pet-mode-idle-breathe {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.008); }
+  0%, 100% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1); }
+  50% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1.008); }
 }
 
 @keyframes pet-mode-blink-eye {
@@ -493,8 +546,8 @@
 }
 
 @keyframes pet-mode-sleep-breathe {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.025); }
+  0%, 100% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1); }
+  50% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1.025); }
 }
 
 @keyframes pet-mode-release-held {
@@ -567,6 +620,7 @@
   .pet-mode-cat__expression,
   .pet-mode-cat__expression-face,
   .pet-mode-cat__eyes,
+  .pet-mode-cat__vector-eye--gaze,
   .pet-mode-cat__toy,
   .pet-mode-cat__drag-pending-idle,
   .pet-mode-cat__drag-pending-held,

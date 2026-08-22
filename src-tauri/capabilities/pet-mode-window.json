@@ -24,6 +24,7 @@
     "allow-pet-mode-begin-drag",
     "allow-pet-mode-report-drag-error",
     "allow-pet-mode-cursor-inside",
+    "allow-pet-mode-cursor-sample",
     "allow-pet-mode-input-bounds",
     "allow-pet-mode-roam",
     "allow-pet-mode-exit-screen",

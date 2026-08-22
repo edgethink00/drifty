@@ -192,6 +192,18 @@ pub struct PetModeInputBounds {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PetModeCursorSample {
+    pub cursor_x: f64,
+    pub cursor_y: f64,
+    pub window_x: f64,
+    pub window_y: f64,
+    pub window_width: f64,
+    pub window_height: f64,
+    pub visible: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PetModeNativeDragResult {
     moved: bool,
     start_x: f64,
@@ -1032,6 +1044,36 @@ pub fn pet_mode_input_bounds(app: AppHandle) -> Result<PetModeInputBounds, Strin
         width: size.width,
         height: size.height,
         visible: window.is_visible().unwrap_or(false),
+    })
+}
+
+#[tauri::command]
+pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, String> {
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    let visible = window.is_visible().unwrap_or(false);
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let position = window
+        .outer_position()
+        .map_err(|error| error.to_string())?
+        .to_logical::<f64>(scale_factor);
+    let size = window
+        .outer_size()
+        .map_err(|error| error.to_string())?
+        .to_logical::<f64>(scale_factor);
+    let cursor = app
+        .cursor_position()
+        .map_err(|error| error.to_string())?
+        .to_logical::<f64>(scale_factor);
+    Ok(PetModeCursorSample {
+        cursor_x: cursor.x,
+        cursor_y: cursor.y,
+        window_x: position.x,
+        window_y: position.y,
+        window_width: size.width,
+        window_height: size.height,
+        visible,
     })
 }
 
@@ -2131,6 +2173,28 @@ fn resolve_pet_home_monitor(app: &AppHandle) -> Option<Monitor> {
     app.primary_monitor().ok().flatten()
 }
 
+
+#[cfg(test)]
+fn pet_mode_logical_cursor_sample(
+    scale_factor: f64,
+    cursor_x: f64,
+    cursor_y: f64,
+    window_x: f64,
+    window_y: f64,
+    window_width: f64,
+    window_height: f64,
+) -> (f64, f64, f64, f64, f64, f64) {
+    let scale = if scale_factor <= 0.0 { 1.0 } else { scale_factor };
+    (
+        cursor_x / scale,
+        cursor_y / scale,
+        window_x / scale,
+        window_y / scale,
+        window_width / scale,
+        window_height / scale,
+    )
+}
+
 fn emit_pet_event(window: &WebviewWindow, payload: Value) -> Result<(), String> {
     window
         .emit("pet-mode-event", payload)
@@ -2536,6 +2600,18 @@ mod tests {
             (movement_duration_seconds(2.08, PET_MODE_WALK_SPEED, 60.0) - 0.18).abs()
                 < f64::EPSILON
         );
+    }
+
+    #[test]
+    fn cursor_sample_converts_physical_pixels_into_logical_points() {
+        let (cursor_x, cursor_y, window_x, window_y, window_width, window_height) =
+            pet_mode_logical_cursor_sample(2.0, 2440.0, 94.0, 2160.0, 0.0, 288.0, 198.0);
+        assert!((cursor_x - 1220.0).abs() < 1e-9);
+        assert!((cursor_y - 47.0).abs() < 1e-9);
+        assert!((window_x - 1080.0).abs() < 1e-9);
+        assert!((window_y - 0.0).abs() < 1e-9);
+        assert!((window_width - 144.0).abs() < 1e-9);
+        assert!((window_height - 99.0).abs() < 1e-9);
     }
 
     #[test]

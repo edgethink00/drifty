@@ -38,6 +38,16 @@ describe("pet mode hit target", () => {
     expect(app).not.toContain("pet-mode-hit-shape");
   });
 
+  it("samples nearby cursor gaze without expanding the native hit region", () => {
+    expect(app).toContain("sampleNativePetCursor");
+    expect(app).toContain("gazeOffset={gazeOffset}");
+    expect(cat).toContain("pet-mode-cat__vector-eyes--gaze");
+    expect(css).toContain(".pet-mode-cat__vector-eyes--gaze");
+    expect(registration).toContain("pet_mode_cursor_sample");
+    expect(capability.permissions).toContain("allow-pet-mode-cursor-sample");
+    expect(native).toContain("setIgnoresMouseEvents(!interactive)");
+  });
+
   it("registers and authorizes the new least-privilege native command", () => {
     expect(registration).toContain("pet_mode_update_hit_region");
     expect(capability.permissions).toContain("allow-pet-mode-update-hit-region");

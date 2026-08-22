@@ -23,6 +23,7 @@ import {
   returnNativePetFromOuting,
   returnNativePetHome,
   roamNativePet,
+  sampleNativePetCursor,
   setNativePetPresence,
 } from "./petModeBridge";
 import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
@@ -64,6 +65,13 @@ import {
   type PetModeCoat,
   type PetModeSize,
 } from "./petModeData";
+import {
+  PET_MODE_GAZE_SAMPLE_MS,
+  dampPetModeGazeOffset,
+  petModeGazePoseForPhase,
+  resolvePetModeGazeOffset,
+  type PetModeGazeOffset,
+} from "./petModeGaze";
 import "./petMode.css";
 
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
@@ -106,6 +114,7 @@ export function PetModeWindowApp() {
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const [dragProbe, setDragProbe] = useState<PetDropPlan | null>(null);
+  const [gazeOffset, setGazeOffset] = useState<PetModeGazeOffset>({ x: 0, y: 0 });
   const [guidesEnabled, setGuidesEnabled] = useState(() => {
     try {
       return window.localStorage.getItem(PET_MODE_GUIDES_STORAGE_KEY) === "1";
@@ -134,6 +143,7 @@ export function PetModeWindowApp() {
   const manualDragRef = useRef(false);
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
+  const gazeEngagedRef = useRef(false);
 
   const reportLabState = useCallback((nextPhase = phaseRef.current) => {
     void reportNativePetModeLabState({
@@ -887,6 +897,63 @@ export function PetModeWindowApp() {
     };
   }, [commitPhase]);
 
+  useEffect(() => {
+    if (!petModeEnabled || !petVisible) {
+      gazeEngagedRef.current = false;
+      setGazeOffset({ x: 0, y: 0 });
+      return undefined;
+    }
+    let disposed = false;
+    let timerId = 0;
+    const poll = async () => {
+      if (disposed) return;
+      const pose = petModeGazePoseForPhase(phaseRef.current);
+      const reducedMotion = prefersReducedMotion();
+      if (!pose || reducedMotion || manualDragRef.current) {
+        gazeEngagedRef.current = false;
+        setGazeOffset((current) => current.x === 0 && current.y === 0 ? current : { x: 0, y: 0 });
+      } else {
+        const sample = await sampleNativePetCursor();
+        if (disposed) return;
+        if (!sample) {
+          gazeEngagedRef.current = false;
+          setGazeOffset((current) => current.x === 0 && current.y === 0 ? current : { x: 0, y: 0 });
+          return;
+        }
+        if (!sample.visible) {
+          gazeEngagedRef.current = false;
+          setGazeOffset((current) => current.x === 0 && current.y === 0 ? current : { x: 0, y: 0 });
+        } else {
+          const next = resolvePetModeGazeOffset({
+            cursorX: sample.cursorX,
+            cursorY: sample.cursorY,
+            windowX: sample.windowX,
+            windowY: sample.windowY,
+            windowWidth: sample.windowWidth,
+            windowHeight: sample.windowHeight,
+            facing: facingRef.current,
+            pose,
+            reducedMotion,
+          }, gazeEngagedRef.current);
+          gazeEngagedRef.current = next.engaged;
+          setGazeOffset((current) => {
+            const damped = dampPetModeGazeOffset(current, next.offset, PET_MODE_GAZE_SAMPLE_MS);
+            if (Math.abs(current.x - damped.x) < 0.04 && Math.abs(current.y - damped.y) < 0.04) {
+              return current;
+            }
+            return damped;
+          });
+        }
+      }
+      if (!disposed) timerId = window.setTimeout(() => { void poll(); }, PET_MODE_GAZE_SAMPLE_MS);
+    };
+    void poll();
+    return () => {
+      disposed = true;
+      window.clearTimeout(timerId);
+    };
+  }, [petModeEnabled, petVisible]);
+
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     // The overlay is a separate, non-focusable window. It must still consume
     // every press on its hit rectangle, including while an animation is busy;
@@ -987,6 +1054,7 @@ export function PetModeWindowApp() {
               && phase !== "entry"
               && hitRegionTransitionCount === 0}
             hitRegionCommitRevision={hitRegionCommitRevision}
+            gazeOffset={gazeOffset}
           />
           <span
             ref={contactAnchorRef}

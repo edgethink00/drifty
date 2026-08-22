@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-cursor-sample"
+description = "Enables the pet_mode_cursor_sample command without any pre-configured scope."
+commands.allow = ["pet_mode_cursor_sample"]
+
+[[permission]]
+identifier = "deny-pet-mode-cursor-sample"
+description = "Denies the pet_mode_cursor_sample command without any pre-configured scope."
+commands.deny = ["pet_mode_cursor_sample"]

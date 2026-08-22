@@ -40,6 +40,7 @@ vi.mock("./petModeBridge", () => ({
   exitNativePetScreen: vi.fn().mockResolvedValue("left"),
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
+  sampleNativePetCursor: vi.fn().mockResolvedValue(null),
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   resolveNativePetDrop: vi.fn().mockResolvedValue(null),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
