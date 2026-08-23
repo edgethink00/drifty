@@ -14,6 +14,10 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatDuration, formatTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
+import {
+  CLASSIFICATION_FOCUS_RATE_DESCRIPTION,
+  CLASSIFICATION_FOCUS_RATE_LABEL,
+} from "./classificationFocusRate";
 import type { ClassificationPanelStyle } from "./ClassificationBreakdownCards";
 import {
   captureRowSurfaceDetails,
@@ -38,7 +42,7 @@ type ClassificationPageProps = {
   readonly classificationDateLabel: string;
   readonly classificationOptions: ClassificationOptions;
   readonly classificationPanelStyle: ClassificationPanelStyle;
-  readonly classificationQualityPercent: number;
+  readonly classificationFocusRatePercent: number;
   readonly classificationRange: ClassificationRange;
   readonly classificationSessionCount: number;
   readonly classificationSourceSummaries: ClassificationSourceSummary[];
@@ -98,7 +102,7 @@ export function ClassificationPage({
   classificationDateLabel,
   classificationOptions,
   classificationPanelStyle,
-  classificationQualityPercent,
+  classificationFocusRatePercent,
   classificationRange,
   classificationSessionCount,
   classificationSourceSummaries,
@@ -292,7 +296,15 @@ export function ClassificationPage({
             <strong>{classificationTopAppLabel}</strong>
           </div>
         </div>
-        <div className="clf-stat"><span className="eyebrow">Quality</span><strong>{classificationQualityPercent}%</strong></div>
+        <div
+          className="clf-stat"
+          role="group"
+          aria-label={`${CLASSIFICATION_FOCUS_RATE_LABEL}, ${CLASSIFICATION_FOCUS_RATE_DESCRIPTION}`}
+          title={CLASSIFICATION_FOCUS_RATE_DESCRIPTION}
+        >
+          <span className="eyebrow">{CLASSIFICATION_FOCUS_RATE_LABEL}</span>
+          <strong>{classificationFocusRatePercent}%</strong>
+        </div>
       </div>
 
       {classificationCategoryBreakdowns.length === 0 && !classificationCorrectionDraft ? renderCorrectionNotice() : null}

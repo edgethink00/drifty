@@ -263,7 +263,8 @@ import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeri
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
 import { buildQuarterHourDayField } from "./features/dashboard/dayField";
-import { applyFocusDriftReplayReveal, buildFocusDriftChart, buildProductivityQualityPercent } from "./features/dashboard/focusDriftChart";
+import { applyFocusDriftReplayReveal, buildFocusDriftChart } from "./features/dashboard/focusDriftChart";
+import { buildFocusRatePercent } from "./features/classification/classificationFocusRate";
 import {
   WeekDashboardDayModelCache,
   buildWeekDashboardModel,
@@ -5250,8 +5251,8 @@ export default function App() {
     () => buildProductivityDurations(classificationSegments, classificationOptions),
     [classificationOptions, classificationSegments],
   );
-  const classificationQualityPercent = useMemo(
-    () => buildProductivityQualityPercent(classificationProductivityTotals),
+  const classificationFocusRatePercent = useMemo(
+    () => buildFocusRatePercent(classificationProductivityTotals),
     [classificationProductivityTotals],
   );
   const lastCaptureDistanceLabel = status?.lastEventAt ? formatRelativeTime(status.lastEventAt) : "No captures yet";
@@ -7246,7 +7247,7 @@ export default function App() {
             classificationDateLabel={classificationDateLabel}
             classificationOptions={classificationOptions}
             classificationPanelStyle={classificationPanelStyle}
-            classificationQualityPercent={classificationQualityPercent}
+            classificationFocusRatePercent={classificationFocusRatePercent}
             classificationRange={classificationRange}
             classificationSessionCount={classificationSegments.length}
             classificationSourceSummaries={classificationSourceSummaries}

@@ -1,5 +1,5 @@
 import { categorizeActivity, logicalDayStartMs, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
-import type { ActivitySegment, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
+import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
 import { formatCompactHourLabel, formatQuarterHourLabel } from "../../lib/formatting";
@@ -124,12 +124,6 @@ export const FOCUS_DRIFT_GRID_PATH = FOCUS_DRIFT_Y_AXIS_TICKS.map((tick) => `M${
 
 export function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
   return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay, startOfDayMinutes);
-}
-
-export function buildProductivityQualityPercent(productivityTotals: ProductivityDuration[]): number {
-  const totalSeconds = productivityTotals.reduce((total, entry) => total + entry.totalSeconds, 0);
-  const focusSeconds = productivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
-  return totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
 }
 
 export function applyFocusDriftReplayReveal(input: FocusDriftReplayRevealInput): FocusDriftChart {
