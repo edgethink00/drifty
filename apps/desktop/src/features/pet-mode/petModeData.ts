@@ -9,6 +9,9 @@ export const PET_MODE_STORAGE_KEY = "drifty.pet.enabled";
 export const PET_MODE_COAT_STORAGE_KEY = "drifty.pet.coat";
 export const PET_MODE_LEGACY_STORAGE_KEY = "drifty.dev.petMode";
 export const PET_MODE_LEGACY_COAT_STORAGE_KEY = "drifty.dev.petModeCoat";
+/** A timestamp keeps a temporary hide reliable across an app restart. */
+export const PET_MODE_HIDDEN_UNTIL_STORAGE_KEY = "drifty.pet.hiddenUntil.v1";
+export const PET_MODE_HIDE_ONE_HOUR_MS = 60 * 60 * 1000;
 export const PET_MODE_PRESENCE_RATIO = 0.6;
 export const PET_MODE_PRESENT_MS = 9 * 60 * 1000;
 export const PET_MODE_AWAY_MS = 6 * 60 * 1000;
@@ -396,6 +399,63 @@ export function resolveInitialPetModeEnabled(): boolean {
   const stored = window.localStorage.getItem(PET_MODE_STORAGE_KEY);
   if (stored !== null) return stored === "1";
   return window.localStorage.getItem(PET_MODE_LEGACY_STORAGE_KEY) === "1";
+}
+
+/**
+ * A one-hour hide is deliberately separate from the on/off preference: the pet
+ * stays enabled, so it returns on its own instead of being silently lost to a
+ * user who only wanted it out of the way for a screen share.
+ */
+export function resolveInitialPetModeHiddenUntil(now = Date.now()): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const stored = window.localStorage.getItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY);
+    if (stored === null) return null;
+    const hiddenUntil = Number(stored);
+    /* A hide is only ever one hour long. Anything further out came from a
+       corrupted write or a clock that moved backwards, and honouring it would
+       retire the pet for years with no visible way back: the account-menu
+       toggle already reads on, so the user has nothing left to switch. Treat an
+       impossible deadline as no hide at all. */
+    if (
+      !Number.isFinite(hiddenUntil)
+      || hiddenUntil <= now
+      || hiddenUntil > now + PET_MODE_HIDE_ONE_HOUR_MS
+    ) {
+      window.localStorage.removeItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY);
+      return null;
+    }
+    return hiddenUntil;
+  } catch {
+    return null;
+  }
+}
+
+export function persistPetModeHiddenUntil(hiddenUntil: number | null): number | null {
+  if (typeof window === "undefined") return hiddenUntil;
+  try {
+    if (hiddenUntil === null) {
+      window.localStorage.removeItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(hiddenUntil));
+    }
+  } catch {
+    // Runtime state still changes when storage is unavailable.
+  }
+  return hiddenUntil;
+}
+
+/**
+ * The pet is present only when it is both enabled and not temporarily hidden.
+ *
+ * Both webviews must agree on this, and neither may read the raw `enabled` key
+ * alone. The pet window mirrors the toggle so its autonomous timers stop aging
+ * behind a hidden panel; a temporary hide has to enter that same path, or a
+ * restart during the hidden hour would replay the entry walk for a cat the user
+ * just put away.
+ */
+export function resolvePetModePresent(now = Date.now()): boolean {
+  return resolveInitialPetModeEnabled() && resolveInitialPetModeHiddenUntil(now) === null;
 }
 
 // The prototype shipped the cat as a themed pair: its light theme used a

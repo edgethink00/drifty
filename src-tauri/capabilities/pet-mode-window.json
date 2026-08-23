@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "pet-mode-window",
-  "description": "Least-privilege capability for the Dev-mode pet overlay window.",
+  "description": "Least-privilege capability for the pet overlay window.",
   "windows": [
     "pet-mode"
   ],
@@ -32,6 +32,8 @@
     "allow-pet-mode-return-from-outing",
     "allow-pet-mode-remember-position",
     "allow-pet-mode-preview-action",
-    "allow-pet-mode-resolve-drop"
+    "allow-pet-mode-resolve-drop",
+    "allow-pet-mode-visibility-action",
+    "allow-watcher-peek-end-of-day-review-action"
   ]
 }

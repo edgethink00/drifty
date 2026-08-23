@@ -233,12 +233,16 @@ import {
   buildPetModeSnapshot,
   getPetModeWindowSize,
   PET_MODE_GUIDES_STORAGE_KEY,
+  PET_MODE_HIDE_ONE_HOUR_MS,
+  persistPetModeHiddenUntil,
+  resolveInitialPetModeHiddenUntil,
 } from "./features/pet-mode/petModeData";
 import {
   applyNativePetModeLabTarget,
   getNativePetInputBounds,
   listenToNativePetAlignment,
   listenToNativePetPointer,
+  listenToNativePetVisibilityAction,
   placeNativePetModeAtCenterForLab,
   playNativePetModeIntervention,
   previewNativePetModeAction,
@@ -246,6 +250,7 @@ import {
   setNativePetModeEnabled,
   setNativePetModeGuides,
   updateNativePetMode,
+  type PetVisibilityAction,
 } from "./features/pet-mode/petModeBridge";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
 import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
@@ -673,7 +678,44 @@ export default function App() {
   } = useCompanionSettingsController();
   // No Dev gate: the pet ships as a production surface and is controlled from
   // the account menu and Companion settings.
-  const petModeActive = petModeEnabled;
+  const [petModeHiddenUntil, setPetModeHiddenUntil] = useState(resolveInitialPetModeHiddenUntil);
+  // A temporary hide suppresses the pet without touching its on/off preference,
+  // so the one-hour timer below can restore exactly what the user had.
+  const petModeActive = petModeEnabled && petModeHiddenUntil === null;
+
+  const handleHidePetForOneHour = useCallback(() => {
+    setPetModeHiddenUntil(persistPetModeHiddenUntil(Date.now() + PET_MODE_HIDE_ONE_HOUR_MS));
+  }, []);
+
+  const handlePetVisibilityAction = useCallback((action: PetVisibilityAction) => {
+    if (action === "hideOneHour") {
+      handleHidePetForOneHour();
+      return;
+    }
+    setPetModeEnabled(false);
+  }, [handleHidePetForOneHour, setPetModeEnabled]);
+
+  useEffect(() => {
+    if (petModeHiddenUntil === null) return undefined;
+    const remainingMs = petModeHiddenUntil - Date.now();
+    if (remainingMs <= 0) {
+      setPetModeHiddenUntil(persistPetModeHiddenUntil(null));
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      setPetModeHiddenUntil(persistPetModeHiddenUntil(null));
+    }, remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [petModeHiddenUntil]);
+
+  // Turning the pet back on from Settings or the account menu is an explicit
+  // "show it now", so it must clear a pending temporary hide instead of leaving
+  // the user with a toggle that appears on but shows nothing.
+  useEffect(() => {
+    if (!petModeEnabled) return;
+    setPetModeHiddenUntil((current) => (current === null ? current : persistPetModeHiddenUntil(null)));
+  }, [petModeEnabled]);
+
   const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
   const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
   const [petModeGuidesEnabled, setPetModeGuidesEnabled] = useState(() => {
@@ -5083,6 +5125,20 @@ export default function App() {
       unlisten?.();
     };
   }, []);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetVisibilityAction((action) => {
+      if (!disposed) handlePetVisibilityAction(action);
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [handlePetVisibilityAction]);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;

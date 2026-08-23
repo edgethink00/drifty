@@ -14,6 +14,7 @@ import {
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_PRESENT_MS,
   PET_MODE_STORAGE_KEY,
+  PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   type PetModeWindowEvent,
 } from "./petModeData";
@@ -98,6 +99,9 @@ const bridge = vi.hoisted(() => ({
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   resolveNativePetDrop: vi.fn().mockResolvedValue({ kind: "hop", distance: 4, durationMs: 16, targetY: 0, ledge: "hop" }),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
+  triggerNativePetVisibilityAction: vi.fn().mockResolvedValue(undefined),
+  triggerNativeEndOfDayReviewAction: vi.fn().mockResolvedValue(undefined),
+  openNativePetModeMenu: vi.fn().mockResolvedValue(true),
   preloadPetModeHitRegions: vi.fn().mockResolvedValue(undefined),
   stagePetModeHitRegionTransition: vi.fn().mockResolvedValue(undefined),
   publishPetModeHitRegion: vi.fn().mockResolvedValue(undefined),
@@ -126,6 +130,16 @@ vi.mock("./petModeBridge", () => ({
   rememberNativePetPosition: bridge.rememberNativePetPosition,
   resolveNativePetDrop: bridge.resolveNativePetDrop,
   setNativePetPresence: bridge.setNativePetPresence,
+  triggerNativePetVisibilityAction: bridge.triggerNativePetVisibilityAction,
+}));
+
+vi.mock("../companion/watcherBridge", () => ({
+  isTauriRuntime: () => true,
+  triggerNativeEndOfDayReviewAction: bridge.triggerNativeEndOfDayReviewAction,
+}));
+
+vi.mock("./petModeNativeMenu", () => ({
+  openNativePetModeMenu: bridge.openNativePetModeMenu,
 }));
 
 vi.mock("./petModeHitRegions", () => ({
@@ -152,6 +166,112 @@ describe("PetModeWindowApp", () => {
     delete document.documentElement.dataset.surface;
   });
 
+  it("opens its own menu on right-click and routes each choice natively", async () => {
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    /* The pet is a transparent always-on-top panel. If WebKit's own context
+       menu survives, the user gets Reload/Inspect floating over their desktop
+       instead of the pet's options, so suppressing it is part of the feature. */
+    const menuEvent = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 });
+    const notPrevented = pet.dispatchEvent(menuEvent);
+    expect(notPrevented, "the browser's own context menu must not survive").toBe(false);
+    await act(async () => undefined);
+
+    expect(bridge.openNativePetModeMenu).toHaveBeenCalledTimes(1);
+    // A right-click is a menu request, so it must never register as petting.
+    expect(bridge.beginNativePetDrag).not.toHaveBeenCalled();
+
+    const actions = bridge.openNativePetModeMenu.mock.calls[0][0];
+
+    actions.onHideForOneHour();
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("hideOneHour");
+
+    actions.onTurnOffPet();
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("turnOff");
+
+    actions.onOpenDashboard();
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard");
+
+    actions.onOpenSettings();
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openSettings");
+  });
+
+  it("stays away on a restart that lands inside a temporary hide", async () => {
+    /* The pet window mounts from storage, so reading only the enabled flag
+       would replay the entry walk for a cat the user hid minutes ago. */
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(Date.now() + 60_000));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const cat = document.querySelector(".pet-mode-cat");
+    expect(cat?.getAttribute("data-phase")).not.toBe("entry");
+  });
+
+  it("holds the cat still while its menu is open and never stacks two", async () => {
+    /* The menu is anchored where the cat stands. Autonomous life running
+       underneath it would walk the cat out from under its own menu. */
+    let releaseMenu: (() => void) | null = null;
+    bridge.openNativePetModeMenu.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => { releaseMenu = () => resolve(true); }),
+    );
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    fireEvent.contextMenu(pet);
+    await act(async () => undefined);
+    expect(bridge.openNativePetModeMenu).toHaveBeenCalledTimes(1);
+
+    // A second right-click while the first menu is still up must not stack.
+    fireEvent.contextMenu(pet);
+    await act(async () => undefined);
+    expect(bridge.openNativePetModeMenu).toHaveBeenCalledTimes(1);
+
+    await act(async () => { releaseMenu?.(); });
+
+    // Once the menu closes the pet accepts a menu request again.
+    fireEvent.contextMenu(pet);
+    await act(async () => undefined);
+    expect(bridge.openNativePetModeMenu).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not open its menu while the cat is being dragged", async () => {
+    /* AppKit owns the pointer for the whole drag. Popping a menu mid-carry
+       would steal that press and drop the cat somewhere the user never chose,
+       so a right-click during a drag is swallowed rather than answered. */
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise(() => {}));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 1, clientX: 60, clientY: 50 });
+    await act(async () => undefined);
+
+    fireEvent.contextMenu(pet);
+    await act(async () => undefined);
+
+    expect(bridge.openNativePetModeMenu).not.toHaveBeenCalled();
+  });
+
   it("boots as a transparent pet surface and supports direct dragging", async () => {
     vi.useFakeTimers();
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
@@ -162,7 +282,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => undefined);
 
     expect(document.documentElement.dataset.surface).toBe("pet-mode");
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 1, clientX: 10, clientY: 10 });
     dispatchPointer(pet, "pointermove", { pointerId: 1, clientX: 20, clientY: 10 });
     await act(async () => { await Promise.resolve(); });
@@ -802,7 +922,7 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 3, clientX: 12, clientY: 12 });
     dispatchPointer(pet, "pointerup", { pointerId: 3, clientX: 12, clientY: 12 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
@@ -842,7 +962,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler?.({ kind: "motion", motion: "run" });
     });
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 31, clientX: 12, clientY: 12 });
     dispatchPointer(pet, "pointerup", { pointerId: 31, clientX: 12, clientY: 12 });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -865,7 +985,7 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 32, clientX: 12, clientY: 12 });
     dispatchPointer(pet, "pointerup", { pointerId: 32, clientX: 12, clientY: 12 });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
@@ -912,7 +1032,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler?.({ kind: "motion", motion: "run" });
     });
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const press = dispatchPointer(pet, "pointerdown", { pointerId: 8, clientX: 18, clientY: 18 });
     dispatchPointer(pet, "pointermove", { pointerId: 8, clientX: 30, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
@@ -960,7 +1080,7 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("stretch");
 
@@ -1018,7 +1138,7 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 10, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
@@ -1051,7 +1171,7 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 11, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
@@ -1088,7 +1208,7 @@ describe("PetModeWindowApp", () => {
     }));
     render(<PetModeWindowApp />);
     await act(async () => undefined);
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 21, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
@@ -1125,7 +1245,7 @@ describe("PetModeWindowApp", () => {
     }));
     render(<PetModeWindowApp />);
     await act(async () => undefined);
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 22, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
@@ -1173,7 +1293,7 @@ describe("PetModeWindowApp", () => {
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." });
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 23, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
     act(() => { bridge.dragStartHandler?.(); });

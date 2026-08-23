@@ -24,6 +24,16 @@ type PetModePointerEvent = {
 
 type PetModeAlignmentEvent = PetModeContactAlignment;
 
+export type PetVisibilityAction = "hideOneHour" | "turnOff";
+
+type PetVisibilityActionEvent = {
+  readonly action?: unknown;
+};
+
+function isPetVisibilityAction(value: unknown): value is PetVisibilityAction {
+  return value === "hideOneHour" || value === "turnOff";
+}
+
 export type PetModeInputBounds = {
   readonly x: number;
   readonly y: number;
@@ -341,6 +351,22 @@ export async function resolveNativePetDrop(): Promise<PetDropPlan | null> {
 export async function setNativePetModeGuides(enabled: boolean): Promise<void> {
   if (!isTauriRuntime()) return;
   await emit("pet-mode-event", { kind: "guides", enabled });
+}
+
+export async function triggerNativePetVisibilityAction(
+  action: PetVisibilityAction,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_mode_visibility_action", { action });
+}
+
+export async function listenToNativePetVisibilityAction(
+  onAction: (action: PetVisibilityAction) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<PetVisibilityActionEvent>("pet-visibility-action", ({ payload }) => {
+    if (isPetVisibilityAction(payload.action)) onAction(payload.action);
+  });
 }
 
 export async function listenToNativePetDragProbe(

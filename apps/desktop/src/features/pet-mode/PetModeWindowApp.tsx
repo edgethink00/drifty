@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
+import { triggerNativeEndOfDayReviewAction } from "../companion/watcherBridge";
 import { PetModeCat, type PetModeCatPhase } from "./PetModeCat";
 import {
   alignNativePetContact,
@@ -25,7 +26,9 @@ import {
   roamNativePet,
   sampleNativePetCursor,
   setNativePetPresence,
+  triggerNativePetVisibilityAction,
 } from "./petModeBridge";
+import { openNativePetModeMenu } from "./petModeNativeMenu";
 import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 import {
   PET_MODE_AWAY_MS,
@@ -45,6 +48,7 @@ import {
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
   PET_MODE_STORAGE_KEY,
+  PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_SIT_MAX_MS,
@@ -55,8 +59,8 @@ import {
   getPetModeNextActionInterval,
   pickPetModeLifeAction,
   resolveInitialPetModeCoat,
-  resolveInitialPetModeEnabled,
   resolveInitialPetModeSize,
+  resolvePetModePresent,
   type PetModeInterventionTarget,
   type PetModeLabAction,
   type PetModeLifeAction,
@@ -86,7 +90,7 @@ export function PetModeWindowApp() {
     const reducedMotion = typeof window !== "undefined"
       && typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const enabled = resolveInitialPetModeEnabled();
+    const enabled = resolvePetModePresent();
     const entersOnLaunch = enabled && !reducedMotion;
     return {
       enabled,
@@ -114,6 +118,9 @@ export function PetModeWindowApp() {
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const [dragProbe, setDragProbe] = useState<PetDropPlan | null>(null);
+  // A right-click menu is anchored to the cat's current position, so the cat
+  // has to stand still for as long as the menu is up.
+  const [menuHolding, setMenuHolding] = useState(false);
   const [gazeOffset, setGazeOffset] = useState<PetModeGazeOffset>({ x: 0, y: 0 });
   const [guidesEnabled, setGuidesEnabled] = useState(() => {
     try {
@@ -130,6 +137,7 @@ export function PetModeWindowApp() {
   const poseTransitionRef = useRef(0);
   const facingTransitionRef = useRef(0);
   const activeLabActionRef = useRef<PetModeLabAction | null>(null);
+  const menuOpenRef = useRef(false);
   const labLifeLoopEnabledRef = useRef(false);
   const petModeEnabledRef = useRef(initialAppearance.enabled);
   const autonomousCycleRef = useRef(0);
@@ -324,10 +332,16 @@ export function PetModeWindowApp() {
   // The native panel remains mounted while Show Pet is off. Without mirroring
   // the persisted toggle here, its autonomous timers keep aging behind the
   // hidden window and can send the cat straight back out when it next enters.
+  // A one-hour hide is the same situation wearing a different key, so it rides
+  // this path too rather than only suppressing the panel from the main window.
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== PET_MODE_STORAGE_KEY) return;
-      const enabled = resolveInitialPetModeEnabled();
+      if (
+        event.key !== null
+        && event.key !== PET_MODE_STORAGE_KEY
+        && event.key !== PET_MODE_HIDDEN_UNTIL_STORAGE_KEY
+      ) return;
+      const enabled = resolvePetModePresent();
       if (enabled === petModeEnabledRef.current) return;
 
       petModeEnabledRef.current = enabled;
@@ -616,7 +630,7 @@ export function PetModeWindowApp() {
           // Native cancellation normally prevents stale entry events after the
           // toggle turns off. Re-check the shared setting here as a webview-side
           // guard so a queued old event cannot resurrect the hidden pet.
-          if (!resolveInitialPetModeEnabled()) return;
+          if (!resolvePetModePresent()) return;
           // A persisted cold-start pose may already be `entry`. Bump a separate
           // sequence so the gait restarts exactly when native screen movement
           // begins instead of continuing from the hidden mount time.
@@ -636,7 +650,7 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "entry_complete") {
-        if (!resolveInitialPetModeEnabled()) return;
+        if (!resolvePetModePresent()) return;
         const beganANewResidence = phaseRef.current === "entry" || !petModeEnabledRef.current;
         petModeEnabledRef.current = true;
         commitVisibility(true);
@@ -767,7 +781,7 @@ export function PetModeWindowApp() {
     const retry = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -777,7 +791,7 @@ export function PetModeWindowApp() {
     const schedule = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -817,7 +831,7 @@ export function PetModeWindowApp() {
     const retry = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -831,7 +845,7 @@ export function PetModeWindowApp() {
       );
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current) {
           retry();
           return;
         }
@@ -1002,6 +1016,40 @@ export function PetModeWindowApp() {
     })();
   };
 
+  /* A right-click is a menu request, never a petting gesture. handlePointerDown
+     already ignores non-primary buttons, so the only thing needed here is to
+     stop the browser's own menu and hand the press to AppKit. */
+  const handleContextMenu = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (manualDragRef.current) return;
+    /* The menu is anchored to where the cat stands. Autonomous life keeps
+       running underneath it, so without this the cat can walk out from under
+       its own open menu and leave it pointing at nothing. Holding the pose for
+       the lifetime of the menu also stops a second right-click from stacking a
+       duplicate popup. */
+    if (menuOpenRef.current) return;
+    menuOpenRef.current = true;
+    setMenuHolding(true);
+    void openNativePetModeMenu({
+      onOpenDashboard: () => {
+        void triggerNativeEndOfDayReviewAction("openDashboard").catch(() => undefined);
+      },
+      onOpenSettings: () => {
+        void triggerNativeEndOfDayReviewAction("openSettings").catch(() => undefined);
+      },
+      onHideForOneHour: () => {
+        void triggerNativePetVisibilityAction("hideOneHour").catch(() => undefined);
+      },
+      onTurnOffPet: () => {
+        void triggerNativePetVisibilityAction("turnOff").catch(() => undefined);
+      },
+    }).catch(() => undefined).finally(() => {
+      menuOpenRef.current = false;
+      setMenuHolding(false);
+    });
+  };
+
   const handlePet = () => {
     if (manualDragRef.current) return;
     if (phaseRef.current === "sleep") {
@@ -1034,11 +1082,12 @@ export function PetModeWindowApp() {
           type="button"
           className={`pet-mode-hit-target${entering ? " is-entering" : ""}`}
           onPointerDown={handlePointerDown}
+          onContextMenu={handleContextMenu}
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
           }}
-          aria-label="Pet Drifty cat. Drag to move."
+          aria-label="Pet Drifty cat. Drag to move. Right-click for options."
         >
           <PetModeCat
             phase={phase}
@@ -1052,6 +1101,9 @@ export function PetModeWindowApp() {
             hitRegionInteractive={petModeEnabled
               && petVisible
               && phase !== "entry"
+              /* While the menu is up AppKit owns the pointer. Republishing the
+                 silhouette underneath it can hand input back mid-popup. */
+              && !menuHolding
               && hitRegionTransitionCount === 0}
             hitRegionCommitRevision={hitRegionCommitRevision}
             gazeOffset={gazeOffset}

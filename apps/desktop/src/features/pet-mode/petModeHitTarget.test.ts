@@ -28,7 +28,11 @@ describe("pet mode hit target", () => {
   it("publishes a fail-closed native region for the committed rendered frame", () => {
     expect(cat).toContain("useLayoutEffect");
     expect(cat).toContain("publishPetModeHitRegion");
-    expect(app).toMatch(/hitRegionInteractive=\{petModeEnabled\s*&& petVisible\s*&& phase !== "entry"\s*&& hitRegionTransitionCount === 0\}/);
+    /* Every term here is a reason the WebView must not own the pointer. The
+       menu term joined them because AppKit holds the pointer for the lifetime
+       of an open popup, and republishing the silhouette underneath it can hand
+       input back mid-menu. */
+    expect(app).toMatch(/hitRegionInteractive=\{petModeEnabled\s*&& petVisible\s*&& phase !== "entry"\s*(?:\/\*[\s\S]*?\*\/\s*)?&& !menuHolding\s*&& hitRegionTransitionCount === 0\}/);
     expect(native).toContain("setIgnoresMouseEvents(!interactive)");
     expect(native).toContain("state.spans.is_empty()");
   });

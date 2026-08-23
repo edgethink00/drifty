@@ -105,7 +105,7 @@ describe("pet sit pose", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move." }), {
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." }), {
       clientX: 72,
       clientY: 60,
     });

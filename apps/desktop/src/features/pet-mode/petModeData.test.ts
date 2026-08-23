@@ -17,6 +17,8 @@ import {
   PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
+  PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
+  PET_MODE_HIDE_ONE_HOUR_MS,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
@@ -41,6 +43,9 @@ import {
   buildPetModePreviewInterventionTarget,
   buildPetModeSnapshot,
   resolveInitialPetModeEnabled,
+  persistPetModeHiddenUntil,
+  resolveInitialPetModeHiddenUntil,
+  resolvePetModePresent,
 } from "./petModeData";
 
 describe("petModeData", () => {
@@ -251,5 +256,75 @@ describe("petModeData", () => {
       browserName: "Aside",
       preview: true,
     });
+  });
+});
+
+describe("pet temporary hide", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("keeps a future hide and drops one that has already expired", () => {
+    const now = Date.now();
+
+    persistPetModeHiddenUntil(now + PET_MODE_HIDE_ONE_HOUR_MS);
+    expect(resolveInitialPetModeHiddenUntil(now)).toBe(now + PET_MODE_HIDE_ONE_HOUR_MS);
+
+    // An expired hide must not survive a restart, otherwise a pet hidden for an
+    // hour before quitting would come back still hidden and read as broken.
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(now - 1));
+    expect(resolveInitialPetModeHiddenUntil(now)).toBeNull();
+    expect(window.localStorage.getItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY)).toBeNull();
+  });
+
+  it("treats unreadable values as not hidden", () => {
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, "not-a-timestamp");
+    expect(resolveInitialPetModeHiddenUntil(Date.now())).toBeNull();
+  });
+
+  /* The only escape hatch from a hide is the deadline itself: the account-menu
+     toggle already reads on, so a deadline years away would retire the pet with
+     nothing left for the user to switch. A hide can never exceed its one hour. */
+  it("refuses a deadline further out than one hour", () => {
+    const now = Date.now();
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(now + PET_MODE_HIDE_ONE_HOUR_MS * 24));
+    expect(resolveInitialPetModeHiddenUntil(now)).toBeNull();
+    expect(window.localStorage.getItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY)).toBeNull();
+
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(Number.MAX_SAFE_INTEGER));
+    expect(resolveInitialPetModeHiddenUntil(now)).toBeNull();
+  });
+
+  it("still honours a deadline exactly at the one-hour boundary", () => {
+    const now = Date.now();
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(now + PET_MODE_HIDE_ONE_HOUR_MS));
+    expect(resolveInitialPetModeHiddenUntil(now)).toBe(now + PET_MODE_HIDE_ONE_HOUR_MS);
+  });
+
+  it("clears the stored hide when the pet is shown again", () => {
+    persistPetModeHiddenUntil(Date.now() + PET_MODE_HIDE_ONE_HOUR_MS);
+    expect(persistPetModeHiddenUntil(null)).toBeNull();
+    expect(window.localStorage.getItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY)).toBeNull();
+  });
+
+  /* Presence is the only thing either webview may act on. Reading the raw
+     enabled flag during a hidden hour is how a restart replays the entry walk
+     for a cat the user just put away. */
+  it("reports the pet absent while a hide is live and present once it lapses", () => {
+    const now = Date.now();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    expect(resolvePetModePresent(now)).toBe(true);
+
+    persistPetModeHiddenUntil(now + PET_MODE_HIDE_ONE_HOUR_MS);
+    expect(resolvePetModePresent(now)).toBe(false);
+
+    // The same stored state read after the hour is up must come back present
+    // without anyone having to clear it explicitly.
+    expect(resolvePetModePresent(now + PET_MODE_HIDE_ONE_HOUR_MS + 1)).toBe(true);
+  });
+
+  it("keeps a disabled pet absent regardless of the hide", () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "0");
+    expect(resolvePetModePresent()).toBe(false);
   });
 });

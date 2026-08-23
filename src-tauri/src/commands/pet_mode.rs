@@ -599,6 +599,38 @@ pub fn pet_mode_update(app: AppHandle, snapshot: Value) -> Result<(), String> {
     emit_pet_event(&window, json!({ "kind": "snapshot", "snapshot": snapshot }))
 }
 
+fn validate_pet_visibility_action(action: &str) -> Result<(), String> {
+    match action {
+        "hideOneHour" | "turnOff" => Ok(()),
+        _ => Err(format!("unknown pet visibility action: {action}")),
+    }
+}
+
+/// Hide the pet immediately, then let the main window persist the user's choice
+/// and own the one-hour restore timer. Like the Companion path this never
+/// reveals the dashboard: dismissing the cat from its own context menu should
+/// not replace one interruption with a bigger one.
+#[tauri::command]
+pub fn pet_mode_visibility_action(app: AppHandle, action: String) -> Result<(), String> {
+    validate_pet_visibility_action(&action)?;
+
+    if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
+        PET_MODE_ENABLED.store(false, Ordering::Relaxed);
+        PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+        cancel_pet_motion();
+        reset_pet_hit_region();
+        let _ = set_pet_window_interactive(&window, false);
+        window.hide().map_err(|error| error.to_string())?;
+    }
+
+    if let Some(main) = app.get_webview_window("main") {
+        main.emit("pet-visibility-action", json!({ "action": action }))
+            .map_err(|error| error.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[tauri::command]
 pub fn pet_mode_intervene(app: AppHandle, target: PetModeInterventionTarget) -> Result<(), String> {
     if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
@@ -2290,6 +2322,18 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The command hides the pet before anything validates intent, so an
+    /// unrecognised action must be rejected outright rather than treated as a
+    /// generic dismissal the main window never records.
+    #[test]
+    fn accepts_only_pet_visibility_menu_actions() {
+        assert!(validate_pet_visibility_action("hideOneHour").is_ok());
+        assert!(validate_pet_visibility_action("turnOff").is_ok());
+        assert!(validate_pet_visibility_action("openDashboard").is_err());
+        assert!(validate_pet_visibility_action("").is_err());
+        assert!(validate_pet_visibility_action("hideoneHour").is_err());
+    }
 
     #[test]
     fn entry_starts_with_only_transparent_gutter_inside_the_display() {

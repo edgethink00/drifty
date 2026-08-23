@@ -115,7 +115,29 @@ describe("pet promoted out of Dev", () => {
   });
 
   it("is not gated behind Dev mode when deciding to show the pet", () => {
-    expect(app).toContain("const petModeActive = petModeEnabled;");
+    // The only thing allowed to suppress an enabled pet is its own temporary
+    // hide, which expires on a timer. Any Dev-mode term here would be the
+    // regression this test exists to catch.
+    expect(app).toContain("const petModeActive = petModeEnabled && petModeHiddenUntil === null;");
+  });
+
+  /* A temporarily hidden pet must stay off screen for every reason the pet can
+     appear, not just the resident panel. An intervention that keyed off the raw
+     preference would drag the cat back mid-screen-share, which is exactly the
+     situation the one-hour hide exists to protect. */
+  it("routes interventions through the same suppressed state as the panel", () => {
+    expect(app).toContain("if (petModeActive) {");
+    const interventionBlock = app.slice(app.indexOf("const runExtremeNudge = async () => {"));
+    expect(interventionBlock.slice(0, 200)).not.toContain("petModeEnabled");
+  });
+
+  it("keeps the native visibility action authoritative over both hide choices", () => {
+    // Rust hides the panel immediately; the main window owns persistence. If the
+    // command stopped validating, an unknown action would silently hide the pet
+    // with nothing recording why.
+    expect(petModeRustContract).toContain("fn validate_pet_visibility_action");
+    expect(petModeRustContract).toContain('"hideOneHour" | "turnOff" => Ok(())');
+    expect(petModeRustContract).toContain('main.emit("pet-visibility-action"');
   });
 
   it("offers the visibility toggle in the account menu", () => {

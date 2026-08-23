@@ -113,6 +113,7 @@ fn main() {
             "extreme_nudge_apply",
             "pet_mode_set_enabled",
             "pet_mode_update",
+            "pet_mode_visibility_action",
             "pet_mode_intervene",
             "pet_mode_preview_intervention",
             "pet_mode_preview_action",
