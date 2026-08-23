@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const pillStyles = readFileSync(new URL("./companion-pill.css", import.meta.url), "utf8");
+const pillStyles = readFileSync(new URL("./companion-pill.css", import.meta.url), "utf8")
+  .replace(/\r\n?/gu, "\n");
 
 function cssRule(selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

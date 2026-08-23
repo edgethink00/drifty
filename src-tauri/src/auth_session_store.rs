@@ -18,7 +18,7 @@ fn auth_session_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn keychain_entry() -> Result<Entry, String> {
     Entry::new(AUTH_SESSION_KEYCHAIN_SERVICE, AUTH_SESSION_KEYCHAIN_ACCOUNT)
-        .map_err(|error| format!("Unable to open auth session Keychain entry: {error}"))
+        .map_err(|error| format!("Unable to open auth session credential: {error}"))
 }
 
 fn remove_legacy_session_file(app: &AppHandle) -> Result<(), String> {
@@ -36,9 +36,9 @@ fn load_legacy_session(app: &AppHandle, entry: &Entry) -> Result<Option<String>,
         Err(error) => return Err(error.to_string()),
     };
 
-    entry
-        .set_password(&legacy_value)
-        .map_err(|error| format!("Unable to migrate auth session into Keychain: {error}"))?;
+    entry.set_password(&legacy_value).map_err(|error| {
+        format!("Unable to migrate auth session into the OS credential store: {error}")
+    })?;
     remove_legacy_session_file(app)?;
 
     Ok(Some(legacy_value))
@@ -50,7 +50,7 @@ pub fn load_saved_session(app: &AppHandle) -> Result<Option<String>, String> {
         Ok(value) => Ok(Some(value)),
         Err(KeyringError::NoEntry) => load_legacy_session(app, &entry),
         Err(error) => Err(format!(
-            "Unable to read auth session from Keychain: {error}"
+            "Unable to read auth session from the OS credential store: {error}"
         )),
     }
 }
@@ -58,14 +58,14 @@ pub fn load_saved_session(app: &AppHandle) -> Result<Option<String>, String> {
 pub fn save_session(value: &str) -> Result<(), String> {
     keychain_entry()?
         .set_password(value)
-        .map_err(|error| format!("Unable to save auth session in Keychain: {error}"))
+        .map_err(|error| format!("Unable to save auth session in the OS credential store: {error}"))
 }
 
 pub fn clear_saved_session(app: &AppHandle) -> Result<(), String> {
     let keychain_result = match keychain_entry()?.delete_credential() {
         Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
         Err(error) => Err(format!(
-            "Unable to clear auth session from Keychain: {error}"
+            "Unable to clear auth session from the OS credential store: {error}"
         )),
     };
 

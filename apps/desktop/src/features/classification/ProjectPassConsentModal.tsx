@@ -73,7 +73,7 @@ function ProjectPassConsentDialog({
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id={TITLE_ID}>Turn on project analysis</h2>
-            <p id={DESCRIPTION_ID}>Exactly what leaves your Mac before you turn it on.</p>
+            <p id={DESCRIPTION_ID}>Exactly what leaves your computer before you turn it on.</p>
           </div>
         </div>
 
@@ -84,7 +84,7 @@ function ProjectPassConsentDialog({
           </li>
           <li>
             It never sends your raw history beyond that summary. Full timeline rows and session history
-            stay on your Mac, and your existing AI privacy settings still apply.
+            stay on your computer, and your existing AI privacy settings still apply.
           </li>
           <li>
             Optional context currently included: {[

@@ -6,7 +6,8 @@
     "pet-mode"
   ],
   "platforms": [
-    "macOS"
+    "macOS",
+    "windows"
   ],
   "permissions": [
     "core:default",

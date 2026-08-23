@@ -28,7 +28,7 @@ export const DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS = [
   {
     id: "device-limit",
     label: "Device limit",
-    detail: "Two active Macs used",
+    detail: "Two active desktop devices used",
   },
   {
     id: "connect-ai",
@@ -57,7 +57,7 @@ const DEVICE_LIMIT_ENTITLEMENT = {
   deviceAccess: {
     allowed: false,
     reason: "device_limit_reached",
-    message: "This Drifty Cloud Individual plan is already active on 2 Macs. Remove a device in Account settings to use Cloud AI here.",
+    message: "This Drifty Cloud Individual plan is already active on 2 desktop devices. Remove a device in Account settings to use Cloud AI here.",
     activeDeviceCount: 2,
     maxActiveDevices: 2,
     activeWindowDays: 30,

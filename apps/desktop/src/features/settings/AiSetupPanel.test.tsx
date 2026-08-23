@@ -290,7 +290,7 @@ describe("AiSetupPanel", () => {
     const requiredFields = screen.getByRole("list", { name: /Required AI classification fields/i });
     const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
     // The receipt states each always-sent field by name, with the value that would
-    // actually leave this Mac for the worked example.
+    // actually leave this computer for the worked example.
     expect(within(requiredFields).getByText(/^App$/i)).toBeTruthy();
     expect(within(requiredFields).getByText(/^Duration$/i)).toBeTruthy();
     expect(within(requiredFields).getByText(/^Site domain$/i)).toBeTruthy();
@@ -387,7 +387,7 @@ describe("AiSetupPanel", () => {
       "Provider API keys",
     ]);
     expect(within(neverSent).getByText(/The description never is/i)).toBeTruthy();
-    expect(within(neverSent).getByText(/macOS Keychain/i)).toBeTruthy();
+    expect(within(neverSent).getByText(/operating system's credential store/i)).toBeTruthy();
   });
 
   it("falls back to enabled optional AI privacy controls when persisted settings are malformed", () => {

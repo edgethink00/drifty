@@ -46,7 +46,7 @@ describe("DriftAlarmCopySettings", () => {
     fireEvent.click(within(dialog).getByRole("tab", { name: "Notification" }));
     expect(within(dialog).queryByLabelText("Dashboard action")).toBeNull();
     expect(within(dialog).queryByLabelText("No focus target text")).toBeNull();
-    expect(within(dialog).queryByLabelText("macOS notification body")).toBeNull();
+    expect(within(dialog).queryByLabelText("Desktop notification body")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Decision needed" } });
     expect(onChange).not.toHaveBeenCalled();
     const notificationPreview = within(dialog).getByRole("complementary", { name: "Alarm copy preview" });

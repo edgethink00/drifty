@@ -91,7 +91,7 @@ describe("SocialProfileView", () => {
     expect(screen.getByRole("button", { name: /profile embed/i })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^badge/i })).toBeNull();
     expect(screen.getByText(/local preview · not public/i)).toBeTruthy();
-    expect(screen.getByText(/stays on this Mac until you turn on Category breakdown/i)).toBeTruthy();
+    expect(screen.getByText(/stays on this computer until you turn on Category breakdown/i)).toBeTruthy();
     expect(screen.getByText("Workspace")).toBeTruthy();
     const publicPreview = screen.getByRole("region", { name: /public preview/i });
     expect(within(publicPreview).getByText(/20h/)).toBeTruthy();

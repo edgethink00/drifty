@@ -9,10 +9,14 @@ from app.tracker.windows_workspace import (
     ProcessIdentity,
     aumid_display_name,
     build_snapshot,
+    enrich_browser_snapshot,
     exe_display_name,
     identity_key_for,
+    is_verified_browser_history_identity,
     resolve_identity,
 )
+from app.tracker.browser_automation import BrowserMetadata
+from app.tracker.windows_browser_uia import WindowsBrowserUiaResult
 
 
 class ExeDisplayNameTests(unittest.TestCase):
@@ -21,6 +25,20 @@ class ExeDisplayNameTests(unittest.TestCase):
 
     def test_handles_forward_slashes(self) -> None:
         self.assertEqual(exe_display_name("C:/Tools/app.exe"), "app")
+
+    def test_canonicalizes_browser_executable_names(self) -> None:
+        self.assertEqual(exe_display_name("C:\\Program Files\\Google\\Chrome\\chrome.exe"), "Google Chrome")
+        self.assertEqual(exe_display_name("C:\\Program Files (x86)\\Microsoft\\Edge\\msedge.exe"), "Microsoft Edge")
+
+    def test_canonicalizes_chrome_channels_from_the_full_path(self) -> None:
+        self.assertEqual(
+            exe_display_name(r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe"),
+            "Google Chrome Beta",
+        )
+        self.assertEqual(
+            exe_display_name(r"C:\Users\qa\AppData\Local\Google\Chrome SxS\Application\chrome.exe"),
+            "Google Chrome Canary",
+        )
 
     def test_keeps_non_exe_names(self) -> None:
         self.assertEqual(exe_display_name("C:\\Tools\\helper.bin"), "helper.bin")
@@ -160,6 +178,108 @@ class BuildSnapshotTests(unittest.TestCase):
         self.assertIn("foreground window", snapshot.frontmost_capture_error or "")
 
 
+class BrowserEnrichmentTests(unittest.TestCase):
+    def _snapshot(self, app_name: str = "Google Chrome"):
+        return build_snapshot(
+            ForegroundWindow(hwnd=44, title="Example - Google Chrome", pid=5),
+            ProcessIdentity(exe_path="C:\\Program Files\\Google\\Chrome\\chrome.exe", exe_name=app_name, aumid=None),
+            observed_at="2026-08-20T00:00:00+00:00",
+        )
+
+    def test_live_uia_url_is_primary_and_populates_browser_contract(self) -> None:
+        snapshot = enrich_browser_snapshot(
+            self._snapshot(),
+            44,
+            live_reader=lambda hwnd, app: WindowsBrowserUiaResult("https://www.example.com/docs", None),
+            history_reader=lambda *_: self.fail("history must not run after a live URL"),
+        )
+        self.assertEqual(snapshot.browser_name, "Google Chrome")
+        self.assertEqual(snapshot.site_domain, "example.com")
+        self.assertEqual(snapshot.site_url, "https://www.example.com/docs")
+        self.assertEqual(snapshot.site_source, "windows-uia-address-bar")
+        self.assertEqual(snapshot.capture_confidence, 0.8)
+        self.assertEqual(snapshot.browser_automation_status, "granted")
+
+    def test_history_is_only_a_fallback_and_preserves_uia_diagnostic(self) -> None:
+        history = BrowserMetadata(
+            browser_name="Google Chrome",
+            site_domain="example.com",
+            site_url="https://example.com/fallback",
+            browser_history_status="matched",
+            browser_history_reason="matched",
+            browser_history_database_found=True,
+            browser_history_profile_count=1,
+            browser_history_candidate_count=3,
+            browser_history_error_count=0,
+        )
+        snapshot = enrich_browser_snapshot(
+            self._snapshot(),
+            44,
+            live_reader=lambda hwnd, app: WindowsBrowserUiaResult(None, "no URL-shaped edit control value"),
+            history_reader=lambda *_: history,
+            history_identity_checker=lambda *_: True,
+        )
+        self.assertEqual(snapshot.site_url, "https://example.com/fallback")
+        self.assertEqual(snapshot.site_source, "browser-history-title")
+        self.assertEqual(snapshot.browser_automation_status, "unavailable")
+        self.assertIn("URL-shaped", snapshot.browser_automation_error or "")
+        self.assertEqual(snapshot.browser_history_status, "matched")
+        self.assertEqual(snapshot.capture_confidence, 0.45)
+
+    def test_unverified_portable_browser_never_reads_canonical_history(self) -> None:
+        snapshot = self._snapshot()
+        snapshot.bundle_id = r"c:\temp\chrome.exe"
+        enriched = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: WindowsBrowserUiaResult(None, "address bar unavailable"),
+            history_reader=lambda *_: self.fail("unverified executable must not read browser history"),
+        )
+        self.assertIsNone(enriched.site_url)
+        self.assertEqual(enriched.capture_confidence, 1.0)
+
+    def test_non_browser_never_starts_uia_or_history(self) -> None:
+        snapshot = self._snapshot("Editor")
+        snapshot.app_name = "Editor"
+        unchanged = enrich_browser_snapshot(
+            snapshot,
+            44,
+            live_reader=lambda *_: self.fail("UIA must not run"),
+            history_reader=lambda *_: self.fail("history must not run"),
+        )
+        self.assertIs(unchanged, snapshot)
+        self.assertIsNone(unchanged.browser_name)
+
+
+class BrowserHistoryIdentityTests(unittest.TestCase):
+    def test_accepts_exact_vendor_install_path(self) -> None:
+        self.assertTrue(is_verified_browser_history_identity(
+            "Google Chrome",
+            r"c:\program files\google\chrome\application\chrome.exe",
+            {"PROGRAMFILES": r"C:\Program Files"},
+        ))
+
+    def test_rejects_same_basename_outside_vendor_install(self) -> None:
+        self.assertFalse(is_verified_browser_history_identity(
+            "Google Chrome",
+            r"C:\Temp\chrome.exe",
+            {"PROGRAMFILES": r"C:\Program Files", "LOCALAPPDATA": r"C:\Users\qa\AppData\Local"},
+        ))
+
+    def test_accepts_beta_binary_only_for_the_beta_profile_identity(self) -> None:
+        path = r"C:\Program Files\Google\Chrome Beta\Application\chrome.exe"
+        environment = {"PROGRAMFILES": r"C:\Program Files"}
+        self.assertTrue(is_verified_browser_history_identity(
+            "Google Chrome Beta",
+            path,
+            environment,
+        ))
+        self.assertFalse(is_verified_browser_history_identity(
+            "Google Chrome",
+            path,
+            environment,
+        ))
+
 class SessionZeroRefusalTests(unittest.TestCase):
     def test_session_zero_refuses_capture(self) -> None:
         with (
@@ -169,7 +289,18 @@ class SessionZeroRefusalTests(unittest.TestCase):
             snapshot = windows_workspace.current_snapshot()
         self.assertEqual(snapshot.app_name, "Unavailable")
         self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
-        self.assertIn("session 0", snapshot.frontmost_capture_error or "")
+        self.assertIn("no interactive desktop", snapshot.frontmost_capture_error or "")
+
+    def test_unknown_session_refuses_before_foreground_capture(self) -> None:
+        with (
+            patch.object(windows_workspace, "is_windows", return_value=True),
+            patch.object(windows_workspace, "process_session_id", return_value=None),
+            patch.object(windows_workspace, "read_foreground_window") as foreground,
+        ):
+            snapshot = windows_workspace.current_snapshot()
+        foreground.assert_not_called()
+        self.assertEqual(snapshot.frontmost_capture_source, "unavailable")
+        self.assertIn("session is unknown", snapshot.frontmost_capture_error or "")
 
     def test_non_windows_platform_refuses_capture(self) -> None:
         with patch.object(windows_workspace, "is_windows", return_value=False):

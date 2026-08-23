@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use std::{thread, time::Duration};
 
 #[cfg(target_os = "macos")]
@@ -11,9 +12,13 @@ use tauri::async_runtime;
 use thiserror::Error;
 
 mod browser_tabs;
+#[cfg(target_os = "windows")]
+mod windows;
 
 const DRIFTY_BUNDLE_ID: &str = "so.drifty.mac";
+#[cfg(target_os = "macos")]
 const GRACEFUL_TERMINATE_WAIT: Duration = Duration::from_millis(800);
+#[cfg(target_os = "macos")]
 const FORCE_TERMINATE_WAIT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Debug, Deserialize)]
@@ -46,6 +51,9 @@ pub enum ExtremeNudgeOutcomeKind {
 enum ExtremeNudgeError {
     #[error("Browser tab closing requires a captured page URL or domain")]
     MissingBrowserTarget,
+    #[cfg(target_os = "windows")]
+    #[error("Browser tab closing requires the captured browser executable identity")]
+    MissingBrowserIdentity,
     #[error("Refusing to terminate protected app bundle {0}")]
     ProtectedBundle(String),
     #[error("App bundle id is required for {0}")]
@@ -91,6 +99,7 @@ fn apply_extreme_nudge(
 
         let diagnostic = browser_tabs::close_browser_tab(
             browser_name,
+            target.bundle_id.as_deref(),
             site_url.as_deref(),
             site_domain.as_deref(),
             target.force_chromium_ax_tab_close,
@@ -126,6 +135,11 @@ fn normalized_bundle_id(value: Option<&str>, app_name: &str) -> Result<String, E
 }
 
 fn is_protected_bundle_id(bundle_id: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        return windows::is_protected_identity(bundle_id);
+    }
+    #[cfg(not(target_os = "windows"))]
     matches!(
         bundle_id,
         DRIFTY_BUNDLE_ID
@@ -187,10 +201,15 @@ fn all_applications_terminated(
 }
 
 #[cfg(not(target_os = "macos"))]
-fn terminate_app_by_bundle_id(_bundle_id: &str) -> Result<(), ExtremeNudgeError> {
-    Err(ExtremeNudgeError::AppTerminateFailed(
-        "extreme nudge app termination is only available on macOS".to_string(),
-    ))
+fn terminate_app_by_bundle_id(bundle_id: &str) -> Result<(), ExtremeNudgeError> {
+    #[cfg(target_os = "windows")]
+    {
+        return windows::terminate_app_by_identity(bundle_id);
+    }
+    #[cfg(not(target_os = "windows"))]
+    Err(ExtremeNudgeError::AppTerminateFailed(format!(
+        "extreme nudge app termination is unavailable for {bundle_id}"
+    )))
 }
 
 #[cfg(test)]
@@ -205,10 +224,13 @@ mod tests {
         assert!(browser_tabs::is_supported_browser_tab_target(
             "Microsoft Edge"
         ));
-        assert!(browser_tabs::is_supported_browser_tab_target("Arc"));
-        assert!(browser_tabs::is_supported_browser_tab_target("Aside"));
-        assert!(browser_tabs::is_supported_browser_tab_target("Safari"));
-        assert!(browser_tabs::is_supported_browser_tab_target("Firefox"));
+        #[cfg(not(target_os = "windows"))]
+        {
+            assert!(browser_tabs::is_supported_browser_tab_target("Arc"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Aside"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Safari"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Firefox"));
+        }
     }
 
     #[test]
@@ -218,8 +240,14 @@ mod tests {
 
     #[test]
     fn protected_bundle_ids_are_rejected() {
+        #[cfg(not(target_os = "windows"))]
         assert!(matches!(
             normalized_bundle_id(Some(DRIFTY_BUNDLE_ID), "Drifty"),
+            Err(ExtremeNudgeError::ProtectedBundle(_)),
+        ));
+        #[cfg(target_os = "windows")]
+        assert!(matches!(
+            normalized_bundle_id(Some(r"C:\Program Files\Drifty\drifty.exe"), "Drifty"),
             Err(ExtremeNudgeError::ProtectedBundle(_)),
         ));
     }

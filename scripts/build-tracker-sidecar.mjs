@@ -1,6 +1,6 @@
 import { accessSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -25,6 +25,24 @@ const exeSuffix = process.platform === "win32" ? ".exe" : "";
 // start. macOS keeps --onefile: its single extraction is fast enough there
 // and the externalBin flow expects one file.
 const useOneDir = process.platform === "win32";
+const WINDOWS_RELEASE_PYTHON = Object.freeze({ major: 3, minor: 14, patch: 0 });
+const WINDOWS_RELEASE_PACKAGES = Object.freeze({
+  "altgraph": "0.17.5",
+  "certifi": "2026.7.22",
+  "packaging": "26.3",
+  "pefile": "2024.8.26",
+  "pip": "25.2",
+  "pyinstaller": "6.22.1",
+  "pyinstaller-hooks-contrib": "2026.6",
+  "pywin32-ctypes": "0.2.3",
+  "sentry-sdk": "2.68.0",
+  "setuptools": "84.0.0",
+  "tzdata": "2026.3",
+  "urllib3": "2.7.0",
+});
+const WINDOWS_RELEASE_PTH_FILES = Object.freeze({
+  "distutils-precedence.pth": "2638ce9e2500e572a5e0de7faed6661eb569d1b696fcba07b0dd223da5f5d224",
+});
 
 // PyInstaller follows imports, and `tzdata` is a data-only package that
 // nothing imports by name - `zoneinfo` discovers it at runtime. Without an
@@ -147,6 +165,71 @@ function assertPyInstaller(pythonBin) {
   return result.stdout.trim();
 }
 
+function assertWindowsReleaseToolchain(pythonBin) {
+  if (process.platform !== "win32" || process.env.DRIFTY_RELEASE_BUILD !== "1") return;
+  if (!process.env.DRIFTY_TRACKER_BUILD_PYTHON || !isAbsolute(pythonBin)) {
+    fail("Windows release builds require an explicit absolute DRIFTY_TRACKER_BUILD_PYTHON venv interpreter.");
+  }
+  const inspectScript = [
+    "import hashlib",
+    "import importlib.metadata as metadata",
+    "import json",
+    "from pathlib import Path",
+    "import site",
+    "import sys",
+    "normalize = lambda value: value.lower().replace('_', '-').replace('.', '-')",
+    "packages = {normalize(dist.metadata['Name']): dist.version for dist in metadata.distributions()}",
+    "site_roots = [Path(value) for value in site.getsitepackages() if Path(value).name.lower() == 'site-packages']",
+    "pth_files = {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for root in site_roots for path in root.glob('*.pth')}",
+    "print(json.dumps({'python': [sys.version_info.major, sys.version_info.minor, sys.version_info.micro], 'inVenv': sys.prefix != sys.base_prefix, 'packages': packages, 'pthFiles': pth_files}, sort_keys=True))",
+  ].join("; ");
+  const inspection = run(pythonBin, ["-c", inspectScript], { capture: true });
+  if (inspection.status !== 0) {
+    fail(`Windows release Python environment is incomplete: ${inspection.stderr.trim()}`);
+  }
+  let observed;
+  try {
+    observed = JSON.parse(inspection.stdout.trim());
+  } catch {
+    fail(`Windows release Python environment returned invalid inventory: ${inspection.stdout}`);
+  }
+  if (!observed.inVenv) {
+    fail("Windows release builds require an isolated Python virtual environment.");
+  }
+  if (observed.python?.[0] !== WINDOWS_RELEASE_PYTHON.major
+    || observed.python?.[1] !== WINDOWS_RELEASE_PYTHON.minor
+    || observed.python?.[2] !== WINDOWS_RELEASE_PYTHON.patch) {
+    fail(`Windows release builds require Python ${WINDOWS_RELEASE_PYTHON.major}.${WINDOWS_RELEASE_PYTHON.minor}.${WINDOWS_RELEASE_PYTHON.patch}.`);
+  }
+  if (JSON.stringify(observed.packages) !== JSON.stringify(WINDOWS_RELEASE_PACKAGES)) {
+    fail("Windows release Python distribution inventory does not match the complete approved lock.");
+  }
+  if (JSON.stringify(observed.pthFiles) !== JSON.stringify(WINDOWS_RELEASE_PTH_FILES)) {
+    fail("Windows release Python startup .pth inventory does not match the approved lock.");
+  }
+  const dependencyCheck = run(pythonBin, ["-m", "pip", "check"], { capture: true });
+  if (dependencyCheck.status !== 0) {
+    fail(`Windows release Python dependency check failed: ${dependencyCheck.stdout.trim()} ${dependencyCheck.stderr.trim()}`);
+  }
+}
+
+function signWindowsReleaseArtifact(artifactPath) {
+  if (process.platform !== "win32" || process.env.DRIFTY_WINDOWS_SIGN_RELEASE !== "1") return;
+  const systemRoot = process.env.SystemRoot;
+  if (!systemRoot) fail("SystemRoot is required to resolve trusted Windows PowerShell for signing.");
+  const powershell = resolve(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+  if (!existsSync(powershell)) fail(`Trusted Windows PowerShell is unavailable: ${powershell}`);
+  const signingScript = resolve(repoRoot, "scripts", "sign-windows-artifact.ps1");
+  const result = run(
+    powershell,
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", signingScript, "-Path", artifactPath],
+    { capture: true },
+  );
+  if (result.status !== 0) {
+    fail(`Windows sidecar signing failed: ${result.stdout.trim()} ${result.stderr.trim()}`);
+  }
+}
+
 async function assertExecutable(path) {
   const stats = statSync(path);
   if (!stats.isFile()) {
@@ -199,6 +282,7 @@ async function main() {
   assertSafeTarget(target);
 
   const pythonBin = defaultPython();
+  assertWindowsReleaseToolchain(pythonBin);
   const pyInstallerVersion = assertPyInstaller(pythonBin);
   const outputPath = resolve(binariesDir, `${artifactBaseName}-${target}${useOneDir ? "" : exeSuffix}`);
   const outputExecutable = useOneDir
@@ -268,6 +352,8 @@ async function main() {
     }
     await assertExecutable(outputExecutable);
     assertSmokeTest(outputExecutable);
+    signWindowsReleaseArtifact(outputExecutable);
+    if (process.env.DRIFTY_WINDOWS_SIGN_RELEASE === "1") assertSmokeTest(outputExecutable);
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });
   }

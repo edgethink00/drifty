@@ -233,8 +233,8 @@ describe("App onboarding cloud login", () => {
     trackerGetHourlySummary.mockResolvedValue([]);
     isPermissionGranted.mockResolvedValue(false);
     requestPermission.mockResolvedValue("granted");
-    accessibilityGetStatus.mockResolvedValue({ granted: false });
-    accessibilityRequestAccess.mockResolvedValue({ granted: false });
+    accessibilityGetStatus.mockResolvedValue({ granted: false, required: true });
+    accessibilityRequestAccess.mockResolvedValue({ granted: false, required: true });
     openSystemSettingsPane.mockResolvedValue(true);
     billingMocks.fetchBillingEntitlement.mockResolvedValue({
       success: true,

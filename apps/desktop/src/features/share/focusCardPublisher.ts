@@ -198,7 +198,7 @@ export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): P
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
   // Same publish boundary as the leaderboard: imported estimates and segments
-  // synced from other Macs never feed this device's published card.
+  // synced from other devices never feed this device's published card.
   const monthSegments = fetched.filter(
     (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
   );

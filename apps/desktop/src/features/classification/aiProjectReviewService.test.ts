@@ -408,17 +408,21 @@ describe("runProjectPass orchestration", () => {
     const { tracker, spies } = mockTracker({ getTimeline: vi.fn(async () => manySegments) as TrackerApi["getTimeline"] });
     const prompts: string[] = [];
     let activeInferences = 0;
-    let resolveFirstInference: (() => void) | null = null;
-    const firstInferenceStarted = new Promise<void>((resolve) => {
-      resolveFirstInference = resolve;
+    let resolveParallelInference: ((started: boolean) => void) | null = null;
+    const parallelInferenceStarted = new Promise<boolean>((resolve) => {
+      resolveParallelInference = resolve;
+    });
+    let releaseInferences: () => void = () => undefined;
+    const inferenceRelease = new Promise<void>((resolve) => {
+      releaseInferences = resolve;
     });
     let maxInFlight = 0;
     const inference: ProjectPassInference = vi.fn(async (prompt: string) => {
       prompts.push(prompt);
       activeInferences += 1;
       maxInFlight = Math.max(maxInFlight, activeInferences);
-      if (prompts.length === 1) resolveFirstInference?.();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (activeInferences > 1) resolveParallelInference?.(true);
+      await inferenceRelease;
       activeInferences -= 1;
       const coreSection = prompt.split("Core analysis windows (return assignments and corrections only for these ids):")[1]?.split("Context after (read-only; do not output these ids):")[0] ?? "";
       const output = coreSection.includes(`App${PROJECT_PASS_MAX_CHUNK_WINDOWS}`)
@@ -442,11 +446,15 @@ describe("runProjectPass orchestration", () => {
       contextPolicy: CONTEXT_POLICY,
     });
 
-    await firstInferenceStarted;
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const observedParallelStart = await Promise.race([
+      parallelInferenceStarted,
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 1_000)),
+    ]);
     const observedParallelism = maxInFlight;
+    releaseInferences();
     await run;
 
+    expect(observedParallelStart).toBe(true);
     expect(observedParallelism).toBeGreaterThan(1);
     expect(observedParallelism).toBeLessThanOrEqual(EXPECTED_MAX_PARALLEL_CHUNKS);
     expect(prompts).toHaveLength(2);

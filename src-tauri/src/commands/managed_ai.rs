@@ -297,7 +297,8 @@ fn model_resource_failure(
     {
         return Some(ModelResourceFailure {
             error_kind: ManagedAiStatusErrorKind::InsufficientMemory,
-            message: "Selected local model requires more memory than this Mac has.".to_string(),
+            message: "Selected local model requires more memory than this computer has."
+                .to_string(),
             required_bytes: spec.min_memory_bytes,
             available_bytes,
         });

@@ -28,7 +28,7 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         id: "drifty-qwen3-5-2b-economy",
         tier: "economy",
         label: "Qwen 3.5 2B",
-        detail: "Lightest and fastest, but least accurate — fine for rough sorting on older Macs.",
+        detail: "Lightest and fastest, but least accurate — fine for rough sorting on older computers.",
         download_size: "~1.4 GB",
         disk_required: "3 GB free",
         disk_required_bytes: 3 * GIB,
@@ -47,7 +47,7 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         id: "drifty-qwen3-5-4b-default",
         tier: "default",
         label: "Qwen 3.5 4B",
-        detail: "Best balance of speed and accuracy for most Macs — what we suggest.",
+        detail: "Best balance of speed and accuracy for most computers — what we suggest.",
         download_size: "~2.8 GB",
         disk_required: "6 GB free",
         disk_required_bytes: 6 * GIB,
@@ -85,7 +85,7 @@ pub(super) const MANAGED_MODELS: &[ManagedAiModelSpec] = &[
         id: "drifty-qwen3-6-27b-smart",
         tier: "smart",
         label: "Qwen 3.6 27B",
-        detail: "Most accurate classification — needs a powerful Mac and more memory.",
+        detail: "Most accurate classification — needs a powerful computer and more memory.",
         download_size: "~16.8 GB",
         disk_required: "30 GB free",
         disk_required_bytes: 30 * GIB,
@@ -199,11 +199,11 @@ fn fit_detail(
     match fit {
         ManagedAiModelFit::Good => None,
         ManagedAiModelFit::Tight => Some(format!(
-            "May be slow and heavy alongside other apps on a {} GB Mac.",
+            "May be slow and heavy alongside other apps on a {} GB computer.",
             whole_gigabytes(machine_memory_bytes)
         )),
         ManagedAiModelFit::Insufficient => Some(format!(
-            "Needs at least {} GB of memory — this Mac has {} GB.",
+            "Needs at least {} GB of memory — this computer has {} GB.",
             whole_gigabytes(spec.min_memory_bytes),
             whole_gigabytes(machine_memory_bytes)
         )),

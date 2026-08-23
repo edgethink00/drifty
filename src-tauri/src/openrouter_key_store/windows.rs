@@ -12,9 +12,8 @@ const OPENROUTER_API_KEY_SERVICE: &str = "so.drifty.openrouter-api-key";
 const OPENROUTER_API_KEY_ACCOUNT: &str = "desktop";
 
 fn credential_entry() -> Result<Entry, String> {
-    Entry::new(OPENROUTER_API_KEY_SERVICE, OPENROUTER_API_KEY_ACCOUNT).map_err(|error| {
-        format!("Unable to open OpenRouter API key credential: {error}")
-    })
+    Entry::new(OPENROUTER_API_KEY_SERVICE, OPENROUTER_API_KEY_ACCOUNT)
+        .map_err(|error| format!("Unable to open OpenRouter API key credential: {error}"))
 }
 
 pub fn load_api_key() -> Result<Option<String>, String> {
@@ -48,4 +47,3 @@ pub fn clear_api_key() -> Result<(), String> {
         )),
     }
 }
-

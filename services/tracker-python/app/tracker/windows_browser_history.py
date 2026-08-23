@@ -68,6 +68,8 @@ def windows_browser_roots() -> dict:
         return {}
     return {
         "Google Chrome": local / "Google" / "Chrome" / "User Data",
+        "Google Chrome Beta": local / "Google" / "Chrome Beta" / "User Data",
+        "Google Chrome Dev": local / "Google" / "Chrome Dev" / "User Data",
         "Google Chrome Canary": local / "Google" / "Chrome SxS" / "User Data",
         "Microsoft Edge": local / "Microsoft" / "Edge" / "User Data",
         "Brave Browser": local / "BraveSoftware" / "Brave-Browser" / "User Data",

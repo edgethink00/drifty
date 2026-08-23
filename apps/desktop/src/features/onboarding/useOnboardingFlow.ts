@@ -42,6 +42,7 @@ type UseOnboardingFlowOptions = {
   readonly initialDisplayName: string;
   readonly trackerStatus: TrackerStatus | null;
   readonly accessibilityGranted: boolean;
+  readonly accessibilityRequired: boolean;
   readonly onStartTracking: () => Promise<void>;
   readonly onEarlyTrackingStart: () => void;
   readonly onCheckAccessibility: () => Promise<boolean>;
@@ -61,6 +62,7 @@ export function useOnboardingFlow({
   initialDisplayName,
   trackerStatus,
   accessibilityGranted: accessibilityGrantedFromApp,
+  accessibilityRequired,
   onStartTracking,
   onEarlyTrackingStart,
   onCheckAccessibility,
@@ -114,6 +116,7 @@ export function useOnboardingFlow({
   });
   const permissions = useOnboardingPermissions({
     accessibilityGrantedFromApp,
+    accessibilityRequired,
     onCheckAccessibility,
     onEarlyTrackingStart,
     onEnableDriftAlerts,
@@ -128,7 +131,7 @@ export function useOnboardingFlow({
     skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
   }), [connection.setupChoice]);
   const stepIndex = steps.findIndex((item) => item.id === step);
-  const permissionSummaryLabel = permissions.accessibilityGranted
+  const permissionSummaryLabel = permissions.accessibilityRequired && permissions.accessibilityGranted
     ? "Accessibility verified"
     : "Tracking readiness verified";
   const isFinalStep = stepIndex === steps.length - 1;

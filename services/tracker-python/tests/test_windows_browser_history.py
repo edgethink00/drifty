@@ -45,6 +45,8 @@ class WindowsBrowserRootTests(unittest.TestCase):
     def test_chromium_profiles_nest_under_user_data(self) -> None:
         roots = self._roots()
         self.assertEqual(self._parts(roots["Google Chrome"])[-3:], ["Google", "Chrome", "User Data"])
+        self.assertEqual(self._parts(roots["Google Chrome Beta"])[-3:], ["Google", "Chrome Beta", "User Data"])
+        self.assertEqual(self._parts(roots["Google Chrome Canary"])[-3:], ["Google", "Chrome SxS", "User Data"])
         self.assertEqual(self._parts(roots["Microsoft Edge"])[-3:], ["Microsoft", "Edge", "User Data"])
         self.assertEqual(
             self._parts(roots["Brave Browser"])[-3:], ["BraveSoftware", "Brave-Browser", "User Data"]

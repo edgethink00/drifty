@@ -30,8 +30,8 @@ describe("IndividualPlanCards", () => {
     expect(within(individualPlan).getByText("$5")).toBeTruthy();
     expect(within(individualPlan).getByText("/ month")).toBeTruthy();
     expect(within(individualPlan).getByText("Cloud AI")).toBeTruthy();
-    expect(within(individualPlan).getByText("2 active Macs included")).toBeTruthy();
-    expect(within(individualPlan).getByText("Manage old Macs from Account settings")).toBeTruthy();
+    expect(within(individualPlan).getByText("2 active desktop devices included")).toBeTruthy();
+    expect(within(individualPlan).getByText("Manage old devices from Account settings")).toBeTruthy();
     expect(within(individualPlan).getByText("Start Individual")).toBeTruthy();
 
     expect(screen.queryByRole("article", { name: /pro plan/i })).toBeNull();

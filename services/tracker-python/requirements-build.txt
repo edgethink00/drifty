@@ -1,7 +1,7 @@
-pyinstaller>=6.11,<7
-sentry-sdk>=2.64,<3
+pyinstaller==6.22.1
+sentry-sdk==2.68.0
 # Windows ships no IANA time zone database, so `zoneinfo` resolves nothing there
 # (`zoneinfo.TZPATH` is empty) and any zone key lookup raises. macOS has the
 # system database, so this is only needed to build the Windows sidecar; pip
 # installs it on every platform and PyInstaller only bundles what is imported.
-tzdata>=2026.1; sys_platform == "win32"
+tzdata==2026.3; sys_platform == "win32"

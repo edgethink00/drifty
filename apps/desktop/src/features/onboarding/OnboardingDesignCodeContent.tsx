@@ -358,17 +358,57 @@ function ExtremeConfirmDialog({
   readonly onConfirm: () => void;
 }) {
   const { t } = useLocalization();
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cancelRef.current?.focus();
+    return () => previousFocus?.focus();
+  }, []);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+    ) ?? [])];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   return (
     <div className="dc-onb-confirm-backdrop">
-      <section className="dc-onb-confirm modal-shell" data-modal-variant="expressive" role="alertdialog" aria-modal="true" aria-labelledby="dc-onb-confirm-title">
+      <section
+        ref={dialogRef}
+        className="dc-onb-confirm modal-shell"
+        data-modal-variant="expressive"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="dc-onb-confirm-title"
+        aria-describedby="dc-onb-confirm-description"
+        onKeyDown={handleDialogKeyDown}
+      >
         <div className="dc-onb-confirm__icon" aria-hidden="true">
           <ScissorsIcon />
         </div>
         <div className="dc-onb-confirm__eyebrow">{t("onboarding.nudges.extreme")}</div>
         <h2 id="dc-onb-confirm-title">{t("onboarding.extreme.title")}</h2>
-        <p>{t("onboarding.extreme.description")}</p>
+        <p id="dc-onb-confirm-description">{t("onboarding.extreme.description")}</p>
         <div className="dc-onb-confirm__actions">
-          <button type="button" className="dc-onb-confirm__secondary" onClick={onCancel}>{t("onboarding.extreme.keepOff")}</button>
+          <button ref={cancelRef} type="button" className="dc-onb-confirm__secondary" onClick={onCancel}>{t("onboarding.extreme.keepOff")}</button>
           <button type="button" className="dc-onb-confirm__primary" onClick={onConfirm}>{t("onboarding.extreme.allowClosing")}</button>
         </div>
       </section>

@@ -36,7 +36,7 @@ const CLOUD_BILLING_STATE = {
 const DEVICE_LIMIT_STATE = {
   variant: "device-limit",
   title: "Drifty Cloud device limit reached",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Individual includes 2 active Macs. Remove an old Mac to use Cloud AI here.",
+  body: "Your local timeline, predefined rules, and local rules are still shown. Individual includes 2 active desktop devices. Remove an old device to use Cloud AI here.",
   ctaLabel: "Manage devices",
 } satisfies DashboardAiUnavailableState;
 

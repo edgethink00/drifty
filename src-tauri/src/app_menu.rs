@@ -4,6 +4,13 @@ use tauri::{AppHandle, Runtime};
 use crate::shell_action::{self, app_menu_id, ShellAction};
 
 pub(crate) fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
+    // Windows WebView2 surfaces Menu::default() as a native menubar
+    // (File/Edit/Window/Help). The product chrome already lives in the
+    // renderer, so attaching that menu makes a Mac app look pasted on.
+    if cfg!(windows) {
+        return Ok(());
+    }
+
     let menu = Menu::default(app)?;
     if !menu.items()?.is_empty() {
         let _ = menu.remove_at(0)?;

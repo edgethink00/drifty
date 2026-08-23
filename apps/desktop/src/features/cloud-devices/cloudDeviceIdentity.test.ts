@@ -22,6 +22,7 @@ describe("cloudDeviceIdentity", () => {
     tauriCoreMock.invoke.mockResolvedValue({
       installId: "11111111-1111-4111-8111-111111111111",
       label: "MacBook Pro (Apple M1 Pro)",
+      platform: "macos",
     });
 
     const { readCloudDevicePayload } = await import("./cloudDeviceIdentity");
@@ -32,6 +33,24 @@ describe("cloudDeviceIdentity", () => {
       installId: "11111111-1111-4111-8111-111111111111",
       label: "MacBook Pro (Apple M1 Pro)",
       platform: "macos",
+      appVersion: CLOUD_API_CLIENT_VERSION,
+    });
+  });
+
+  it("preserves a native Windows identity in the Cloud payload", async () => {
+    tauriCoreMock.isTauri.mockReturnValue(true);
+    tauriCoreMock.invoke.mockResolvedValue({
+      installId: "33333333-3333-4333-8333-333333333333",
+      label: "LG 16Z90Q (Intel Core i5)",
+      platform: "windows",
+    });
+
+    const { readCloudDevicePayload } = await import("./cloudDeviceIdentity");
+
+    await expect(readCloudDevicePayload()).resolves.toEqual({
+      installId: "33333333-3333-4333-8333-333333333333",
+      label: "LG 16Z90Q (Intel Core i5)",
+      platform: "windows",
       appVersion: CLOUD_API_CLIENT_VERSION,
     });
   });

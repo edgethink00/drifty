@@ -4,7 +4,7 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 
 export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
-  const accessibilityEnabled = flow.accessibilityGranted;
+  const accessibilityEnabled = !flow.accessibilityRequired || flow.accessibilityGranted;
   const notificationsEnabled = flow.notificationsReady;
   const safariHistory = flow.safariHistoryPermission;
   // Live proof the permission works: show what tracking sees right now.
@@ -25,14 +25,16 @@ export function PermissionsStep({ flow }: { readonly flow: OnboardingFlow }) {
         </p>
       ) : null}
       <ul className="dc-onb-row-list">
-        <PermissionRow
-          title={t("settings.permissions.accessibility")}
-          description={t("onboarding.permissions.accessibilityDescription")}
-          pill={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("common.required")}
-          tone={accessibilityEnabled ? "success" : "required"}
-          disabled={accessibilityEnabled}
-          onClick={() => void flow.handleRequestAccessibilityClick()}
-        />
+        {flow.accessibilityRequired ? (
+          <PermissionRow
+            title={t("settings.permissions.accessibility")}
+            description={t("onboarding.permissions.accessibilityDescription")}
+            pill={accessibilityEnabled ? t("onboarding.permissions.allowed") : t("common.required")}
+            tone={accessibilityEnabled ? "success" : "required"}
+            disabled={accessibilityEnabled}
+            onClick={() => void flow.handleRequestAccessibilityClick()}
+          />
+        ) : null}
         <PermissionRow
           title={t("onboarding.permissions.notifications")}
           description={t("onboarding.permissions.notificationsDescription")}

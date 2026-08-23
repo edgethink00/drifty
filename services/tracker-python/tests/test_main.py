@@ -438,6 +438,32 @@ class TrackerMainTests(unittest.TestCase):
             # on Windows, so only the termination signal is asserted.
             self.assertIn(call(501, tracker_main.signal.SIGTERM), kill.call_args_list)
 
+    def test_stop_verified_daemon_accepts_kill_race_only_after_confirmed_exit(self) -> None:
+        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main.pid_path().write_text("501")
+            command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+            with patch.object(tracker_main, "_process_exists", side_effect=[True, False]), patch.object(
+                tracker_main, "_process_command", return_value=command
+            ), patch("app.main.os.kill", side_effect=PermissionError("process exited during kill")):
+                ownership = tracker_main._stop_verified_tracker_daemon(501)
+
+            self.assertEqual(ownership, "tracker")
+            self.assertFalse(tracker_main.pid_path().exists())
+
+    def test_stop_verified_daemon_preserves_live_process_permission_failure(self) -> None:
+        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+            tracker_main.state_dir().mkdir(parents=True)
+            tracker_main.pid_path().write_text("501")
+            command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
+            with patch.object(tracker_main, "_process_exists", side_effect=[True, True]), patch.object(
+                tracker_main, "_process_command", return_value=command
+            ), patch("app.main.os.kill", side_effect=PermissionError("access denied")):
+                with self.assertRaises(PermissionError):
+                    tracker_main._stop_verified_tracker_daemon(501)
+
+            self.assertTrue(tracker_main.pid_path().exists())
+
     def test_stop_tracking_reaps_actual_duplicate_temp_daemons_without_pid_record(self) -> None:
         processes: list[subprocess.Popen] = []
         with temp_dir_closing_databases() as tmp:
@@ -463,16 +489,23 @@ class TrackerMainTests(unittest.TestCase):
                         process_table = tracker_main._process_table()
                         if process_table is not None:
                             discovered = tracker_main._matching_tracker_daemon_pids(process_table)
-                        if discovered == sorted(process.pid for process in processes):
+                        if {process.pid for process in processes}.issubset(discovered):
                             break
                         time.sleep(0.02)
 
-                    self.assertEqual(discovered, sorted(process.pid for process in processes))
+                    spawned_pids = {process.pid for process in processes}
+                    # A Windows venv executable can remain as a launcher while
+                    # the base interpreter runs the same command line. CIM then
+                    # reports two matching PIDs for one Popen handle. The
+                    # lifecycle contract is that every daemon we spawned is
+                    # discovered and every same-DB runtime is reaped, not that
+                    # one command line always maps to exactly one process.
+                    self.assertTrue(spawned_pids.issubset(discovered))
                     self.assertFalse(tracker_main.pid_path().exists())
                     with patch.object(tracker_main, "get_status", return_value={"data": {"running": False}}):
                         result = tracker_main.stop_tracking()
 
-                    self.assertTrue(result["ok"])
+                    self.assertTrue(result["ok"], result)
                     self.assertFalse(tracker_main.pid_path().exists())
                     remaining_table = tracker_main._process_table()
                     self.assertIsNotNone(remaining_table)

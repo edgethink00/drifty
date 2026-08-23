@@ -78,19 +78,41 @@ fn byte_unit_multiplier(unit: &str) -> Option<u64> {
 }
 
 fn process_resident_memory_bytes(pid: u32) -> Option<u64> {
-    let output = Command::new("ps")
-        .arg("-p")
-        .arg(pid.to_string())
-        .arg("-o")
-        .arg("rss=")
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    #[cfg(windows)]
+    {
+        return windows_resident_memory_bytes(pid);
     }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let resident_kib = parse_resident_kib(&text)?;
-    resident_kib.checked_mul(1024)
+    #[cfg(not(windows))]
+    {
+        let output = Command::new("ps")
+            .arg("-p")
+            .arg(pid.to_string())
+            .arg("-o")
+            .arg("rss=")
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        let resident_kib = parse_resident_kib(&text)?;
+        resident_kib.checked_mul(1024)
+    }
+}
+
+#[cfg(windows)]
+fn windows_resident_memory_bytes(pid: u32) -> Option<u64> {
+    use sysinfo::{MemoryRefreshKind, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+
+    let system_pid = Pid::from_u32(pid);
+    let mut system = System::new();
+    system.refresh_memory_specifics(MemoryRefreshKind::nothing().with_ram());
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[system_pid]),
+        true,
+        ProcessRefreshKind::nothing().with_memory(),
+    );
+    system.process(system_pid).map(|process| process.memory())
 }
 
 fn parse_resident_kib(text: &str) -> Option<u64> {

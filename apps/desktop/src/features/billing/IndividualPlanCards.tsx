@@ -36,9 +36,9 @@ const FREE_PLAN_FEATURES = [
 
 const INDIVIDUAL_PLAN_FEATURES = [
   "Drifty Cloud AI analysis",
-  "2 active Macs included",
+  "2 active desktop devices included",
   "Richer focus and drift summaries",
-  "Manage old Macs from Account settings",
+  "Manage old devices from Account settings",
   "Local tracking remains local-first",
 ] as const;
 
@@ -90,7 +90,7 @@ export function IndividualPlanCards({
           <small className="individual-plan-card__badge">{individualIsCurrent ? "Current plan" : "Cloud AI"}</small>
         </span>
         <span className="individual-plan-card__note">
-          {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis on up to 2 active Macs without managing keys or models."}
+          {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis on up to 2 active desktop devices without managing keys or models."}
         </span>
         <span className="individual-plan-card__price-row">
           <span className="individual-plan-card__price-stack">

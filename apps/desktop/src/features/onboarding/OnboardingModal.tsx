@@ -25,6 +25,7 @@ export function OnboardingModal({
   initialDisplayName,
   trackerStatus,
   accessibilityGranted,
+  accessibilityRequired,
   onStartTracking,
   onEarlyTrackingStart,
   onCheckAccessibility,
@@ -45,6 +46,7 @@ export function OnboardingModal({
   initialDisplayName: string;
   trackerStatus: TrackerStatus | null;
   accessibilityGranted: boolean;
+  accessibilityRequired: boolean;
   onStartTracking: () => Promise<void>;
   onEarlyTrackingStart: () => void;
   onCheckAccessibility: () => Promise<boolean>;
@@ -73,6 +75,7 @@ export function OnboardingModal({
     initialDisplayName,
     trackerStatus,
     accessibilityGranted,
+    accessibilityRequired,
     onStartTracking,
     onEarlyTrackingStart,
     onCheckAccessibility,
@@ -95,7 +98,6 @@ export function OnboardingModal({
       aria-labelledby="onboarding-title"
     >
       <div className="onboarding-window-drag-strip" data-tauri-drag-region aria-hidden="true" />
-
       <div className="onboarding-content-area">
         <OnboardingDesignCodeContent
           flow={flow}

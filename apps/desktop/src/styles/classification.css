@@ -85,6 +85,37 @@
   border-right: none;
 }
 
+/* The native window can shrink to 960px while the expanded sidebar remains
+   visible. At that size the classification page itself is only ~715px wide,
+   so its 880px three-column minimum used to be clipped by the grid's hidden
+   overflow. Reflow against the content container, not the outer viewport:
+   keep Categories and Apps & Sites side by side, then give Activity details
+   the full second row. */
+@container classification-page (max-width: 55rem) {
+  .classification-panel-view {
+    overflow-y: auto;
+  }
+
+  .classification-panel-view__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+    height: max-content;
+    min-height: 100%;
+  }
+
+  .classification-panel-view__panel:nth-child(2) {
+    border-right: none;
+  }
+
+  .classification-panel-view__panel:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .classification-panel-view__panel--detail {
+    grid-column: 1 / -1;
+  }
+}
+
 .classification-panel-view__panel--detail {
   position: relative;
   background:

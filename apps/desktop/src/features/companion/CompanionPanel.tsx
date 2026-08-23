@@ -52,7 +52,7 @@ export function CompanionPanel() {
   }
 
   if (!user) {
-    return <p>Sign in to connect iOS companion summaries to this Mac account.</p>;
+    return <p>Sign in to connect iOS companion summaries to this desktop account.</p>;
   }
 
   return (

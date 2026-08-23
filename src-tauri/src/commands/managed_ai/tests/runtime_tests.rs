@@ -47,6 +47,7 @@ fn start_requires_runtime_assets() {
     ));
 }
 
+#[cfg(unix)]
 #[test]
 fn start_spawns_runtime_for_downloaded_model() {
     let _globals = lock_runtime_globals();
@@ -82,6 +83,7 @@ fn start_spawns_runtime_for_downloaded_model() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
     let _globals = lock_runtime_globals();
@@ -106,6 +108,7 @@ fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
     assert!(status.message.contains("within two minutes"));
 }
 
+#[cfg(unix)]
 #[test]
 fn delete_model_reaps_adopted_runtime_server() {
     let _globals = lock_runtime_globals();
@@ -130,6 +133,7 @@ fn delete_model_reaps_adopted_runtime_server() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn app_exit_reaps_adopted_runtime_server() {
     let _globals = lock_runtime_globals();

@@ -60,7 +60,8 @@ fn frontmost_other_app_is_fullscreen() -> bool {
         let result = (|| {
             let mut window_ref: CFTypeRef = std::ptr::null();
             let window_key = CFString::new("AXFocusedWindow");
-            if AXUIElementCopyAttributeValue(app, window_key.as_concrete_TypeRef(), &mut window_ref) != 0
+            if AXUIElementCopyAttributeValue(app, window_key.as_concrete_TypeRef(), &mut window_ref)
+                != 0
                 || window_ref.is_null()
             {
                 return false;
@@ -72,7 +73,8 @@ fn frontmost_other_app_is_fullscreen() -> bool {
                     window_ref as AXUIElementRef,
                     fullscreen_key.as_concrete_TypeRef(),
                     &mut value_ref,
-                ) != 0 || value_ref.is_null()
+                ) != 0
+                    || value_ref.is_null()
                 {
                     return false;
                 }

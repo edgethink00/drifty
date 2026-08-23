@@ -65,6 +65,7 @@ describe("PermissionsSettingsSection", () => {
     render(
       <PermissionsSettingsSection
         accessibilityGranted={false}
+        accessibilityRequired
         onCheckAccessibility={onCheckAccessibility}
         onRequestAccessibility={onRequestAccessibility}
       />,
@@ -86,6 +87,7 @@ describe("PermissionsSettingsSection", () => {
     render(
       <PermissionsSettingsSection
         accessibilityGranted
+        accessibilityRequired
         onCheckAccessibility={onCheckAccessibility}
         onRequestAccessibility={vi.fn().mockResolvedValue(true)}
       />,
@@ -106,6 +108,7 @@ describe("PermissionsSettingsSection", () => {
     render(
       <PermissionsSettingsSection
         accessibilityGranted={false}
+        accessibilityRequired
         onCheckAccessibility={vi.fn().mockResolvedValue(false)}
         onRequestAccessibility={vi.fn().mockResolvedValue(false)}
       />,
@@ -126,6 +129,7 @@ describe("PermissionsSettingsSection", () => {
     render(
       <PermissionsSettingsSection
         accessibilityGranted={false}
+        accessibilityRequired
         onCheckAccessibility={vi.fn().mockResolvedValue(false)}
         onRequestAccessibility={vi.fn().mockResolvedValue(false)}
       />,
@@ -134,5 +138,22 @@ describe("PermissionsSettingsSection", () => {
     expect(await screen.findByText("Safari history")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Allow Safari history$/ }));
     expect(safariHistoryPermission.onEnable).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not present the macOS Accessibility grant when the native platform does not require it", async () => {
+    const onCheckAccessibility = vi.fn().mockResolvedValue(true);
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted
+        accessibilityRequired={false}
+        onCheckAccessibility={onCheckAccessibility}
+        onRequestAccessibility={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    await waitFor(() => expect(onCheckAccessibility).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Accessibility")).toBeNull();
+    expect(screen.getByText("Notifications")).toBeTruthy();
   });
 });

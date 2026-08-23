@@ -75,6 +75,7 @@ import { useDeveloperPreReleaseUpdateController } from "./features/updates/useDe
 import { AppStatusNotice, buildLatestBuildStatusNotice, buildManualUpdateStatusNotice } from "./features/updates/AppUpdateStatusNotice";
 import { trackerClient } from "./lib/api/trackerClient";
 import { accessibilityClient } from "./lib/api/accessibilityClient";
+import type { HostPlatform } from "./lib/api/accessibilityClient";
 import { shouldUsePreviewData } from "./lib/api/previewData";
 import { setMainWindowNativeBlur, setMainWindowThemeAppearance, setOnboardingWindowPresentation } from "./lib/api/windowChromeClient";
 import {
@@ -427,6 +428,15 @@ export default function App() {
   useEffect(() => {
     readContextualGuardAuditEvents();
   }, []);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.driftyBuildCommit = BUILD_INFO.commit;
+    root.dataset.driftyAppVersion = BUILD_INFO.version;
+    return () => {
+      delete root.dataset.driftyBuildCommit;
+      delete root.dataset.driftyAppVersion;
+    };
+  }, []);
   const contentRef = useRef<HTMLElement>(null);
   const autoUpdateLaunchCheckScheduledRef = useRef(false);
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
@@ -454,7 +464,9 @@ export default function App() {
   }, []);
   const brandCaptureEventAtRef = useRef<string | null>(null);
   const hasObservedBrandCaptureRef = useRef(false);
+  const [hostPlatform, setHostPlatform] = useState<HostPlatform>(accessibilityClient.detectHostPlatform);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
+  const [accessibilityRequired, setAccessibilityRequired] = useState(hostPlatform !== "windows");
   const [currentSnapshot, setCurrentSnapshot] = useState<CurrentActivitySnapshot | null>(null);
   const [segments, setSegments] = useState<ActivitySegment[]>([]);
   const [segmentsLoadedDay, setSegmentsLoadedDay] = useState<string | null>(null);
@@ -1189,7 +1201,7 @@ export default function App() {
     userScopeKey: deviceSyncUserScopeKey,
     onRemoteSegmentsApplied: handleRemoteSegmentsApplied,
   });
-  // The filter row lists other Macs only ("This Mac" covers the current one).
+  // The filter row lists other devices only (the current device is implicit).
   const remoteDeviceLabelById = useMemo(() => {
     if (syncDeviceLabelById.size === 0) return syncDeviceLabelById;
     const next = new Map(syncDeviceLabelById);
@@ -1217,7 +1229,7 @@ export default function App() {
     try {
       await purgeCloudSyncData();
       await trackerClient.purgeRemoteSegments();
-      // Reset the cursors so re-enabling sync re-uploads this Mac's full
+      // Reset the cursors so re-enabling sync re-uploads this device's full
       // history (the cloud copy was just deleted) and re-pulls from scratch.
       await trackerClient.setSyncState({
         sync_push_seq: "0",
@@ -1483,6 +1495,9 @@ export default function App() {
   const pendingDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const pendingBreakReturnAlarmRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const evaluateDriftAlarmRef = useRef<DriftAlarmEvaluator | null>(null);
+  const acknowledgedNativeDriftAlarmStatusSignatureRef = useRef<string | null>(null);
+  const pendingNativeDriftAlarmStatusSignatureRef = useRef<string | null>(null);
+  const desiredNativeDriftAlarmStatusRef = useRef<{ signature: string; status: DriftAlarmTrayStatus } | null>(null);
   const loadCompactHistoryRange = useCallback((historyTimelineRange: CompactHistoryRange): Promise<CompactHistoryLoad> => {
     const key = compactHistoryRangeKey(historyTimelineRange);
     const cached = findFreshCompactHistoryLoad(compactHistoryCacheRef.current, historyTimelineRange);
@@ -1611,6 +1626,47 @@ export default function App() {
     shouldBlockLocalTrackerAccess,
   ]);
 
+  const publishNativeDriftAlarmTrayStatus = useCallback((nextStatus: DriftAlarmTrayStatus) => {
+    const client = trackerClient as Partial<typeof trackerClient>;
+    const updateNativeStatus = client.updateTrayDriftAlarmStatus;
+    if (typeof updateNativeStatus !== "function") return;
+
+    const signature = JSON.stringify(nextStatus);
+    desiredNativeDriftAlarmStatusRef.current = { signature, status: nextStatus };
+    if (
+      acknowledgedNativeDriftAlarmStatusSignatureRef.current === signature
+      || pendingNativeDriftAlarmStatusSignatureRef.current !== null
+    ) return;
+
+    const send = (entry: { signature: string; status: DriftAlarmTrayStatus }, attempt: number) => {
+      pendingNativeDriftAlarmStatusSignatureRef.current = entry.signature;
+      void updateNativeStatus(entry.status).then(() => {
+        acknowledgedNativeDriftAlarmStatusSignatureRef.current = entry.signature;
+        pendingNativeDriftAlarmStatusSignatureRef.current = null;
+        const desired = desiredNativeDriftAlarmStatusRef.current;
+        if (desired && desired.signature !== entry.signature) send(desired, 0);
+      }).catch(() => {
+        const desired = desiredNativeDriftAlarmStatusRef.current;
+        if (desired?.signature === entry.signature && attempt === 0) {
+          window.setTimeout(() => {
+            const latest = desiredNativeDriftAlarmStatusRef.current;
+            if (latest?.signature === entry.signature) {
+              send(entry, 1);
+              return;
+            }
+            pendingNativeDriftAlarmStatusSignatureRef.current = null;
+            if (latest) send(latest, 0);
+          }, 250);
+          return;
+        }
+        pendingNativeDriftAlarmStatusSignatureRef.current = null;
+        if (desired && desired.signature !== entry.signature) send(desired, 0);
+      });
+    };
+
+    send({ signature, status: nextStatus }, 0);
+  }, []);
+
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
     const nextStatus = buildDriftAlarmTrayStatus({
       enabled: driftAlertsEnabled,
@@ -1628,15 +1684,12 @@ export default function App() {
     });
 
     if (options?.updateRendererState === false) {
-      const client = trackerClient as Partial<typeof trackerClient>;
-      if (typeof client.updateTrayDriftAlarmStatus === "function") {
-        void client.updateTrayDriftAlarmStatus(nextNativeStatus).catch(() => undefined);
-      }
+      publishNativeDriftAlarmTrayStatus(nextNativeStatus);
       return;
     }
 
     setDriftAlarmTrayStatus(nextStatus);
-  }, [driftAlertsEnabled, isDevModeActive, status?.running]);
+  }, [driftAlertsEnabled, isDevModeActive, publishNativeDriftAlarmTrayStatus, status?.running]);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
@@ -3307,6 +3360,18 @@ export default function App() {
   useEffect(() => () => clearWatcherRecoveryTimer(), [clearWatcherRecoveryTimer]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void accessibilityClient.getStatus().then((nextStatus) => {
+      setAccessibilityGranted(nextStatus.granted);
+      setAccessibilityRequired(nextStatus.required);
+      setHostPlatform(nextStatus.platform ?? "macos");
+    }).catch(() => {
+      // Permission errors remain visible through the explicit permissions flow;
+      // the app shell keeps its conservative build-platform contract here.
+    });
+  }, []);
+
+  useEffect(() => {
     if (!isTauriRuntime()) return undefined;
     if (!consumePostUpdateRelaunchFocusPending()) return undefined;
 
@@ -4389,12 +4454,13 @@ export default function App() {
       }
       return;
     }
+    if (selectedDay !== currentDriftAlarmDay()) return;
 
     evaluateDriftAlarm({
       snapshot: currentSnapshot,
       liveSegments: liveDriftAlarmSegmentsRef.current,
     });
-  }, [currentSnapshot, driftAlertsEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, status?.running]);
+  }, [currentSnapshot, driftAlertsEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, selectedDay, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -5064,14 +5130,12 @@ export default function App() {
     void client.updateTrayProductivityIcon(trayProductivityMix).catch(() => undefined);
   }, [hasLoadedOnce, selectedDay, shouldBlockLocalTrackerAccess, todayDay, trayProductivityMix]);
   useEffect(() => {
-    const client = trackerClient as Partial<typeof trackerClient>;
-    if (typeof client.updateTrayDriftAlarmStatus !== "function") return;
-    void client.updateTrayDriftAlarmStatus({
+    publishNativeDriftAlarmTrayStatus({
       ...driftAlarmTrayStatus,
       developerDetailsEnabled: isDevModeActive,
       trackerRunning: status?.running ?? null,
-    }).catch(() => undefined);
-  }, [driftAlarmTrayStatus, isDevModeActive, status?.running]);
+    });
+  }, [driftAlarmTrayStatus, isDevModeActive, publishNativeDriftAlarmTrayStatus, status?.running]);
   const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 6 }), [effectiveDashboardSegments]);
   const dashboardTopApps = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 1, groupBy: "app" }), [effectiveDashboardSegments]);
   const dayField = useMemo(() => buildQuarterHourDayField(effectiveSelectedDaySegments, selectedDay, startOfDayMinutes), [effectiveSelectedDaySegments, selectedDay, startOfDayMinutes]);
@@ -6038,12 +6102,16 @@ export default function App() {
   async function handleCheckAccessibility() {
     const nextStatus = await accessibilityClient.getStatus();
     setAccessibilityGranted(nextStatus.granted);
+    setAccessibilityRequired(nextStatus.required);
+    setHostPlatform(nextStatus.platform ?? "macos");
     return nextStatus.granted;
   }
 
   async function handleRequestAccessibility() {
     const nextStatus = await accessibilityClient.requestAccess();
     setAccessibilityGranted(nextStatus.granted);
+    setAccessibilityRequired(nextStatus.required);
+    setHostPlatform(nextStatus.platform ?? "macos");
     return nextStatus.granted;
   }
 
@@ -6517,6 +6585,7 @@ export default function App() {
       initialDisplayName={profileDraft.displayName}
       trackerStatus={status}
       accessibilityGranted={accessibilityGranted}
+      accessibilityRequired={accessibilityRequired}
       onStartTracking={handleStartTrackingFromOnboarding}
       onEarlyTrackingStart={() => {
         // Opportunistic: capture the rest of onboarding in the first day. Failures
@@ -7358,6 +7427,7 @@ export default function App() {
                 {settingsSection === "permissions" && (
                   <PermissionsSettingsSection
                     accessibilityGranted={accessibilityGranted}
+                    accessibilityRequired={accessibilityRequired}
                     onCheckAccessibility={handleCheckAccessibility}
                     onRequestAccessibility={handleRequestAccessibility}
                   />

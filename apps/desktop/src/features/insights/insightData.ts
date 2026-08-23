@@ -457,7 +457,7 @@ export function getInsightSurfaceIdentity(segment: ActivitySegment): Omit<DriftS
     return { id: `site:${siteDomain ?? siteTitle}`, label, detail: "Website", appName, bundleId, siteDomain };
   }
 
-  return { id: `app:${bundleId ?? appName}`, label: appName, detail: "Mac app", appName, bundleId, siteDomain: null };
+  return { id: `app:${bundleId ?? appName}`, label: appName, detail: "Desktop app", appName, bundleId, siteDomain: null };
 }
 
 export function addSegmentHours(segmentStartMs: number, segmentEndMs: number, hourSeconds: number[]) {

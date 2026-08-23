@@ -16,11 +16,12 @@ const CLOUD_DEVICE_INSTALL_ID_FILE: &str = "cloud-device-install-id";
 pub struct CloudDeviceIdentity {
     install_id: String,
     label: String,
+    platform: &'static str,
 }
 
 fn keychain_entry() -> Result<Entry, String> {
     Entry::new(CLOUD_DEVICE_KEYCHAIN_SERVICE, CLOUD_DEVICE_KEYCHAIN_ACCOUNT)
-        .map_err(|error| format!("Unable to open Cloud device Keychain entry: {error}"))
+        .map_err(|error| format!("Unable to open Cloud device credential: {error}"))
 }
 
 pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
@@ -42,8 +43,9 @@ pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
 
     match entry.get_password() {
         Ok(value) if normalized_install_id(&value).is_some() => {
-            let install_id = normalized_install_id(&value)
-                .ok_or_else(|| "Unable to normalize Cloud device id from Keychain.".to_string())?;
+            let install_id = normalized_install_id(&value).ok_or_else(|| {
+                "Unable to normalize Cloud device id from the OS credential store.".to_string()
+            })?;
             let _ = save_backup_install_id(&backup_path, &install_id);
             Ok(install_id)
         }
@@ -54,14 +56,15 @@ pub fn load_or_create_install_id(app: &AppHandle) -> Result<String, String> {
             }
 
             let install_id = Uuid::new_v4().to_string();
-            entry
-                .set_password(&install_id)
-                .map_err(|error| format!("Unable to save Cloud device id in Keychain: {error}"))?;
+            entry.set_password(&install_id).map_err(|error| {
+                format!("Unable to save Cloud device id in the OS credential store: {error}")
+            })?;
             let _ = save_backup_install_id(&backup_path, &install_id);
             Ok(install_id)
         }
-        Err(error) => read_backup_install_id(&backup_path)?
-            .ok_or_else(|| format!("Unable to read Cloud device id from Keychain: {error}")),
+        Err(error) => read_backup_install_id(&backup_path)?.ok_or_else(|| {
+            format!("Unable to read Cloud device id from the OS credential store: {error}")
+        }),
     }
 }
 
@@ -69,7 +72,23 @@ pub fn load_or_create_identity(app: &AppHandle) -> Result<CloudDeviceIdentity, S
     Ok(CloudDeviceIdentity {
         install_id: load_or_create_install_id(app)?,
         label: cloud_device_label(),
+        platform: cloud_device_platform(),
     })
+}
+
+fn cloud_device_platform() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "windows"
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "other"
+    }
 }
 
 fn install_id_file_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -130,17 +149,124 @@ fn normalized_install_id(value: &str) -> Option<String> {
 }
 
 fn cloud_device_label() -> String {
-    let profile = read_hardware_profile();
-    let model_identifier = command_stdout("/usr/sbin/sysctl", &["-n", "hw.model"]);
-    let chip = profile
-        .chip
-        .or_else(|| command_stdout("/usr/sbin/sysctl", &["-n", "machdep.cpu.brand_string"]));
+    #[cfg(target_os = "macos")]
+    {
+        let profile = read_hardware_profile();
+        let model_identifier = command_stdout("/usr/sbin/sysctl", &["-n", "hw.model"]);
+        let chip = profile
+            .chip
+            .or_else(|| command_stdout("/usr/sbin/sysctl", &["-n", "machdep.cpu.brand_string"]));
 
-    cloud_device_label_from_parts(
-        profile.model_name.as_deref(),
-        model_identifier.as_deref(),
-        chip.as_deref(),
-    )
+        cloud_device_label_from_parts(
+            profile.model_name.as_deref(),
+            model_identifier.as_deref(),
+            chip.as_deref(),
+        )
+    }
+    #[cfg(target_os = "windows")]
+    {
+        windows_cloud_device_label()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        "Computer".to_string()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_cloud_device_label() -> String {
+    // CIM is the same source Settings > System > About uses for the PC name
+    // and processor. A failed query must not block device registration.
+    let manufacturer = wmi_property("Win32_ComputerSystem", "Manufacturer");
+    let model = wmi_property("Win32_ComputerSystem", "Model");
+    let cpu = wmi_property("Win32_Processor", "Name");
+    windows_device_label_from_parts(manufacturer.as_deref(), model.as_deref(), cpu.as_deref())
+}
+
+#[cfg(target_os = "windows")]
+fn wmi_property(class: &str, property: &str) -> Option<String> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+    let mut command = Command::new("powershell");
+    command
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "(Get-CimInstance -ClassName {class} | Select-Object -ExpandProperty {property} | Select-Object -First 1)"
+            ),
+        ])
+        .creation_flags(CREATE_NO_WINDOW);
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8(output.stdout).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn windows_device_label_from_parts(
+    manufacturer: Option<&str>,
+    model: Option<&str>,
+    cpu: Option<&str>,
+) -> String {
+    let manufacturer = clean_field(manufacturer).filter(|value| {
+        !value.eq_ignore_ascii_case("System manufacturer")
+            && !value.eq_ignore_ascii_case("To be filled by O.E.M.")
+    });
+    let model = clean_field(model).filter(|value| {
+        !value.eq_ignore_ascii_case("System Product Name")
+            && !value.eq_ignore_ascii_case("To be filled by O.E.M.")
+    });
+    let body = match (manufacturer, model) {
+        (Some(maker), Some(model_name)) if !model_already_names_maker(model_name, maker) => {
+            format!("{maker} {model_name}")
+        }
+        (_, Some(model_name)) => model_name.to_string(),
+        (Some(maker), None) => maker.to_string(),
+        (None, None) => "Windows PC".to_string(),
+    };
+    match clean_field(cpu) {
+        Some(chip_name) => format!("{body} ({chip_name})"),
+        None => body,
+    }
+}
+
+fn model_already_names_maker(model_name: &str, maker: &str) -> bool {
+    let model_tokens = maker_tokens(model_name);
+    let tokens: Vec<String> = maker_tokens(maker);
+    tokens
+        .iter()
+        .any(|token| model_tokens.iter().any(|model_token| model_token == token))
+}
+
+fn maker_tokens(maker: &str) -> Vec<String> {
+    const SKIP: &[&str] = &[
+        "inc",
+        "inc.",
+        "co",
+        "co.",
+        "ltd",
+        "ltd.",
+        "corp",
+        "corp.",
+        "corporation",
+        "electronics",
+        "computer",
+        "computers",
+    ];
+    maker
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(|part| part.to_ascii_lowercase())
+        .filter(|part| !SKIP.contains(&part.as_str()) && part.len() > 1)
+        .collect()
 }
 
 #[derive(Default)]
@@ -246,6 +372,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn cloud_device_platform_matches_the_native_target() {
+        #[cfg(target_os = "macos")]
+        assert_eq!(cloud_device_platform(), "macos");
+        #[cfg(target_os = "windows")]
+        assert_eq!(cloud_device_platform(), "windows");
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        assert_eq!(cloud_device_platform(), "other");
+    }
+
+    #[test]
     fn cloud_device_label_uses_profile_model_name_and_chip_when_available() {
         let label = cloud_device_label_from_parts(
             Some("MacBook Pro"),
@@ -299,6 +435,46 @@ mod tests {
         assert_eq!(
             normalized_install_id("  22222222-2222-4222-8222-222222222222\n"),
             Some("22222222-2222-4222-8222-222222222222".to_string())
+        );
+    }
+
+    #[test]
+    fn windows_device_label_joins_maker_and_model_and_cpu() {
+        assert_eq!(
+            windows_device_label_from_parts(
+                Some("LG Electronics"),
+                Some("16Z90Q-G.AA5BK"),
+                Some("12th Gen Intel(R) Core(TM) i5-1240P")
+            ),
+            "LG Electronics 16Z90Q-G.AA5BK (12th Gen Intel(R) Core(TM) i5-1240P)"
+        );
+    }
+
+    #[test]
+    fn windows_device_label_drops_oem_placeholders() {
+        assert_eq!(
+            windows_device_label_from_parts(
+                Some("To be filled by O.E.M."),
+                Some("System Product Name"),
+                Some("   ")
+            ),
+            "Windows PC"
+        );
+    }
+
+    #[test]
+    fn windows_device_label_does_not_repeat_the_maker_when_the_model_already_contains_it() {
+        assert_eq!(
+            windows_device_label_from_parts(Some("Dell Inc."), Some("Dell XPS 13 9310"), None),
+            "Dell XPS 13 9310"
+        );
+    }
+
+    #[test]
+    fn windows_device_label_does_not_drop_a_short_maker_on_a_substring_match() {
+        assert_eq!(
+            windows_device_label_from_parts(Some("HP"), Some("GraphPad Workstation"), None),
+            "HP GraphPad Workstation"
         );
     }
 }

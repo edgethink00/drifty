@@ -225,7 +225,7 @@ export function TeamProjectsView({
   const emptyLabel = projects.length === 0
     ? loading
       ? "Loading shared projects…"
-      : "No shared projects yet. Create the first one — the definition syncs to every member's Mac."
+      : "No shared projects yet. Create the first one — the definition syncs to every member's computer."
     : "No projects match.";
 
   if (selectedProject) {

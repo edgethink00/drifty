@@ -22,6 +22,7 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app.storage.db import TrackerDatabase
+from app.capture_platform import CAPTURE_PLATFORM
 from app.tracker.browser_history import (  # noqa: E402
     default_browser_is_safari,
     safari_history_readable,
@@ -487,6 +488,7 @@ class BrowserHistorySegmentFilterTests(unittest.TestCase):
         self.assertNotIn("google.com", domains)  # low-signal search
         self.assertIn("b.example", domains)
         self.assertTrue(all(s.duration_seconds >= MIN_SESSION_DURATION_SECONDS for s in segments))
+        self.assertTrue(all(s.platform == CAPTURE_PLATFORM for s in segments))
 
 
 class BrowserHistoryEnvironmentTests(unittest.TestCase):
@@ -511,6 +513,9 @@ class BrowserHistoryEnvironmentTests(unittest.TestCase):
         for value in result["data"].values():
             self.assertIsInstance(value, bool)
 
+    def test_non_macos_never_reports_safari_as_the_default(self) -> None:
+        self.assertFalse(default_browser_is_safari(self.root / "missing.plist", platform="win32"))
+
     def test_safari_history_readable_true_for_valid_database(self) -> None:
         write_safari_history(self.root, [("https://safari.test/", "Safari", self.now)])
         self.assertTrue(safari_history_readable(self.root))
@@ -524,7 +529,7 @@ class BrowserHistoryEnvironmentTests(unittest.TestCase):
             "chrome.plist",
             {"LSHandlers": [{"LSHandlerURLScheme": "http", "LSHandlerRoleAll": "com.google.chrome"}]},
         )
-        self.assertFalse(default_browser_is_safari(plist_path))
+        self.assertFalse(default_browser_is_safari(plist_path, platform="darwin"))
 
     @unittest.skipUnless(_PLISTLIB_AVAILABLE, "plistlib unavailable in this interpreter")
     def test_default_browser_is_safari_true_for_explicit_safari_handler(self) -> None:
@@ -532,7 +537,7 @@ class BrowserHistoryEnvironmentTests(unittest.TestCase):
             "safari.plist",
             {"LSHandlers": [{"LSHandlerURLScheme": "https", "LSHandlerRoleAll": "com.apple.Safari"}]},
         )
-        self.assertTrue(default_browser_is_safari(plist_path))
+        self.assertTrue(default_browser_is_safari(plist_path, platform="darwin"))
 
     @unittest.skipUnless(_PLISTLIB_AVAILABLE, "plistlib unavailable in this interpreter")
     def test_default_browser_is_safari_true_when_no_http_handler(self) -> None:
@@ -540,17 +545,17 @@ class BrowserHistoryEnvironmentTests(unittest.TestCase):
             "no_http.plist",
             {"LSHandlers": [{"LSHandlerURLScheme": "mailto", "LSHandlerRoleAll": "com.apple.mail"}]},
         )
-        self.assertTrue(default_browser_is_safari(plist_path))
+        self.assertTrue(default_browser_is_safari(plist_path, platform="darwin"))
 
     @unittest.skipUnless(_PLISTLIB_AVAILABLE, "plistlib unavailable in this interpreter")
     def test_default_browser_is_safari_true_when_plist_absent(self) -> None:
-        self.assertTrue(default_browser_is_safari(self.root / "missing.plist"))
+        self.assertTrue(default_browser_is_safari(self.root / "missing.plist", platform="darwin"))
 
     @unittest.skipUnless(_PLISTLIB_AVAILABLE, "plistlib unavailable in this interpreter")
     def test_default_browser_is_safari_false_for_garbage_plist(self) -> None:
         garbage_path = self.root / "garbage.plist"
         garbage_path.write_bytes(b"\x00\x01 not a plist \xff")
-        self.assertFalse(default_browser_is_safari(garbage_path))
+        self.assertFalse(default_browser_is_safari(garbage_path, platform="darwin"))
 
 
 if __name__ == "__main__":

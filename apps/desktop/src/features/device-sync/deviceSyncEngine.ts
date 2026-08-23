@@ -46,7 +46,7 @@ export type DeviceSyncEngineDeps = {
   ) => Promise<SyncPushResponse>;
   readonly fetchPullPage?: (cursor: string | null, excludeDeviceId: string | null) => Promise<SyncPullPage>;
   readonly fetchDeletionsPullPage?: (cursor: string | null, excludeDeviceId: string | null) => Promise<SyncDeletionsPullPage>;
-  /** Resolves this Mac's cloud device id when nothing has been pushed yet. */
+  /** Resolves this desktop installation's cloud device id when nothing has been pushed yet. */
   readonly resolveDeviceId?: () => Promise<string | null>;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => Date;
@@ -142,7 +142,7 @@ export async function runSyncPullCycle(deps: DeviceSyncEngineDeps): Promise<Sync
       await deps.tracker.setSyncState({ [SYNC_DEVICE_ID_KEY]: deviceId });
     }
   }
-  // Without a known own-device id the pull cannot exclude this Mac's rows, and
+  // Without a known own-device id the pull cannot exclude this device's rows, and
   // applying an echo would flip locally-originated segments to remote. Skip
   // until the id resolves (first push or a successful devices call).
   if (!deviceId) {

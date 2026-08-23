@@ -18,6 +18,7 @@ type NotificationPermissionState =
 
 type PermissionsSettingsSectionProps = {
   readonly accessibilityGranted: boolean;
+  readonly accessibilityRequired: boolean;
   readonly onCheckAccessibility: () => Promise<boolean>;
   readonly onRequestAccessibility: () => Promise<boolean>;
 };
@@ -28,6 +29,7 @@ function isDesktopRuntime() {
 
 export function PermissionsSettingsSection({
   accessibilityGranted,
+  accessibilityRequired,
   onCheckAccessibility,
   onRequestAccessibility,
 }: PermissionsSettingsSectionProps) {
@@ -199,33 +201,35 @@ export function PermissionsSettingsSection({
         <h3>{t("settings.permissions.title")}</h3>
         <p className="settings-permissions-intro">{t("settings.permissions.intro")}</p>
 
-        <div className="settings-row settings-row--group-start settings-permission-row">
-          <div>
-            <div className="settings-permission-title-line">
-              <div className="lbl">{t("settings.permissions.accessibility")}</div>
-              <span className="settings-permission-requirement">{t("common.required")}</span>
+        {accessibilityRequired ? (
+          <div className="settings-row settings-row--group-start settings-permission-row">
+            <div>
+              <div className="settings-permission-title-line">
+                <div className="lbl">{t("settings.permissions.accessibility")}</div>
+                <span className="settings-permission-requirement">{t("common.required")}</span>
+              </div>
+              <div className="desc">{t("settings.permissions.accessibilityDescription")}</div>
+              {accessibilityError ? (
+                <div className="settings-permission-error" role="alert">{t("settings.permissions.checkFailed")}</div>
+              ) : null}
             </div>
-            <div className="desc">{t("settings.permissions.accessibilityDescription")}</div>
-            {accessibilityError ? (
-              <div className="settings-permission-error" role="alert">{t("settings.permissions.checkFailed")}</div>
-            ) : null}
+            <div className="ctrl settings-permission-control">
+              <span className="settings-permission-status" data-tone={accessibilityTone} aria-live="polite">
+                {accessibilityStatus()}
+              </span>
+              <button
+                type="button"
+                className="settings-btn"
+                disabled={!desktopRuntime || accessibilityChecking}
+                onClick={() => void handleAccessibilityAction()}
+              >
+                {accessibilityActionLabel()}
+              </button>
+            </div>
           </div>
-          <div className="ctrl settings-permission-control">
-            <span className="settings-permission-status" data-tone={accessibilityTone} aria-live="polite">
-              {accessibilityStatus()}
-            </span>
-            <button
-              type="button"
-              className="settings-btn"
-              disabled={!desktopRuntime || accessibilityChecking}
-              onClick={() => void handleAccessibilityAction()}
-            >
-              {accessibilityActionLabel()}
-            </button>
-          </div>
-        </div>
+        ) : null}
 
-        <div className={`settings-row settings-permission-row${safariHistory.show ? "" : " settings-row--group-end"}`}>
+        <div className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show ? "" : " settings-row--group-end"}`}>
           <div>
             <div className="settings-permission-title-line">
               <div className="lbl">{t("settings.permissions.notifications")}</div>

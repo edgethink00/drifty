@@ -14,6 +14,10 @@ function productionTsxFiles(directory = sourceRoot): string[] {
   });
 }
 
+function sourceRelativePath(path: string): string {
+  return relative(sourceRoot, path).split("\\").join("/");
+}
+
 const RETIRED_APP_BUTTON_ALIASES = new Set(["secondary-button", "ghost-button"]);
 
 function retiredAppButtonAliases(source: string): string[] {
@@ -31,7 +35,7 @@ describe("app button system contract", () => {
   it("keeps retired app-wide button aliases out of production markup", () => {
     const violations = productionTsxFiles().flatMap((path) => {
       const source = readFileSync(path, "utf8");
-      return retiredAppButtonAliases(source).map((alias) => `${relative(sourceRoot, path)}: ${alias}`);
+      return retiredAppButtonAliases(source).map((alias) => `${sourceRelativePath(path)}: ${alias}`);
     });
 
     expect(violations).toEqual([]);
@@ -49,7 +53,7 @@ describe("app button system contract", () => {
     ];
     const violations = productionTsxFiles().flatMap((path) => {
       const source = readFileSync(path, "utf8");
-      const localPath = relative(sourceRoot, path);
+      const localPath = sourceRelativePath(path);
       const usesSettingsButton = /settings-btn/.test(source);
       return usesSettingsButton
         && !allowedPrefixes.some((prefix) => localPath.startsWith(prefix))
@@ -64,7 +68,7 @@ describe("app button system contract", () => {
   it("gives every app action an explicit intent", () => {
     const violations = productionTsxFiles().flatMap((path) => {
       const source = readFileSync(path, "utf8");
-      const localPath = relative(sourceRoot, path);
+      const localPath = sourceRelativePath(path);
       const classValues = [...source.matchAll(/["'`]([^"'`]*app-btn[^"'`]*)["'`]/g)]
         .map((match) => match[1])
         .filter((value) => value.split(/\s+/).some((token) => token === "app-btn" || token.startsWith("app-btn--")));
@@ -88,7 +92,7 @@ describe("app button system contract", () => {
     const violations = productionTsxFiles().flatMap((path) => {
       if (!path.endsWith("Modal.tsx")) return [];
       const source = readFileSync(path, "utf8");
-      return /\bapp-btn\b/.test(source) ? [relative(sourceRoot, path)] : [];
+      return /\bapp-btn\b/.test(source) ? [sourceRelativePath(path)] : [];
     });
 
     expect(violations).toEqual([]);

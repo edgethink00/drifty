@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
+from app.capture_platform import CAPTURE_PLATFORM
 from app.storage.db import ImportedActivitySegment
 
 from .models import (
@@ -145,7 +146,7 @@ def _segment_from_session(
         youtube_is_shorts=1 if is_shorts else 0 if is_shorts is not None else None,
         browser_name=first_visit.browser_name,
         site_source=BROWSER_HISTORY_IMPORT_SOURCE,
-        platform="macos",
+        platform=CAPTURE_PLATFORM,
         source=BROWSER_HISTORY_IMPORT_SOURCE,
         confidence=DEFAULT_CONFIDENCE,
         raw_context_json=json.dumps(

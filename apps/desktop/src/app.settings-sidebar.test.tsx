@@ -178,8 +178,8 @@ describe("App settings sidebar", () => {
     trackerClient.start.mockResolvedValue({ running: true });
     trackerClient.stop.mockResolvedValue({ running: false });
     trackerClient.updateTrayProductivityIcon.mockResolvedValue(undefined);
-    accessibilityClient.getStatus.mockResolvedValue({ granted: false });
-    accessibilityClient.requestAccess.mockResolvedValue({ granted: true });
+    accessibilityClient.getStatus.mockResolvedValue({ granted: false, required: true });
+    accessibilityClient.requestAccess.mockResolvedValue({ granted: true, required: true });
     leaderboardMocks.fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
     leaderboardMocks.fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
     leaderboardMocks.optOutLeaderboard.mockResolvedValue({ success: true, error: null });

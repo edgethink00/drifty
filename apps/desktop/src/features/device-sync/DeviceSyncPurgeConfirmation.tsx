@@ -33,7 +33,7 @@ export function DeviceSyncPurgeConfirmation({
         <h2 id={TITLE_ID}>Delete synced cloud data?</h2>
         <p id={DESCRIPTION_ID}>
           This removes the cloud copy of your synced activity. Segments already merged on
-          your other Macs stay there, but nothing new downloads until you sync again.
+          your other devices stay there, but nothing new downloads until you sync again.
         </p>
         <div className="history-confirm__actions">
           <button

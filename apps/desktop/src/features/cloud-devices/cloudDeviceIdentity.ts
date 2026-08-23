@@ -4,13 +4,14 @@ import { CLOUD_API_CLIENT_VERSION } from "../../lib/cloudContract";
 export type CloudDevicePayload = {
   readonly installId: string;
   readonly label: string;
-  readonly platform: "macos";
+  readonly platform: "macos" | "windows";
   readonly appVersion: string;
 };
 
 type NativeCloudDeviceIdentity = {
   readonly installId: string;
   readonly label: string;
+  readonly platform: "macos" | "windows";
 };
 
 let cachedCloudDevicePayload: Promise<CloudDevicePayload | null> | null = null;
@@ -31,7 +32,7 @@ async function readNativeCloudDevicePayload(): Promise<CloudDevicePayload | null
   if (identity) return toCloudDevicePayload(identity);
 
   return invoke<string>("cloud_device_install_id")
-    .then((installId) => toCloudDevicePayload({ installId, label: "Mac" }))
+    .then((installId) => toCloudDevicePayload({ installId, label: "Mac", platform: "macos" }))
     .catch(() => null);
 }
 
@@ -44,8 +45,8 @@ async function readNativeCloudDeviceIdentity(): Promise<NativeCloudDeviceIdentit
 function toCloudDevicePayload(identity: NativeCloudDeviceIdentity): CloudDevicePayload {
   return {
     installId: identity.installId,
-    label: identity.label || "Mac",
-    platform: "macos",
+    label: identity.label || (identity.platform === "windows" ? "Windows PC" : "Mac"),
+    platform: identity.platform,
     appVersion: CLOUD_API_CLIENT_VERSION,
   };
 }
@@ -54,10 +55,18 @@ function parseNativeCloudDeviceIdentity(value: unknown): NativeCloudDeviceIdenti
   if (!isRecord(value)) return null;
   if (typeof value.installId !== "string" || !value.installId.trim()) return null;
   if (typeof value.label !== "string" || !value.label.trim()) return null;
+  // Native builds before the cross-platform identity field were macOS-only.
+  const platform = value.platform === undefined
+    ? "macos"
+    : value.platform === "macos" || value.platform === "windows"
+      ? value.platform
+      : null;
+  if (!platform) return null;
 
   return {
     installId: value.installId,
     label: value.label,
+    platform,
   };
 }
 

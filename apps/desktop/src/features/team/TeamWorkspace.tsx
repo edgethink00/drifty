@@ -517,7 +517,7 @@ export function TeamWorkspace({
             <div className="team-set-section">
               <span className="label-mono">Your sharing</span>
               <p className="team-modal__hint">
-                {projects.publishNote ?? "Share publishes only your per-project totals for the current window. Apps, sites, and windows never leave your Mac."}
+                {projects.publishNote ?? "Share publishes only your per-project totals for the current window. Apps, sites, and windows never leave your computer."}
               </p>
               <div className="team-set-share">
                 <button

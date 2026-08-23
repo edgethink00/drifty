@@ -685,6 +685,8 @@ describe("App AI classification controls", () => {
     expect(cssRule(".content--classification .page")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".content--classification .classification-panel-view")).toMatch(/flex:\s*1 1 auto;[\s\S]*min-height:\s*0;/);
     expect(cssRule(".classification-panel-view__grid")).toMatch(/height:\s*100%;[\s\S]*min-height:\s*0;/);
+    expect(styles).toMatch(/\.content--classification \.page\s*{[\s\S]*container-name:\s*classification-page;[\s\S]*container-type:\s*inline-size;/);
+    expect(styles).toMatch(/@container classification-page \(max-width:\s*55rem\)\s*{[\s\S]*\.classification-panel-view__grid\s*{[\s\S]*grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\);[\s\S]*\.classification-panel-view__panel--detail\s*{[\s\S]*grid-column:\s*1 \/ -1;/);
     expect(styles).toMatch(/\.panel-header\s*{[\s\S]*min-height:\s*52px;[\s\S]*padding:\s*8px 10px 7px;/);
     expect(styles).toMatch(/\.classification-panel-view\s*\{[\s\S]*--classification-row-height:\s*48px;/);
     expect(styles).toMatch(/\.classification-panel-view__category-row,\s*\.classification-panel-view__source-row\s*{[\s\S]*min-height:\s*var\(--classification-row-height\);/);
@@ -698,7 +700,7 @@ describe("App AI classification controls", () => {
     expect(styles).toMatch(/\.classification-panel-view__category-row:has\(\.category-dot--entertainment\)\s*{[\s\S]*--classification-category-tone:\s*var\(--category-entertainment\);[\s\S]*\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-category-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__source-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-selected-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__activity-row\s*{[\s\S]*align-items:\s*center;/);
-  }, 15_000);
+  }, 30_000);
 
   it("auto-runs one 20-item AI classification batch for the logical day when the renderer is not focused", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });

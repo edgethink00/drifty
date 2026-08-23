@@ -13,6 +13,8 @@
   height: 100%;
   max-width: none;
   min-height: 0;
+  container-name: classification-page;
+  container-type: inline-size;
 }
 
 .content--classification .page:has(.classification-panel-view--empty-state) {

@@ -178,7 +178,7 @@ export function buildSidebarCtaPreviewInput(previewCase: SidebarCtaPreviewCase, 
       return {
         ...base,
         billingEntitlement: ACTIVE_ENTITLEMENT,
-        managedLocalAiStatus: managedLocalError("insufficient_memory", "Selected local model requires more memory than this Mac has."),
+        managedLocalAiStatus: managedLocalError("insufficient_memory", "Selected local model requires more memory than this computer has."),
       };
     case "local-storage":
       return {

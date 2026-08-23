@@ -15,4 +15,3 @@ pub use macos::{clear_api_key, load_api_key, save_api_key};
 mod windows;
 #[cfg(windows)]
 pub use windows::{clear_api_key, load_api_key, save_api_key};
-

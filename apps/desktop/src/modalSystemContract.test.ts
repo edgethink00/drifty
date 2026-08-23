@@ -25,7 +25,7 @@ const modalSurfaces = [
   ["Remove cloud device", "./features/cloud-devices/CloudDeviceManagementPanel.tsx", /className="cloud-device-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Delete synced cloud data", "./features/device-sync/DeviceSyncPurgeConfirmation.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
   ["Delete selected records", "./features/history/HistoryView.tsx", /className="history-confirm__panel modal-shell" data-modal-variant="compact"/],
-  ["Extreme nudge consent", "./features/onboarding/OnboardingDesignCodeContent.tsx", /className="dc-onb-confirm modal-shell" data-modal-variant="expressive"/],
+  ["Extreme nudge consent", "./features/onboarding/OnboardingDesignCodeContent.tsx", /className="dc-onb-confirm modal-shell"\s+data-modal-variant="expressive"/],
   ["Command palette", "./features/command-bar/CommandBar.tsx", /className="cmd-box modal-shell"\s+data-modal-variant="utility"/],
   ["Edit drift alarm copy", "./features/companion/DriftAlarmCopySettings.tsx", /className="auth-modal modal-shell drift-copy-modal"\s+data-modal-variant="workspace"/],
   ["Restore AI analysis", "./features/dashboard/DashboardAiRecoveryOverlay.tsx", /className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"/],

@@ -169,7 +169,7 @@ def match_browser_history_title(
         result = BrowserHistoryMatchResult(candidate=None, reason="missing_window_title")
         for variant in windows_page_title_candidates(window_title):
             result = _match_browser_history_title(variant, pool, observed_at)
-            if result.candidate is not None:
+            if result.candidate is not None or result.reason in {"ambiguous_url", "outside_time_window"}:
                 return result
         return result
     return _match_browser_history_title(window_title, candidates, observed_at)
@@ -196,7 +196,12 @@ def _match_browser_history_title(
 
     if not matches:
         return BrowserHistoryMatchResult(candidate=None, reason="generic_title" if saw_generic else "no_match")
-    nearest_candidate = _nearest_history_candidate(_most_specific_title_matches(matches), observed_at)
+    timely_matches = _history_candidates_within_time_window(matches, observed_at)
+    if not timely_matches:
+        return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
+    if len({candidate.url for candidate in timely_matches}) != 1:
+        return BrowserHistoryMatchResult(candidate=None, reason="ambiguous_url")
+    nearest_candidate = _nearest_history_candidate(_most_specific_title_matches(timely_matches), observed_at)
     if nearest_candidate is None:
         return BrowserHistoryMatchResult(candidate=None, reason="outside_time_window")
     return BrowserHistoryMatchResult(candidate=nearest_candidate, reason="matched")
@@ -388,6 +393,21 @@ def _nearest_history_candidate(candidates: list[BrowserHistoryCandidate], observ
     return nearest_candidate
 
 
+def _history_candidates_within_time_window(
+    candidates: list[BrowserHistoryCandidate],
+    observed_at: str | None,
+) -> list[BrowserHistoryCandidate]:
+    observed_at_seconds = _observed_at_unix_seconds(observed_at)
+    if observed_at_seconds is None:
+        return candidates
+    return [
+        candidate
+        for candidate in candidates
+        if abs(_candidate_visited_at_unix_seconds(candidate) - observed_at_seconds)
+        <= BROWSER_HISTORY_TITLE_MATCH_WINDOW_SECONDS
+    ]
+
+
 def _observed_at_unix_seconds(observed_at: str | None) -> float | None:
     if observed_at is None:
         return None
@@ -458,7 +478,7 @@ def safari_history_readable(root: Path | None = None) -> bool:
         return False
 
 
-def default_browser_is_safari(plist_path: Path | None = None) -> bool:
+def default_browser_is_safari(plist_path: Path | None = None, *, platform: str | None = None) -> bool:
     """Report whether Safari is the default browser via LaunchServices.
 
     Rule (conservative, per the Safari-onboarding-row decision):
@@ -471,6 +491,9 @@ def default_browser_is_safari(plist_path: Path | None = None) -> bool:
       - Any parse/read error (corrupt or unreadable plist) -> False, so a broken
         read never spuriously shows the Safari row.
     """
+    if (sys.platform if platform is None else platform) != "darwin":
+        return False
+
     # Imported lazily: plistlib pulls in xml.parsers.expat at import time, and this
     # module is on a hot import path shared by live tracking that never needs it.
     # A mis-linked interpreter without expat degrades to conservative False.

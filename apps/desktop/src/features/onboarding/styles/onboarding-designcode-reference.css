@@ -1338,16 +1338,30 @@
 }
 
 .dc-onb-card .dc-onb-dot {
+  position: relative;
   width: 6px;
   height: 6px;
   border-radius: 999px;
+  background: transparent;
+}
+
+.dc-onb-card .dc-onb-dot::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
   background: rgba(28, 28, 25, 0.18);
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+  content: "";
+  transform: scaleX(1);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
 }
 
 .dc-onb-card .dc-onb-dot--active {
-  width: 20px;
+  background: transparent;
+}
+
+.dc-onb-card .dc-onb-dot--active::before {
   background: var(--dc-onb-accent);
+  transform: scaleX(3.3333);
 }
 
 .dc-onb-actions-spacer {
@@ -1482,6 +1496,60 @@
   font-weight: 600;
 }
 
+/* Keep keyboard focus deterministic across WebKit and WebView2. Several of
+   these controls intentionally remove the browser's default outline. */
+.onboarding-card.dc-onb-card :is(
+  .dc-onb-account__google,
+  .dc-onb-account__email,
+  .dc-onb-account__dev-skip-button,
+  .dc-onb-input,
+  .dc-onb-tag,
+  .dc-onb-dropdown-option,
+  .dc-onb-secondary-button,
+  .dc-onb-toggle,
+  .dc-onb-setup-card,
+  .dc-onb-advanced-toggle,
+  .dc-onb-back,
+  .dc-onb-primary
+):focus-visible,
+.dc-onb-confirm :is(.dc-onb-confirm__secondary, .dc-onb-confirm__primary):focus-visible {
+  outline: 2px solid var(--dc-onb-accent);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .onboarding-card.dc-onb-card :is(
+    .dc-onb-account__google,
+    .dc-onb-account__email,
+    .dc-onb-account__dev-skip-button,
+    .dc-onb-input,
+    .dc-onb-tag,
+    .dc-onb-dropdown-option,
+    .dc-onb-secondary-button,
+    .dc-onb-toggle,
+    .dc-onb-setup-card,
+    .dc-onb-advanced-toggle,
+    .dc-onb-back,
+    .dc-onb-primary
+  ):focus-visible,
+  .dc-onb-confirm :is(.dc-onb-confirm__secondary, .dc-onb-confirm__primary):focus-visible {
+    outline-color: Highlight;
+  }
+
+  .onboarding-card.dc-onb-card :is(
+    .dc-onb-account__google,
+    .dc-onb-tag
+  ),
+  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary,
+  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:hover:not(:disabled),
+  .onboarding-card.dc-onb-card .dc-onb-actions .dc-onb-primary:active:not(:disabled),
+  .dc-onb-confirm .dc-onb-confirm__primary {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+}
+
 @media (max-width: 760px) {
   .onboarding-screen.dc-onboarding-screen .onboarding-content-area {
     padding: 0;
@@ -1539,7 +1607,9 @@
   .dc-onb-welcome__headline,
   .dc-onb-welcome__body,
   .dc-onb-advanced-cards,
-  .dc-onb-spinner {
+  .dc-onb-spinner,
+  .dc-onb-dot::before {
     animation: none;
+    transition: none;
   }
 }

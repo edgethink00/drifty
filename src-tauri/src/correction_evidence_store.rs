@@ -172,15 +172,29 @@ fn atomic_write(path: &Path, contents: &str) -> Result<(), String> {
             .map_err(|error| format!("Unable to flush correction evidence: {error}"))?;
         fs::rename(&temporary_path, path)
             .map_err(|error| format!("Unable to replace correction evidence: {error}"))?;
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| format!("Unable to flush correction evidence directory: {error}"))?;
+        sync_parent_directory(parent)?;
         Ok(())
     })();
     if write_result.is_err() {
         let _ = fs::remove_file(&temporary_path);
     }
     write_result
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(parent: &Path) -> Result<(), String> {
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("Unable to flush correction evidence directory: {error}"))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_parent: &Path) -> Result<(), String> {
+    // std::fs cannot open a Windows directory with the backup-semantics flag
+    // required for a metadata flush. The temporary file itself is synced
+    // before the same-volume atomic rename, which is the strongest portable
+    // durability guarantee available here.
+    Ok(())
 }
 
 fn correction_evidence_path(app_data_dir: &Path, scope: &str) -> PathBuf {

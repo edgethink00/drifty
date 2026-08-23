@@ -36,7 +36,7 @@
   box-shadow: none;
   color: var(--text-soft);
   font-family: var(--font-display, inherit);
-  font-size: 0.675rem;
+  font-size: var(--type-overline-size);
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
@@ -92,13 +92,13 @@
 
 .agents-week-calendar__foot-cell strong {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: var(--type-overline-size);
   font-weight: 650;
 }
 
 .agents-week-calendar__foot-cell small {
   font-family: var(--font-mono);
-  font-size: 0.52rem;
+  font-size: var(--type-overline-size);
   color: var(--text-soft);
   min-height: 0.62rem;
 }
@@ -136,7 +136,7 @@
 .agents-story__detail {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.68rem;
+  font-size: var(--type-overline-size);
   line-height: 1.35;
 }
 
@@ -181,7 +181,7 @@
 
 .agents-models__name {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: var(--type-overline-size);
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -204,7 +204,7 @@
 
 .agents-models__figures {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: var(--type-overline-size);
   color: var(--text-soft);
   white-space: nowrap;
 }

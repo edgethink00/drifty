@@ -69,7 +69,7 @@ class BrowserHistoryTitleMatchingTests(unittest.TestCase):
         self.assertIsNone(result.candidate)
         self.assertEqual(result.reason, "generic_title")
 
-    def test_matcher_selects_nearest_visit_time_when_duplicate_specific_titles_match(self) -> None:
+    def test_matcher_rejects_distinct_profile_urls_even_when_one_visit_is_nearer(self) -> None:
         observed_at = "2026-06-28T17:06:30+00:00"
         candidates = [
             BrowserHistoryCandidate(
@@ -90,10 +90,62 @@ class BrowserHistoryTitleMatchingTests(unittest.TestCase):
 
         result = match_browser_history_title("Quarterly planning - Google Chrome", candidates, observed_at)
 
+        self.assertIsNone(result.candidate)
+        self.assertEqual(result.reason, "ambiguous_url")
+
+    def test_matcher_rejects_distinct_urls_before_preferring_a_longer_title(self) -> None:
+        observed_at = "2026-06-28T17:06:30+00:00"
+        candidates = [
+            BrowserHistoryCandidate(
+                url="https://current.example.test/",
+                title="Quarterly planning",
+                visited_at=chromium_timestamp("2026-06-28T17:06:25+00:00"),
+                browser_name="Google Chrome",
+                profile_name="Default",
+            ),
+            BrowserHistoryCandidate(
+                url="https://other.example.test/",
+                title="Quarterly planning - Google Chrome",
+                visited_at=chromium_timestamp("2026-06-28T17:06:28+00:00"),
+                browser_name="Google Chrome",
+                profile_name="Profile 1",
+            ),
+        ]
+
+        result = match_browser_history_title(
+            "Quarterly planning - Google Chrome - Profile 1",
+            candidates,
+            observed_at,
+        )
+
+        self.assertIsNone(result.candidate)
+        self.assertEqual(result.reason, "ambiguous_url")
+
+    def test_matcher_accepts_duplicate_profile_records_for_the_same_url(self) -> None:
+        observed_at = "2026-06-28T17:06:30+00:00"
+        candidates = [
+            BrowserHistoryCandidate(
+                url="https://one.example.test/plan",
+                title="Quarterly planning",
+                visited_at=chromium_timestamp("2026-06-28T17:07:30+00:00"),
+                browser_name="Google Chrome",
+                profile_name="Default",
+            ),
+            BrowserHistoryCandidate(
+                url="https://one.example.test/plan",
+                title="Quarterly planning",
+                visited_at=chromium_timestamp("2026-06-28T17:06:35+00:00"),
+                browser_name="Google Chrome",
+                profile_name="Profile 1",
+            ),
+        ]
+
+        result = match_browser_history_title("Quarterly planning - Google Chrome", candidates, observed_at)
+
         self.assertEqual(result.candidate, candidates[1])
         self.assertEqual(result.reason, "matched")
 
-    def test_prefers_most_specific_title_over_recency(self) -> None:
+    def test_rejects_less_specific_title_collision_instead_of_guessing(self) -> None:
         observed_at = "2026-06-28T17:06:30+00:00"
         candidates = [
             BrowserHistoryCandidate(
@@ -114,8 +166,8 @@ class BrowserHistoryTitleMatchingTests(unittest.TestCase):
 
         result = match_browser_history_title("Project - Overview - Google Chrome", candidates, observed_at)
 
-        self.assertEqual(result.candidate, candidates[1])
-        self.assertEqual(result.reason, "matched")
+        self.assertIsNone(result.candidate)
+        self.assertEqual(result.reason, "ambiguous_url")
 
     def test_matcher_rejects_nearest_specific_title_outside_time_window(self) -> None:
         observed_at = "2026-06-28T17:06:30+00:00"

@@ -50,7 +50,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
       <div className="history-confirm__panel modal-shell" data-modal-variant="compact">
         <h2 id="history-confirm-title">Delete history records?</h2>
         <p>
-          This removes {recordCount} local activity {recordCount === 1 ? "record" : "records"} from this Mac.
+          This removes {recordCount} local activity {recordCount === 1 ? "record" : "records"} from this computer.
         </p>
         <div className="history-confirm__actions">
           <button

@@ -12,7 +12,6 @@ use tar::Archive;
 use super::super::ManagedAiError;
 use super::RUNTIME_FILE_NAME;
 
-const RUNTIME_RELEASE_DIR: &str = "llama-b9690";
 const RUNTIME_ARCHIVE_TIMEOUT_SECS: u64 = 120;
 
 // Concurrent managed_ai_start calls (gate classification, live classification,
@@ -21,21 +20,79 @@ const RUNTIME_ARCHIVE_TIMEOUT_SECS: u64 = 120;
 static RUNTIME_INSTALL_LOCK: Mutex<()> = Mutex::new(());
 
 struct RuntimeArchive {
+    os: &'static str,
     arch: &'static str,
     url: &'static str,
     sha256: &'static str,
+    expected_size_bytes: u64,
+    format: RuntimeArchiveFormat,
+    payload_dir: Option<&'static str>,
+    runtime_file_name: &'static str,
+    required_files: &'static [&'static str],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeArchiveFormat {
+    TarGz,
+    Zip,
 }
 
 const RUNTIME_ARCHIVES: &[RuntimeArchive] = &[
     RuntimeArchive {
+        os: "macos",
         arch: "aarch64",
         url: "https://github.com/ggml-org/llama.cpp/releases/download/b9690/llama-b9690-bin-macos-arm64.tar.gz",
         sha256: "2a6369266a8e349ee282cd98b39ddb2cf23f57860d2225d20c791aa5a3f3a44b",
+        expected_size_bytes: 10_911_721,
+        format: RuntimeArchiveFormat::TarGz,
+        payload_dir: Some("llama-b9690"),
+        runtime_file_name: "llama-server",
+        required_files: &["llama-server"],
     },
     RuntimeArchive {
+        os: "macos",
         arch: "x86_64",
         url: "https://github.com/ggml-org/llama.cpp/releases/download/b9690/llama-b9690-bin-macos-x64.tar.gz",
         sha256: "9311257e3787ea8162bd7c3809c8ea79145ecc1afc1f4349a9567eb2c9fa2c77",
+        expected_size_bytes: 11_204_002,
+        format: RuntimeArchiveFormat::TarGz,
+        payload_dir: Some("llama-b9690"),
+        runtime_file_name: "llama-server",
+        required_files: &["llama-server"],
+    },
+    RuntimeArchive {
+        os: "windows",
+        arch: "x86_64",
+        url: "https://github.com/ggml-org/llama.cpp/releases/download/b9690/llama-b9690-bin-win-cpu-x64.zip",
+        sha256: "d50b9c2e801b2d91e8d6bd915e3484f6282d3220a7d31163cff4f5ce82831020",
+        expected_size_bytes: 17_237_515,
+        format: RuntimeArchiveFormat::Zip,
+        payload_dir: None,
+        runtime_file_name: "llama-server.exe",
+        required_files: &[
+            "llama-server.exe",
+            "llama-server-impl.dll",
+            "llama-common.dll",
+            "llama.dll",
+            "ggml.dll",
+            "ggml-base.dll",
+            "ggml-rpc.dll",
+            "libomp140.x86_64.dll",
+            "ggml-cpu-alderlake.dll",
+            "ggml-cpu-cannonlake.dll",
+            "ggml-cpu-cascadelake.dll",
+            "ggml-cpu-cooperlake.dll",
+            "ggml-cpu-haswell.dll",
+            "ggml-cpu-icelake.dll",
+            "ggml-cpu-ivybridge.dll",
+            "ggml-cpu-piledriver.dll",
+            "ggml-cpu-sandybridge.dll",
+            "ggml-cpu-sapphirerapids.dll",
+            "ggml-cpu-skylakex.dll",
+            "ggml-cpu-sse42.dll",
+            "ggml-cpu-x64.dll",
+            "ggml-cpu-zen4.dll",
+        ],
     },
 ];
 
@@ -48,13 +105,14 @@ pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiErro
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
+    let archive = runtime_archive_for_current_arch()?;
     let runtime_path = runtime_path(root);
-    if runtime_path.is_file() {
+    if runtime_install_complete(root, archive) {
         return Ok(runtime_path);
     }
 
     install_runtime(root)?;
-    if runtime_path.is_file() {
+    if runtime_install_complete(root, archive) {
         return Ok(runtime_path);
     }
 
@@ -90,7 +148,7 @@ fn install_runtime(root: &Path) -> Result<(), ManagedAiError> {
     let archive = runtime_archive_for_current_arch()?;
     let bytes = download_runtime_archive(archive)?;
     verify_archive_sha256(&bytes, archive.sha256)?;
-    install_runtime_from_archive(root, &bytes)
+    install_runtime_from_archive(root, &bytes, archive)
 }
 
 fn download_runtime_archive(archive: &RuntimeArchive) -> Result<Vec<u8>, ManagedAiError> {
@@ -99,54 +157,98 @@ fn download_runtime_archive(archive: &RuntimeArchive) -> Result<Vec<u8>, Managed
         .user_agent("Drifty managed local AI runtime installer")
         .build()?;
     let mut response = client.get(archive.url).send()?.error_for_status()?;
-    let mut bytes = Vec::new();
-    response.read_to_end(&mut bytes)?;
+    if let Some(content_length) = response.content_length() {
+        if content_length != archive.expected_size_bytes {
+            return Err(ManagedAiError::RuntimeFailed(format!(
+                "runtime archive size mismatch: expected {} bytes, server declared {content_length}",
+                archive.expected_size_bytes
+            )));
+        }
+    }
+    read_archive_bytes(&mut response, archive.expected_size_bytes)
+}
+
+fn read_archive_bytes(
+    reader: &mut impl Read,
+    expected_size_bytes: u64,
+) -> Result<Vec<u8>, ManagedAiError> {
+    let mut bytes = Vec::with_capacity(expected_size_bytes as usize);
+    reader
+        .take(expected_size_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 != expected_size_bytes {
+        return Err(ManagedAiError::RuntimeFailed(format!(
+            "runtime archive size mismatch: expected {expected_size_bytes} bytes, received {}",
+            bytes.len()
+        )));
+    }
     Ok(bytes)
 }
 
-fn install_runtime_from_archive(root: &Path, bytes: &[u8]) -> Result<(), ManagedAiError> {
+fn install_runtime_from_archive(
+    root: &Path,
+    bytes: &[u8],
+    archive: &RuntimeArchive,
+) -> Result<(), ManagedAiError> {
     let runtime_dir = root.join("runtime");
     let staging_dir = root.join("runtime.staging");
     if staging_dir.exists() {
         fs::remove_dir_all(&staging_dir)?;
     }
     fs::create_dir_all(&staging_dir)?;
-    let mut archive = Archive::new(GzDecoder::new(Cursor::new(bytes)));
-    archive.unpack(&staging_dir)?;
+    match archive.format {
+        RuntimeArchiveFormat::TarGz => {
+            let mut tar = Archive::new(GzDecoder::new(Cursor::new(bytes)));
+            tar.unpack(&staging_dir)?;
+        }
+        RuntimeArchiveFormat::Zip => {
+            let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|error| {
+                ManagedAiError::RuntimeFailed(format!("runtime zip is invalid: {error}"))
+            })?;
+            zip.extract(&staging_dir).map_err(|error| {
+                ManagedAiError::RuntimeFailed(format!("runtime zip extraction failed: {error}"))
+            })?;
+        }
+    }
 
-    let extracted_dir = staging_dir.join(RUNTIME_RELEASE_DIR);
-    if !extracted_dir.join(RUNTIME_FILE_NAME).is_file() {
+    let extracted_dir = archive
+        .payload_dir
+        .map(|directory| staging_dir.join(directory))
+        .unwrap_or_else(|| staging_dir.clone());
+    if let Some(missing) = archive
+        .required_files
+        .iter()
+        .find(|file_name| !extracted_dir.join(file_name).is_file())
+    {
         return Err(ManagedAiError::RuntimeMissing(format!(
-            "{} missing inside downloaded runtime archive.",
-            RUNTIME_FILE_NAME
+            "{missing} missing inside downloaded runtime archive."
         )));
     }
     if runtime_dir.exists() {
         fs::remove_dir_all(&runtime_dir)?;
     }
     fs::rename(extracted_dir, &runtime_dir)?;
-    fs::remove_dir_all(staging_dir)?;
-    ensure_runtime_executable(&runtime_dir.join(RUNTIME_FILE_NAME))?;
+    if staging_dir.exists() {
+        fs::remove_dir_all(staging_dir)?;
+    }
+    ensure_runtime_executable(&runtime_dir.join(archive.runtime_file_name))?;
     Ok(())
 }
 
 fn runtime_archive_for_current_arch() -> Result<&'static RuntimeArchive, ManagedAiError> {
-    if std::env::consts::OS != "macos" {
-        return Err(ManagedAiError::RuntimeMissing(format!(
-            "llama.cpp managed runtime is not available for {}.",
-            std::env::consts::OS
-        )));
-    }
-    runtime_archive_for_arch(std::env::consts::ARCH).ok_or_else(|| {
+    runtime_archive_for(std::env::consts::OS, std::env::consts::ARCH).ok_or_else(|| {
         ManagedAiError::RuntimeMissing(format!(
-            "llama.cpp managed runtime is not available for {}.",
-            std::env::consts::ARCH
+            "llama.cpp managed runtime is not available for {} {}.",
+            std::env::consts::OS,
+            std::env::consts::ARCH,
         ))
     })
 }
 
-fn runtime_archive_for_arch(arch: &str) -> Option<&'static RuntimeArchive> {
-    RUNTIME_ARCHIVES.iter().find(|archive| archive.arch == arch)
+fn runtime_archive_for(os: &str, arch: &str) -> Option<&'static RuntimeArchive> {
+    RUNTIME_ARCHIVES
+        .iter()
+        .find(|archive| archive.os == os && archive.arch == arch)
 }
 
 fn verify_archive_sha256(bytes: &[u8], expected: &str) -> Result<(), ManagedAiError> {
@@ -168,32 +270,123 @@ fn runtime_path(root: &Path) -> PathBuf {
     root.join("runtime").join(RUNTIME_FILE_NAME)
 }
 
+fn runtime_install_complete(root: &Path, archive: &RuntimeArchive) -> bool {
+    let runtime_dir = root.join("runtime");
+    archive
+        .required_files
+        .iter()
+        .all(|file_name| runtime_dir.join(file_name).is_file())
+}
+
 fn ensure_runtime_executable(path: &Path) -> Result<(), ManagedAiError> {
-    let mut permissions = File::open(path)?.metadata()?.permissions();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
+        let mut permissions = File::open(path)?.metadata()?.permissions();
         permissions.set_mode(0o755);
+        fs::set_permissions(path, permissions)?;
     }
-    fs::set_permissions(path, permissions)?;
+    #[cfg(not(unix))]
+    {
+        // Windows has no executable permission bit; opening the file still
+        // catches a missing or inaccessible runtime before start-up.
+        let _file = File::open(path)?;
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use zip::write::SimpleFileOptions;
 
     #[test]
-    fn runtime_manifest_selects_supported_macos_arches() {
-        assert!(runtime_archive_for_arch("aarch64").is_some());
-        assert!(runtime_archive_for_arch("x86_64").is_some());
-        assert!(runtime_archive_for_arch("armv7").is_none());
+    fn runtime_manifest_selects_supported_desktop_targets() {
+        assert!(runtime_archive_for("macos", "aarch64").is_some());
+        assert!(runtime_archive_for("macos", "x86_64").is_some());
+        assert!(runtime_archive_for("windows", "aarch64").is_none());
+        assert!(runtime_archive_for("windows", "x86_64").is_some());
+        assert!(runtime_archive_for("windows", "armv7").is_none());
+        assert!(runtime_archive_for("linux", "x86_64").is_none());
     }
 
     #[test]
     fn runtime_checksum_rejects_modified_archive_bytes() {
-        let archive = runtime_archive_for_arch("aarch64").expect("arm64 runtime archive");
+        let archive = runtime_archive_for("macos", "aarch64").expect("arm64 runtime archive");
         let result = verify_archive_sha256(b"not a runtime", archive.sha256);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn windows_zip_install_keeps_the_server_and_sibling_dlls_together() {
+        let root = tempfile::tempdir().expect("create runtime root");
+        let cursor = Cursor::new(Vec::new());
+        let mut writer = zip::ZipWriter::new(cursor);
+        let options = SimpleFileOptions::default();
+        writer
+            .start_file("llama-server.exe", options)
+            .expect("start server entry");
+        writer.write_all(b"server").expect("write server entry");
+        writer
+            .start_file("ggml.dll", options)
+            .expect("start DLL entry");
+        writer.write_all(b"dll").expect("write DLL entry");
+        let bytes = writer.finish().expect("finish zip").into_inner();
+        let archive = RuntimeArchive {
+            os: "windows",
+            arch: "x86_64",
+            url: "https://example.invalid/runtime.zip",
+            sha256: "unused",
+            expected_size_bytes: bytes.len() as u64,
+            format: RuntimeArchiveFormat::Zip,
+            payload_dir: None,
+            runtime_file_name: "llama-server.exe",
+            required_files: &["llama-server.exe", "ggml.dll"],
+        };
+
+        install_runtime_from_archive(root.path(), &bytes, &archive).expect("install runtime zip");
+
+        assert!(root.path().join("runtime/llama-server.exe").is_file());
+        assert!(root.path().join("runtime/ggml.dll").is_file());
+        assert!(!root.path().join("runtime.staging").exists());
+        assert!(runtime_install_complete(root.path(), &archive));
+
+        fs::remove_file(root.path().join("runtime/ggml.dll")).expect("remove required DLL");
+        assert!(!runtime_install_complete(root.path(), &archive));
+    }
+
+    #[test]
+    fn archive_reader_rejects_short_and_oversized_bodies() {
+        assert_eq!(
+            read_archive_bytes(&mut Cursor::new(b"1234"), 4).expect("exact body"),
+            b"1234"
+        );
+        assert!(read_archive_bytes(&mut Cursor::new(b"123"), 4).is_err());
+        assert!(read_archive_bytes(&mut Cursor::new(b"12345"), 4).is_err());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "downloads and launches the pinned official llama.cpp Windows runtime"]
+    fn windows_pinned_runtime_downloads_installs_and_launches() {
+        let root = tempfile::tempdir().expect("create runtime root");
+        let archive = runtime_archive_for_current_arch().expect("select Windows runtime archive");
+        let bytes = download_runtime_archive(archive).expect("download pinned Windows runtime");
+        verify_archive_sha256(&bytes, archive.sha256).expect("verify Windows runtime checksum");
+        install_runtime_from_archive(root.path(), &bytes, archive)
+            .expect("install pinned Windows runtime");
+
+        let runtime_path = root.path().join("runtime").join(archive.runtime_file_name);
+        let output = std::process::Command::new(&runtime_path)
+            .arg("--version")
+            .output()
+            .expect("launch installed llama-server");
+
+        assert!(
+            output.status.success(),
+            "llama-server --version failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

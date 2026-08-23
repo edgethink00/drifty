@@ -120,7 +120,7 @@ fn catalog_fit_detail_explains_tight_and_insufficient_models() {
     assert_eq!(gemma.fit.as_deref(), Some("tight"));
     assert_eq!(
         gemma.fit_detail.as_deref(),
-        Some("May be slow and heavy alongside other apps on a 16 GB Mac.")
+        Some("May be slow and heavy alongside other apps on a 16 GB computer.")
     );
 
     let smart = models
@@ -130,7 +130,7 @@ fn catalog_fit_detail_explains_tight_and_insufficient_models() {
     assert_eq!(smart.fit.as_deref(), Some("insufficient"));
     assert_eq!(
         smart.fit_detail.as_deref(),
-        Some("Needs at least 36 GB of memory — this Mac has 16 GB.")
+        Some("Needs at least 36 GB of memory — this computer has 16 GB.")
     );
 
     let default = models
@@ -165,7 +165,10 @@ fn install_downloads_model_artifact_before_marking_installed() {
     .expect("install model");
     let artifact_dir = model_dir(root.path(), "drifty-qwen3-5-4b-default");
 
-    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert!(
+        matches!(status.state, ManagedAiInstallState::Installed),
+        "unexpected managed AI install status: {status:?}"
+    );
     assert_eq!(
         status.selected_model_id.as_deref(),
         Some("drifty-qwen3-5-4b-default")
@@ -286,7 +289,10 @@ fn install_records_downloader_reported_progress_before_marking_installed() {
     )
     .expect("install model");
 
-    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert!(
+        matches!(status.state, ManagedAiInstallState::Installed),
+        "unexpected managed AI progress install status: {status:?}"
+    );
     assert!(status.progress.is_none());
     assert_eq!(
         installed_model_ids(&status),
@@ -417,8 +423,37 @@ fn fake_download(
     let artifact_dir = model_dir(root, spec.id);
     std::fs::create_dir_all(&artifact_dir)?;
     let file = std::fs::File::create(artifact_dir.join(spec.file_name))?;
+    #[cfg(windows)]
+    mark_sparse_for_windows_test(&file)?;
     file.set_len(spec.expected_size_bytes)?;
     Ok(artifact_dir)
+}
+
+#[cfg(windows)]
+fn mark_sparse_for_windows_test(file: &std::fs::File) -> std::io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
+    use windows_sys::Win32::System::IO::DeviceIoControl;
+
+    let mut bytes_returned = 0_u32;
+    // SAFETY: the handle belongs to the live `File`; FSCTL_SET_SPARSE takes no
+    // input or output buffers, and `bytes_returned` remains valid for the call.
+    let succeeded = unsafe {
+        DeviceIoControl(
+            file.as_raw_handle() as _,
+            FSCTL_SET_SPARSE,
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &mut bytes_returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if succeeded == 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 fn write_fake_runtime(root: &Path, args_path: &Path) -> Result<(), ManagedAiError> {

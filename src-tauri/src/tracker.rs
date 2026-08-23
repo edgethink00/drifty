@@ -34,6 +34,8 @@ pub(crate) const TRACKER_STOP_ERROR_MESSAGE: &str = "Activity tracking could not
 pub(crate) const TRACKER_STATUS_ERROR_MESSAGE: &str =
     "Activity tracking status is unavailable. Try again.";
 pub(crate) const TRACKER_PAUSED_MESSAGE: &str = "Tracking paused until you resume.";
+#[cfg(windows)]
+const WINDOWS_CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 #[derive(Debug, Default)]
 struct TrackerStartupLifecycle {
@@ -302,11 +304,7 @@ impl TrackerController {
         let Some(command) = daemon_process_command_line(pid)? else {
             return Ok(false);
         };
-        Ok(tracker_daemon_command_matches(
-            &command,
-            &runtime,
-            &db_path,
-        ))
+        Ok(tracker_daemon_command_matches(&command, &runtime, &db_path))
     }
 
     pub(crate) fn recover_start(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
@@ -804,8 +802,106 @@ struct ServeProcess {
 static SERVE_PROCESS: OnceLock<Mutex<Option<ServeProcess>>> = OnceLock::new();
 static SERVE_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 // PID of the live serve child so shutdown can force-kill it when the serve
-// mutex is stuck behind a hung round trip. 0 means no live child.
+// mutex is stuck behind a hung round trip. Unix uses the PID directly;
+// Windows also retains an identity-preserving duplicated process handle.
+// 0 means no live child.
 static SERVE_CHILD_PID: AtomicU32 = AtomicU32::new(0);
+
+#[cfg(windows)]
+struct WindowsServeChildHandle {
+    pid: u32,
+    handle: windows_sys::Win32::Foundation::HANDLE,
+}
+
+// A process HANDLE is an owned kernel reference and may be transferred across
+// threads. This wrapper closes it exactly once from Drop.
+#[cfg(windows)]
+unsafe impl Send for WindowsServeChildHandle {}
+
+#[cfg(windows)]
+impl WindowsServeChildHandle {
+    fn duplicate(child: &Child) -> Result<Self, TrackerError> {
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::{
+            Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS},
+            System::Threading::GetCurrentProcess,
+        };
+
+        let current_process = unsafe { GetCurrentProcess() };
+        let mut duplicated = std::ptr::null_mut();
+        let success = unsafe {
+            DuplicateHandle(
+                current_process,
+                child.as_raw_handle(),
+                current_process,
+                &mut duplicated,
+                0,
+                0,
+                DUPLICATE_SAME_ACCESS,
+            )
+        };
+        if success == 0 || duplicated.is_null() {
+            return Err(TrackerError::CommandFailed(format!(
+                "unable to retain tracker process handle: {}",
+                std::io::Error::last_os_error()
+            )));
+        }
+        Ok(Self {
+            pid: child.id(),
+            handle: duplicated,
+        })
+    }
+
+    fn terminate(&self) -> bool {
+        unsafe { windows_sys::Win32::System::Threading::TerminateProcess(self.handle, 1) != 0 }
+    }
+}
+
+#[cfg(windows)]
+impl Drop for WindowsServeChildHandle {
+    fn drop(&mut self) {
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(self.handle);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn windows_serve_child_handle() -> &'static Mutex<Option<WindowsServeChildHandle>> {
+    static HANDLE: OnceLock<Mutex<Option<WindowsServeChildHandle>>> = OnceLock::new();
+    HANDLE.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(windows)]
+fn remember_windows_serve_child(child: &Child) -> Result<(), TrackerError> {
+    let handle = WindowsServeChildHandle::duplicate(child)?;
+    let mut guard = windows_serve_child_handle()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *guard = Some(handle);
+    Ok(())
+}
+
+#[cfg(windows)]
+fn clear_windows_serve_child(pid: u32) {
+    let mut guard = windows_serve_child_handle()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if guard.as_ref().is_some_and(|handle| handle.pid == pid) {
+        guard.take();
+    }
+}
+
+#[cfg(windows)]
+fn force_kill_windows_serve_child() {
+    let handle = windows_serve_child_handle()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
+    if let Some(handle) = handle {
+        let _ = handle.terminate();
+    }
+}
 
 const SERVE_ROUND_TRIP_TIMEOUT: Duration = Duration::from_secs(30);
 const SHUTDOWN_LOCK_WAIT: Duration = Duration::from_secs(2);
@@ -914,6 +1010,12 @@ fn spawn_serve_process(runtime: &TrackerRuntime, db: &Path) -> Result<ServeProce
         .stdout
         .take()
         .ok_or_else(|| TrackerError::CommandFailed("serve stdout unavailable".into()))?;
+    #[cfg(windows)]
+    if let Err(error) = remember_windows_serve_child(&child) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
     SERVE_CHILD_PID.store(child.id(), Ordering::SeqCst);
 
     let (response_sender, responses) = mpsc::channel();
@@ -953,6 +1055,8 @@ fn kill_serve_process(mut proc: ServeProcess) {
     let pid = proc.child.id();
     let _ = proc.child.kill();
     let _ = proc.child.wait();
+    #[cfg(windows)]
+    clear_windows_serve_child(pid);
     let _ = SERVE_CHILD_PID.compare_exchange(pid, 0, Ordering::SeqCst, Ordering::SeqCst);
 }
 
@@ -1149,28 +1253,23 @@ pub fn shutdown_serve_process() {
             }
         }
     }
-    let pid = SERVE_CHILD_PID.swap(0, Ordering::SeqCst);
-    if pid != 0 {
-        force_kill_pid(pid);
+    #[cfg(unix)]
+    {
+        let pid = SERVE_CHILD_PID.swap(0, Ordering::SeqCst);
+        if pid != 0 {
+            force_kill_pid(pid);
+        }
+    }
+    #[cfg(windows)]
+    {
+        SERVE_CHILD_PID.store(0, Ordering::SeqCst);
+        force_kill_windows_serve_child();
     }
 }
 
 #[cfg(unix)]
 fn force_kill_pid(pid: u32) {
     let _ = Command::new("kill").arg("-9").arg(pid.to_string()).status();
-}
-
-/// No kill -9 on Windows; sysinfo terminates the process by pid.
-#[cfg(windows)]
-fn force_kill_pid(pid: u32) {
-    use sysinfo::{Pid, ProcessesToUpdate, System};
-
-    let system_pid = Pid::from_u32(pid);
-    let mut system = System::new();
-    system.refresh_processes(ProcessesToUpdate::Some(&[system_pid]), true);
-    if let Some(process) = system.process(system_pid) {
-        process.kill();
-    }
 }
 
 fn build_period_payload(day: Option<String>, start: Option<String>, end: Option<String>) -> Value {
@@ -1215,6 +1314,14 @@ fn command_from_argv(argv: Vec<OsString>) -> Result<Command, TrackerError> {
     };
     let mut command = Command::new(program);
     command.args(args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // The packaged tracker is a console-subsystem executable because its
+        // request protocol uses stdin/stdout. CREATE_NO_WINDOW preserves those
+        // redirected pipes without flashing a console over the desktop app.
+        command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
+    }
     for (key, value) in crate::observability::tracker_sentry_env_vars() {
         command.env(key, value);
     }
@@ -1241,6 +1348,20 @@ fn resolve_tracker_runtime_from_paths_with_python_resolver(
     cwd: &Path,
     python_resolver: impl FnOnce() -> PathBuf,
 ) -> Result<TrackerRuntime, TrackerError> {
+    resolve_tracker_runtime_from_paths_with_policy(
+        resource_dir,
+        cwd,
+        cfg!(debug_assertions),
+        python_resolver,
+    )
+}
+
+fn resolve_tracker_runtime_from_paths_with_policy(
+    resource_dir: Option<&Path>,
+    cwd: &Path,
+    allow_source_runtime: bool,
+    python_resolver: impl FnOnce() -> PathBuf,
+) -> Result<TrackerRuntime, TrackerError> {
     if let Some(resource_dir) = resource_dir {
         if let Some(sidecar) = packaged_sidecar_candidates(resource_dir)
             .into_iter()
@@ -1255,6 +1376,13 @@ fn resolve_tracker_runtime_from_paths_with_python_resolver(
                 resource_dir.display()
             )));
         }
+    }
+
+    if !allow_source_runtime {
+        return Err(TrackerError::MissingRuntime(
+            "bundled tracker sidecar is unavailable; production builds do not execute source Python"
+                .into(),
+        ));
     }
 
     let script_path = resolve_source_tracker_script(cwd);
@@ -1448,7 +1576,7 @@ fn python_candidate_runs(candidate: &str) -> bool {
     {
         use std::os::windows::process::CommandExt;
         // CREATE_NO_WINDOW: never flash a console while probing.
-        command.creation_flags(0x0800_0000);
+        command.creation_flags(WINDOWS_CREATE_NO_WINDOW);
     }
     command
         .stdout(std::process::Stdio::null())
@@ -1523,6 +1651,33 @@ mod tests {
         "save_ai_review_events",
         "revert_ai_review_event",
     ];
+
+    #[cfg(windows)]
+    #[test]
+    fn duplicated_windows_child_handle_terminates_the_original_process_object() {
+        use std::os::windows::process::CommandExt;
+
+        let mut command = Command::new("ping");
+        command
+            .args(["-n", "30", "127.0.0.1"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(WINDOWS_CREATE_NO_WINDOW);
+        let mut child = command.spawn().expect("spawn bounded Windows child");
+        let handle = match WindowsServeChildHandle::duplicate(&child) {
+            Ok(handle) => handle,
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("duplicate child handle: {error}");
+            }
+        };
+
+        assert_eq!(handle.pid, child.id());
+        assert!(handle.terminate());
+        assert!(!child.wait().expect("wait for terminated child").success());
+    }
 
     #[test]
     fn stop_daemon_for_app_exit_reports_completed_fast_stop() {
@@ -1762,7 +1917,7 @@ mod tests {
     #[test]
     fn packaged_sidecar_runtime_selects_bundled_executable() {
         let resource_dir = temp_dir_path("packaged-sidecar-runtime");
-        let sidecar = resource_dir.join("drifty-tracker");
+        let sidecar = resource_dir.join(format!("drifty-tracker{}", std::env::consts::EXE_SUFFIX));
         std::fs::create_dir_all(&resource_dir).expect("create resource dir");
         std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
 
@@ -1835,9 +1990,36 @@ mod tests {
     }
 
     #[test]
+    fn production_runtime_never_falls_back_to_source_python() {
+        let repo = temp_dir_path("production-no-source-fallback");
+        let resource_dir = repo.join("installed-resources");
+        let script = repo
+            .join("services")
+            .join("tracker-python")
+            .join("app")
+            .join("main.py");
+        std::fs::create_dir_all(&resource_dir).expect("create resource dir");
+        std::fs::create_dir_all(script.parent().expect("script parent"))
+            .expect("create script dir");
+        std::fs::write(&script, b"print('must not run')").expect("write source script");
+
+        let err = resolve_tracker_runtime_from_paths_with_policy(
+            Some(&resource_dir),
+            repo.as_path(),
+            false,
+            || panic!("production runtime must not resolve Python"),
+        )
+        .expect_err("missing production sidecar must fail closed");
+
+        assert!(matches!(err, TrackerError::MissingRuntime(_)));
+        assert!(err.to_string().contains("do not execute source Python"));
+        let _ = std::fs::remove_dir_all(repo);
+    }
+
+    #[test]
     fn packaged_sidecar_ignores_python_bin_override() {
         let resource_dir = temp_dir_path("packaged-ignores-python");
-        let sidecar = resource_dir.join("drifty-tracker");
+        let sidecar = resource_dir.join(format!("drifty-tracker{}", std::env::consts::EXE_SUFFIX));
         std::fs::create_dir_all(&resource_dir).expect("create resource dir");
         std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
 
@@ -1858,6 +2040,26 @@ mod tests {
         let _ = std::fs::remove_dir_all(resource_dir);
     }
 
+    #[test]
+    fn packaged_sidecar_selects_onedir_bundle_under_resources() {
+        let resource_dir = temp_dir_path("packaged-onedir-runtime");
+        let sidecar = resource_dir
+            .join("drifty-tracker")
+            .join(format!("drifty-tracker{}", std::env::consts::EXE_SUFFIX));
+        std::fs::create_dir_all(sidecar.parent().expect("onedir parent")).expect("create onedir");
+        std::fs::write(&sidecar, b"fake sidecar").expect("write sidecar");
+
+        let runtime =
+            resolve_tracker_runtime_from_paths(Some(&resource_dir), resource_dir.as_path())
+                .expect("onedir packaged sidecar runtime");
+
+        assert_eq!(runtime.kind, TrackerRuntimeKind::PackagedSidecar);
+        assert_eq!(runtime.executable_path, sidecar);
+
+        let _ = std::fs::remove_dir_all(resource_dir);
+    }
+
+    #[cfg(target_os = "macos")]
     #[test]
     fn packaged_app_resources_selects_macos_sidecar() {
         let app_root = temp_dir_path("packaged-app-layout").join("Drifty.app");
@@ -1996,6 +2198,7 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
     #[test]
     fn recovery_one_shot_is_killed_at_its_own_short_timeout() {
         let dir = temp_dir_path("recovery-one-shot-timeout");
@@ -2063,6 +2266,7 @@ mod tests {
         std::env::temp_dir().join(format!("drifty-tracker-test-{name}-{}", std::process::id()))
     }
 
+    #[cfg(unix)]
     #[test]
     fn serve_round_trip_times_out_on_hung_sidecar_and_respawns() {
         let dir = temp_dir_path("serve-timeout");

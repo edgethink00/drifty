@@ -18,7 +18,7 @@ function desktopSourcePath(relativePath: string): string {
 }
 
 describe("AccountSettingsSection", () => {
-  it("shows Cloud active Macs in Account settings and confirms before removing a non-current Mac", () => {
+  it("shows active Cloud devices in Account settings and confirms before removing a non-current device", () => {
     const onRevokeCloudDevice = vi.fn();
     const onRefreshCloudStatus = vi.fn();
 
@@ -33,7 +33,7 @@ describe("AccountSettingsSection", () => {
         cloudDeviceAccess={{
           allowed: false,
           reason: "device_limit_reached",
-          message: "This Drifty Cloud Individual plan is already active on 2 Macs.",
+          message: "This Drifty Cloud Individual plan is already active on 2 desktop devices.",
           activeDeviceCount: 2,
           maxActiveDevices: 2,
           activeWindowDays: 30,
@@ -82,7 +82,7 @@ describe("AccountSettingsSection", () => {
     expect(screen.getByText(/Device limit reached/i)).toBeTruthy();
 
     const cloudDevices = screen.getByRole("region", { name: /Cloud devices/i });
-    expect(within(cloudDevices).getByText(/2\/2 active Macs/i)).toBeTruthy();
+    expect(within(cloudDevices).getByText(/2\/2 active desktop devices/i)).toBeTruthy();
     expect(within(cloudDevices).getByText("Current Mac")).toBeTruthy();
     expect(within(cloudDevices).getByText("Current")).toBeTruthy();
 
@@ -92,16 +92,16 @@ describe("AccountSettingsSection", () => {
     expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1);
     expect(onRevokeCloudDevice).not.toHaveBeenCalled();
 
-    const cancelDialog = screen.getByRole("alertdialog", { name: /^Remove this Mac\?$/i });
+    const cancelDialog = screen.getByRole("alertdialog", { name: /^Remove this device\?$/i });
     expect(within(cancelDialog).getAllByText(/Old MacBook/).length).toBeGreaterThan(0);
 
     fireEvent.click(within(cancelDialog).getByRole("button", { name: /^Cancel$/i }));
 
-    expect(screen.queryByRole("alertdialog", { name: /^Remove this Mac\?$/i })).toBeNull();
+    expect(screen.queryByRole("alertdialog", { name: /^Remove this device\?$/i })).toBeNull();
 
     fireEvent.click(within(cloudDevices).getByRole("button", { name: /^Remove$/i }));
 
-    const confirmDialog = screen.getByRole("alertdialog", { name: /^Remove this Mac\?$/i });
+    const confirmDialog = screen.getByRole("alertdialog", { name: /^Remove this device\?$/i });
     fireEvent.click(within(confirmDialog).getByRole("button", { name: /^Remove device$/i }));
 
     expect(onRevokeCloudDevice).toHaveBeenCalledWith("device-old");
@@ -177,7 +177,7 @@ describe("AccountSettingsSection", () => {
 
     const cloudDevices = screen.getByRole("region", { name: /Cloud devices/i });
     expect(within(cloudDevices).getByText("Drifty Cloud device access is unavailable.")).toBeTruthy();
-    expect(within(cloudDevices).queryByText(/Refresh devices to load active Macs/i)).toBeNull();
+    expect(within(cloudDevices).queryByText(/Refresh devices to load active desktop devices/i)).toBeNull();
   });
 
   it("keeps Cloud device status badges on the shared pill radius", () => {

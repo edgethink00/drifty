@@ -30,7 +30,7 @@ const catalog: readonly ManagedLocalAiModel[] = [
     estimatedRuntimeMemoryBytes: 19_864_223_744,
     recommended: false,
     fit: "insufficient",
-    fitDetail: "Needs at least 36 GB of memory — this Mac has 16 GB.",
+    fitDetail: "Needs at least 36 GB of memory — this computer has 16 GB.",
   },
 ];
 
@@ -47,13 +47,13 @@ describe("OnboardingManagedLocalAiSetup hardware fit", () => {
     );
 
     const recommendedCard = screen.getByRole("article", { name: "Qwen 3.5 4B local AI model" });
-    expect(within(recommendedCard).getByText("Recommended for your Mac")).toBeTruthy();
+    expect(within(recommendedCard).getByText("Recommended for your computer")).toBeTruthy();
     expect(within(recommendedCard).getByText("RAM while running")).toBeTruthy();
     expect(within(recommendedCard).getByText("~3.5 GB")).toBeTruthy();
     expect(within(recommendedCard).getByRole("button", { name: "Download" })).toHaveProperty("disabled", false);
 
     const unsupportedCard = screen.getByRole("article", { name: "Qwen 3.6 27B local AI model" });
-    expect(within(unsupportedCard).getByText("Needs at least 36 GB of memory — this Mac has 16 GB.")).toBeTruthy();
+    expect(within(unsupportedCard).getByText("Needs at least 36 GB of memory — this computer has 16 GB.")).toBeTruthy();
     expect(within(unsupportedCard).getByRole("button", { name: "Download" })).toHaveProperty("disabled", true);
     expect(unsupportedCard.className).toContain("is-unsupported");
   });

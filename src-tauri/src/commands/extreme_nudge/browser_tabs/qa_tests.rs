@@ -21,8 +21,14 @@ fn qa_closes_safari_tab_through_native_browser_tab_path() {
     open_safari_tab(SAFARI_QA_URL).expect("open Safari QA tab");
     wait_for_tab_count("Safari", SAFARI_QA_URL, 1).expect("Safari QA tab is visible");
 
-    super::close_browser_tab("Safari", Some(SAFARI_QA_URL), Some("example.com"), false)
-        .expect("native Safari close_browser_tab closes QA tab");
+    super::close_browser_tab(
+        "Safari",
+        None,
+        Some(SAFARI_QA_URL),
+        Some("example.com"),
+        false,
+    )
+    .expect("native Safari close_browser_tab closes QA tab");
 
     wait_for_tab_count("Safari", SAFARI_QA_URL, 0).expect("Safari QA tab is closed");
 }
@@ -52,6 +58,7 @@ fn qa_closes_edge_tab_through_native_browser_tab_path() {
         .and_then(|_| {
             super::close_browser_tab(
                 "Microsoft Edge",
+                None,
                 Some(EDGE_QA_URL),
                 Some("example.com"),
                 false,
@@ -87,11 +94,15 @@ fn qa_closes_firefox_tab_through_native_browser_tab_path() {
     .expect("launch Firefox QA browser");
 
     let result = match wait_for_firefox_url_match(FIREFOX_QA_URL, true) {
-        Ok(()) => {
-            super::close_browser_tab("Firefox", Some(FIREFOX_QA_URL), Some("example.com"), false)
-                .map_err(|error| error.to_string())
-                .and_then(|_| wait_for_firefox_url_match(FIREFOX_QA_URL, false))
-        }
+        Ok(()) => super::close_browser_tab(
+            "Firefox",
+            None,
+            Some(FIREFOX_QA_URL),
+            Some("example.com"),
+            false,
+        )
+        .map_err(|error| error.to_string())
+        .and_then(|_| wait_for_firefox_url_match(FIREFOX_QA_URL, false)),
         Err(error) => {
             eprintln!("Firefox URL is not exposed through Accessibility; skipping QA: {error}");
             Ok(())

@@ -131,7 +131,7 @@ fn main() {
             "pet_mode_remember_position",
         ]),
     ))
-    .expect("failed to build tauri app manifest");
+    .unwrap_or_else(|error| panic!("failed to build tauri app manifest: {error:#?}"));
 }
 
 fn resolve_build_commit() -> String {

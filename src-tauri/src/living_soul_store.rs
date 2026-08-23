@@ -1,12 +1,15 @@
 use chrono::DateTime;
 use std::{
     collections::HashMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+#[cfg(unix)]
+use std::fs::File;
 
 const SOUL_DIRECTORY_NAME: &str = "living-souls";
 const SOUL_FILE_NAME: &str = "Soul.md";
@@ -86,9 +89,7 @@ pub(crate) fn write_living_soul(
                 path.display()
             )
         })?;
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| format!("Unable to flush Living Soul directory: {error}"))?;
+        sync_parent_directory(parent)?;
         Ok(())
     })();
 
@@ -96,6 +97,22 @@ pub(crate) fn write_living_soul(
         let _ = fs::remove_file(&temporary_path);
     }
     write_result
+}
+
+#[cfg(unix)]
+fn sync_parent_directory(parent: &Path) -> Result<(), String> {
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|error| format!("Unable to flush Living Soul directory: {error}"))
+}
+
+#[cfg(not(unix))]
+fn sync_parent_directory(_parent: &Path) -> Result<(), String> {
+    // std::fs cannot open a Windows directory with the backup-semantics flag
+    // required for a metadata flush. The temporary file itself is synced
+    // before the same-volume atomic rename, which is the strongest portable
+    // durability guarantee available here.
+    Ok(())
 }
 
 fn validate_living_soul_markdown(markdown: &str) -> Result<(), String> {

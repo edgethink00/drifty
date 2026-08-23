@@ -3,7 +3,7 @@
   "identifier": "drift-alarm-window",
   "description": "Least-privilege capability for the drift alarm overlay window.",
   "windows": ["drift-alarm"],
-  "platforms": ["macOS"],
+  "platforms": ["macOS", "windows"],
   "permissions": [
     "core:default",
     "core:event:allow-listen",

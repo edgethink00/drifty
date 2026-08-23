@@ -98,7 +98,7 @@ export function FlowLegendHoverCard({ hover, appIcons, cardRef }: { readonly hov
 
 export function flowDeviceBadgeLabel(deviceId: string | null | undefined, deviceLabelById?: ReadonlyMap<string, string>): string | null {
   if (!deviceId) return null;
-  return deviceLabelById?.get(deviceId) ?? "Synced Mac";
+  return deviceLabelById?.get(deviceId) ?? "Synced device";
 }
 
 export function FlowHoverCard({

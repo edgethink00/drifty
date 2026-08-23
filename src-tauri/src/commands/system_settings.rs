@@ -28,7 +28,13 @@ pub enum SystemSettingsPane {
 
 impl SystemSettingsPane {
     fn urls(&self) -> &'static [&'static str] {
-        match self {
+        #[cfg(target_os = "windows")]
+        {
+            return self.windows_urls();
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            match self {
             Self::Accessibility => &[
                 "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility",
                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
@@ -43,11 +49,30 @@ impl SystemSettingsPane {
                 "x-apple.systempreferences:com.apple.preference.notifications",
             ],
         }
+        }
+    }
+
+    /// ms-settings URIs are the documented Settings app deep links.
+    /// Accessibility is the closest analogue of macOS Accessibility; there is
+    /// no Full Disk Access on Windows, so that pane opens App permissions.
+    fn windows_urls(&self) -> &'static [&'static str] {
+        match self {
+            Self::Accessibility => &[
+                "ms-settings:easeofaccess-display",
+                "ms-settings:easeofaccess",
+            ],
+            Self::FullDiskAccess => &["ms-settings:appsfeatures", "ms-settings:privacy"],
+            Self::Notifications => &["ms-settings:notifications"],
+        }
     }
 }
 
 #[tauri::command]
 pub async fn system_open_settings_pane(pane: SystemSettingsPane) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    if matches!(pane, SystemSettingsPane::FullDiskAccess) {
+        return Err("Full Disk Access is a macOS-only permission.".to_string());
+    }
     let urls = pane.urls().to_vec();
     async_runtime::spawn_blocking(move || open_system_settings_urls(&urls))
         .await
@@ -150,7 +175,9 @@ fn open_focus_target_app(bundle_id: &str) -> Result<(), String> {
 
 #[cfg(not(target_os = "macos"))]
 fn open_focus_target_app(_bundle_id: &str) -> Result<(), String> {
-    Err("Focus target app activation is only available on macOS".to_string())
+    // Companion focus-target actions are macOS AppleScript. Returning Ok
+    // keeps the UI from treating an unsupported platform as a hard failure.
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -187,7 +214,7 @@ fn activate_focus_target_browser_tab(
     _site_url: Option<&str>,
     _site_domain: Option<&str>,
 ) -> Result<bool, String> {
-    Err("Focus target browser tab activation is only available on macOS".to_string())
+    Ok(false)
 }
 
 #[cfg(target_os = "macos")]
@@ -224,7 +251,7 @@ fn focus_target_browser_tab_exists_internal(
     _site_url: Option<&str>,
     _site_domain: Option<&str>,
 ) -> Result<bool, String> {
-    Err("Focus target browser tab lookup is only available on macOS".to_string())
+    Ok(false)
 }
 
 fn focus_target_browser_app_name(browser_name: &str) -> Option<&'static str> {
@@ -499,15 +526,36 @@ fn is_accessibility_settings_url(url: &str) -> bool {
     url.contains("Privacy_Accessibility")
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn open_system_settings_urls(urls: &[&str]) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let mut last_error = "No Settings URL configured".to_string();
+    for url in urls {
+        match Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .creation_flags(CREATE_NO_WINDOW)
+            .status()
+        {
+            Ok(status) if status.success() => return Ok(()),
+            Ok(status) => last_error = format!("Settings returned status {status}"),
+            Err(error) => last_error = error.to_string(),
+        }
+    }
+    Err(last_error)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn open_system_settings_urls(_urls: &[&str]) -> Result<(), String> {
-    Err("System Settings panes are only available on macOS".to_string())
+    Err("System Settings panes are only available on macOS and Windows".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn accessibility_urls_are_detected_for_prompt_only_behavior() {
         assert!(SystemSettingsPane::Accessibility
@@ -516,6 +564,21 @@ mod tests {
             .any(|url| is_accessibility_settings_url(url)));
         assert!(!SystemSettingsPane::Notifications
             .urls()
+            .iter()
+            .any(|url| is_accessibility_settings_url(url)));
+    }
+
+    #[test]
+    fn windows_settings_panes_use_ms_settings_uris() {
+        let accessibility = SystemSettingsPane::Accessibility.windows_urls();
+        let notifications = SystemSettingsPane::Notifications.windows_urls();
+        let disk = SystemSettingsPane::FullDiskAccess.windows_urls();
+        assert!(accessibility
+            .iter()
+            .all(|url| url.starts_with("ms-settings:")));
+        assert!(notifications.contains(&"ms-settings:notifications"));
+        assert!(disk.iter().all(|url| url.starts_with("ms-settings:")));
+        assert!(!accessibility
             .iter()
             .any(|url| is_accessibility_settings_url(url)));
     }

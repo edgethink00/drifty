@@ -10,7 +10,7 @@ function inlineCssImports(filePath: string, visited = new Set<string>()): string
   }
   visited.add(absolutePath);
 
-  const css = readFileSync(absolutePath, "utf8");
+  const css = readFileSync(absolutePath, "utf8").replace(/\r\n?/gu, "\n");
   return css.replace(/^@import\s+["']([^"']+)["'];\s*$/gm, (_match, importPath: string) => {
     return inlineCssImports(resolve(dirname(absolutePath), importPath), visited);
   });
@@ -22,7 +22,7 @@ export function readCssWithImports(filePath: string): string {
 
 export function readAppStyles(): string {
   const entryPath = resolve("src/main.tsx");
-  const entrySource = readFileSync(entryPath, "utf8");
+  const entrySource = readFileSync(entryPath, "utf8").replace(/\r\n?/gu, "\n");
   let styles = "";
 
   for (const match of entrySource.matchAll(CSS_IMPORT_PATTERN)) {

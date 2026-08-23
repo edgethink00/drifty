@@ -12,6 +12,8 @@ mod matching;
 #[cfg(test)]
 mod qa_tests;
 mod safari;
+#[cfg(target_os = "windows")]
+mod windows;
 
 pub(super) use matching::{normalized_site_domain, site_domain_from_url};
 
@@ -25,11 +27,29 @@ enum BrowserTabScriptKind {
 }
 
 pub(super) fn is_supported_browser_tab_target(app_name: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        return windows::is_supported_browser(app_name);
+    }
+    #[cfg(not(target_os = "windows"))]
     browser_tab_script_kind(app_name).is_some()
 }
 
+#[cfg(target_os = "windows")]
 pub(super) fn close_browser_tab(
     browser_name: &str,
+    browser_identity: Option<&str>,
+    site_url: Option<&str>,
+    site_domain: Option<&str>,
+    _force_chromium_ax_tab_close: bool,
+) -> Result<String, ExtremeNudgeError> {
+    windows::close_browser_tab(browser_name, browser_identity, site_url, site_domain)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(super) fn close_browser_tab(
+    browser_name: &str,
+    _browser_identity: Option<&str>,
     site_url: Option<&str>,
     site_domain: Option<&str>,
     force_chromium_ax_tab_close: bool,
@@ -307,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn browser_tab_target_detection_accepts_safari_and_firefox() {
         assert!(is_supported_browser_tab_target("Safari"));
         assert!(is_supported_browser_tab_target("Safari Technology Preview"));
@@ -314,6 +335,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn safari_tab_close_script_uses_safari_tab_model() {
         let script = tab_close_script(
             "Safari",
@@ -331,6 +353,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn firefox_tab_close_script_only_closes_matching_front_tab() {
         let script = tab_close_script(
             "Firefox",
@@ -354,6 +377,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn tab_matcher_accepts_schemaless_browser_urls() {
         let script =
             tab_close_script("Firefox", "example.com/watch", Some("example.com"), false).unwrap();

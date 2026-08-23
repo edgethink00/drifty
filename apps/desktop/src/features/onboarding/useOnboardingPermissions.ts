@@ -5,6 +5,7 @@ import type { NotificationPermissionState, OnboardingStep } from "./onboardingFl
 
 type UseOnboardingPermissionsOptions = {
   readonly accessibilityGrantedFromApp: boolean;
+  readonly accessibilityRequired: boolean;
   readonly onCheckAccessibility: () => Promise<boolean>;
   /** Fired once when Accessibility flips to granted mid-onboarding: tracking starts right away. */
   readonly onEarlyTrackingStart: () => void;
@@ -17,6 +18,7 @@ type UseOnboardingPermissionsOptions = {
 
 export function useOnboardingPermissions({
   accessibilityGrantedFromApp,
+  accessibilityRequired,
   onCheckAccessibility,
   onEarlyTrackingStart,
   onEnableDriftAlerts,
@@ -35,7 +37,9 @@ export function useOnboardingPermissions({
   const isDesktopRuntime = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
   const trackerUnavailable = trackerStatus?.trackerMode === "unavailable";
   const accessibilityGranted = accessibilityGrantedFromApp || Boolean(trackerStatus?.accessibilityGranted);
-  const accessibilityReady = accessibilityGranted || (!isDesktopRuntime && trackerUnavailable);
+  const accessibilityReady = !accessibilityRequired
+    || accessibilityGranted
+    || (!isDesktopRuntime && trackerUnavailable);
   const notificationsReady = notificationPermission === "granted" || notificationPermission === "unavailable";
 
   useEffect(() => {
@@ -186,6 +190,7 @@ export function useOnboardingPermissions({
 
   return {
     accessibilityGranted,
+    accessibilityRequired,
     accessibilityReady,
     accessibilityRecheckPending,
     handleNotificationPermissionClick,

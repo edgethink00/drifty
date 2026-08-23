@@ -467,8 +467,8 @@ describe("App onboarding", () => {
     }));
     isPermissionGranted.mockResolvedValue(false);
     requestPermission.mockResolvedValue("granted");
-    accessibilityGetStatus.mockResolvedValue({ granted: true });
-    accessibilityRequestAccess.mockResolvedValue({ granted: true });
+    accessibilityGetStatus.mockResolvedValue({ granted: true, required: true });
+    accessibilityRequestAccess.mockResolvedValue({ granted: true, required: true });
     startupSettingsClient.isAvailable.mockReturnValue(false);
     startupSettingsClient.setOpenAtLoginEnabled.mockResolvedValue({
       success: true,
@@ -971,13 +971,23 @@ describe("App onboarding", () => {
 
     const driftAlarmToggle = screen.getByRole("button", { name: "Drift alarm" });
     const extremeNudgeToggle = screen.getByRole("button", { name: "Extreme nudge" });
+    extremeNudgeToggle.focus();
     fireEvent.click(extremeNudgeToggle);
     const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
+    const keepOffButton = within(confirmDialog).getByRole("button", { name: /keep off/i });
+    const allowClosingButton = within(confirmDialog).getByRole("button", { name: /allow closing/i });
     expect(confirmDialog.textContent).toContain("close the distracting browser tab or quit the distracting app");
+    await waitFor(() => expect(document.activeElement).toBe(keepOffButton));
+    allowClosingButton.focus();
+    fireEvent.keyDown(confirmDialog, { key: "Tab" });
+    expect(document.activeElement).toBe(keepOffButton);
+    fireEvent.keyDown(confirmDialog, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(allowClosingButton);
     expect(driftAlarmToggle.getAttribute("aria-pressed")).toBe("false");
     expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("false");
-    fireEvent.click(screen.getByRole("button", { name: /keep off/i }));
+    fireEvent.keyDown(confirmDialog, { key: "Escape" });
     expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
+    expect(document.activeElement).toBe(extremeNudgeToggle);
 
     fireEvent.click(extremeNudgeToggle);
     fireEvent.click(await screen.findByRole("button", { name: /allow closing/i }));
@@ -1259,8 +1269,8 @@ describe("App onboarding", () => {
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       accessibilityGranted: false,
     }));
-    accessibilityGetStatus.mockResolvedValue({ granted: false });
-    accessibilityRequestAccess.mockResolvedValue({ granted: false });
+    accessibilityGetStatus.mockResolvedValue({ granted: false, required: true });
+    accessibilityRequestAccess.mockResolvedValue({ granted: false, required: true });
 
     render(<App />);
 
@@ -1339,7 +1349,7 @@ describe("App onboarding", () => {
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       accessibilityGranted: false,
     }));
-    accessibilityGetStatus.mockResolvedValue({ granted: false });
+    accessibilityGetStatus.mockResolvedValue({ granted: false, required: true });
 
     render(<App />);
 
@@ -1351,10 +1361,26 @@ describe("App onboarding", () => {
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
       accessibilityGranted: true,
     }));
-    accessibilityGetStatus.mockResolvedValue({ granted: true });
+    accessibilityGetStatus.mockResolvedValue({ granted: true, required: true });
     fireEvent.focus(window);
 
     await waitFor(() => expect(continueButton.disabled).toBe(false), { timeout: 3_000 });
+  });
+
+  it("lets Windows continue without presenting a macOS-only Accessibility grant", async () => {
+    setTauriRuntime();
+    trackerGetStatus.mockResolvedValue(makeTrackerStatus({
+      accessibilityGranted: false,
+    }));
+    accessibilityGetStatus.mockResolvedValue({ granted: true, required: false });
+
+    render(<App />);
+
+    await advanceToPermissionsStep();
+    const continueButton = await screen.findByRole("button", { name: /^continue$/i }) as HTMLButtonElement;
+    await waitFor(() => expect(continueButton.disabled).toBe(false));
+    expect(screen.queryByText(/^Accessibility$/)).toBeNull();
+    expect(screen.getByText(/^Notifications$/)).toBeTruthy();
   });
 
   it("uses downloaded-model lookup copy before initial managed status resolves and applies native ready events", async () => {
@@ -1386,7 +1412,7 @@ describe("App onboarding", () => {
 
     const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
     await waitFor(() => expect(within(defaultModel).getByRole("button", { name: /^ready$/i })).toBeTruthy());
-    expect(within(localDialog).getByText(/model ready — classification runs entirely on this mac/i)).toBeTruthy();
+    expect(within(localDialog).getByText(/model ready — classification runs entirely on this computer/i)).toBeTruthy();
     expect(within(localDialog).queryByText(/looking for downloaded local models/i)).toBeNull();
 
     await act(async () => {
@@ -1464,7 +1490,7 @@ describe("App onboarding", () => {
     // app-level attach watcher) finish the setup once the model lands.
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /how your data is handled/i })).toBeTruthy();
-    expect(screen.getByText(/activity goes to the selected local model on this mac, not to drifty cloud/i)).toBeTruthy();
+    expect(screen.getByText(/activity goes to the selected local model on this computer, not to drifty cloud/i)).toBeTruthy();
 
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
@@ -1521,7 +1547,7 @@ describe("App onboarding", () => {
     await chooseLocalAiSetup();
     const localDialog = await screen.findByRole("dialog", { name: /set up your local ai model/i });
 
-    await waitFor(() => expect(within(localDialog).getByText(/model ready — classification runs entirely on this mac/i)).toBeTruthy());
+    await waitFor(() => expect(within(localDialog).getByText(/model ready — classification runs entirely on this computer/i)).toBeTruthy());
     expect(within(localDialog).queryByText(/checking managed local ai/i)).toBeNull();
     const defaultModel = within(localDialog).getByRole("article", { name: /qwen 3\.5 4b local ai model/i });
     expect(within(defaultModel).getByRole("button", { name: /^ready$/i })).toBeTruthy();
@@ -1651,7 +1677,7 @@ describe("App onboarding", () => {
     // The stale different-model "running" must be ignored: the 4B row stays downloading
     // and the status row must not flash the ready state for the wrong model.
     expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
-    expect(screen.queryByText(/model ready — classification runs entirely on this mac/i)).toBeNull();
+    expect(screen.queryByText(/model ready — classification runs entirely on this computer/i)).toBeNull();
 
     // The 500ms status poll that runs while installing can also return the stale
     // previously-loaded model as "running"; that too must not flash Ready.
@@ -1664,7 +1690,7 @@ describe("App onboarding", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(within(defaultModel).getByRole("button", { name: /^downloading/i })).toBeTruthy();
-    expect(screen.queryByText(/model ready — classification runs entirely on this mac/i)).toBeNull();
+    expect(screen.queryByText(/model ready — classification runs entirely on this computer/i)).toBeNull();
   });
 
   it("shows a retry action when managed model download reports an error before the install command returns", async () => {

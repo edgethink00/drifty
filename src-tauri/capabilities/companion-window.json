@@ -3,7 +3,7 @@
   "identifier": "companion-window",
   "description": "Least-privilege capability for the resident non-activating companion pill.",
   "windows": ["companion-pill"],
-  "platforms": ["macOS"],
+  "platforms": ["macOS", "windows"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",

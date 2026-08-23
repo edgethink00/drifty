@@ -2448,6 +2448,7 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn accessibility_script_prefers_selected_tab_then_window_close() {
         let script = pet_target_geometry_script("Google Chrome", true, true);
@@ -2462,6 +2463,7 @@ mod tests {
         assert!(!script.contains("keystroke"));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn accessibility_preview_can_inspect_a_background_browser_without_closing_it() {
         let script = pet_target_geometry_script("Aside", true, false);
@@ -2480,12 +2482,14 @@ mod tests {
         assert!(!script.contains("front window"));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn safari_infers_its_left_edge_tab_close_position() {
         let script = pet_target_geometry_script("Safari", true, true);
         assert!(script.contains("set inferredX to (item 1 of tabPosition) + 14"));
     }
 
+    #[cfg(target_os = "macos")]
     #[test]
     fn accessibility_script_escapes_process_name() {
         let process_name = "Odd \"Browser";

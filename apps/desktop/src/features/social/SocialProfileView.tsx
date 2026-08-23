@@ -298,7 +298,7 @@ export function SocialProfileView({
                       <span className="label-mono">{detailFlags?.shareCategoryBreakdown ? "Shared aggregate" : "Local preview · not public"}</span>
                       <span>Last 7 days</span>
                     </div>
-                    <p className="social-category-preview__note">This preview stays on this Mac until you turn on Category breakdown.</p>
+                    <p className="social-category-preview__note">This preview stays on this computer until you turn on Category breakdown.</p>
                     <div className="social-category-preview__list">
                       {categoryPreview.slice(0, 6).map((entry) => (
                         <div key={entry.category} className="social-category-preview__row">

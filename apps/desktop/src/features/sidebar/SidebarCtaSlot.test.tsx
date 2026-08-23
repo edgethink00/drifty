@@ -526,7 +526,7 @@ describe("SidebarCtaSlot", () => {
       "insufficient_memory",
       8 * 1024 ** 3,
       4 * 1024 ** 3,
-      /This model needs 8 GB RAM.*This Mac has 4 GB.*Tracking continues.*choose a smaller Local AI model/i,
+      /This model needs 8 GB RAM.*This computer has 4 GB.*Tracking continues.*choose a smaller Local AI model/i,
     ],
     [
       "insufficient_storage",

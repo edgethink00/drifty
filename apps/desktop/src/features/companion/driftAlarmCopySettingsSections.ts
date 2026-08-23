@@ -36,7 +36,7 @@ const BREAK_RETURN_COPY_SECTION = {
 const NOTIFICATION_COPY_SECTION = {
   key: "notification",
   title: "Notification",
-  description: "Customize the representative title used by the native macOS notification.",
+  description: "Customize the representative title used by the native desktop notification.",
   fields: [
     { key: "notificationTitle", label: "Title", hint: "Plain text" },
   ],

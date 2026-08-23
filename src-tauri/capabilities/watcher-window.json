@@ -3,7 +3,7 @@
   "identifier": "watcher-window",
   "description": "Least-privilege capability for the companion watcher overlay window.",
   "windows": ["watcher-peek"],
-  "platforms": ["macOS"],
+  "platforms": ["macOS", "windows"],
   "permissions": [
     "core:default",
     "core:event:allow-listen",

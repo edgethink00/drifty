@@ -16,7 +16,7 @@ const classificationService = readFileSync(CLASSIFICATION_SERVICE_PATH, "utf8");
 const localProviderRequest = readFileSync(LOCAL_PROVIDER_REQUEST_PATH, "utf8");
 
 const FIX_INSTRUCTIONS = [
-  "The AI privacy panel promises users an exhaustive list of what leaves this Mac.",
+  "The AI privacy panel promises users an exhaustive list of what leaves this computer.",
   "A field reached the outbound request without a matching disclosure.",
   "",
   "To fix, do BOTH of these:",

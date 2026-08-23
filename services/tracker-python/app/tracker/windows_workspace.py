@@ -20,18 +20,26 @@ Identity model under test (§4.2): ``bundle_id`` carries the AUMID for packaged
 apps and the lowercased executable path otherwise, so downstream identity keys
 (`app_identity_key`) stay unique without schema changes.
 
-Browser URL capture is deliberately absent here: it is workstream W2 (UIA /
-history fallback) and lands behind the same ``Snapshot`` fields later.
+Allowlisted Chromium browser URLs are read from the focused window's address
+bar through a resident UI Automation host. Browser history is a conservative
+fallback, not the primary attribution source; Firefox remains on that fallback
+path.
 """
 
 from __future__ import annotations
 
 import ctypes
+import ntpath
+import os
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable
 
+from app.tracker.browser_automation import BrowserMetadata, normalize_domain, youtube_ids
+from app.tracker.browser_history import browser_history_metadata, is_browser_history_supported_app
 from app.tracker.capture_contract import Snapshot, utc_now_iso
+from app.tracker.windows_browser_uia import WindowsBrowserUiaResult, read_live_browser_url
 
 
 _APPLICATION_FRAME_HOST = "applicationframehost.exe"
@@ -42,6 +50,55 @@ _PATH_MAX = 32767
 
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _APPMODEL_ERROR_NO_APPLICATION = 15703
+_LIVE_UIA_CONFIDENCE = 0.8
+_HISTORY_FALLBACK_CONFIDENCE = 0.45
+
+_EXE_DISPLAY_NAME_OVERRIDES = {
+    "chrome.exe": "Google Chrome",
+    "msedge.exe": "Microsoft Edge",
+    "brave.exe": "Brave Browser",
+    "chromium.exe": "Chromium",
+    "vivaldi.exe": "Vivaldi",
+    "opera.exe": "Opera",
+    "whale.exe": "Whale",
+    "firefox.exe": "Firefox",
+}
+
+_VERIFIED_HISTORY_BROWSER_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
+    "Google Chrome": (
+        ("PROGRAMFILES", r"Google\Chrome\Application\chrome.exe"),
+        ("PROGRAMFILES(X86)", r"Google\Chrome\Application\chrome.exe"),
+        ("LOCALAPPDATA", r"Google\Chrome\Application\chrome.exe"),
+    ),
+    "Google Chrome Beta": (
+        ("PROGRAMFILES", r"Google\Chrome Beta\Application\chrome.exe"),
+        ("PROGRAMFILES(X86)", r"Google\Chrome Beta\Application\chrome.exe"),
+        ("LOCALAPPDATA", r"Google\Chrome Beta\Application\chrome.exe"),
+    ),
+    "Google Chrome Dev": (
+        ("PROGRAMFILES", r"Google\Chrome Dev\Application\chrome.exe"),
+        ("PROGRAMFILES(X86)", r"Google\Chrome Dev\Application\chrome.exe"),
+        ("LOCALAPPDATA", r"Google\Chrome Dev\Application\chrome.exe"),
+    ),
+    "Google Chrome Canary": (
+        ("LOCALAPPDATA", r"Google\Chrome SxS\Application\chrome.exe"),
+    ),
+    "Microsoft Edge": (
+        ("PROGRAMFILES", r"Microsoft\Edge\Application\msedge.exe"),
+        ("PROGRAMFILES(X86)", r"Microsoft\Edge\Application\msedge.exe"),
+        ("LOCALAPPDATA", r"Microsoft\Edge\Application\msedge.exe"),
+    ),
+    "Brave Browser": (
+        ("PROGRAMFILES", r"BraveSoftware\Brave-Browser\Application\brave.exe"),
+        ("PROGRAMFILES(X86)", r"BraveSoftware\Brave-Browser\Application\brave.exe"),
+        ("LOCALAPPDATA", r"BraveSoftware\Brave-Browser\Application\brave.exe"),
+    ),
+    "Firefox": (
+        ("PROGRAMFILES", r"Mozilla Firefox\firefox.exe"),
+        ("PROGRAMFILES(X86)", r"Mozilla Firefox\firefox.exe"),
+        ("LOCALAPPDATA", r"Mozilla Firefox\firefox.exe"),
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -170,6 +227,19 @@ def exe_display_name(exe_path: str | None) -> str | None:
     if not exe_path:
         return None
     name = exe_path.replace("\\", "/").rsplit("/", 1)[-1]
+    normalized_path = exe_path.replace("\\", "/").lower()
+    if name.lower() == "chrome.exe":
+        chrome_channels = (
+            ("/google/chrome beta/application/chrome.exe", "Google Chrome Beta"),
+            ("/google/chrome dev/application/chrome.exe", "Google Chrome Dev"),
+            ("/google/chrome sxs/application/chrome.exe", "Google Chrome Canary"),
+        )
+        for suffix, display_name in chrome_channels:
+            if normalized_path.endswith(suffix):
+                return display_name
+    override = _EXE_DISPLAY_NAME_OVERRIDES.get(name.lower())
+    if override:
+        return override
     if name.lower().endswith(".exe"):
         name = name[: -len(".exe")]
     return name or None
@@ -182,6 +252,34 @@ def identity_key_for(exe_path: str | None, aumid: str | None) -> str | None:
     if exe_path:
         return exe_path.lower()
     return None
+
+
+def is_verified_browser_history_identity(
+    app_name: str,
+    bundle_id: str | None,
+    environment: Mapping[str, str] | None = None,
+) -> bool:
+    """Allow cross-process history reads only for a known browser install.
+
+    Live UIA remains HWND-local and works for portable browsers. History is a
+    separate process/profile boundary, so a basename such as ``chrome.exe`` is
+    not sufficient proof that the foreground executable owns Chrome's profile.
+    """
+    if not bundle_id or not ntpath.isabs(bundle_id):
+        return False
+    relative_paths = _VERIFIED_HISTORY_BROWSER_PATHS.get(app_name)
+    if not relative_paths:
+        return False
+    values = os.environ if environment is None else environment
+    actual = ntpath.normcase(ntpath.normpath(bundle_id))
+    for root_name, relative_path in relative_paths:
+        root = values.get(root_name)
+        if not root:
+            continue
+        expected = ntpath.normcase(ntpath.normpath(ntpath.join(root, relative_path)))
+        if actual == expected:
+            return True
+    return False
 
 
 def aumid_display_name(aumid: str) -> str | None:
@@ -243,6 +341,74 @@ def build_snapshot(
     )
 
 
+def _browser_metadata_from_live_uia(
+    app_name: str,
+    result: WindowsBrowserUiaResult,
+) -> BrowserMetadata:
+    if not result.url:
+        return BrowserMetadata(
+            browser_name=app_name,
+            browser_automation_status="unavailable",
+            browser_automation_error=result.error or "Windows UIA address bar URL unavailable.",
+        )
+    video_id, playlist_id, is_shorts = youtube_ids(result.url)
+    return BrowserMetadata(
+        browser_name=app_name,
+        site_domain=normalize_domain(result.url),
+        site_url=result.url,
+        youtube_video_id=video_id,
+        youtube_playlist_id=playlist_id,
+        youtube_is_shorts=is_shorts,
+        match_state="windows-uia-address-bar",
+        browser_automation_status="granted",
+    )
+
+
+def enrich_browser_snapshot(
+    snapshot: Snapshot,
+    hwnd: int,
+    live_reader: Callable[[int, str | None], WindowsBrowserUiaResult] = read_live_browser_url,
+    history_reader: Callable[[str | None, str | None, str | None], BrowserMetadata] = browser_history_metadata,
+    history_identity_checker: Callable[[str, str | None], bool] = is_verified_browser_history_identity,
+) -> Snapshot:
+    """Attach live URL context, then conservatively fall back to history."""
+    if not is_browser_history_supported_app(snapshot.app_name):
+        return snapshot
+
+    live = _browser_metadata_from_live_uia(snapshot.app_name, live_reader(hwnd, snapshot.app_name))
+    history = None
+    metadata = live
+    if not live.site_url and history_identity_checker(snapshot.app_name, snapshot.bundle_id):
+        history = history_reader(snapshot.app_name, snapshot.window_title, snapshot.observed_at)
+        if history.site_url:
+            metadata = history
+
+    snapshot.browser_name = snapshot.app_name
+    snapshot.site_domain = metadata.site_domain
+    snapshot.site_title = metadata.site_title
+    snapshot.site_url = metadata.site_url
+    snapshot.youtube_video_id = metadata.youtube_video_id
+    snapshot.youtube_playlist_id = metadata.youtube_playlist_id
+    snapshot.youtube_is_shorts = metadata.youtube_is_shorts
+    snapshot.site_source = (
+        "windows-uia-address-bar" if live.site_url else "browser-history-title" if metadata.site_url else None
+    )
+    if live.site_url:
+        snapshot.capture_confidence = _LIVE_UIA_CONFIDENCE
+    elif metadata.site_url:
+        snapshot.capture_confidence = _HISTORY_FALLBACK_CONFIDENCE
+    snapshot.browser_automation_status = live.browser_automation_status
+    snapshot.browser_automation_error = live.browser_automation_error
+    if history is not None:
+        snapshot.browser_history_status = history.browser_history_status
+        snapshot.browser_history_reason = history.browser_history_reason
+        snapshot.browser_history_database_found = history.browser_history_database_found
+        snapshot.browser_history_profile_count = history.browser_history_profile_count
+        snapshot.browser_history_candidate_count = history.browser_history_candidate_count
+        snapshot.browser_history_error_count = history.browser_history_error_count
+    return snapshot
+
+
 def resolve_identity(
     window: ForegroundWindow,
     read_exe_path: Callable[[int], str | None] | None = None,
@@ -293,12 +459,12 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
         return build_snapshot(None, None, observed, "windows_workspace requires Windows.")
 
     session = process_session_id()
-    if session == 0:
+    if session in (None, 0):
         return build_snapshot(
             None,
             None,
             observed,
-            "Capture refused: session 0 has no interactive desktop.",
+            "Capture refused: Windows session is unknown or has no interactive desktop.",
         )
 
     window = read_foreground_window()
@@ -306,4 +472,5 @@ def current_snapshot() -> Snapshot:  # pragma: no cover - composed Win32 boundar
         return build_snapshot(None, None, observed, "GetForegroundWindow returned no window.")
 
     identity, diagnostic = resolve_identity(window)
-    return build_snapshot(window, identity, observed, diagnostic)
+    snapshot = build_snapshot(window, identity, observed, diagnostic)
+    return enrich_browser_snapshot(snapshot, window.hwnd)

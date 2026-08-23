@@ -1,10 +1,12 @@
 use serde::Serialize;
 use tauri::async_runtime;
 
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccessibilityPermissionStatus {
     pub granted: bool,
+    pub required: bool,
+    pub platform: &'static str,
 }
 
 #[tauri::command]
@@ -25,12 +27,30 @@ pub async fn accessibility_request_access() -> Result<AccessibilityPermissionSta
 fn accessibility_status() -> AccessibilityPermissionStatus {
     AccessibilityPermissionStatus {
         granted: accessibility_trusted(false),
+        required: true,
+        platform: "macos",
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
 fn accessibility_status() -> AccessibilityPermissionStatus {
-    AccessibilityPermissionStatus { granted: false }
+    // Windows foreground-window and UI Automation capture has no macOS-style
+    // per-app Accessibility grant. Treat capture as ready and tell the shared
+    // renderer that it must not present a permission the user cannot grant.
+    AccessibilityPermissionStatus {
+        granted: true,
+        required: false,
+        platform: "windows",
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn accessibility_status() -> AccessibilityPermissionStatus {
+    AccessibilityPermissionStatus {
+        granted: false,
+        required: false,
+        platform: "other",
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -92,4 +112,21 @@ fn open_accessibility_settings() -> Result<(), String> {
     }
 
     Err(last_error)
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_reports_capture_ready_without_a_fake_permission_gate() {
+        assert_eq!(
+            accessibility_status(),
+            AccessibilityPermissionStatus {
+                granted: true,
+                required: false,
+                platform: "windows",
+            }
+        );
+    }
 }

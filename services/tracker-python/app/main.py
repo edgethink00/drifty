@@ -838,6 +838,17 @@ def _stop_verified_tracker_daemon(pid: int) -> TrackerProcessOwnership:
     except ProcessLookupError:
         _remove_pid_record_if_owned(pid)
         return ownership
+    except OSError:
+        # A Windows venv launcher's child can exit between the liveness probe
+        # above and TerminateProcess. Windows may report that race as access
+        # denied rather than ERROR_INVALID_PARAMETER/ProcessLookupError while
+        # the dying process object is still visible. Treat only an independently
+        # confirmed exit as success; a live process with the same error remains
+        # a hard failure so we never hide a real permission problem.
+        if not _process_exists(pid):
+            _remove_pid_record_if_owned(pid)
+            return ownership
+        raise
     if not _wait_for_process_exit(pid):
         raise TimeoutError(f"Tracker daemon {pid} did not exit after SIGTERM.")
     _remove_pid_record_if_owned(pid)

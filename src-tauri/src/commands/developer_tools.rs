@@ -460,6 +460,7 @@ mod tests {
         source
     }
 
+    #[cfg(unix)]
     #[test]
     fn install_and_uninstall_owned_cli_link() {
         let root = TempDir::new().expect("temp dir");
@@ -477,6 +478,7 @@ mod tests {
         assert!(!destination.exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn a_different_drifty_bundle_link_is_not_treated_as_owned() {
         let root = TempDir::new().expect("temp dir");
@@ -500,6 +502,7 @@ mod tests {
         assert_eq!(fs::read_link(destination).expect("unchanged target"), old);
     }
 
+    #[cfg(unix)]
     #[test]
     fn foreign_file_and_symlink_are_never_changed() {
         let root = TempDir::new().expect("temp dir");
@@ -528,6 +531,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn app_shaped_foreign_links_are_never_treated_as_owned() {
         let root = TempDir::new().expect("temp dir");
@@ -586,6 +590,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn codex_skill_uses_the_same_ownership_rules() {
         let root = TempDir::new().expect("temp dir");
@@ -616,6 +621,7 @@ mod tests {
         assert!(!destination.exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn all_skill_targets_install_to_their_documented_paths() {
         let root = TempDir::new().expect("temp dir");

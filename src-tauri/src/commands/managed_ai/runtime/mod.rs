@@ -10,9 +10,14 @@ mod install;
 mod memory;
 mod process;
 
+#[cfg(target_os = "windows")]
+const RUNTIME_FILE_NAME: &str = "llama-server.exe";
+#[cfg(not(target_os = "windows"))]
 const RUNTIME_FILE_NAME: &str = "llama-server";
 const RUNTIME_HOST: &str = "127.0.0.1";
 const RUNTIME_PORT: &str = "39217";
+#[cfg(target_os = "windows")]
+const RUNTIME_PORT_NUMBER: u16 = 39_217;
 
 pub(super) fn start_runtime(
     root: &Path,
