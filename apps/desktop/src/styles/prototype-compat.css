@@ -10,7 +10,7 @@
   gap: 10px;
   width: 100%;
   min-height: var(--nav-item-height);
-  padding: 0 10px;
+  padding: 0 var(--sidebar-row-inline-padding);
   border-radius: 8px;
   color: color-mix(in srgb, var(--text) 86%, transparent);
   font-size: 0.8125rem;
@@ -279,7 +279,7 @@
 /* Page wrapper (each page in App.tsx uses `<div class="page">`) */
 .page {
   box-sizing: border-box;
-  padding: 12px var(--space-4) 28px;
+  padding: var(--page-content-block-start) var(--page-content-inline) 28px;
   max-width: none;
   margin: 0;
   width: 100%;

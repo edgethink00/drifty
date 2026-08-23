@@ -348,7 +348,7 @@
 .sidebar {
   background: transparent;
   border-right: 0;
-  padding: var(--window-chrome-height) 8px var(--content-panel-gap);
+  padding: var(--window-chrome-height) var(--sidebar-inline-gutter) var(--content-panel-gap);
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -470,7 +470,7 @@
   letter-spacing: .14em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--text) 72%, transparent);
-  padding: 12px 10px 4px;
+  padding: 12px var(--sidebar-row-inline-padding) 4px;
 }
 
 .sidebar-nav, .page-stack, .dashboard-grid, .kpi-row, .tracker-grid,

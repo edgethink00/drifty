@@ -70,6 +70,11 @@ html {
      sidebar, which wraps nav and CTA copy at wide window sizes. */
   --sidebar-expanded-width: 12.8125rem;
   --sidebar-collapsed-width: 3.375rem;
+  /* Both sidebar variants share one horizontal grid: rail gutter first, then
+     row content inset. Keeping these separate lets the collapsed rail retain
+     its own centering while expanded Main and Settings icons stay aligned. */
+  --sidebar-inline-gutter: 8px;
+  --sidebar-row-inline-padding: 10px;
   /* Shared row height for the main sidebar and the settings rail.
      Both nav surfaces read this single token so they stay in sync. */
   --nav-item-height: 32px;
@@ -87,6 +92,10 @@ html {
   --space-6: 2rem;
   --space-7: 3rem;
   --space-8: 4rem;
+  /* Canonical content/title anchor for standard desktop pages. Nested page
+     headers must inherit this anchor instead of adding optical offsets. */
+  --page-content-block-start: 12px;
+  --page-content-inline: var(--space-4);
   --block-gap: 0.625rem;
   --block-gap-compact: var(--space-2);
   --radius-sm: 8px;

@@ -32,7 +32,7 @@ describe("sidebar motion styles", () => {
     // rows inherit the primary nav rhythm instead of re-declaring their own
     // vertical padding.
     expect(navItemBlock).toContain("min-height: var(--nav-item-height);");
-    expect(navItemBlock).toContain("padding: 0 10px;");
+    expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(styles).not.toMatch(/\.nav-item\.nav-item--period\s*\{[^}]*padding-block/);
     expect(periodTextBlock).toContain("line-height: inherit;");
   });
@@ -163,5 +163,26 @@ describe("sidebar motion styles", () => {
     expect(settingsShellBlock).toContain("grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);");
     expect(settingsShellBlock).not.toContain("calc(var(--sidebar-expanded-width) + var(--space-7))");
     expect(settingsNavControlsBlock).toContain("left: calc(var(--sidebar-expanded-width) + 16px);");
+  });
+
+  it("keeps main and Settings sidebar rows on one horizontal grid", () => {
+    const styles = readStyles();
+    const sidebarBlock = cssBlock(styles, ".sidebar");
+    const settingsSidebarBlock = cssBlock(styles, ".sidebar--settings");
+    const navItemBlock = cssBlock(styles, ".nav-item");
+    const navLabelBlock = cssBlock(styles, ".nav-label");
+    const settingsBackBlock = cssBlock(styles, ".settings-sidebar-back");
+    const settingsHeadingBlock = cssBlock(styles, ".settings-sidebar-heading");
+    const settingsNavItemBlock = cssBlock(styles, ".sidebar--settings .settings-nav-item");
+
+    expect(styles).toContain("--sidebar-inline-gutter: 8px;");
+    expect(styles).toContain("--sidebar-row-inline-padding: 10px;");
+    expect(sidebarBlock).toContain("padding: var(--window-chrome-height) var(--sidebar-inline-gutter) var(--content-panel-gap);");
+    expect(settingsSidebarBlock).toContain("padding-inline: var(--sidebar-inline-gutter);");
+    expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
+    expect(navLabelBlock).toContain("padding: 12px var(--sidebar-row-inline-padding) 4px;");
+    expect(settingsBackBlock).toContain("padding: 0.5rem var(--sidebar-row-inline-padding);");
+    expect(settingsHeadingBlock).toContain("padding: 0.38rem var(--sidebar-row-inline-padding) 0.62rem;");
+    expect(settingsNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
   });
 });

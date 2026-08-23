@@ -14,7 +14,7 @@
 .sidebar--settings {
   gap: var(--space-3);
   overflow-x: visible;
-  padding-inline: var(--space-3);
+  padding-inline: var(--sidebar-inline-gutter);
 }
 
 .settings-sidebar-back {
@@ -24,7 +24,7 @@
   width: 100%;
   min-height: 2.25rem;
   margin: 8px 0 2px;
-  padding: 0.5rem 0.7rem;
+  padding: 0.5rem var(--sidebar-row-inline-padding);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -49,7 +49,7 @@
 
 .settings-sidebar-heading {
   display: grid;
-  padding: 0.38rem 0.68rem 0.62rem;
+  padding: 0.38rem var(--sidebar-row-inline-padding) 0.62rem;
   border-bottom: 1px solid var(--line);
 }
 
@@ -75,7 +75,7 @@
 
 .sidebar--settings .settings-nav-item {
   min-height: var(--nav-item-height);
-  padding: 0 0.7rem;
+  padding: 0 var(--sidebar-row-inline-padding);
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: 0.8125rem;

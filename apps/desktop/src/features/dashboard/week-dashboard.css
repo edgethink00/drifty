@@ -2056,14 +2056,14 @@
 
 /* ── Your Day: header inside the left main block ── */
 .day-split__main > .pg-head {
-  padding: 2px 2px 0;
+  padding: 0;
   margin: 0 0 var(--space-2);
 }
 
 .day-split__main > .pg-head .dashboard-page-head__row {
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
-  align-items: center;
+  align-items: flex-start;
 }
 
 .day-split__main > .pg-head .dashboard-page-head__title {
@@ -2191,14 +2191,14 @@
 
 .page--week-dashboard .week-v2-calendar > .pg-head {
   grid-row: 1;
-  padding: 2px 2px 0;
+  padding: 0;
   margin: 0 0 var(--space-2);
 }
 
 .page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__row {
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
-  align-items: center;
+  align-items: flex-start;
 }
 
 .page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__title {
