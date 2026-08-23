@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
-import { logicalTodayIsoDate } from "../../lib/formatting";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
 import {
+  FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS,
+  FIRST_DAY_PREPARATION_MAX_MS,
+  FIRST_DAY_PREPARATION_RETRY_BASE_MS,
+  FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT,
   resolveFirstDayTargetDay,
   useFirstDayPreparation,
   type UseFirstDayPreparationOptions,
@@ -26,10 +29,12 @@ vi.mock("../../lib/api/trackerClient", () => ({
 
 const managedAiMocks = vi.hoisted(() => ({
   getManagedLocalAiStatus: vi.fn(),
+  startManagedLocalAi: vi.fn(),
 }));
 
 vi.mock("../settings/managedLocalAiClient", () => ({
   getManagedLocalAiStatus: managedAiMocks.getManagedLocalAiStatus,
+  startManagedLocalAi: managedAiMocks.startManagedLocalAi,
 }));
 
 const CLASSIFY_STALL_MS = 75 * 1000;
@@ -48,9 +53,6 @@ function summary(partial: Partial<AiClassificationSummary>): AiClassificationSum
   return { status: "saved", selectedSegments: 0, savedRecords: 0, message: "", ...partial };
 }
 
-const emptySummary = summary({ status: "empty", selectedSegments: 0, savedRecords: 0 });
-const savedSummary = summary({ status: "saved", selectedSegments: 5, savedRecords: 5 });
-
 function metrics(totalSegments: number, classifiedSegments = 0) {
   return {
     totalSegments,
@@ -60,6 +62,14 @@ function metrics(totalSegments: number, classifiedSegments = 0) {
     staleClassifications: 0,
   };
 }
+
+const emptySummary = summary({
+  status: "empty",
+  selectedSegments: 0,
+  savedRecords: 0,
+  metrics: metrics(20, 20),
+});
+const savedSummary = summary({ status: "saved", selectedSegments: 5, savedRecords: 5 });
 
 function emptyImportPreview() {
   return {
@@ -86,7 +96,9 @@ async function flushAsync(times = 5): Promise<void> {
 function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): UseFirstDayPreparationOptions {
   return {
     preparingFirstDay: true,
-    canUseCloudAiClassification: true,
+    browserHistoryImportEnabled: true,
+    canUseCloudAiClassificationRef: { current: true },
+    cloudAiSelected: true,
     localAiClassificationOptionsRef: { current: null },
     managedLocalSelected: false,
     shouldBlockLocalTrackerAccess: false,
@@ -107,6 +119,7 @@ function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): Us
 describe("useFirstDayPreparation", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     managedAiMocks.getManagedLocalAiStatus.mockReset().mockResolvedValue({
       state: "not_installed",
       selectedModelId: null,
@@ -119,6 +132,18 @@ describe("useFirstDayPreparation", () => {
       errorKind: null,
       memoryUsageBytes: null,
     });
+    managedAiMocks.startManagedLocalAi.mockReset().mockResolvedValue({
+      state: "running",
+      selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: ["drifty-qwen3-5-4b-default"],
+      baseUrl: "http://127.0.0.1:39217/v1",
+      model: "qwen",
+      message: "Ready",
+      artifactDir: null,
+      progress: null,
+      errorKind: null,
+      memoryUsageBytes: null,
+    });
     trackerMocks.getClassificationMetrics.mockReset().mockResolvedValue(metrics(20, 0));
     trackerMocks.previewBrowserHistoryImport.mockReset().mockResolvedValue(emptyImportPreview());
     trackerMocks.importBrowserHistory.mockReset().mockResolvedValue({
@@ -126,13 +151,13 @@ describe("useFirstDayPreparation", () => {
       insertedCount: 0,
       skippedDuplicateCount: 0,
     });
-    // Default: no timeline available → empty visible set → the gate falls back to whole-day
-    // classification, preserving the behavior the other tests assert.
+    // Timeline reads are not part of the whole-day completion contract.
     trackerMocks.getTimeline.mockReset().mockResolvedValue([]);
     trackerMocks.getUnclassifiedSegments.mockReset().mockResolvedValue([]);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -190,33 +215,75 @@ describe("useFirstDayPreparation", () => {
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
-  it("ends classification after four consecutive no-progress batches", async () => {
+  it("pauses after four consecutive no-progress batches instead of revealing Unclassified", async () => {
     const noProgressSummary = summary({ status: "saved", selectedSegments: 3, savedRecords: 0 });
     const runAiClassification = vi.fn().mockResolvedValue(noProgressSummary);
     const options = makeOptions({ runAiClassification });
 
-    renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(40);
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(40));
 
     expect(runAiClassification).toHaveBeenCalledTimes(4);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+  });
+
+  it("does not accept an empty batch while whole-day metrics still report Unclassified", async () => {
+    const stillIncompleteEmptySummary = summary({
+      status: "empty",
+      selectedSegments: 0,
+      savedRecords: 0,
+      metrics: metrics(20, 17),
+    });
+    const runAiClassification = vi.fn().mockResolvedValue(stillIncompleteEmptySummary);
+    const options = makeOptions({ runAiClassification });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(40));
+
+    expect(runAiClassification).toHaveBeenCalledTimes(4);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+  });
+
+  it("reuses a still-running timed-out batch when the user retries", async () => {
+    const firstBatch = deferred<AiClassificationSummary>();
+    const runAiClassification = vi
+      .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
+      .mockReturnValueOnce(firstBatch.promise)
+      .mockResolvedValueOnce(emptySummary);
+    const options = makeOptions({ runAiClassification: runAiClassification as UseFirstDayPreparationOptions["runAiClassification"] });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    // Three consecutive stall windows on the same pending batch trip the
+    // transient-failure limit without launching a second in-flight call.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(CLASSIFY_STALL_MS * FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT);
+      await flushAsync(30);
+    });
+    expect(result.current.failure).toBe("classification_incomplete");
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.retry();
+      await flushAsync(30);
+    });
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).not.toHaveBeenCalled();
+
+    await act(async () => {
+      firstBatch.resolve(savedSummary);
+      await flushAsync(40);
+    });
+    expect(runAiClassification).toHaveBeenCalledTimes(2);
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
-  it("reveals once the flow chart's visible set is classified, even with other segments unclassified", async () => {
-    // Two segments in distinct 3-minute buckets: each is its bucket's sole (winning) candidate,
-    // so the visible set is exactly {seg-1, seg-2}. Dated on the gate's own logical
-    // today so the test does not rot when the calendar day changes.
-    const gateToday = logicalTodayIsoDate(0);
-    const visibleSegments = [
-      { id: "seg-1", appName: "AppA", startedAt: `${gateToday}T09:00:00`, endedAt: `${gateToday}T09:02:00` },
-      { id: "seg-2", appName: "AppB", startedAt: `${gateToday}T10:00:00`, endedAt: `${gateToday}T10:02:00` },
-    ];
-    trackerMocks.getTimeline.mockResolvedValue(visibleSegments);
-    // The whole day still has unclassified segments beyond the visible set...
+  it("classifies the whole target day instead of limiting batches to visible flow blocks", async () => {
     trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(20, 3));
-
-    // ...but classification of the allow-listed visible set completes (one saved batch, then a
-    // genuinely empty batch because nothing in the allow-list remains) → reveal.
     const runAiClassification = vi
       .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
       .mockResolvedValueOnce(savedSummary)
@@ -226,9 +293,8 @@ describe("useFirstDayPreparation", () => {
     renderHook(() => useFirstDayPreparation(options));
     await flushAsync(30);
 
-    // The classify batches were scoped to the visible set via the segmentIds allow-list.
     const firstQuery = runAiClassification.mock.calls[0]?.[0] as { segmentIds?: string[] } | undefined;
-    expect(firstQuery?.segmentIds).toEqual(["seg-1", "seg-2"]);
+    expect(firstQuery?.segmentIds).toBeUndefined();
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
@@ -248,14 +314,15 @@ describe("useFirstDayPreparation", () => {
     });
     const runAiClassification = vi.fn().mockResolvedValue(emptySummary);
     const options = makeOptions({
-      canUseCloudAiClassification: false,
+      canUseCloudAiClassificationRef: { current: false },
+      cloudAiSelected: false,
       managedLocalSelected: true,
       localAiClassificationOptionsRef: optionsRef,
       runAiClassification,
     });
 
     renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(20);
+    await act(async () => flushAsync(20));
 
     // Download still running: the gate sits in the downloading phase, showing
     // real download progress, without classifying or revealing.
@@ -280,27 +347,169 @@ describe("useFirstDayPreparation", () => {
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
-  it("bails out of the download wait when no managed download was ever started", async () => {
-    const options = makeOptions({ canUseCloudAiClassification: false, managedLocalSelected: true });
+  it("pauses when no selected managed model download was ever started", async () => {
+    const options = makeOptions({
+      canUseCloudAiClassificationRef: { current: false },
+      cloudAiSelected: false,
+      managedLocalSelected: true,
+    });
 
-    renderHook(() => useFirstDayPreparation(options));
-    await flushAsync(20);
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(20));
 
-    // Status says nothing is installed or installing → reveal without classification.
     expect(options.setPhase).toHaveBeenCalledWith("downloading");
     expect(options.runAiClassification).not.toHaveBeenCalled();
-    expect(options.onReveal).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
   });
 
-  it("reveals even when the browser history import throws", async () => {
+  it("continues classification when the optional browser history import throws", async () => {
     trackerMocks.previewBrowserHistoryImport.mockRejectedValue(new Error("history unavailable"));
     const options = makeOptions();
 
     renderHook(() => useFirstDayPreparation(options));
     await flushAsync(20);
 
-    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(options.runAiClassification).toHaveBeenCalled();
     expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for live Cloud readiness instead of treating the initial false snapshot as final", async () => {
+    const cloudReadyRef = { current: false };
+    const options = makeOptions({ canUseCloudAiClassificationRef: cloudReadyRef });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+
+    expect(options.setPhase).toHaveBeenCalledWith("classifying");
+    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(result.current.failure).toBeNull();
+
+    cloudReadyRef.current = true;
+    await vi.advanceTimersByTimeAsync(500);
+    await flushAsync(20);
+
+    expect(options.runAiClassification).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("pauses with a retry choice when Cloud readiness never settles", async () => {
+    const options = makeOptions({ canUseCloudAiClassificationRef: { current: false } });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS);
+      await flushAsync(20);
+    });
+
+    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("cloud_not_ready");
+  });
+
+  it("recovers from a single transient Cloud classification failure", async () => {
+    const runAiClassification = vi.fn()
+      .mockRejectedValueOnce(new Error("Failed to fetch"))
+      .mockResolvedValueOnce(emptySummary);
+    const options = makeOptions({ runAiClassification });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_RETRY_BASE_MS);
+    await flushAsync(20);
+    expect(runAiClassification).toHaveBeenCalledTimes(2);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires three consecutive transient failures before pausing", async () => {
+    const runAiClassification = vi.fn().mockRejectedValue(new Error("Failed to fetch"));
+    const options = makeOptions({ runAiClassification });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_RETRY_BASE_MS);
+    await flushAsync(20);
+    expect(runAiClassification).toHaveBeenCalledTimes(2);
+    expect(result.current.failure).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_RETRY_BASE_MS * 2);
+      await flushAsync(20);
+    });
+    expect(runAiClassification).toHaveBeenCalledTimes(FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+  });
+
+  it("does not treat a content-level classification miss as a retryable Cloud blip", async () => {
+    const contentMiss = summary({
+      status: "error",
+      selectedSegments: 3,
+      savedRecords: 0,
+      failureKind: "content",
+      message: "AI classification returned no usable classifications.",
+    });
+    const runAiClassification = vi.fn().mockResolvedValue(contentMiss);
+    const options = makeOptions({ runAiClassification });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(40));
+
+    expect(runAiClassification).toHaveBeenCalledTimes(4);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+  });
+
+  it("resets the no-progress streak after a later batch actually saves", async () => {
+    const noProgress = summary({ status: "saved", selectedSegments: 3, savedRecords: 0 });
+    const runAiClassification = vi.fn()
+      .mockResolvedValueOnce(noProgress)
+      .mockResolvedValueOnce(noProgress)
+      .mockResolvedValueOnce(noProgress)
+      .mockResolvedValueOnce(savedSummary)
+      .mockResolvedValueOnce(emptySummary);
+    const options = makeOptions({ runAiClassification });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(50));
+
+    expect(runAiClassification).toHaveBeenCalledTimes(5);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a paused attempt and lets the user explicitly continue anyway", async () => {
+    const cloudReadyRef = { current: false };
+    const options = makeOptions({ canUseCloudAiClassificationRef: cloudReadyRef });
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS);
+      await flushAsync(20);
+    });
+    expect(result.current.failure).toBe("cloud_not_ready");
+
+    cloudReadyRef.current = true;
+    await act(async () => {
+      result.current.retry();
+      await flushAsync(30);
+    });
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+
+    const secondOptions = makeOptions({ canUseCloudAiClassificationRef: { current: false } });
+    const second = renderHook(() => useFirstDayPreparation(secondOptions));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS);
+      await flushAsync(20);
+    });
+    act(() => second.result.current.continueAnyway());
+    expect(secondOptions.onReveal).toHaveBeenCalledTimes(1);
   });
 
   it("runs once per arm: a second preparingFirstDay=true is ignored until rearm()", async () => {

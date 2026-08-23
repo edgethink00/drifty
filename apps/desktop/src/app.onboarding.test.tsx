@@ -1074,7 +1074,7 @@ describe("App onboarding", () => {
     }
   });
 
-  it("lets users opt out of the recent history first-dashboard bootstrap", async () => {
+  it("lets users opt out of recent history while still preparing the selected Cloud route", async () => {
     render(<App />);
 
     await advanceToReadyStep({ activity: "Coding" });
@@ -1092,6 +1092,8 @@ describe("App onboarding", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
+    expect(await screen.findByText(/making sense of your day/i)).toBeTruthy();
+    expect(trackerPreviewBrowserHistoryImport).not.toHaveBeenCalled();
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
     const storedRecord = JSON.parse(storedValue ?? "{}") as Record<string, unknown>;

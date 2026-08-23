@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
-import { selectFlowVisibleSegmentIds, shiftIsoDate } from "@drifty/domain";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
+import { shiftIsoDate } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
+import { logicalTodayIsoDate } from "../../lib/formatting";
 import {
   toClassificationQueryForDay,
   type AiClassificationRunOptions,
@@ -11,34 +11,32 @@ import {
 import { getManagedLocalAiStatus } from "../settings/managedLocalAiClient";
 import { ensureManagedLocalAiReady } from "../classification/managedLocalAiChat";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
-import type { FirstDayPreparationPhase } from "./FirstDayPreparationScreen";
+import type {
+  FirstDayPreparationFailureReason,
+  FirstDayPreparationPhase,
+} from "./FirstDayPreparationScreen";
 
 const FIRST_DAY_PREPARATION_LOOKBACK_DAYS = 2;
 // The intent is to reveal a *classified* dashboard, so we wait while today's AI
 // classification keeps making progress. We only cut it short when a batch stalls
 // (a genuine hang, e.g. an unauthenticated cloud call) or when the overall phase
 // exceeds its cap — after which the remainder finishes in the background.
-const FIRST_DAY_PREPARATION_MAX_MS = 300 * 1000; // ultimate "never trap the user" backstop
+export const FIRST_DAY_PREPARATION_MAX_MS = 300 * 1000; // ultimate "never trap the user" backstop
 const FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES = 80;
 const FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE = 10; // small batches so each call finishes fast on slow local models
 const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 75 * 1000; // per-batch hang cutoff — generous so a slow-but-working local model (4B) isn't killed mid-batch
 const FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT = 4; // give up only after this many consecutive no-save batches
+export const FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT = 3;
+export const FIRST_DAY_PREPARATION_RETRY_BASE_MS = 1_000;
 // Onboarding classifies at "normal" granularity (one AI call per domain+title signature,
 // fanned out to matching segments) — ~fine accuracy at meaningfully fewer AI calls.
 const FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL: ClassificationLevel = "normal";
-// The dashboard flow chart's default zoom draws one block per 3-minute bucket. We reveal once
-// every segment the chart actually shows at this zoom is classified, rather than after the
-// whole day — so the visible surface is done without waiting on the non-visible tail.
-const FIRST_DAY_PREPARATION_FLOW_INTERVAL_MINUTES = 3 as const;
-// Cap for scanning a day's still-unclassified pool when measuring visible-set progress; a
-// single logical day stays well under this.
-const FIRST_DAY_PREPARATION_UNCLASSIFIED_SCAN_LIMIT = 5000;
 // Just after the logical day rolls over (start-of-day, e.g. 4am) "today" is nearly
 // empty, so the gate completes the most recent logical day that actually has data.
 const FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS = 15;
-// Offset 0 re-runs the revealed target day to mop up anything the (time-capped)
-// foreground gate left unclassified; -1/-2 cover the rest of the imported window.
-const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [0, -1, -2] as const;
+// The selected day is fully classified before reveal. Background work only
+// covers the two older days in the imported window.
+const FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS = [-1, -2] as const;
 // Poll cadence for the in-gate managed-model download wait; download progress
 // feeds the loading bar, so keep it responsive.
 const FIRST_DAY_PREPARATION_DOWNLOAD_POLL_MS = 1_500;
@@ -46,6 +44,8 @@ const FIRST_DAY_PREPARATION_DOWNLOAD_POLL_MS = 1_500;
 // model that is still downloading before classifying — slower poll, generous cap.
 const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_POLL_MS = 5_000;
 const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS = 60 * 60 * 1000;
+export const FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS = 30 * 1000;
+const FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS = 500;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -74,7 +74,11 @@ type RefreshDashboard = (
 
 export type UseFirstDayPreparationOptions = {
   readonly preparingFirstDay: boolean;
-  readonly canUseCloudAiClassification: boolean;
+  readonly browserHistoryImportEnabled: boolean;
+  /** Live entitlement/auth readiness; it can flip while the one-shot gate runs. */
+  readonly canUseCloudAiClassificationRef: MutableRefObject<boolean>;
+  /** True when onboarding selected Drifty Cloud, even while readiness is settling. */
+  readonly cloudAiSelected: boolean;
   /**
    * Live view of the local AI options. The managed-model attach watcher fills the
    * AI setup while the gate runs, so the gate reads this ref instead of a snapshot.
@@ -114,8 +118,10 @@ export async function resolveFirstDayTargetDay(logicalToday: string): Promise<st
 // browser history and finish classifying *today* before revealing the dashboard.
 // Older days within the window are left to a background pass so the reveal is fast.
 export function useFirstDayPreparation({
-  canUseCloudAiClassification,
+  browserHistoryImportEnabled,
+  canUseCloudAiClassificationRef,
   clearLocalActivityCaches,
+  cloudAiSelected,
   localAiClassificationOptionsRef,
   managedLocalSelected,
   onReveal,
@@ -129,14 +135,38 @@ export function useFirstDayPreparation({
   setProgress,
   shouldBlockLocalTrackerAccess,
   startOfDayMinutes,
-}: UseFirstDayPreparationOptions): { readonly rearm: () => void } {
+}: UseFirstDayPreparationOptions): {
+  readonly continueAnyway: () => void;
+  readonly failure: FirstDayPreparationFailureReason | null;
+  readonly rearm: () => void;
+  readonly retry: () => void;
+} {
   const runRef = useRef(false);
+  const foregroundBatchRef = useRef<{
+    readonly day: string;
+    readonly localProvider: AiClassificationRunOptions["localProvider"];
+    readonly promise: Promise<AiClassificationSummary>;
+  } | null>(null);
+  const [failure, setFailure] = useState<FirstDayPreparationFailureReason | null>(null);
+  const [retryRevision, setRetryRevision] = useState(0);
 
   // Re-arms the one-shot gate so the next `preparingFirstDay: true` starts a fresh run
   // (used when onboarding completes again, e.g. re-running onboarding from Dev mode).
   const rearm = useCallback(() => {
     runRef.current = false;
+    setFailure(null);
   }, []);
+
+  const retry = useCallback(() => {
+    runRef.current = false;
+    setFailure(null);
+    setRetryRevision((revision) => revision + 1);
+  }, []);
+
+  const continueAnyway = useCallback(() => {
+    setFailure(null);
+    onReveal();
+  }, [onReveal]);
 
   useEffect(() => {
     if (!preparingFirstDay) return;
@@ -144,12 +174,25 @@ export function useFirstDayPreparation({
     runRef.current = true;
 
     let settled = false;
+    let cancelled = false;
+    let revealed = false;
     const reveal = () => {
-      if (settled) return;
+      if (settled || cancelled) return;
       settled = true;
+      revealed = true;
+      setFailure(null);
       onReveal();
     };
-    const safetyTimeout = setTimeout(reveal, FIRST_DAY_PREPARATION_MAX_MS);
+    const fail = (reason: FirstDayPreparationFailureReason, detail?: unknown) => {
+      if (settled || cancelled) return;
+      settled = true;
+      if (detail) console.warn("First-day preparation paused", detail);
+      setFailure(reason);
+    };
+    const safetyTimeout = setTimeout(
+      () => fail("preparation_timed_out"),
+      FIRST_DAY_PREPARATION_MAX_MS,
+    );
 
     const runClassificationForDay = (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
       const query = toClassificationQueryForDay(day);
@@ -163,7 +206,7 @@ export function useFirstDayPreparation({
     // download progress on the loading bar and hand back the options once they exist.
     // Bails when there is genuinely nothing to wait for (no download, or it failed).
     const waitForManagedModelOptions = async (): Promise<LocalAiClassificationOptions | null> => {
-      while (!settled) {
+      while (!settled && !cancelled) {
         const options = localAiClassificationOptionsRef.current;
         if (options) return options;
         try {
@@ -183,7 +226,7 @@ export function useFirstDayPreparation({
     // already visible, so a long download only delays the background fill-in.
     const waitForManagedModelInBackground = async (): Promise<LocalAiClassificationOptions | null> => {
       const deadline = Date.now() + FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS;
-      while (Date.now() < deadline) {
+      while (!cancelled && Date.now() < deadline) {
         const options = localAiClassificationOptionsRef.current;
         if (options) return options;
         try {
@@ -198,74 +241,73 @@ export function useFirstDayPreparation({
       return localAiClassificationOptionsRef.current;
     };
 
-    // Resolve the flow chart's visible segment set for `day` at the default 3-minute zoom.
-    // Reveal is gated on this set, so we classify (and report progress against) exactly the
-    // segments the dashboard will draw — not the whole day. Falls back to the whole day if the
-    // timeline can't be read, so a fetch failure never blocks classification.
-    const resolveVisibleSegmentIds = async (day: string): Promise<string[]> => {
-      try {
-        const segments = await trackerClient.getTimeline(getLogicalDayRange(day, day, startOfDayMinutes));
-        return Array.from(
-          selectFlowVisibleSegmentIds(segments, day, FIRST_DAY_PREPARATION_FLOW_INTERVAL_MINUTES, undefined, startOfDayMinutes),
-        );
-      } catch {
-        return [];
+    const waitForCloudAiAvailability = async (): Promise<boolean> => {
+      const deadline = Date.now() + FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS;
+      while (!settled && !cancelled && Date.now() < deadline) {
+        if (canUseCloudAiClassificationRef.current) return true;
+        await firstDayPreparationDelay(FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS);
       }
+      return canUseCloudAiClassificationRef.current;
     };
 
-    // Classify a single day one batch at a time, prioritizing the flow chart's visible set, so
-    // the loading screen can report real progress (classified-in-set / set-size) and the loop
-    // ends — revealing the dashboard — as soon as every visible block is classified.
-    const classifyTodayWithProgress = async (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
+    // Classify the entire selected logical day. Completion is checked against
+    // the whole-day query, never the flow chart's currently visible subset.
+    const classifyTodayWithProgress = async (
+      day: string,
+      classifyOptions: LocalAiClassificationOptions | null,
+    ): Promise<boolean> => {
       const dayQuery = toClassificationQueryForDay(day);
-      const visibleIds = await resolveVisibleSegmentIds(day);
-      const visibleSet = new Set(visibleIds);
-      // With a visible set, the batch selection is restricted to it (allow-list); the loop then
-      // stops once those are done. Without one, fall back to classifying the whole day.
-      const query = visibleSet.size > 0 ? { ...dayQuery, segmentIds: visibleIds } : dayQuery;
 
-      const reportProgress = async () => {
-        try {
-          if (visibleSet.size > 0) {
-            const remaining = await trackerClient.getUnclassifiedSegments({
-              ...dayQuery,
-              limit: FIRST_DAY_PREPARATION_UNCLASSIFIED_SCAN_LIMIT,
-            });
-            const remainingInSet = remaining.reduce((count, segment) => (visibleSet.has(segment.id) ? count + 1 : count), 0);
-            const classifiedInSet = Math.max(0, visibleSet.size - remainingInSet);
-            setProgress(Math.min(1, classifiedInSet / visibleSet.size));
-            return;
-          }
-          const metrics = await trackerClient.getClassificationMetrics(dayQuery);
-          if (metrics.totalSegments > 0) {
-            setProgress(Math.min(1, metrics.classifiedSegments / metrics.totalSegments));
-          }
-        } catch {
-          // progress is best-effort; never let it interrupt classification
+      const applyProgress = (metrics: Awaited<ReturnType<typeof trackerClient.getClassificationMetrics>>) => {
+        if (metrics.totalSegments > 0) {
+          setProgress(Math.min(1, metrics.classifiedSegments / metrics.totalSegments));
         }
       };
-      await reportProgress();
+      const reportProgress = async () => {
+        try {
+          const metrics = await trackerClient.getClassificationMetrics(dayQuery);
+          applyProgress(metrics);
+          return metrics;
+        } catch {
+          return null;
+        }
+      };
+      const initialMetrics = await reportProgress();
+      if (initialMetrics?.unclassifiedSegments === 0) return true;
       const batchTimeoutSummary: AiClassificationSummary = {
         status: "error",
         selectedSegments: 0,
         savedRecords: 0,
         message: "Classification timed out.",
+        failureKind: "transport",
       };
       let consecutiveNoProgress = 0;
+      let consecutiveTransientFailures = 0;
       // Single-flight: at most ONE runAiClassification call is ever in flight. When a
       // batch outlives its stall window we count no-progress but keep waiting on the
       // SAME pending promise on the next iteration (with a fresh window) instead of
       // stacking a second call on top of a slow local model, which used to pile up
       // duplicate same-day classification work.
-      let pendingBatch: Promise<AiClassificationSummary> | null = null;
+      const localProvider = classifyOptions?.localProvider ?? null;
+      const existingBatch = foregroundBatchRef.current;
+      let pendingBatch = existingBatch?.day === day && existingBatch.localProvider === localProvider
+        ? existingBatch.promise
+        : null;
       for (let batch = 0; batch < FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES; batch += 1) {
+        if (settled || cancelled) break;
         // Small batches so each call finishes fast; a single stalled/failed batch is
         // treated as a hang after the timeout but does NOT abandon the rest — we keep
         // going until nothing is left or several no-progress batches in a row.
         if (!pendingBatch) {
-          pendingBatch = classifyOptions
-            ? runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
-            : runAiClassification(query, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
+          const nextBatch = classifyOptions
+            ? runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
+            : runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
+          const entry = { day, localProvider, promise: nextBatch };
+          foregroundBatchRef.current = entry;
+          void nextBatch.finally(() => {
+            if (foregroundBatchRef.current === entry) foregroundBatchRef.current = null;
+          }).catch(() => undefined);
+          pendingBatch = nextBatch;
         }
         // A rejected batch (e.g. a provider that is still coming up) counts as a
         // failed batch instead of aborting the whole gate run.
@@ -275,21 +317,42 @@ export function useFirstDayPreparation({
             selectedSegments: 0,
             savedRecords: 0,
             message: error instanceof Error ? error.message : "Classification failed.",
+            failureKind: "transport",
           })),
           FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS,
           batchTimeoutSummary,
         );
-        await reportProgress();
+        const nextMetrics = summary.metrics ?? await reportProgress();
+        if (summary.metrics) applyProgress(summary.metrics);
         // A timed-out batch returns the fabricated `batchTimeoutSummary` (selectedSegments: 0).
         // Do NOT treat that as "nothing left" — only a real empty result ends the loop.
         const timedOut = summary === batchTimeoutSummary;
         // Only a real settle frees the single-flight slot; the next iteration then
         // processes its real summary and may launch a fresh batch.
         if (!timedOut) pendingBatch = null;
-        if (summary.status === "disabled") break; // AI off
-        if (!timedOut && summary.selectedSegments === 0) break; // genuinely nothing left
+        // `empty` only means the batch selector found no eligible work. The
+        // whole-day metrics are the success contract; never reveal while they
+        // still report unclassified activity.
+        if (nextMetrics?.unclassifiedSegments === 0) {
+          setProgress(1);
+          return true;
+        }
+        const transientFailure = timedOut
+          || summary.status === "disabled"
+          || (summary.status === "error" && summary.failureKind !== "content");
+        if (transientFailure) {
+          consecutiveTransientFailures += 1;
+          if (consecutiveTransientFailures >= FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT) break;
+          if (!timedOut) {
+            await firstDayPreparationDelay(
+              FIRST_DAY_PREPARATION_RETRY_BASE_MS * (2 ** (consecutiveTransientFailures - 1)),
+            );
+          }
+          continue;
+        }
         if (!timedOut && summary.savedRecords > 0) {
           consecutiveNoProgress = 0;
+          consecutiveTransientFailures = 0;
           continue;
         }
         consecutiveNoProgress += 1;
@@ -299,8 +362,8 @@ export function useFirstDayPreparation({
       // save is harmless because the background mop-up re-covers this day, and the
       // no-op catch keeps a late rejection from surfacing as unhandled.
       if (pendingBatch) void pendingBatch.catch(() => undefined);
-      // No forced 100%: the progress bar reflects real classified/total coverage.
       await reportProgress();
+      return false;
     };
 
     void (async () => {
@@ -308,76 +371,99 @@ export function useFirstDayPreparation({
       // Managed Local AI counts as "available" even while its download is still
       // running — the gate waits for it (phase "downloading") instead of skipping AI.
       const aiCouldBecomeAvailable = Boolean(localAiClassificationOptionsRef.current)
-        || canUseCloudAiClassification
+        || canUseCloudAiClassificationRef.current
+        || cloudAiSelected
         || managedLocalSelected;
       try {
-        if (!shouldBlockLocalTrackerAccess) {
+        if (shouldBlockLocalTrackerAccess) {
+          fail("classification_incomplete", "Local tracker access is blocked.");
+          return;
+        }
+
+        if (browserHistoryImportEnabled) {
           setPhase("importing");
           setProgress(null);
-          const preview = await trackerClient.previewBrowserHistoryImport({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
-          if (preview.segmentCount > 0) {
-            await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
-            clearLocalActivityCaches();
+          try {
+            const preview = await trackerClient.previewBrowserHistoryImport({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
+            if (preview.segmentCount > 0) {
+              await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
+              clearLocalActivityCaches();
+            }
+          } catch (error) {
+            // Import is optional reconstruction. Continue with activity the
+            // tracker already has instead of treating it as a Cloud failure.
+            console.warn("First-day browser history import unavailable", error);
           }
-          // Complete + reveal the most recent logical day that has data, and open the
-          // dashboard there — right after the day rolls over "today" is often empty.
-          today = await resolveFirstDayTargetDay(today);
-          // Not a user choice: the gate may land on yesterday when today is still empty,
-          // and the dashboard must still auto-return to today after the next rollover.
-          selectDay(today, { userSelected: false });
-          // refresh() materializes and persists the day's built-in heuristic classifications,
-          // so nothing renders as bare "unclassified" even before AI runs.
-          await refresh(today, { foreground: true });
+        }
+        // Complete + reveal the most recent logical day that has data, and open the
+        // dashboard there — right after the day rolls over "today" is often empty.
+        today = await resolveFirstDayTargetDay(today);
+        selectDay(today, { userSelected: false });
+        await refresh(today, { foreground: true });
 
-          if (aiCouldBecomeAvailable && !settled) {
-            let classifyOptions = localAiClassificationOptionsRef.current;
-            if (!classifyOptions && !canUseCloudAiClassification && managedLocalSelected) {
-              setPhase("downloading");
-              setProgress(null);
-              classifyOptions = await waitForManagedModelOptions();
+        if (aiCouldBecomeAvailable && !settled) {
+          let classifyOptions = localAiClassificationOptionsRef.current;
+          if (!classifyOptions && !canUseCloudAiClassificationRef.current && managedLocalSelected) {
+            setPhase("downloading");
+            setProgress(null);
+            classifyOptions = await waitForManagedModelOptions();
+            if (!classifyOptions && !settled) {
+              fail("classification_incomplete", "The selected local model did not become ready.");
+              return;
             }
-            // Warm the managed runtime inside the gate: the model file being
-            // installed is not enough — llama-server (fetched on first start)
-            // must be up before classification can succeed. Failures fall
-            // through: the classify batches surface them and the reveal
-            // backstop still applies.
-            if (classifyOptions?.localProvider.provider === "managed_local" && !settled) {
-              setPhase("downloading");
-              try {
-                await ensureManagedLocalAiReady(classifyOptions.localProvider.modelId);
-              } catch (error) {
-                // best-effort warmup; classification retries have their own path
-              }
+          }
+          if (!classifyOptions && cloudAiSelected && !canUseCloudAiClassificationRef.current && !settled) {
+            setPhase("classifying");
+            setProgress(null);
+            const cloudReady = await waitForCloudAiAvailability();
+            if (!cloudReady && !settled) {
+              fail("cloud_not_ready");
+              return;
             }
-            if ((classifyOptions || canUseCloudAiClassification) && !settled) {
-              setPhase("classifying");
-              setProgress(null);
-              // Intent: reveal a fully-classified *today*. Wait until today's segments are
-              // all classified (the loop exits when nothing is left). The only escape hatches
-              // are a genuinely stalled/hung provider and the overall safety backstop below.
-              await classifyTodayWithProgress(today, classifyOptions);
-              await refresh(today);
+          }
+
+          if (classifyOptions?.localProvider.provider === "managed_local" && !settled) {
+            setPhase("downloading");
+            try {
+              await ensureManagedLocalAiReady(classifyOptions.localProvider.modelId);
+            } catch (error) {
+              // Classification below confirms readiness with bounded retries.
+              console.warn("Managed local AI warmup did not complete", error);
             }
+          }
+          if ((classifyOptions || canUseCloudAiClassificationRef.current) && !settled) {
+            setPhase("classifying");
+            setProgress(null);
+            const complete = await classifyTodayWithProgress(today, classifyOptions);
+            if (!complete && !settled) {
+              fail("classification_incomplete");
+              return;
+            }
+            if (!settled) await refresh(today);
+          } else if (!settled) {
+            fail("classification_incomplete", "The selected AI route is unavailable.");
+            return;
           }
         }
       } catch (error) {
-        // Never trap the user on the loading screen; reveal with whatever we have.
-      } finally {
-        clearTimeout(safetyTimeout);
-        reveal();
+        fail("classification_incomplete", error);
       }
+
+      clearTimeout(safetyTimeout);
+      if (!settled) reveal();
 
       // Background: classify the rest of the 48h window without blocking the reveal.
       // A managed model that outlived the gate's backstop is awaited here, so the
       // revealed (heuristic) dashboard still fills in with AI classifications.
-      if (aiCouldBecomeAvailable && !shouldBlockLocalTrackerAccess) {
+      if (revealed && aiCouldBecomeAvailable && !shouldBlockLocalTrackerAccess) {
         void (async () => {
           let backgroundOptions = localAiClassificationOptionsRef.current;
-          if (!backgroundOptions && !canUseCloudAiClassification && managedLocalSelected) {
+          if (!backgroundOptions && !canUseCloudAiClassificationRef.current && managedLocalSelected) {
             backgroundOptions = await waitForManagedModelInBackground();
             if (!backgroundOptions) return;
           }
           for (const offset of FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS) {
+            if (cancelled) return;
             const day = shiftIsoDate(today, offset);
             try {
               const summary = await runClassificationForDay(day, backgroundOptions);
@@ -391,13 +477,13 @@ export function useFirstDayPreparation({
     })();
 
     return () => {
+      if (!revealed) cancelled = true;
       clearTimeout(safetyTimeout);
     };
-    // Intentionally keyed only on `preparingFirstDay`: this is a one-shot run guarded
-    // by runRef, and re-running on other dep changes would clear the safety-reveal
-    // timeout mid-flight and could trap the user on the loading screen.
+    // Retrying is the only dependency besides the gate itself that starts a new
+    // attempt; live readiness is read through refs to avoid cancelling mid-run.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preparingFirstDay]);
+  }, [preparingFirstDay, retryRevision]);
 
-  return { rearm };
+  return { continueAnyway, failure, rearm, retry };
 }

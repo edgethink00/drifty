@@ -25,6 +25,8 @@ type UseCloudBillingControllerInput = {
 };
 
 type UseCloudBillingControllerResult = {
+  /** Errors from an explicit checkout/portal action; shown locally, never used as global Cloud health. */
+  readonly billingActionError: string | null;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
@@ -42,6 +44,22 @@ type UseCloudBillingControllerResult = {
   readonly refreshBillingEntitlement: () => Promise<BillingEntitlement | null>;
 };
 
+export const CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS = 1_500;
+
+function cloudEntitlementRetryDelay(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS));
+}
+
+async function fetchBillingEntitlementWithConfirmation(
+  shouldContinue: () => boolean,
+): Promise<Awaited<ReturnType<typeof fetchBillingEntitlement>>> {
+  const firstResult = await fetchBillingEntitlement();
+  if (firstResult.success || !shouldContinue()) return firstResult;
+  await cloudEntitlementRetryDelay();
+  if (!shouldContinue()) return firstResult;
+  return fetchBillingEntitlement();
+}
+
 export function useCloudBillingController({
   hasRequiredAccountAuth,
   isSupabaseConfigured,
@@ -53,6 +71,7 @@ export function useCloudBillingController({
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
+  const [billingActionError, setBillingActionError] = useState<string | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [cloudDeviceActionError, setCloudDeviceActionError] = useState<string | null>(null);
@@ -65,6 +84,7 @@ export function useCloudBillingController({
       setBillingEntitlement(null);
       setBillingEntitlementLoading(false);
       setBillingEntitlementError(null);
+      setBillingActionError(null);
       setCloudDeviceActionError(null);
       return null;
     }
@@ -73,7 +93,9 @@ export function useCloudBillingController({
     setBillingEntitlementLoading(true);
     setBillingEntitlementError(null);
     setCloudDeviceActionError(null);
-    const result = await fetchBillingEntitlement();
+    const result = await fetchBillingEntitlementWithConfirmation(
+      () => requestId === billingEntitlementRequestRef.current,
+    );
     if (requestId !== billingEntitlementRequestRef.current) return null;
     if (result.success) {
       setBillingEntitlement(result.data);
@@ -108,17 +130,17 @@ export function useCloudBillingController({
       return;
     }
 
+    setBillingActionError(null);
     if (billingEntitlement?.status === "active") {
       void refreshBillingEntitlement();
       return;
     }
 
-    setBillingEntitlementError(null);
     setBillingCheckoutLoadingInterval(billingInterval);
     try {
       const checkoutResult = await createIndividualCheckout(billingInterval);
       if (!checkoutResult.success) {
-        setBillingEntitlementError(checkoutResult.error);
+        setBillingActionError(checkoutResult.error);
         capturePostHogEvent("billing_action", {
           action: "checkout_created",
           result: "error",
@@ -140,7 +162,7 @@ export function useCloudBillingController({
         billing_interval: billingInterval,
       });
     } catch (error) {
-      setBillingEntitlementError(toErrorMessage(error));
+      setBillingActionError(toErrorMessage(error));
       capturePostHogEvent("billing_action", {
         action: "checkout_opened",
         result: "error",
@@ -163,6 +185,7 @@ export function useCloudBillingController({
       return;
     }
 
+    setBillingActionError(null);
     const canOpenBillingPortal = billingEntitlement?.status === "active"
       || billingEntitlement?.lockedReason === "device_limit_reached";
     if (!canOpenBillingPortal) {
@@ -170,12 +193,11 @@ export function useCloudBillingController({
       return;
     }
 
-    setBillingEntitlementError(null);
     setBillingPortalLoading(true);
     try {
       const portalResult = await createBillingPortalSession();
       if (!portalResult.success) {
-        setBillingEntitlementError(portalResult.error);
+        setBillingActionError(portalResult.error);
         capturePostHogEvent("billing_action", {
           action: "portal_created",
           result: "error",
@@ -200,7 +222,7 @@ export function useCloudBillingController({
         ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
       });
     } catch (error) {
-      setBillingEntitlementError(toErrorMessage(error));
+      setBillingActionError(toErrorMessage(error));
       capturePostHogEvent("billing_action", {
         action: "portal_opened",
         result: "error",
@@ -247,6 +269,7 @@ export function useCloudBillingController({
       setBillingEntitlement(null);
       setBillingEntitlementLoading(false);
       setBillingEntitlementError(null);
+      setBillingActionError(null);
       setCloudDeviceActionError(null);
       return undefined;
     }
@@ -255,7 +278,9 @@ export function useCloudBillingController({
     setBillingEntitlementLoading(true);
     setBillingEntitlementError(null);
     setCloudDeviceActionError(null);
-    void fetchBillingEntitlement().then((result) => {
+    void fetchBillingEntitlementWithConfirmation(
+      () => !cancelled && requestId === billingEntitlementRequestRef.current,
+    ).then((result) => {
       if (cancelled) return;
       if (requestId !== billingEntitlementRequestRef.current) return;
       if (result.success) {
@@ -305,6 +330,7 @@ export function useCloudBillingController({
   }, [refreshBillingEntitlement]);
 
   return {
+    billingActionError,
     billingCheckoutLoadingInterval,
     billingEntitlement,
     billingEntitlementError,

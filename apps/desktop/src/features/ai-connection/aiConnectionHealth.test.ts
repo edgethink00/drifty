@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   aiConnectionIssueKindFromMessage,
+  CLOUD_AI_FAILURE_EPISODE_MS,
+  isEstablishedCloudAiDisconnect,
   isEstablishedLocalAiDisconnect,
   localAiProviderLabel,
   localAiSetupFingerprint,
   nextLocalAiConnectionCheck,
+  nextCloudAiConnectionCheck,
   type LocalAiConnectionCheck,
 } from "./aiConnectionHealth";
 import { DEFAULT_LOCAL_AI_SETUP, type LocalAiSetupState } from "../settings/localAiSetup";
@@ -191,6 +194,72 @@ describe("isEstablishedLocalAiDisconnect", () => {
     expect(isEstablishedLocalAiDisconnect(check({ status: "connected", consecutiveFailures: 0 }))).toBe(false);
     expect(isEstablishedLocalAiDisconnect(check({ status: "failed", consecutiveFailures: 1 }))).toBe(false);
     expect(isEstablishedLocalAiDisconnect(check({ status: "failed", consecutiveFailures: 2 }))).toBe(true);
+  });
+});
+
+describe("cloud AI connection hysteresis", () => {
+  it("does not surface a single transient classification failure", () => {
+    const first = nextCloudAiConnectionCheck(null, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 1_000);
+
+    expect(first).toMatchObject({ issueKind: "network", consecutiveFailures: 1 });
+    expect(isEstablishedCloudAiDisconnect(first)).toBe(false);
+  });
+
+  it("surfaces the second consecutive failure in one episode", () => {
+    const first = nextCloudAiConnectionCheck(null, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 1_000);
+    const second = nextCloudAiConnectionCheck(first, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 2_000);
+
+    expect(second?.consecutiveFailures).toBe(2);
+    expect(isEstablishedCloudAiDisconnect(second)).toBe(true);
+  });
+
+  it("clears the episode after real provider contact", () => {
+    const failed = nextCloudAiConnectionCheck(null, {
+      kind: "classification_transport_failure",
+      message: "Provider unavailable",
+    }, 1_000);
+
+    expect(nextCloudAiConnectionCheck(failed, {
+      kind: "provider_contact_ok",
+      message: "Cloud classification completed.",
+    }, 2_000)).toBeNull();
+  });
+
+  it("does not combine failures from separate ten-minute episodes", () => {
+    const first = nextCloudAiConnectionCheck(null, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 1_000);
+    const later = nextCloudAiConnectionCheck(first, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 1_000 + CLOUD_AI_FAILURE_EPISODE_MS + 1);
+
+    expect(later?.consecutiveFailures).toBe(1);
+    expect(isEstablishedCloudAiDisconnect(later)).toBe(false);
+  });
+
+  it("still confirms two failures that land exactly at the episode boundary", () => {
+    const first = nextCloudAiConnectionCheck(null, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 1_000);
+    const second = nextCloudAiConnectionCheck(first, {
+      kind: "classification_transport_failure",
+      message: "TypeError: Failed to fetch",
+    }, 1_000 + CLOUD_AI_FAILURE_EPISODE_MS);
+
+    expect(second?.consecutiveFailures).toBe(2);
+    expect(isEstablishedCloudAiDisconnect(second)).toBe(true);
   });
 });
 

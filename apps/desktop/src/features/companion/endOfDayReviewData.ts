@@ -1,4 +1,5 @@
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import { isBrowserHistoryImportSegment } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
 import {
   DAILY_LEADERBOARD_CHECKPOINT_MINUTE,
@@ -39,7 +40,16 @@ export const END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS = 3 * 60 * 60;
 export const END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS = 15 * 60 * 1000;
 
 export function sumEndOfDayReviewTrackedSeconds(segments: readonly ActivitySegment[]): number {
-  return segments.reduce((total, segment) => total + Math.max(0, segment.durationSeconds), 0);
+  // Imported history reconstructs the dashboard, but it was not observed by
+  // Drifty after installation and cannot make a thin install day review-ready.
+  return segments.reduce(
+    (total, segment) => total + (
+      isBrowserHistoryImportSegment(segment) || !Number.isFinite(segment.durationSeconds)
+        ? 0
+        : Math.max(0, segment.durationSeconds)
+    ),
+    0,
+  );
 }
 
 export function collectMissingEndOfDayReviewIconRequests(event: EndOfDayReviewEvent): AppIdentity[] {

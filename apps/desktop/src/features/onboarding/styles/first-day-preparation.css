@@ -101,6 +101,12 @@
   animation: firstDayPrepFlip 10.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
 }
 
+.first-day-prep__mark--paused,
+.first-day-prep__mark--paused .first-day-prep__mark-glow,
+.first-day-prep__mark--paused .first-day-prep__hourglass {
+  animation: none;
+}
+
 /* ---- Copy ---- */
 .first-day-prep__copy {
   display: flex;
@@ -122,7 +128,7 @@
   font-size: 14px;
   line-height: 1.5;
   color: #8a887f;
-  max-width: 320px;
+  max-width: min(420px, calc(100vw - 64px));
   animation: firstDayPrepLineIn 460ms ease both;
 }
 
@@ -160,6 +166,40 @@
   font-variant-numeric: tabular-nums;
 }
 
+.first-day-prep__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 64px));
+}
+
+.first-day-prep__action {
+  min-width: 104px;
+  min-height: 34px;
+  padding: 7px 14px;
+  border: 1px solid rgba(28, 28, 25, 0.12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #4b4a45;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.first-day-prep__action--primary {
+  border-color: transparent;
+  background: #1c1c19;
+  color: #fff;
+}
+
+.first-day-prep__action:focus-visible {
+  outline: 2px solid #b18cff;
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .first-day-prep__hourglass,
   .first-day-prep__mark,
@@ -172,4 +212,33 @@
   .first-day-prep__progress--indeterminate .first-day-prep__progress-fill {
     animation-duration: 2.4s;
   }
+}
+:root[data-theme="dark"] .first-day-prep {
+  background:
+    radial-gradient(120% 90% at 50% 8%, #2a2924 0%, #1c1c19 45%, #141412 100%);
+  color: #f5f4ef;
+}
+
+:root[data-theme="dark"] .first-day-prep__line {
+  color: #b3b0a6;
+}
+
+:root[data-theme="dark"] .first-day-prep__percent {
+  color: #8f8c82;
+}
+
+:root[data-theme="dark"] .first-day-prep__progress {
+  background: rgba(245, 244, 239, 0.12);
+}
+
+:root[data-theme="dark"] .first-day-prep__action {
+  border-color: rgba(245, 244, 239, 0.16);
+  background: rgba(28, 28, 25, 0.72);
+  color: #d8d5cc;
+}
+
+:root[data-theme="dark"] .first-day-prep__action--primary {
+  border-color: transparent;
+  background: #f5f4ef;
+  color: #1c1c19;
 }

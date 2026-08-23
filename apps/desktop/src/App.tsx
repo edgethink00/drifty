@@ -61,6 +61,9 @@ import {
 } from "./features/sidebar/sidebarUpgradeDismissal";
 import {
   aiConnectionIssueKindFromMessage,
+  isEstablishedCloudAiDisconnect,
+  nextCloudAiConnectionCheck,
+  type CloudAiConnectionCheck,
 } from "./features/ai-connection/aiConnectionHealth";
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
@@ -119,6 +122,7 @@ import {
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
+import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
 import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import {
   WatcherPeek,
@@ -1036,6 +1040,30 @@ export default function App() {
   const [aiClassificationUsageDay, setAiClassificationUsageDay] = useState<string | null>(null);
   const [classificationActionLoading, setClassificationActionLoading] = useState(false);
   const [classificationSummary, setClassificationSummary] = useState<AiClassificationSummary | null>(null);
+  const [cloudAiConnectionCheck, setCloudAiConnectionCheck] = useState<CloudAiConnectionCheck | null>(null);
+  const cloudAiConnectionGenerationRef = useRef(0);
+  const recordCloudAiClassificationSummary = useCallback((summary: AiClassificationSummary, generation: number) => {
+    if (generation !== cloudAiConnectionGenerationRef.current) return;
+    if (summary.status === "error" && summary.failureKind !== "content") {
+      setCloudAiConnectionCheck((current) => nextCloudAiConnectionCheck(current, {
+        kind: "classification_transport_failure",
+        message: summary.message,
+      }, Date.now()));
+      return;
+    }
+    if (summary.usedAiProvider !== true) return;
+    setCloudAiConnectionCheck((current) => nextCloudAiConnectionCheck(current, {
+      kind: "provider_contact_ok",
+      message: summary.message,
+    }, Date.now()));
+  }, []);
+  const recordCloudAiClassificationError = useCallback((message: string, generation: number) => {
+    if (generation !== cloudAiConnectionGenerationRef.current) return;
+    setCloudAiConnectionCheck((current) => nextCloudAiConnectionCheck(current, {
+      kind: "classification_transport_failure",
+      message,
+    }, Date.now()));
+  }, []);
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
   const [compactHistoryCacheRevision, setCompactHistoryCacheRevision] = useState(0);
@@ -1131,10 +1159,8 @@ export default function App() {
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
   } = useAuth();
-  const featureNewBadges = useFeatureNewBadges(
-    readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt,
-    petModeEnabled,
-  );
+  const onboardingCompletedAt = readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt ?? null;
+  const featureNewBadges = useFeatureNewBadges(onboardingCompletedAt, petModeEnabled);
   const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
   const isEffectiveAuthRequired = isAuthRequired;
   const allowsEffectiveAnonymousAuth = allowsAnonymousAuth && !isEffectiveAuthRequired;
@@ -1147,6 +1173,7 @@ export default function App() {
   const isPolicySignedIn = Boolean(user) && (!isEffectiveAuthRequired || hasRequiredAccountAuth);
   const requestCloudBillingAuth = openDefaultAuthModal;
   const {
+    billingActionError,
     billingCheckoutLoadingInterval,
     billingEntitlement,
     billingEntitlementError,
@@ -1373,6 +1400,9 @@ export default function App() {
       ? "cloud"
       : "disabled";
   const classificationActivity = useClassificationActivity();
+  const establishedCloudClassificationIssueKind = isEstablishedCloudAiDisconnect(cloudAiConnectionCheck)
+    ? cloudAiConnectionCheck?.issueKind ?? null
+    : null;
   const aiConnectionStatus = resolveAiConnectionStatus({
     canUseCloudAi: canUseCloudAiClassification,
     localProviderStatus: localAiProviderStatus,
@@ -1383,9 +1413,7 @@ export default function App() {
     // Local providers report connectivity through localProviderStatus (with
     // failure hysteresis); only cloud runs surface summary errors here, and
     // content-level failures (provider answered, output unusable) never do.
-    classificationIssueKind: !localAiClassificationOptions && classificationSummary?.status === "error" && classificationSummary.failureKind !== "content"
-      ? aiConnectionIssueKindFromMessage(classificationSummary.message)
-      : null,
+    classificationIssueKind: !localAiClassificationOptions ? establishedCloudClassificationIssueKind : null,
     cloudIssueKind: billingEntitlementError
       ? aiConnectionIssueKindFromMessage(billingEntitlementError)
       : billingEntitlement?.lockedReason === "device_limit_reached"
@@ -1400,6 +1428,8 @@ export default function App() {
       if (previousAiClassificationProviderKey === aiClassificationProviderKey) return current;
       return current?.status === "error" ? null : current;
     });
+    setCloudAiConnectionCheck(null);
+    cloudAiConnectionGenerationRef.current += 1;
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
   }, [aiClassificationProviderKey]);
   const isSettingsTab = activeTab === "settings";
@@ -2692,10 +2722,15 @@ export default function App() {
   useEffect(() => {
     localAiClassificationOptionsRef.current = localAiClassificationOptions;
   }, [localAiClassificationOptions]);
+  const canUseCloudAiClassificationRef = useRef(canUseCloudAiClassification);
+  useEffect(() => {
+    canUseCloudAiClassificationRef.current = canUseCloudAiClassification;
+  }, [canUseCloudAiClassification]);
   // Picking Local AI in onboarding routes classification to the managed model the
   // moment the download starts (driftyRoute "local"), so the route — not the
   // provider default — is the "user chose Local AI" signal.
   const managedLocalSelected = isManagedLocalAiRoute(localAiSetup);
+  const cloudAiSelected = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
   // Once onboarding closes with a managed download still in flight, this watcher
   // writes the ready model into the AI setup and sends the ready notification.
   useManagedLocalModelAttach(
@@ -2703,16 +2738,58 @@ export default function App() {
     setLocalAiSetup,
   );
 
-  const { rearm: rearmFirstDayPreparation } = useFirstDayPreparation({
-    canUseCloudAiClassification,
+  // The first-day gate owns its retries, but every real provider contact still
+  // feeds the same Cloud-health hysteresis as later background/manual runs.
+  const runFirstDayAiClassification = useCallback(async (
+    ...args: Parameters<typeof runAiClassification>
+  ): Promise<AiClassificationSummary> => {
+    const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
+    try {
+      const summary = await runAiClassification(...args);
+      if (args[2]?.localProvider) recordLocalAiClassificationSummary(summary);
+      else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
+      return summary;
+    } catch (error) {
+      const message = toErrorMessage(error);
+      if (args[2]?.localProvider) recordLocalAiClassificationError(message);
+      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
+      throw error;
+    }
+  }, [recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary]);
+  const runFirstDayAiClassificationUntilEmpty = useCallback(async (
+    ...args: Parameters<typeof runAiClassificationUntilEmpty>
+  ): Promise<AiClassificationSummary> => {
+    const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
+    try {
+      const summary = await runAiClassificationUntilEmpty(...args);
+      if (args[2]?.localProvider) recordLocalAiClassificationSummary(summary);
+      else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
+      return summary;
+    } catch (error) {
+      const message = toErrorMessage(error);
+      if (args[2]?.localProvider) recordLocalAiClassificationError(message);
+      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
+      throw error;
+    }
+  }, [recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary]);
+
+  const {
+    continueAnyway: continueFirstDayPreparationAnyway,
+    failure: firstDayPreparationFailure,
+    rearm: rearmFirstDayPreparation,
+    retry: retryFirstDayPreparation,
+  } = useFirstDayPreparation({
+    browserHistoryImportEnabled: browserHistoryBootstrapEnabled,
+    canUseCloudAiClassificationRef,
     clearLocalActivityCaches,
+    cloudAiSelected,
     localAiClassificationOptionsRef,
     managedLocalSelected,
     onReveal: () => setPreparingFirstDay(false),
     preparingFirstDay,
     refresh,
-    runAiClassification,
-    runAiClassificationUntilEmpty,
+    runAiClassification: runFirstDayAiClassification,
+    runAiClassificationUntilEmpty: runFirstDayAiClassificationUntilEmpty,
     selectDay,
     selectedDayRef,
     setPhase: setFirstDayPreparationPhase,
@@ -5075,7 +5152,8 @@ export default function App() {
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     /* Visibility controls only the resident capsule. A milestone is an alert,
        so a running tracker may announce it through the standalone surface. */
-    announcementsEnabled: status?.running === true,
+    announcementsEnabled: status?.running === true
+      && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt),
   });
 
   useCompanionReentryMoment({
@@ -5091,7 +5169,8 @@ export default function App() {
     startOfDayMinutes,
     currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,
     classificationOptions: companionFocusRecordClassificationOptions,
-    announcementsEnabled: status?.running === true,
+    announcementsEnabled: status?.running === true
+      && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt),
   });
 
   useCompanionLeaderboardMilestones({
@@ -5286,7 +5365,9 @@ export default function App() {
        are skipped silently. The leaderboard checkpoint keeps its own once-a-
        day marker so a skipped review never suppresses the publish. */
     const trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
-    const reviewDue = !reviewShown && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
+    const reviewDue = !reviewShown
+      && isInstallDayReviewEligible(onboardingCompletedAt, todayDay, startOfDayMinutes)
+      && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
     if (!reviewDue && leaderboardCheckpointDone) return;
 
     if (reviewDue) {
@@ -5349,7 +5430,7 @@ export default function App() {
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });
-  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, status?.running, syncLeaderboardPublication, todayDay]);
+  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -5802,6 +5883,7 @@ export default function App() {
     if (isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return;
     const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
     const trigger = isFocused ? "focused_idle" : "background_threshold";
+    const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
 
     aiClassificationInFlightRef.current = true;
     try {
@@ -5810,6 +5892,7 @@ export default function App() {
         ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
         : await runAiClassificationForUnknownThreshold(query, threshold);
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
+      else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       if (summary.status === "empty" && summary.savedRecords === 0) return;
       if (selectedDayRef.current === today) {
         setClassificationSummary(summary);
@@ -5833,6 +5916,7 @@ export default function App() {
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
+      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
       captureAiClassificationRun(trigger, providerKind, "current_day", {
         status: "error",
         selectedSegments: 0,
@@ -5845,7 +5929,7 @@ export default function App() {
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, preparingFirstDay, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
 
   useEffect(() => {
     // Preview/demo fixtures ship pre-classified segments and seed a cloud-
@@ -5990,10 +6074,17 @@ export default function App() {
     selectDay(logicalTodayIsoDate(startOfDayMinutes));
     navigateToTab("dashboard", "Today");
     setOnboardingOpen(false);
-    if (state.browserHistoryBootstrapEnabled && !shouldBlockLocalTrackerAccess) {
+    const shouldPrepareFirstDay = !shouldBlockLocalTrackerAccess && (
+      state.browserHistoryBootstrapEnabled
+      || cloudAiSelected
+      || managedLocalSelected
+      || Boolean(localAiClassificationOptions)
+    );
+    if (shouldPrepareFirstDay) {
       rearmFirstDayPreparation();
       setFirstDayWorkLabel(state.workType);
-      setFirstDayPreparationPhase("importing");
+      setFirstDayPreparationPhase(state.browserHistoryBootstrapEnabled ? "importing" : "classifying");
+      setFirstDayPreparationProgress(null);
       setPreparingFirstDay(true);
     }
   }
@@ -6195,6 +6286,7 @@ export default function App() {
     const executionUsageDay = todayIsoDate();
     const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
     const range = selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
+    const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
     setClassificationActionLoading(true);
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: "Running AI classification..." });
@@ -6204,6 +6296,7 @@ export default function App() {
         ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
         : await runAiClassification(toClassificationQueryForDay(selectedDay));
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
+      else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary(summary);
       if (summary.metrics) setClassificationMetrics(summary.metrics);
       const nextUsage = await resolveAiClassificationUsageFromExecutionDelta(executionUsageDay, usageBefore);
@@ -6217,6 +6310,7 @@ export default function App() {
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
+      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
@@ -6244,6 +6338,7 @@ export default function App() {
     const executionUsageDay = todayIsoDate();
     const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
     const range = targetDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
+    const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
     setClassificationActionLoading(true);
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: `Classifying all unclassified activity for ${formatDayLabel(targetDay)}...` });
@@ -6253,6 +6348,7 @@ export default function App() {
         ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, localAiClassificationOptions)
         : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
+      else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary({
         ...summary,
         message: `${summary.message} Target: ${formatDayLabel(targetDay)}.`,
@@ -6269,6 +6365,7 @@ export default function App() {
     } catch (nextError) {
       const message = toErrorMessage(nextError);
       if (localAiClassificationOptions) recordLocalAiClassificationError(message);
+      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
@@ -6549,6 +6646,7 @@ export default function App() {
 
   const effectiveBillingEntitlement = activeDashboardAiUnavailablePreviewInput?.billingEntitlement ?? billingEntitlement;
   const effectiveBillingEntitlementError = activeDashboardAiUnavailablePreviewInput?.billingEntitlementError ?? billingEntitlementError;
+  const effectiveBillingSettingsError = effectiveBillingEntitlementError ?? billingActionError;
   const effectiveBillingEntitlementLoading = activeDashboardAiUnavailablePreviewInput?.billingEntitlementLoading ?? billingEntitlementLoading;
   const effectiveIsSupabaseConfigured = activeDashboardAiUnavailablePreviewInput?.isSupabaseConfigured ?? isSupabaseConfigured;
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
@@ -6641,6 +6739,9 @@ export default function App() {
         <>
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
           <FirstDayPreparationScreen
+            failure={firstDayPreparationFailure}
+            onContinueAnyway={continueFirstDayPreparationAnyway}
+            onRetry={retryFirstDayPreparation}
             phase={firstDayPreparationPhase}
             progress={firstDayPreparationProgress}
             workActivityLabel={firstDayWorkLabel}
@@ -7368,7 +7469,7 @@ export default function App() {
                 {settingsSection === "account" && (
                   <AccountSettingsSection
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
-                    billingEntitlementError={effectiveBillingEntitlementError}
+                    billingEntitlementError={effectiveBillingSettingsError}
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive}

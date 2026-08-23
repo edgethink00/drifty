@@ -36,10 +36,22 @@ export type LocalAiConnectionEvent =
   // A classification run failed at the transport layer (fetch/HTTP/timeout).
   | { readonly kind: "classification_transport_failure"; readonly issueKind?: AiConnectionIssueKind; readonly message: string };
 
+export type CloudAiConnectionCheck = {
+  readonly issueKind: AiConnectionIssueKind;
+  readonly message: string;
+  readonly checkedAt: number;
+  readonly consecutiveFailures: number;
+};
+
+export type CloudAiConnectionEvent =
+  | { readonly kind: "provider_contact_ok"; readonly message: string }
+  | { readonly kind: "classification_transport_failure"; readonly issueKind?: AiConnectionIssueKind; readonly message: string };
+
 // A lone transport failure from a background classification run is weak
 // evidence (rate limits, wake-from-sleep blips); require this many consecutive
 // failures before tearing down an established "connected" state.
 export const CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD = 2;
+export const CLOUD_AI_FAILURE_EPISODE_MS = 10 * 60 * 1000;
 
 // Persistent disconnect status for chrome/status surfaces requires more than
 // one probe so a single failed launch test cannot flip the pill before the
@@ -105,6 +117,32 @@ export function nextLocalAiConnectionCheck(
 
 export function isEstablishedLocalAiDisconnect(check: LocalAiConnectionCheck | null): boolean {
   return check?.status === "failed" && check.consecutiveFailures >= ESTABLISHED_DISCONNECT_FAILURE_THRESHOLD;
+}
+
+/**
+ * Background Cloud classification is a health signal, not a direct connection
+ * test. A single wake/auth/network blip starts an episode but does not surface
+ * a global issue; a second consecutive failure within the episode confirms it.
+ */
+export function nextCloudAiConnectionCheck(
+  previousCheck: CloudAiConnectionCheck | null,
+  event: CloudAiConnectionEvent,
+  checkedAt: number,
+): CloudAiConnectionCheck | null {
+  if (event.kind === "provider_contact_ok") return null;
+  const continuesEpisode = previousCheck !== null
+    && checkedAt >= previousCheck.checkedAt
+    && checkedAt - previousCheck.checkedAt <= CLOUD_AI_FAILURE_EPISODE_MS;
+  return {
+    issueKind: event.issueKind ?? aiConnectionIssueKindFromMessage(event.message),
+    message: event.message,
+    checkedAt,
+    consecutiveFailures: (continuesEpisode ? previousCheck.consecutiveFailures : 0) + 1,
+  };
+}
+
+export function isEstablishedCloudAiDisconnect(check: CloudAiConnectionCheck | null): boolean {
+  return (check?.consecutiveFailures ?? 0) >= CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD;
 }
 
 const NETWORK_ERROR_PATTERNS = [
