@@ -280,7 +280,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, hasEnabledEnhancedContextSetting, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
@@ -331,6 +331,9 @@ const LazyHistoryView = lazy(async () => ({
 }));
 const LazyProjectsPage = lazy(async () => ({
   default: (await import("./features/projects/ProjectsPage")).ProjectsPage,
+}));
+const LazyAgentsPage = lazy(async () => ({
+  default: (await import("./features/dev-signals/AgentsPage")).AgentsPage,
 }));
 const LazySocialPage = lazy(async () => ({
   default: (await import("./features/social/SocialPage")).SocialPage,
@@ -513,6 +516,7 @@ export default function App() {
   );
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
+  const [agentsBetaEnabled, setAgentsBetaEnabled] = useState(resolveInitialAgentsBetaEnabled);
   const [legacyShellBlurPreviewEnabled, setLegacyShellBlurPreviewEnabled] = useState(resolveInitialLegacyShellBlurPreviewEnabled);
   const [floatingCompanionDevEnabled, setFloatingCompanionDevEnabled] = useState(resolveInitialFloatingCompanionDevEnabled);
   const [teamSubView, setTeamSubView] = useState<TeamProjectsSubView>("dashboards");
@@ -529,6 +533,7 @@ export default function App() {
   const effectiveEnhancedContextSettings = resolveEffectiveEnhancedContextSettings(isDevModeActive, enhancedContextSettings);
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
+  const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
   const [companionMenuBarDisplayMode, setCompanionMenuBarDisplayMode] = useState(resolveInitialCompanionMenuBarDisplayMode);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
@@ -3138,6 +3143,7 @@ export default function App() {
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
+    if (agentsBetaEnabled) setAgentsBetaEnabled(false);
     if (floatingCompanionDevEnabled) setFloatingCompanionDevEnabled(false);
     if (devWebAccountPreviewEnabled) setDevWebAccountPreviewEnabled(false);
     if (forceChromiumAxCaptureEnabled) setForceChromiumAxCaptureEnabled(false);
@@ -3147,7 +3153,7 @@ export default function App() {
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
@@ -3179,6 +3185,17 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(PROFILE_BETA_STORAGE_KEY, canOpenProfileBeta ? "1" : "0");
   }, [canOpenProfileBeta]);
+
+  useEffect(() => {
+    window.localStorage.setItem(AGENTS_BETA_STORAGE_KEY, canOpenAgentsBeta ? "1" : "0");
+  }, [canOpenAgentsBeta]);
+
+  // Leaving the agents tab open when the toggle goes off would strand the user
+  // on a surface the sidebar no longer offers, so send them back to the day.
+  useEffect(() => {
+    if (activeTab !== "agents" || canOpenAgentsBeta) return;
+    navigateToTab("dashboard", "Today");
+  }, [activeTab, canOpenAgentsBeta, navigateToTab]);
 
   // Profile is a Dev-mode beta surface; without the gate, profile requests land
   // on the leaderboard (replacing the history entry so back/forward stays sane).
@@ -6657,6 +6674,18 @@ export default function App() {
               {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
             </button>
           ))}
+          {canOpenAgentsBeta ? (
+            <button
+              type="button"
+              className={activeTab === "agents" ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
+              aria-current={activeTab === "agents" ? "page" : undefined}
+              onClick={() => navigateToTab("agents")}
+            >
+              <NavIcon type="agents" />
+              <span>Your Agents</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Your Agents</span> : null}
+            </button>
+          ) : null}
         </nav>
 
         <div className="nav-label">Activity</div>
@@ -7030,6 +7059,11 @@ export default function App() {
             onSelectDay={selectDay}
           />
         ) : null}
+
+        {/* Your Agents: agent time and commit output, sibling of the dashboard
+            views. Dev-mode beta preview, so the surface is gated too — not just
+            its sidebar entry. */}
+        {activeTab === "agents" && canOpenAgentsBeta ? <LazyAgentsPage /> : null}
 
         {/* Classification */}
         {activeTab === "classification" ? (
@@ -7544,8 +7578,10 @@ export default function App() {
                     onTogglePetModeGuides={handleTogglePetModeGuides}
                     teamsBetaEnabled={teamsBetaEnabled}
                     profileBetaEnabled={profileBetaEnabled}
+                    agentsBetaEnabled={agentsBetaEnabled}
                     onTeamsBetaChange={setTeamsBetaEnabled}
                     onProfileBetaChange={setProfileBetaEnabled}
+                    onAgentsBetaChange={setAgentsBetaEnabled}
                     legacyShellBlurPreviewEnabled={legacyShellBlurPreviewEnabled}
                     onLegacyShellBlurPreviewEnabledChange={setLegacyShellBlurPreviewEnabled}
                     onPreviewDashboardAiUnavailableCase={previewDashboardAiUnavailableCase}

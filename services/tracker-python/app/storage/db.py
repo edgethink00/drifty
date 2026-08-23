@@ -40,7 +40,7 @@ VALID_RULE_MATCH_SCOPES = {"surface", "detail"}
 VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", "siteUrl"}
 
 VALID_PROJECT_STATUSES = {"active", "archived"}
-VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword"}
+VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword", "repo_path"}
 DEFAULT_PROJECT_COLOR = "#6366f1"
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
@@ -471,6 +471,48 @@ class TrackerDatabase:
                   deletion_uid TEXT PRIMARY KEY,
                   applied_at TEXT NOT NULL
                 );
+
+                -- Dev signals. Local-only: intentionally outside the sync
+                -- triggers and never mirrored to shared surfaces.
+                CREATE TABLE IF NOT EXISTS dev_commit_events (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  repo_key TEXT NOT NULL,
+                  commit_sha TEXT NOT NULL,
+                  authored_at TEXT NOT NULL,
+                  insertions INTEGER,
+                  deletions INTEGER,
+                  files_changed INTEGER,
+                  ingested_at TEXT NOT NULL,
+                  UNIQUE(repo_key, commit_sha)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_dev_commit_events_authored
+                ON dev_commit_events(datetime(authored_at));
+
+                CREATE TABLE IF NOT EXISTS dev_repos (
+                  repo_key TEXT PRIMARY KEY,
+                  repo_path TEXT NOT NULL,
+                  author_email TEXT,
+                  created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS agent_session_events (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  provider TEXT NOT NULL,
+                  session_key TEXT NOT NULL,
+                  turn_index INTEGER NOT NULL,
+                  started_at TEXT NOT NULL,
+                  ended_at TEXT NOT NULL,
+                  active_seconds INTEGER NOT NULL,
+                  cwd_key TEXT,
+                  model TEXT,
+                  total_tokens INTEGER,
+                  ingested_at TEXT NOT NULL,
+                  UNIQUE(provider, session_key, turn_index)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_agent_session_events_started
+                ON agent_session_events(datetime(started_at));
 
                 INSERT OR IGNORE INTO sync_counter(id, seq) VALUES (1, 0);
                 """
@@ -2358,6 +2400,154 @@ class TrackerDatabase:
                 else:
                     skipped_count += 1
         return {"matchedCount": matched_count, "appliedCount": applied_count, "skippedCount": skipped_count}
+
+    # ---- Dev signals -----------------------------------------------------
+    #
+    # These tables are local-only by design: they are absent from the sync
+    # triggers above and must never reach team, leaderboard, or profile
+    # surfaces.
+
+    def list_dev_repos(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT repo_key, repo_path, author_email, created_at FROM dev_repos ORDER BY created_at ASC"
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def save_dev_repo(self, repo_key: str, repo_path: str, author_email: str | None) -> dict[str, Any]:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO dev_repos (repo_key, repo_path, author_email, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(repo_key) DO UPDATE SET
+                  repo_path = excluded.repo_path,
+                  author_email = excluded.author_email
+                """,
+                (repo_key, repo_path, author_email, timestamp),
+            )
+        return {"repoKey": repo_key, "repoPath": repo_path, "authorEmail": author_email}
+
+    def delete_dev_repo(self, repo_key: str) -> int:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM dev_commit_events WHERE repo_key = ?", (repo_key,))
+            cursor = conn.execute("DELETE FROM dev_repos WHERE repo_key = ?", (repo_key,))
+            return cursor.rowcount
+
+    def save_dev_commit_events(self, events: list[dict[str, Any]]) -> int:
+        """Insert commit events, ignoring ones already stored.
+
+        Ingestion re-reads overlapping windows, so the unique constraint on
+        (repo_key, commit_sha) carries the deduplication.
+        """
+        if not events:
+            return 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        with self.connect() as conn:
+            for event in events:
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO dev_commit_events
+                      (repo_key, commit_sha, authored_at, insertions, deletions,
+                       files_changed, ingested_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event.get("repoKey"),
+                        event.get("commitSha"),
+                        event.get("authoredAt"),
+                        event.get("insertions"),
+                        event.get("deletions"),
+                        event.get("filesChanged"),
+                        timestamp,
+                    ),
+                )
+                inserted += cursor.rowcount
+        return inserted
+
+    def fetch_dev_commit_events(self, start: str, end: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT repo_key, commit_sha, authored_at, insertions, deletions, files_changed
+                FROM dev_commit_events
+                WHERE datetime(authored_at) >= datetime(?)
+                  AND datetime(authored_at) < datetime(?)
+                ORDER BY datetime(authored_at) ASC
+                """,
+                (start, end),
+            ).fetchall()
+        return [
+            {
+                "repoKey": row["repo_key"],
+                "commitSha": row["commit_sha"],
+                "authoredAt": row["authored_at"],
+                "insertions": row["insertions"],
+                "deletions": row["deletions"],
+                "filesChanged": row["files_changed"],
+            }
+            for row in rows
+        ]
+
+    def save_agent_session_events(self, events: list[dict[str, Any]]) -> int:
+        if not events:
+            return 0
+        timestamp = datetime.now(timezone.utc).isoformat()
+        inserted = 0
+        with self.connect() as conn:
+            for event in events:
+                cursor = conn.execute(
+                    """
+                    INSERT OR IGNORE INTO agent_session_events
+                      (provider, session_key, turn_index, started_at, ended_at,
+                       active_seconds, cwd_key, model, total_tokens, ingested_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event.get("provider"),
+                        event.get("sessionKey"),
+                        event.get("turnIndex"),
+                        event.get("startedAt"),
+                        event.get("endedAt"),
+                        event.get("activeSeconds"),
+                        event.get("cwdKey"),
+                        event.get("model"),
+                        event.get("totalTokens"),
+                        timestamp,
+                    ),
+                )
+                inserted += cursor.rowcount
+        return inserted
+
+    def fetch_agent_session_events(self, start: str, end: str) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT provider, session_key, turn_index, started_at, ended_at,
+                       active_seconds, cwd_key, model, total_tokens
+                FROM agent_session_events
+                WHERE datetime(started_at) < datetime(?)
+                  AND datetime(ended_at) >= datetime(?)
+                ORDER BY datetime(started_at) ASC
+                """,
+                (end, start),
+            ).fetchall()
+        return [
+            {
+                "provider": row["provider"],
+                "sessionKey": row["session_key"],
+                "turnIndex": row["turn_index"],
+                "startedAt": row["started_at"],
+                "endedAt": row["ended_at"],
+                "activeSeconds": row["active_seconds"],
+                "cwdKey": row["cwd_key"],
+                "model": row["model"],
+                "totalTokens": row["total_tokens"],
+            }
+            for row in rows
+        ]
 
     def get_projects(self) -> list[dict[str, Any]]:
         with self.connect() as conn:

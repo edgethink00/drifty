@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-get-dev-signals"
+description = "Enables the tracker_get_dev_signals command without any pre-configured scope."
+commands.allow = ["tracker_get_dev_signals"]
+
+[[permission]]
+identifier = "deny-tracker-get-dev-signals"
+description = "Denies the tracker_get_dev_signals command without any pre-configured scope."
+commands.deny = ["tracker_get_dev_signals"]

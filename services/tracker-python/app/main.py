@@ -48,6 +48,13 @@ from app.tracker.adaptive_context.developer_diagnostics import (
     save_developer_diagnostics,
 )
 from app.sentry_setup import capture_tracker_exception, init_tracker_sentry
+from app.tracker.dev_signals.aggregation import summarize_agent_time
+from app.tracker.dev_signals.discovery import discover_repositories as discover_dev_repositories
+from app.tracker.dev_signals.ingest import (
+    DEFAULT_BACKFILL_DAYS as DEV_SIGNALS_BACKFILL_DAYS,
+    register_repo as register_dev_repo,
+    run_ingest as run_dev_signals_ingest,
+)
 
 if TYPE_CHECKING:
     from app.tracker.macos_workspace import Snapshot
@@ -1209,6 +1216,111 @@ def get_classification_metrics(payload: dict):
     return response(True, database().classification_metrics(start, end))
 
 
+def discover_dev_repos(payload: dict):
+    """Scan for git repositories without registering any of them.
+
+    Discovery is a suggestion surface: it reports what exists so the user can
+    choose, and never starts tracking on its own.
+    """
+    roots = payload.get("roots")
+    if roots is not None and not isinstance(roots, list):
+        return response(False, error="roots must be a list")
+    cleaned = [str(root) for root in roots if isinstance(root, str) and root] if roots else None
+    tracked = {repo["repo_key"] for repo in database().list_dev_repos()}
+    discovered = discover_dev_repositories(cleaned)
+    return response(
+        True,
+        {
+            "repos": [
+                {
+                    "repoKey": repo.repo_key,
+                    "repoPath": repo.repo_path,
+                    "remoteIdentity": repo.remote_identity,
+                    "lastCommitAt": repo.last_commit_at,
+                    "worktreeCount": repo.worktree_count,
+                    "tracked": repo.repo_key in tracked,
+                }
+                for repo in discovered
+            ]
+        },
+    )
+
+
+def get_dev_repos(payload: dict):
+    return response(True, {"repos": database().list_dev_repos()})
+
+
+def save_dev_repo(payload: dict):
+    repo_path = payload.get("repoPath", payload.get("repo_path"))
+    if not isinstance(repo_path, str) or not repo_path:
+        return response(False, error="repoPath is required")
+    author_email = payload.get("authorEmail", payload.get("author_email"))
+    registered = register_dev_repo(
+        database(),
+        repo_path,
+        author_email if isinstance(author_email, str) and author_email else None,
+    )
+    if registered is None:
+        return response(False, error="path is not a git repository")
+    return response(True, registered)
+
+
+def delete_dev_repo(payload: dict):
+    repo_key = payload.get("repoKey", payload.get("repo_key"))
+    if not isinstance(repo_key, str) or not repo_key:
+        return response(False, error="repoKey is required")
+    return response(True, {"deleted": database().delete_dev_repo(repo_key)})
+
+
+def sync_dev_signals(payload: dict):
+    raw_days = payload.get("backfillDays", payload.get("backfill_days"))
+    try:
+        backfill_days = int(raw_days) if raw_days is not None else DEV_SIGNALS_BACKFILL_DAYS
+    except (TypeError, ValueError):
+        backfill_days = DEV_SIGNALS_BACKFILL_DAYS
+    result = run_dev_signals_ingest(database(), backfill_days=max(1, backfill_days))
+    return response(
+        True,
+        {
+            "commitsIngested": result.commits_ingested,
+            "agentTurnsIngested": result.agent_turns_ingested,
+            "filesScanned": result.files_scanned,
+            "skippedFiles": result.skipped_files,
+        },
+    )
+
+
+def get_dev_signals(payload: dict):
+    """Commit markers and agent time for one day.
+
+    Agent turns overlap when sessions run in parallel, so the summary reports
+    wall-clock time (real time with at least one agent working) separately from
+    the cumulative sum. Only wall-clock is comparable to tracked attention time.
+    """
+    start, end = day_bounds(payload)
+    db = database()
+    commits = db.fetch_dev_commit_events(start, end)
+    agent_events = db.fetch_agent_session_events(start, end)
+    summary = summarize_agent_time(agent_events)
+    return response(
+        True,
+        {
+            "commits": commits,
+            "agentTurns": agent_events,
+            "agentSummary": {
+                "wallClockSeconds": summary.wall_clock_seconds,
+                "cumulativeSeconds": summary.cumulative_seconds,
+                "concurrencyPeak": summary.concurrency_peak,
+                "parallelFactor": round(summary.parallel_factor, 2),
+                "spans": [
+                    {"start": span.start.isoformat(), "end": span.end.isoformat()}
+                    for span in summary.spans
+                ],
+            },
+        },
+    )
+
+
 def get_projects(payload: dict):
     return response(True, database().get_projects())
 
@@ -1584,6 +1696,12 @@ COMMANDS = {
     "get_projects": get_projects,
     "save_project": save_project,
     "delete_project": delete_project,
+    "discover_dev_repos": discover_dev_repos,
+    "get_dev_repos": get_dev_repos,
+    "save_dev_repo": save_dev_repo,
+    "delete_dev_repo": delete_dev_repo,
+    "sync_dev_signals": sync_dev_signals,
+    "get_dev_signals": get_dev_signals,
     "save_project_anchors": save_project_anchors,
     "delete_project_anchor": delete_project_anchor,
     "save_project_assignments": save_project_assignments,

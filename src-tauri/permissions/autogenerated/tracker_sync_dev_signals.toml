@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-sync-dev-signals"
+description = "Enables the tracker_sync_dev_signals command without any pre-configured scope."
+commands.allow = ["tracker_sync_dev_signals"]
+
+[[permission]]
+identifier = "deny-tracker-sync-dev-signals"
+description = "Denies the tracker_sync_dev_signals command without any pre-configured scope."
+commands.deny = ["tracker_sync_dev_signals"]

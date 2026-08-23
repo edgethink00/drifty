@@ -31,6 +31,9 @@ export const trackerInvokeCommands = [
   "tracker_refresh_non_ai_classifications",
   "tracker_get_classification_metrics",
   "tracker_get_projects",
+  "tracker_get_dev_signals",
+  "tracker_get_dev_repos",
+  "tracker_sync_dev_signals",
   "tracker_save_project",
   "tracker_delete_project",
   "tracker_save_project_anchors",
@@ -114,6 +117,9 @@ export type TrackerCommandMap = {
   tracker_refresh_non_ai_classifications: { args: { query: ClassificationQuery }; result: { deleted: number } };
   tracker_get_classification_metrics: { args: { query: ClassificationQuery }; result: ClassificationMetrics };
   tracker_get_projects: { args: undefined; result: Project[] };
+  tracker_get_dev_signals: { args: DevSignalsQueryArgs; result: DevSignalsDayPayload };
+  tracker_get_dev_repos: { args: undefined; result: { repos: DevRepoRecord[] } };
+  tracker_sync_dev_signals: { args: DevSignalsSyncArgs; result: DevSignalsSyncResult };
   tracker_save_project: { args: { query: { input: ProjectInput } }; result: Project };
   tracker_delete_project: { args: { query: { id: string } }; result: { deleted: number } };
   tracker_save_project_anchors: {
@@ -228,6 +234,68 @@ export interface DateRangeQuery {
 }
 
 export type TimelineQuery = DayQuery | DateRangeQuery;
+
+/** Flat args for tracker_get_dev_signals: the Rust command takes day/start/end directly. */
+export type DevSignalsQueryArgs = {
+  day?: string;
+  start?: string;
+  end?: string;
+};
+
+export type DevSignalsSyncArgs = {
+  backfillDays?: number;
+};
+
+export interface DevCommitEvent {
+  repoKey: string;
+  commitSha: string;
+  authoredAt: string;
+  insertions: number;
+  deletions: number;
+  filesChanged: number;
+}
+
+export interface AgentSessionTurnEvent {
+  provider: string;
+  sessionKey: string;
+  turnIndex: number;
+  startedAt: string;
+  endedAt: string;
+  activeSeconds: number;
+  cwdKey: string | null;
+  model: string | null;
+  totalTokens: number | null;
+}
+
+export interface AgentTimeSummaryPayload {
+  /** Real time with at least one agent working. Comparable to attention time. */
+  wallClockSeconds: number;
+  /** Sum across concurrent sessions. Never compared to attention time. */
+  cumulativeSeconds: number;
+  concurrencyPeak: number;
+  parallelFactor: number;
+  spans: { start: string; end: string }[];
+}
+
+export interface DevSignalsDayPayload {
+  commits: DevCommitEvent[];
+  agentTurns: AgentSessionTurnEvent[];
+  agentSummary: AgentTimeSummaryPayload;
+}
+
+export interface DevSignalsSyncResult {
+  commitsIngested: number;
+  agentTurnsIngested: number;
+  filesScanned: number;
+  skippedFiles: number;
+}
+
+export interface DevRepoRecord {
+  repo_key: string;
+  repo_path: string;
+  author_email: string | null;
+  created_at: string;
+}
 
 export interface TimelinePageCursor {
   beforeEndedAt: string;
@@ -744,6 +812,9 @@ export interface TrackerApi {
   refreshNonAiClassifications(query: ClassificationQuery): Promise<{ deleted: number }>;
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
   getProjects(): Promise<Project[]>;
+  getDevSignals(query: TimelineQuery): Promise<DevSignalsDayPayload | null>;
+  getDevRepos(): Promise<DevRepoRecord[]>;
+  syncDevSignals(backfillDays?: number): Promise<DevSignalsSyncResult | null>;
   saveProject(input: ProjectInput): Promise<Project>;
   deleteProject(id: string): Promise<{ deleted: number }>;
   saveProjectAnchors(projectId: string, anchors: ProjectAnchor[]): Promise<ProjectAnchor[]>;

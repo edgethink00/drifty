@@ -351,6 +351,19 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_get_projects");
     return result ?? [];
   },
+  async getDevSignals(query: TimelineQuery) {
+    // The Rust command takes day/start/end as flat args, mirroring the sidecar payload.
+    const result = await safeInvoke("tracker_get_dev_signals", { ...query });
+    return result ?? null;
+  },
+  async getDevRepos() {
+    const result = await safeInvoke("tracker_get_dev_repos");
+    return result?.repos ?? [];
+  },
+  async syncDevSignals(backfillDays?: number) {
+    const result = await safeInvoke("tracker_sync_dev_signals", backfillDays === undefined ? {} : { backfillDays });
+    return result ?? null;
+  },
   async saveProject(input: ProjectInput) {
     const result = await safeInvoke("tracker_save_project", { query: { input } });
     return result ?? {

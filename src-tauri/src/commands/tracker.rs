@@ -814,6 +814,55 @@ pub async fn tracker_get_projects(
 }
 
 #[tauri::command]
+pub async fn tracker_get_dev_signals(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    day: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_dev_signals(&app, day, start, end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_sync_dev_signals(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    backfill_days: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .sync_dev_signals(&app, backfill_days)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_dev_repos(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_dev_repos(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_save_project(
     app: AppHandle,
     controller: State<'_, TrackerController>,

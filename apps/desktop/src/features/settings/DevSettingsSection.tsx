@@ -87,8 +87,10 @@ type DevSettingsSectionProps = {
   readonly onInstallLatestBuild: () => void;
   readonly teamsBetaEnabled: boolean;
   readonly profileBetaEnabled: boolean;
+  readonly agentsBetaEnabled: boolean;
   readonly onTeamsBetaChange: (enabled: boolean) => void;
   readonly onProfileBetaChange: (enabled: boolean) => void;
+  readonly onAgentsBetaChange: (enabled: boolean) => void;
   readonly legacyShellBlurPreviewEnabled: boolean;
   readonly onLegacyShellBlurPreviewEnabledChange: (enabled: boolean) => void;
   readonly onPreviewDashboardAiUnavailableCase: () => void;
@@ -155,8 +157,10 @@ export function DevSettingsSection({
   onInstallLatestBuild,
   teamsBetaEnabled,
   profileBetaEnabled,
+  agentsBetaEnabled,
   onTeamsBetaChange,
   onProfileBetaChange,
+  onAgentsBetaChange,
   legacyShellBlurPreviewEnabled,
   onLegacyShellBlurPreviewEnabledChange,
   onPreviewDashboardAiUnavailableCase,
@@ -321,6 +325,15 @@ export function DevSettingsSection({
           </div>
           <div className="ctrl">
             <Toggle checked={profileBetaEnabled} onChange={onProfileBetaChange} ariaLabel="Toggle Profile beta" />
+          </div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">Your Agents (beta)</div>
+            <div className="desc">Show the Your Agents tab under the Dashboard section: agent session time from local Codex and Claude Code logs, paired with git commit activity. Reads only local files and keeps them local. Dev-mode opt-in.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />
           </div>
         </div>
         <div className="settings-row">

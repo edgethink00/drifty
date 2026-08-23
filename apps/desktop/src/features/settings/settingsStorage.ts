@@ -27,6 +27,7 @@ export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 
 export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
+export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
 export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
 /** Dev-only before/after switch for the shell glass: "1" restores the
  * previous CSS backdrop-filter implementation (the one that flickered) so it
@@ -431,6 +432,13 @@ export function resolveInitialTeamsBetaEnabled(): boolean {
 export function resolveInitialProfileBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(PROFILE_BETA_STORAGE_KEY) === "1";
+}
+
+/** Your Agents stays a Dev preview: it reads local agent session logs and git
+ *  history, so it only appears once a developer opts in. */
+export function resolveInitialAgentsBetaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(AGENTS_BETA_STORAGE_KEY) === "1";
 }
 
 export function resolveInitialLegacyShellBlurPreviewEnabled(): boolean {

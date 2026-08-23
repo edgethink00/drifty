@@ -407,6 +407,32 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_projects", json!({}))
     }
 
+    pub fn get_dev_signals(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_dev_signals", build_period_payload(day, start, end))
+    }
+
+    pub fn get_dev_repos(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_dev_repos", json!({}))
+    }
+
+    pub fn sync_dev_signals(
+        &self,
+        app: &AppHandle,
+        backfill_days: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        let mut payload = serde_json::Map::new();
+        if let Some(days) = backfill_days {
+            payload.insert("backfillDays".into(), json!(days));
+        }
+        self.invoke::<Value>(app, "sync_dev_signals", Value::Object(payload))
+    }
+
     pub fn get_project_assignments(
         &self,
         app: &AppHandle,
@@ -831,6 +857,8 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "search_classification_rule_candidates"
         | "get_projects"
         | "get_project_assignments"
+        | "get_dev_signals"
+        | "get_dev_repos"
         | "get_project_window_assignments"
         | "get_team_projects"
         | "get_team_project_assignments"
@@ -1673,6 +1701,8 @@ mod tests {
             "search_classification_rule_candidates",
             "get_projects",
             "get_project_assignments",
+            "get_dev_signals",
+            "get_dev_repos",
             "get_project_window_assignments",
             "get_team_projects",
             "get_team_project_assignments",

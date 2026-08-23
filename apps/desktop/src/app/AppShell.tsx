@@ -9,6 +9,9 @@ export function NavIcon({ type }: { type: NavIconType }) {
       return (<svg {...props}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5" /></svg>);
     case "calendar":
       return (<svg {...props}><rect x="4" y="5" width="16" height="15" rx="2" /><path d="M8 3v4M16 3v4M4 10h16" /><path d="M8 14h2M14 14h2M8 17h2" /></svg>);
+    case "agents":
+      // A terminal prompt: the machine-side of the day, next to home and calendar.
+      return (<svg {...props}><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m7 9 3 3-3 3" /><path d="M12.5 15H17" /></svg>);
     case "classification":
       return (<svg {...props}><path d="M4 5h16M4 12h10M4 19h14" /><circle cx="18" cy="12" r="2" /><circle cx="20" cy="19" r="2" /></svg>);
     case "projects":

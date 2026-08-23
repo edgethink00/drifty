@@ -33,6 +33,7 @@ export function toDashboardPeriodAnalytics(period: DashboardPeriod): DashboardPe
 export function toAppSurfaceAnalytics(tabId: TabId): AppSurfaceAnalyticsValue {
   switch (tabId) {
     case "dashboard":
+    case "agents":
     case "classification":
     case "projects":
     case "history":

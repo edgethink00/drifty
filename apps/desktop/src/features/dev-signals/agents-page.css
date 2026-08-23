@@ -1,0 +1,210 @@
+/* Your Agents — styling deltas only.
+
+   The page is composed from the day view's own pieces (dashboard-page-head,
+   flow-chart-card + FlowChartGrid, editorial-panel, app-usage-panel,
+   week-v2-grid--day, BreakdownSidePanel), so those carry their existing
+   styles. This file styles only what has no existing equivalent: the week
+   columns, the rhythm histogram, and the models list. Colour comes from
+   existing tokens; no dark-mode rules needed. */
+
+/* ── period toggle (ported from studyhall's dashboard-period-toggle) ──────── */
+
+/* studyhall solved the in-page Day/Week switch on this same design system: a
+   soft inset track with a raised active pill. Ported verbatim with drifty's
+   tokens so the two apps' toggles read as the same control. */
+.agents-period-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1.7px;
+  padding: 3px;
+  border: 0;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--text) 7%, var(--surface));
+}
+
+.agents-period-toggle button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 0.33rem 0.71rem;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-soft);
+  font-family: var(--font-display, inherit);
+  font-size: 0.675rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-transform: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.agents-period-toggle button:hover:not(.on) {
+  background: transparent;
+  color: var(--text);
+  transform: none;
+}
+
+.agents-period-toggle button.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  font-weight: 600;
+}
+
+/* ── week calendar (week-v2 system) ────────────────────────────────────── */
+
+/* The calendar itself is week-dashboard.css untouched; the deltas are a
+   bounded scroller (24h at 30px/h) and a totals foot row aligned to the same
+   rail+7 columns grid. */
+/* Explicit rows: some week-dashboard rules grid-place the scroller by row
+   number, which floated the foot above it under this page's class. */
+.agents-week-calendar {
+  margin-bottom: var(--block-gap);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.agents-week-calendar > .week-v2-calendar__legend { grid-row: 1; }
+.agents-week-calendar > .week-v2-calendar__scroller { grid-row: 2; }
+.agents-week-calendar > .agents-week-calendar__foot { grid-row: 3; }
+
+.agents-week-calendar__scroller { max-height: 26rem; }
+
+.agents-week-calendar__foot {
+  display: grid;
+  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
+  border-top: 1px solid var(--line);
+}
+
+.agents-week-calendar__foot-cell {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 0.4rem 0 0.45rem;
+  border-left: 1px solid var(--line);
+}
+
+.agents-week-calendar__foot-cell strong {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
+.agents-week-calendar__foot-cell small {
+  font-family: var(--font-mono);
+  font-size: 0.52rem;
+  color: var(--text-soft);
+  min-height: 0.62rem;
+}
+
+/* The agents page reuses the dashboard's single-panel treatment. */
+.content--agents:has(.day-split__main) {
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  border-radius: var(--content-panel-radius);
+}
+
+/* ── breakdown panel ───────────────────────────────────────────────────── */
+
+/* Sentence blocks: a labelled statement with its own supporting detail.
+   As the panel's lead block it needs no rule above it — the charts that
+   follow bring their own panel chrome. */
+.agents-story {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.agents-story--lead {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.agents-story__value {
+  font-family: var(--font-display, inherit);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.agents-story__detail {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.agents-story__meter {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--productivity-focus) 26%, transparent);
+  overflow: hidden;
+}
+
+.agents-story__meter span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--text) 42%, transparent);
+}
+
+/* Rhythm chart rides the focus-drift plot classes at the plot's own height;
+   the one delta is the commits series, which borrows drift's dashed line
+   treatment in the grey commits already use on this page. */
+.agents-rhythm-chart__commits-line {
+  stroke: color-mix(in srgb, var(--text) 45%, transparent);
+  stroke-width: 1.85;
+  stroke-dasharray: 5 4;
+}
+
+/* Models ranked list. */
+.agents-models {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agents-models__row {
+  display: grid;
+  grid-template-columns: minmax(0, 11rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.agents-models__name {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agents-models__bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  overflow: hidden;
+}
+
+.agents-models__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--productivity-focus);
+}
+
+.agents-models__figures {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
