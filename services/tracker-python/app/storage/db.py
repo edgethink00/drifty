@@ -227,6 +227,7 @@ class TrackerDatabase:
                   platform TEXT NOT NULL,
                   source TEXT NOT NULL,
                   confidence REAL,
+                  engagement_evidence TEXT,
                   raw_context_json TEXT
                 );
 
@@ -531,6 +532,7 @@ class TrackerDatabase:
             "youtube_is_shorts": "INTEGER",
             "browser_name": "TEXT",
             "site_source": "TEXT",
+            "engagement_evidence": "TEXT",
             "segment_uid": "TEXT",
             "origin_device_id": "TEXT",
             "sync_seq": "INTEGER NOT NULL DEFAULT 0",
@@ -866,8 +868,12 @@ class TrackerDatabase:
                 and snapshot.site_source == "browser-history-title"
                 and snapshot.site_url is not None
             )
+            snapshot_engagement_evidence = snapshot.engagement_evidence
+            last_engagement_evidence = last["engagement_evidence"] if last else None
+            same_engagement_evidence = last_engagement_evidence == snapshot_engagement_evidence
             exact_context_match = (
                 last
+                and same_engagement_evidence
                 and last["app_name"] == snapshot.app_name
                 and last["window_title"] == snapshot.window_title
                 and last["site_domain"] == snapshot.site_domain
@@ -880,7 +886,7 @@ class TrackerDatabase:
 
             if (
                 last
-                and (exact_context_match or history_enrichment)
+                and (exact_context_match or (history_enrichment and same_engagement_evidence))
                 and self._within_merge_gap(last["ended_at"], snapshot.observed_at, max_merge_gap_seconds)
             ):
                 conn.execute(
@@ -899,6 +905,7 @@ class TrackerDatabase:
                         site_source = ?,
                         source = ?,
                         confidence = ?,
+                        engagement_evidence = ?,
                         raw_context_json = ?
                     WHERE id = ?
                     """,
@@ -916,6 +923,7 @@ class TrackerDatabase:
                         snapshot.site_source,
                         snapshot.source,
                         getattr(snapshot, "capture_confidence", 1.0),
+                        snapshot_engagement_evidence,
                         self._snapshot_raw_context_json(snapshot),
                         last["id"],
                     ),
@@ -943,8 +951,9 @@ class TrackerDatabase:
                     platform,
                     source,
                     confidence,
+                    engagement_evidence,
                     raw_context_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -965,9 +974,28 @@ class TrackerDatabase:
                     CAPTURE_PLATFORM,
                     snapshot.source,
                     getattr(snapshot, "capture_confidence", 1.0),
+                    snapshot_engagement_evidence,
                     self._snapshot_raw_context_json(snapshot),
                 ),
             )
+
+    def latest_local_engagement_evidence(self) -> str | None:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT engagement_evidence
+                FROM activity_segments
+                WHERE origin_device_id IS NULL
+                  AND source != ?
+                ORDER BY datetime(ended_at) DESC, id DESC
+                LIMIT 1
+                """,
+                (BROWSER_HISTORY_IMPORT_SOURCE,),
+            ).fetchone()
+        if row is None:
+            return None
+        value = row["engagement_evidence"]
+        return value if value == "foreground-audio" else None
 
     def backfill_recent_browser_history_context(
         self,
@@ -1123,8 +1151,9 @@ class TrackerDatabase:
                     platform,
                     source,
                     confidence,
+                    engagement_evidence,
                     raw_context_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     segment.get("segment_uid") or str(uuid.uuid4()),
@@ -1145,6 +1174,7 @@ class TrackerDatabase:
                     segment.get("platform", "macos"),
                     segment.get("source", "unknown"),
                     segment.get("confidence"),
+                    segment.get("engagement_evidence"),
                     sanitized_raw_context_json(segment.get("raw_context_json")),
                 ),
             )
@@ -1954,6 +1984,9 @@ class TrackerDatabase:
                     skipped += 1
                     continue
 
+                # Strict receive allow-list: engagement_evidence and raw_context_json
+                # are local sensor/context fields and are intentionally ignored even
+                # if a malformed or older peer includes them in a sync payload.
                 values = (
                     item.get("startedAt"),
                     item.get("endedAt"),
@@ -3754,6 +3787,7 @@ class TrackerDatabase:
                 activity_segments.platform,
                 activity_segments.source,
                 activity_segments.confidence,
+                activity_segments.engagement_evidence,
                 activity_segments.origin_device_id,
                 youtube_video_metadata.category AS youtube_category,
                 youtube_video_metadata.channel_name AS youtube_channel_name,

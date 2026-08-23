@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -212,6 +213,44 @@ class LocalWritePathIsolationTests(DeviceSyncTestCase):
 
 
 class SyncOutboxTests(DeviceSyncTestCase):
+    def test_outbox_keeps_local_engagement_sensor_evidence_out_of_cloud_payload(self) -> None:
+        self._insert_local_segment(
+            0,
+            engagement_evidence="foreground-audio",
+            raw_context_json='{"engagement_evidence":"foreground-audio"}',
+        )
+
+        outbox = self.database.get_sync_outbox(0, limit=10, hot_grace_seconds=0)
+
+        self.assertEqual(len(outbox["items"]), 1)
+        serialized_payload = json.dumps(outbox["items"], sort_keys=True)
+        self.assertNotIn("engagementEvidence", serialized_payload)
+        self.assertNotIn("engagement_evidence", serialized_payload)
+        self.assertNotIn("foreground-audio", serialized_payload)
+
+    def test_sync_receiver_discards_injected_engagement_sensor_evidence(self) -> None:
+        segment_uid = "99999999-0000-0000-0000-000000000099"
+        remote = self._remote_segment(
+            segment_uid,
+            started_at="2026-07-06T09:00:00+00:00",
+            ended_at="2026-07-06T09:01:00+00:00",
+            engagementEvidence="foreground-audio",
+            engagement_evidence="foreground-audio",
+            rawContextJson='{"engagement_evidence":"foreground-audio"}',
+        )
+
+        result = self.database.apply_synced_segments([remote])
+
+        self.assertEqual(result["inserted"], 1)
+        with self.database.connect() as conn:
+            row = conn.execute(
+                "SELECT engagement_evidence, raw_context_json FROM activity_segments WHERE segment_uid = ?",
+                (segment_uid,),
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertIsNone(row["engagement_evidence"])
+        self.assertIsNone(row["raw_context_json"])
+
     def test_outbox_returns_local_rows_after_cursor_with_classifications(self) -> None:
         self._insert_local_segment(0)
         self._insert_local_segment(1)

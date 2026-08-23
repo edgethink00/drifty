@@ -64,6 +64,39 @@ describe("aggregateTeamProjectDayTotals", () => {
     ]);
   });
 
+  it("excludes passive-supported segments from published team totals", () => {
+    const segments = [
+      segment("interactive", "2026-07-08T03:00:00.000Z", 600),
+      segment("passive", "2026-07-08T06:00:00.000Z", 300, {
+        engagementEvidence: "foreground-audio",
+      }),
+    ];
+    const assignments = [assignment("interactive", "p-code"), assignment("passive", "p-code")];
+
+    expect(aggregateTeamProjectDayTotals(assignments, segments, 0)).toEqual([
+      { project_id: "p-code", activity_date: "2026-07-08", seconds: 600 },
+    ]);
+  });
+
+  it("excludes passive-supported time even when a fixed window assigns it", () => {
+    const segments = [segment("passive", "2026-07-08T03:00:00.000Z", 300, {
+      endedAt: "2026-07-08T03:05:00.000Z",
+      engagementEvidence: "foreground-audio",
+    })];
+    const windows: ProjectWindowAssignmentRecord[] = [{
+      windowId: "passive-window",
+      windowStartedAt: "2026-07-08T03:00:00.000Z",
+      windowEndedAt: "2026-07-08T03:05:00.000Z",
+      durationSeconds: 300,
+      segmentOverlaps: [{ segmentId: "passive", durationSeconds: 300 }],
+      projectId: null,
+      teamProjectId: "team-a",
+      source: "ai",
+    }];
+
+    expect(aggregateTeamProjectDayTotals([], segments, 0, windows)).toEqual([]);
+  });
+
   it("returns nothing when there are no assignments", () => {
     expect(aggregateTeamProjectDayTotals([], [segment("s1", "2026-07-08T03:00:00.000Z", 100)], 0)).toEqual([]);
   });

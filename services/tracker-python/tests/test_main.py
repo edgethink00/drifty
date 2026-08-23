@@ -17,6 +17,7 @@ from app.storage.db import TrackerDatabase
 from app.storage.live_tail import fetch_live_tail
 from app.tracker.adaptive_context import developer_diagnostics
 from app.tracker.macos_workspace import Snapshot
+from app.tracker.macos_audio_activity import ForegroundAudioSample
 from app.tracker.power_state import PowerStateSample
 from tests.support_cleanup import temp_dir_closing_databases
 
@@ -343,7 +344,7 @@ class TrackerMainTests(unittest.TestCase):
             kill.assert_not_called()
 
     def test_stop_tracking_does_not_signal_tracker_for_another_database(self) -> None:
-        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+        with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
             pid_file = tracker_main.pid_path()
             pid_file.write_text("12345")
@@ -362,7 +363,7 @@ class TrackerMainTests(unittest.TestCase):
             self.assertFalse(pid_file.exists())
 
     def test_stop_tracking_signals_verified_tracker_daemon(self) -> None:
-        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+        with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             tracker_main.state_dir().mkdir(parents=True)
             pid_file = tracker_main.pid_path()
             pid_file.write_text("12345")
@@ -381,8 +382,34 @@ class TrackerMainTests(unittest.TestCase):
             self.assertIn(call(12345, tracker_main.signal.SIGTERM), kill.call_args_list)
             self.assertFalse(pid_file.exists())
 
+    def test_stop_tracking_clears_active_passive_diagnostics_after_confirmed_exit(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            db_path = Path(tmp) / "tracker.sqlite3"
+            db = TrackerDatabase(db_path)
+            db.set_meta(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "2026-04-06T09:05:00+00:00")
+            db.set_meta("foreground_audio_detection_available", "true")
+            db.set_meta("foreground_audio_active", "true")
+            db.set_meta("foreground_audio_reason", "active_output_owned_by_frontmost")
+            db.set_meta("passive_lease_remaining_seconds", "1200")
+
+            with patch.object(tracker_main, "DB_PATH", db_path), patch.object(
+                tracker_main, "database", return_value=db
+            ), patch.object(
+                tracker_main, "_process_table", side_effect=[{}, {}]
+            ), patch.object(
+                tracker_main, "get_status", return_value={"data": {"running": False}}
+            ):
+                result = tracker_main.stop_tracking()
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(db.get_meta(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY), "")
+            self.assertEqual(db.get_meta("foreground_audio_detection_available"), "false")
+            self.assertEqual(db.get_meta("foreground_audio_active"), "false")
+            self.assertEqual(db.get_meta("foreground_audio_reason"), "tracking_stopped")
+            self.assertEqual(db.get_meta("passive_lease_remaining_seconds"), "")
+
     def test_stop_tracking_finds_live_same_db_daemon_without_pid_record(self) -> None:
-        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+        with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             command = f"{sys.executable} {tracker_main._current_script_path()} daemon --db {tracker_main.DB_PATH}"
             with patch.object(tracker_main, "_process_table", side_effect=[{301: command}, {}]), patch.object(
                 tracker_main, "_process_command", return_value=command
@@ -397,7 +424,7 @@ class TrackerMainTests(unittest.TestCase):
             self.assertIn(call(301, tracker_main.signal.SIGTERM), kill.call_args_list)
 
     def test_stop_tracking_stops_every_duplicate_same_db_daemon(self) -> None:
-        with TemporaryDirectory() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
+        with temp_dir_closing_databases() as tmp, patch.object(tracker_main, "DB_PATH", Path(tmp) / "tracker.sqlite3"):
             first = f"/Applications/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
             second = f"/tmp/old/Drifty.app/Contents/MacOS/drifty-tracker daemon --db {tracker_main.DB_PATH}"
             commands = {401: first, 402: second}
@@ -1311,37 +1338,6 @@ class TrackerMainTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         mock_db.delete_history_range.assert_not_called()
 
-    def test_handle_idle_sample_trims_and_skips_when_threshold_reached(self) -> None:
-        mock_db = MagicMock()
-        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
-
-        should_skip = tracker_main.handle_idle_sample(mock_db, 181.25, now=now, threshold_seconds=180)
-
-        self.assertTrue(should_skip)
-        mock_db.trim_latest_segment.assert_called_once_with((now - timedelta(seconds=181.25)).isoformat())
-        mock_db.set_meta.assert_any_call("idle_detection_available", "true")
-        mock_db.set_meta.assert_any_call("idle_seconds", "181.250")
-        mock_db.set_meta.assert_any_call("tracker_mode", "idle")
-
-    def test_handle_idle_sample_keeps_tracking_when_idle_unavailable(self) -> None:
-        mock_db = MagicMock()
-
-        should_skip = tracker_main.handle_idle_sample(mock_db, None, threshold_seconds=180)
-
-        self.assertFalse(should_skip)
-        mock_db.set_meta.assert_called_once_with("idle_detection_available", "false")
-        mock_db.trim_latest_segment.assert_not_called()
-
-    def test_handle_idle_sample_keeps_tracking_below_threshold(self) -> None:
-        mock_db = MagicMock()
-
-        should_skip = tracker_main.handle_idle_sample(mock_db, 42.0, threshold_seconds=180)
-
-        self.assertFalse(should_skip)
-        mock_db.set_meta.assert_any_call("idle_detection_available", "true")
-        mock_db.set_meta.assert_any_call("idle_seconds", "42.000")
-        mock_db.trim_latest_segment.assert_not_called()
-
     def test_handle_power_state_sample_trims_and_skips_when_suppressed(self) -> None:
         mock_db = MagicMock()
         observed_at = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
@@ -1355,6 +1351,11 @@ class TrackerMainTests(unittest.TestCase):
 
         self.assertTrue(should_skip)
         mock_db.trim_latest_segment.assert_called_once_with(observed_at.isoformat())
+        mock_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        mock_db.set_meta.assert_any_call("foreground_audio_detection_available", "false")
+        mock_db.set_meta.assert_any_call("foreground_audio_active", "false")
+        mock_db.set_meta.assert_any_call("foreground_audio_reason", "power_suppressed")
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
         mock_db.set_meta.assert_any_call("capture_suppressed_reason", "non_user_visible_wake_type:darkwake")
         mock_db.set_meta.assert_any_call("last_capture_suppressed_at", observed_at.isoformat())
@@ -1382,6 +1383,231 @@ class TrackerMainTests(unittest.TestCase):
     def test_sample_seconds_since_previous_keeps_minimum_interval(self) -> None:
         self.assertEqual(tracker_main.sample_seconds_since_previous(10.0, 12.0, default_seconds=5), 5)
 
+    def test_audio_grace_is_bounded_and_rejects_future_or_invalid_timestamps(self) -> None:
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        offset_timestamp = (now - timedelta(seconds=10)).astimezone(
+            timezone(timedelta(hours=9))
+        ).isoformat()
+
+        self.assertTrue(tracker_main.audio_grace_is_active((now - timedelta(seconds=15)).isoformat(), now))
+        self.assertTrue(tracker_main.audio_grace_is_active(offset_timestamp, now))
+        self.assertFalse(tracker_main.audio_grace_is_active((now - timedelta(seconds=15.001)).isoformat(), now))
+        self.assertFalse(tracker_main.audio_grace_is_active((now + timedelta(seconds=1)).isoformat(), now))
+        self.assertFalse(tracker_main.audio_grace_is_active("2026-04-06T09:04:50", now))
+        self.assertFalse(tracker_main.audio_grace_is_active("invalid", now))
+
+    def test_engagement_decision_uses_foreground_audio_inside_lease(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = None
+        sample = ForegroundAudioSample(True, True, "active_output_owned_by_frontmost")
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+
+        with patch.object(tracker_main, "current_foreground_audio_sample", return_value=sample):
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 300, now=now)
+
+        self.assertEqual(decision.kind, "capture_passive")
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "1500")
+        mock_db.set_meta.assert_any_call("foreground_audio_active", "true")
+        mock_db.set_meta.assert_any_call(
+            tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY,
+            now.isoformat(),
+        )
+
+    def test_engagement_decision_does_not_probe_during_interactive_input_window(self) -> None:
+        mock_db = MagicMock()
+
+        with patch.object(tracker_main, "current_foreground_audio_sample") as audio_probe:
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 179.999)
+
+        self.assertEqual(decision.kind, "capture_interactive")
+        audio_probe.assert_not_called()
+        mock_db.latest_local_engagement_evidence.assert_not_called()
+        mock_db.set_meta.assert_any_call("idle_detection_available", "true")
+        mock_db.set_meta.assert_any_call("idle_seconds", "179.999")
+        mock_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        mock_db.set_meta.assert_any_call("foreground_audio_reason", "interactive_input")
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
+
+    def test_engagement_decision_preserves_capture_when_idle_detection_is_unavailable(self) -> None:
+        mock_db = MagicMock()
+
+        with patch.object(tracker_main, "current_foreground_audio_sample") as audio_probe:
+            decision = tracker_main.engagement_decision_for_tick(mock_db, None)
+
+        self.assertEqual(decision.kind, "capture_interactive")
+        audio_probe.assert_not_called()
+        mock_db.latest_local_engagement_evidence.assert_not_called()
+        mock_db.set_meta.assert_any_call("idle_detection_available", "false")
+        mock_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        mock_db.set_meta.assert_any_call("foreground_audio_reason", "idle_detection_unavailable")
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
+
+    def test_engagement_decision_contains_unexpected_audio_probe_failure(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = None
+        mock_db.get_meta.return_value = None
+
+        with patch.object(
+            tracker_main,
+            "current_foreground_audio_sample",
+            side_effect=ImportError("missing packaged module"),
+        ):
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 300)
+
+        self.assertEqual(decision.kind, "stop_and_trim_to_input")
+        mock_db.set_meta.assert_any_call("foreground_audio_detection_available", "false")
+        mock_db.set_meta.assert_any_call("foreground_audio_active", "false")
+        mock_db.set_meta.assert_any_call("foreground_audio_reason", "probe_failed")
+
+    def test_unexpected_audio_probe_failure_does_not_use_dropout_grace(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = "foreground-audio"
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        mock_db.get_meta.return_value = (now - timedelta(seconds=5)).isoformat()
+
+        with patch.object(
+            tracker_main,
+            "current_foreground_audio_sample",
+            side_effect=RuntimeError("unexpected HAL failure"),
+        ):
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 300, now=now)
+
+        self.assertEqual(decision.kind, "stop_and_keep_recorded")
+        mock_db.get_meta.assert_not_called()
+
+    def test_engagement_decision_limits_audio_dropout_grace_to_fifteen_seconds(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = "foreground-audio"
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        mock_db.get_meta.return_value = (now - timedelta(seconds=15)).isoformat()
+        sample = ForegroundAudioSample(True, False, "no_active_output")
+
+        with patch.object(tracker_main, "current_foreground_audio_sample", return_value=sample):
+            within_grace = tracker_main.engagement_decision_for_tick(mock_db, 300, now=now)
+            after_grace = tracker_main.engagement_decision_for_tick(
+                mock_db,
+                300,
+                now=now + timedelta(milliseconds=1),
+            )
+
+        self.assertEqual(within_grace.kind, "capture_passive")
+        self.assertEqual(after_grace.kind, "stop_and_keep_recorded")
+
+    def test_engagement_decision_refuses_audio_grace_without_recorded_passive_time(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = None
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        mock_db.get_meta.return_value = (now - timedelta(seconds=5)).isoformat()
+        sample = ForegroundAudioSample(True, False, "no_active_output")
+
+        with patch.object(tracker_main, "current_foreground_audio_sample", return_value=sample):
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 300, now=now)
+
+        self.assertEqual(decision.kind, "stop_and_trim_to_input")
+
+    def test_engagement_decision_refuses_grace_when_output_belongs_to_another_app(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = "foreground-audio"
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        mock_db.get_meta.return_value = (now - timedelta(seconds=5)).isoformat()
+        sample = ForegroundAudioSample(True, False, "active_output_not_owned_by_frontmost")
+
+        with patch.object(tracker_main, "current_foreground_audio_sample", return_value=sample):
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 300, now=now)
+
+        self.assertEqual(decision.kind, "stop_and_keep_recorded")
+        mock_db.get_meta.assert_not_called()
+
+    def test_power_suppression_prevents_grace_from_reopening_capture(self) -> None:
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        with temp_dir_closing_databases() as tmp:
+            db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
+            db.record_snapshot(
+                Snapshot(
+                    observed_at=(now - timedelta(seconds=10)).isoformat(),
+                    app_name="Audio Review",
+                    bundle_id="com.example.audio-review",
+                    window_title="Review",
+                    source="accessibility",
+                    engagement_evidence="foreground-audio",
+                ),
+                5,
+            )
+            db.set_meta(
+                tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY,
+                (now - timedelta(seconds=5)).isoformat(),
+            )
+            tracker_main.handle_power_state_sample(
+                db,
+                PowerStateSample(
+                    observed_at=now - timedelta(seconds=4),
+                    should_capture=False,
+                    reason="clamshell_sleep_state",
+                ),
+            )
+            sample = ForegroundAudioSample(True, False, "no_active_output")
+
+            with patch.object(tracker_main, "current_foreground_audio_sample", return_value=sample):
+                decision = tracker_main.engagement_decision_for_tick(db, 300, now=now)
+
+            self.assertEqual(decision.kind, "stop_and_keep_recorded")
+            self.assertEqual(db.get_meta(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY), "")
+
+    def test_engagement_decision_does_not_probe_or_extend_expired_lease(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = "foreground-audio"
+
+        with patch.object(tracker_main, "current_foreground_audio_sample") as audio_probe:
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 1800)
+
+        self.assertEqual(decision.kind, "stop_and_keep_recorded")
+        audio_probe.assert_not_called()
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "0")
+
+    def test_engagement_decision_rounds_remaining_lease_up_while_capture_is_valid(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = None
+        sample = ForegroundAudioSample(True, True, "active_output_owned_by_frontmost")
+
+        with patch.object(tracker_main, "current_foreground_audio_sample", return_value=sample):
+            decision = tracker_main.engagement_decision_for_tick(mock_db, 1799.5)
+
+        self.assertEqual(decision.kind, "capture_passive")
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "1")
+
+    def test_apply_engagement_stop_preserves_supported_time_but_trims_unsupported_idle(self) -> None:
+        now = datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc)
+        keep_db = MagicMock()
+        trim_db = MagicMock()
+
+        tracker_main.apply_engagement_stop(
+            keep_db,
+            tracker_main.EngagementDecision("stop_and_keep_recorded"),
+            300,
+            now=now,
+        )
+        tracker_main.apply_engagement_stop(
+            trim_db,
+            tracker_main.EngagementDecision("stop_and_trim_to_input"),
+            300,
+            now=now,
+        )
+
+        keep_db.trim_latest_segment.assert_not_called()
+        trim_db.trim_latest_segment.assert_called_once_with((now - timedelta(seconds=300)).isoformat())
+        keep_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        keep_db.set_meta.assert_any_call("foreground_audio_detection_available", "false")
+        keep_db.set_meta.assert_any_call("foreground_audio_active", "false")
+        keep_db.set_meta.assert_any_call("foreground_audio_reason", "engagement_stopped")
+        keep_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
+        keep_db.set_meta.assert_any_call("tracker_mode", "idle")
+        trim_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        trim_db.set_meta.assert_any_call("foreground_audio_detection_available", "false")
+        trim_db.set_meta.assert_any_call("foreground_audio_active", "false")
+        trim_db.set_meta.assert_any_call("foreground_audio_reason", "engagement_stopped")
+        trim_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
+        trim_db.set_meta.assert_any_call("tracker_mode", "idle")
+
     def test_daemon_skips_idle_and_snapshot_when_power_state_suppressed(self) -> None:
         with temp_dir_closing_databases() as tmp:
             tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
@@ -1396,6 +1622,8 @@ class TrackerMainTests(unittest.TestCase):
             ), patch.object(tracker_main, "seconds_since_last_input") as idle, patch.object(
                 tracker_main, "current_snapshot"
             ) as snapshot, patch.object(
+                tracker_main, "current_foreground_audio_sample"
+            ) as audio_probe, patch.object(
                 tracker_main.time, "sleep", side_effect=KeyboardInterrupt
             ):
                 with self.assertRaises(KeyboardInterrupt):
@@ -1403,7 +1631,9 @@ class TrackerMainTests(unittest.TestCase):
 
         idle.assert_not_called()
         snapshot.assert_not_called()
+        audio_probe.assert_not_called()
         mock_db.trim_latest_segment.assert_called_once_with(power_state.observed_at.isoformat())
+        mock_db.set_meta.assert_any_call(tracker_main.PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
         mock_db.set_meta.assert_any_call("tracker_mode", "suppressed")
 
     def test_daemon_resumes_with_default_sample_after_power_suppression(self) -> None:
@@ -1468,6 +1698,10 @@ class TrackerMainTests(unittest.TestCase):
                     tracker_main.daemon()
 
         mock_db.set_meta.assert_any_call(tracker_main.TRACKER_RUNTIME_FINGERPRINT_META_KEY, "runtime-fp")
+        mock_db.set_meta.assert_any_call("foreground_audio_detection_available", "false")
+        mock_db.set_meta.assert_any_call("foreground_audio_active", "false")
+        mock_db.set_meta.assert_any_call("foreground_audio_reason", "daemon_started")
+        mock_db.set_meta.assert_any_call("passive_lease_remaining_seconds", "")
 
     def test_daemon_checks_for_a_due_backup_while_it_remains_running(self) -> None:
         with temp_dir_closing_databases() as tmp:
@@ -1671,6 +1905,85 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(next_tick, 42.0)
         mock_db.record_snapshot.assert_called_once()
         mock_db.set_meta.assert_any_call("last_event_at", snapshot.observed_at)
+
+    def test_daemon_tick_records_supported_passive_segment_with_bounded_merge_gap(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = None
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:05:00+00:00",
+            app_name="Google Chrome",
+            bundle_id="com.google.Chrome",
+            window_title="Audio review",
+            source="accessibility",
+        )
+        power_state = PowerStateSample(
+            observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
+            should_capture=True,
+            reason="ok",
+        )
+        audio_sample = ForegroundAudioSample(True, True, "active_output_owned_by_frontmost")
+        with patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+            tracker_main, "seconds_since_last_input", return_value=300.0
+        ), patch.object(
+            tracker_main, "current_foreground_audio_sample", return_value=audio_sample
+        ), patch.object(
+            tracker_main, "_apply_developer_diagnostics_env"
+        ), patch.object(
+            tracker_main, "current_snapshot", return_value=snapshot
+        ), patch.object(
+            tracker_main.time, "monotonic", return_value=42.0
+        ), patch.object(
+            tracker_main, "enqueue_youtube_metadata_fetch"
+        ), patch.object(
+            tracker_main, "backfill_browser_history_context"
+        ):
+            next_tick = tracker_main._daemon_tick(mock_db, 37.0)
+
+        self.assertEqual(next_tick, 42.0)
+        self.assertEqual(snapshot.engagement_evidence, "foreground-audio")
+        mock_db.record_snapshot.assert_called_once_with(
+            snapshot,
+            tracker_main.SAMPLE_SECONDS,
+            max_merge_gap_seconds=tracker_main.PASSIVE_AUDIO_GAP_GRACE_SECONDS,
+        )
+        # The existing sub-three-minute idle grace remains interactive. The
+        # passive evidence begins at this observed sample and is never applied
+        # retroactively to an interval where the audio probe did not run.
+        mock_db.trim_latest_segment.assert_not_called()
+        mock_db.set_meta.assert_any_call("tracker_mode", "tracking")
+
+    def test_daemon_tick_does_not_bridge_passive_capture_after_a_gap(self) -> None:
+        mock_db = MagicMock()
+        mock_db.latest_local_engagement_evidence.return_value = "foreground-audio"
+        snapshot = Snapshot(
+            observed_at="2026-04-06T09:05:30+00:00",
+            app_name="Google Chrome",
+            bundle_id="com.google.Chrome",
+            window_title="Audio review",
+            source="accessibility",
+        )
+        power_state = PowerStateSample(
+            observed_at=datetime(2026, 4, 6, 9, 5, 30, tzinfo=timezone.utc),
+            should_capture=True,
+            reason="ok",
+        )
+        audio_sample = ForegroundAudioSample(True, True, "active_output_owned_by_frontmost")
+        with patch.object(tracker_main, "current_power_state", return_value=power_state), patch.object(
+            tracker_main, "seconds_since_last_input", return_value=330.0
+        ), patch.object(
+            tracker_main, "current_foreground_audio_sample", return_value=audio_sample
+        ), patch.object(tracker_main, "_apply_developer_diagnostics_env"), patch.object(
+            tracker_main, "current_snapshot", return_value=snapshot
+        ), patch.object(tracker_main.time, "monotonic", return_value=50.0), patch.object(
+            tracker_main, "enqueue_youtube_metadata_fetch"
+        ), patch.object(tracker_main, "backfill_browser_history_context"):
+            tracker_main._daemon_tick(mock_db, None)
+
+        mock_db.record_snapshot.assert_called_once_with(
+            snapshot,
+            tracker_main.SAMPLE_SECONDS,
+            max_merge_gap_seconds=0,
+        )
 
     def test_enqueue_youtube_metadata_fetch_skips_cached_video(self) -> None:
         with temp_dir_closing_databases() as tmp:

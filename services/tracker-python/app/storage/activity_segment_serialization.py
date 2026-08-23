@@ -70,6 +70,9 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "confidence": row.get("confidence"),
         "deviceId": row.get("origin_device_id"),
     }
+    engagement_evidence = row_engagement_evidence(row)
+    if engagement_evidence is not None:
+        serialized["engagementEvidence"] = engagement_evidence
     if classification is not None:
         serialized["classification"] = classification
     if raw_context is not None:
@@ -91,6 +94,9 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
         "platform": row.get("platform", "macos"),
         "source": row.get("source", "unknown"),
     }
+    engagement_evidence = row_engagement_evidence(row)
+    if engagement_evidence is not None:
+        serialized["engagementEvidence"] = engagement_evidence
     optional_fields: dict[str, RowValue] = {
         "deviceId": row.get("origin_device_id"),
         "bundleId": row.get("bundle_id"),
@@ -160,6 +166,11 @@ def clean_text(value: RowValue) -> str | None:
         return None
     cleaned = value.strip()
     return cleaned or None
+
+
+def row_engagement_evidence(row: Mapping[str, RowValue]) -> str | None:
+    value = row.get("engagement_evidence")
+    return value if value == "foreground-audio" else None
 
 
 def classification_payload(row: Mapping[str, RowValue]) -> dict[str, SerializedValue] | None:

@@ -104,6 +104,8 @@ export interface ActivitySegment {
   frontmostFallbackError?: string | null;
   platform: "macos" | "windows" | "android" | "ios";
   source: TrackerSource;
+  /** Local capture support only; foreground audio never proves productivity or attention. */
+  engagementEvidence?: "foreground-audio" | null;
   confidence?: number | null;
   /** cloud_devices.id of the originating Mac; null/absent = recorded on this Mac. */
   deviceId?: string | null;
@@ -112,6 +114,10 @@ export interface ActivitySegment {
 
 export function isBrowserHistoryImportSegment(segment: Pick<ActivitySegment, "siteSource" | "source">): boolean {
   return segment.source === "browser-history-import" || segment.siteSource === "browser-history-import";
+}
+
+export function isPassiveSupportedSegment(segment: Pick<ActivitySegment, "engagementEvidence">): boolean {
+  return segment.engagementEvidence === "foreground-audio";
 }
 
 /**

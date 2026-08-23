@@ -110,6 +110,31 @@ describe("leaderboardPublisher", () => {
     }
   });
 
+  it("keeps passive-supported time local instead of publishing it", async () => {
+    const today = todayIsoDate();
+    getTimeline.mockResolvedValue([
+      makeSegment(today, 3600),
+      {
+        ...makeSegment(today, 1800),
+        id: `${today}-passive-audio`,
+        engagementEvidence: "foreground-audio",
+      },
+    ]);
+
+    const result = await buildLeaderboardPublishPayloads({
+      profileDisplayName: "Alex",
+      leaderboardWindowEndDay: today,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+    });
+
+    expect(result.segmentCount).toBe(1);
+    for (const payload of result.payloads) {
+      expect(payload.focusSeconds).toBe(3600);
+    }
+  });
+
   it("publishes auto aggregates without updating profiles", async () => {
     const today = todayIsoDate();
     getTimeline.mockResolvedValue([makeSegment(today, 3600)]);
@@ -159,7 +184,14 @@ describe("leaderboardPublisher", () => {
   it("builds an exact closed weekly checkpoint without replacing it with today", async () => {
     vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
     const closedDay = "2026-07-05";
-    getTimeline.mockResolvedValue([makeSegment(closedDay, 3600)]);
+    getTimeline.mockResolvedValue([
+      makeSegment(closedDay, 3600),
+      {
+        ...makeSegment(closedDay, 1800),
+        id: `${closedDay}-passive-audio`,
+        engagementEvidence: "foreground-audio",
+      },
+    ]);
 
     const payload = await buildLeaderboardCheckpointPayload({
       period: "weekly",

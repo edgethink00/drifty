@@ -1652,6 +1652,18 @@ mod tests {
         "revert_ai_review_event",
     ];
 
+    #[test]
+    fn timeline_envelope_preserves_passive_engagement_evidence() {
+        let raw = br#"{"ok":true,"data":[{"id":"42","engagementEvidence":"foreground-audio"}],"error":null}"#;
+
+        let timeline = parse_envelope::<Value>(raw).expect("timeline envelope");
+
+        assert_eq!(
+            timeline[0]["engagementEvidence"],
+            Value::String("foreground-audio".into())
+        );
+    }
+
     #[cfg(windows)]
     #[test]
     fn duplicated_windows_child_handle_terminates_the_original_process_object() {

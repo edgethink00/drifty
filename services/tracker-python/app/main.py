@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -48,6 +49,11 @@ from app.tracker.adaptive_context.developer_diagnostics import (
     save_developer_diagnostics,
 )
 from app.sentry_setup import capture_tracker_exception, init_tracker_sentry
+from app.tracker.engagement_policy import (
+    FOREGROUND_AUDIO_EVIDENCE,
+    EngagementDecision,
+    decide_engagement,
+)
 from app.tracker.dev_signals.aggregation import summarize_agent_time
 from app.tracker.dev_signals.discovery import discover_repositories as discover_dev_repositories
 from app.tracker.dev_signals.ingest import (
@@ -64,6 +70,9 @@ if TYPE_CHECKING:
 DB_PATH = APP_DIR / "drifty_tracker.sqlite3"
 SAMPLE_SECONDS = int(os.environ.get("DRIFTY_SAMPLE_SECONDS", "5"))
 IDLE_THRESHOLD_SECONDS = int(os.environ.get("DRIFTY_IDLE_THRESHOLD_SECONDS", "180"))
+PASSIVE_ACTIVITY_LEASE_SECONDS = 30 * 60
+PASSIVE_AUDIO_GAP_GRACE_SECONDS = 15
+PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY = "passive_audio_last_supported_at"
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
 DATABASE_BACKUP_CHECK_SECONDS = 60 * 60
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
@@ -235,6 +244,12 @@ def current_power_state() -> PowerStateSample:
     from app.tracker.power_state import current_power_state as read_current_power_state
 
     return read_current_power_state()
+
+
+def current_foreground_audio_sample():
+    from app.tracker.macos_audio_activity import foreground_audio_sample
+
+    return foreground_audio_sample()
 
 
 def fetch_youtube_metadata(site_url: str, video_id: str, timeout_seconds: float) -> YouTubeVideoMetadata:
@@ -951,6 +966,9 @@ def _stop_tracking_locked():
     status = get_status()["data"]
     if status.get("running"):
         return response(False, status, "Tracker still reports running after stop.")
+    db = database()
+    db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+    reset_foreground_audio_diagnostics(db, "tracking_stopped")
     return response(True, status)
 
 
@@ -1539,26 +1557,129 @@ def get_current_snapshot():
     )
 
 
-def handle_idle_sample(
+def audio_grace_is_active(
+    last_supported_at: str | None,
+    now: datetime,
+    grace_seconds: int = PASSIVE_AUDIO_GAP_GRACE_SECONDS,
+) -> bool:
+    if not last_supported_at:
+        return False
+    try:
+        parsed = datetime.fromisoformat(last_supported_at)
+    except ValueError:
+        return False
+    if parsed.tzinfo is None:
+        return False
+    elapsed = (now - parsed.astimezone(timezone.utc)).total_seconds()
+    return 0 <= elapsed <= grace_seconds
+
+
+def engagement_decision_for_tick(
     db: TrackerDatabase,
     idle_seconds: float | None,
+    *,
     now: datetime | None = None,
-    threshold_seconds: int = IDLE_THRESHOLD_SECONDS,
-) -> bool:
+    interactive_threshold_seconds: int = IDLE_THRESHOLD_SECONDS,
+    passive_lease_seconds: int = PASSIVE_ACTIVITY_LEASE_SECONDS,
+) -> EngagementDecision:
+    reference_time = now or datetime.now(timezone.utc)
     if idle_seconds is None:
         db.set_meta("idle_detection_available", "false")
-        return False
+    else:
+        db.set_meta("idle_detection_available", "true")
+        db.set_meta("idle_seconds", f"{idle_seconds:.3f}")
 
-    db.set_meta("idle_detection_available", "true")
-    db.set_meta("idle_seconds", f"{idle_seconds:.3f}")
-    if idle_seconds < threshold_seconds:
-        return False
+    if idle_seconds is None or idle_seconds < interactive_threshold_seconds:
+        db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        reset_foreground_audio_diagnostics(
+            db,
+            "idle_detection_unavailable" if idle_seconds is None else "interactive_input",
+        )
+        return decide_engagement(
+            idle_seconds=idle_seconds,
+            audio_supported=False,
+            audio_grace_active=False,
+            latest_engagement_evidence=None,
+            interactive_threshold_seconds=interactive_threshold_seconds,
+            passive_lease_seconds=passive_lease_seconds,
+        )
 
-    reference_time = now or datetime.now(timezone.utc)
-    idle_started_at = reference_time - timedelta(seconds=idle_seconds)
-    db.trim_latest_segment(idle_started_at.isoformat())
+    latest_evidence = db.latest_local_engagement_evidence()
+    if latest_evidence != FOREGROUND_AUDIO_EVIDENCE:
+        latest_evidence = None
+    # Evidence alone never opens grace: the separate supported-at timestamp
+    # must also be <=15s old, and is cleared on direct input, daemon start,
+    # explicit/engagement stop, and power suppression. That makes an older DB
+    # row inert across sessions while still letting the first dropout after a
+    # just-recorded passive sample keep its already-supported time.
+
+    audio_supported = False
+    grace_active = False
+    grace_eligible = True
+    remaining_seconds = max(0, math.ceil(passive_lease_seconds - idle_seconds))
+    db.set_meta("passive_lease_remaining_seconds", str(remaining_seconds))
+    if idle_seconds < passive_lease_seconds:
+        try:
+            audio_sample = current_foreground_audio_sample()
+        except Exception:
+            # The native probe already fails closed for expected CoreAudio and
+            # process-inspection errors. Keep the daemon alive if an unexpected
+            # import/runtime edge escapes that boundary.
+            db.set_meta("foreground_audio_detection_available", "false")
+            db.set_meta("foreground_audio_active", "false")
+            db.set_meta("foreground_audio_reason", "probe_failed")
+            # A crashed native probe is stronger uncertainty than a momentary
+            # no-output sample. Do not bridge it with the dropout grace.
+            grace_eligible = False
+        else:
+            audio_supported = bool(audio_sample.available and audio_sample.active)
+            # Output that definitely belongs to another process is an ownership
+            # change, not a dropout in the previously supported foreground app.
+            grace_eligible = audio_sample.reason != "active_output_not_owned_by_frontmost"
+            db.set_meta("foreground_audio_detection_available", str(bool(audio_sample.available)).lower())
+            db.set_meta("foreground_audio_active", str(audio_supported).lower())
+            db.set_meta("foreground_audio_reason", audio_sample.reason)
+        if audio_supported:
+            supported_at = reference_time.isoformat()
+            db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, supported_at)
+            grace_active = True
+        elif grace_eligible:
+            grace_active = audio_grace_is_active(
+                db.get_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY),
+                reference_time,
+            )
+
+    return decide_engagement(
+        idle_seconds=idle_seconds,
+        audio_supported=audio_supported,
+        audio_grace_active=grace_active,
+        latest_engagement_evidence=latest_evidence,
+        interactive_threshold_seconds=interactive_threshold_seconds,
+        passive_lease_seconds=passive_lease_seconds,
+    )
+
+
+def apply_engagement_stop(
+    db: TrackerDatabase,
+    decision: EngagementDecision,
+    idle_seconds: float | None,
+    *,
+    now: datetime | None = None,
+) -> None:
+    if decision.kind == "stop_and_trim_to_input" and idle_seconds is not None:
+        reference_time = now or datetime.now(timezone.utc)
+        idle_started_at = reference_time - timedelta(seconds=idle_seconds)
+        db.trim_latest_segment(idle_started_at.isoformat())
+    db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+    reset_foreground_audio_diagnostics(db, "engagement_stopped")
     db.set_meta("tracker_mode", "idle")
-    return True
+
+
+def reset_foreground_audio_diagnostics(db: TrackerDatabase, reason: str) -> None:
+    db.set_meta("foreground_audio_detection_available", "false")
+    db.set_meta("foreground_audio_active", "false")
+    db.set_meta("foreground_audio_reason", reason)
+    db.set_meta("passive_lease_remaining_seconds", "")
 
 
 def handle_power_state_sample(db: TrackerDatabase, power_state: PowerStateSample) -> bool:
@@ -1567,6 +1688,8 @@ def handle_power_state_sample(db: TrackerDatabase, power_state: PowerStateSample
 
     observed_at = power_state.observed_at.isoformat()
     db.trim_latest_segment(observed_at)
+    db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+    reset_foreground_audio_diagnostics(db, "power_suppressed")
     db.set_meta("tracker_mode", "suppressed")
     db.set_meta("capture_suppressed_reason", power_state.reason)
     db.set_meta("last_capture_suppressed_at", observed_at)
@@ -1753,17 +1876,27 @@ def _daemon_tick(db: TrackerDatabase, last_capture_tick: float | None) -> float 
         return None
 
     idle_seconds = seconds_since_last_input()
-    if handle_idle_sample(db, idle_seconds):
+    reference_time = datetime.now(timezone.utc)
+    engagement = engagement_decision_for_tick(db, idle_seconds, now=reference_time)
+    if not engagement.should_capture:
+        apply_engagement_stop(db, engagement, idle_seconds, now=reference_time)
         return None
 
     _apply_developer_diagnostics_env(db)
     snapshot = current_snapshot(include_system_transient=False)
+    snapshot.engagement_evidence = FOREGROUND_AUDIO_EVIDENCE if engagement.is_passive else None
     capture_tick = time.monotonic()
     sample_seconds = sample_seconds_since_previous(last_capture_tick, capture_tick)
-    db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
+    if engagement.is_passive:
+        passive_merge_gap = PASSIVE_AUDIO_GAP_GRACE_SECONDS if last_capture_tick is not None else 0
+        db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=passive_merge_gap)
+    else:
+        db.record_snapshot(snapshot, sample_seconds, max_merge_gap_seconds=IDLE_THRESHOLD_SECONDS)
     enqueue_youtube_metadata_fetch(DB_PATH, snapshot.youtube_video_id, snapshot.site_url)
     backfill_browser_history_context(db, snapshot.observed_at)
     db.set_meta("last_event_at", snapshot.observed_at)
+    # Preserve the existing public tracker-mode vocabulary. Passive support is
+    # diagnostic evidence for this segment, not a new daemon lifecycle mode.
     db.set_meta("tracker_mode", "tracking")
     return capture_tick
 
@@ -1797,6 +1930,10 @@ def daemon():
         db = database()
         db.set_meta("tracker_script_path", _current_script_path())
         db.set_meta(TRACKER_RUNTIME_FINGERPRINT_META_KEY, _tracker_runtime_fingerprint())
+        # A grace window is meaningful only inside one uninterrupted daemon
+        # run. Restarts and manual stop/start cycles begin fail-closed.
+        db.set_meta(PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY, "")
+        reset_foreground_audio_diagnostics(db, "daemon_started")
     except BaseException:
         try:
             _remove_pid_record_if_owned(daemon_pid)

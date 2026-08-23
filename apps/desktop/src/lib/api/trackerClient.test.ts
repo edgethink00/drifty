@@ -129,6 +129,24 @@ describe("trackerClient", () => {
     });
   });
 
+  it("preserves passive engagement evidence from the native timeline response", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce([{
+      id: "42",
+      engagementEvidence: "foreground-audio",
+    }]);
+
+    const result = await trackerClient.getTimeline({ day: "2026-08-24" });
+
+    expect(result).toEqual([{
+      id: "42",
+      engagementEvidence: "foreground-audio",
+    }]);
+    expect(invoke).toHaveBeenCalledWith("tracker_get_timeline", {
+      query: { day: "2026-08-24" },
+    });
+  });
+
   it("invokes tracker_get_dashboard_week_timeline with the selected range", async () => {
     const { trackerClient } = await import("./trackerClient");
     invoke.mockResolvedValueOnce([{ id: "week-segment" }]);

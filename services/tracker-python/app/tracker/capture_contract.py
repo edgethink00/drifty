@@ -23,7 +23,7 @@ from app.tracker.adaptive_context import AdaptiveContentContextPayload
 from app.tracker.browser_automation import BrowserAutomationStatus
 from app.tracker.macos_system_activity import SystemTransientActivity
 
-__all__ = ["FrontmostCaptureSource", "Snapshot", "utc_now_iso"]
+__all__ = ["EngagementEvidence", "FrontmostCaptureSource", "Snapshot", "utc_now_iso"]
 
 
 def utc_now_iso() -> str:
@@ -39,6 +39,7 @@ FrontmostCaptureSource = Literal[
     "uwp-frame-host",
     "unavailable",
 ]
+EngagementEvidence = Literal["foreground-audio"]
 
 
 @dataclass
@@ -70,3 +71,4 @@ class Snapshot:
     frontmost_capture_error: str | None = None
     frontmost_fallback_error: str | None = None
     adaptive_content_context: AdaptiveContentContextPayload | None = None
+    engagement_evidence: EngagementEvidence | None = None

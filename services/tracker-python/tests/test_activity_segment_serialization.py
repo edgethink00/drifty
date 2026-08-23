@@ -67,6 +67,57 @@ class ActivitySegmentSerializationTests(unittest.TestCase):
         self.assertEqual(segment["browserAutomationStatus"], "empty_result")
         self.assertEqual(segment["browserAutomationError"], "Google Chrome returned an empty browser automation result.")
 
+    def test_full_and_compact_timeline_include_passive_engagement_evidence(self) -> None:
+        started_at = "2026-06-13T00:00:00+00:00"
+        with temp_dir_closing_databases() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": "2026-06-13T00:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": "Google Chrome",
+                    "bundle_id": "com.google.Chrome",
+                    "window_title": "Audio review",
+                    "platform": "macos",
+                    "source": "accessibility",
+                    "confidence": 1.0,
+                    "engagement_evidence": "foreground-audio",
+                    "raw_context_json": json.dumps({"engagement_evidence": "foreground-audio"}),
+                }
+            )
+
+            local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+            full = database.fetch_timeline(local_day)[0]
+            compact = database.dashboard_week_timeline(
+                "2026-06-12T00:00:00+00:00",
+                "2026-06-14T00:00:00+00:00",
+            )[0]
+
+        self.assertEqual(full["engagementEvidence"], "foreground-audio")
+        self.assertEqual(compact["engagementEvidence"], "foreground-audio")
+
+    def test_raw_context_cannot_claim_passive_engagement_evidence(self) -> None:
+        started_at = "2026-06-13T00:00:00+00:00"
+        with temp_dir_closing_databases() as tempdir:
+            database = TrackerDatabase(Path(tempdir) / "tracker.sqlite3")
+            database.insert_segment(
+                {
+                    "started_at": started_at,
+                    "ended_at": "2026-06-13T00:05:00+00:00",
+                    "duration_seconds": 300,
+                    "app_name": "Untrusted Context",
+                    "platform": "macos",
+                    "source": "accessibility",
+                    "raw_context_json": json.dumps({"engagement_evidence": "foreground-audio"}),
+                }
+            )
+
+            local_day = datetime.fromisoformat(started_at).astimezone().date().isoformat()
+            segment = database.fetch_timeline(local_day)[0]
+
+        self.assertNotIn("engagementEvidence", segment)
+
     def test_fetch_timeline_includes_browser_history_diagnostics(self) -> None:
         started_at = "2026-06-13T00:00:00+00:00"
         with temp_dir_closing_databases() as tempdir:

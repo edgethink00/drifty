@@ -10,6 +10,7 @@ import {
   CATEGORY_ORDER,
   classifyActivity,
   isBrowserHistoryImportSegment,
+  isPassiveSupportedSegment,
   isRemoteDeviceSegment,
   logicalDayEndExclusiveMs,
   logicalDayStartMs,
@@ -147,18 +148,19 @@ export function buildHourlyFocusPattern(
  * Focus totals use the same rolling-focus math as the leaderboard (clipped to logical days).
  */
 export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: FocusCardInput): FocusCardPayload {
+  const publishableMonthSegments = monthSegments.filter((segment) => !isPassiveSupportedSegment(segment));
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const weekStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "weekly");
   const sod = input.startOfDayMinutes;
-  const options = { fallbackCandidates: monthSegments, includeAiClassifications: input.includeAiClassifications };
+  const options = { fallbackCandidates: publishableMonthSegments, includeAiClassifications: input.includeAiClassifications };
 
-  const focus7d = Math.round(buildRollingFocusSeconds(monthSegments, weekStartDay, input.windowEndDay, options, sod));
-  const focusToday = Math.round(buildRollingFocusSeconds(monthSegments, input.windowEndDay, input.windowEndDay, options, sod));
+  const focus7d = Math.round(buildRollingFocusSeconds(publishableMonthSegments, weekStartDay, input.windowEndDay, options, sod));
+  const focusToday = Math.round(buildRollingFocusSeconds(publishableMonthSegments, input.windowEndDay, input.windowEndDay, options, sod));
 
   // Drift/neutral/share stay week-scoped: keep only segments overlapping the 7-day window
   // (same set a 7-day tracker fetch would return).
   const weekWindowStartMs = logicalDayStartMs(weekStartDay, sod);
-  const weekSegments = monthSegments.filter((segment) => new Date(segment.endedAt).getTime() > weekWindowStartMs);
+  const weekSegments = publishableMonthSegments.filter((segment) => new Date(segment.endedAt).getTime() > weekWindowStartMs);
   const durations = buildProductivityDurations(weekSegments, { ...options, fallbackCandidates: weekSegments });
   const focusBucket = bucketSeconds(durations, "focus");
   const driftSeconds = bucketSeconds(durations, "drift");
@@ -168,7 +170,7 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
 
   // Daily series via the same classify-and-split math as the local 30-day chart, so the
   // published chart embed matches what the user saw in-app.
-  const dailyFocus: DailyFocusPoint[] = buildDailyProductivitySeries(monthSegments, monthStartDay, input.windowEndDay, options, sod)
+  const dailyFocus: DailyFocusPoint[] = buildDailyProductivitySeries(publishableMonthSegments, monthStartDay, input.windowEndDay, options, sod)
     .map((point) => ({ day: point.day, focus: point.focus, drift: point.drift }));
 
   // Detail opt-ins: each field is computed AND attached only while its flag is on, so the
@@ -189,7 +191,7 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
     share_category_breakdown: shareCategoryBreakdown,
     share_hourly_pattern: shareHourlyPattern,
     ...(shareCategoryBreakdown ? { category_breakdown_7d: buildCategoryBreakdown7d(weekSegments, weekOptions) } : {}),
-    ...(shareHourlyPattern ? { hourly_focus_pattern: buildHourlyFocusPattern(monthSegments, weekStartDay, input.windowEndDay, options, sod) } : {}),
+    ...(shareHourlyPattern ? { hourly_focus_pattern: buildHourlyFocusPattern(publishableMonthSegments, weekStartDay, input.windowEndDay, options, sod) } : {}),
   };
 }
 
@@ -197,10 +199,12 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
 export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): Promise<FocusCardPayload> {
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
-  // Same publish boundary as the leaderboard: imported estimates and segments
-  // synced from other devices never feed this device's published card.
+  // Same publish boundary as the leaderboard: imported estimates, passive-supported
+  // time, and segments synced from other devices never feed this published card.
   const monthSegments = fetched.filter(
-    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+    (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isPassiveSupportedSegment(segment)
+      && !isRemoteDeviceSegment(segment),
   );
   return buildFocusCardPayload(monthSegments, input);
 }

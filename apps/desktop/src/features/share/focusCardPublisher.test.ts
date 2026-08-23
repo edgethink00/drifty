@@ -73,6 +73,30 @@ describe("buildFocusCardPayload", () => {
     expect(payload.daily_focus.every((point) => point.focus === 0)).toBe(true);
   });
 
+  it("excludes passive-supported time from every public card aggregate", () => {
+    const today = todayIsoDate();
+    const passive = {
+      ...makeSegment(today, 1800),
+      id: `${today}-passive-audio`,
+      engagementEvidence: "foreground-audio" as const,
+    };
+
+    const payload = buildFocusCardPayload([makeSegment(today, 3600), passive], {
+      windowEndDay: today,
+      startOfDayMinutes: 0,
+      includeAiClassifications: false,
+      shareCategoryBreakdown: true,
+      shareHourlyPattern: true,
+    });
+
+    expect(payload.focus_seconds_today).toBe(3600);
+    expect(payload.focus_seconds_7d).toBe(3600);
+    expect(payload.daily_focus.find((point) => point.day === today)?.focus).toBe(3600);
+    expect(payload.category_breakdown_7d?.[0]?.seconds).toBe(3600);
+    expect(payload.hourly_focus_pattern?.reduce((sum, point) => sum + point.focusSeconds, 0))
+      .toBe(Math.round(3600 / 7));
+  });
+
   it("keeps focus_share within [0,1]", () => {
     const today = todayIsoDate();
     const payload = buildFocusCardPayload([makeSegment(today, 3600)], {

@@ -76,6 +76,52 @@ class TrackerDatabaseTests(unittest.TestCase):
 
         self.assertIsNone(self.database.get_meta("rollback-key"))
 
+    def test_existing_database_adds_engagement_evidence_column_without_losing_activity(self) -> None:
+        self.database.close()
+        self.db_path.unlink()
+        with sqlite3.connect(self.db_path) as connection:
+            connection.executescript(
+                """
+                CREATE TABLE activity_segments (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  started_at TEXT NOT NULL,
+                  ended_at TEXT NOT NULL,
+                  duration_seconds INTEGER NOT NULL,
+                  app_name TEXT NOT NULL,
+                  bundle_id TEXT,
+                  window_title TEXT,
+                  platform TEXT NOT NULL,
+                  source TEXT NOT NULL,
+                  confidence REAL,
+                  raw_context_json TEXT
+                );
+                INSERT INTO activity_segments (
+                  started_at, ended_at, duration_seconds, app_name, platform, source
+                ) VALUES (
+                  '2026-04-06T09:00:00+00:00',
+                  '2026-04-06T09:05:00+00:00',
+                  300,
+                  'Legacy App',
+                  'macos',
+                  'nsworkspace'
+                );
+                """
+            )
+
+        self.database = TrackerDatabase(self.db_path)
+
+        with self.database.connect() as connection:
+            columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(activity_segments)")
+            }
+        timeline = self.database.fetch_timeline("2026-04-06")
+        self.assertIn("engagement_evidence", columns)
+        self.assertEqual(len(timeline), 1)
+        self.assertEqual(timeline[0]["appName"], "Legacy App")
+        self.assertEqual(timeline[0]["durationSeconds"], 300)
+        self.assertNotIn("engagementEvidence", timeline[0])
+
     def _insert_activity_segment(
         self,
         index: int,
@@ -294,6 +340,84 @@ class TrackerDatabaseTests(unittest.TestCase):
         events = self.database.fetch_timeline("2026-04-06")
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["durationSeconds"], 10)
+
+    def test_record_snapshot_splits_interactive_and_passive_evidence(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:00+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title="Audio review",
+                source="accessibility",
+            ),
+            5,
+            max_merge_gap_seconds=180,
+        )
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:05+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title="Audio review",
+                source="accessibility",
+                engagement_evidence="foreground-audio",
+            ),
+            5,
+            max_merge_gap_seconds=15,
+        )
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:10+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title="Audio review",
+                source="accessibility",
+            ),
+            5,
+            max_merge_gap_seconds=180,
+        )
+
+        events = self.database.fetch_timeline("2026-04-06")
+        self.assertEqual(len(events), 3)
+        self.assertIsNone(events[0].get("engagementEvidence"))
+        self.assertEqual(events[1]["engagementEvidence"], "foreground-audio")
+        self.assertIsNone(events[2].get("engagementEvidence"))
+        self.assertIsNone(self.database.latest_local_engagement_evidence())
+
+    def test_latest_local_engagement_evidence_reads_passive_segment(self) -> None:
+        self.database.record_snapshot(
+            Snapshot(
+                observed_at="2026-04-06T09:00:00+00:00",
+                app_name="Google Chrome",
+                bundle_id="com.google.Chrome",
+                window_title="Audio review",
+                source="accessibility",
+                engagement_evidence="foreground-audio",
+            ),
+            5,
+        )
+
+        self.assertEqual(self.database.latest_local_engagement_evidence(), "foreground-audio")
+
+    def test_latest_local_engagement_evidence_uses_the_ended_at_index(self) -> None:
+        with self.database.connect() as connection:
+            plan = connection.execute(
+                """
+                EXPLAIN QUERY PLAN
+                SELECT engagement_evidence
+                FROM activity_segments
+                WHERE origin_device_id IS NULL
+                  AND source != ?
+                ORDER BY datetime(ended_at) DESC, id DESC
+                LIMIT 1
+                """,
+                ("browser-history-import",),
+            ).fetchall()
+
+        self.assertTrue(
+            any("idx_activity_segments_ended_at" in row["detail"] for row in plan),
+            [row["detail"] for row in plan],
+        )
 
     def test_record_snapshot_refreshes_browser_diagnostics_when_merging(self) -> None:
         self.database.record_snapshot(

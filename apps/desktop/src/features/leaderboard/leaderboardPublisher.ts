@@ -1,4 +1,4 @@
-import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isRemoteDeviceSegment } from "@drifty/domain";
+import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isPassiveSupportedSegment, isRemoteDeviceSegment } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
@@ -56,12 +56,14 @@ export async function buildLeaderboardPublishPayloads(input: Omit<PublishLeaderb
     leaderboardWindowEndDay,
     input.startOfDayMinutes,
   ));
-  // Imported (estimated) browser-history segments stay local-only; never publish them
+  // Imported estimates and passive-supported time stay local-only; never publish them
   // to the shared leaderboard totals. Segments synced from another Mac are excluded
   // too — the originating device publishes its own totals, so counting them here
   // would double-publish the same time.
   const allPeriodSegments = fetchedSegments.filter(
-    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+    (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isPassiveSupportedSegment(segment)
+      && !isRemoteDeviceSegment(segment),
   );
 
   return {
@@ -83,7 +85,9 @@ export async function buildLeaderboardCheckpointPayload(
     input.startOfDayMinutes,
   ));
   const publishableSegments = fetchedSegments.filter(
-    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+    (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isPassiveSupportedSegment(segment)
+      && !isRemoteDeviceSegment(segment),
   );
 
   return buildLeaderboardPublishPayload(input.period, publishableSegments, {
