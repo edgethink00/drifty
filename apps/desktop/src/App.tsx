@@ -1477,7 +1477,6 @@ export default function App() {
     && sidebarCtaSlot?.kind === "upgrade"
     && isSidebarUpgradeDismissed(sidebarUpgradeDismissedUntil, Date.now());
   const shouldShowSidebarCtaSlot = !isSettingsTab
-    && !isSidebarVisuallyCollapsed
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
   const refreshRequestRef = useRef(0);

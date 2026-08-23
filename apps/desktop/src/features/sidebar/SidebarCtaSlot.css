@@ -15,12 +15,20 @@
 .sidebar-cta-slot-wrap {
   position: relative;
   width: 100%;
+  overflow: hidden;
 }
 
 .sidebar-cta-slot {
   position: relative;
   isolation: isolate;
-  width: 100%;
+  /* Pinned to the expanded content column rather than the live parent width.
+     While the rail animates, a percentage width would reflow this copy into
+     more lines and grow the card vertically, which read as the card stretching
+     and snapping back. Holding the expanded width keeps the collapse purely
+     horizontal; the wrap above clips the overflow. */
+  width: var(--sidebar-cta-slot-width);
+  min-width: var(--sidebar-cta-slot-width);
+  max-width: var(--sidebar-cta-slot-width);
   display: grid;
   grid-template-rows: auto auto;
   gap: 12px;

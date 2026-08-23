@@ -558,7 +558,7 @@
 
 .tracker-control {
   position: relative;
-  min-height: 46.2px;
+  min-height: var(--sidebar-tracker-row-min-height);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 24px;
   align-items: center;

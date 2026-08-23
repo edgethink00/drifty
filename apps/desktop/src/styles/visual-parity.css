@@ -160,14 +160,15 @@
 .account-trigger__chevrons {
   transition:
     opacity var(--sidebar-fade-duration) ease-out,
-    transform var(--sidebar-duration) var(--sidebar-ease);
+    transform var(--sidebar-fade-duration) ease-out;
 }
 
 .sidebar--collapsed {
   align-items: flex-start;
-  gap: 0.24rem;
-  overflow: visible;
-  padding: var(--window-chrome-height) 7px var(--content-panel-gap);
+  gap: 3px;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  padding: var(--window-chrome-height) 8px var(--content-panel-gap);
   scrollbar-width: none;
 }
 
@@ -177,7 +178,7 @@
 .sidebar--collapsed .settings-sidebar-back,
 .sidebar--collapsed .settings-nav,
 .sidebar--collapsed .sidebar-foot {
-  max-width: calc(var(--sidebar-collapsed-width) - 14px);
+  width: 100%;
 }
 
 .sidebar--collapsed::-webkit-scrollbar,
@@ -193,7 +194,7 @@
 .app-shell:not(.app-shell--sidebar-collapsed) .live-pill .app-class,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__copy,
 .app-shell:not(.app-shell--sidebar-collapsed) .account-trigger__chevrons {
-  transition-delay: var(--sidebar-fade-delay);
+  transition-delay: var(--sidebar-duration);
 }
 
 .sidebar--collapsed .nav-label,
@@ -212,9 +213,9 @@
 .sidebar--collapsed .brand {
   gap: 0;
   width: 100%;
-  justify-content: center;
-  padding: 10px 0;
-  margin: 0 0 12px;
+  justify-content: flex-start;
+  padding: 10px 4px;
+  margin: 0 0 4px;
 }
 
   /* Show the standalone icon while collapsed. */
@@ -228,35 +229,36 @@
 
   .sidebar--collapsed .nav-label {
     width: 100%;
-    padding: 4px 0;
+    padding: 12px 10px 4px;
     overflow: hidden;
     color: transparent;
   }
 
   .sidebar--collapsed .sidebar-nav {
     width: 100%;
-    justify-items: center;
-    gap: 0.34rem;
+    justify-items: start;
+    gap: 0.12rem;
   }
 
   .sidebar--collapsed .sidebar-nav--periods {
     width: 100%;
-    margin-bottom: 10px;
-    padding-bottom: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 14px;
   }
 
   .sidebar--collapsed .nav-item {
     gap: 0;
-    justify-content: center;
+    justify-content: flex-start;
     width: 100%;
     height: var(--nav-item-height);
-    padding: 0;
+    padding: 0 10px;
     border-radius: 10px;
+    overflow: hidden;
   }
 
   .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge) {
-    max-width: 0;
     opacity: 0;
+    max-width: 0;
     overflow: hidden;
     white-space: nowrap;
     pointer-events: none;
@@ -274,8 +276,8 @@
   }
 
   .sidebar--collapsed .nav-item svg {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
 
   .sidebar--collapsed .settings-sidebar-back {
@@ -309,14 +311,14 @@
 
   .sidebar--collapsed .settings-nav {
     width: 100%;
-    align-items: center;
-    gap: 0.34rem;
+    align-items: start;
+    gap: 0.12rem;
   }
 
   .sidebar--collapsed .settings-nav-group {
     display: grid;
     width: 100%;
-    gap: 0.34rem;
+    gap: 0.12rem;
   }
 
   .sidebar--collapsed .settings-nav-item {
@@ -324,11 +326,12 @@
     height: var(--nav-item-height);
     min-height: var(--nav-item-height);
     display: grid;
-    place-items: center;
-    padding: 0;
+    place-items: center start;
+    padding: 0 10px;
     border-radius: 10px;
     position: relative;
     text-align: center;
+    overflow: hidden;
   }
 
   /* Collapsed rail shows the section icon (centered) instead of the first-letter glyph. */
@@ -342,8 +345,8 @@
   }
 
   .sidebar--collapsed .settings-nav-item__label {
-    max-width: 0;
     opacity: 0;
+    max-width: 0;
     overflow: hidden;
     pointer-events: none;
     transform: translateX(-6px);
@@ -362,34 +365,97 @@
 
   .sidebar--collapsed .sidebar-foot {
     width: 100%;
-    display: grid;
-    align-items: stretch;
-    justify-items: center;
-    padding-top: 14px;
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    padding-top: 0;
+    gap: 6px;
+  }
+
+  /* The card is hidden rather than unmounted so removing it cannot shift the
+     tracker and account rows underneath. `visibility` (not `display`) keeps the
+     box in the flex flow, and the wrap stays sized by the card it contains -
+     a pinned height would under-reserve for a three-line CTA and let the
+     tracker row jump as the rail collapses. */
+  .sidebar--collapsed .sidebar-cta-slot-wrap {
+    visibility: hidden;
+    pointer-events: none;
+    overflow: hidden;
+    flex: 0 0 auto;
+    width: 100%;
+    transition: none;
+  }
+
+  .sidebar--collapsed .sidebar-cta-slot {
+    visibility: hidden;
+    pointer-events: none;
+    box-shadow: none;
+    transition: none;
+  }
+
+  .sidebar--collapsed .sidebar-cta-slot[data-tone]::before {
+    display: none;
+  }
+
+  /* Collapsing is a width-only tween on the shell grid, but the expanded
+     tracker (icon + copy + trailing control on one row) and the collapsed
+     tracker (dot stacked over the control) are different layouts, and CSS
+     cannot interpolate between them. Restyling at frame 0 teleported the
+     control to the rail; restyling at the end clipped it away mid-tween and
+     then popped it back.
+
+     So the collapsed layout is applied immediately, which keeps the end state
+     pixel-identical to the pre-change build, and only `transform` moves. Each
+     control starts at the delta between its expanded and collapsed centre and
+     eases to zero on the same duration and curve as the column width, so it
+     reads as riding the shrinking rail.
+
+     Offsets are measured centre-to-centre in the default window size. They are
+     presentational only: if they drift, the control lands slightly off during
+     the tween while the collapsed end state stays correct. */
+  .sidebar--collapsed {
+    /* play/pause: expanded centre (179, 719.9) -> collapsed centre (26, 725) */
+    --sidebar-collapse-toggle-ride-x: 153px;
+    --sidebar-collapse-toggle-ride-y: -5.1px;
+    /* 24px expanded control scaled into the 36px collapsed plate */
+    --sidebar-collapse-toggle-ride-scale: 0.6667;
+    /* status dot: expanded row sits 17.9px below the collapsed stack slot */
+    --sidebar-collapse-dot-ride-y: 17.9px;
   }
 
   .sidebar--collapsed .tracker-control {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
+    align-content: center;
     gap: 8px;
     width: 2.25rem;
     max-width: 2.25rem;
+    /* Matches the expanded row so the bottom-anchored foot - and the CTA card
+       above it - cannot slide down as the stack replaces the row. */
+    height: var(--sidebar-tracker-row-height);
+    min-height: var(--sidebar-tracker-row-height);
     padding: 0;
     border-radius: 0;
     background: transparent;
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+    overflow: visible;
   }
 
   .sidebar--collapsed .live-pill,
-  .sidebar--collapsed .sidebar-tracker-toggle,
-  .sidebar--collapsed .account-menu-shell,
-  .sidebar--collapsed .account-trigger {
+  .sidebar--collapsed .sidebar-tracker-toggle {
     width: 2.25rem;
     max-width: 2.25rem;
+  }
+
+  /* The account row keeps the expanded width and is simply clipped by the rail,
+     so the avatar never re-centres and never drifts vertically. */
+  .sidebar--collapsed .account-menu-shell,
+  .sidebar--collapsed .account-trigger {
+    width: var(--sidebar-expanded-width);
+    min-width: var(--sidebar-expanded-width);
+    max-width: var(--sidebar-expanded-width);
   }
 
   .sidebar--collapsed .live-pill {
@@ -401,7 +467,7 @@
     border: 0;
     background: transparent;
     color: inherit;
-    overflow: hidden;
+    overflow: visible;
     margin-inline: auto;
   }
 
@@ -425,7 +491,16 @@
     letter-spacing: 0;
     overflow: hidden;
     pointer-events: none;
-    transform: none;
+    animation: sidebar-collapsed-dot-ride var(--sidebar-duration) var(--sidebar-ease);
+  }
+
+  /* The dot rides the same curve as the column: it holds the expanded row
+     position while the rail is still wide, then lands on the collapsed stack
+     as the last of the width is taken away. */
+  @keyframes sidebar-collapsed-dot-ride {
+    from { transform: translate(0, var(--sidebar-collapse-dot-ride-y)); }
+    58% { transform: translate(0, var(--sidebar-collapse-dot-ride-y)); }
+    to { transform: none; }
   }
 
   .sidebar--collapsed .live-pill__summary-copy {
@@ -442,8 +517,8 @@
     height: 8px;
   }
 
-.sidebar--collapsed .live-pill .app-name,
-.sidebar--collapsed .live-pill .app-class {
+  .sidebar--collapsed .live-pill .app-name,
+  .sidebar--collapsed .live-pill .app-class {
     max-width: 0;
     max-height: 0;
     margin: 0;
@@ -451,6 +526,10 @@
     overflow: hidden;
     pointer-events: none;
     transform: translateX(-4px);
+  }
+
+  .sidebar--collapsed .live-pill__status-dot {
+    visibility: hidden;
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle__icon {
@@ -473,6 +552,27 @@
     overflow: visible;
     backdrop-filter: blur(18px) saturate(1.1);
     -webkit-backdrop-filter: blur(18px) saturate(1.1);
+    animation: sidebar-collapsed-toggle-ride var(--sidebar-duration) var(--sidebar-ease);
+  }
+
+  @keyframes sidebar-collapsed-toggle-ride {
+    from {
+      transform:
+        translate(
+          var(--sidebar-collapse-toggle-ride-x),
+          var(--sidebar-collapse-toggle-ride-y)
+        )
+        scale(var(--sidebar-collapse-toggle-ride-scale));
+      border-color: transparent;
+      background: transparent;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    45% {
+      border-color: transparent;
+      background: transparent;
+    }
+    to { transform: none; }
   }
 
   .sidebar--collapsed .sidebar-tracker-toggle span {
@@ -528,27 +628,28 @@
   }
 
   .sidebar--collapsed .account-menu-shell {
-    display: grid;
-    justify-items: center;
-    width: auto;
+    display: block;
+    justify-items: start;
+    width: 100%;
     padding-top: 0;
     border-top: 0;
   }
 
   .sidebar--collapsed .account-trigger {
-    height: 2.25rem;
-    display: flex;
+    height: auto;
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
     align-items: center;
-    justify-content: center;
-    gap: 0;
-    margin-inline: auto;
-    padding: 0;
+    justify-content: start;
+    gap: 8px;
+    margin-inline: 0;
+    padding: 5px 7px;
     border-radius: 10px;
   }
 
   .sidebar--collapsed .account-avatar {
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 27px;
+    height: 27px;
     display: grid;
     place-items: center;
     flex: 0 0 auto;
@@ -590,5 +691,12 @@
   .account-trigger__chevrons {
     transition-duration: 0.01ms !important;
     transition-delay: 0ms !important;
+  }
+
+  /* The collapsed rail settles with keyframes rather than transitions, so it
+     needs its own opt-out or it keeps animating under reduced motion. */
+  .sidebar--collapsed .live-pill .k,
+  .sidebar--collapsed .sidebar-tracker-toggle {
+    animation: none !important;
   }
 }
