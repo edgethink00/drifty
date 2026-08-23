@@ -131,7 +131,7 @@
   color: var(--text);
   display: inline-flex;
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 650;
   justify-content: center;
   min-height: 1.7rem;

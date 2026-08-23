@@ -141,7 +141,7 @@
   margin: 0;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-weight: 600;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -157,7 +157,9 @@
 
 .history-row {
   display: grid;
-  grid-template-columns: 1.55rem minmax(7.6rem, 0.18fr) minmax(0, 1fr) minmax(8rem, auto);
+  /* The time column holds a full mono range ("8:15 PM – 8:23 PM"). It was sized
+     for the old sub-floor type, so raising the floor truncated the end time. */
+  grid-template-columns: 1.55rem minmax(9.2rem, 0.2fr) minmax(0, 1fr) minmax(8rem, auto);
   align-items: center;
   gap: var(--space-2);
   min-height: 44px;
@@ -189,7 +191,7 @@
   overflow: hidden;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -198,7 +200,7 @@
 .history-row__time strong {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-weight: 650;
   line-height: 1.2;
 }
@@ -232,7 +234,7 @@
 
 .history-row__identity-copy span {
   color: var(--text-soft);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   line-height: 1.2;
 }
 
@@ -245,7 +247,7 @@
   max-width: 12rem;
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.2;
   white-space: nowrap;
@@ -347,7 +349,7 @@
   }
 
   .history-row {
-    grid-template-columns: 1.55rem minmax(6.3rem, auto) minmax(0, 1fr);
+    grid-template-columns: 1.55rem minmax(9.2rem, auto) minmax(0, 1fr);
     align-items: start;
     min-height: 58px;
     padding: 8px 12px;
@@ -362,17 +364,17 @@
 .history-calendar-layout { display: grid; grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr); gap: 16px; align-items: start; }
 .history-calendar { display: grid; gap: 10px; width: 100%; max-width: 18rem; }
 .history-calendar__toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.history-calendar__nav { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-soft); }
-.history-calendar__nav strong { min-width: 8rem; color: var(--text); font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: -.02em; text-align: center; }
+.history-calendar__nav { display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 0.71875rem; color: var(--text-soft); }
+.history-calendar__nav strong { min-width: 8rem; color: var(--text); font-family: var(--font-display); font-size: 0.84375rem; font-weight: 600; letter-spacing: -.02em; text-align: center; }
 .history-calendar__nav button { width: 26px; height: 24px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
 .history-calendar__nav button:disabled { opacity: .38; cursor: default; }
 .history-calendar__month { display: grid; gap: 6px; }
-.history-calendar__month h3 { margin: 0; font-family: var(--font-display); font-size: 13px; font-weight: 600; letter-spacing: -.02em; }
-.history-calendar__weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; font-family: var(--font-mono); font-size: 9px; color: var(--text-soft); text-align: center; }
+.history-calendar__month h3 { margin: 0; font-family: var(--font-display); font-size: 0.84375rem; font-weight: 600; letter-spacing: -.02em; }
+.history-calendar__weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-soft); text-align: center; }
 .heatmap-shell { display: flex; flex-direction: column; gap: 4px; }
 .heatmap-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.heatmap-cell { aspect-ratio: 1; border-radius: 5px; background: var(--bg-2); padding: 4px; display: grid; align-content: space-between; color: var(--text-soft); font-family: var(--font-mono); font-size: 8.5px; }
-.heatmap-cell strong { color: var(--text); font-size: 9px; font-weight: 650; }
+.heatmap-cell { aspect-ratio: 1; border-radius: 5px; background: var(--bg-2); padding: 4px; display: grid; align-content: space-between; color: var(--text-soft); font-family: var(--font-mono); font-size: 0.75rem; }
+.heatmap-cell strong { color: var(--text); font-size: 0.75rem; font-weight: 650; }
 .heatmap-cell--1 { background: color-mix(in srgb, var(--warn) 28%, var(--bg-2)); }
 .heatmap-cell--2 { background: color-mix(in srgb, var(--gold) 42%, var(--bg-2)); }
 .heatmap-cell--3 { background: color-mix(in srgb, var(--accent) 72%, var(--bg-2)); }

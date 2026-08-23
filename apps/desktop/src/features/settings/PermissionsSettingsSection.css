@@ -24,7 +24,7 @@
   background: color-mix(in srgb, var(--text) 3%, var(--surface));
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.75rem;
   font-weight: 650;
   line-height: 1;
 }

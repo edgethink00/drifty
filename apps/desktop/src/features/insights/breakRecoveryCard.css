@@ -28,7 +28,7 @@
   justify-content: flex-end;
   max-width: 360px;
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1;
 }
 
@@ -88,7 +88,7 @@
 .break-recovery-card__metric span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -103,7 +103,7 @@
 .break-recovery-card__metric small {
   overflow: hidden;
   color: var(--text-soft);
-  font-size: 0.63rem;
+  font-size: 0.71875rem;
   line-height: 1.12;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -137,7 +137,7 @@
 .break-recovery-card__distribution-head small {
   flex: 0 0 auto;
   color: var(--text-soft);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   line-height: 1.1;
 }
 
@@ -157,7 +157,7 @@
 .break-recovery-card__distribution-row > span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;

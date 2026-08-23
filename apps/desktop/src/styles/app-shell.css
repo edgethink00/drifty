@@ -466,7 +466,7 @@
 
 .nav-label {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.75rem;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--text) 72%, transparent);
@@ -493,7 +493,7 @@
   padding: 8px 10px;
   border-radius: 8px;
   color: color-mix(in srgb, var(--text) 86%, transparent);
-  font-size: 12.5px;
+  font-size: 0.8125rem;
   font-weight: 500;
   text-align: left;
   transition: color .15s, background .15s;
@@ -553,7 +553,7 @@
 .sidebar-status p {
   margin: 0;
   color: color-mix(in srgb, currentColor 66%, transparent);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
 }
 
 .tracker-control {
@@ -641,7 +641,7 @@
   font-family: var(--font-mono);
   width: 8px;
   height: 8px;
-  font-size: 8.5px;
+  font-size: 0.75rem;
   opacity: 1;
   display: grid;
   place-items: center;
@@ -687,7 +687,7 @@
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--text) 72%, transparent);
-  font-size: 9.5px;
+  font-size: 0.71875rem;
   font-weight: 560;
   line-height: 1.12;
   text-overflow: ellipsis;
@@ -720,7 +720,7 @@
   align-items: baseline;
   gap: 0;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 0.8125rem;
   font-weight: 650;
   line-height: 1.08;
 }
@@ -747,7 +747,7 @@
   overflow: hidden;
   color: color-mix(in srgb, var(--text) 56%, transparent);
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 0.75rem;
   font-weight: 560;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -765,7 +765,7 @@
   gap: 1px;
   flex: 1 1 auto;
   color: color-mix(in srgb, var(--text) 74%, transparent);
-  font-size: 10.5px;
+  font-size: 0.75rem;
   line-height: 1.24;
 }
 
@@ -784,7 +784,7 @@
   max-height: 1.25rem;
   min-width: 0;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -794,12 +794,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 0.71875rem;
   font-weight: 500;
   opacity: 0.82;
 }
 .live-pill .app-class {
-  font-size: 11px;
+  font-size: 0.75rem;
   max-width: 100%;
   max-height: 1rem;
   opacity: 0.8;
@@ -883,7 +883,7 @@
   width: auto;
   height: auto;
   background: transparent;
-  font-size: 12px;
+  font-size: 0.78125rem;
   font-weight: 700;
 }
 
@@ -912,11 +912,11 @@
   justify-content: center;
   color: var(--on-accent);
   font-weight: 700;
-  font-size: 10px;
+  font-size: 0.71875rem;
 }
 
-.user-row .nm { font-size: 12.5px; font-weight: 600; }
-.user-row .tier { font-family: var(--font-mono); font-size: 9.5px; color: var(--text-soft); }
+.user-row .nm { font-size: 0.8125rem; font-weight: 600; }
+.user-row .tier { font-family: var(--font-mono); font-size: 0.71875rem; color: var(--text-soft); }
 
 /* ── MAIN ── */
 .content {
@@ -976,7 +976,7 @@
   background: var(--bg-2);
   border-radius: 999px;
   padding: 7px 13px;
-  font-size: 12.5px;
+  font-size: 0.8125rem;
   color: var(--text-soft);
   cursor: pointer;
 }
@@ -986,7 +986,7 @@
   outline: 0;
   background: transparent;
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 0.8125rem;
   color: var(--text);
   width: 100%;
   cursor: pointer;
@@ -997,7 +997,7 @@
 
 .search .kbd {
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 0.71875rem;
   color: var(--text-soft);
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1077,7 +1077,7 @@
 .hero h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 1.3125rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -1123,7 +1123,7 @@
   padding: 6px 16px;
   border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 0.75rem;
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--text-soft);
@@ -1133,7 +1133,7 @@
 
 .seg button small {
   display: block;
-  font-size: 9px;
+  font-size: 0.75rem;
   letter-spacing: .08em;
   margin-top: 2px;
   opacity: .58;
@@ -1231,7 +1231,7 @@
 
 .classification-range-controls .settings-mode-option span {
   font-family: var(--font-display, inherit);
-  font-size: 0.675rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;

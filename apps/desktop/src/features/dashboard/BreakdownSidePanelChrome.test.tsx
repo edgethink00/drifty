@@ -47,7 +47,7 @@ describe("BreakdownSidePanel chrome", () => {
     const iconRule = cssRule(styles, ".week-v2-side__chevron");
     const titleRule = cssRule(styles, ".week-v2-side__title");
 
-    expect(rootRule).toContain("--type-breakdown-title-size: 0.714rem;");
+    expect(rootRule).toContain("--type-breakdown-title-size: 0.78125rem;");
     expect(rootRule).toContain("--text-breakdown-title: color-mix(in srgb, var(--text) 86%, var(--text-soft));");
     expect(titleRule).toContain("font-size: var(--type-breakdown-title-size);");
     expect(titleRule).toContain("color: var(--text-breakdown-title);");

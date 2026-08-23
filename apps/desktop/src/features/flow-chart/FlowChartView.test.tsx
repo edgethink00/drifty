@@ -40,8 +40,12 @@ function expectedBreakdownCellMinHeight(intervalMinutes: FlowIntervalMinutes): s
   return `${(0.76 * intervalMinutes) / 3}rem`;
 }
 
-function expectedMinuteAxisFontSize(intervalMinutes: FlowIntervalMinutes): string {
-  return intervalMinutes === 3 ? "0.52rem" : "0.58rem";
+function expectedMinuteAxisFontSize(_intervalMinutes: FlowIntervalMinutes): string {
+  // The minute axis sits a hair under the shared 11px floor at every interval.
+  // It is the densest repeated label in the app, so it is trimmed 3% to keep it
+  // from reading heavier than its surroundings; the denser 3-minute view no
+  // longer shrinks further, which is what made it unreadable before.
+  return "0.667rem";
 }
 
 function visibleHourLabels(): string[] {
@@ -116,12 +120,12 @@ describe("FlowChartView", () => {
 
     expect(intervalControlRule).toContain("padding: 1.78px;");
     expect(intervalButtonRule).toContain("padding: 1.78px var(--space-2);");
-    expect(intervalButtonRule).toContain("font-size: 0.58rem;");
+    expect(intervalButtonRule).toContain("font-size: 0.6875rem;");
     expect(colorModeControlRule).toContain("padding: 1.78px;");
     expect(colorModeButtonRule).toContain("min-height: 1.08rem;");
-    expect(colorModeButtonRule).toContain("padding: 0.14rem 0.48rem;");
-    expect(colorModeButtonRule).toContain("font-size: 0.54rem;");
-    expect(colorModeButtonRule).toContain("letter-spacing: 0.08em;");
+    expect(colorModeButtonRule).toContain("padding: 0.1rem 0.38rem;");
+    expect(colorModeButtonRule).toContain("font-size: 0.6875rem;");
+    expect(colorModeButtonRule).toContain("letter-spacing: 0.05em;");
   });
 
   it("tightens only the flow chart shell spacing while preserving cell scale", () => {
@@ -129,14 +133,14 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-chart-card\s*{[\s\S]*gap:\s*8px;/);
     expect(styles).toMatch(/\.flow-chart-card\s*{[\s\S]*--flow-axis-gutter:\s*1\.55rem;/);
     expect(styles).toMatch(/\.flow-chart-hours,\s*\.flow-chart-row\s*\{[\s\S]*grid-template-columns:\s*var\(--flow-axis-gutter\) repeat\(24,\s*minmax\(1\.55rem,\s*1fr\)\);/);
-    expect(cssRule(".flow-chart-hours")).toContain("font-size: 0.58rem;");
-    expect(cssRule(".flow-chart-row-label")).toContain("font-size: var(--flow-minute-axis-font-size, 0.52rem);");
+    expect(cssRule(".flow-chart-hours")).toContain("font-size: 0.6875rem;");
+    expect(cssRule(".flow-chart-row-label")).toContain("font-size: var(--flow-minute-axis-font-size, 0.667rem);");
     expect(styles).toMatch(/\.flow-chart-row--now::before\s*\{[\s\S]*left:\s*calc\(var\(--flow-axis-gutter\) \+ 0\.15rem\);/);
     expect(styles).toMatch(/\.flow-chart-row--now::after\s*\{[\s\S]*left:\s*calc\(var\(--flow-axis-gutter\) \+ \(\(100% - var\(--flow-axis-gutter\)\) \/ 24\) \* \(var\(--flow-current-hour\) \+ 1\)\);/);
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*gap:\s*5px;/);
     expect(styles).toMatch(/\.flow-compact-split-chart__panel\s*{[\s\S]*padding:\s*0\.44rem 0\.64rem;/);
-    expect(styles).toMatch(/\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.68rem;/);
-    expect(styles).toMatch(/\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.62rem;/);
+    expect(styles).toMatch(/\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.75rem;/);
+    expect(styles).toMatch(/\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.71875rem;/);
     expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-item\s*{[\s\S]*font-size:\s*0\.79rem;/);
     expect(styles).toMatch(/\.flow-compact-productivity-circle\s+\.flow-compact-split-chart__legend-value\s*{[\s\S]*font-size:\s*0\.71rem;/);
   });

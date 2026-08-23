@@ -693,7 +693,7 @@ describe("App AI classification controls", () => {
     expect(cssRule(".classification-panel-view__category-row")).toMatch(/box-shadow:\s*0 2px 8px color-mix\(in srgb, var\(--classification-category-tone\) 4%, transparent\);/);
     expect(cssRule(".classification-panel-view__category-row")).toMatch(/color-mix\(in srgb, var\(--classification-category-tone\) 2%, var\(--surface\)\)/);
     expect(cssRule(".classification-panel-view__activity-summary,\n.classification-panel-view__activity-toggle")).toContain("min-height: var(--classification-row-height);");
-    expect(styles).toMatch(/\.classification-panel-view__activity-copy strong\s*{[\s\S]*font-size:\s*0\.64rem;/);
+    expect(styles).toMatch(/\.classification-panel-view__activity-copy strong\s*{[\s\S]*font-size:\s*0\.71875rem;/);
     expect(styles).toMatch(/\.classification-panel-view__bar\s*{[\s\S]*height:\s*6px;/);
     expect(styles).toMatch(/\.classification-panel-view__category-row:has\(\.category-dot--entertainment\)\s*{[\s\S]*--classification-category-tone:\s*var\(--category-entertainment\);[\s\S]*\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-category-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__source-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-selected-tone\)/);

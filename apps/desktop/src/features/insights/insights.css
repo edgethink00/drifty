@@ -448,7 +448,7 @@
   min-height: 14px;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.75rem;
   line-height: 1;
   letter-spacing: 0.01em;
 }
@@ -462,7 +462,7 @@
   width: var(--cadence-weekday-label);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.75rem;
   line-height: 1;
   letter-spacing: 0.01em;
 }
@@ -507,7 +507,7 @@
   gap: var(--space-2);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 0.75rem;
 }
 
 .contribution-grid__legend i {
@@ -631,7 +631,7 @@
   background: color-mix(in srgb, var(--accent) 11%, var(--surface-strong));
   color: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
   font-family: var(--font-sans);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 580;
   white-space: nowrap;
 }
@@ -950,7 +950,7 @@
   padding: 0.16rem var(--space-2);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   font-weight: 570;
 }
 
@@ -985,7 +985,7 @@
 .drift-source-row__rank {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
 }
 
 .drift-source-row__icon {
@@ -1035,7 +1035,7 @@
 .drift-pattern-card p {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   line-height: 1.22;
 }
 
@@ -1067,7 +1067,7 @@
   margin-bottom: 0.12rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -1195,7 +1195,7 @@
   gap: 0.3rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
 }
 
@@ -1301,7 +1301,7 @@
   top: -0.55em;
   width: 2.1rem;
   text-align: right;
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
   font-family: var(--font-mono);
   color: var(--text-soft);
   line-height: 1;
@@ -1351,7 +1351,7 @@
   height: 1.22rem;
   display: flex;
   align-items: center;
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-family: var(--font-mono);
   color: var(--text-soft);
   letter-spacing: 0.04em;
@@ -1456,7 +1456,7 @@
 }
 
 .od-cat-center-label {
-  font-size: 0.48rem;
+  font-size: 0.6875rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
   letter-spacing: 0.03em;
@@ -1585,7 +1585,7 @@
 .weekly-breakdown-analytical__eyebrow {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.16em;
   line-height: 1;
   text-transform: uppercase;
@@ -1753,7 +1753,7 @@
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.5rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1788,7 +1788,7 @@
   gap: 0;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.48rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1816,7 +1816,7 @@
 .productivity-rhythm-card__weekday {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.54rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -2028,6 +2028,27 @@
   align-items: start;
 }
 
+/* An element cannot answer its own container query, so the card above the two
+   columns carries the container. */
+.trend-topics-card {
+  container-type: inline-size;
+  container-name: trend-topics;
+}
+
+/* Each column packs rank, icon, name and value into one row, so two columns
+   leave the name a few dozen pixels and "youtube.com" renders as "yo…". Below
+   this width one column per row keeps the source identifiable, which is the
+   only reason the list exists.
+
+   Measured on origin/main: the name clips while the card is under ~394px and
+   reads fine at 394px and above, so the fold stops short of the default
+   window and leaves the two-column layout intact there. */
+@container trend-topics (max-width: 23rem) {
+  .trend-topics-card__columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .drift-time-trend__sources {
   display: grid;
   gap: 0.28rem;
@@ -2101,7 +2122,7 @@
   background: color-mix(in srgb, var(--trend-tone, var(--warn)) 14%, transparent);
   color: var(--trend-tone, var(--warn));
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   line-height: 1;
 }
 
@@ -2149,7 +2170,7 @@
   background: color-mix(in srgb, var(--trend-tone, var(--warn)) 14%, transparent);
   color: var(--trend-tone, var(--warn));
   font-family: var(--font-mono);
-  font-size: 0.48rem;
+  font-size: 0.6875rem;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -2161,7 +2182,7 @@
   justify-self: end;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
   line-height: 1.2;
   letter-spacing: 0.02em;
 }

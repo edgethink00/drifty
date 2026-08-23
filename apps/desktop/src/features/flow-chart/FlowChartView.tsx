@@ -70,7 +70,12 @@ export function FlowChartView({
     () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes),
     [blocks, boundaryMinutes, intervalMinutes],
   );
-  const minuteAxisFontSize = intervalMinutes === 3 ? "0.52rem" : "0.58rem";
+  // The minute axis sits a hair under the shared 11px floor. It is the densest
+  // repeated label in the app (up to 20 marks per hour), so at the full floor it
+  // read heavier than everything around it; 3% back keeps it legible without
+  // letting the axis dominate the chart. The denser 3-minute view no longer
+  // shrinks further, which is what made it unreadable before.
+  const minuteAxisFontSize = "0.667rem";
   const chartStyle: CSSProperties & Record<"--flow-cell-min-height" | "--flow-breakdown-cell-min-height" | "--flow-minute-axis-font-size" | "--flow-row-count", string> = {
     "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
     "--flow-breakdown-cell-min-height": `${(FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,

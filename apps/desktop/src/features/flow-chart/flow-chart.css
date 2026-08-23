@@ -58,7 +58,7 @@
   background: color-mix(in srgb, var(--surface) 84%, transparent);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -112,7 +112,7 @@
 
 .flow-interval-control button {
   padding: 1.78px var(--space-2);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
 }
 
 .flow-color-mode-control {
@@ -121,10 +121,13 @@
 }
 
 .flow-color-mode-control button {
+  /* These pills went from 8.6px to the 11px floor, a bigger jump than anything
+     around them, so the chrome grew more than the text did. Trim the padding
+     and tracking to give the label its size back without inflating the pill. */
   min-height: 1.08rem;
-  padding: 0.14rem 0.48rem;
-  font-size: 0.54rem;
-  letter-spacing: 0.08em;
+  padding: 0.1rem 0.38rem;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
 }
 
 .flow-chart-hours,
@@ -143,7 +146,7 @@
 .flow-chart-hours {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   line-height: 1;
   overflow: visible;
 }
@@ -189,7 +192,7 @@
   align-self: center;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: var(--flow-minute-axis-font-size, 0.52rem);
+  font-size: var(--flow-minute-axis-font-size, 0.667rem);
   line-height: 1;
 }
 

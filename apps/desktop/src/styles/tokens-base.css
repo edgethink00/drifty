@@ -2,6 +2,41 @@
    Drifty — design system  ·  light/dark · olive green
    ========================================================= */
 
+/* ---------------------------------------------------------
+   Viewport-linked type scale
+
+   Every rem-based type token below resolves against the root
+   font size, so widening the main window scales app text as a
+   system instead of leaving the same small type in more empty
+   space. Discrete steps (not a fluid vw curve) keep the scale
+   testable and avoid reflow churn while a window is dragged.
+
+   Only the main app window scales. Auxiliary surfaces
+   (companion pill, watcher, drift alarm, pet mode) are small
+   fixed-size overlay windows whose own viewport must not drive
+   app-wide type, so they stay pinned at the base size.
+   --------------------------------------------------------- */
+html {
+  font-size: 100%;
+}
+
+@media (min-width: 1600px) {
+  html:not([data-surface]) {
+    font-size: 106.25%;
+  }
+}
+
+@media (min-width: 2000px) {
+  html:not([data-surface]) {
+    font-size: 112.5%;
+  }
+}
+
+@media (min-width: 2400px) {
+  html:not([data-surface]) {
+    font-size: 118.75%;
+  }
+}
 
 :root {
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -9,29 +44,32 @@
   --font-serif: "Iowan Old Style", "Georgia", serif;
   --font-mono: "SF Mono", ui-monospace, "Fira Code", monospace;
   --font-ui: var(--font-sans);
-  --type-overline-size: 0.5625rem;
-  --type-control-size: 0.6875rem;
+  --type-overline-size: 0.6875rem;
+  --type-control-size: 0.75rem;
   /* 액션 버튼 라벨 전용. --type-control-size 는 mono 로 조판되는 작은
      컨트롤(칩·상태 라벨 등)이 함께 쓰므로 값을 바꾸지 않고, 버튼만
      sans Sentence case 에 맞는 크기를 따로 갖는다. */
-  --type-button-size: 0.78rem;
-  --type-setting-label-size: 0.8125rem;
-  --type-setting-desc-size: 0.72rem;
-  --type-setting-value-size: 0.72rem;
-  --type-metric-size: 1.125rem;
-  --type-caption-size: 0.65625rem;
+  --type-button-size: 0.8125rem;
+  --type-setting-label-size: 0.84375rem;
+  --type-setting-desc-size: 0.78125rem;
+  --type-setting-value-size: 0.78125rem;
+  --type-metric-size: 1.1875rem;
+  --type-caption-size: 0.75rem;
   --type-chip-size: var(--type-caption-size);
   --type-input-size: var(--type-setting-value-size);
-  --type-mode-label-size: 0.75rem;
-  --type-section-title-size: 1rem;
+  --type-mode-label-size: 0.8125rem;
+  --type-section-title-size: 1.0625rem;
   --type-empty-title-size: var(--type-section-title-size);
-  --type-breakdown-title-size: 0.714rem;
+  --type-breakdown-title-size: 0.78125rem;
   --text-breakdown-title: color-mix(in srgb, var(--text) 86%, var(--text-soft));
   --window-chrome-height: 32px;
   --window-control-center-y: 17px;
   --window-nav-offset-x: 100px;
-  --sidebar-expanded-width: 205px;
-  --sidebar-collapsed-width: 54px;
+  /* Expressed in rem so the sidebar keeps pace with the viewport-linked type
+     scale. A fixed pixel rail plus larger labels is effectively a narrower
+     sidebar, which wraps nav and CTA copy at wide window sizes. */
+  --sidebar-expanded-width: 12.8125rem;
+  --sidebar-collapsed-width: 3.375rem;
   /* Shared row height for the main sidebar and the settings rail.
      Both nav surfaces read this single token so they stay in sync. */
   --nav-item-height: 32px;
@@ -230,7 +268,7 @@ body {
   background: transparent;
   color: var(--text);
   font-family: var(--font-sans);
-  font-size: 13px;
+  font-size: 0.875rem;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

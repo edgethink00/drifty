@@ -129,7 +129,7 @@
 
 .projects-model-status__label {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -216,7 +216,7 @@
   margin: 0 0 0.12rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -415,7 +415,7 @@
   background: var(--bg-2);
   color: var(--text);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
 }
 
 .projects-first-run__copy li strong {
@@ -444,7 +444,7 @@
 
 .project-pass-cost__stat-label {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -480,7 +480,7 @@
 
 .project-pass-cost__table th {
   padding: 0 0 0.4rem;
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
   font-weight: 600;
   text-align: right;
   text-transform: uppercase;
@@ -521,7 +521,7 @@
 
 .project-pass-cost__triggers-label {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -663,7 +663,7 @@
 
 .projects-page .projects-table__head span {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -937,7 +937,7 @@
 }
 
 .project-detail__stat .label-mono {
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   color: var(--text-muted);
 }
 
@@ -1027,7 +1027,7 @@
 }
 
 .project-detail__source-val span {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 

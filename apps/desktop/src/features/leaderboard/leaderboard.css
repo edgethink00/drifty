@@ -132,9 +132,17 @@
 .leaderboard-hero__stats .label-mono,
 .leaderboard-toolbar__stats .label-mono,
 .leaderboard-row__meta--compact .label-mono {
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.13em;
   white-space: nowrap;
+}
+
+/* These labels are nowrap inside equal-width tracks, so at the raised type
+   floor they run past their column instead of stopping at it. Ellipsis keeps
+   each label inside its own cell. */
+.leaderboard-toolbar__stats .label-mono {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .leaderboard-hero__stats strong {
@@ -157,7 +165,7 @@
   min-height: 30px;
   padding: 0.38rem 0.72rem;
   border-radius: 999px;
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.1em;
   white-space: nowrap;
 }
@@ -360,7 +368,7 @@
   right: 0.64rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.08em;
 }
@@ -403,7 +411,7 @@
 .leaderboard-podium-card__copy span {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
 }
 
 .leaderboard-profile-sidebar__form {
@@ -419,7 +427,7 @@
 .leaderboard-profile-sidebar__form span {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -557,6 +565,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
 }
+
 
 .leaderboard-toolbar__stats div {
   display: grid;
@@ -1128,7 +1137,7 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-strong) 48%, transparent);
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1206,7 +1215,7 @@
   background: color-mix(in srgb, var(--surface-strong) 50%, transparent);
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 590;
   white-space: nowrap;
 }
@@ -1309,6 +1318,36 @@
   background: transparent;
 }
 
+/* Three side-by-side stats stop fitting their labels once the toolbar is narrow:
+   the widest ("Total worktime") clipped, and so did its value. Stacking reads
+   better than shaving all three to stubs, but only where the row is genuinely
+   short — origin/main keeps them side by side at the default window, so this
+   holds that layout everywhere it already worked.
+
+   The container sits on the toolbar because an element cannot answer its own
+   container query, and this block is declared after the rule above so the
+   cascade cannot drop it. Measured: labels clip under ~55rem of toolbar (a
+   1100px window gives 51.8rem) and read in full by ~58rem (1200px window). */
+.leaderboard-board-block .leaderboard-toolbar {
+  container-type: inline-size;
+  container-name: leaderboard-toolbar;
+}
+
+@container leaderboard-toolbar (max-width: 55rem) {
+  .leaderboard-toolbar__stats {
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+    gap: 0.1rem;
+  }
+
+  .leaderboard-toolbar__stats div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+}
+
 .leaderboard-search {
   min-height: 2rem;
   border-radius: var(--radius-sm);
@@ -1331,7 +1370,7 @@
   min-height: 2.15rem;
   padding: 0 var(--space-3);
   color: color-mix(in srgb, var(--text-soft) 88%, transparent);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -1395,7 +1434,7 @@
   min-width: 1.55rem;
   justify-content: center;
   color: var(--text-soft);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 500;
 }
 
@@ -1420,7 +1459,7 @@
   border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   background: color-mix(in srgb, var(--surface-strong) 68%, transparent);
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-weight: 520;
 }
 
@@ -1452,7 +1491,7 @@
 .leaderboard-hero__stats .label-mono,
 .leaderboard-toolbar__stats .label-mono {
   color: color-mix(in srgb, var(--text-soft) 86%, transparent);
-  font-size: 0.52rem;
+  font-size: 0.6875rem;
   letter-spacing: 0;
 }
 
@@ -1825,7 +1864,7 @@
   border-radius: var(--radius-pill);
   color: color-mix(in srgb, var(--accent) 76%, var(--text-muted));
   font-family: var(--font-sans);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-weight: 600;
   padding: 0.12rem 0.42rem;
 }
@@ -1856,7 +1895,7 @@
 .leaderboard-profile-sidebar__form small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   justify-self: end;
   letter-spacing: 0.02em;
 }
@@ -1874,7 +1913,7 @@
 .profile-editor-links legend {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   font-weight: 650;
   letter-spacing: 0.08em;
   padding: 0 var(--space-1);
@@ -2068,7 +2107,7 @@
   border-radius: var(--radius-pill);
   color: color-mix(in srgb, var(--accent) 72%, var(--text));
   font-family: var(--font-sans);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-weight: 620;
   padding: 0.08rem 0.36rem;
 }
@@ -2549,7 +2588,7 @@
   border-radius: 12px;
   padding: 14px 16px;
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   line-height: 1.6;
   overflow: auto;
   box-shadow: 0 6px 22px rgba(0,0,0,.14);
@@ -2605,7 +2644,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--line) 74%, transparent);
 }
 
-.embeds-rail__group .label-mono { font-size: 0.6rem; color: var(--text-muted); }
+.embeds-rail__group .label-mono { font-size: 0.71875rem; color: var(--text-muted); }
 .embeds-format-list { display: grid; gap: 6px; width: 100%; }
 
 .embeds-format {
@@ -2633,7 +2672,7 @@
 
 .embeds-format__name { flex: 0 0 auto; font-size: 0.78rem; font-weight: 600; color: var(--text); line-height: 1.35; }
 .embeds-format--active .embeds-format__name { color: var(--accent-strong); }
-.embeds-format__desc { flex: 1; min-width: 0; font-size: 0.64rem; color: var(--text-soft); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.embeds-format__desc { flex: 1; min-width: 0; font-size: 0.71875rem; color: var(--text-soft); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .embeds-format__lock { position: absolute; top: 50%; right: 0.65rem; transform: translateY(-50%); color: var(--text-muted); display: flex; }
 .embeds-format__lock svg { width: 13px; height: 13px; }
 .embeds-format__lock--hidden { display: none; }
@@ -2644,8 +2683,8 @@
 .embeds-scope .drifty-checkbox { flex: 0 0 auto; margin-top: 1px; }
 .embeds-scope__copy { display: grid; gap: 1px; min-width: 0; }
 .embeds-scope__name { font-size: 0.75rem; font-weight: 600; color: var(--text); line-height: 1.3; }
-.embeds-scope__desc { font-size: 0.65rem; color: var(--text-soft); line-height: 1.4; }
-.embeds-rail__hint { margin: 0; font-size: 0.68rem; line-height: 1.5; color: var(--text-soft); }
+.embeds-scope__desc { font-size: 0.75rem; color: var(--text-soft); line-height: 1.4; }
+.embeds-rail__hint { margin: 0; font-size: 0.75rem; line-height: 1.5; color: var(--text-soft); }
 
 .profile-copy-row .app-btn { min-width: 4.9rem; white-space: nowrap; }
 

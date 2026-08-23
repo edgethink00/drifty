@@ -212,7 +212,7 @@
 
 .modal-foot__note {
   margin: 0 auto 0 0;
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   line-height: 1.4;
   color: var(--text-muted);
   padding-right: var(--space-3);
@@ -391,7 +391,7 @@
    pages keep their own input styling. */
 .auth-modal .auth-modal__field > span {
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -460,7 +460,7 @@
 
 .profile-editor-preview .profile-socials a {
   padding: 0.24rem 0.6rem;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   color: var(--text-soft);
   background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
 }
@@ -553,7 +553,7 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   background: color-mix(in srgb, var(--surface-strong) 72%, var(--surface));
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   line-height: 1.6;
   white-space: pre;
   word-break: normal;
@@ -648,7 +648,7 @@
 .auth-modal .settings-color-token__action {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   letter-spacing: 0.04em;
 }
 

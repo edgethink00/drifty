@@ -114,7 +114,7 @@
 .classification-category-card__stats dt {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.5rem;
+  font-size: 0.6875rem;
   letter-spacing: .13em;
   text-transform: uppercase;
 }
@@ -135,7 +135,7 @@
   overflow: hidden;
   color: var(--text-soft);
   font-family: var(--font-sans);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   font-weight: 400;
   letter-spacing: 0;
   text-overflow: ellipsis;

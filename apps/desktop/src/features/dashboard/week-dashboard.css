@@ -79,7 +79,7 @@
 .week-panel__meta {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -92,7 +92,7 @@
   margin-right: calc(var(--week-score-column) + 0.62rem);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   opacity: 0.68;
 }
 
@@ -129,7 +129,7 @@
 .week-ranked-row__label strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -137,14 +137,14 @@
 .week-ranked-row__label span {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
 }
 
 .week-ranked-row__score {
   justify-self: end;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -201,7 +201,7 @@
   min-width: 0;
   color: color-mix(in srgb, var(--surface) 92%, white);
   font-family: var(--font-display);
-  font-size: 0.54rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   letter-spacing: -0.02em;
   text-shadow: 0 1px 8px color-mix(in srgb, var(--text) 24%, transparent);
@@ -237,7 +237,7 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--surface-strong) 70%, var(--surface));
   color: var(--text-muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
 }
 
 .week-category-pill strong {
@@ -248,7 +248,7 @@
 .week-category-pill span:last-child {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
 }
 
 .week-donut {
@@ -291,7 +291,7 @@
 .week-donut__center span {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.54rem;
+  font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -310,7 +310,7 @@
   padding-top: 0.42rem;
   border-top: 1px solid var(--line);
   color: var(--text-muted);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 .week-breakdown-item strong {
@@ -389,7 +389,7 @@
 .week-v2-sub {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   letter-spacing: 0.04em;
 }
 
@@ -409,7 +409,7 @@
   background: color-mix(in srgb, var(--surface) 76%, transparent);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.71875rem;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -607,7 +607,7 @@
   gap: var(--space-2);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   white-space: nowrap;
 }
 
@@ -638,7 +638,7 @@
 .week-v2-rank__pos {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   letter-spacing: 0.06em;
 }
 
@@ -661,7 +661,7 @@
 .week-v2-rank__day small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
 }
 
 .week-v2-rank__bar {
@@ -762,7 +762,7 @@
 
 .week-v2-summary--compact .week-v2-summary__main strong {
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 1.75rem;
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1;
@@ -863,7 +863,7 @@
   min-width: 0.85rem;
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   line-height: 1;
 }
 
@@ -966,7 +966,7 @@
 .week-v2-calendar__day-head small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.625rem;
+  font-size: 0.71875rem;
 }
 
 .week-v2-calendar__day-head .is-weekend strong {
@@ -1017,7 +1017,7 @@
   transform: translateY(-50%);
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.59rem;
+  font-size: 0.6875rem;
   white-space: nowrap;
 }
 
@@ -1060,7 +1060,7 @@
   color: color-mix(in srgb, var(--surface) 92%, white);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 20%, transparent), 0 0 8px color-mix(in srgb, var(--text) 12%, transparent);
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   line-height: 1;
   white-space: nowrap;
 }
@@ -1143,7 +1143,7 @@
 .week-v2-calendar__event strong {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 640;
   letter-spacing: -0.02em;
 }
@@ -1151,13 +1151,13 @@
 .week-v2-calendar__event small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.55rem;
+  font-size: 0.6875rem;
 }
 
 .week-v2-calendar__event em {
   grid-column: 2;
   color: var(--text-soft);
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
   font-style: normal;
 }
 
@@ -1182,7 +1182,7 @@
 }
 
 .week-v2-calendar__event--short strong {
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
 }
 
 .week-v2-calendar__event--short small {
@@ -1190,7 +1190,7 @@
 }
 
 .week-v2-calendar__event--dense strong {
-  font-size: 0.58rem;
+  font-size: 0.6875rem;
 }
 
 .week-v2-calendar__event--dense small,
@@ -1257,7 +1257,7 @@
   gap: 5px;
   min-width: 0;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 0.71875rem;
   font-weight: 650;
   letter-spacing: 0.04em;
   color: color-mix(in srgb, var(--text-soft) 84%, var(--text));
@@ -1480,7 +1480,7 @@
 .week-v2-calendar__event strong {
   display: block;
   color: color-mix(in srgb, var(--canvas) 92%, black);
-  font-size: 11px;
+  font-size: 0.75rem;
   line-height: 1.12;
   min-width: 0;
   max-width: 100%;
@@ -1491,7 +1491,7 @@
 
 .week-v2-calendar__event small {
   color: color-mix(in srgb, var(--canvas) 76%, black);
-  font-size: 9px;
+  font-size: 0.75rem;
   line-height: 1.1;
   min-width: 0;
   max-width: 100%;
@@ -1554,7 +1554,7 @@
 }
 
 .week-v2-calendar__event--tiny strong {
-  font-size: 9px;
+  font-size: 0.75rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -1622,7 +1622,7 @@
 }
 
 .week-v2-calendar__event--dense strong {
-  font-size: 9.5px;
+  font-size: 0.71875rem;
 }
 
 /* ── Breakdown side panel (2026-07 dashboard redesign) ─────────────────────
@@ -1715,7 +1715,7 @@
 .week-v2-side__rail-label {
   writing-mode: vertical-rl;
   font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-size: 0.6875rem;
   font-weight: 650;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1874,7 +1874,7 @@
 }
 
 .week-v2-side__content .flow-compact-split-chart__panel > .flow-compact-split-chart__legend .flow-compact-split-chart__legend-value {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
 }
 
 /* Side-panel KPI tiles (Your Day breakdown) */
@@ -1893,7 +1893,7 @@
 }
 
 .week-v2-side__content .metric-tile strong {
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .week-v2-side__content .metric-tile .eyebrow {
@@ -1902,7 +1902,7 @@
 
 .week-v2-side__content .metric-tile p {
   margin-top: 2px;
-  font-size: 9px;
+  font-size: 0.75rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2308,7 +2308,10 @@
 }
 
 .page--week-dashboard .week-v2-side__content > .kpi-row--insights .metric-tile {
-  padding: 6px 10px 7px;
+  /* Captions like "4h 27m avg/day" need ~11px more than the old side padding
+     leaves them at the 11px type floor. Trimming the padding keeps them intact
+     without widening the rail, which Your Day shares and would lose chart width to. */
+  padding: 6px 5px 7px;
 }
 
 /* Week calendar = one rounded white bordered inner block that includes the

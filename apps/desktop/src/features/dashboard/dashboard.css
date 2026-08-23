@@ -49,6 +49,11 @@
   padding: 0;
   border-top: 1px solid var(--line);
   list-style: none;
+  /* The row layout has to respond to the list's own width, not the window's.
+     The panel sits beside a fixed-width feature card, so at a 900px window the
+     list is only ~365px wide and window media queries never fire. */
+  container-type: inline-size;
+  container-name: app-usage-list;
 }
 
 .app-usage-feature {
@@ -93,7 +98,7 @@
 .app-usage-rank {
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 0.5rem;
+  font-size: 0.6875rem;
   font-variant-numeric: tabular-nums;
   letter-spacing: .1em;
   text-transform: uppercase;
@@ -134,7 +139,7 @@
 .app-usage-feature__identity p {
   margin: 2px 0 0;
   color: var(--text-soft);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   line-height: 1.25;
 }
 
@@ -158,7 +163,7 @@
 .app-usage-feature__measure span {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.48rem;
+  font-size: 0.6875rem;
   letter-spacing: .06em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -193,7 +198,7 @@
 .app-usage-feature__meter-copy span {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.52rem;
+  font-size: 0.6875rem;
   letter-spacing: .12em;
   text-transform: uppercase;
 }
@@ -253,9 +258,39 @@
 .app-usage-feature__stats dt {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.46rem;
+  font-size: 0.6875rem;
   letter-spacing: .12em;
   text-transform: uppercase;
+}
+
+/* SESSIONS / AVERAGE / DAYS are uppercase mono with wide tracking, so three
+   equal columns stop fitting well before the card looks full. They already
+   ran into each other at the old size; the raised floor makes it obvious.
+   Let the labels ellipsize instead of printing over their neighbour. */
+.app-usage-feature__stats dt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Ellipsis alone turns the labels into "SE… AV… DA…", so once the card itself
+   is narrow, drop to two columns and let each label keep its word. Kept tight
+   so the default window still shows all three side by side. */
+.app-usage-feature {
+  container-type: inline-size;
+  container-name: app-usage-feature;
+}
+
+@container app-usage-feature (max-width: 11.5rem) {
+  .app-usage-feature__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Three items in two columns leave a hole in the second row, so let the last
+     one span the full width instead of sitting beside an empty cell. */
+  .app-usage-feature__stats div:last-child {
+    grid-column: 1 / -1;
+  }
 }
 
 .app-usage-feature__stats dd {
@@ -273,7 +308,7 @@
 
 .app-usage-row {
   display: grid;
-  grid-template-columns: 2.7ch minmax(11.5rem, 1.42fr) minmax(7rem, 0.68fr) max-content;
+  grid-template-columns: 2.7ch minmax(0, 1.42fr) minmax(0, 0.68fr) minmax(0, max-content);
   column-gap: 0.62rem;
   row-gap: 0.35rem;
   align-items: center;
@@ -284,7 +319,7 @@
 
 .app-usage-row > .app-usage-rank {
   justify-self: end;
-  font-size: 0.625rem;
+  font-size: 0.71875rem;
   line-height: 1;
   text-align: right;
 }
@@ -318,7 +353,7 @@
 .app-usage-row__figures span {
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -538,7 +573,7 @@
   justify-content: center;
   color: #fff;
   font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-size: 0.71875rem;
   letter-spacing: .02em;
   overflow: hidden;
   white-space: nowrap;
@@ -739,7 +774,7 @@
   background: color-mix(in srgb, var(--surface-strong) 48%, transparent);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 650;
   line-height: 1;
 }
@@ -777,7 +812,7 @@
 .focus-drift-hover-card__source-duration {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   font-weight: 650;
   line-height: 1;
 }
@@ -823,7 +858,7 @@
 .focus-drift-hover-card__metric span {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.71875rem;
   line-height: 1;
 }
 
@@ -890,7 +925,7 @@
 
 .focus-drift-hover-card__source-body strong {
   color: var(--text);
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
   font-style: normal;
   font-weight: 650;
   line-height: 1.05;
@@ -898,13 +933,13 @@
 
 .focus-drift-hover-card__source-kind {
   flex: 0 0 auto;
-  font-size: 0.52rem;
+  font-size: 0.6875rem;
 }
 
 .focus-drift-hover-card__source-body em {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 0.53rem;
+  font-size: 0.6875rem;
   font-style: normal;
   line-height: 1.05;
 }
@@ -912,7 +947,7 @@
 .focus-drift-hover-card__source-duration {
   justify-self: end;
   color: var(--text);
-  font-size: 0.55rem;
+  font-size: 0.6875rem;
   white-space: nowrap;
 }
 
@@ -982,7 +1017,7 @@
 
 .app-usage-feature__identity p {
   margin: 1px 0 0;
-  font-size: 0.64rem;
+  font-size: 0.71875rem;
 }
 
 .app-usage-feature__measure strong {
@@ -1039,7 +1074,7 @@
 
 .app-usage-row__copy small,
 .app-usage-row__figures span {
-  font-size: 0.61rem;
+  font-size: 0.71875rem;
   line-height: 1.05;
 }
 
@@ -1077,7 +1112,7 @@
 
 .browser-history-bootstrap__status {
   color: var(--text-soft);
-  font-size: 11.5px;
+  font-size: 0.78125rem;
   line-height: 1.35;
 }
 
@@ -1113,4 +1148,44 @@
 
 .app-usage-row__figures {
   min-width: 0;
+}
+
+/* The row must respond to the list's own width, not the window's: this panel
+   sits beside a fixed-width feature card, so at a 900px window the list is only
+   ~220px wide and window media queries never fire. Below this width the four
+   columns cannot hold a name, a bar, and a stats string at once, and the name
+   track collapses to 0 while the stats text overflows across it. Stacking is
+   the only layout that stays readable at the raised type floor.
+
+   The threshold is deliberately tight. Measured on origin/main the name track
+   is 0px wide at a 900px window but 72px by 1100px, so only the genuinely
+   broken widths fold and the default 1254px window keeps its four columns.
+
+   Declared after the later same-specificity rules above so the compact layout
+   is not silently overridden by the cascade. */
+@container app-usage-list (max-width: 17rem) {
+  .app-usage-row {
+    grid-template-columns: 2.35ch minmax(0, 1fr);
+    height: auto;
+    min-height: 0;
+    row-gap: 0.16rem;
+    align-items: start;
+    padding: 0.4rem 0;
+  }
+
+  .app-usage-row__bar,
+  .app-usage-row__figures {
+    grid-column: 2;
+  }
+
+  /* Keep the stacked row compact: the duration and the share line sit side by
+     side rather than each claiming a full line, so the list does not turn into
+     a long scroll just because it folded. */
+  .app-usage-row__figures {
+    display: flex;
+    align-items: baseline;
+    gap: 0.42rem;
+    justify-content: flex-start;
+    text-align: left;
+  }
 }
