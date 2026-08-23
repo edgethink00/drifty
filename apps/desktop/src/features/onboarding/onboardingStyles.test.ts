@@ -73,3 +73,19 @@ describe("onboarding design-code reference styles", () => {
     expect(compactQuery).toContain("flex-direction: column;");
   });
 });
+
+describe("onboarding job-step contrast", () => {
+  it("keeps dark selected work chips on a light fill with dark text", () => {
+    const selectedRule = cssRule(".dc-onb-choice--selected");
+    const darkSelectedRule = cssRule(':root[data-theme="dark"] .dc-onb-choice--selected');
+    const textareaRule = cssRule(".dc-onb-textarea");
+
+    expect(selectedRule).toContain("background: #4f4e48;");
+    expect(selectedRule).toContain("color: #f6f5f1;");
+    expect(darkSelectedRule).toContain("background: #eceae3;");
+    expect(darkSelectedRule).toContain("color: #151513;");
+    expect(textareaRule).toContain("background: var(--dc-onb-raised);");
+    expect(textareaRule).toContain("color: var(--dc-onb-text);");
+  });
+});
+	

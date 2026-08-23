@@ -17,6 +17,7 @@ const document: LivingSoulDocument = {
   declared: {
     workActivities: ["Engineering", "Marketing"],
     workDomain: "AI productivity",
+    workDescription: "I build product features, plan launches, and help customers.",
     purpose: "Protect focus",
   },
   learned: {
@@ -76,7 +77,7 @@ describe("Living Soul document", () => {
     expect(parseLivingSoulMarkdown(legacy)?.contextualPriors).toEqual([]);
   });
 
-  it("seeds declared work activities, domain, and purpose from onboarding", () => {
+  it("seeds declared work activities and description from onboarding", () => {
     expect(declaredContextFromOnboarding({
       version: 2,
       completed: true,
@@ -87,6 +88,7 @@ describe("Living Soul document", () => {
       workDomainOther: "AI productivity",
       jobType: "Engineering, Marketing",
       jobTypeOther: "",
+      workDescription: "I build product features and plan launches.",
       driftAlarmEnabled: true,
       extremeNudgeEnabled: true,
       browserHistoryBootstrapEnabled: false,
@@ -96,7 +98,35 @@ describe("Living Soul document", () => {
       completedAt: "2026-08-14T00:00:00.000Z",
     })).toEqual({
       workActivities: ["Engineering", "Marketing"],
-      workDomain: "AI productivity",
+      workDomain: null,
+      workDescription: "I build product features and plan launches.",
+      purpose: "Protect focus",
+    });
+  });
+
+  it("moves a legacy field into the description when the description is empty", () => {
+    expect(declaredContextFromOnboarding({
+      version: 2,
+      completed: true,
+      displayName: "",
+      workType: "Engineering",
+      workTypeOther: "",
+      workDomain: "Other",
+      workDomainOther: "AI productivity",
+      jobType: "Engineering",
+      jobTypeOther: "",
+      workDescription: "",
+      driftAlarmEnabled: true,
+      extremeNudgeEnabled: true,
+      browserHistoryBootstrapEnabled: false,
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: "protect_focus",
+      completedAt: "2026-08-14T00:00:00.000Z",
+    })).toEqual({
+      workActivities: ["Engineering"],
+      workDomain: null,
+      workDescription: "Works in AI productivity.",
       purpose: "Protect focus",
     });
   });

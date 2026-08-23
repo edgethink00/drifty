@@ -160,6 +160,7 @@ export function renderLivingSoulMarkdown(document: LivingSoulDocument): string {
     "## Declared work context",
     declaredLine("Work activities", document.declared.workActivities.join(", ") || "Not provided"),
     declaredLine("Work domain", document.declared.workDomain ?? "Not provided"),
+    declaredLine("Work description", document.declared.workDescription ?? "Not provided"),
     declaredLine("Drifty purpose", document.declared.purpose ?? "Not provided"),
     "",
     "## Learned work-support patterns",
@@ -266,11 +267,15 @@ export function declaredContextFromOnboarding(
     .split(",")
     .map((value) => cleanText(value === "Other" ? state.jobTypeOther || state.workTypeOther : value, 180))
     .filter((value): value is string => Boolean(value))
-    .slice(0, 5);
-  const rawDomain = state.workDomain === "Other" ? state.workDomainOther : state.workDomain;
+    .slice(0, 4);
+  const rawDomain = cleanText(state.workDomain === "Other" ? state.workDomainOther : state.workDomain, 180);
+  const existingDescription = cleanText(state.workDescription, 240);
+  const migratedDescription = existingDescription
+    ?? (rawDomain ? `Works in ${rawDomain}.` : null);
   return normalizeDeclaredContext({
     workActivities,
-    workDomain: cleanText(rawDomain, 180),
+    workDomain: null,
+    workDescription: migratedDescription,
     purpose: state.purpose ? PURPOSE_LABELS[state.purpose] : null,
   });
 }
@@ -398,11 +403,13 @@ function parseDeclaredContext(markdown: string): LivingSoulDeclaredContext | nul
   }
   const activities = values.get("Work activities");
   const domain = values.get("Work domain");
+  const description = values.get("Work description");
   const purpose = values.get("Drifty purpose");
   if (activities === undefined || domain === undefined || purpose === undefined) return null;
   return normalizeDeclaredContext({
     workActivities: activities === "Not provided" ? [] : activities.split(","),
     workDomain: domain === "Not provided" ? null : domain,
+    ...(description === undefined || description === "Not provided" ? {} : { workDescription: description }),
     purpose: purpose === "Not provided" ? null : purpose,
   });
 }
@@ -470,12 +477,14 @@ function promptPattern(pattern: LivingSoulPattern): LivingSoulPromptPattern {
 }
 
 function normalizeDeclaredContext(declared: LivingSoulDeclaredContext): LivingSoulDeclaredContext {
+  const workDescription = cleanText(declared.workDescription, 240);
   return {
     workActivities: Array.from(new Set(declared.workActivities.flatMap((value) => {
       const cleaned = cleanText(value, 180);
       return cleaned ? [cleaned] : [];
-    }))).slice(0, 5),
+    }))).slice(0, 4),
     workDomain: cleanText(declared.workDomain, 180),
+    ...(workDescription ? { workDescription } : {}),
     purpose: cleanText(declared.purpose, 120),
   };
 }

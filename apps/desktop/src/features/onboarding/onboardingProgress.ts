@@ -19,6 +19,7 @@ export type OnboardingProgressSnapshot = {
   readonly workTypeOther: string;
   readonly workDomain: string | null;
   readonly workDomainOther: string;
+  readonly workDescription: string;
   readonly driftAlarmEnabled: boolean;
   readonly extremeNudgeEnabled: boolean;
   readonly openAtLoginEnabled: boolean;
@@ -115,6 +116,7 @@ function parseOnboardingProgress(rawValue: string | null, now: Date): Onboarding
       workTypeOther: parseString(parsedValue.workTypeOther),
       workDomain: parseNullableString(parsedValue.workDomain),
       workDomainOther: parseString(parsedValue.workDomainOther),
+      workDescription: parseString(parsedValue.workDescription),
       driftAlarmEnabled: parsedValue.driftAlarmEnabled === true,
       extremeNudgeEnabled: parsedValue.extremeNudgeEnabled === true,
       openAtLoginEnabled: parsedValue.openAtLoginEnabled !== false,

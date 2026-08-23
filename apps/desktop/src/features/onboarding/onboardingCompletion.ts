@@ -22,6 +22,7 @@ export function saveUserOnboardingState({
   workTypeOther,
   workDomain,
   workDomainOther,
+  workDescription,
   jobType,
   jobTypeOther,
   driftAlarmEnabled,
@@ -36,6 +37,7 @@ export function saveUserOnboardingState({
   workTypeOther: string;
   workDomain: string | null;
   workDomainOther: string;
+  workDescription: string;
   jobType: string | null;
   jobTypeOther: string;
   driftAlarmEnabled: boolean;
@@ -52,6 +54,7 @@ export function saveUserOnboardingState({
     workTypeOther,
     workDomain,
     workDomainOther,
+    workDescription: normalizeWorkDescription(workDescription),
     jobType,
     jobTypeOther,
     driftAlarmEnabled,
@@ -70,4 +73,13 @@ export function saveUserOnboardingState({
   }
 
   return { success: true, state };
+}
+
+function normalizeWorkDescription(value: string): string {
+  return value
+    .replace(/[\u0000-\u001F\u007F]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240)
+    .trim();
 }

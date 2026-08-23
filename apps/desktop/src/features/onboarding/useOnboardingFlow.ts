@@ -93,8 +93,7 @@ export function useOnboardingFlow({
   });
   const [workType, setWorkType] = useState<string | null>(restoredProgress?.workType ?? null);
   const [workTypeOther, setWorkTypeOther] = useState(restoredProgress?.workTypeOther ?? "");
-  const [workDomain, setWorkDomain] = useState<string | null>(restoredProgress?.workDomain ?? null);
-  const [workDomainOther, setWorkDomainOther] = useState(restoredProgress?.workDomainOther ?? "");
+  const [workDescription, setWorkDescription] = useState(restoredProgress?.workDescription ?? "");
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
   const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(restoredProgress?.driftAlarmEnabled ?? false);
@@ -147,6 +146,7 @@ export function useOnboardingFlow({
     managedLocalStarted: connection.managedLocalStarted,
     setupChoice: connection.setupChoice,
     step,
+    workContextProvided: mainActivities.length > 0 || workDescription.trim().length > 0,
   });
   const blockedHint = useMemo(() => blockedHintForStep({
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
@@ -213,8 +213,9 @@ export function useOnboardingFlow({
       mainActivityOther,
       workType,
       workTypeOther,
-      workDomain,
-      workDomainOther,
+      workDomain: null,
+      workDomainOther: "",
+      workDescription,
       driftAlarmEnabled,
       extremeNudgeEnabled,
       openAtLoginEnabled,
@@ -231,8 +232,7 @@ export function useOnboardingFlow({
     progressEnabled,
     step,
     userId,
-    workDomain,
-    workDomainOther,
+    workDescription,
     workType,
     workTypeOther,
   ]);
@@ -260,8 +260,7 @@ export function useOnboardingFlow({
       setStorageError,
       setupChoice: connection.setupChoice,
       userId,
-      workDomain,
-      workDomainOther,
+      workDescription,
       workType,
       workTypeOther,
     });
@@ -347,12 +346,10 @@ export function useOnboardingFlow({
     title,
     titleRef,
     toggleMainActivity,
-    workDomain,
-    workDomainOther,
+    workDescription,
     workType,
     workTypeOther,
-    setWorkDomain,
-    setWorkDomainOther,
+    setWorkDescription,
     setWorkType,
     setWorkTypeOther,
   };

@@ -29,22 +29,21 @@ export const WORK_TYPE_OPTIONS = [
 
 export const MAIN_ACTIVITY_OPTIONS = [
   "Coding",
+  "Product & Planning",
   "Designing",
-  "Writing",
-  "Researching",
-  "Studying",
+  "Writing & Content",
+  "Research & Learning",
   "Data Analysis",
-  "Marketing",
-  "Sales",
-  "Trading",
-  "Content Creation",
+  "Marketing & Sales",
+  "Customer Support",
   "Meetings & Communication",
-  "Project Management",
   "Operations",
   "Other",
 ] as const;
 
-export const MAX_MAIN_ACTIVITY_SELECTIONS = 5;
+export const MAX_MAIN_ACTIVITY_SELECTIONS = 4;
+
+export const MAX_WORK_DESCRIPTION_LENGTH = 240;
 
 export const WORK_DOMAIN_OPTIONS = [
   "Tech",

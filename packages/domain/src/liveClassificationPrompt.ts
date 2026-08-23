@@ -168,6 +168,7 @@ export interface LivingSoulPromptContext {
   readonly declared: {
     readonly workActivities: readonly string[];
     readonly workDomain: string | null;
+    readonly workDescription?: string | null;
     readonly purpose: string | null;
   };
   readonly learnedWorkSupport: readonly LivingSoulPromptPattern[];

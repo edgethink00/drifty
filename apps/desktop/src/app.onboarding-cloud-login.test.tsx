@@ -330,7 +330,7 @@ describe("App onboarding cloud login", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /create your account/i })).toBeNull();
     });
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
   });
 
   it("closes in-app email auth and resumes onboarding after account authentication succeeds", async () => {
@@ -358,7 +358,7 @@ describe("App onboarding cloud login", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /sign in to drifty/i })).toBeNull();
     });
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
   }, 15_000);
 

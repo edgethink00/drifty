@@ -139,6 +139,7 @@ describe("AiSetupPanel", () => {
       workDomainOther: "",
       jobType: "Coding, Writing",
       jobTypeOther: "",
+      workDescription: "I build and write about product features.",
       driftAlarmEnabled: false,
       extremeNudgeEnabled: false,
       focusGoalHours: null,
@@ -159,18 +160,19 @@ describe("AiSetupPanel", () => {
     expect(screen.queryByText(/AI prompt line/i)).toBeNull();
     expect(screen.queryByText(/^Source$/i)).toBeNull();
 
-    expect(screen.getByRole("button", { name: /remove coding/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /remove writing/i })).toBeTruthy();
-    const addActivity = screen.getByRole("combobox", { name: /add work activity/i });
-    const fieldCombo = screen.getByRole("combobox", { name: /your field/i });
-    expect(screen.getByPlaceholderText("Product development")).toBeTruthy();
-    expect(addActivity).not.toBeInstanceOf(HTMLSelectElement);
-
-    fireEvent.click(addActivity);
-    fireEvent.click(await screen.findByRole("option", { name: "Data Analysis" }));
-    expect(screen.getByRole("button", { name: /remove data analysis/i })).toBeTruthy();
-    fireEvent.click(fieldCombo);
-    fireEvent.click(await screen.findByRole("option", { name: "AI" }));
+    expect(screen.getByRole("button", { name: "Coding" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Writing" }).getAttribute("aria-pressed")).toBe("true");
+    const workDescription = screen.getByLabelText(/tell us more about your work/i);
+    expect(screen.queryByRole("combobox", { name: /add work activity/i })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /your field/i })).toBeNull();
+    if (!(workDescription instanceof HTMLTextAreaElement)) throw new Error("Work description should render as a textarea.");
+    expect(workDescription.value).toBe("I build and write about product features.");
+    fireEvent.click(screen.getByRole("button", { name: "Data Analysis" }));
+    expect(screen.getByRole("button", { name: "Data Analysis" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Designing" }));
+    expect(screen.getByRole("button", { name: "Designing" }).getAttribute("aria-pressed")).toBe("true");
+    expect((screen.getByRole("button", { name: "Operations" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(workDescription, { target: { value: "I build product features and help customers." } });
 
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /save work profile/i }));
@@ -179,10 +181,11 @@ describe("AiSetupPanel", () => {
     expect(savedState).toMatchObject({
       workType: "Coding",
       workTypeOther: "",
-      jobType: "Coding, Writing, Data Analysis",
+      jobType: "Coding, Writing, Data Analysis, Designing",
       jobTypeOther: "",
-      workDomain: "AI",
+      workDomain: null,
       workDomainOther: "",
+      workDescription: "I build product features and help customers.",
     });
     expect(screen.getByRole("status").textContent).toContain("Work profile saved");
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();

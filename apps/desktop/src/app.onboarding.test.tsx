@@ -346,23 +346,7 @@ async function settleAppStartupEffects() {
 }
 
 function selectMainActivity(option: string) {
-  const activityInput = screen.getByLabelText(/search activities/i);
-  if (!(activityInput instanceof HTMLInputElement)) {
-    throw new Error("Activity combobox input was not rendered");
-  }
-  fireEvent.focus(activityInput);
-  fireEvent.change(activityInput, { target: { value: option } });
-  fireEvent.keyDown(activityInput, { key: "Enter", code: "Enter" });
-}
-
-function selectWorkDomain(option: string) {
-  const domainInput = screen.getByLabelText(/your field/i);
-  if (!(domainInput instanceof HTMLInputElement)) {
-    throw new Error("Domain combobox input was not rendered");
-  }
-  fireEvent.focus(domainInput);
-  fireEvent.change(domainInput, { target: { value: option } });
-  fireEvent.keyDown(domainInput, { key: "Enter", code: "Enter" });
+  fireEvent.click(screen.getByRole("button", { name: option }));
 }
 
 async function waitForConnectedAccountAutoAdvance() {
@@ -370,19 +354,25 @@ async function waitForConnectedAccountAutoAdvance() {
   expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
   expect(screen.queryByRole("button", { name: /continue with google/i })).toBeNull();
   expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
-  await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 });
+  await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 });
 }
 
-async function advanceThroughSharedBasics(options: { activity?: string } = {}) {
+async function advanceThroughSharedBasics(options: { activity?: string; workDescription?: string } = {}) {
   await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 6_000 });
   await clickEnabledNext();
   await waitForConnectedAccountAutoAdvance();
   if (options.activity) selectMainActivity(options.activity);
+  else if (!options.workDescription) selectMainActivity("Coding");
+  if (options.workDescription) {
+    fireEvent.change(screen.getByLabelText(/tell us more about your work/i), {
+      target: { value: options.workDescription },
+    });
+  }
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /choose your setup/i }, { timeout: 6_000 });
 }
 
-async function chooseSimpleSetup(options: { activity?: string } = {}) {
+async function chooseSimpleSetup(options: { activity?: string; workDescription?: string } = {}) {
   await advanceThroughSharedBasics(options);
   fireEvent.click(screen.getByRole("button", { name: /drifty cloud/i }));
   await clickEnabledAction(/^continue$/i);
@@ -427,7 +417,7 @@ async function advanceToPermissionsStep() {
   await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
 }
 
-async function advanceToReadyStep(options: { activity?: string } = {}) {
+async function advanceToReadyStep(options: { activity?: string; workDescription?: string } = {}) {
   await chooseSimpleSetup(options);
 }
 
@@ -549,9 +539,37 @@ describe("App onboarding", () => {
     expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /what do you usually work on\?/i })).toBeTruthy();
-    expect(screen.getByLabelText(/search activities/i, { selector: "input" })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(screen.getByText(/choose 1–4 that fit best/i)).toBeTruthy();
+    expect(screen.getByRole("group", { name: /choose the work that fits you/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Coding$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /writing & content/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /research & learning/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /marketing & sales/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /meetings & communication/i })).toBeTruthy();
+    expect(screen.queryByText(/AI understands work and fields that aren't listed/i)).toBeNull();
+    expect(screen.getByPlaceholderText(/Write it the way you would say it\. The AI will understand/i)).toBeTruthy();
+    const workDescription = screen.getByLabelText(/tell us more about your work/i, { selector: "textarea" });
+    expect(workDescription).toBeTruthy();
+    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(workDescription, { target: { value: "I advise education teams." } });
+    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText(/24 \/ 240/)).toBeNull();
+    fireEvent.change(workDescription, { target: { value: "x".repeat(201) } });
+    expect(screen.getByText(/201 \/ 240/)).toBeTruthy();
+    fireEvent.change(workDescription, { target: { value: "" } });
+    expect((screen.getByRole("button", { name: /^continue$/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(/write naturally\. this context helps/i)).toBeNull();
+    expect(screen.queryByLabelText(/your field/i)).toBeNull();
+    expect(screen.getByText(/no need to include company or client names/i)).toBeTruthy();
+    selectMainActivity("Coding");
+    expect(screen.getByRole("button", { name: /^Coding$/i }).querySelector("svg")).toBeNull();
+    selectMainActivity("Product & Planning");
+    selectMainActivity("Designing");
+    selectMainActivity("Data Analysis");
+    expect((screen.getByRole("button", { name: /^Writing & Content$/i }) as HTMLButtonElement).disabled).toBe(true);
+    selectMainActivity("Coding");
+    expect((screen.getByRole("button", { name: /^Writing & Content$/i }) as HTMLButtonElement).disabled).toBe(false);
     const onboardingDragStrip = document.querySelector(".onboarding-window-drag-strip");
     for (const selector of [
       ".onboarding-window-drag-strip",
@@ -569,8 +587,7 @@ describe("App onboarding", () => {
     expect(document.querySelector(".onboarding-topbar")).toBeNull();
     expect(document.querySelector(".onboarding-flow-mark")).toBeNull();
 
-    selectMainActivity("Writing");
-    selectWorkDomain("Tech");
+    selectMainActivity("Writing & Content");
     expect(screen.queryByText("Likely Focus")).toBeNull();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /choose your setup/i })).toBeTruthy();
@@ -627,7 +644,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     await clickEnabledNext();
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
     expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
     expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
   });
@@ -647,7 +664,7 @@ describe("App onboarding", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /continue without signing in/i }));
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
     expect(authState.signInWithEmail).not.toHaveBeenCalled();
     expect(authState.signUpWithEmail).not.toHaveBeenCalled();
@@ -837,7 +854,7 @@ describe("App onboarding", () => {
 
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(authState.signInWithGoogle).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
   });
 
   it("treats an email-less non-anonymous account as connected", async () => {
@@ -852,7 +869,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
     expect(within(screen.getByRole("status")).getByText(/account connected/i)).toBeTruthy();
 
-    expect(await screen.findByRole("dialog", { name: /what do you usually do/i }, { timeout: 6_000 })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
   });
 
   it("waits for profile loading to settle before showing onboarding", async () => {
@@ -905,7 +922,10 @@ describe("App onboarding", () => {
   it("stores v2 onboarding state and hides the modal after completion", async () => {
     render(<App />);
 
-    await advanceToReadyStep({ activity: "Coding" });
+    await advanceToReadyStep({
+      activity: "Coding",
+      workDescription: "I build a small SaaS product and help customers.",
+    });
     await screen.findByRole("dialog", { name: /you're ready to go/i });
 
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
@@ -923,6 +943,7 @@ describe("App onboarding", () => {
     expect(storedRecord.jobType).toBe("Coding");
     expect(storedRecord.workType).toBe("Coding");
     expect(storedRecord.workDomain).toBeNull();
+    expect(storedRecord.workDescription).toBe("I build a small SaaS product and help customers.");
     expect(storedRecord.driftAlarmEnabled).toBe(false);
     expect(storedRecord.extremeNudgeEnabled).toBe(false);
     expect(storedRecord.browserHistoryBootstrapEnabled).toBe(true);

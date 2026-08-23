@@ -1,195 +1,115 @@
-import type { CSSProperties, ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
-import { MAX_MAIN_ACTIVITY_SELECTIONS } from "../../constants";
+import { MAX_MAIN_ACTIVITY_SELECTIONS, MAX_WORK_DESCRIPTION_LENGTH, type MainActivity } from "../../constants";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import { onboardingActivityLabel, onboardingDomainLabel } from "../../onboardingOptionLabels";
+import { onboardingActivityLabel } from "../../onboardingOptionLabels";
+
+const SUGGESTED_ACTIVITIES: readonly MainActivity[] = [
+  "Coding",
+  "Product & Planning",
+  "Designing",
+  "Writing & Content",
+  "Research & Learning",
+  "Data Analysis",
+  "Marketing & Sales",
+  "Customer Support",
+  "Meetings & Communication",
+  "Operations",
+];
+const SUGGESTED_ACTIVITY_SET = new Set<string>(SUGGESTED_ACTIVITIES);
+const WORK_DESCRIPTION_COUNT_REVEAL_THRESHOLD = 200;
 
 export function JobStep({
-  activityOpen,
-  activityOptions,
-  activityQuery,
-  domainOpen,
-  domainOptions,
-  domainQuery,
   selectedActivities,
-  showActivityCustom,
-  showDomainCustom,
-  onActivityFocus,
-  onActivityInput,
-  onActivityKeyDown,
-  onAddActivity,
-  onDomainFocus,
-  onDomainInput,
-  onDomainKeyDown,
-  onRemoveActivity,
-  onSelectDomain,
-  activityDropdownStyle,
-  activityInputRef,
-  domainDropdownStyle,
-  domainInputRef,
+  workDescription,
+  onToggleActivity,
+  onWorkDescriptionChange,
 }: {
-  readonly activityDropdownStyle?: CSSProperties;
-  readonly activityInputRef: RefObject<HTMLInputElement>;
-  readonly activityOpen: boolean;
-  readonly activityOptions: readonly string[];
-  readonly activityQuery: string;
-  readonly domainDropdownStyle?: CSSProperties;
-  readonly domainInputRef: RefObject<HTMLInputElement>;
-  readonly domainOpen: boolean;
-  readonly domainOptions: readonly string[];
-  readonly domainQuery: string;
   readonly selectedActivities: readonly string[];
-  readonly showActivityCustom: boolean;
-  readonly showDomainCustom: boolean;
-  readonly onActivityFocus: () => void;
-  readonly onActivityInput: (event: ChangeEvent<HTMLInputElement>) => void;
-  readonly onActivityKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  readonly onAddActivity: (option: string) => void;
-  readonly onDomainFocus: () => void;
-  readonly onDomainInput: (event: ChangeEvent<HTMLInputElement>) => void;
-  readonly onDomainKeyDown: (event: KeyboardEvent<HTMLInputElement>) => void;
-  readonly onRemoveActivity: (option: string) => void;
-  readonly onSelectDomain: (option: string) => void;
+  readonly workDescription: string;
+  readonly onToggleActivity: (option: string) => void;
+  readonly onWorkDescriptionChange: (value: string) => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
-  const activityQueryTrimmed = activityQuery.trim();
-  const domainQueryTrimmed = domainQuery.trim();
-  const activityPlaceholder = selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS
-    ? t("onboarding.job.maximumSelected")
-    : selectedActivities.length > 0
-      ? t("onboarding.job.addAnother")
-      : t("onboarding.job.searchOrAdd");
+  const hasMaximumActivities = selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS;
+  const visibleActivities = [
+    ...SUGGESTED_ACTIVITIES,
+    ...selectedActivities.filter((activity) => !SUGGESTED_ACTIVITY_SET.has(activity)),
+  ];
 
   return (
     <div className="dc-onb-job">
-      <div className="dc-onb-field-group">
-        <div className="dc-onb-field-head">
-          <h2 className="dc-onb-field-label">{t("onboarding.job.activityLabel")}</h2>
-          <span className="dc-onb-count">{selectedActivities.length} / {MAX_MAIN_ACTIVITY_SELECTIONS}</span>
-        </div>
-        <div className="dc-onb-combobox" data-onb-combobox>
-          {selectedActivities.length > 0 ? (
-            <div className="dc-onb-tags" role="group" aria-label={t("onboarding.job.selectedActivities")}>
-              {selectedActivities.map((activity) => (
-                <button
-                  type="button"
-                  className="dc-onb-tag"
-                  key={activity}
-                  onClick={() => onRemoveActivity(activity)}
-                  aria-label={t("onboarding.job.removeActivity", { activity: onboardingActivityLabel(activity, effectiveLanguage) })}
-                >
-                  <span>{onboardingActivityLabel(activity, effectiveLanguage)}</span>
-                  <span aria-hidden="true">x</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <div className="dc-onb-combobox__anchor">
-            <input
-              className="dc-onb-input"
-              value={activityQuery}
-              onChange={onActivityInput}
-              onFocus={onActivityFocus}
-              onKeyDown={onActivityKeyDown}
-              placeholder={activityPlaceholder}
-              disabled={selectedActivities.length >= MAX_MAIN_ACTIVITY_SELECTIONS}
-              aria-label={t("onboarding.job.searchActivities")}
-              ref={activityInputRef}
-            />
-            {activityOpen ? (
-              <DropdownList style={activityDropdownStyle}>
-                {activityOptions.map((option) => (
-                  <DropdownOption key={option} onClick={() => onAddActivity(option)}>
-                    {onboardingActivityLabel(option, effectiveLanguage)}
-                  </DropdownOption>
-                ))}
-                {showActivityCustom ? (
-                  <DropdownOption onClick={() => onAddActivity(activityQueryTrimmed)}>
-                    <span className="dc-onb-add-icon" aria-hidden="true">+</span>
-                    {t("onboarding.job.addCustom", { value: activityQueryTrimmed })}
-                  </DropdownOption>
-                ) : null}
-                {activityOptions.length === 0 && !showActivityCustom ? (
-                  <div className="dc-onb-dropdown-empty">{t("onboarding.job.noMatches")}</div>
-                ) : null}
-              </DropdownList>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="dc-onb-field-group">
-        <h2 className="dc-onb-field-label">{t("onboarding.job.domainLabel")}</h2>
-        <div className="dc-onb-combobox__anchor" data-onb-combobox>
-          <input
-            className="dc-onb-input"
-            value={domainQuery}
-            onChange={onDomainInput}
-            onFocus={onDomainFocus}
-            onKeyDown={onDomainKeyDown}
-            placeholder={t("onboarding.job.domainSearchOrAdd")}
-            aria-label={t("onboarding.job.yourField")}
-            ref={domainInputRef}
-          />
-          {domainOpen ? (
-            <DropdownList style={domainDropdownStyle}>
-              {domainOptions.map((option) => (
-                <DropdownOption key={option} onClick={() => onSelectDomain(option)}>
-                  {onboardingDomainLabel(option, effectiveLanguage)}
-                </DropdownOption>
-              ))}
-              {showDomainCustom ? (
-                <DropdownOption onClick={() => onSelectDomain(domainQueryTrimmed)}>
-                  <span className="dc-onb-add-icon" aria-hidden="true">+</span>
-                  {t("onboarding.job.addCustom", { value: domainQueryTrimmed })}
-                </DropdownOption>
-              ) : null}
-            </DropdownList>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="dc-onb-job-hint">
-        <InfoIcon />
-        <p>
-          {t("onboarding.job.hintBefore")} <strong>{t("onboarding.job.hintStrong")}</strong>{" "}
-          {t("onboarding.job.hintAfter")}
+      <div className="dc-onb-job-intro-row">
+        <p className="dc-onb-job-intro" id="onboarding-work-choices-help">
+          {t("onboarding.job.intro")}
         </p>
+        {selectedActivities.length > 0 ? (
+          <span className="dc-onb-count">
+            {t("onboarding.job.selectedCount", { count: selectedActivities.length })}
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className="dc-onb-choices"
+        role="group"
+        aria-label={t("onboarding.job.activityLabel")}
+        aria-describedby="onboarding-work-choices-help"
+      >
+        {visibleActivities.map((activity) => {
+          const selected = selectedActivities.includes(activity);
+          return (
+            <button
+              type="button"
+              className={`dc-onb-choice${selected ? " dc-onb-choice--selected" : ""}`}
+              key={activity}
+              aria-pressed={selected}
+              disabled={!selected && hasMaximumActivities}
+              onClick={() => onToggleActivity(activity)}
+            >
+              <span>{onboardingActivityLabel(activity, effectiveLanguage)}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="dc-onb-natural-language">
+        <div className="dc-onb-natural-language__label-row">
+          <label className="dc-onb-field-label" id="onboarding-work-description-label" htmlFor="onboarding-work-description">
+            <span className="dc-onb-natural-language__icon" aria-hidden="true">
+              <AiSparkIcon />
+            </span>
+            {t("onboarding.job.descriptionLabel")}
+          </label>
+          <span className="dc-onb-natural-language__privacy" id="onboarding-work-description-privacy">
+            {t("onboarding.job.descriptionPrivacy")}
+          </span>
+        </div>
+
+        <textarea
+          id="onboarding-work-description"
+          className="dc-onb-input dc-onb-textarea"
+          value={workDescription}
+          onChange={(event) => onWorkDescriptionChange(event.target.value)}
+          placeholder={t("onboarding.job.descriptionPlaceholder")}
+          maxLength={MAX_WORK_DESCRIPTION_LENGTH}
+          rows={3}
+          aria-describedby="onboarding-work-description-privacy"
+        />
+        {workDescription.length > WORK_DESCRIPTION_COUNT_REVEAL_THRESHOLD ? (
+          <div className="dc-onb-natural-language__meta">
+            <span className="dc-onb-count" id="onboarding-work-description-count">
+              {workDescription.length} / {MAX_WORK_DESCRIPTION_LENGTH}
+            </span>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
 
-function DropdownList({
-  children,
-  style,
-}: {
-  readonly children: ReactNode;
-  readonly style?: CSSProperties;
-}) {
-  return <div className="dc-onb-dropdown" style={style}>{children}</div>;
-}
-
-function DropdownOption({
-  children,
-  onClick,
-}: {
-  readonly children: ReactNode;
-  readonly onClick: () => void;
-}) {
+function AiSparkIcon() {
   return (
-    <button type="button" className="dc-onb-dropdown-option" onClick={onClick}>
-      {children}
-    </button>
-  );
-}
-
-function InfoIcon() {
-  return (
-    <span className="dc-onb-job-hint__icon" aria-hidden="true">
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
-        <path d="M12 11v5M12 8.2v.01" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      </svg>
-    </span>
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M8 0.7c.4 3.1 1.9 4.6 5 5C9.9 6.1 8.4 7.6 8 10.7 7.6 7.6 6.1 6.1 3 5.7 6.1 5.3 7.6 3.8 8 0.7Z" />
+    </svg>
   );
 }

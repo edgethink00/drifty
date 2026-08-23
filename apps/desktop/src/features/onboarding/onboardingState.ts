@@ -17,6 +17,7 @@ export type UserOnboardingState = {
   workDomainOther: string;
   jobType: string | null;
   jobTypeOther: string;
+  workDescription?: string;
   driftAlarmEnabled: boolean;
   extremeNudgeEnabled: boolean;
   browserHistoryBootstrapEnabled: boolean;
@@ -31,6 +32,7 @@ export type WorkProfileSettings = {
   workActivityOther: string;
   workDomain: string | null;
   workDomainOther: string;
+  workDescription: string;
 };
 
 const VALID_PURPOSES: ReadonlySet<string> = new Set<OnboardingPurpose>([
@@ -43,6 +45,18 @@ const VALID_PURPOSES: ReadonlySet<string> = new Set<OnboardingPurpose>([
 
 function isOnboardingPurpose(value: unknown): value is OnboardingPurpose {
   return typeof value === "string" && VALID_PURPOSES.has(value);
+}
+
+function resolvePersistedWorkDescriptionLanguage(): "en" | "ko" {
+  if (typeof window === "undefined") return "en";
+  try {
+    const koreanPreviewEnabled = window.localStorage.getItem("drifty.dev.koreanLocalizationPreview") === "1"
+      && window.localStorage.getItem("drifty.dev.mode") === "1";
+    const displayLanguage = window.localStorage.getItem("drifty.displayLanguage") === "en" ? "en" : "ko";
+    return koreanPreviewEnabled && displayLanguage === "ko" ? "ko" : "en";
+  } catch {
+    return "en";
+  }
 }
 
 export function getUserOnboardingStorageKey(userId: string): string {
@@ -82,6 +96,7 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
     const workDomainOther = typeof record.workDomainOther === "string" ? record.workDomainOther : "";
     const jobType = typeof record.jobType === "string" ? record.jobType : null;
     const jobTypeOther = typeof record.jobTypeOther === "string" ? record.jobTypeOther : "";
+    const workDescription = typeof record.workDescription === "string" ? record.workDescription : "";
     const driftAlarmEnabled = typeof record.driftAlarmEnabled === "boolean" ? record.driftAlarmEnabled : false;
     const extremeNudgeEnabled = typeof record.extremeNudgeEnabled === "boolean" ? record.extremeNudgeEnabled : false;
     const browserHistoryBootstrapEnabled =
@@ -100,6 +115,7 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
       workDomainOther,
       jobType,
       jobTypeOther,
+      workDescription,
       driftAlarmEnabled,
       extremeNudgeEnabled,
       browserHistoryBootstrapEnabled,
@@ -146,17 +162,23 @@ export function saveUserWorkProfile(userId: string, workProfile: string): UserOn
     workActivityOther: "",
     workDomain: null,
     workDomainOther: "",
+    workDescription: "",
   });
 }
 
 export function readUserWorkProfileSettings(userId: string): WorkProfileSettings {
   const currentState = readUserOnboardingState(userId);
   const workActivities = readWorkActivitiesFromState(currentState);
+  const migratedDescription = migrateLegacyDomainIntoDescription(
+    currentState,
+    resolvePersistedWorkDescriptionLanguage(),
+  );
   return {
     workActivities,
     workActivityOther: currentState?.jobTypeOther || currentState?.workTypeOther || "",
-    workDomain: currentState?.workDomain ?? null,
-    workDomainOther: currentState?.workDomainOther ?? "",
+    workDomain: null,
+    workDomainOther: "",
+    workDescription: migratedDescription,
   };
 }
 
@@ -172,16 +194,21 @@ export function saveUserWorkProfileSettings(
   const currentState = readUserOnboardingState(userId);
   if (!currentState) return null;
 
+  const persistedDescription = nextWorkProfile.workDescription || migrateLegacyDomainIntoDescription(
+    currentState,
+    resolvePersistedWorkDescriptionLanguage(),
+  );
   const nextState: UserOnboardingState = {
     version: ONBOARDING_STORAGE_VERSION,
     completed: true,
     displayName: currentState.displayName,
     workType: nextWorkProfile.workActivities[0] ?? null,
     workTypeOther: nextWorkProfile.workActivities.includes("Other") ? nextWorkProfile.workActivityOther : "",
-    workDomain: nextWorkProfile.workDomain,
-    workDomainOther: nextWorkProfile.workDomainOther,
+    workDomain: null,
+    workDomainOther: "",
     jobType: summarizeWorkActivities(nextWorkProfile) || null,
     jobTypeOther: nextWorkProfile.workActivities.includes("Other") ? nextWorkProfile.workActivityOther : "",
+    workDescription: persistedDescription,
     driftAlarmEnabled: currentState.driftAlarmEnabled,
     extremeNudgeEnabled: currentState.extremeNudgeEnabled,
     browserHistoryBootstrapEnabled: currentState.browserHistoryBootstrapEnabled,
@@ -200,18 +227,16 @@ export function summarizeUserWorkProfile(userId: string): string {
 
 export function summarizeWorkProfileSettings(workProfile: WorkProfileSettings): string {
   const workType = summarizeWorkActivities(workProfile);
-  const workDomain = normalizeWorkProfileSetting(
-    workProfile.workDomain === "Other" ? workProfile.workDomainOther : workProfile.workDomain,
-  );
-  if (workType && workDomain) return `${workType} in ${workDomain}`;
-  return workType ?? workDomain ?? "";
+  const description = normalizeWorkProfileSetting(workProfile.workDescription, 240);
+  if (workType && description) return `${workType}. ${description}`;
+  return workType ?? description ?? "";
 }
 
 function normalizeWorkProfileSettings(workProfile: WorkProfileSettings): WorkProfileSettings {
   const workActivities = Array.from(new Set(workProfile.workActivities))
     .map((activity) => normalizeWorkProfileSetting(activity))
     .filter((activity): activity is string => Boolean(activity))
-    .slice(0, 5);
+    .slice(0, 4);
   const workDomain = normalizeWorkProfileSetting(workProfile.workDomain);
   return {
     workActivities,
@@ -220,6 +245,7 @@ function normalizeWorkProfileSettings(workProfile: WorkProfileSettings): WorkPro
       : "",
     workDomain,
     workDomainOther: workDomain === "Other" ? normalizeWorkProfileSetting(workProfile.workDomainOther) ?? "" : "",
+    workDescription: normalizeWorkProfileSetting(workProfile.workDescription, 240) ?? "",
   };
 }
 
@@ -233,6 +259,16 @@ function summarizeWorkActivities(workProfile: WorkProfileSettings): string | nul
     })
     .filter((activity): activity is string => Boolean(activity));
   return activities.length > 0 ? activities.join(", ") : null;
+}
+
+function migrateLegacyDomainIntoDescription(state: UserOnboardingState | null, language: "en" | "ko" = "en"): string {
+  const existingDescription = normalizeWorkProfileSetting(state?.workDescription, 240) ?? "";
+  if (existingDescription) return existingDescription;
+  const domain = normalizeWorkProfileSetting(
+    state?.workDomain === "Other" ? state?.workDomainOther : state?.workDomain,
+  );
+  if (!domain) return "";
+  return language === "ko" ? `${domain} 분야에서 일합니다.` : `Works in ${domain}.`;
 }
 
 function readWorkActivitiesFromState(state: UserOnboardingState | null): readonly string[] {
@@ -251,16 +287,16 @@ function splitWorkActivities(value: string | null | undefined): readonly string[
     .split(",")
     .map((activity) => normalizeWorkProfileSetting(activity))
     .filter((activity): activity is string => Boolean(activity))
-    .slice(0, 5);
+    .slice(0, 4);
 }
 
-function normalizeWorkProfileSetting(value: string | null | undefined): string | null {
+function normalizeWorkProfileSetting(value: string | null | undefined, maxLength = 180): string | null {
   const normalized = value
     ?.replace(/[\u0000-\u001F\u007F]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (!normalized) return null;
-  return normalized.slice(0, 180).trim() || null;
+  return normalized.slice(0, maxLength).trim() || null;
 }
 
 export { ONBOARDING_STORAGE_VERSION };

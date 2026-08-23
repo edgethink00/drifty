@@ -22,8 +22,7 @@ type CompleteOnboardingInput = {
   readonly setStorageError: (error: string | null) => void;
   readonly setupChoice: SetupChoice | null;
   readonly userId: string;
-  readonly workDomain: string | null;
-  readonly workDomainOther: string;
+  readonly workDescription: string;
   readonly workType: string | null;
   readonly workTypeOther: string;
 };
@@ -46,8 +45,7 @@ export async function completeOnboardingAction({
   setStorageError,
   setupChoice,
   userId,
-  workDomain,
-  workDomainOther,
+  workDescription,
   workType,
   workTypeOther,
 }: CompleteOnboardingInput): Promise<void> {
@@ -81,8 +79,9 @@ export async function completeOnboardingAction({
     displayName,
     workType: mainActivities[0] ?? workType,
     workTypeOther: mainActivities.includes("Other") ? mainActivityOther : workTypeOther,
-    workDomain,
-    workDomainOther,
+    workDomain: null,
+    workDomainOther: "",
+    workDescription,
     jobType: mainActivities.length > 0 ? mainActivities.join(", ") : jobType,
     jobTypeOther: mainActivities.includes("Other") ? mainActivityOther : jobTypeOther,
     focusGoalHours: null,

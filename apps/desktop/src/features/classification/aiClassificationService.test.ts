@@ -462,11 +462,11 @@ describe("runAiClassification cloud contract", () => {
       await runAiClassification({ day: "2026-05-22" });
 
       const body = invoke.mock.calls[0]?.[1]?.body as Record<string, unknown>;
-      expect(body.workProfile).toBe("Coding, Writing in AI");
+      expect(body.workProfile).toBe("Coding, Writing. Works in AI.");
       expect(body.memoryContext).toMatchObject({
         soul: {
           revision: 1,
-          declared: { workActivities: ["Coding", "Writing"], workDomain: "AI" },
+          declared: { workActivities: ["Coding", "Writing"], workDomain: null, workDescription: "Works in AI." },
         },
       });
     } finally {
@@ -1284,6 +1284,7 @@ describe("runAiClassification cloud contract", () => {
       workTypeOther: "  AI   product\nstrategy\u0000 ",
       workDomain: "Other",
       workDomainOther: " developer   tools ",
+      workDescription: " I build product features and help   customers. ",
     });
 
     try {
@@ -1293,7 +1294,8 @@ describe("runAiClassification cloud contract", () => {
       });
 
       const request = nativeInvoke.mock.calls[0]?.[1]?.request as { messages: Array<{ content: string }> };
-      expect(request.messages[0].content).toContain('<living_soul>{"revision":1,"declared":{"workActivities":["AI product strategy"],"workDomain":"developer tools"');
+      expect(request.messages[0].content).toContain('<living_soul>{"revision":1,"declared":{"workActivities":["AI product strategy"],"workDomain":null');
+      expect(request.messages[0].content).toContain('"workDescription":"I build product features and help customers."');
       expect(request.messages[0].content).toContain("Do not include raw titles, domains, or work profile details in the reason.");
     } finally {
       cleanupServiceMocks();

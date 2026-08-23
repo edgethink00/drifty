@@ -295,4 +295,21 @@ describe("Settings content styles", () => {
     expect(aiSetupSource).toContain("<AiPrivacyReview />");
     expect(privacySource).toContain("<AiPrivacyReview />");
   });
+  it("keeps dark selected work-profile chips and the description field readable", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const selectedRule = cssRule(aiSetupStyles, ".ai-setup-work-choice--selected");
+    const darkSelectedRule = cssRule(aiSetupStyles, ':root[data-theme="dark"] .ai-setup-work-choice--selected');
+    const textareaRule = cssRule(aiSetupStyles, ".content--settings .ai-setup-work-description textarea");
+    const darkTextareaRule = cssRule(
+      aiSetupStyles,
+      ':root[data-theme="dark"] .content--settings .ai-setup-work-description textarea',
+    );
+
+    expect(selectedRule).toContain("background: #4f4e48;");
+    expect(selectedRule).toContain("color: #f6f5f1;");
+    expect(darkSelectedRule).toContain("background: #eceae3;");
+    expect(darkSelectedRule).toContain("color: #151513;");
+    expect(textareaRule).toContain("color: var(--text);");
+    expect(darkTextareaRule).toContain("color: var(--text);");
+  });
 });

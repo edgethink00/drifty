@@ -13,6 +13,7 @@ const baseAdvanceState = {
   managedLocalStarted: false,
   setupChoice: "simple",
   step: "permissions",
+  workContextProvided: true,
 } as const;
 
 describe("canAdvanceOnboarding (managed local download)", () => {
@@ -35,6 +36,19 @@ describe("canAdvanceOnboarding (managed local download)", () => {
 });
 
 describe("onboardingFlowSelectors", () => {
+  it("requires at least one source of work context on the job step", () => {
+    expect(canAdvanceOnboarding({
+      ...baseAdvanceState,
+      step: "job",
+      workContextProvided: false,
+    })).toBe(false);
+    expect(canAdvanceOnboarding({
+      ...baseAdvanceState,
+      step: "job",
+      workContextProvided: true,
+    })).toBe(true);
+  });
+
   it("requires Accessibility readiness on the combined permissions step", () => {
     expect(canAdvanceOnboarding({
       ...baseAdvanceState,

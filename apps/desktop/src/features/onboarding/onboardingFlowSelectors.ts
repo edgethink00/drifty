@@ -15,6 +15,7 @@ export function canAdvanceOnboarding({
   managedLocalStarted,
   setupChoice,
   step,
+  workContextProvided,
 }: {
   readonly accessibilityReady: boolean;
   readonly accessibilityRecheckPending: boolean;
@@ -27,6 +28,7 @@ export function canAdvanceOnboarding({
   readonly managedLocalStarted: boolean;
   readonly setupChoice: SetupChoice | null;
   readonly step: OnboardingStep;
+  readonly workContextProvided: boolean;
 }): boolean {
   switch (step) {
     case "welcome":
@@ -36,6 +38,7 @@ export function canAdvanceOnboarding({
     case "account":
       return accountConnected;
     case "job":
+      return workContextProvided;
     case "self_data_review":
     case "nudges":
     case "ready":

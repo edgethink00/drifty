@@ -107,6 +107,9 @@ function compactBatchMemoryContext(
           return truncated ? [truncated] : [];
         }),
         workDomain: truncateText(context.soul.declared.workDomain, 80),
+        ...(context.soul.declared.workDescription
+          ? { workDescription: truncateText(context.soul.declared.workDescription, 160) }
+          : {}),
         purpose: truncateText(context.soul.declared.purpose, 80),
       },
       learnedWorkSupport: compactSoulPatterns(context.soul.learnedWorkSupport),

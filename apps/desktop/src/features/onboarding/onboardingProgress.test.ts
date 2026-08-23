@@ -19,6 +19,7 @@ const baseProgress: OnboardingProgressInput = {
   workTypeOther: "",
   workDomain: "AI",
   workDomainOther: "",
+  workDescription: "I build a small AI product.",
   driftAlarmEnabled: true,
   extremeNudgeEnabled: false,
   openAtLoginEnabled: true,

@@ -54,6 +54,7 @@ describe("onboardingState", () => {
       workActivityOther: "",
       workDomain: "AI",
       workDomainOther: "",
+      workDescription: "I build product features and help customers.",
     });
 
     expect(savedState).toMatchObject({
@@ -61,10 +62,71 @@ describe("onboardingState", () => {
       workTypeOther: "",
       jobType: "Coding, Writing",
       jobTypeOther: "",
-      workDomain: "AI",
+      workDomain: null,
+      workDescription: "I build product features and help customers.",
     });
     expect(readUserWorkProfileSettings("local").workActivities).toEqual(["Coding", "Writing"]);
-    expect(summarizeUserWorkProfile("local")).toBe("Coding, Writing in AI");
+    expect(readUserWorkProfileSettings("local").workDescription).toBe("I build product features and help customers.");
+    expect(summarizeUserWorkProfile("local")).toBe("Coding, Writing. I build product features and help customers.");
+  });
+
+  it("moves a legacy field into the description when the description is empty", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+
+    expect(readUserWorkProfileSettings("local")).toMatchObject({
+      workActivities: ["Software Development"],
+      workDomain: null,
+      workDomainOther: "",
+      workDescription: "Works in Tech.",
+    });
+    expect(summarizeUserWorkProfile("local")).toBe("Software Development. Works in Tech.");
+  });
+
+  it("does not overwrite an existing description with the legacy field", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+    const key = getUserOnboardingStorageKey("local");
+    const current = JSON.parse(window.localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+    window.localStorage.setItem(key, JSON.stringify({ ...current, workDescription: "I already described my work." }));
+    expect(readUserWorkProfileSettings("local").workDescription).toBe("I already described my work.");
+  });
+
+  it("persists a migrated field into the description and clears the stored field", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+    const savedState = saveUserWorkProfileSettings("local", readUserWorkProfileSettings("local"));
+    expect(savedState).toMatchObject({
+      workDomain: null,
+      workDomainOther: "",
+      workDescription: "Works in Tech.",
+    });
+    const stored = JSON.parse(window.localStorage.getItem(getUserOnboardingStorageKey("local")) ?? "{}") as Record<string, unknown>;
+    expect(stored.workDomain).toBeNull();
+    expect(stored.workDescription).toBe("Works in Tech.");
+  });
+
+  it("caps stored work activities at four", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+    const savedState = saveUserWorkProfileSettings("local", {
+      workActivities: ["Coding", "Writing", "Designing", "Data Analysis", "Operations"],
+      workActivityOther: "",
+      workDomain: null,
+      workDomainOther: "",
+      workDescription: "I ship product work.",
+    });
+    expect(savedState?.jobType).toBe("Coding, Writing, Designing, Data Analysis");
+    expect(readUserWorkProfileSettings("local").workActivities).toEqual([
+      "Coding",
+      "Writing",
+      "Designing",
+      "Data Analysis",
+    ]);
+  });
+
+  it("migrates an empty description from a legacy field in Korean preview", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+    window.localStorage.setItem("drifty.dev.mode", "1");
+    window.localStorage.setItem("drifty.dev.koreanLocalizationPreview", "1");
+    window.localStorage.setItem("drifty.displayLanguage", "ko");
+    expect(readUserWorkProfileSettings("local").workDescription).toBe("Tech 분야에서 일합니다.");
   });
 
   it("refuses to create an onboarding-completed record from a work profile save alone", () => {
@@ -73,6 +135,7 @@ describe("onboardingState", () => {
       workActivityOther: "",
       workDomain: "AI",
       workDomainOther: "",
+      workDescription: "",
     });
 
     expect(savedState).toBeNull();

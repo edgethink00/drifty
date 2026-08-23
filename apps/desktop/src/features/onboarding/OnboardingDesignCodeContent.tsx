@@ -1,14 +1,5 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
-import { MAIN_ACTIVITY_OPTIONS, MAX_MAIN_ACTIVITY_SELECTIONS, WORK_DOMAIN_OPTIONS } from "./constants";
 import type { OnboardingFlow } from "./useOnboardingFlow";
 import { WelcomeStep } from "./components/steps/WelcomeStep";
 import { AccountStep } from "./components/steps/AccountStep";
@@ -21,7 +12,6 @@ import { TestConnectionStep } from "./components/steps/TestConnectionStep";
 import { SelfDataReviewStep } from "./components/steps/SelfDataReviewStep";
 import { ReadyStep } from "./components/steps/ReadyStep";
 import { useLocalization } from "../localization/LocalizationContext";
-import { onboardingActivityLabel, onboardingDomainLabel } from "./onboardingOptionLabels";
 import { DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 
 type OnboardingDesignCodeContentProps = {
@@ -37,30 +27,9 @@ export function OnboardingDesignCodeContent({
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
 }: OnboardingDesignCodeContentProps) {
-  const { effectiveLanguage, t } = useLocalization();
-  const [activityQuery, setActivityQuery] = useState("");
-  const [activityOpen, setActivityOpen] = useState(false);
-  const [domainQuery, setDomainQuery] = useState("");
-  const [domainOpen, setDomainOpen] = useState(false);
+  const { t } = useLocalization();
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmExtremeOpen, setConfirmExtremeOpen] = useState(false);
-  const activityInputRef = useRef<HTMLInputElement | null>(null);
-  const domainInputRef = useRef<HTMLInputElement | null>(null);
-  const [activityDropdownStyle, setActivityDropdownStyle] = useState<CSSProperties | undefined>();
-  const [domainDropdownStyle, setDomainDropdownStyle] = useState<CSSProperties | undefined>();
-
-  useEffect(() => {
-    function handleDocumentMouseDown(event: MouseEvent) {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      if (target.closest("[data-onb-combobox]")) return;
-      setActivityOpen(false);
-      setDomainOpen(false);
-    }
-
-    document.addEventListener("mousedown", handleDocumentMouseDown);
-    return () => document.removeEventListener("mousedown", handleDocumentMouseDown);
-  }, []);
 
   const title = flow.title;
   const showTitle = flow.step !== "welcome" && flow.step !== "account";
@@ -69,41 +38,6 @@ export function OnboardingDesignCodeContent({
   const showBack = flow.stepIndex > 0;
   const footerLabel = flow.footerLabel;
   const selectedActivities = flow.mainActivities;
-  const activityOptions = useMemo(() => {
-    const query = activityQuery.trim().toLowerCase();
-    return MAIN_ACTIVITY_OPTIONS.filter((option) => (
-      !selectedActivities.includes(option) && (!query || onboardingActivityLabel(option, effectiveLanguage).toLowerCase().includes(query))
-    ));
-  }, [activityQuery, effectiveLanguage, selectedActivities]);
-  const activityQueryTrimmed = activityQuery.trim();
-  const showActivityCustom = activityQueryTrimmed.length > 0
-    && !MAIN_ACTIVITY_OPTIONS.some((option) => onboardingActivityLabel(option, effectiveLanguage).toLowerCase() === activityQueryTrimmed.toLowerCase())
-    && !selectedActivities.some((option) => option.toLowerCase() === activityQueryTrimmed.toLowerCase())
-    && selectedActivities.length < MAX_MAIN_ACTIVITY_SELECTIONS;
-  const domainOptions = useMemo(() => {
-    const query = domainQuery.trim().toLowerCase();
-    return WORK_DOMAIN_OPTIONS.filter((option) => !query || onboardingDomainLabel(option, effectiveLanguage).toLowerCase().includes(query));
-  }, [domainQuery, effectiveLanguage]);
-  const domainQueryTrimmed = domainQuery.trim();
-  const showDomainCustom = domainQueryTrimmed.length > 0
-    && !WORK_DOMAIN_OPTIONS.some((option) => onboardingDomainLabel(option, effectiveLanguage).toLowerCase() === domainQueryTrimmed.toLowerCase());
-
-  useLayoutEffect(() => {
-    if (!activityOpen && !domainOpen) return;
-
-    function updateDropdownLayout() {
-      setActivityDropdownStyle(activityOpen ? computeDropdownStyle(activityInputRef.current) : undefined);
-      setDomainDropdownStyle(domainOpen ? computeDropdownStyle(domainInputRef.current) : undefined);
-    }
-
-    updateDropdownLayout();
-    window.addEventListener("resize", updateDropdownLayout);
-    window.addEventListener("scroll", updateDropdownLayout, true);
-    return () => {
-      window.removeEventListener("resize", updateDropdownLayout);
-      window.removeEventListener("scroll", updateDropdownLayout, true);
-    };
-  }, [activityOpen, domainOpen, activityOptions.length, domainOptions.length, showActivityCustom, showDomainCustom]);
 
   const advancedVisible = advancedOpen || flow.isUserManagedProviderSetup;
   const contentClassName = [
@@ -112,57 +46,16 @@ export function OnboardingDesignCodeContent({
     flow.step === "welcome" ? "dc-onb-content--welcome" : "",
   ].filter(Boolean).join(" ");
 
-  function addActivity(option: string) {
+  function handleActivityToggle(option: string) {
+    if (selectedActivities.includes(option)) {
+      flow.toggleMainActivity(option);
+      if (flow.workType === option) {
+        flow.setWorkType(selectedActivities.find((activity) => activity !== option) ?? null);
+      }
+      return;
+    }
     flow.addMainActivity(option);
-    flow.setWorkType(option);
-    setActivityQuery("");
-    setActivityOpen(false);
-  }
-
-  function removeActivity(option: string) {
-    flow.toggleMainActivity(option);
-    if (flow.workType === option) {
-      flow.setWorkType(null);
-    }
-  }
-
-  function selectDomain(option: string) {
-    flow.setWorkDomain(option);
-    flow.setWorkDomainOther("");
-    setDomainQuery(onboardingDomainLabel(option, effectiveLanguage));
-    setDomainOpen(false);
-  }
-
-  function handleActivityKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const firstOption = activityOptions[0];
-      if (firstOption) {
-        addActivity(firstOption);
-      } else if (activityQueryTrimmed) {
-        addActivity(activityQueryTrimmed);
-      }
-      return;
-    }
-    if (event.key === "Escape") {
-      setActivityOpen(false);
-    }
-  }
-
-  function handleDomainKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      const firstOption = domainOptions[0];
-      if (firstOption) {
-        selectDomain(firstOption);
-      } else if (domainQueryTrimmed) {
-        selectDomain(domainQueryTrimmed);
-      }
-      return;
-    }
-    if (event.key === "Escape") {
-      setDomainOpen(false);
-    }
+    if (!flow.workType) flow.setWorkType(option);
   }
 
   function handleDriftToggle() {
@@ -220,43 +113,10 @@ export function OnboardingDesignCodeContent({
               ) : null}
               {flow.step === "job" ? (
                 <JobStep
-                  activityOpen={activityOpen}
-                  activityOptions={activityOptions}
-                  activityQuery={activityQuery}
-                  domainOpen={domainOpen}
-                  domainOptions={domainOptions}
-                  domainQuery={domainQuery}
                   selectedActivities={selectedActivities}
-                  showActivityCustom={showActivityCustom}
-                  showDomainCustom={showDomainCustom}
-                  onActivityFocus={() => {
-                    setActivityOpen(true);
-                    setDomainOpen(false);
-                  }}
-                  onActivityInput={(event) => {
-                    setActivityQuery(event.target.value);
-                    setActivityOpen(true);
-                    setDomainOpen(false);
-                  }}
-                  onActivityKeyDown={handleActivityKeyDown}
-                  onAddActivity={addActivity}
-                  onDomainFocus={() => {
-                    setDomainOpen(true);
-                    setActivityOpen(false);
-                  }}
-                  onDomainInput={(event) => {
-                    setDomainQuery(event.target.value);
-                    flow.setWorkDomain(null);
-                    setDomainOpen(true);
-                    setActivityOpen(false);
-                  }}
-                  onDomainKeyDown={handleDomainKeyDown}
-                  onRemoveActivity={removeActivity}
-                  onSelectDomain={selectDomain}
-                  activityDropdownStyle={activityDropdownStyle}
-                  activityInputRef={activityInputRef}
-                  domainDropdownStyle={domainDropdownStyle}
-                  domainInputRef={domainInputRef}
+                  workDescription={flow.workDescription}
+                  onToggleActivity={handleActivityToggle}
+                  onWorkDescriptionChange={flow.setWorkDescription}
                 />
               ) : null}
               {flow.step === "permissions" ? <PermissionsStep flow={flow} /> : null}
@@ -325,29 +185,6 @@ export function OnboardingDesignCodeContent({
       ) : null}
     </>
   );
-}
-
-function computeDropdownStyle(input: HTMLInputElement | null): CSSProperties | undefined {
-  if (!input) return undefined;
-  const rect = input.getBoundingClientRect();
-  const viewportHeight = window.innerHeight;
-  const gap = 6;
-  const desiredMaxHeight = 236;
-  const spaceBelow = viewportHeight - rect.bottom - 12;
-  const spaceAbove = rect.top - 12;
-  const openUp = spaceBelow < 140 && spaceAbove > spaceBelow;
-  const maxHeight = Math.max(96, Math.min(desiredMaxHeight, openUp ? spaceAbove : spaceBelow));
-
-  return {
-    position: "fixed",
-    left: rect.left,
-    right: "auto",
-    width: rect.width,
-    top: openUp ? "auto" : rect.bottom + gap,
-    bottom: openUp ? viewportHeight - rect.top + gap : "auto",
-    maxHeight,
-    zIndex: 9999,
-  };
 }
 
 function ExtremeConfirmDialog({

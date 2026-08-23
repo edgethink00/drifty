@@ -6,8 +6,10 @@ import {
   type WorkProfileSettings,
 } from "../onboarding/onboardingState";
 import { synchronizeLivingSoulDeclaredContextForUser } from "../classification/livingSoul";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export function useWorkProfileSettings(workProfileUserId: string) {
+  const { t } = useLocalization();
   const [workProfileDraft, setWorkProfileDraft] = useState(() => readUserWorkProfileSettings(workProfileUserId));
   const [workProfileMessage, setWorkProfileMessage] = useState<string | null>(null);
 
@@ -20,7 +22,7 @@ export function useWorkProfileSettings(workProfileUserId: string) {
   const handleSaveWorkProfile = () => {
     const savedState = saveUserWorkProfileSettings(workProfileUserId, workProfileDraft);
     setWorkProfileMessage(
-      savedState ? "Work profile saved for future AI classification." : "Choose a role or field before saving.",
+      savedState ? t("settings.ai.workProfileSaved") : t("settings.ai.workProfileSaveHint"),
     );
     if (!savedState) return;
 

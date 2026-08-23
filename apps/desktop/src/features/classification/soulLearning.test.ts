@@ -215,7 +215,8 @@ describe("Living Soul feedback lifecycle", () => {
     expect(updated.document.revision).toBe(2);
     expect(updated.document.declared).toEqual({
       workActivities: ["Design"],
-      workDomain: "Healthcare",
+      workDomain: null,
+      workDescription: "Works in Healthcare.",
       purpose: "Understand the day",
     });
   });
