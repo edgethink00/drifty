@@ -184,7 +184,7 @@ describe("AccountSettingsSection", () => {
     fireEvent.change(codeInput, { target: { value: " drft-test-2026 " } });
     expect(screen.queryByText(/offline trial code/i)).toBeNull();
     expect(screen.getByText("Trial code")).toBeTruthy();
-    expect(codeInput.getAttribute("placeholder")).toBe("DRFT-XXXX-XXXX");
+    expect(codeInput.getAttribute("placeholder")).toBe("DRFT-XXXX");
 
     fireEvent.click(screen.getByRole("button", { name: /^Apply code$/i }));
 
