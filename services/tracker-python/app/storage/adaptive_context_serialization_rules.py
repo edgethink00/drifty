@@ -52,6 +52,7 @@ ADAPTIVE_CONTEXT_ITEM_KINDS: Final[frozenset[str]] = frozenset(
         "attendeeCountRange",
         "pageType",
         "layerType",
+        "channelType",
         "shortSelectedHint",
         "shortVisibleHint",
         "introHint",

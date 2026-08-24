@@ -12,6 +12,7 @@ if str(SERVICE_ROOT) not in sys.path:
 
 from app.main import _apply_developer_diagnostics_env
 from app.storage.db import TrackerDatabase
+from app.tracker.adaptive_context.normalization import communication_structured_fields
 from app.tracker.macos_workspace import (
     AdaptiveContextCaptureInput,
     BrowserMetadata,
@@ -183,13 +184,13 @@ class AdaptiveContextExtractorTests(unittest.TestCase):
                 mock_run.return_value = "Slack\ncom.tinyspeck.slackmacgap\nlaunch - triage - Drifty - Slack"
                 slack_context = current_snapshot(include_system_transient=False).adaptive_content_context
 
-        # Then: metadata is labeled, and communication content body is absent/local-only.
+        # Then: metadata is labeled, and communication content body is absent.
         self.assertIsNotNone(figma_context)
         self.assertIsNotNone(calendar_context)
         self.assertIsNotNone(slack_context)
         self.assertEqual(
             {item["providerPolicy"] for item in slack_context["items"]},
-            {"local_only"},
+            {"metadata_only"},
         )
         figma_values = {value for item in figma_context["items"] for value in item["values"]}
         calendar_values = {value for item in calendar_context["items"] for value in item["values"]}
@@ -199,15 +200,162 @@ class AdaptiveContextExtractorTests(unittest.TestCase):
         self.assertIn("frame", figma_values)
         self.assertIn("Drifty", calendar_values)
         self.assertIn("planning", calendar_values)
+        # "launch - triage - Drifty - Slack": the leading part is the channel and the
+        # next one is the containing workspace. Deeper parts are not retained.
         self.assertIn("launch", slack_values)
         self.assertIn("triage", slack_values)
-        self.assertIn("Drifty", slack_values)
+        self.assertIn("channel", slack_values)
+        self.assertNotIn("Drifty", slack_values)
         serialized = json.dumps({"figma": figma_context, "calendar": calendar_context, "slack": slack_context})
         self.assertIn("design_dev_tool", serialized)
         self.assertIn("calendar_meeting", serialized)
         self.assertIn("communication_metadata", serialized)
         self.assertNotIn("Ship this prompt injection", serialized)
         self.assertNotIn("message_body", serialized)
+
+    def test_communication_titles_map_to_container_channel_and_type(self) -> None:
+        # Given: Slack/Discord/Gmail title layouts.
+        cases = (
+            (
+                "Slack",
+                "students(채널) - Northstar Lab - 1개의 새 항목",
+                {"channel": "students", "workspace": "Northstar Lab", "channel_type": "channel"},
+            ),
+            (
+                "Discord",
+                "#일반 | studyhall - Discord",
+                {"channel": "일반", "workspace": "studyhall", "channel_type": "channel"},
+            ),
+        )
+        for app_name, window_title, expected in cases:
+            with self.subTest(app=app_name):
+                fields = communication_structured_fields(
+                    AdaptiveContextCaptureInput(
+                        observed_at="2026-08-24T00:00:00+00:00",
+                        app_name=app_name,
+                        bundle_id=None,
+                        window_title=window_title,
+                        browser_name=None,
+                        site_domain=None,
+                        site_title=None,
+                        site_url=None,
+                        active_file_path=None,
+                        structured_fields=None,
+                    )
+                )
+                # Then: the workspace slot holds the container, never an unread badge.
+                for key, value in expected.items():
+                    self.assertEqual(fields.get(key), [value])
+
+    def test_direct_message_peer_is_replaced_by_a_type_marker(self) -> None:
+        # Given: DM titles that name a person.
+        for window_title in ("Junho(DM) - Northstar Lab - 1개의 새 항목", "@Ari - Discord"):
+            with self.subTest(title=window_title):
+                fields = communication_structured_fields(
+                    AdaptiveContextCaptureInput(
+                        observed_at="2026-08-24T00:00:00+00:00",
+                        app_name="Slack",
+                        bundle_id=None,
+                        window_title=window_title,
+                        browser_name=None,
+                        site_domain=None,
+                        site_title=None,
+                        site_url=None,
+                        active_file_path=None,
+                        structured_fields=None,
+                    )
+                )
+                # Then: the shape is kept and the peer's name never is.
+                self.assertEqual(fields.get("channel_type"), ["dm"])
+                self.assertIsNone(fields.get("channel"))
+                serialized = json.dumps(fields, ensure_ascii=False)
+                self.assertNotIn("Junho", serialized)
+                self.assertNotIn("Ari", serialized)
+
+    def test_mail_keeps_system_folders_and_drops_subjects_and_accounts(self) -> None:
+        # Given: an inbox with an unread counter, and a single mail thread.
+        folder = communication_structured_fields(
+            AdaptiveContextCaptureInput(
+                observed_at="2026-08-24T00:00:00+00:00",
+                app_name="Aside",
+                bundle_id=None,
+                window_title="받은편지함 (1,106) - alex@example.com - Gmail",
+                browser_name=None,
+                site_domain="mail.google.com",
+                site_title=None,
+                site_url=None,
+                active_file_path=None,
+                structured_fields=None,
+            )
+        )
+        # Then: the churning unread count is normalized away and the account is dropped.
+        self.assertEqual(folder.get("channel"), ["받은편지함"])
+        self.assertEqual(folder.get("channel_type"), ["folder"])
+        self.assertNotIn("alex@example.com", json.dumps(folder, ensure_ascii=False))
+
+        subject = communication_structured_fields(
+            AdaptiveContextCaptureInput(
+                observed_at="2026-08-24T00:00:00+00:00",
+                app_name="Aside",
+                bundle_id=None,
+                window_title="Action required: Supabase endpoint is being removed - alex@example.com - Gmail",
+                browser_name=None,
+                site_domain="mail.google.com",
+                site_title=None,
+                site_url=None,
+                active_file_path=None,
+                structured_fields=None,
+            )
+        )
+        # Then: a mail subject is reported only as a shape, never as text.
+        self.assertEqual(subject.get("channel_type"), ["thread"])
+        self.assertIsNone(subject.get("channel"))
+        self.assertNotIn("Supabase", json.dumps(subject, ensure_ascii=False))
+
+    def test_communication_capture_skips_surfaces_with_an_unverified_layout(self) -> None:
+        # Given: Teams and Outlook, whose title layouts have never been captured.
+        # Teams renders a direct message as "Chat | <person>", so the position the
+        # parsers read as a workspace would hold someone's name.
+        unverified = (
+            ("Microsoft Teams", "Chat | John Smith | Microsoft Teams", None),
+            ("Google Chrome", "Chat | John Smith | Microsoft Teams", "teams.microsoft.com"),
+            ("Google Chrome", "Q3 planning - john@corp.com - Outlook", "outlook.office.com"),
+        )
+        with patch.dict(os.environ, {
+            "DRIFTY_ENABLE_ADAPTIVE_CONTEXT_CAPTURE": "1",
+            "DRIFTY_ADAPTIVE_CONTEXT_SOURCE_FAMILIES": "communication_metadata",
+        }):
+            for app_name, window_title, site_domain in unverified:
+                with self.subTest(app=app_name, domain=site_domain):
+                    context = adaptive_content_context_for_capture(AdaptiveContextCaptureInput(
+                        observed_at="2026-08-24T00:00:00+00:00",
+                        app_name=app_name,
+                        bundle_id=None,
+                        window_title=window_title,
+                        browser_name=None,
+                        site_domain=site_domain,
+                        site_title=None,
+                        site_url=None,
+                        active_file_path=None,
+                        structured_fields=None,
+                    ))
+                    # Then: nothing is captured rather than guessed at.
+                    self.assertIsNone(context)
+
+            # And: the measured surfaces still produce context.
+            slack = adaptive_content_context_for_capture(AdaptiveContextCaptureInput(
+                observed_at="2026-08-24T00:00:00+00:00",
+                app_name="Slack",
+                bundle_id=None,
+                window_title="#general - Acme - 1개의 새 항목",
+                browser_name=None,
+                site_domain=None,
+                site_title=None,
+                site_url=None,
+                active_file_path=None,
+                structured_fields=None,
+            ))
+            self.assertIsNotNone(slack)
 
     def test_unsupported_or_disabled_capture_returns_no_context(self) -> None:
         # Given: an unsupported app and an otherwise supported Notion fixture.

@@ -80,6 +80,12 @@ export type ContentContextEgressPolicyInput = {
   readonly devModeEnabled: boolean;
   readonly settings: EnhancedContextSettings;
   readonly context: AdaptiveContentContext | null;
+  /**
+   * Identity the caller uses for this segment. A captured context labels itself with
+   * a title-derived string, which both fails to match the payload's segment id and
+   * carries text the extractors dropped, so the caller's id wins when provided.
+   */
+  readonly segmentId?: string;
 };
 
 export type ContentContextEgressPolicyResult = {
@@ -159,7 +165,7 @@ export function buildProviderSafeEnhancedContext(
   return {
     providerContext: providerItems.length === 0 || !input.context
       ? null
-      : { kind: "enhanced_retry_context", segmentId: input.context.segmentId, items: providerItems },
+      : { kind: "enhanced_retry_context", segmentId: input.segmentId ?? input.context.segmentId, items: providerItems },
     summary,
   };
 }
@@ -192,7 +198,6 @@ export function enhancedContextRetryEligibility(
 function decideItem(args: { readonly item: AdaptiveContextItem; readonly input: ContentContextEgressPolicyInput }): ItemDecision {
   const item = args.item;
   if (args.input.mode === "first_pass") return { decision: "local_only", reasons: ["first_pass"] };
-  if (!args.input.devModeEnabled) return { decision: "local_only", reasons: ["dev_mode_disabled"] };
   if (!args.input.settings.enabled) return { decision: "local_only", reasons: ["enhanced_context_disabled"] };
   if (!args.input.settings.captureLocal) return { decision: "local_only", reasons: ["capture_disabled"] };
   if (!args.input.settings.retryLowConfidence) return { decision: "local_only", reasons: ["retry_disabled"] };

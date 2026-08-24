@@ -1587,6 +1587,7 @@ async function classifyLocalEnhancedRetry(input: {
     devModeEnabled,
     settings,
     context: input.adaptiveContextBySegmentId.get(input.payload.segmentId) ?? null,
+    segmentId: input.payload.segmentId,
   });
   const debugLoggingEnabled = settings.debugLogging;
   if (debugLoggingEnabled) {

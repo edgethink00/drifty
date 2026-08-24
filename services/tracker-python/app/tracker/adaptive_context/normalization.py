@@ -41,17 +41,50 @@ NON_REPO_PATH_SEGMENTS: Final = frozenset(
 )
 DESIGN_DOMAINS: Final = ("figma.com",)
 CALENDAR_DOMAINS: Final = ("calendar.google.com", "outlook.office.com")
+# Only surfaces whose title layout has been observed in real captures. Each one
+# renders "<channel> - <workspace>" or "<folder> - <account> - <app>", which is
+# what the parsers below assume. A surface with an unverified layout can put a
+# person's name where a workspace belongs, so it stays out until it is measured.
 COMMUNICATION_DOMAINS: Final = (
     "slack.com",
     "mail.google.com",
-    "outlook.office.com",
-    "teams.microsoft.com",
     "discord.com",
 )
+COMMUNICATION_APPS: Final = frozenset({"Slack", "Discord"})
 TITLE_PART_RE: Final = re.compile(r"\s+(?:[-–—|·•])\s+")
 BRACKET_LABEL_RE: Final = re.compile(r"\[([^\]]{1,80})\]")
 TITLE_SUFFIX_VERSION_RE: Final = re.compile(r"\s+v?\d+(?:\.\d+)*$")
 UNREAD_BADGE_RE: Final = re.compile(r"\s*\(\d+\)$")
+# Slack/Gmail render unread counters inside the title ("받은편지함 (1,106)",
+# "students(채널)"). They churn per segment and carry no context.
+UNREAD_COUNT_RE: Final = re.compile(r"\s*\(\s*[\d,\.]+\s*\)\s*$")
+SLACK_UNREAD_BADGE_RE: Final = re.compile(r"^\d+\s*(?:개의 새 항목|new items?)$", re.IGNORECASE)
+SLACK_CHANNEL_SUFFIX_RE: Final = re.compile(r"\s*\((?:채널|channel)\)$", re.IGNORECASE)
+SLACK_DM_SUFFIX_RE: Final = re.compile(r"\s*\((?:DM|디엠)\)$", re.IGNORECASE)
+# Mail surfaces expose system folders; anything else in that slot is a thread subject.
+MAIL_SYSTEM_FOLDERS: Final = frozenset(
+    {
+        "받은편지함",
+        "보낸편지함",
+        "스팸함",
+        "휴지통",
+        "임시보관함",
+        "중요편지함",
+        "전체보관함",
+        "inbox",
+        "sent",
+        "spam",
+        "trash",
+        "drafts",
+        "starred",
+        "important",
+        "all mail",
+        "archive",
+    }
+)
+MAIL_SURFACE_DOMAINS: Final = ("mail.google.com", "outlook.office.com")
+MAIL_SURFACE_APPS: Final = frozenset({"mail", "gmail", "outlook", "microsoft outlook", "spark", "airmail"})
+CHAT_APPS: Final = frozenset({"slack", "discord", "microsoft teams", "teams"})
 COMMON_TITLE_SUFFIXES: Final = frozenset(
     {
         "arc",
@@ -107,11 +140,17 @@ def clean_context_values(values: Sequence[str] | None) -> list[str]:
     if values is None:
         return []
     cleaned_values: list[str] = []
+    seen: set[str] = set()
     for value in values:
         cleaned = value.strip()
         if not cleaned:
             continue
-        cleaned_values.append(cleaned[:MAX_ADAPTIVE_VALUE_CHARS])
+        truncated = cleaned[:MAX_ADAPTIVE_VALUE_CHARS]
+        # GitHub renders a label both in the title and the sidebar; keep one copy.
+        if truncated in seen:
+            continue
+        seen.add(truncated)
+        cleaned_values.append(truncated)
         if len(cleaned_values) >= MAX_ADAPTIVE_VALUES:
             break
     return cleaned_values
@@ -264,10 +303,61 @@ def communication_structured_fields(capture: AdaptiveContextCaptureInput) -> Ada
     fields: AdaptiveStructuredFields = {}
     # Unread-count badges such as "받은편지함 (843)" churn per segment without adding context.
     parts = [part for part in (UNREAD_BADGE_RE.sub("", raw).strip() for raw in title_parts(capture)) if part]
-    if parts:
-        add_structured_values(fields, "channel", [parts[0].removeprefix("#")])
+    parts = [UNREAD_COUNT_RE.sub("", part).strip() for part in parts]
+    parts = [part for part in parts if part and not SLACK_UNREAD_BADGE_RE.match(part)]
+    if not parts:
+        return fields
+    if is_mail_surface(capture):
+        return mail_structured_fields(parts)
+    return chat_structured_fields(parts)
+
+
+def is_mail_surface(capture: AdaptiveContextCaptureInput) -> bool:
+    # A chat app never renders a mail surface, and its channel names may mention mail.
+    if capture.app_name.casefold() in CHAT_APPS:
+        return False
+    if domain_matches(capture.site_domain, MAIL_SURFACE_DOMAINS):
+        return True
+    if capture.app_name.casefold() in MAIL_SURFACE_APPS:
+        return True
+    # In a browser the app name is the browser, so fall back to the title suffix
+    # ("... - Gmail"), which is the mail client's own trailing marker.
+    trailing = title_parts(capture)
+    return bool(trailing) and trailing[-1].casefold() in MAIL_SURFACE_APPS
+
+
+def mail_structured_fields(parts: Sequence[str]) -> AdaptiveStructuredFields:
+    """Mail titles read "<folder-or-subject> - <account> - Gmail".
+
+    Only system folders are context. A non-folder value in that slot is a thread
+    subject, and the account slot is a personal identifier; neither is retained.
+    """
+    fields: AdaptiveStructuredFields = {}
+    folder = parts[0]
+    if folder.casefold() in MAIL_SYSTEM_FOLDERS:
+        add_structured_values(fields, "channel", [folder])
+        add_structured_values(fields, "channel_type", ["folder"])
+    else:
+        add_structured_values(fields, "channel_type", ["thread"])
+    return fields
+
+
+def chat_structured_fields(parts: Sequence[str]) -> AdaptiveStructuredFields:
+    """Slack/Discord titles read "<channel> - <workspace-or-server> - <app>".
+
+    The second slot is the containing workspace/server, not a thread. DM peers are
+    replaced by a type marker so a social graph never leaves the device.
+    """
+    fields: AdaptiveStructuredFields = {}
+    raw_channel = parts[0]
+    is_dm = raw_channel.startswith("@") or bool(SLACK_DM_SUFFIX_RE.search(raw_channel))
+    if is_dm:
+        add_structured_values(fields, "channel_type", ["dm"])
+    else:
+        channel = SLACK_CHANNEL_SUFFIX_RE.sub("", raw_channel).removeprefix("#").strip()
+        if channel:
+            add_structured_values(fields, "channel", [channel])
+            add_structured_values(fields, "channel_type", ["channel"])
     if len(parts) >= 2:
-        add_structured_values(fields, "thread", [parts[1]])
-    if len(parts) >= 3:
-        add_structured_values(fields, "workspace", [parts[2]])
+        add_structured_values(fields, "workspace", [parts[1]])
     return fields

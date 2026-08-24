@@ -144,6 +144,24 @@ export const ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS: Readonly<Record<Enhanc
 };
 
 export const DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFamilySettings = {
+  document_knowledge: true,
+  local_notes_markdown: true,
+  work_tracker_dev_platform: true,
+  // No extraction has ever been observed from this family; keep it opt-in until it is.
+  design_dev_tool: false,
+  calendar_meeting: true,
+  communication_metadata: true,
+};
+
+export const DEFAULT_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
+  enabled: true,
+  captureLocal: true,
+  retryLowConfidence: true,
+  debugLogging: false,
+  sourceFamilies: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES,
+};
+
+const DISABLED_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFamilySettings = {
   document_knowledge: false,
   local_notes_markdown: false,
   work_tracker_dev_platform: false,
@@ -152,12 +170,13 @@ export const DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFami
   communication_metadata: false,
 };
 
-export const DEFAULT_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
+/** Every capture path off, used when the user turns the feature off. */
+export const DISABLED_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
   enabled: false,
   captureLocal: false,
   retryLowConfidence: false,
   debugLogging: false,
-  sourceFamilies: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES,
+  sourceFamilies: DISABLED_ENHANCED_CONTEXT_SOURCE_FAMILIES,
 };
 
 type DemoDashboardReplaySettingsInput = {
@@ -459,27 +478,38 @@ export function resolveInitialFloatingCompanionDevEnabled(): boolean {
 export function resolveInitialEnhancedContextSettings(): EnhancedContextSettings {
   if (typeof window === "undefined") return DEFAULT_ENHANCED_CONTEXT_SETTINGS;
   return {
-    enabled: readStoredBoolean(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY),
-    captureLocal: readStoredBoolean(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY),
-    retryLowConfidence: readStoredBoolean(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY),
+    enabled: readStoredBoolean(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY, DEFAULT_ENHANCED_CONTEXT_SETTINGS.enabled),
+    captureLocal: readStoredBoolean(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY, DEFAULT_ENHANCED_CONTEXT_SETTINGS.captureLocal),
+    retryLowConfidence: readStoredBoolean(
+      ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY,
+      DEFAULT_ENHANCED_CONTEXT_SETTINGS.retryLowConfidence,
+    ),
     debugLogging: readStoredBoolean(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY),
     sourceFamilies: {
-      document_knowledge: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.document_knowledge),
-      local_notes_markdown: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.local_notes_markdown),
-      work_tracker_dev_platform: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.work_tracker_dev_platform),
-      design_dev_tool: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.design_dev_tool),
-      calendar_meeting: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.calendar_meeting),
-      communication_metadata: readStoredBoolean(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.communication_metadata),
+      document_knowledge: readStoredFamily("document_knowledge"),
+      local_notes_markdown: readStoredFamily("local_notes_markdown"),
+      work_tracker_dev_platform: readStoredFamily("work_tracker_dev_platform"),
+      design_dev_tool: readStoredFamily("design_dev_tool"),
+      calendar_meeting: readStoredFamily("calendar_meeting"),
+      communication_metadata: readStoredFamily("communication_metadata"),
     },
   };
+}
+
+function readStoredFamily(family: keyof EnhancedContextSourceFamilySettings): boolean {
+  return readStoredBoolean(
+    ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS[family],
+    DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES[family],
+  );
 }
 
 export function resolveEffectiveEnhancedContextSettings(
   devModeEnabled: boolean,
   settings: EnhancedContextSettings,
 ): EnhancedContextSettings {
-  if (!devModeEnabled || !settings.enabled) return DEFAULT_ENHANCED_CONTEXT_SETTINGS;
-  return settings;
+  if (!settings.enabled) return DISABLED_ENHANCED_CONTEXT_SETTINGS;
+  // Debug logging stays a Dev-mode diagnostic even though capture itself ships on.
+  return devModeEnabled ? settings : { ...settings, debugLogging: false };
 }
 
 export function persistEnhancedContextSettings(
@@ -535,9 +565,11 @@ export function applyThemeToDocument(theme: ThemeMode) {
   document.documentElement.style.colorScheme = theme;
 }
 
-function readStoredBoolean(storageKey: string): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(storageKey) === "1";
+function readStoredBoolean(storageKey: string, fallback = false): boolean {
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(storageKey);
+  if (stored === null) return fallback;
+  return stored === "1";
 }
 
 function writeStoredBoolean(storageKey: string, enabled: boolean): void {

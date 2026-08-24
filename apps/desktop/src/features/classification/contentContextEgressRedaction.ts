@@ -68,8 +68,9 @@ export function sensitivityReasons(item: AdaptiveContextItem): readonly ContentC
   if (item.kind === "messageBody" || item.values.some((value) => value.includes("document.body.innerText"))) {
     reasons.push("raw_collector_output");
   }
-  if (item.sourceFamily === "communication_metadata"
-    || item.sensitivity.some((flag) => BLOCKING_SENSITIVITY_FLAGS.has(flag) || LOCAL_ONLY_SENSITIVITY_FLAGS.has(flag))) {
+  // Communication values are container/channel shape only; a DM peer, mail subject,
+  // and account address are dropped by the extractor before they reach this point.
+  if (item.sensitivity.some((flag) => BLOCKING_SENSITIVITY_FLAGS.has(flag) || LOCAL_ONLY_SENSITIVITY_FLAGS.has(flag))) {
     reasons.push("sensitive_surface");
   }
   return reasons;

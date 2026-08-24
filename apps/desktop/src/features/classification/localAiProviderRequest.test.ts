@@ -307,4 +307,45 @@ describe("toLocalProviderRequest", () => {
     expect(prompt).not.toContain("abcd");
     expect(prompt).not.toContain("abcd1234");
   });
+
+  it("attaches enhanced context under the payload's id, not the capture's title", () => {
+    // A captured context labels itself with a title-derived string that still holds the
+    // DM peer the extractor dropped. The prompt matches on the payload's segment id, so
+    // egress has to relabel; otherwise the context silently never attaches.
+    const rawTitleSegmentId = "2026-08-24T00:00:00+00:00|Slack|Junho(DM) - Northstar Lab - 2개의 새 항목";
+    const egress = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      devModeEnabled: false,
+      settings: enhancedContextSettings,
+      segmentId: basePayload.segmentId,
+      context: {
+        version: 1,
+        segmentId: rawTitleSegmentId,
+        collectedAt: "2026-08-24T00:00:00.000Z",
+        localStorage: "stored_local",
+        items: [{
+          id: "communication_metadata:workspace",
+          depth: 1,
+          kind: "workspace",
+          sourceFamily: "communication_metadata",
+          values: ["Northstar Lab"],
+          extractionConfidence: "medium",
+          localStorage: "stored_local",
+          providerPolicy: "metadata_only",
+          sensitivity: [],
+        }],
+      },
+    });
+
+    expect(egress.providerContext).not.toBeNull();
+    if (!egress.providerContext) return;
+
+    expect(egress.providerContext.segmentId).toBe(basePayload.segmentId);
+
+    const prompt = enhancedRetryPromptFor([basePayload], egress.providerContext);
+
+    expect(prompt).toContain("Northstar Lab");
+    expect(prompt).not.toContain("Junho");
+    expect(prompt).not.toContain("개의 새 항목");
+  });
 });

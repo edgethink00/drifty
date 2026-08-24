@@ -2054,7 +2054,7 @@ describe("runAiClassification cloud contract", () => {
           kind: "egress_decision",
           egress: expect.objectContaining({
             providerSafeItemCount: 0,
-            decisionCounts: expect.objectContaining({ local_only: 1 }),
+            decisionCounts: expect.objectContaining({ blocked: 1 }),
             dropReasonCounts: expect.objectContaining({ raw_collector_output: 1 }),
           }),
         }),

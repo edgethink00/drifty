@@ -294,10 +294,13 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("switch", { name: "Toggle project classification preview" })).toBeNull();
   });
 
-  it("defaults enhanced context Dev settings off and persists only Dev-active values", () => {
+  it("defaults enhanced context on outside Dev mode and keeps debug logging Dev-only", () => {
     window.localStorage.clear();
 
     expect(resolveInitialEnhancedContextSettings()).toEqual(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+    expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.enabled).toBe(true);
+    // No extraction from this family has ever been observed, so it stays opt-in.
+    expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies.design_dev_tool).toBe(false);
 
     const enabledSettings = {
       enabled: true,
@@ -314,10 +317,11 @@ describe("DevSettingsSection", () => {
       },
     };
 
-    expect(persistEnhancedContextSettings(enabledSettings, false)).toEqual(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
-    expect(window.localStorage.getItem(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY)).toBe("0");
-    expect(window.localStorage.getItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY)).toBe("0");
-    expect(window.localStorage.getItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY)).toBe("0");
+    // Outside Dev mode capture stays on; only the debug diagnostic is withheld.
+    expect(persistEnhancedContextSettings(enabledSettings, false)).toEqual({ ...enabledSettings, debugLogging: false });
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY)).toBe("1");
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY)).toBe("1");
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY)).toBe("1");
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY)).toBe("0");
 
     expect(persistEnhancedContextSettings(enabledSettings, true)).toEqual(enabledSettings);
@@ -325,9 +329,13 @@ describe("DevSettingsSection", () => {
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY)).toBe("1");
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY)).toBe("1");
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY)).toBe("1");
+
+    // An explicit opt-out survives a reload rather than falling back to the default.
+    expect(persistEnhancedContextSettings({ ...enabledSettings, enabled: false }, true).enabled).toBe(false);
+    expect(resolveInitialEnhancedContextSettings().enabled).toBe(false);
   });
 
-  it("renders enhanced context controls as off-by-default Dev toggles, collapsed behind a local accordion", () => {
+  it("renders enhanced context controls on by default, collapsed behind a local accordion", () => {
     const props = renderProductionDevSettings();
 
     expect(screen.getByRole("button", { name: /^Enhanced context \(Dev\)/ })).toBeTruthy();
@@ -336,9 +344,10 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText(/Separate from current Content context title and YouTube metadata/i)).toBeTruthy();
     expect(screen.getByText(/No raw bodies or screenshots/i)).toBeTruthy();
     expect(screen.getByText(/Keep the first AI request unchanged/i)).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Enable enhanced context" }).getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByRole("switch", { name: "Capture enhanced context locally" }).getAttribute("aria-checked")).toBe("false");
-    expect(screen.getByRole("switch", { name: "Use enhanced context for low-confidence AI retry" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("switch", { name: "Enable enhanced context" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Capture enhanced context locally" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("switch", { name: "Use enhanced context for low-confidence AI retry" }).getAttribute("aria-checked")).toBe("true");
+    // Debug logging is a diagnostic, not part of the shipped default.
     expect(screen.getByRole("switch", { name: "Enhanced context debug logging" }).getAttribute("aria-checked")).toBe("false");
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable enhanced context" }));
@@ -346,16 +355,17 @@ describe("DevSettingsSection", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Use enhanced context for low-confidence AI retry" }));
     fireEvent.click(screen.getByRole("switch", { name: "Enhanced context debug logging" }));
 
-    expect(props.onEnhancedContextEnabledChange).toHaveBeenCalledWith(true);
-    expect(props.onEnhancedContextCaptureLocalChange).toHaveBeenCalledWith(true);
-    expect(props.onEnhancedContextRetryLowConfidenceChange).toHaveBeenCalledWith(true);
+    expect(props.onEnhancedContextEnabledChange).toHaveBeenCalledWith(false);
+    expect(props.onEnhancedContextCaptureLocalChange).toHaveBeenCalledWith(false);
+    expect(props.onEnhancedContextRetryLowConfidenceChange).toHaveBeenCalledWith(false);
     expect(props.onEnhancedContextDebugLoggingChange).toHaveBeenCalledWith(true);
 
     for (const option of ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS) {
       const sourceSwitch = screen.getByRole("switch", { name: `Enhanced context source: ${option.label}` });
-      expect(sourceSwitch.getAttribute("aria-checked")).toBe("false");
+      const shipsOn = DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies[option.family];
+      expect(sourceSwitch.getAttribute("aria-checked")).toBe(String(shipsOn));
       fireEvent.click(sourceSwitch);
-      expect(props.onEnhancedContextSourceFamilyChange).toHaveBeenCalledWith(option.family, true);
+      expect(props.onEnhancedContextSourceFamilyChange).toHaveBeenCalledWith(option.family, !shipsOn);
     }
   });
 });

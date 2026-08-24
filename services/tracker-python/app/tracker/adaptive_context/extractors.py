@@ -11,6 +11,7 @@ from app.tracker.adaptive_context.markdown import (
 from app.tracker.adaptive_context.normalization import (
     BODY_LIKE_STRUCTURED_KEYS,
     CALENDAR_DOMAINS,
+    COMMUNICATION_APPS,
     COMMUNICATION_DOMAINS,
     DESIGN_DOMAINS,
     ISSUE_DOMAINS,
@@ -63,7 +64,7 @@ def derived_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveS
         fields = merge_structured_fields(fields, design_structured_fields(capture)) or fields
     if capture.app_name == "Calendar" or domain_matches(capture.site_domain, CALENDAR_DOMAINS):
         fields = merge_structured_fields(fields, calendar_structured_fields(capture)) or fields
-    if capture.app_name in {"Slack", "Discord", "Microsoft Teams"} or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS):
+    if capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS):
         fields = merge_structured_fields(fields, communication_structured_fields(capture)) or fields
     return fields
 
@@ -236,6 +237,7 @@ def metadata_only_items(
         ("attendee_count_range", "attendeeCountRange", 2),
         ("channel", "channel", 1),
         ("thread", "thread", 1),
+        ("channel_type", "channelType", 2),
     ):
         append_adaptive_item(
             items,
@@ -262,7 +264,7 @@ def adaptive_content_context_for_capture(capture: AdaptiveContextCaptureInput) -
     if "calendar_meeting" in enabled_families and (capture.app_name == "Calendar" or domain_matches(capture.site_domain, CALENDAR_DOMAINS)):
         items.extend(metadata_only_items(capture, "calendar_meeting", "metadata_only"))
     if "communication_metadata" in enabled_families and (
-        capture.app_name in {"Slack", "Discord", "Microsoft Teams"} or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS)
+        capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS)
     ):
-        items.extend(metadata_only_items(capture, "communication_metadata", "local_only"))
+        items.extend(metadata_only_items(capture, "communication_metadata", "metadata_only"))
     return adaptive_context_payload(capture, items)

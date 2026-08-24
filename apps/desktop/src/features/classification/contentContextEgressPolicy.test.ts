@@ -340,11 +340,11 @@ describe("contentContextEgressPolicy", () => {
     expect(result.summary.dropReasonCounts.secret_like_value).toBe(10);
   });
 
-  it("returns no provider context when Dev gates are disabled", () => {
-    const devDisabled = buildProviderSafeEnhancedContext({
+  it("returns no provider context when the user turns the feature off", () => {
+    const captureDisabled = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
       devModeEnabled: false,
-      settings: enabledSettings,
+      settings: { ...enabledSettings, captureLocal: false },
       context: context([notionParentPage]),
     });
     const toggleDisabled = buildProviderSafeEnhancedContext({
@@ -354,9 +354,9 @@ describe("contentContextEgressPolicy", () => {
       context: context([notionParentPage]),
     });
 
-    expect(devDisabled.providerContext).toBeNull();
+    expect(captureDisabled.providerContext).toBeNull();
     expect(toggleDisabled.providerContext).toBeNull();
-    expect(devDisabled.summary.dropReasonCounts.dev_mode_disabled).toBe(1);
+    expect(captureDisabled.summary.dropReasonCounts.capture_disabled).toBe(1);
     expect(toggleDisabled.summary.dropReasonCounts.enhanced_context_disabled).toBe(1);
   });
 
@@ -385,6 +385,88 @@ describe("contentContextEgressPolicy", () => {
     expect(serialized).not.toContain("document.body.innerText");
     expect(serialized).not.toContain("hunter2");
     expect(result.summary.dropReasonCounts.raw_collector_output).toBe(1);
+  });
+
+  it("sends communication shape outside Dev mode and still withholds the body", () => {
+    const shared = {
+      sourceFamily: "communication_metadata",
+      extractionConfidence: "medium",
+      localStorage: "stored_local",
+      providerPolicy: "metadata_only",
+      sensitivity: [],
+    } as const;
+    const workspace: AdaptiveContextItem = {
+      ...shared, id: "communication_metadata:workspace", depth: 1, kind: "workspace", values: ["Northstar Lab"],
+    };
+    const channel: AdaptiveContextItem = {
+      ...shared, id: "communication_metadata:channel", depth: 1, kind: "channel", values: ["students"],
+    };
+    const channelType: AdaptiveContextItem = {
+      ...shared, id: "communication_metadata:channelType", depth: 2, kind: "channelType", values: ["channel"],
+    };
+
+    const result = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      // Enhanced context ships on, so egress must not depend on Dev mode.
+      devModeEnabled: false,
+      settings: enabledSettings,
+      context: context([workspace, channel, channelType]),
+    });
+
+    expect(result.providerContext?.items.map((item) => item.kind)).toEqual(["workspace", "channel", "channelType"]);
+    expect(result.summary.decisionCounts.metadata_only).toBe(3);
+
+    const withBody = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      devModeEnabled: false,
+      settings: enabledSettings,
+      context: context([{
+        id: "communication_metadata:messageBody",
+        depth: 3,
+        kind: "messageBody",
+        sourceFamily: "communication_metadata",
+        values: ["standup notes from the team"],
+        extractionConfidence: "medium",
+        localStorage: "stored_local",
+        providerPolicy: "blocked",
+        sensitivity: ["message_body"],
+      }]),
+    });
+
+    expect(withBody.providerContext).toBeNull();
+    expect(JSON.stringify(withBody)).not.toContain("standup notes");
+  });
+
+  it("keeps rows captured before the promotion local-only", () => {
+    // Rows already on disk carry the old shape: the container sat in `thread`, the
+    // channel kept its suffix, and every item was stamped local_only at capture time.
+    const legacyItem = (kind: "channel" | "thread" | "workspace", values: readonly string[]): AdaptiveContextItem => ({
+      id: `communication_metadata:${kind}`,
+      depth: 1,
+      kind,
+      sourceFamily: "communication_metadata",
+      values,
+      extractionConfidence: "medium",
+      localStorage: "stored_local",
+      providerPolicy: "local_only",
+      sensitivity: [],
+    });
+
+    const result = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      devModeEnabled: false,
+      settings: enabledSettings,
+      context: context([
+        legacyItem("channel", ["students(채널)"]),
+        legacyItem("thread", ["Northstar Lab"]),
+        legacyItem("workspace", ["1개의 새 항목"]),
+      ]),
+    });
+
+    // The stored policy still wins, so promoting the feature never retroactively
+    // sends context that was captured under the old rules.
+    expect(result.providerContext).toBeNull();
+    expect(result.summary.dropReasonCounts.provider_policy_local_only).toBe(3);
   });
 
   it("maps provider-safe context count into deterministic retry eligibility", () => {
