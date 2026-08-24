@@ -11,6 +11,7 @@ import {
   ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY,
   ENHANCED_CONTEXT_ENABLED_STORAGE_KEY,
   ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY,
+  ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS,
   ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS,
   persistEnhancedContextSettings,
   resolveInitialEnhancedContextSettings,
@@ -294,78 +295,98 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("switch", { name: "Toggle project classification preview" })).toBeNull();
   });
 
-  it("defaults enhanced context on outside Dev mode and keeps debug logging Dev-only", () => {
+  it("locks shipped enhanced context on and keeps only design as a dogfood override", () => {
     window.localStorage.clear();
 
     expect(resolveInitialEnhancedContextSettings()).toEqual(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
     expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.enabled).toBe(true);
     // No extraction from this family has ever been observed, so it stays opt-in.
     expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies.design_dev_tool).toBe(false);
+    expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies.ai_conversation).toBe(true);
+    expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies.developer_workspace).toBe(true);
+    expect(DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies.document_editor).toBe(true);
 
-    const enabledSettings = {
-      enabled: true,
-      captureLocal: true,
-      retryLowConfidence: true,
+    const attemptedOverrides = {
+      enabled: false,
+      captureLocal: false,
+      retryLowConfidence: false,
       debugLogging: true,
       sourceFamilies: {
-        document_knowledge: true,
-        local_notes_markdown: true,
-        work_tracker_dev_platform: true,
+        document_knowledge: false,
+        local_notes_markdown: false,
+        work_tracker_dev_platform: false,
         design_dev_tool: true,
-        calendar_meeting: true,
-        communication_metadata: true,
+        calendar_meeting: false,
+        communication_metadata: false,
+        ai_conversation: false,
+        developer_workspace: false,
+        document_editor: false,
       },
     };
 
-    // Outside Dev mode capture stays on; only the debug diagnostic is withheld.
-    expect(persistEnhancedContextSettings(enabledSettings, false)).toEqual({ ...enabledSettings, debugLogging: false });
+    // Production classification behavior is not configurable from Dev settings.
+    expect(persistEnhancedContextSettings(attemptedOverrides, false)).toEqual(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY)).toBe("1");
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY)).toBe("1");
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY)).toBe("1");
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY)).toBe("0");
 
-    expect(persistEnhancedContextSettings(enabledSettings, true)).toEqual(enabledSettings);
-    expect(window.localStorage.getItem(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY)).toBe("1");
-    expect(window.localStorage.getItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY)).toBe("1");
-    expect(window.localStorage.getItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY)).toBe("1");
+    const dogfoodSettings = persistEnhancedContextSettings(attemptedOverrides, true);
+    expect(dogfoodSettings).toEqual({
+      ...DEFAULT_ENHANCED_CONTEXT_SETTINGS,
+      debugLogging: true,
+      sourceFamilies: {
+        ...DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies,
+        design_dev_tool: true,
+      },
+    });
     expect(window.localStorage.getItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY)).toBe("1");
 
-    // An explicit opt-out survives a reload rather than falling back to the default.
-    expect(persistEnhancedContextSettings({ ...enabledSettings, enabled: false }, true).enabled).toBe(false);
-    expect(resolveInitialEnhancedContextSettings().enabled).toBe(false);
+    // Legacy Dev opt-outs are migrated to the shipped production policy.
+    window.localStorage.setItem(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY, "0");
+    window.localStorage.setItem(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY, "0");
+    window.localStorage.setItem(ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY, "0");
+    window.localStorage.setItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.ai_conversation, "0");
+    window.localStorage.setItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.developer_workspace, "0");
+    window.localStorage.setItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.document_editor, "0");
+    expect(resolveInitialEnhancedContextSettings()).toEqual(dogfoodSettings);
+
+    // Leaving Dev mode clears dogfood state without touching shipped families.
+    expect(persistEnhancedContextSettings(dogfoodSettings, false)).toEqual(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY)).toBe("0");
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.design_dev_tool)).toBe("0");
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.ai_conversation)).toBe("1");
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.developer_workspace)).toBe("1");
+    expect(window.localStorage.getItem(ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS.document_editor)).toBe("1");
+    expect(resolveInitialEnhancedContextSettings()).toEqual(DEFAULT_ENHANCED_CONTEXT_SETTINGS);
   });
 
-  it("renders enhanced context controls on by default, collapsed behind a local accordion", () => {
+  it("shows production status with only dogfood diagnostics and the design experiment", () => {
     const props = renderProductionDevSettings();
 
-    expect(screen.getByRole("button", { name: /^Enhanced context \(Dev\)/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Enhanced context \(Dev\)/ }));
+    expect(screen.getByRole("button", { name: /^Enhanced context dogfood/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Enhanced context dogfood/ }));
 
-    expect(screen.getByText(/Separate from current Content context title and YouTube metadata/i)).toBeTruthy();
-    expect(screen.getByText(/No raw bodies or screenshots/i)).toBeTruthy();
-    expect(screen.getByText(/Keep the first AI request unchanged/i)).toBeTruthy();
-    expect(screen.getByRole("switch", { name: "Enable enhanced context" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByRole("switch", { name: "Capture enhanced context locally" }).getAttribute("aria-checked")).toBe("true");
-    expect(screen.getByRole("switch", { name: "Use enhanced context for low-confidence AI retry" }).getAttribute("aria-checked")).toBe("true");
-    // Debug logging is a diagnostic, not part of the shipped default.
+    expect(screen.getByText("Production classification context")).toBeTruthy();
+    expect(screen.getByText(/approved metadata is on by default/i)).toBeTruthy();
+    expect(screen.getByText("On", { selector: ".ctrl--value" })).toBeTruthy();
+    expect(screen.queryByRole("switch", { name: "Enable enhanced context" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Capture enhanced context locally" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Use enhanced context for low-confidence AI retry" })).toBeNull();
     expect(screen.getByRole("switch", { name: "Enhanced context debug logging" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("switch", { name: "Experimental design context" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.queryByRole("switch", { name: "AI conversation context" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Developer workspace context" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Document editor context" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("switch", { name: "Enable enhanced context" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Capture enhanced context locally" }));
-    fireEvent.click(screen.getByRole("switch", { name: "Use enhanced context for low-confidence AI retry" }));
     fireEvent.click(screen.getByRole("switch", { name: "Enhanced context debug logging" }));
-
-    expect(props.onEnhancedContextEnabledChange).toHaveBeenCalledWith(false);
-    expect(props.onEnhancedContextCaptureLocalChange).toHaveBeenCalledWith(false);
-    expect(props.onEnhancedContextRetryLowConfidenceChange).toHaveBeenCalledWith(false);
+    fireEvent.click(screen.getByRole("switch", { name: "Experimental design context" }));
     expect(props.onEnhancedContextDebugLoggingChange).toHaveBeenCalledWith(true);
+    expect(props.onEnhancedContextSourceFamilyChange).toHaveBeenCalledWith("design_dev_tool", true);
 
-    for (const option of ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS) {
-      const sourceSwitch = screen.getByRole("switch", { name: `Enhanced context source: ${option.label}` });
-      const shipsOn = DEFAULT_ENHANCED_CONTEXT_SETTINGS.sourceFamilies[option.family];
-      expect(sourceSwitch.getAttribute("aria-checked")).toBe(String(shipsOn));
-      fireEvent.click(sourceSwitch);
-      expect(props.onEnhancedContextSourceFamilyChange).toHaveBeenCalledWith(option.family, !shipsOn);
+    const experimentalFamilies = new Set(["design_dev_tool"]);
+    for (const option of ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS.filter((option) => !experimentalFamilies.has(option.family))) {
+      expect(screen.queryByRole("switch", { name: option.label })).toBeNull();
     }
   });
 });

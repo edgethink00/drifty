@@ -1,5 +1,6 @@
 import { Toggle } from "../../components/Toggle";
 import {
+  ENHANCED_CONTEXT_DOGFOOD_SOURCE_FAMILIES,
   ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS,
   type EnhancedContextSettings,
   type EnhancedContextSourceFamily,
@@ -7,18 +8,12 @@ import {
 
 type DevSettingsEnhancedContextBlockProps = {
   readonly settings: EnhancedContextSettings;
-  readonly onEnabledChange: (enabled: boolean) => void;
-  readonly onCaptureLocalChange: (enabled: boolean) => void;
-  readonly onRetryLowConfidenceChange: (enabled: boolean) => void;
   readonly onDebugLoggingChange: (enabled: boolean) => void;
   readonly onSourceFamilyChange: (family: EnhancedContextSourceFamily, enabled: boolean) => void;
 };
 
 export function DevSettingsEnhancedContextBlock({
   settings,
-  onEnabledChange,
-  onCaptureLocalChange,
-  onRetryLowConfidenceChange,
   onDebugLoggingChange,
   onSourceFamilyChange,
 }: DevSettingsEnhancedContextBlockProps) {
@@ -26,59 +21,39 @@ export function DevSettingsEnhancedContextBlock({
     <>
       <div className="settings-row">
         <div>
-          <div className="lbl">Enable enhanced context</div>
-          <div className="desc">Master gate for Dev-only derived document and work context. Separate from current Content context title and YouTube metadata. Off by default.</div>
+          <div className="lbl">Production classification context</div>
+          <div className="desc">Approved metadata is on by default, including normalized AI conversation titles, developer workspaces, and document names. It can add one bounded retry when the first AI classification lacks enough context; prompts, commands, message bodies, and raw page text remain blocked.</div>
         </div>
-        <div className="ctrl">
-          <Toggle checked={settings.enabled} onChange={onEnabledChange} ariaLabel="Enable enhanced context" />
-        </div>
-      </div>
-      <div className="settings-row">
-        <div>
-          <div className="lbl">Capture enhanced context locally</div>
-          <div className="desc">Allow enabled source families to store bounded metadata, headings, tags, and short safe hints on-device. No raw bodies or screenshots.</div>
-        </div>
-        <div className="ctrl">
-          <Toggle checked={settings.captureLocal} onChange={onCaptureLocalChange} ariaLabel="Capture enhanced context locally" />
-        </div>
-      </div>
-      <div className="settings-row">
-        <div>
-          <div className="lbl">Use enhanced context for low-confidence AI retry</div>
-          <div className="desc">Keep the first AI request unchanged, then permit one low-confidence retry only after deterministic policy filtering approves safe context.</div>
-        </div>
-        <div className="ctrl">
-          <Toggle
-            checked={settings.retryLowConfidence}
-            onChange={onRetryLowConfidenceChange}
-            ariaLabel="Use enhanced context for low-confidence AI retry"
-          />
-        </div>
+        <div className="ctrl ctrl--value">On</div>
       </div>
       <div className="settings-row">
         <div>
           <div className="lbl">Enhanced context debug logging</div>
-          <div className="desc">Record local counts, reasons, and statuses for capture, egress, retry, and blocked surfaces.</div>
+          <div className="desc">Dogfood only. Record local counts, reasons, and statuses for capture, egress, retry, and blocked surfaces. Context values are not written to the debug export.</div>
         </div>
         <div className="ctrl">
           <Toggle checked={settings.debugLogging} onChange={onDebugLoggingChange} ariaLabel="Enhanced context debug logging" />
         </div>
       </div>
-      {ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS.map((option) => (
-        <div className="settings-row" key={option.family}>
-          <div>
-            <div className="lbl">{option.label}</div>
-            <div className="desc">{option.description}</div>
+      {ENHANCED_CONTEXT_DOGFOOD_SOURCE_FAMILIES.map((family) => {
+        const option = ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS.find((candidate) => candidate.family === family);
+        if (!option) return null;
+        return (
+          <div className="settings-row" key={family}>
+            <div>
+              <div className="lbl">{option.label}</div>
+              <div className="desc">Dogfood only. {option.description}</div>
+            </div>
+            <div className="ctrl">
+              <Toggle
+                checked={settings.sourceFamilies[family]}
+                onChange={(enabled) => onSourceFamilyChange(family, enabled)}
+                ariaLabel={option.label}
+              />
+            </div>
           </div>
-          <div className="ctrl">
-            <Toggle
-              checked={settings.sourceFamilies[option.family]}
-              onChange={(enabled) => onSourceFamilyChange(option.family, enabled)}
-              ariaLabel={`Enhanced context source: ${option.label}`}
-            />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 }

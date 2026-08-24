@@ -11,18 +11,26 @@ from app.tracker.adaptive_context.markdown import (
 from app.tracker.adaptive_context.normalization import (
     BODY_LIKE_STRUCTURED_KEYS,
     CALENDAR_DOMAINS,
+    AI_CONVERSATION_DOMAINS,
     COMMUNICATION_APPS,
     COMMUNICATION_DOMAINS,
     DESIGN_DOMAINS,
+    DEVELOPER_WORKSPACE_APPS,
+    DOCUMENT_EDITOR_APPS,
+    DOCUMENT_EDITOR_DOMAINS,
     ISSUE_DOMAINS,
     NON_REPO_PATH_SEGMENTS,
     calendar_structured_fields,
+    ai_conversation_structured_fields,
     clean_context_values,
     communication_structured_fields,
     design_structured_fields,
+    developer_workspace_structured_fields,
+    document_editor_structured_fields,
     document_surface_matches,
     document_structured_fields,
     domain_matches,
+    domain_exactly_matches,
     issue_structured_fields,
     path_markdown_file_from_title,
     title_parts,
@@ -66,6 +74,12 @@ def derived_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveS
         fields = merge_structured_fields(fields, calendar_structured_fields(capture)) or fields
     if capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS):
         fields = merge_structured_fields(fields, communication_structured_fields(capture)) or fields
+    if domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS):
+        fields = merge_structured_fields(fields, ai_conversation_structured_fields(capture)) or fields
+    if capture.app_name.casefold() in DEVELOPER_WORKSPACE_APPS:
+        fields = merge_structured_fields(fields, developer_workspace_structured_fields(capture)) or fields
+    if capture.app_name.casefold() in DOCUMENT_EDITOR_APPS or domain_exactly_matches(capture.site_domain, DOCUMENT_EDITOR_DOMAINS):
+        fields = merge_structured_fields(fields, document_editor_structured_fields(capture)) or fields
     return fields
 
 
@@ -246,6 +260,27 @@ def metadata_only_items(
     return items
 
 
+def selected_metadata_items(
+    capture: AdaptiveContextCaptureInput,
+    source_family: str,
+    item_specs: Sequence[tuple[str, int, str]],
+) -> list[AdaptiveContextItemPayload]:
+    items: list[AdaptiveContextItemPayload] = []
+    for field_key, depth, kind in item_specs:
+        append_adaptive_item(
+            items,
+            adaptive_item(
+                f"{source_family}:{kind}",
+                depth,
+                kind,
+                source_family,
+                structured_values(capture.structured_fields, field_key),
+                "metadata_only",
+            ),
+        )
+    return items
+
+
 def adaptive_content_context_for_capture(capture: AdaptiveContextCaptureInput) -> AdaptiveContentContextPayload | None:
     if not adaptive_context_capture_enabled():
         return None
@@ -267,4 +302,26 @@ def adaptive_content_context_for_capture(capture: AdaptiveContextCaptureInput) -
         capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS)
     ):
         items.extend(metadata_only_items(capture, "communication_metadata", "metadata_only"))
+    if "ai_conversation" in enabled_families and (
+        domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS)
+    ):
+        items.extend(selected_metadata_items(capture, "ai_conversation", (
+            ("workspace", 1, "workspace"),
+            ("thread", 1, "thread"),
+            ("conversation_type", 2, "conversationType"),
+        )))
+    if "developer_workspace" in enabled_families and capture.app_name.casefold() in DEVELOPER_WORKSPACE_APPS:
+        items.extend(selected_metadata_items(capture, "developer_workspace", (
+            ("workspace", 1, "workspace"),
+            ("project", 1, "project"),
+            ("repo", 1, "repo"),
+        )))
+    if "document_editor" in enabled_families and (
+        capture.app_name.casefold() in DOCUMENT_EDITOR_APPS or domain_exactly_matches(capture.site_domain, DOCUMENT_EDITOR_DOMAINS)
+    ):
+        items.extend(selected_metadata_items(capture, "document_editor", (
+            ("workspace", 1, "workspace"),
+            ("document", 1, "document"),
+            ("document_type", 2, "documentType"),
+        )))
     return adaptive_context_payload(capture, items)

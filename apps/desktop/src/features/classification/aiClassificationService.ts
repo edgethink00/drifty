@@ -1584,12 +1584,11 @@ async function classifyLocalEnhancedRetry(input: {
   const devModeEnabled = resolveInitialDevModeEnabled();
   const egress = buildProviderSafeEnhancedContext({
     mode: "enhanced_retry",
-    devModeEnabled,
     settings,
     context: input.adaptiveContextBySegmentId.get(input.payload.segmentId) ?? null,
     segmentId: input.payload.segmentId,
   });
-  const debugLoggingEnabled = settings.debugLogging;
+  const debugLoggingEnabled = devModeEnabled && settings.debugLogging;
   if (debugLoggingEnabled) {
     recordEnhancedContextDebugEvent({
       kind: "egress_decision",
@@ -1601,7 +1600,6 @@ async function classifyLocalEnhancedRetry(input: {
   const firstPassConfidence = finiteConfidence(input.firstPassRecord.confidence);
   const alreadyRetried = enhancedContextRetriedFingerprints.has(input.payload.inputFingerprint);
   const eligibility = enhancedContextRetryEligibility({
-    devModeEnabled,
     settings,
     alreadyRetried,
     category: input.firstPassRecord.category,

@@ -1855,7 +1855,7 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
-  it("keeps first-pass local provider payload free of enhanced context and preserves old behavior when Dev retry toggles are off", async () => {
+  it("keeps first-pass payload clean and runs the shipped enhanced retry outside Dev mode", async () => {
     const segment = createUnknownSegment(1, {
       appName: "Notion",
       siteDomain: "notion.so",
@@ -1866,26 +1866,37 @@ describe("runAiClassification cloud contract", () => {
     try {
       const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
       nativeInvoke.mockReset();
-      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
-        category: "unknown",
-        productivity: "neutral",
-        confidence: 0.5,
-        reason: "Insufficient evidence",
-      }));
+      nativeInvoke
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "unknown",
+          productivity: "neutral",
+          confidence: 0.5,
+          reason: "Insufficient evidence",
+        }))
+        .mockResolvedValueOnce(localAiResponse("segment-1", {
+          category: "workspace",
+          productivity: "focus",
+          confidence: 0.82,
+          reason: "Work research context",
+        }));
 
       const result = await runAiClassification({ day: "2026-05-22" }, 20, {
         localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.2" },
       });
 
       expect(result.status).toBe("saved");
-      expect(nativeInvoke).toHaveBeenCalledTimes(1);
-      const prompt = promptFromNativeCall(nativeInvoke, 0);
-      expect(prompt).not.toContain("Enhanced retry context");
-      expect(prompt).not.toContain("Product research");
+      expect(nativeInvoke).toHaveBeenCalledTimes(2);
+      const firstPassPrompt = promptFromNativeCall(nativeInvoke, 0);
+      expect(firstPassPrompt).not.toContain("Enhanced retry context");
+      expect(firstPassPrompt).not.toContain("Product research");
+      const retryPrompt = promptFromNativeCall(nativeInvoke, 1);
+      expect(retryPrompt).toContain("Enhanced retry context");
+      expect(retryPrompt).toContain("Product research");
+      expect(retryPrompt).not.toContain("blocked raw body");
       expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
         segmentId: "segment-1",
-        category: "unknown",
-        confidence: 0.5,
+        category: "workspace",
+        confidence: 0.82,
       })]);
     } finally {
       cleanupServiceMocks();

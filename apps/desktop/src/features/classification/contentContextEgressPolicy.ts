@@ -22,9 +22,7 @@ type ProviderVisibleDecision = Extract<AdaptiveProviderPolicyDecision, "send" | 
 
 export const CONTENT_CONTEXT_DROP_REASONS = [
   "first_pass",
-  "dev_mode_disabled",
   "enhanced_context_disabled",
-  "capture_disabled",
   "retry_disabled",
   "missing_context",
   "source_family_disabled",
@@ -77,7 +75,6 @@ export type ContentContextEgressSummary = {
 
 export type ContentContextEgressPolicyInput = {
   readonly mode: ContentContextEgressMode;
-  readonly devModeEnabled: boolean;
   readonly settings: EnhancedContextSettings;
   readonly context: AdaptiveContentContext | null;
   /**
@@ -171,7 +168,6 @@ export function buildProviderSafeEnhancedContext(
 }
 
 export type EnhancedContextRetryEligibilityInput = {
-  readonly devModeEnabled: boolean;
   readonly settings: EnhancedContextSettings;
   readonly alreadyRetried: boolean;
   readonly category: ActivityCategory;
@@ -185,7 +181,7 @@ export function enhancedContextRetryEligibility(
   input: EnhancedContextRetryEligibilityInput,
 ): AdaptiveRetryEligibility {
   return adaptiveRetryEligibility({
-    retryEnabled: input.devModeEnabled && input.settings.enabled && input.settings.retryLowConfidence,
+    retryEnabled: input.settings.enabled && input.settings.retryLowConfidence,
     alreadyRetried: input.alreadyRetried,
     category: input.category,
     confidence: input.confidence,
@@ -199,7 +195,6 @@ function decideItem(args: { readonly item: AdaptiveContextItem; readonly input: 
   const item = args.item;
   if (args.input.mode === "first_pass") return { decision: "local_only", reasons: ["first_pass"] };
   if (!args.input.settings.enabled) return { decision: "local_only", reasons: ["enhanced_context_disabled"] };
-  if (!args.input.settings.captureLocal) return { decision: "local_only", reasons: ["capture_disabled"] };
   if (!args.input.settings.retryLowConfidence) return { decision: "local_only", reasons: ["retry_disabled"] };
   if (item.sourceFamily === "surface_metadata") {
     return { decision: "local_only", reasons: ["surface_metadata_not_enhanced"] };
@@ -240,6 +235,9 @@ function sourceFamilyEnabled(settings: EnhancedContextSettings, family: Adaptive
     case "design_dev_tool":
     case "calendar_meeting":
     case "communication_metadata":
+    case "ai_conversation":
+    case "developer_workspace":
+    case "document_editor":
       return settings.sourceFamilies[family];
   }
 }

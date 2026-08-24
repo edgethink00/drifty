@@ -44,7 +44,7 @@ export const CONTENT_CONTEXT_TERMS: {
   enhancedContext: {
     kind: "enhanced_context",
     providerVisibility: "local_first_enhanced_retry_only",
-    devGated: true,
+    devGated: false,
     firstPassProviderVisible: false,
     fields: ENHANCED_CONTENT_CONTEXT_FIELDS,
     excludedFields: EXCLUDED_CONTENT_CONTEXT_FIELDS,
@@ -70,16 +70,27 @@ export const ADAPTIVE_CONTEXT_DEPTH_POLICIES: Readonly<Record<AdaptiveContextDep
   3: { depth: 3, signalOrigin: "local_derived_context", countsAsNewEnhancedSignal: true, maxProviderCharacters: 240, examples: ["short selected snippet", "short visible hint", "intro snippet", "safe keyword summary"] },
 };
 
-export const ADAPTIVE_CONTEXT_SOURCE_FAMILIES = ["surface_metadata", "document_knowledge", "local_notes_markdown", "work_tracker_dev_platform", "design_dev_tool", "calendar_meeting", "communication_metadata"] as const;
+export const ADAPTIVE_CONTEXT_SOURCE_FAMILIES = [
+  "surface_metadata",
+  "document_knowledge",
+  "local_notes_markdown",
+  "work_tracker_dev_platform",
+  "design_dev_tool",
+  "calendar_meeting",
+  "communication_metadata",
+  "ai_conversation",
+  "developer_workspace",
+  "document_editor",
+] as const;
 export type AdaptiveContextSourceFamily = (typeof ADAPTIVE_CONTEXT_SOURCE_FAMILIES)[number];
 
 export const DEPTH_0_ITEM_KINDS = ["appName", "bundleId", "windowTitle", "siteDomain", "siteUrl", "siteTitle", "youtubeTitle", "youtubeChannelName", "youtubeCategory"] as const;
 export type AdaptiveDepth0ContextItemKind = (typeof DEPTH_0_ITEM_KINDS)[number];
 
-export const DEPTH_1_ITEM_KINDS = ["workspace", "parentPage", "database", "project", "folder", "vault", "repo", "team", "channel", "thread"] as const;
+export const DEPTH_1_ITEM_KINDS = ["workspace", "parentPage", "database", "project", "folder", "vault", "repo", "team", "channel", "thread", "document"] as const;
 export type AdaptiveDepth1ContextItemKind = (typeof DEPTH_1_ITEM_KINDS)[number];
 
-export const DEPTH_2_ITEM_KINDS = ["heading", "tag", "label", "status", "documentType", "issueType", "visibleSection", "meetingType", "attendeeCountRange", "pageType", "layerType", "channelType"] as const;
+export const DEPTH_2_ITEM_KINDS = ["heading", "tag", "label", "status", "documentType", "issueType", "visibleSection", "meetingType", "attendeeCountRange", "pageType", "layerType", "channelType", "conversationType"] as const;
 export type AdaptiveDepth2ContextItemKind = (typeof DEPTH_2_ITEM_KINDS)[number];
 
 export const DEPTH_3_ITEM_KINDS = ["shortSelectedHint", "shortVisibleHint", "introHint", "safeKeywordSummary", "messageBody"] as const;
@@ -142,6 +153,9 @@ const DESIGN_DEV_ITEM_KINDS = ["workspace", "project", "folder", "repo", "visibl
 const CALENDAR_ITEM_KINDS = ["workspace", "project", "documentType", "meetingType", "attendeeCountRange", "tag"] as const;
 // `channelType` carries dm/channel/folder shape without naming the DM peer or mail thread.
 const COMMUNICATION_ITEM_KINDS = ["workspace", "team", "channel", "thread", "channelType"] as const;
+const AI_CONVERSATION_ITEM_KINDS = ["workspace", "thread", "conversationType"] as const;
+const DEVELOPER_WORKSPACE_ITEM_KINDS = ["workspace", "project", "repo"] as const;
+const DOCUMENT_EDITOR_ITEM_KINDS = ["workspace", "document", "documentType"] as const;
 
 export const ADAPTIVE_CONTEXT_SOURCE_FAMILY_POLICIES: Readonly<Record<AdaptiveContextSourceFamily, AdaptiveSourceFamilyPolicy>> = {
   surface_metadata: { family: "surface_metadata", localCaptureDefault: "depth_0_current_payload", providerRetryDefault: "metadata_only", allowedDepths: [0], allowedItemKinds: DEPTH_0_ITEM_KINDS, blockedItemKinds: [] },
@@ -151,6 +165,9 @@ export const ADAPTIVE_CONTEXT_SOURCE_FAMILY_POLICIES: Readonly<Record<AdaptiveCo
   design_dev_tool: { family: "design_dev_tool", localCaptureDefault: "metadata_only", providerRetryDefault: "metadata_only", allowedDepths: [1, 2], allowedItemKinds: DESIGN_DEV_ITEM_KINDS, blockedItemKinds: BODY_ITEM_KINDS },
   calendar_meeting: { family: "calendar_meeting", localCaptureDefault: "metadata_only", providerRetryDefault: "metadata_only", allowedDepths: [1, 2], allowedItemKinds: CALENDAR_ITEM_KINDS, blockedItemKinds: BODY_ITEM_KINDS },
   communication_metadata: { family: "communication_metadata", localCaptureDefault: "store_depth_1_2", providerRetryDefault: "metadata_only", allowedDepths: [1, 2], allowedItemKinds: COMMUNICATION_ITEM_KINDS, blockedItemKinds: BODY_ITEM_KINDS },
+  ai_conversation: { family: "ai_conversation", localCaptureDefault: "metadata_only", providerRetryDefault: "metadata_only", allowedDepths: [1, 2], allowedItemKinds: AI_CONVERSATION_ITEM_KINDS, blockedItemKinds: BODY_ITEM_KINDS },
+  developer_workspace: { family: "developer_workspace", localCaptureDefault: "metadata_only", providerRetryDefault: "metadata_only", allowedDepths: [1, 2], allowedItemKinds: DEVELOPER_WORKSPACE_ITEM_KINDS, blockedItemKinds: BODY_ITEM_KINDS },
+  document_editor: { family: "document_editor", localCaptureDefault: "metadata_only", providerRetryDefault: "metadata_only", allowedDepths: [1, 2], allowedItemKinds: DOCUMENT_EDITOR_ITEM_KINDS, blockedItemKinds: BODY_ITEM_KINDS },
 };
 
 export function sourceFamilyPolicy(family: AdaptiveContextSourceFamily): AdaptiveSourceFamilyPolicy {

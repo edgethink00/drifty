@@ -119,8 +119,8 @@ export const ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS = [
   },
   {
     family: "design_dev_tool",
-    label: "Design / dev tools",
-    description: "Figma, IDE, editor, repo, project, and selected-page metadata.",
+    label: "Experimental design context",
+    description: "Figma and supported design-surface workspace, page-type, and layer-type metadata.",
   },
   {
     family: "calendar_meeting",
@@ -132,7 +132,26 @@ export const ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS = [
     label: "Communication metadata",
     description: "Workspace, channel, and thread metadata only; no message bodies.",
   },
+  {
+    family: "ai_conversation",
+    label: "AI conversation context",
+    description: "ChatGPT, Claude, Gemini, Grok, and supported AI web conversations: conversation title and route type only.",
+  },
+  {
+    family: "developer_workspace",
+    label: "Developer workspace context",
+    description: "cmux, explicit terminal paths, and supported editors: workspace/project metadata only; no commands or terminal text.",
+  },
+  {
+    family: "document_editor",
+    label: "Document editor context",
+    description: "PowerPoint, Office, Overleaf, and supported editors: document name and type only; no document body.",
+  },
 ] satisfies readonly EnhancedContextSourceFamilyOption[];
+
+export const ENHANCED_CONTEXT_DOGFOOD_SOURCE_FAMILIES = [
+  "design_dev_tool",
+] as const satisfies readonly EnhancedContextSourceFamily[];
 
 export const ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS: Readonly<Record<EnhancedContextSourceFamily, string>> = {
   document_knowledge: "drifty.dev.enhancedContext.source.documentKnowledge",
@@ -141,6 +160,9 @@ export const ENHANCED_CONTEXT_SOURCE_FAMILY_STORAGE_KEYS: Readonly<Record<Enhanc
   design_dev_tool: "drifty.dev.enhancedContext.source.designDevTool",
   calendar_meeting: "drifty.dev.enhancedContext.source.calendarMeeting",
   communication_metadata: "drifty.dev.enhancedContext.source.communicationMetadata",
+  ai_conversation: "drifty.dev.enhancedContext.source.aiConversation",
+  developer_workspace: "drifty.dev.enhancedContext.source.developerWorkspace",
+  document_editor: "drifty.dev.enhancedContext.source.documentEditor",
 };
 
 export const DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFamilySettings = {
@@ -151,6 +173,9 @@ export const DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFami
   design_dev_tool: false,
   calendar_meeting: true,
   communication_metadata: true,
+  ai_conversation: true,
+  developer_workspace: true,
+  document_editor: true,
 };
 
 export const DEFAULT_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
@@ -159,24 +184,6 @@ export const DEFAULT_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
   retryLowConfidence: true,
   debugLogging: false,
   sourceFamilies: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES,
-};
-
-const DISABLED_ENHANCED_CONTEXT_SOURCE_FAMILIES: EnhancedContextSourceFamilySettings = {
-  document_knowledge: false,
-  local_notes_markdown: false,
-  work_tracker_dev_platform: false,
-  design_dev_tool: false,
-  calendar_meeting: false,
-  communication_metadata: false,
-};
-
-/** Every capture path off, used when the user turns the feature off. */
-export const DISABLED_ENHANCED_CONTEXT_SETTINGS: EnhancedContextSettings = {
-  enabled: false,
-  captureLocal: false,
-  retryLowConfidence: false,
-  debugLogging: false,
-  sourceFamilies: DISABLED_ENHANCED_CONTEXT_SOURCE_FAMILIES,
 };
 
 type DemoDashboardReplaySettingsInput = {
@@ -478,20 +485,20 @@ export function resolveInitialFloatingCompanionDevEnabled(): boolean {
 export function resolveInitialEnhancedContextSettings(): EnhancedContextSettings {
   if (typeof window === "undefined") return DEFAULT_ENHANCED_CONTEXT_SETTINGS;
   return {
-    enabled: readStoredBoolean(ENHANCED_CONTEXT_ENABLED_STORAGE_KEY, DEFAULT_ENHANCED_CONTEXT_SETTINGS.enabled),
-    captureLocal: readStoredBoolean(ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY, DEFAULT_ENHANCED_CONTEXT_SETTINGS.captureLocal),
-    retryLowConfidence: readStoredBoolean(
-      ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY,
-      DEFAULT_ENHANCED_CONTEXT_SETTINGS.retryLowConfidence,
-    ),
+    enabled: DEFAULT_ENHANCED_CONTEXT_SETTINGS.enabled,
+    captureLocal: DEFAULT_ENHANCED_CONTEXT_SETTINGS.captureLocal,
+    retryLowConfidence: DEFAULT_ENHANCED_CONTEXT_SETTINGS.retryLowConfidence,
     debugLogging: readStoredBoolean(ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY),
     sourceFamilies: {
-      document_knowledge: readStoredFamily("document_knowledge"),
-      local_notes_markdown: readStoredFamily("local_notes_markdown"),
-      work_tracker_dev_platform: readStoredFamily("work_tracker_dev_platform"),
+      document_knowledge: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.document_knowledge,
+      local_notes_markdown: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.local_notes_markdown,
+      work_tracker_dev_platform: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.work_tracker_dev_platform,
       design_dev_tool: readStoredFamily("design_dev_tool"),
-      calendar_meeting: readStoredFamily("calendar_meeting"),
-      communication_metadata: readStoredFamily("communication_metadata"),
+      calendar_meeting: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.calendar_meeting,
+      communication_metadata: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.communication_metadata,
+      ai_conversation: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.ai_conversation,
+      developer_workspace: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.developer_workspace,
+      document_editor: DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES.document_editor,
     },
   };
 }
@@ -507,9 +514,14 @@ export function resolveEffectiveEnhancedContextSettings(
   devModeEnabled: boolean,
   settings: EnhancedContextSettings,
 ): EnhancedContextSettings {
-  if (!settings.enabled) return DISABLED_ENHANCED_CONTEXT_SETTINGS;
-  // Debug logging stays a Dev-mode diagnostic even though capture itself ships on.
-  return devModeEnabled ? settings : { ...settings, debugLogging: false };
+  return {
+    ...DEFAULT_ENHANCED_CONTEXT_SETTINGS,
+    debugLogging: devModeEnabled && settings.debugLogging,
+    sourceFamilies: {
+      ...DEFAULT_ENHANCED_CONTEXT_SOURCE_FAMILIES,
+      design_dev_tool: devModeEnabled && settings.sourceFamilies.design_dev_tool,
+    },
+  };
 }
 
 export function persistEnhancedContextSettings(
@@ -529,14 +541,6 @@ export function persistEnhancedContextSettings(
     );
   }
   return effectiveSettings;
-}
-
-export function hasEnabledEnhancedContextSetting(settings: EnhancedContextSettings): boolean {
-  return settings.enabled
-    || settings.captureLocal
-    || settings.retryLowConfidence
-    || settings.debugLogging
-    || ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS.some((option) => settings.sourceFamilies[option.family]);
 }
 
 export function resolveInitialForceChromiumAxCaptureEnabled(): boolean {

@@ -61,10 +61,7 @@ type DevSettingsSectionProps = {
   readonly onSidebarCtaPreviewCaseChange: (previewCase: SidebarCtaPreviewCase | null) => void;
   readonly onDemoDashboardReplayDurationSecondsChange?: (value: number) => void;
   readonly onDemoDashboardReplayPreRollSecondsChange?: (value: number) => void;
-  readonly onEnhancedContextCaptureLocalChange: (enabled: boolean) => void;
   readonly onEnhancedContextDebugLoggingChange: (enabled: boolean) => void;
-  readonly onEnhancedContextEnabledChange: (enabled: boolean) => void;
-  readonly onEnhancedContextRetryLowConfidenceChange: (enabled: boolean) => void;
   readonly onEnhancedContextSourceFamilyChange: (family: EnhancedContextSourceFamily, enabled: boolean) => void;
   readonly onForceBrowserHistoryUrlFallbackChange: (enabled: boolean) => void;
   readonly onForceChromiumAxCaptureChange: (enabled: boolean) => void;
@@ -131,10 +128,7 @@ export function DevSettingsSection({
   onSidebarCtaPreviewCaseChange,
   onDemoDashboardReplayDurationSecondsChange,
   onDemoDashboardReplayPreRollSecondsChange,
-  onEnhancedContextCaptureLocalChange,
   onEnhancedContextDebugLoggingChange,
-  onEnhancedContextEnabledChange,
-  onEnhancedContextRetryLowConfidenceChange,
   onEnhancedContextSourceFamilyChange,
   onForceBrowserHistoryUrlFallbackChange,
   onForceChromiumAxCaptureChange,
@@ -346,8 +340,8 @@ export function DevSettingsSection({
           </div>
         </div>
       </div>
-      <SettingsCollapsibleCard title="Enhanced context (Dev)">
-        <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onCaptureLocalChange={onEnhancedContextCaptureLocalChange} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onEnabledChange={onEnhancedContextEnabledChange} onRetryLowConfidenceChange={onEnhancedContextRetryLowConfidenceChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
+      <SettingsCollapsibleCard title="Enhanced context dogfood">
+        <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
       </SettingsCollapsibleCard>
       <DevSettingsProjectClassificationBlock
         projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}

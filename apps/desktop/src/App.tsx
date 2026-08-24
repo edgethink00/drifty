@@ -292,7 +292,7 @@ import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiCli
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
-import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
+import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
 import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
@@ -6492,17 +6492,6 @@ export default function App() {
       return next;
     });
   }, []);
-  const handleEnhancedContextEnabledChange = useCallback((enabled: boolean) => {
-    setEnhancedContextSettings(enabled
-      ? { ...DEFAULT_ENHANCED_CONTEXT_SETTINGS, enabled: true }
-      : DEFAULT_ENHANCED_CONTEXT_SETTINGS);
-  }, []);
-  const handleEnhancedContextCaptureLocalChange = useCallback((enabled: boolean) => {
-    setEnhancedContextSettings((current) => ({ ...current, captureLocal: enabled }));
-  }, []);
-  const handleEnhancedContextRetryLowConfidenceChange = useCallback((enabled: boolean) => {
-    setEnhancedContextSettings((current) => ({ ...current, retryLowConfidence: enabled }));
-  }, []);
   const handleEnhancedContextDebugLoggingChange = useCallback((enabled: boolean) => {
     setEnhancedContextSettings((current) => ({ ...current, debugLogging: enabled }));
   }, []);
@@ -7743,10 +7732,7 @@ export default function App() {
                     onSidebarCtaPreviewCaseChange={setSidebarCtaPreviewCase}
                     onDemoDashboardReplayDurationSecondsChange={handleDemoDashboardReplayDurationSecondsChange}
                     onDemoDashboardReplayPreRollSecondsChange={handleDemoDashboardReplayPreRollSecondsChange}
-                    onEnhancedContextCaptureLocalChange={handleEnhancedContextCaptureLocalChange}
                     onEnhancedContextDebugLoggingChange={handleEnhancedContextDebugLoggingChange}
-                    onEnhancedContextEnabledChange={handleEnhancedContextEnabledChange}
-                    onEnhancedContextRetryLowConfidenceChange={handleEnhancedContextRetryLowConfidenceChange}
                     onEnhancedContextSourceFamilyChange={handleEnhancedContextSourceFamilyChange}
                     onForceBrowserHistoryUrlFallbackChange={setForceBrowserHistoryUrlFallbackEnabled}
                     onForceChromiumAxCaptureChange={setForceChromiumAxCaptureEnabled}

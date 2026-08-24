@@ -99,7 +99,6 @@ export type EnhancedContextDebugStatus =
 
 export type EnhancedContextDebugReason =
   | "structured_capture"
-  | "capture_disabled"
   | "source_family_disabled"
   | "storage_disabled"
   | "stored_local"

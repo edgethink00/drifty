@@ -365,14 +365,20 @@ describe("AI privacy disclosure contract", () => {
     }
     // The payload carries these per item (enhancedPromptItems), so the copy names them.
     expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/depth/i);
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/Dev-gated|Dev settings/i);
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("개발자 모드");
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/on by default/i);
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).not.toMatch(/Dev-gated|Dev settings/i);
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("기본으로 켜져");
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).not.toContain("개발자 모드");
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/conversation title\/type/i);
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/terminal commands/i);
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("AI 대화 제목·유형");
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("터미널 명령");
 
     // The cloud edge builder carries no enhancedContext field, so the copy must scope the
-    // claim to the BYOK route rather than implying the cloud route receives it too.
+    // claim to local/self-hosted/BYOK routes rather than implying the cloud route receives it too.
     const edgeItemKeys = itemKeysFrom(CLASSIFICATION_SERVICE_SOURCE, "toEdgeClassificationRequestItems");
     expect(edgeItemKeys).not.toContain("enhancedContext");
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/your own key/i);
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/local, self-hosted, or bring-your-own-key/i);
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("클라우드 경로는 이 항목을 받지 않습니다");
   });
 

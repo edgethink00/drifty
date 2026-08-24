@@ -12,7 +12,12 @@ if str(SERVICE_ROOT) not in sys.path:
 
 from app.main import _apply_developer_diagnostics_env
 from app.storage.db import TrackerDatabase
-from app.tracker.adaptive_context.normalization import communication_structured_fields
+from app.tracker.adaptive_context.normalization import (
+    ai_conversation_structured_fields,
+    communication_structured_fields,
+    developer_workspace_structured_fields,
+    document_editor_structured_fields,
+)
 from app.tracker.macos_workspace import (
     AdaptiveContextCaptureInput,
     BrowserMetadata,
@@ -27,6 +32,171 @@ _MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS foreground ca
 
 @_MACOS_ONLY
 class AdaptiveContextExtractorTests(unittest.TestCase):
+    def test_ai_conversation_extractor_keeps_thread_shape_without_bodies(self) -> None:
+        # Given: a measured ChatGPT web title plus collector fields that must never
+        # become enhanced context.
+        capture = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="Aside",
+            bundle_id="com.browser.aside",
+            window_title="Migration strategy - ChatGPT - Aside - person@example.com",
+            browser_name="Aside",
+            site_domain="chatgpt.com",
+            site_title="Migration strategy",
+            site_url="https://chatgpt.com/c/01234567-89ab-cdef-0123-456789abcdef",
+            structured_fields={
+                "message_body": ["Do not retain this prompt or response"],
+                "raw_full_page_text": ["Private conversation transcript"],
+            },
+        )
+
+        # When: only the Dev AI-conversation family is enabled.
+        with patch.dict(
+            os.environ,
+            {
+                "DRIFTY_ENABLE_ADAPTIVE_CONTEXT_CAPTURE": "1",
+                "DRIFTY_ADAPTIVE_CONTEXT_SOURCE_FAMILIES": "ai_conversation",
+            },
+        ):
+            context = adaptive_content_context_for_capture(capture)
+
+        # Then: the bounded thread label and route type survive, while bodies and
+        # account suffixes do not.
+        self.assertIsNotNone(context)
+        items = context["items"] if context is not None else []
+        values_by_kind = {item["kind"]: item["values"] for item in items}
+        self.assertEqual(values_by_kind["thread"], ["Migration strategy"])
+        self.assertEqual(values_by_kind["conversationType"], ["chat"])
+        serialized = json.dumps(items)
+        self.assertNotIn("prompt", serialized.lower())
+        self.assertNotIn("transcript", serialized.lower())
+        self.assertNotIn("person@example.com", serialized)
+
+        # And: a generic native title contains no additional information, so the
+        # experimental family emits nothing instead of echoing the app name.
+        generic = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="ChatGPT",
+            bundle_id="com.openai.chat",
+            window_title="ChatGPT",
+        )
+        self.assertEqual(ai_conversation_structured_fields(generic), {})
+
+        stale_native_title = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="ChatGPT",
+            bundle_id="com.openai.chat",
+            window_title="#private | workspace - Discord",
+        )
+        self.assertEqual(ai_conversation_structured_fields(stale_native_title), {})
+
+        learning_page = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="Aside",
+            bundle_id="com.browser.aside",
+            window_title="OpenAI Academy course - Aside",
+            browser_name="Aside",
+            site_domain="learn.chatgpt.com",
+            site_title="OpenAI Academy course",
+            site_url="https://learn.chatgpt.com/courses/context-engineering",
+        )
+        self.assertEqual(ai_conversation_structured_fields(learning_page), {})
+
+    def test_developer_workspace_extractor_accepts_projects_and_rejects_commands(self) -> None:
+        # Given: the high-volume cmux title shapes observed in dogfood data.
+        project = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="cmux",
+            bundle_id="dev.cmux",
+            window_title="drifty_mac",
+            structured_fields={"terminal_command": ["export SECRET=hidden"]},
+        )
+        command = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="cmux",
+            bundle_id="dev.cmux",
+            window_title="ssh production",
+        )
+        task_sentence = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="cmux",
+            bundle_id="dev.cmux",
+            window_title="✳ review the deployment status",
+        )
+
+        # Then: a stable project slug becomes workspace metadata, while command and
+        # task text do not become context.
+        self.assertEqual(developer_workspace_structured_fields(project), {"workspace": ["drifty_mac"]})
+        self.assertEqual(developer_workspace_structured_fields(command), {})
+        self.assertEqual(developer_workspace_structured_fields(task_sentence), {})
+        command_with_path = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="cmux",
+            bundle_id="dev.cmux",
+            window_title="git checkout feature/private",
+        )
+        self.assertEqual(developer_workspace_structured_fields(command_with_path), {})
+
+        # And: editor title structure may expose the workspace slot without copying
+        # the active filename.
+        editor = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="Visual Studio Code",
+            bundle_id="com.microsoft.VSCode",
+            window_title="main.ts - drifty_mac - Visual Studio Code",
+        )
+        self.assertEqual(developer_workspace_structured_fields(editor), {"workspace": ["drifty_mac"]})
+
+    def test_document_editor_extractor_normalizes_document_metadata_without_body(self) -> None:
+        # Given: a measured PowerPoint presenter-view title and an injected body.
+        capture = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="Microsoft PowerPoint",
+            bundle_id="com.microsoft.Powerpoint",
+            window_title="PowerPoint 발표자 보기 - [Q3_launch]",
+            structured_fields={"document_body": ["Confidential slide body"]},
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "DRIFTY_ENABLE_ADAPTIVE_CONTEXT_CAPTURE": "1",
+                "DRIFTY_ADAPTIVE_CONTEXT_SOURCE_FAMILIES": "document_editor",
+            },
+        ):
+            context = adaptive_content_context_for_capture(capture)
+
+        self.assertIsNotNone(context)
+        items = context["items"] if context is not None else []
+        values_by_kind = {item["kind"]: item["values"] for item in items}
+        self.assertEqual(values_by_kind["document"], ["Q3_launch"])
+        self.assertEqual(values_by_kind["documentType"], ["presentation"])
+        self.assertNotIn("Confidential", json.dumps(context))
+
+        # And: Overleaf is a document editor, not a knowledge-base hierarchy.
+        overleaf = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="Aside",
+            bundle_id="com.browser.aside",
+            window_title="Agent evaluation paper - Overleaf, Online LaTeX Editor - Aside",
+            browser_name="Aside",
+            site_domain="overleaf.com",
+            site_title="Agent evaluation paper - Overleaf, Online LaTeX Editor",
+            site_url="https://www.overleaf.com/project/0123456789abcdef",
+        )
+        self.assertEqual(
+            document_editor_structured_fields(overleaf),
+            {"document": ["Agent evaluation paper"], "document_type": ["paper"]},
+        )
+
+        blank_powerpoint = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="Microsoft PowerPoint",
+            bundle_id="com.microsoft.Powerpoint",
+            window_title=None,
+        )
+        self.assertEqual(document_editor_structured_fields(blank_powerpoint), {})
+
     def test_current_snapshot_extracts_notion_context_from_production_metadata(self) -> None:
         # Given: a browser snapshot sees a Notion-like page with only URL/title metadata.
         metadata = BrowserMetadata(
@@ -147,6 +317,39 @@ class AdaptiveContextExtractorTests(unittest.TestCase):
         self.assertIn("In progress", values)
         self.assertIn("Reproduction", values)
         self.assertNotIn("Login", values)
+
+    def test_production_source_families_do_not_capture_experimental_figma_context(self) -> None:
+        # Given: Figma is frontmost while only shipped source families are enabled.
+        production_families = ",".join(
+            (
+                "document_knowledge",
+                "local_notes_markdown",
+                "work_tracker_dev_platform",
+                "calendar_meeting",
+                "communication_metadata",
+            )
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "DRIFTY_ENABLE_ADAPTIVE_CONTEXT_CAPTURE": "1",
+                "DRIFTY_ADAPTIVE_CONTEXT_SOURCE_FAMILIES": production_families,
+            },
+        ), patch(
+            "app.tracker.macos_workspace._run_osascript"
+        ) as mock_run, patch(
+            "app.tracker.macos_workspace._browser_metadata",
+            return_value=BrowserMetadata(
+                browser_name="Figma",
+                site_domain="figma.com",
+                site_url="https://www.figma.com/file/abc123/Drifty-App",
+            ),
+        ):
+            mock_run.return_value = "Figma\ncom.figma.Desktop\nMobile onboarding - Design - Frame"
+            figma_context = current_snapshot(include_system_transient=False).adaptive_content_context
+
+        # Then: the experimental family cannot leak into production capture.
+        self.assertIsNone(figma_context)
 
     def test_current_snapshot_extracts_design_calendar_and_communication_metadata_only(self) -> None:
         # Given: production snapshots expose metadata-only app/window titles.

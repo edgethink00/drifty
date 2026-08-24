@@ -16,6 +16,13 @@ BODY_LIKE_STRUCTURED_KEYS: Final = frozenset(
         "message_body",
         "raw_body",
         "raw_full_page_text",
+        "prompt",
+        "response",
+        "conversation_body",
+        "terminal_command",
+        "shell_command",
+        "document_text",
+        "selected_text",
     }
 )
 DOCUMENT_DOMAINS: Final = ("notion.so", "atlassian.net", "confluence", "coda.io")
@@ -40,6 +47,42 @@ NON_REPO_PATH_SEGMENTS: Final = frozenset(
     }
 )
 DESIGN_DOMAINS: Final = ("figma.com",)
+AI_CONVERSATION_DOMAINS: Final = (
+    "chatgpt.com",
+    "claude.ai",
+    "claude.com",
+    "gemini.google.com",
+    "grok.com",
+    "perplexity.ai",
+    "poe.com",
+    "kimi.com",
+    "chat.mistral.ai",
+    "chat.deepseek.com",
+)
+DEVELOPER_WORKSPACE_APPS: Final = frozenset(
+    {"cmux", "terminal", "iterm2", "iterm", "warp", "cursor", "visual studio code", "code"}
+)
+EDITOR_WORKSPACE_APPS: Final = frozenset({"cursor", "visual studio code", "code"})
+DOCUMENT_EDITOR_DOMAINS: Final = (
+    "overleaf.com",
+    "docs.google.com",
+    "slides.google.com",
+    "sheets.google.com",
+    "office.com",
+)
+DOCUMENT_EDITOR_APPS: Final = frozenset(
+    {
+        "microsoft powerpoint",
+        "powerpoint",
+        "microsoft word",
+        "word",
+        "microsoft excel",
+        "excel",
+        "keynote",
+        "pages",
+        "numbers",
+    }
+)
 CALENDAR_DOMAINS: Final = ("calendar.google.com", "outlook.office.com")
 # Only surfaces whose title layout has been observed in real captures. Each one
 # renders "<channel> - <workspace>" or "<folder> - <account> - <app>", which is
@@ -103,6 +146,26 @@ COMMON_TITLE_SUFFIXES: Final = frozenset(
         "notion",
         "obsidian",
         "slack",
+        "chatgpt",
+        "claude",
+        "gemini",
+        "grok",
+        "perplexity",
+        "poe",
+        "cmux",
+        "cursor",
+        "visual studio code",
+        "code",
+        "terminal",
+        "microsoft powerpoint",
+        "powerpoint",
+        "microsoft word",
+        "word",
+        "microsoft excel",
+        "excel",
+        "keynote",
+        "pages",
+        "numbers",
     }
 )
 ISSUE_STATUSES: Final = ("In progress", "To do", "Todo", "Backlog", "Open", "Closed", "Done", "Blocked")
@@ -116,6 +179,55 @@ ISSUE_SECTIONS: Final = (
 )
 MEETING_TYPES: Final = ("planning", "standup", "retro", "review", "demo", "interview", "sync", "1:1")
 FIGMA_LAYER_TYPES: Final = ("frame", "component", "section", "page")
+AI_GENERIC_TITLES: Final = frozenset(
+    {
+        "chatgpt",
+        "chatgpt: chat, work, create & code with ai",
+        "claude",
+        "gemini",
+        "gemini spark",
+        "grok",
+        "perplexity",
+        "poe",
+        "new chat",
+        "새 채팅",
+        "open codex",
+    }
+)
+GENERIC_DEVELOPER_TITLES: Final = frozenset(
+    {"cmux", "terminal", "cursor", "cursor agents", "visual studio code", "code", "shell", "zsh", "bash"}
+)
+GENERIC_DOCUMENT_TITLES: Final = frozenset(
+    {
+        "microsoft powerpoint",
+        "powerpoint",
+        "presentation1",
+        "microsoft word",
+        "word",
+        "document1",
+        "microsoft excel",
+        "excel",
+        "book1",
+        "keynote",
+        "pages",
+        "numbers",
+        "overleaf, online latex editor",
+    }
+)
+SAFE_WORKSPACE_RE: Final = re.compile(r"^[\w][\w.@+\-]{0,79}$", re.UNICODE)
+SAFE_EDITOR_WORKSPACE_RE: Final = re.compile(r"^[\w][\w .@+\-]{0,79}$", re.UNICODE)
+COMMAND_LIKE_TITLE_RE: Final = re.compile(
+    r"^(?:ssh|sudo|export|cd|git|npm|pnpm|yarn|python|python3|cargo|docker|kubectl|make)(?:\s|$)",
+    re.IGNORECASE,
+)
+PRESENTER_VIEW_RE: Final = re.compile(
+    r"^(?:PowerPoint\s+(?:Presenter View|발표자 보기))\s*[-–—|]\s*\[?(.+?)\]?\s*$",
+    re.IGNORECASE,
+)
+DOCUMENT_EXTENSION_RE: Final = re.compile(
+    r"\.(?:pptx?|docx?|xlsx?|key|pages|numbers|tex)$",
+    re.IGNORECASE,
+)
 
 
 def domain_matches(domain: str | None, candidates: Sequence[str]) -> bool:
@@ -125,8 +237,30 @@ def domain_matches(domain: str | None, candidates: Sequence[str]) -> bool:
     return any(candidate in normalized for candidate in candidates)
 
 
+def domain_exactly_matches(domain: str | None, candidates: Sequence[str]) -> bool:
+    if domain is None:
+        return False
+    normalized = domain.casefold().split(":", 1)[0].removeprefix("www.").rstrip(".")
+    return normalized in candidates
+
+
 def document_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
     return capture.app_name in DOCUMENT_APPS or domain_matches(capture.site_domain, DOCUMENT_DOMAINS)
+
+
+def ai_conversation_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
+    # Native ChatGPT dogfood titles contained system dialogs and stale titles from
+    # other frontmost apps. Until a native app exposes a verified conversation-title
+    # slot, only exact browser conversation hosts are eligible.
+    return domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS)
+
+
+def developer_workspace_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
+    return capture.app_name.casefold() in DEVELOPER_WORKSPACE_APPS
+
+
+def document_editor_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
+    return capture.app_name.casefold() in DOCUMENT_EDITOR_APPS or domain_exactly_matches(capture.site_domain, DOCUMENT_EDITOR_DOMAINS)
 
 
 def url_path_parts(site_url: str | None) -> list[str]:
@@ -286,6 +420,106 @@ def design_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveSt
         add_structured_values(fields, "page_type", ["file"])
     lower_title = title_values_containing(capture).lower()
     add_structured_values(fields, "layer_type", [layer for layer in FIGMA_LAYER_TYPES if layer in lower_title])
+    return fields
+
+
+def ai_conversation_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
+    fields: AdaptiveStructuredFields = {}
+    if not ai_conversation_surface_matches(capture):
+        return fields
+
+    parts = title_parts(capture)
+    if parts and parts[0].casefold() not in AI_GENERIC_TITLES:
+        add_structured_values(fields, "thread", [parts[0]])
+
+    path_parts = [part.casefold() for part in url_path_parts(capture.site_url)]
+    domain = (capture.site_domain or "").casefold().split(":", 1)[0].removeprefix("www.").rstrip(".")
+    conversation_type: str | None = None
+    if domain == "chatgpt.com":
+        if "project" in path_parts or "projects" in path_parts:
+            conversation_type = "project"
+        elif "canvas" in path_parts:
+            conversation_type = "canvas"
+        elif "g" in path_parts or "gpts" in path_parts:
+            conversation_type = "custom_gpt"
+        elif "c" in path_parts:
+            conversation_type = "chat"
+    elif domain in {"claude.ai", "claude.com"}:
+        if "project" in path_parts or "projects" in path_parts:
+            conversation_type = "project"
+        elif "chat" in path_parts:
+            conversation_type = "chat"
+    elif domain == "gemini.google.com" and "app" in path_parts:
+        conversation_type = "chat"
+    elif "chat" in path_parts:
+        conversation_type = "chat"
+    if conversation_type:
+        add_structured_values(fields, "conversation_type", [conversation_type])
+    return fields
+
+
+def _path_workspace(title: str) -> str | None:
+    expanded = title.strip()
+    if not expanded.startswith(("/", "~/")) or any(character in expanded for character in ("\n", "\r", "\t")):
+        return None
+    candidate = expanded.rstrip("/").rsplit("/", 1)[-1]
+    return candidate if SAFE_WORKSPACE_RE.fullmatch(candidate) else None
+
+
+def developer_workspace_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
+    fields: AdaptiveStructuredFields = {}
+    if not developer_workspace_surface_matches(capture):
+        return fields
+    title = (capture.window_title or capture.site_title or "").strip()
+    if not title or title.casefold() in GENERIC_DEVELOPER_TITLES or COMMAND_LIKE_TITLE_RE.match(title):
+        return fields
+
+    app = capture.app_name.casefold()
+    workspace: str | None = _path_workspace(title)
+    if app == "cmux" and workspace is None and SAFE_WORKSPACE_RE.fullmatch(title):
+        workspace = title
+    elif app in EDITOR_WORKSPACE_APPS:
+        parts = title_parts(capture)
+        candidate = parts[-1] if len(parts) >= 2 else None
+        if candidate and candidate.casefold() not in GENERIC_DEVELOPER_TITLES and SAFE_EDITOR_WORKSPACE_RE.fullmatch(candidate):
+            workspace = candidate
+    if workspace:
+        add_structured_values(fields, "workspace", [workspace])
+    return fields
+
+
+def _document_type(capture: AdaptiveContextCaptureInput) -> str | None:
+    app = capture.app_name.casefold()
+    domain = (capture.site_domain or "").casefold()
+    if app in {"microsoft powerpoint", "powerpoint", "keynote"} or "slides.google.com" in domain:
+        return "presentation"
+    if app in {"microsoft excel", "excel", "numbers"} or "sheets.google.com" in domain:
+        return "spreadsheet"
+    if "overleaf.com" in domain:
+        return "paper"
+    if app in {"microsoft word", "word", "pages"} or "docs.google.com" in domain:
+        return "document"
+    return None
+
+
+def document_editor_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveStructuredFields:
+    fields: AdaptiveStructuredFields = {}
+    if not document_editor_surface_matches(capture):
+        return fields
+
+    raw_title = (capture.site_title or capture.window_title or "").strip()
+    presenter_match = PRESENTER_VIEW_RE.match(raw_title)
+    if presenter_match:
+        document = presenter_match.group(1).strip().strip("[]")
+    else:
+        parts = title_parts(capture)
+        document = parts[0] if parts else ""
+    document = DOCUMENT_EXTENSION_RE.sub("", document).strip().strip("[]")
+    if document and document.casefold() not in GENERIC_DOCUMENT_TITLES:
+        add_structured_values(fields, "document", [document])
+        document_type = _document_type(capture)
+        if document_type:
+            add_structured_values(fields, "document_type", [document_type])
     return fields
 
 

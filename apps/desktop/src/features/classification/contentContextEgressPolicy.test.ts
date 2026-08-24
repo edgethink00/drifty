@@ -18,6 +18,9 @@ const enabledSettings: EnhancedContextSettings = {
     design_dev_tool: true,
     calendar_meeting: true,
     communication_metadata: true,
+    ai_conversation: true,
+    developer_workspace: true,
+    document_editor: true,
   },
 };
 
@@ -65,7 +68,6 @@ describe("contentContextEgressPolicy", () => {
   it("returns no enhanced provider context for first-pass mode", () => {
     const result = buildProviderSafeEnhancedContext({
       mode: "first_pass",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([notionParentPage, notionHeading]),
     });
@@ -78,13 +80,11 @@ describe("contentContextEgressPolicy", () => {
   it("allows Notion-like Depth 1-2 metadata only in enhanced retry mode", () => {
     const firstPass = buildProviderSafeEnhancedContext({
       mode: "first_pass",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([notionParentPage, notionHeading]),
     });
     const enhancedRetry = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([notionParentPage, notionHeading]),
     });
@@ -133,7 +133,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([safeDocumentHint, chatBody, authHint, paymentHint]),
     });
@@ -160,7 +159,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([localOnlyHint]),
     });
@@ -187,7 +185,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([urlItem, secretItem]),
     });
@@ -255,7 +252,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([headingWithEmbeddedUrl, tagWithEmbeddedUrl, labelWithEmbeddedUrl, hintWithEmbeddedUrl]),
     });
@@ -279,7 +275,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([unflaggedCredentials]),
     });
@@ -325,7 +320,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context(shortSecretCredentials),
     });
@@ -340,23 +334,20 @@ describe("contentContextEgressPolicy", () => {
     expect(result.summary.dropReasonCounts.secret_like_value).toBe(10);
   });
 
-  it("returns no provider context when the user turns the feature off", () => {
+  it("keeps provider policy independent from dogfood capture and respects the internal kill switch", () => {
     const captureDisabled = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: false,
       settings: { ...enabledSettings, captureLocal: false },
       context: context([notionParentPage]),
     });
     const toggleDisabled = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: disabledSettings,
       context: context([notionParentPage]),
     });
 
-    expect(captureDisabled.providerContext).toBeNull();
+    expect(captureDisabled.providerContext?.items).toHaveLength(1);
     expect(toggleDisabled.providerContext).toBeNull();
-    expect(captureDisabled.summary.dropReasonCounts.capture_disabled).toBe(1);
     expect(toggleDisabled.summary.dropReasonCounts.enhanced_context_disabled).toBe(1);
   });
 
@@ -375,7 +366,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([notionParentPage, rawCollectorBody]),
     });
@@ -387,7 +377,7 @@ describe("contentContextEgressPolicy", () => {
     expect(result.summary.dropReasonCounts.raw_collector_output).toBe(1);
   });
 
-  it("sends communication shape outside Dev mode and still withholds the body", () => {
+  it("sends production communication shape and still withholds the body", () => {
     const shared = {
       sourceFamily: "communication_metadata",
       extractionConfidence: "medium",
@@ -407,8 +397,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      // Enhanced context ships on, so egress must not depend on Dev mode.
-      devModeEnabled: false,
       settings: enabledSettings,
       context: context([workspace, channel, channelType]),
     });
@@ -418,7 +406,6 @@ describe("contentContextEgressPolicy", () => {
 
     const withBody = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: false,
       settings: enabledSettings,
       context: context([{
         id: "communication_metadata:messageBody",
@@ -435,6 +422,48 @@ describe("contentContextEgressPolicy", () => {
 
     expect(withBody.providerContext).toBeNull();
     expect(JSON.stringify(withBody)).not.toContain("standup notes");
+  });
+
+  it("sends promoted extractor metadata only during enhanced retry", () => {
+    const shared = {
+      extractionConfidence: "medium",
+      localStorage: "stored_local",
+      providerPolicy: "metadata_only",
+      sensitivity: [],
+    } as const;
+    const dogfoodItems: AdaptiveContextItem[] = [
+      { ...shared, id: "ai_conversation:thread", sourceFamily: "ai_conversation", depth: 1, kind: "thread", values: ["Migration strategy"] },
+      { ...shared, id: "developer_workspace:workspace", sourceFamily: "developer_workspace", depth: 1, kind: "workspace", values: ["drifty_mac"] },
+      { ...shared, id: "document_editor:documentType", sourceFamily: "document_editor", depth: 2, kind: "documentType", values: ["presentation"] },
+    ];
+
+    const enabled = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      settings: enabledSettings,
+      context: context(dogfoodItems),
+    });
+    expect(enabled.providerContext?.items.map((item) => item.sourceFamily)).toEqual([
+      "ai_conversation",
+      "developer_workspace",
+      "document_editor",
+    ]);
+    expect(enabled.providerContext?.items.every((item) => item.decision === "metadata_only")).toBe(true);
+
+    const disabled = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      settings: {
+        ...enabledSettings,
+        sourceFamilies: {
+          ...enabledSettings.sourceFamilies,
+          ai_conversation: false,
+          developer_workspace: false,
+          document_editor: false,
+        },
+      },
+      context: context(dogfoodItems),
+    });
+    expect(disabled.providerContext).toBeNull();
+    expect(disabled.summary.dropReasonCounts.source_family_disabled).toBe(3);
   });
 
   it("keeps rows captured before the promotion local-only", () => {
@@ -454,7 +483,6 @@ describe("contentContextEgressPolicy", () => {
 
     const result = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: false,
       settings: enabledSettings,
       context: context([
         legacyItem("channel", ["students(채널)"]),
@@ -472,14 +500,12 @@ describe("contentContextEgressPolicy", () => {
   it("maps provider-safe context count into deterministic retry eligibility", () => {
     const providerContext = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enabledSettings,
       context: context([notionParentPage]),
     }).providerContext;
 
     expect(
       enhancedContextRetryEligibility({
-        devModeEnabled: true,
         settings: enabledSettings,
         alreadyRetried: false,
         category: "workspace" satisfies ActivityCategory,
@@ -492,7 +518,6 @@ describe("contentContextEgressPolicy", () => {
 
     expect(
       enhancedContextRetryEligibility({
-        devModeEnabled: true,
         settings: enabledSettings,
         alreadyRetried: false,
         category: "workspace",
@@ -502,5 +527,26 @@ describe("contentContextEgressPolicy", () => {
         providerContext,
       }),
     ).toEqual({ kind: "ineligible", reason: "high_confidence" });
+  });
+
+  it("allows the shipped retry with production defaults", () => {
+    const providerContext = buildProviderSafeEnhancedContext({
+      mode: "enhanced_retry",
+      settings: { ...enabledSettings, captureLocal: false },
+      context: context([notionParentPage]),
+    }).providerContext;
+
+    expect(providerContext?.items).toHaveLength(1);
+    expect(
+      enhancedContextRetryEligibility({
+        settings: enabledSettings,
+        alreadyRetried: false,
+        category: "unknown",
+        confidence: 0.5,
+        evidence: "insufficient",
+        threshold: 0.55,
+        providerContext,
+      }),
+    ).toEqual({ kind: "eligible", reason: "unknown_category" });
   });
 });

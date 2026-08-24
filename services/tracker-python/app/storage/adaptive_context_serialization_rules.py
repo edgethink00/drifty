@@ -17,6 +17,18 @@ BODY_LIKE_CONTEXT_KEYS: Final[frozenset[str]] = frozenset(
         "raw_body",
         "rawFullPageText",
         "raw_full_page_text",
+        "prompt",
+        "response",
+        "conversationBody",
+        "conversation_body",
+        "terminalCommand",
+        "terminal_command",
+        "shellCommand",
+        "shell_command",
+        "documentText",
+        "document_text",
+        "selectedText",
+        "selected_text",
     }
 )
 ADAPTIVE_CONTEXT_DEPTHS: Final[frozenset[int]] = frozenset({0, 1, 2, 3})
@@ -41,6 +53,7 @@ ADAPTIVE_CONTEXT_ITEM_KINDS: Final[frozenset[str]] = frozenset(
         "team",
         "channel",
         "thread",
+        "document",
         "heading",
         "tag",
         "label",
@@ -53,6 +66,7 @@ ADAPTIVE_CONTEXT_ITEM_KINDS: Final[frozenset[str]] = frozenset(
         "pageType",
         "layerType",
         "channelType",
+        "conversationType",
         "shortSelectedHint",
         "shortVisibleHint",
         "introHint",
@@ -69,6 +83,9 @@ ADAPTIVE_CONTEXT_SOURCE_FAMILIES: Final[frozenset[str]] = frozenset(
         "design_dev_tool",
         "calendar_meeting",
         "communication_metadata",
+        "ai_conversation",
+        "developer_workspace",
+        "document_editor",
     }
 )
 ADAPTIVE_PROVIDER_POLICIES: Final[frozenset[str]] = frozenset(

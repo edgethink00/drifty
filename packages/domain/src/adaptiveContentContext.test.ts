@@ -23,9 +23,9 @@ describe("adaptive content context terminology", () => {
     expect(current.excludedFields).toContain("documentBody");
     expect(current.excludedFields).toContain("notionBody");
 
-    // Then: Enhanced context is local derived evidence for a gated retry, not first-pass payload.
+    // Then: Enhanced context is production derived evidence for a retry, not first-pass payload.
     expect(enhanced.providerVisibility).toBe("local_first_enhanced_retry_only");
-    expect(enhanced.devGated).toBe(true);
+    expect(enhanced.devGated).toBe(false);
     expect(enhanced.firstPassProviderVisible).toBe(false);
     expect(enhanced.excludedFields).toContain("rawFullPageText");
   });
@@ -96,6 +96,9 @@ describe("adaptive content context terminology", () => {
     const documentPolicy = sourceFamilyPolicy("document_knowledge");
     const workPolicy = sourceFamilyPolicy("work_tracker_dev_platform");
     const communicationPolicy = sourceFamilyPolicy("communication_metadata");
+    const aiConversationPolicy = sourceFamilyPolicy("ai_conversation");
+    const developerWorkspacePolicy = sourceFamilyPolicy("developer_workspace");
+    const documentEditorPolicy = sourceFamilyPolicy("document_editor");
 
     // When/Then: document and work families may store derived context locally.
     expect(documentPolicy.localCaptureDefault).toBe("store_depth_1_2");
@@ -104,8 +107,18 @@ describe("adaptive content context terminology", () => {
     expect(workPolicy.allowedItemKinds).toContain("label");
 
     // Then: communication metadata never authorizes message-body provider egress.
-    expect(communicationPolicy.providerRetryDefault).toBe("local_only");
+    expect(communicationPolicy.providerRetryDefault).toBe("metadata_only");
     expect(communicationPolicy.blockedItemKinds).toContain("messageBody");
+
+    // Then: the newly promoted families stay bounded to structural metadata.
+    expect(aiConversationPolicy.allowedItemKinds).toEqual(["workspace", "thread", "conversationType"]);
+    expect(developerWorkspacePolicy.allowedItemKinds).toEqual(["workspace", "project", "repo"]);
+    expect(documentEditorPolicy.allowedItemKinds).toEqual(["workspace", "document", "documentType"]);
+    for (const policy of [aiConversationPolicy, developerWorkspacePolicy, documentEditorPolicy]) {
+      expect(policy.allowedDepths).toEqual([1, 2]);
+      expect(policy.providerRetryDefault).toBe("metadata_only");
+      expect(policy.blockedItemKinds).toContain("messageBody");
+    }
   });
 
   it("marks only low-confidence or unknown first-pass results eligible for one enhanced retry", () => {

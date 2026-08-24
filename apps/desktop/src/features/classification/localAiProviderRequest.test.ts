@@ -47,6 +47,9 @@ const enhancedContextSettings: EnhancedContextSettings = {
     design_dev_tool: true,
     calendar_meeting: true,
     communication_metadata: true,
+    ai_conversation: true,
+    developer_workspace: true,
+    document_editor: true,
   },
 };
 
@@ -179,7 +182,6 @@ describe("toLocalProviderRequest", () => {
     } satisfies AdaptiveContextItem;
     const egress = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enhancedContextSettings,
       context: {
         version: 1,
@@ -215,7 +217,6 @@ describe("toLocalProviderRequest", () => {
     } satisfies AdaptiveContextItem;
     const egress = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enhancedContextSettings,
       context: {
         version: 1,
@@ -284,7 +285,6 @@ describe("toLocalProviderRequest", () => {
     }] satisfies readonly AdaptiveContextItem[];
     const egress = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: true,
       settings: enhancedContextSettings,
       context: {
         version: 1,
@@ -315,7 +315,6 @@ describe("toLocalProviderRequest", () => {
     const rawTitleSegmentId = "2026-08-24T00:00:00+00:00|Slack|Junho(DM) - Northstar Lab - 2개의 새 항목";
     const egress = buildProviderSafeEnhancedContext({
       mode: "enhanced_retry",
-      devModeEnabled: false,
       settings: enhancedContextSettings,
       segmentId: basePayload.segmentId,
       context: {

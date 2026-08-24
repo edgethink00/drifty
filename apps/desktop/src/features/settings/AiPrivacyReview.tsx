@@ -14,7 +14,7 @@ import {
   type AiPrivacyRequestOptionalSettings,
   type AiPrivacyRequestSettings,
 } from "./aiPrivacyRequestSettings";
-import { resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "./settingsStorage";
+import { resolveInitialEnhancedContextSettings } from "./settingsStorage";
 
 type VisibleField = {
   readonly detailKey: TranslationKey;
@@ -129,15 +129,15 @@ const DRAG_SLOP_PX = 4;
 
 /**
  * The enhanced-context payload only reaches a provider when every gate in
- * contentContextEgressPolicy.decideItem() is open: Dev mode, the Enhanced context
- * setting, local capture, and low-confidence retry. Reading them here mirrors what
+ * contentContextEgressPolicy.decideItem() is open: the production Enhanced context
+ * setting and low-confidence retry. Reading them here mirrors what
  * aiClassificationService already reads at request time, so the row reports the state
  * the user is actually in rather than assuming the default.
  */
 function enhancedContextCanReachProvider(): boolean {
   if (typeof window === "undefined") return false;
   const settings = resolveInitialEnhancedContextSettings();
-  return resolveInitialDevModeEnabled() && settings.enabled && settings.captureLocal && settings.retryLowConfidence;
+  return settings.enabled && settings.retryLowConfidence;
 }
 
 /**
@@ -307,9 +307,8 @@ export function AiPrivacyReview() {
           </li>
 
           {/* Enhanced context is a real outbound field (localAiProviderRequest promptItem),
-              not a variant of Content context. It is off by default and Dev-gated, so it is
-              stated as its own row with its own state rather than folded into another row's
-              copy. This panel only describes it; the setting itself lives in Dev settings. */}
+              not a variant of Content context. It ships as a bounded retry-only production
+              field, so it keeps its own receipt row instead of being folded into Content context. */}
           <li className="ai-privacy-review__row ai-privacy-review__row--always">
             <div className="ai-privacy-review__row-inner">
               <span className="ai-privacy-review__row-body">

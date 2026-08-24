@@ -17,6 +17,9 @@ SUPPORTED_ADAPTIVE_SOURCE_FAMILIES: Final = frozenset(
         "design_dev_tool",
         "calendar_meeting",
         "communication_metadata",
+        "ai_conversation",
+        "developer_workspace",
+        "document_editor",
     }
 )
 
