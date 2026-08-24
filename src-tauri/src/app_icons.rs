@@ -234,9 +234,93 @@ fn sanitize_filename(input: &str) -> String {
         .collect()
 }
 
+fn app_icon_cache_root(app: &AppHandle) -> PathBuf {
+    app.path()
+        .app_local_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join(APP_ICON_CACHE_DIR)
+}
+
+/// Removes cache entries written before the `.128.` variant key existed.
+///
+/// Those files store pre-resize, full-resolution icons and nothing reads them
+/// anymore, but no cleanup shipped with the key change. Long-running installs
+/// accumulate hundreds of megabytes this way (195MB observed on a real
+/// machine), so this reclaims them once at startup.
+pub(crate) fn purge_legacy_app_icon_cache(app: &AppHandle) -> Result<u64, TrackerError> {
+    purge_legacy_entries_in(&app_icon_cache_root(app))
+}
+
+/// Directory-explicit form of [`purge_legacy_app_icon_cache`] so the retention
+/// rule can be tested without touching the real cache.
+fn purge_legacy_entries_in(cache_root: &Path) -> Result<u64, TrackerError> {
+    if !cache_root.exists() {
+        return Ok(0);
+    }
+
+    let current_marker = format!(".{APP_ICON_CACHE_VARIANT}.");
+    let Ok(entries) = fs::read_dir(cache_root) else {
+        return Ok(0);
+    };
+
+    let mut reclaimed = 0_u64;
+    for entry in entries.flatten() {
+        let Ok(metadata) = entry.metadata() else {
+            continue;
+        };
+        if !metadata.is_file() {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
+            continue;
+        };
+        // Keep anything written in the current variant format.
+        if name.contains(&current_marker) {
+            continue;
+        }
+        let size = metadata.len();
+        if fs::remove_file(entry.path()).is_ok() {
+            reclaimed += size;
+        }
+    }
+    Ok(reclaimed)
+}
+
+/// Deletes every cached app icon. Backs the Settings control.
+pub(crate) fn clear_app_icon_cache(app: &AppHandle) -> Result<u64, TrackerError> {
+    let cache_root = app_icon_cache_root(app);
+    if !cache_root.exists() {
+        return Ok(0);
+    }
+    let reclaimed = crate::site_icons::directory_size(&cache_root);
+    fs::remove_dir_all(&cache_root)
+        .map_err(|err| TrackerError::CommandFailed(err.to_string()))?;
+    Ok(reclaimed)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_purge_removes_only_pre_variant_entries() {
+        let cache_dir = tempfile::tempdir().expect("temp dir");
+        // Current-format entries that must survive.
+        fs::write(cache_dir.path().join("Code.128.data-url"), "keep").expect("write");
+        fs::write(cache_dir.path().join("Code.128.png"), [1_u8, 2, 3]).expect("write");
+        // Pre-variant entries that nothing reads anymore.
+        fs::write(cache_dir.path().join("Code.data-url"), vec![b'x'; 1024]).expect("write");
+        fs::write(cache_dir.path().join("Dictionary.data-url"), vec![b'y'; 2048]).expect("write");
+
+        let reclaimed = purge_legacy_entries_in(cache_dir.path()).expect("purge");
+
+        assert_eq!(reclaimed, 1024 + 2048);
+        assert!(cache_dir.path().join("Code.128.data-url").exists());
+        assert!(cache_dir.path().join("Code.128.png").exists());
+        assert!(!cache_dir.path().join("Code.data-url").exists());
+        assert!(!cache_dir.path().join("Dictionary.data-url").exists());
+    }
+
 
     #[test]
     fn cached_data_url_is_reused_when_present() {

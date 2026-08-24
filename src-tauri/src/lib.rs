@@ -9,6 +9,7 @@ mod living_soul_store;
 mod observability;
 mod openrouter_key_store;
 mod shell_action;
+mod site_icons;
 mod tracker;
 mod tracker_recovery;
 mod tracking_pause;
@@ -48,6 +49,7 @@ use commands::{
     tracker_apply_synced_segments, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_delete_project,
     tracker_delete_project_anchor, tracker_get_ai_review_events, tracker_get_app_icons,
+    tracker_clear_icon_caches, tracker_get_site_icons,
     tracker_get_browser_history_environment, tracker_get_classification_metrics,
     tracker_get_classification_rules, tracker_get_current_snapshot,
     tracker_get_dashboard_week_timeline, tracker_get_dev_repos, tracker_get_dev_signals,
@@ -492,6 +494,25 @@ pub fn run() {
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
 
+            // Reclaim icon-cache generations nothing reads anymore. Both run
+            // off-thread because they touch the filesystem, and a failure here
+            // must never block startup.
+            let icon_cache_handle = app.handle().clone();
+            let _ = tauri::async_runtime::spawn_blocking(move || {
+                if let Ok(bytes) = app_icons::purge_legacy_app_icon_cache(&icon_cache_handle) {
+                    if bytes > 0 {
+                        eprintln!("[icon-cache] reclaimed {bytes} bytes of legacy app icons");
+                    }
+                }
+                if let Ok(bytes) =
+                    site_icons::purge_stale_site_icon_generations(&icon_cache_handle)
+                {
+                    if bytes > 0 {
+                        eprintln!("[icon-cache] reclaimed {bytes} bytes of stale site icons");
+                    }
+                }
+            });
+
             #[cfg(target_os = "windows")]
             if !commands::windows_background_launch_requested() {
                 reveal_main_window(app.handle());
@@ -584,6 +605,8 @@ pub fn run() {
             tracker_get_raw_events,
             tracker_get_top_sites,
             tracker_get_app_icons,
+            tracker_get_site_icons,
+            tracker_clear_icon_caches,
             tracker_get_unclassified_segments,
             tracker_get_reusable_ai_classifications,
             tracker_get_classification_rules,

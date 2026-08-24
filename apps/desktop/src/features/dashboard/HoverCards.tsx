@@ -34,7 +34,6 @@ export type CompactClassificationHoverState = {
   dotClassName: string;
   color: string;
   appBreakdown: CompactClassificationBreakdownRow[];
-  disableRemoteFavicons?: boolean;
   x: number;
   y: number;
 };
@@ -103,7 +102,7 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
           return (
             <div className="category-hover-card__app" key={`${item.siteDomain ?? item.siteTitle ?? item.bundleId ?? item.appName}`}>
               <span className="usage-identity-icon usage-identity-icon--sm">
-                {item.siteDomain && !hover.disableRemoteFavicons ? <SiteFavicon domain={item.siteDomain} size={20} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={label} iconSrc={item.siteTitle ? null : iconSrc} size="sm" />}
+                {item.siteDomain ? <SiteFavicon domain={item.siteDomain} size={20} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={label} iconSrc={item.siteTitle ? null : iconSrc} size="sm" />}
               </span>
               <span>{label}</span>
               <strong>{secondsToLabel(item.totalSeconds)}</strong>

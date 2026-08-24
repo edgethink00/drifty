@@ -2,6 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FocusDriftHoverCard } from "./FocusDriftHoverCard";
+import { SiteIconProvider } from "../../components/SiteIconContext";
 import type { FocusDriftPoint } from "./focusDriftChart";
 
 const focusDriftPoint: FocusDriftPoint = {
@@ -48,13 +49,15 @@ const focusDriftPoint: FocusDriftPoint = {
 describe("FocusDriftHoverCard", () => {
   it("renders source icons and dense focus drift details without repeated explanation", () => {
     render(
-      <FocusDriftHoverCard
-        appIcons={{
-          "com.google.Chrome": "data:image/png;base64,chrome",
-          "com.microsoft.VSCode": "data:image/png;base64,code",
-        }}
-        hover={{ point: focusDriftPoint, kind: "focus", x: 20, y: 20 }}
-      />,
+      <SiteIconProvider value={{ "youtube.com": "data:image/png;base64,youtube" }}>
+        <FocusDriftHoverCard
+          appIcons={{
+            "com.google.Chrome": "data:image/png;base64,chrome",
+            "com.microsoft.VSCode": "data:image/png;base64,code",
+          }}
+          hover={{ point: focusDriftPoint, kind: "focus", x: 20, y: 20 }}
+        />
+      </SiteIconProvider>,
     );
 
     const card = screen.getByText("12:00").closest(".focus-drift-hover-card");
@@ -72,6 +75,7 @@ describe("FocusDriftHoverCard", () => {
     expect(appIcon?.getAttribute("src")).toBe("data:image/png;base64,code");
 
     const favicon = card.querySelector(".focus-drift-hover-card__source-icon .site-favicon");
-    expect(favicon?.getAttribute("src")).toBe("https://www.google.com/s2/favicons?domain=youtube.com&sz=64");
+    // Site icons come from the local cache, never from a remote URL.
+    expect(favicon?.getAttribute("src")).toBe("data:image/png;base64,youtube");
   });
 });

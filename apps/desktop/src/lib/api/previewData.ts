@@ -30,7 +30,10 @@ const PREVIEW_APP_BUNDLE_IDS: Readonly<Record<string, string>> = {
 const PREVIEW_APP_ICON_SOURCES: Readonly<Record<string, string>> = {
   "com.apple.mail": "./assets/mail-CrE6QGcD.png",
   "com.apple.MobileSMS": "./assets/messages-aYNxSzkK.png",
-  "com.figma.Desktop": "https://www.google.com/s2/favicons?domain=figma.com&sz=64",
+  // Preview icons are bundled assets only. This one used to point at the
+  // remote favicon service, which the webview CSP no longer allows now that
+  // site icons are fetched natively; without a bundled Figma asset it falls
+  // back to the lettered glyph.
   "com.linear": "./assets/linear-CuZX2ooj.png",
   "com.microsoft.VSCode": "./assets/visual-studio-code-DW738tZv.png",
   "com.spotify.client": "./assets/spotify-DuyINEyo.ico",

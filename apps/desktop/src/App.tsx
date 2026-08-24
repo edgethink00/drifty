@@ -66,6 +66,8 @@ import {
   type CloudAiConnectionCheck,
 } from "./features/ai-connection/aiConnectionHealth";
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
+import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIconDomain, type SiteIconMap } from "./features/app-icons/siteIconRequests";
+import { SiteIconProvider } from "./components/SiteIconContext";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
@@ -500,6 +502,8 @@ export default function App() {
   const [insightTopSites, setInsightTopSites] = useState<SiteDuration[]>([]);
   const [appIcons, setAppIcons] = useState<AppIconMap>({});
   const appIconsRef = useRef<AppIconMap>({});
+  const [siteIcons, setSiteIcons] = useState<SiteIconMap>({});
+  const siteIconsRef = useRef<SiteIconMap>({});
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -818,6 +822,10 @@ export default function App() {
   }, [appIcons]);
 
   useEffect(() => {
+    siteIconsRef.current = siteIcons;
+  }, [siteIcons]);
+
+  useEffect(() => {
     const dashboardPeriod = activeTab === "dashboard" ? toDashboardPeriodAnalytics(dashPeriod) : null;
     const surfaceKey = [activeTab, dashboardPeriod, activeTab === "settings" ? settingsSection : null].join(":");
     if (previousSurfaceAnalyticsKeyRef.current === surfaceKey) return;
@@ -1129,8 +1137,8 @@ export default function App() {
     segments: sourceSegments,
   }), [classificationRules]);
   const recentDriftAlarmFocusTargets = useMemo(
-    () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons),
-    [appIcons, historySegments, segments, selectedDayClassificationOptions],
+    () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons, siteIcons),
+    [appIcons, historySegments, segments, selectedDayClassificationOptions, siteIcons],
   );
   const [availableDriftAlarmFocusTargets, setAvailableDriftAlarmFocusTargets] = useState<DriftAlarmFocusTarget[]>([]);
   const availableDriftAlarmFocusTargetsRef = useRef<DriftAlarmFocusTarget[]>([]);
@@ -1554,6 +1562,7 @@ export default function App() {
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
   const appIconRequestsInFlightRef = useRef<Set<string>>(new Set());
+  const siteIconRequestsInFlightRef = useRef<Set<string>>(new Set());
   const driftAlarmRequestInFlightRef = useRef(false);
   const liveDriftAlarmRefreshInFlightRef = useRef(false);
   const liveDriftAlarmAiRequestInFlightRef = useRef<string | null>(null);
@@ -1627,6 +1636,47 @@ export default function App() {
     })();
   }, []);
 
+  // Site icons follow the same path as app icons: ask the native layer only
+  // for domains that are not already resolved, and let it serve them from the
+  // on-disk cache. Resolved misses stay in the map so they are not retried.
+  const loadMissingSiteIconDomains = useCallback((domains: readonly string[]) => {
+    void (async () => {
+      const missingDomains = domains.filter((domain) => {
+        if (siteIconRequestsInFlightRef.current.has(domain)) return false;
+        siteIconRequestsInFlightRef.current.add(domain);
+        return true;
+      });
+      if (missingDomains.length === 0) return;
+
+      try {
+        const rawIconMap = await trackerClient.getSiteIcons(missingDomains);
+        setSiteIcons((current) => mergeSiteIconResults(current, missingDomains, rawIconMap));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "unknown error";
+        console.warn("Failed to load site icons.", message);
+      } finally {
+        for (const domain of missingDomains) {
+          siteIconRequestsInFlightRef.current.delete(domain);
+        }
+      }
+    })();
+  }, []);
+
+  const loadMissingSiteIcons = useCallback((segmentsToInspect: readonly ActivitySegment[]) => {
+    loadMissingSiteIconDomains(collectMissingSiteIconRequests(segmentsToInspect, siteIconsRef.current));
+  }, [loadMissingSiteIconDomains]);
+
+  // Saved classification rules name domains directly rather than through
+  // tracked segments, so their icons need their own resolve pass.
+  useEffect(() => {
+    const ruleDomains = classificationRules
+      .filter((rule) => rule.targetKind === "site")
+      .map((rule) => normalizeSiteIconDomain(rule.targetValue))
+      .filter((domain): domain is string => domain !== null && !(domain in siteIconsRef.current));
+    if (ruleDomains.length === 0) return;
+    loadMissingSiteIconDomains(ruleDomains);
+  }, [classificationRules, loadMissingSiteIconDomains]);
+
   useEffect(() => {
     const query = normalizedHistorySearchQuery;
     if (query.length === 0) {
@@ -1672,6 +1722,7 @@ export default function App() {
             shouldReportFailure: () => historySearchRequestRef.current === requestId,
             failureMessage: "Failed to load history search app icons",
           });
+          loadMissingSiteIcons(materializedPage.segments);
         } catch (nextError) {
           if (historySearchRequestRef.current !== requestId) return;
           setHistorySearchError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
@@ -1687,6 +1738,7 @@ export default function App() {
   }, [
     activeTab,
     loadMissingAppIcons,
+    loadMissingSiteIcons,
     materializeBuiltInHeuristicTimeline,
     normalizedHistorySearchQuery,
     shouldBlockLocalTrackerAccess,
@@ -2449,6 +2501,9 @@ export default function App() {
         shouldReportFailure: () => refreshRequestRef.current === requestId,
         failureMessage: "Failed to load dashboard app icons",
       });
+      loadMissingSiteIcons(materializedArchiveTimelines === null
+        ? materializedTimeline.segments
+        : [...materializedTimeline.segments, ...materializedArchiveTimelines.segments]);
       return true;
     } catch (nextError) {
       if (refreshRequestRef.current !== requestId) return false;
@@ -2640,6 +2695,7 @@ export default function App() {
         shouldReportFailure: () => historyRefreshRequestRef.current === requestId,
         failureMessage: "Failed to load history app icons",
       });
+      loadMissingSiteIcons(segmentsToInspect);
     };
 
     try {
@@ -2863,6 +2919,7 @@ export default function App() {
         shouldReportFailure: () => historyRefreshRequestRef.current === requestId,
         failureMessage: "Failed to load additional history app icons",
       });
+      loadMissingSiteIcons(materializedPage.segments);
     } catch (nextError) {
       if (historyRefreshRequestRef.current !== requestId) return;
       setHistoryLoadMoreError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
@@ -2877,6 +2934,7 @@ export default function App() {
     historyNextCursor,
     historySegmentsLoadedRange,
     loadMissingAppIcons,
+    loadMissingSiteIcons,
     materializeBuiltInHeuristicTimeline,
   ]);
 
@@ -2909,6 +2967,7 @@ export default function App() {
         shouldReportFailure: () => historySearchRequestRef.current === requestId,
         failureMessage: "Failed to load additional history search app icons",
       });
+      loadMissingSiteIcons(materializedPage.segments);
     } catch (nextError) {
       if (historySearchRequestRef.current !== requestId) return;
       setHistorySearchError(nextError instanceof Error ? nextError.message : toErrorMessage(nextError));
@@ -2922,6 +2981,7 @@ export default function App() {
     historySearchLoading,
     historySearchNextCursor,
     loadMissingAppIcons,
+    loadMissingSiteIcons,
     materializeBuiltInHeuristicTimeline,
     normalizedHistorySearchQuery,
   ]);
@@ -3768,7 +3828,9 @@ export default function App() {
       driftAlarmHistorySegmentsRef.current,
       driftAlarmClassificationOptions,
       appIconsRef.current,
+      siteIconsRef.current,
     );
+
     const availableDriftAlarmFocusTargetsForAlarm = availableDriftAlarmFocusTargets.length > 0
       ? availableDriftAlarmFocusTargets
       : filterDefinitelyAvailableFocusTargets(driftAlarmFocusTargets);
@@ -4098,7 +4160,11 @@ export default function App() {
       const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
       const sourceAppName = segment.appName.trim() || "Unknown app";
       const sourceIconKey = segment.bundleId?.trim() ?? sourceAppName;
-      const sourceIconSrc = appIconsRef.current[sourceIconKey] ?? appIconsRef.current[sourceAppName] ?? null;
+      // Resolve the site icon here: the alarm window has no site-icon context.
+      const sourceIconSrc = (sourceSiteDomain ? siteIconsRef.current[sourceSiteDomain.toLowerCase()] : null)
+        ?? appIconsRef.current[sourceIconKey]
+        ?? appIconsRef.current[sourceAppName]
+        ?? null;
       const sourceSegmentId = latestDrift.sourceSegmentId ?? segment.id;
       rememberDriftAlarmSourceSegment(driftAlarmSourceSegmentsRef.current, sourceSegmentId, segment);
 
@@ -4333,7 +4399,10 @@ export default function App() {
         const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
         const breakReturnAppName = segment.appName.trim() || "Unknown app";
         const breakReturnIconKey = segment.bundleId?.trim() ?? breakReturnAppName;
-        const breakReturnIconSrc = appIconsRef.current[breakReturnIconKey] ?? appIconsRef.current[breakReturnAppName] ?? null;
+        const breakReturnIconSrc = (breakReturnSiteDomain ? siteIconsRef.current[breakReturnSiteDomain.toLowerCase()] : null)
+          ?? appIconsRef.current[breakReturnIconKey]
+          ?? appIconsRef.current[breakReturnAppName]
+          ?? null;
 
         showDriftAlarm(buildBreakReturnAlarmEvent({
           id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
@@ -4713,6 +4782,7 @@ export default function App() {
             segments,
             failureMessage: "Failed to load selected day replay app icons",
           });
+          loadMissingSiteIcons(segments);
         }
         return;
       }
@@ -4769,6 +4839,7 @@ export default function App() {
     dashboardWeekRange.startDay,
     loadCompactHistoryRange,
     loadMissingAppIcons,
+    loadMissingSiteIcons,
     segments,
     selectedDay,
     shouldBlockLocalTrackerAccess,
@@ -4794,7 +4865,8 @@ export default function App() {
       segments: dashboardSegments,
       failureMessage: "Failed to load visible week app icons",
     });
-  }, [activeTab, dashPeriod, dashboardSegments, loadMissingAppIcons, shouldBlockLocalTrackerAccess]);
+    loadMissingSiteIcons(dashboardSegments);
+  }, [activeTab, dashPeriod, dashboardSegments, loadMissingAppIcons, loadMissingSiteIcons, shouldBlockLocalTrackerAccess]);
   const dashboardWeekRefreshKey = compactHistoryRangeKey(dashboardWeekHistoryRange);
   const weekRefreshStatus: DashboardWeekRefreshStatus = dashPeriod !== "Week" || dashboardWeekCompactHistoryLoad
     ? "idle"
@@ -6754,6 +6826,7 @@ export default function App() {
 
   if (onboardingOpen) {
     return (
+      <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
         <>
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
@@ -6761,11 +6834,13 @@ export default function App() {
           {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
         </>
       </LocalizationProvider>
+      </SiteIconProvider>
     );
   }
 
   if (preparingFirstDay) {
     return (
+      <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
         <>
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
@@ -6779,11 +6854,13 @@ export default function App() {
           />
         </>
       </LocalizationProvider>
+      </SiteIconProvider>
     );
   }
 
   return (
-    <LocalizationProvider controller={localization}>
+    <SiteIconProvider value={siteIcons}>
+      <LocalizationProvider controller={localization}>
     <div className={shellClassName}>
       <div className="window-chrome">
         <div className="window-nav-controls" aria-label="Window navigation">
@@ -7912,5 +7989,6 @@ export default function App() {
 
     </div>
     </LocalizationProvider>
+      </SiteIconProvider>
   );
 }

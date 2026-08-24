@@ -41,7 +41,11 @@ export const DRIFT_ALERT_DELAY_OPTIONS = [
   { value: "1800", seconds: 1800, label: "30m", detail: "After 30 minutes of drift" },
 ] as const satisfies ReadonlyArray<{ value: DriftAlertDelayValue; seconds: DriftAlertDelaySeconds; label: string; detail: string }>;
 
-export function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: AppIconMap): DriftAlarmFocusTarget {
+export function buildFocusTargetFromSegment(
+  segment: ActivitySegment,
+  appIcons: AppIconMap,
+  siteIcons: Readonly<Record<string, string | null>> = {},
+): DriftAlarmFocusTarget {
   const appName = segment.appName.trim() || "Unknown app";
   const bundleId = segment.bundleId?.trim() || null;
   const browserName = segment.browserName?.trim() || null;
@@ -50,7 +54,12 @@ export function buildFocusTargetFromSegment(segment: ActivitySegment, appIcons: 
   const siteUrl = segment.siteUrl?.trim() || null;
   const windowTitle = segment.windowTitle?.trim() || null;
   const iconKey = bundleId ?? appName;
-  const iconSrc = appIcons[iconKey] ?? appIcons[appName] ?? null;
+  // Site rows carry no bundle id, so their icon comes from the site cache;
+  // it is resolved here because the alarm window cannot resolve it itself.
+  const iconSrc = (siteDomain ? siteIcons[siteDomain.toLowerCase()] : null)
+    ?? appIcons[iconKey]
+    ?? appIcons[appName]
+    ?? null;
   const label = siteDomain ?? siteTitle ?? appName;
   const detail = formatFocusTargetDetail({ appName, siteDomain, siteTitle, windowTitle });
 
@@ -250,7 +259,7 @@ function sumNearbyShoppingDriftSeconds(candidate: ActivitySegment, segments: Act
   }, candidate.durationSeconds);
 }
 
-export function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap): DriftAlarmFocusTarget[] {
+export function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap, siteIcons: Readonly<Record<string, string | null>> = {}): DriftAlarmFocusTarget[] {
   const targets: DriftAlarmFocusTarget[] = [];
   const seen = new Set<string>();
   const sortedFocusSegments = segments
@@ -266,7 +275,9 @@ export function buildRecentFocusTargets(segments: ActivitySegment[], historySegm
     return true;
   };
 
-  const latestRecentFocusTarget = sortedFocusSegments[0] ? buildFocusTargetFromSegment(sortedFocusSegments[0], appIcons) : null;
+  const latestRecentFocusTarget = sortedFocusSegments[0]
+    ? buildFocusTargetFromSegment(sortedFocusSegments[0], appIcons, siteIcons)
+    : null;
   if (latestRecentFocusTarget) addTarget(latestRecentFocusTarget);
 
   const weeklyFocusStartMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -329,7 +340,7 @@ export function buildRecentFocusTargets(segments: ActivitySegment[], historySegm
   }
 
   for (const segment of sortedFocusSegments.slice(1)) {
-    if (addTarget(buildFocusTargetFromSegment(segment, appIcons))) break;
+    if (addTarget(buildFocusTargetFromSegment(segment, appIcons, siteIcons))) break;
   }
 
   return targets;

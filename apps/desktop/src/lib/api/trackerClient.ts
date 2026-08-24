@@ -275,6 +275,16 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_get_app_icons", { query: { apps } });
     return result ?? {};
   },
+  async getSiteIcons(domains: string[]) {
+    if (shouldUsePreviewData()) return {};
+    const result = await safeInvoke("tracker_get_site_icons", { query: { domains } });
+    return result ?? {};
+  },
+  async clearIconCaches(): Promise<{ reclaimedBytes: number }> {
+    if (shouldUsePreviewData()) return { reclaimedBytes: 0 };
+    const result = await safeInvoke("tracker_clear_icon_caches");
+    return result ?? { reclaimedBytes: 0 };
+  },
   async getUnclassifiedSegments(query: UnclassifiedSegmentsQuery) {
     if (shouldUsePreviewData()) return [];
     const result = await safeInvoke("tracker_get_unclassified_segments", { query });

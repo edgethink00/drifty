@@ -70,7 +70,7 @@ function DriftAlarmFocusTargetIcon({ target }: { readonly target: DriftAlarmFocu
   if (target.siteDomain) {
     return (
       <span className="da__target-icon">
-        <SiteFavicon domain={target.siteDomain} size={22} fallbackIconSrc={target.iconSrc} />
+        <SiteFavicon domain={target.siteDomain} size={22} iconSrc={target.iconSrc} />
       </span>
     );
   }

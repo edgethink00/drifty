@@ -18,6 +18,8 @@ export const trackerInvokeCommands = [
   "tracker_get_top_sites",
   "tracker_set_developer_diagnostics",
   "tracker_get_app_icons",
+  "tracker_get_site_icons",
+  "tracker_clear_icon_caches",
   "tracker_get_unclassified_segments",
   "tracker_get_reusable_ai_classifications",
   "tracker_get_classification_rules",
@@ -92,6 +94,11 @@ export type TrackerCommandMap = {
   tracker_get_top_sites: { args: { query: TopSitesQuery }; result: SiteDuration[] };
   tracker_set_developer_diagnostics: { args: { query: DeveloperDiagnosticsSettings }; result: unknown };
   tracker_get_app_icons: { args: { query: { apps: AppIdentity[] } }; result: AppIconMap };
+  tracker_get_site_icons: {
+    args: { query: { domains: string[] } };
+    result: Readonly<Record<string, string | null>>;
+  };
+  tracker_clear_icon_caches: { args: undefined; result: { reclaimedBytes: number } };
   tracker_get_unclassified_segments: { args: { query: UnclassifiedSegmentsQuery }; result: ActivitySegment[] };
   tracker_get_reusable_ai_classifications: {
     args: { query: { inputFingerprints: string[] } };
@@ -799,6 +806,8 @@ export interface TrackerApi {
   getTopSites(query: TopSitesQuery): Promise<SiteDuration[]>;
   setDeveloperDiagnostics(settings: DeveloperDiagnosticsSettings): Promise<void>;
   getAppIcons(apps: AppIdentity[]): Promise<AppIconMap>;
+  getSiteIcons(domains: string[]): Promise<Readonly<Record<string, string | null>>>;
+  clearIconCaches(): Promise<{ reclaimedBytes: number }>;
   getUnclassifiedSegments(query: UnclassifiedSegmentsQuery): Promise<ActivitySegment[]>;
   getReusableAiClassifications(inputFingerprints: string[]): Promise<Record<string, ActivityClassificationRecord>>;
   getClassificationRules(): Promise<ClassificationRule[]>;

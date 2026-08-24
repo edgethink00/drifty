@@ -240,6 +240,12 @@ pub struct AppIconsQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SiteIconsQuery {
+    pub domains: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectSaveQuery {
     pub input: serde_json::Value,
 }
@@ -691,6 +697,40 @@ pub async fn tracker_get_app_icons(
         controller
             .get_app_icons(&app, &query.apps)
             .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Resolves site icons through the local cache, so the webview never issues
+/// the outbound request itself.
+#[tauri::command]
+pub async fn tracker_get_site_icons(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: SiteIconsQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_site_icons(&app, &query.domains)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+/// Clears every cached icon and reports the reclaimed bytes.
+#[tauri::command]
+pub async fn tracker_clear_icon_caches(app: AppHandle) -> Result<serde_json::Value, String> {
+    async_runtime::spawn_blocking(move || {
+        let site_bytes = crate::site_icons::clear_site_icon_cache(&app)
+            .map_err(|error| error.to_string())?;
+        let app_bytes = crate::app_icons::clear_app_icon_cache(&app)
+            .map_err(|error| error.to_string())?;
+        Ok::<serde_json::Value, String>(serde_json::json!({
+            "reclaimedBytes": site_bytes + app_bytes,
+        }))
     })
     .await
     .map_err(|error| error.to_string())?

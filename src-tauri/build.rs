@@ -43,6 +43,8 @@ fn main() {
             "tracker_get_raw_events",
             "tracker_get_top_sites",
             "tracker_get_app_icons",
+            "tracker_get_site_icons",
+            "tracker_clear_icon_caches",
             "tracker_get_unclassified_segments",
             "tracker_get_reusable_ai_classifications",
             "tracker_get_classification_rules",

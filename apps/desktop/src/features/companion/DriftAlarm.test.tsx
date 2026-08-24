@@ -222,7 +222,7 @@ describe("DriftAlarm", () => {
       contextLabel: "sbxh6.com",
       sourceSiteDomain: "sbxh6.com",
       sourceAppName: "Google Chrome",
-      sourceIconSrc: null,
+      sourceIconSrc: "data:image/png;base64,drift-site",
       driftDurationSeconds: 2 * 60,
       preservedFocusStrikeSeconds: 30 * 60,
       generatedAt: "2026-05-20T13:16:00.000Z",
@@ -232,7 +232,13 @@ describe("DriftAlarm", () => {
     const { container } = render(<DriftAlarm event={event} onAction={onAction} />);
     const sourceTile = container.querySelector(".da__drift .src-tile");
     expect(sourceTile).toBeTruthy();
-    expect(sourceTile?.querySelector(".site-favicon")).toBeTruthy();
+    // `.site-favicon` is also on the lettered placeholder, so assert on the
+    // image itself: the alarm window has no site-icon context and cannot fetch
+    // anything, so a missing payload icon silently degrades to a letter.
+    const sourceImage = sourceTile?.querySelector("img.site-favicon");
+    expect(sourceImage).toBeTruthy();
+    expect(sourceImage?.getAttribute("src")).toBe("data:image/png;base64,drift-site");
+    expect(sourceTile?.querySelector(".site-favicon--fallback")).toBeNull();
   });
 
   it("renders the current drift source app icon when no site domain is available", () => {

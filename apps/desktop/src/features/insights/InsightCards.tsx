@@ -237,7 +237,6 @@ export function WeeklyCategoryRow({
           shareLabel: `${Math.round((entry.seconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: entry.dotClassName,
           color: entry.color,
-          disableRemoteFavicons: true,
           appBreakdown: buildBreakdown((segment) => classifyActivity(segment, classificationOptions).productivity === entry.key),
         });
       }
@@ -267,7 +266,6 @@ export function WeeklyCategoryRow({
           shareLabel: `${Math.round((seconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: "",
           color: meta?.color ?? item.color,
-          disableRemoteFavicons: true,
           appBreakdown: buildBreakdown((segment) => matchesProject(segment, item.key)),
         });
       }
@@ -281,7 +279,6 @@ export function WeeklyCategoryRow({
           shareLabel: `${Math.round((entry.totalSeconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: `category-dot--${entry.category}`,
           color: CATEGORY_COLORS[entry.category],
-          disableRemoteFavicons: true,
           appBreakdown: buildBreakdown((segment) => classifyActivity(segment, classificationOptions).category === entry.category),
         });
       }
@@ -516,7 +513,6 @@ export function AttentionRhythmCard({
       shareLabel: `${Math.round((cellSeconds / Math.max(totalSeconds, 1)) * 100)}%`,
       dotClassName: `productivity-dot--${cell.state}`,
       color: PRODUCTIVITY_COLORS[cell.state],
-      disableRemoteFavicons: true,
       appBreakdown: buildCompactActivityBreakdown(matchingSegments),
       x,
       y,

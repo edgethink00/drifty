@@ -1,32 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useSiteIcon } from "./SiteIconContext";
 
-function faviconUrl(domain: string) {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
-}
-
+/**
+ * Renders a site icon from the local cache.
+ *
+ * The icon bytes are fetched and cached by the native layer, so this component
+ * only ever renders a `data:` URL, a caller-supplied app icon, or a lettered
+ * placeholder - it issues no network request of its own.
+ */
 export function SiteFavicon({
   domain,
   size = 20,
   fallbackIconSrc,
+  iconSrc: explicitIconSrc,
 }: {
   domain: string;
   size?: number;
   fallbackIconSrc?: string | null;
+  /**
+   * Pre-resolved icon for surfaces outside the main window, which have no
+   * site-icon context and cannot call the native command themselves. The
+   * drift alarm overlay receives its icons in the event payload.
+   */
+  iconSrc?: string | null;
 }) {
-  const [sourceIndex, setSourceIndex] = useState(0);
-  const sources = useMemo(() => {
-    const nextSources = [faviconUrl(domain)];
-    if (fallbackIconSrc) {
-      nextSources.push(fallbackIconSrc);
-    }
-    return nextSources;
-  }, [domain, fallbackIconSrc]);
+  const cachedIconSrc = useSiteIcon(domain);
+  const iconSrc = explicitIconSrc ?? cachedIconSrc ?? fallbackIconSrc ?? null;
 
-  useEffect(() => {
-    setSourceIndex(0);
-  }, [sources]);
-
-  if (sourceIndex >= sources.length) {
+  if (!iconSrc) {
     return (
       <div className="site-favicon site-favicon--fallback" style={{ width: size, height: size }} aria-hidden="true">
         {domain[0]?.toUpperCase() ?? "•"}
@@ -37,12 +37,11 @@ export function SiteFavicon({
   return (
     <img
       className="site-favicon"
-      src={sources[sourceIndex]}
+      src={iconSrc}
       alt=""
       width={size}
       height={size}
       loading="lazy"
-      onError={() => setSourceIndex((current) => current + 1)}
     />
   );
 }

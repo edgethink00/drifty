@@ -9,6 +9,7 @@ import {
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { useLocalization } from "../localization/LocalizationContext";
+import { trackerClient } from "../../lib/api/trackerClient";
 
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
@@ -16,6 +17,12 @@ type PrivacySettingsSectionProps = {
   readonly databasePath?: string | null;
   readonly todaySessionCount?: number;
 };
+
+function formatReclaimedBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export function PrivacySettingsSection({
   onHistoryDeleted,
@@ -26,6 +33,21 @@ export function PrivacySettingsSection({
   const { t } = useLocalization();
   const [aiSettings, setAiSettings] = useState<AiPrivacyRequestSettings>(() => readAiPrivacyRequestSettings());
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [iconCacheClearing, setIconCacheClearing] = useState(false);
+  const [iconCacheCleared, setIconCacheCleared] = useState<string | null>(null);
+
+  async function handleClearIconCache() {
+    setIconCacheClearing(true);
+    try {
+      const { reclaimedBytes } = await trackerClient.clearIconCaches();
+      setIconCacheCleared(formatReclaimedBytes(reclaimedBytes));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      console.warn("Failed to clear the icon cache.", message);
+    } finally {
+      setIconCacheClearing(false);
+    }
+  }
 
   useEffect(() => {
     const syncSettings = () => setAiSettings(readAiPrivacyRequestSettings());
@@ -85,6 +107,25 @@ export function PrivacySettingsSection({
             <div className="lbl">{t("settings.data.sessions")}</div>
           </div>
           <div className="ctrl ctrl--value">{t("settings.data.sessionsToday", { count: todaySessionCount })}</div>
+        </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">{t("settings.data.iconCache")}</div>
+            <div className="desc">{t("settings.data.iconCacheDescription")}</div>
+          </div>
+          <div className="ctrl">
+            <button
+              className="settings-btn"
+              type="button"
+              disabled={iconCacheClearing}
+              onClick={() => void handleClearIconCache()}
+            >
+              {iconCacheClearing ? t("settings.data.iconCacheClearing") : t("settings.data.iconCacheAction")}
+            </button>
+            {iconCacheCleared !== null ? (
+              <span className="chip green">{t("settings.data.iconCacheCleared", { size: iconCacheCleared })}</span>
+            ) : null}
+          </div>
         </div>
       </div>
       <div className="settings-block">

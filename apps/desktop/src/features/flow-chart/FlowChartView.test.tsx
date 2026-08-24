@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
+import { SiteIconProvider } from "../../components/SiteIconContext";
 import { readAppStyles } from "../../test/readStyles";
 
 const styles = readAppStyles();
@@ -325,7 +326,11 @@ describe("FlowChartView", () => {
       durationSeconds: 300,
     };
 
-    render(<FlowChartView blocks={[block]} appIcons={{ "com.google.Chrome": "data:image/png;base64,chrome" }} intervalMinutes={5} />);
+    render(
+      <SiteIconProvider value={{ "instagram.com": "data:image/png;base64,instagram" }}>
+        <FlowChartView blocks={[block]} appIcons={{ "com.google.Chrome": "data:image/png;base64,chrome" }} intervalMinutes={5} />
+      </SiteIconProvider>,
+    );
 
     const cell = screen.getByRole("button", { name: /instagram\.com/i });
     expect(cell.getAttribute("aria-label")).not.toContain("Google Chrome");
@@ -396,7 +401,11 @@ describe("FlowChartView", () => {
       durationSeconds: 300,
     };
 
-    render(<FlowChartView blocks={[block]} appIcons={{ "com.google.Chrome": "data:image/png;base64,chrome" }} intervalMinutes={5} />);
+    render(
+      <SiteIconProvider value={{ "instagram.com": "data:image/png;base64,instagram" }}>
+        <FlowChartView blocks={[block]} appIcons={{ "com.google.Chrome": "data:image/png;base64,chrome" }} intervalMinutes={5} />
+      </SiteIconProvider>,
+    );
 
     fireEvent.mouseEnter(screen.getByLabelText("Social media"), { clientX: 220, clientY: 90 });
     const categoryHover = document.querySelector(".category-hover-card") as HTMLElement;
@@ -404,7 +413,7 @@ describe("FlowChartView", () => {
     expect(categoryHover).toBeTruthy();
     expect(categoryHover.textContent).toContain("instagram.com");
     expect(categoryHover.textContent).not.toContain("Google Chrome");
-    expect(categoryHover.querySelector("img.site-favicon")?.getAttribute("src")).toBe("https://www.google.com/s2/favicons?domain=instagram.com&sz=64");
+    expect(categoryHover.querySelector("img.site-favicon")?.getAttribute("src")).toBe("data:image/png;base64,instagram");
   });
 
   it("moves legend hover cards with the pointer", () => {

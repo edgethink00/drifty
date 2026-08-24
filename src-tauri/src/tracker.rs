@@ -16,6 +16,7 @@ use tauri::{AppHandle, Manager};
 use thiserror::Error;
 
 use crate::app_icons::{app_identity_key, resolve_app_icon_data};
+use crate::site_icons::resolve_site_icons_batch;
 mod mutation;
 mod query;
 
@@ -530,6 +531,18 @@ impl TrackerController {
             let key = app_identity_key(identity);
             let icon = resolve_app_icon_data(app, identity)?;
             icons.insert(key, icon.map(Value::String).unwrap_or(Value::Null));
+        }
+        Ok(Value::Object(icons))
+    }
+
+    pub fn get_site_icons(
+        &self,
+        app: &AppHandle,
+        domains: &[String],
+    ) -> Result<Value, TrackerError> {
+        let mut icons = serde_json::Map::new();
+        for (domain, icon) in resolve_site_icons_batch(app, domains)? {
+            icons.insert(domain, icon.map(Value::String).unwrap_or(Value::Null));
         }
         Ok(Value::Object(icons))
     }

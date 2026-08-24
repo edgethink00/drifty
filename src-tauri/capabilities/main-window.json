@@ -59,6 +59,8 @@
     "allow-tracker-get-raw-events",
     "allow-tracker-get-top-sites",
     "allow-tracker-get-app-icons",
+    "allow-tracker-get-site-icons",
+    "allow-tracker-clear-icon-caches",
     "allow-tracker-get-unclassified-segments",
     "allow-tracker-get-reusable-ai-classifications",
     "allow-tracker-get-classification-rules",

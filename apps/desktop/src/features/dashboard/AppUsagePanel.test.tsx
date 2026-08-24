@@ -2,6 +2,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AppUsagePanel } from "./AppUsagePanel";
+import { SiteIconProvider } from "../../components/SiteIconContext";
 
 describe("AppUsagePanel", () => {
   it("renders ranked app usage details", () => {
@@ -89,35 +90,37 @@ describe("AppUsagePanel", () => {
 
   it("renders site usage with browser context", () => {
     render(
-      <AppUsagePanel
-        periodLabel="today"
-        totalSeconds={3600}
-        appIcons={{ "com.google.Chrome": "data:image/png;base64,chrome" }}
-        items={[
-          {
-            rank: 1,
-            appName: "github.com",
-            bundleId: null,
-            usageKind: "site",
-            siteDomain: "github.com",
-            siteTitle: "GitHub",
-            browserName: "Chrome",
-            totalSeconds: 2400,
-            sessionCount: 2,
-            activeDays: 1,
-            averageSessionSeconds: 1200,
-            shareOfTotal: 2 / 3,
-            firstStartedAt: "2026-04-06T09:00:00.000Z",
-            lastEndedAt: "2026-04-06T10:00:00.000Z",
-          },
-        ]}
-      />,
+      <SiteIconProvider value={{ "github.com": "data:image/png;base64,github" }}>
+        <AppUsagePanel
+          periodLabel="today"
+          totalSeconds={3600}
+          appIcons={{ "com.google.Chrome": "data:image/png;base64,chrome" }}
+          items={[
+            {
+              rank: 1,
+              appName: "github.com",
+              bundleId: null,
+              usageKind: "site",
+              siteDomain: "github.com",
+              siteTitle: "GitHub",
+              browserName: "Chrome",
+              totalSeconds: 2400,
+              sessionCount: 2,
+              activeDays: 1,
+              averageSessionSeconds: 1200,
+              shareOfTotal: 2 / 3,
+              firstStartedAt: "2026-04-06T09:00:00.000Z",
+              lastEndedAt: "2026-04-06T10:00:00.000Z",
+            },
+          ]}
+        />
+      </SiteIconProvider>,
     );
 
     expect(screen.getByText("Most used site")).toBeTruthy();
     expect(screen.getByLabelText("Most used site: github.com")).toBeTruthy();
     expect(screen.getByText("github.com")).toBeTruthy();
     expect(screen.getByText(/GitHub · via Chrome · Last used/)).toBeTruthy();
-    expect(screen.getByRole("presentation").getAttribute("src")).toBe("https://www.google.com/s2/favicons?domain=github.com&sz=64");
+    expect(screen.getByRole("presentation").getAttribute("src")).toBe("data:image/png;base64,github");
   });
 });

@@ -99,7 +99,10 @@ describe("previewData", () => {
     ]);
 
     expect(icons["com.microsoft.VSCode"]).toContain("visual-studio-code");
-    expect(icons.Figma).toContain("figma.com");
+    // Preview icons are bundled assets only; the webview no longer loads
+    // remote favicons, so an app without a bundled asset resolves to null and
+    // renders the lettered glyph.
+    expect(icons.Figma).toBeNull();
     expect(icons.Linear).toContain("linear");
   });
 
