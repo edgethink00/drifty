@@ -10,6 +10,7 @@ import type { TeamPeriod } from "./teamTypes";
 import { useTeamProjects, type TeamProjectsSubView } from "./useTeamProjects";
 import type { UseTeamControllerResult } from "./useTeamController";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
+import { DateNavigator } from "../../components/DateNavigator";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import "./team.css";
 
@@ -236,34 +237,20 @@ export function TeamWorkspace({
                 </button>
               ))}
             </div>
-            <div className="day-nav" aria-label="Dashboard time window">
-              <div className="day-nav__current"><strong>{windowLabel}</strong></div>
-              <button
-                className="app-btn app-btn--quiet app-btn--compact day-nav__step"
-                type="button"
-                aria-label="Previous window"
-                onClick={() => setWindowOffset((offset) => offset + 1)}
-              >
-                &lsaquo;
-              </button>
-              <button
-                className="app-btn app-btn--quiet app-btn--compact day-nav__today"
-                type="button"
-                disabled={atLatestWindow}
-                onClick={() => setWindowOffset(0)}
-              >
-                Latest
-              </button>
-              <button
-                className="app-btn app-btn--quiet app-btn--compact day-nav__step"
-                type="button"
-                aria-label="Next window"
-                disabled={atLatestWindow}
-                onClick={() => setWindowOffset((offset) => Math.max(0, offset - 1))}
-              >
-                &rsaquo;
-              </button>
-            </div>
+            {/* Shared with Dashboard/Trends/Projects/Classification so the step
+                controls cannot drift from the rest of the app again. */}
+            <DateNavigator
+              ariaLabel="Dashboard time window"
+              label={windowLabel}
+              todayLabel="Latest"
+              isTodayDisabled={atLatestWindow}
+              isNextDisabled={atLatestWindow}
+              onPrevious={() => setWindowOffset((offset) => offset + 1)}
+              onNext={() => setWindowOffset((offset) => Math.max(0, offset - 1))}
+              onToday={() => setWindowOffset(0)}
+              previousLabel="Previous window"
+              nextLabel="Next window"
+            />
           </div>
         ) : null}
       </div>

@@ -1261,15 +1261,10 @@
   letter-spacing: -0.03em;
 }
 
-.day-nav__step, .day-nav__today {
-  padding: 0.38rem 0.52rem;
-  border-radius: 999px;
-}
-
-.day-nav__step, .day-nav__today {
-  border-color: transparent;
-  color: var(--text-soft);
-}
+/* Step and Latest button chrome (padding, radius, quiet border/colour) comes
+   from the app button contract in `app-buttons.css`, which is imported last
+   and therefore wins at equal specificity. The padding and quiet-colour rules
+   that used to sit here never rendered. */
 
 .app-status-notice {
   --app-status-tone: var(--accent);

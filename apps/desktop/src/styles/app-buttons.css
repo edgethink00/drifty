@@ -102,6 +102,31 @@
   font-size: 0.75rem;
 }
 
+/* Directional chevron for step controls. Inherits the shared `.app-btn > svg`
+   14px box above; this rule only supplies the stroke rendering and the
+   left-facing rotation. Stroke weight is deliberately independent of
+   `font-weight` so a step control can read as solidly as its text sibling
+   without growing. */
+.nav-chevron {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nav-chevron[data-direction="left"] {
+  transform: rotate(180deg);
+}
+
+/* A step control carries no label, so the quiet rank's `--text-soft` left the
+   mark noticeably fainter than the `Latest` button beside it. One step up to
+   `--text-muted` restores parity without a size increase; `:disabled` still
+   fades through the shared `.app-btn:disabled` opacity. */
+.day-nav__step {
+  color: var(--text-muted);
+}
+
 /* Page-header actions. A `.pg-head` action is a primary target in its row, so it
    keeps the default 2rem height rather than shrinking to the 1.75rem date-nav
    size. Declaring it here keeps every header action on one measurement instead

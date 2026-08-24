@@ -516,25 +516,12 @@
   gap: 6px;
   flex-wrap: wrap;
 }
-.day-nav__step,
-.day-nav__today {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-weight: 700;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.day-nav__step:hover,
-.day-nav__today:hover:not(:disabled) {
-  background: var(--surface);
-  color: var(--text);
-}
-.day-nav__today:disabled { opacity: 0.4; cursor: not-allowed; }
+/* The prototype's own mono/bordered step-button styling used to live here. It
+   was already dead: `app-buttons.css` is imported last in `styles.css` and
+   matches at the same specificity, so `.app-btn--quiet.app-btn--compact` won
+   every declaration. Keeping it only invited edits against rules that never
+   render. Step and Latest buttons now read entirely from the app button
+   contract. */
 .day-nav__current {
   display: flex;
   flex-direction: column;
