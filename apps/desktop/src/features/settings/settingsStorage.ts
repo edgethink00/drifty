@@ -1,5 +1,5 @@
 import type { AppThemeColorKey, ColorOption } from "./SettingsColorControls";
-import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel, TrayIconStyle } from "@drifty/domain";
+import type { ActivityCategory, AdaptiveContextSourceFamily, ProductivityLabel } from "@drifty/domain";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 
 export type ThemeMode = "light" | "dark";
@@ -11,8 +11,6 @@ export type CategoryColorOverrides = Partial<Record<ActivityCategory, string>>;
 export type AppThemeColorOverrides = Partial<Record<AppThemeColorKey, string>>;
 
 export const THEME_STORAGE_KEY = "drifty.theme";
-
-export const MENU_BAR_ICON_STYLE_STORAGE_KEY = "drifty.appearance.menuBarIconStyle";
 
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 
@@ -240,19 +238,8 @@ export function productivityControlColor(productivity: ProductivityLabel, overri
 
 export const DEFAULT_THEME: ThemeMode = "light";
 
-export const DEFAULT_MENU_BAR_ICON_STYLE: TrayIconStyle = "compact";
-
-export const MENU_BAR_ICON_STYLE_OPTIONS = [
-  { value: "compact", label: "Ring only" },
-  { value: "expanded", label: "Logo + ring" },
-] satisfies ReadonlyArray<{ readonly value: TrayIconStyle; readonly label: string }>;
-
 export function isHexColor(value: string): boolean {
   return HEX_COLOR_PATTERN.test(value);
-}
-
-export function isMenuBarIconStyle(value: string | null): value is TrayIconStyle {
-  return MENU_BAR_ICON_STYLE_OPTIONS.some((option) => option.value === value);
 }
 
 export function snapStartOfDayMinutes(minutes: number): number {
@@ -386,12 +373,6 @@ export function resolveInitialTheme(): ThemeMode {
   if (saved === "light" || saved === "dark") { applyThemeToDocument(saved); return saved; }
   applyThemeToDocument(DEFAULT_THEME);
   return DEFAULT_THEME;
-}
-
-export function resolveInitialMenuBarIconStyle(): TrayIconStyle {
-  if (typeof window === "undefined") return DEFAULT_MENU_BAR_ICON_STYLE;
-  const saved = window.localStorage.getItem(MENU_BAR_ICON_STYLE_STORAGE_KEY);
-  return isMenuBarIconStyle(saved) ? saved : DEFAULT_MENU_BAR_ICON_STYLE;
 }
 
 export function resolveInitialSidebarCollapsed(): boolean {

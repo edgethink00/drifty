@@ -2,11 +2,7 @@ import { Toggle } from "../../components/Toggle";
 import { DRIFT_ALERT_DELAY_OPTIONS, driftAlertDelaySecondsFromValue, driftAlertDelayValueFromSeconds, type DriftAlertDelaySeconds } from "../companion/driftAlarmData";
 import type { DriftAlarmCopySettingsValue } from "../companion/driftAlarmCopy";
 import { DriftAlarmCopySettings } from "../companion/DriftAlarmCopySettings";
-import {
-  COMPANION_MENU_BAR_DISPLAY_OPTIONS,
-  type CompanionResidentPreference,
-} from "../companion/companionPillSettings";
-import type { TrayDisplayMode } from "@drifty/domain";
+import type { CompanionResidentPreference } from "../companion/companionPillSettings";
 import { SettingsSelect } from "./SettingsSelect";
 import { PetSettings } from "./PetCoatPicker";
 import type { PetModeCoat, PetModeSize } from "../pet-mode/petModeData";
@@ -16,7 +12,6 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 type NotificationsSettingsSectionProps = {
   readonly companionHiddenUntil: number | null;
   readonly companionSurfacePolicy: CompanionResidentPreference;
-  readonly companionMenuBarDisplayMode: TrayDisplayMode;
   readonly driftAlertDelaySeconds: DriftAlertDelaySeconds;
   readonly driftAlertsEnabled: boolean;
   readonly driftAlarmCopy: DriftAlarmCopySettingsValue;
@@ -28,7 +23,6 @@ type NotificationsSettingsSectionProps = {
   readonly onHideCompanionForOneHour: () => void;
   readonly onShowCompanionNow: () => void;
   readonly onCompanionSurfacePolicyChange: (policy: CompanionResidentPreference) => void;
-  readonly onCompanionMenuBarDisplayModeChange: (mode: TrayDisplayMode) => void;
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
   readonly petModeSize: PetModeSize;
@@ -41,7 +35,6 @@ type NotificationsSettingsSectionProps = {
 export function NotificationsSettingsSection({
   companionHiddenUntil,
   companionSurfacePolicy,
-  companionMenuBarDisplayMode,
   driftAlertDelaySeconds,
   driftAlertsEnabled,
   driftAlarmCopy,
@@ -53,7 +46,6 @@ export function NotificationsSettingsSection({
   onHideCompanionForOneHour,
   onShowCompanionNow,
   onCompanionSurfacePolicyChange,
-  onCompanionMenuBarDisplayModeChange,
   petModeEnabled,
   petModeCoat,
   petModeSize,
@@ -96,36 +88,6 @@ export function NotificationsSettingsSection({
           </div>
         ) : <>
           <div className="settings-row">
-            <div>
-              <div className="lbl">{t("settings.companion.menuBarDisplay")}</div>
-              <div className="desc">{companionMenuBarDisplayMode === "focusTime"
-                ? t("settings.companion.focusTimeDescription")
-                : companionMenuBarDisplayMode === "donutFocusTime"
-                  ? t("settings.companion.donutFocusTimeDescription")
-                  : t("settings.companion.donutDescription")}</div>
-            </div>
-            <div className="ctrl">
-              <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("settings.companion.menuBarDisplay")}>
-                {COMPANION_MENU_BAR_DISPLAY_OPTIONS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    className={`settings-mode-option${companionMenuBarDisplayMode === option.value ? " is-active" : ""}`}
-                    role="radio"
-                    aria-checked={companionMenuBarDisplayMode === option.value}
-                    onClick={() => onCompanionMenuBarDisplayModeChange(option.value)}
-                  >
-                    <span>{option.value === "focusTime"
-                      ? t("settings.companion.focusTime")
-                      : option.value === "donutFocusTime"
-                        ? t("settings.companion.donutFocusTime")
-                        : t("settings.companion.donut")}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        <div className="settings-row">
           <div>
             <div className="lbl">{t("settings.companion.temporaryHide")}</div>
             <div className="desc">

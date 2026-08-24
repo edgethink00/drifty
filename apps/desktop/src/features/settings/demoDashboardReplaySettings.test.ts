@@ -11,15 +11,12 @@ import {
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_SECONDS_STORAGE_KEY,
-  DEFAULT_MENU_BAR_ICON_STYLE,
   DEFAULT_START_OF_DAY_MINUTES,
-  MENU_BAR_ICON_STYLE_STORAGE_KEY,
   START_OF_DAY_STORAGE_KEY,
   clampDemoDashboardReplaySettings,
   persistDemoDashboardReplaySettings,
   resetDemoDashboardReplaySettings,
   resolveInitialDemoDashboardReplaySettings,
-  resolveInitialMenuBarIconStyle,
   resolveInitialStartOfDayMinutes,
 } from "./settingsStorage";
 
@@ -48,19 +45,6 @@ describe("settingsStorage existing behavior", () => {
     expect(malformedValue).toBe(DEFAULT_START_OF_DAY_MINUTES);
   });
 
-  it("resolves compact menu bar icon style by default and clamps malformed storage", () => {
-    window.localStorage.removeItem(MENU_BAR_ICON_STYLE_STORAGE_KEY);
-
-    expect(resolveInitialMenuBarIconStyle()).toBe(DEFAULT_MENU_BAR_ICON_STYLE);
-
-    window.localStorage.setItem(MENU_BAR_ICON_STYLE_STORAGE_KEY, "wide");
-
-    expect(resolveInitialMenuBarIconStyle()).toBe(DEFAULT_MENU_BAR_ICON_STYLE);
-
-    window.localStorage.setItem(MENU_BAR_ICON_STYLE_STORAGE_KEY, "expanded");
-
-    expect(resolveInitialMenuBarIconStyle()).toBe("expanded");
-  });
 });
 
 describe("demo dashboard replay settings", () => {

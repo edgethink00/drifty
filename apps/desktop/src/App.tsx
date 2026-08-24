@@ -1,7 +1,7 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, TrayDisplayMode } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocks,
@@ -140,10 +140,8 @@ import {
 import {
   COMPANION_HIDE_ONE_HOUR_MS,
   persistCompanionHiddenUntil,
-  persistCompanionMenuBarDisplayMode,
   persistCompanionSurfacePolicy,
   resolveInitialCompanionHiddenUntil,
-  resolveInitialCompanionMenuBarDisplayMode,
   resolveInitialCompanionSurfacePolicy,
   resolveEffectiveCompanionSurfacePolicy,
   type CompanionResidentPreference,
@@ -291,7 +289,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialMenuBarIconStyle, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
@@ -557,7 +555,6 @@ export default function App() {
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
-  const [companionMenuBarDisplayMode, setCompanionMenuBarDisplayMode] = useState(resolveInitialCompanionMenuBarDisplayMode);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
   const floatingCompanionDevActive = isDevModeActive && floatingCompanionDevEnabled;
   const companionResidentEnabled = companionSurfacePolicy !== "off";
@@ -579,10 +576,6 @@ export default function App() {
       return nextPolicy;
     });
     setCompanionHiddenUntil(persistCompanionHiddenUntil(null));
-  }, []);
-
-  const handleCompanionMenuBarDisplayModeChange = useCallback((mode: TrayDisplayMode) => {
-    setCompanionMenuBarDisplayMode(persistCompanionMenuBarDisplayMode(mode));
   }, []);
 
   const handleFloatingCompanionDevEnabledChange = useCallback((enabled: boolean) => {
@@ -628,13 +621,10 @@ export default function App() {
   }, [effectiveCompanionSurfacePolicy]);
 
   useEffect(() => {
-    const iconStyle = effectiveCompanionSurfacePolicy === "menuBar"
-      ? "compact"
-      : resolveInitialMenuBarIconStyle();
     const client = trackerClient as Partial<typeof trackerClient>;
     if (typeof client.updateTrayIconStyle !== "function") return;
-    void client.updateTrayIconStyle(iconStyle).catch(() => undefined);
-  }, [effectiveCompanionSurfacePolicy]);
+    void client.updateTrayIconStyle("compact").catch(() => undefined);
+  }, []);
   // Project classification is a Dev-mode preview control (opt-in, off by default):
   // the Dev-settings toggle is the sole gate, so it is available in any build —
   // including public/prerelease binaries — only after the user turns it on.
@@ -5191,16 +5181,11 @@ export default function App() {
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;
     if (typeof client.updateTrayDisplayMode !== "function") return;
-    const mode = effectiveCompanionSurfacePolicy === "menuBar"
-      ? companionMenuBarDisplayMode
-      : "donut";
-    void client.updateTrayDisplayMode(mode, companionTodaySnapshot.focusSecondsToday).catch((error: unknown) => {
+    void client.updateTrayDisplayMode("donut", companionTodaySnapshot.focusSecondsToday).catch((error: unknown) => {
       console.warn("Failed to update the menu bar Companion display", toErrorMessage(error));
     });
   }, [
     companionTodaySnapshot.focusSecondsToday,
-    companionMenuBarDisplayMode,
-    effectiveCompanionSurfacePolicy,
   ]);
 
   useCompanionDailyFocusMilestones({
@@ -7682,7 +7667,6 @@ export default function App() {
                     onPetModeCoatChange={setPetModeCoat}
                     onPetModeSizeChange={setPetModeSize}
                     companionSurfacePolicy={companionSurfacePolicy}
-                    companionMenuBarDisplayMode={companionMenuBarDisplayMode}
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
@@ -7694,7 +7678,6 @@ export default function App() {
                     onHideCompanionForOneHour={handleHideCompanionForOneHour}
                     onShowCompanionNow={handleShowCompanionNow}
                     onCompanionSurfacePolicyChange={handleCompanionSurfacePolicyChange}
-                    onCompanionMenuBarDisplayModeChange={handleCompanionMenuBarDisplayModeChange}
                   />
                 )}
                 {settingsSection === "privacy" && (

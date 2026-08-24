@@ -12,13 +12,11 @@ function renderSettings(
   const props = {
     companionHiddenUntil: null,
     companionSurfacePolicy: "menuBar" as const,
-    companionMenuBarDisplayMode: "focusTime" as const,
     driftAlertDelaySeconds: 60 as const,
     driftAlertsEnabled: true,
     driftAlarmCopy: buildDefaultDriftAlarmCopy(),
     extremeNudgeEnabled: false,
     onCompanionSurfacePolicyChange: vi.fn(),
-    onCompanionMenuBarDisplayModeChange: vi.fn(),
     onDriftAlertDelaySecondsChange: vi.fn(),
     onDriftAlarmCopyChange: vi.fn(),
     onDriftAlertsChange: vi.fn(),
@@ -48,7 +46,7 @@ describe("NotificationsSettingsSection", () => {
     const props = renderSettings();
 
     expect(screen.queryByRole("radiogroup", { name: "Companion placement" })).toBeNull();
-    expect(screen.getByRole("radiogroup", { name: "Menu bar display" })).toBeTruthy();
+    expect(screen.queryByRole("radiogroup", { name: "Menu bar display" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Hide for 1 hour" }));
     fireEvent.click(screen.getByRole("button", { name: "Off" }));
 
@@ -72,13 +70,6 @@ describe("NotificationsSettingsSection", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show in menu bar" }));
     expect(props.onCompanionSurfacePolicyChange).toHaveBeenCalledWith("menuBar");
-  });
-
-  it("changes the production menu-bar display", () => {
-    const props = renderSettings();
-    fireEvent.click(screen.getByRole("radio", { name: "Donut + focus time" }));
-
-    expect(props.onCompanionMenuBarDisplayModeChange).toHaveBeenCalledWith("donutFocusTime");
   });
 
 

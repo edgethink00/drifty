@@ -3,18 +3,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   COMPANION_HIDDEN_UNTIL_STORAGE_KEY,
   COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY,
-  COMPANION_MENU_BAR_DISPLAY_STORAGE_KEY,
   COMPANION_PILL_STORAGE_KEY,
   COMPANION_SURFACE_POLICY_STORAGE_KEY,
   LEGACY_COMPANION_PILL_STORAGE_KEY,
   persistCompanionHiddenUntil,
   persistCompanionDayReviewLayout,
-  persistCompanionMenuBarDisplayMode,
   persistCompanionPillEnabled,
   persistCompanionSurfacePolicy,
   resolveInitialCompanionHiddenUntil,
   resolveInitialCompanionDayReviewLayout,
-  resolveInitialCompanionMenuBarDisplayMode,
   resolveInitialCompanionPillEnabled,
   resolveInitialCompanionSurfacePolicy,
   resolveEffectiveCompanionSurfacePolicy,
@@ -25,30 +22,18 @@ describe("Companion visibility settings", () => {
     window.localStorage.removeItem(COMPANION_PILL_STORAGE_KEY);
     window.localStorage.removeItem(LEGACY_COMPANION_PILL_STORAGE_KEY);
     window.localStorage.removeItem(COMPANION_SURFACE_POLICY_STORAGE_KEY);
-    window.localStorage.removeItem(COMPANION_MENU_BAR_DISPLAY_STORAGE_KEY);
     window.localStorage.removeItem(COMPANION_HIDDEN_UNTIL_STORAGE_KEY);
     window.localStorage.removeItem(COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY);
   });
 
-  it("defaults to the donut menu-bar Companion and persists a permanent off choice", () => {
+  it("defaults to the menu-bar Companion and persists a permanent off choice", () => {
     expect(resolveInitialCompanionPillEnabled()).toBe(true);
     expect(resolveInitialCompanionSurfacePolicy()).toBe("menuBar");
-    // The donut is the only display narrow enough to survive a crowded menu
-    // bar; a titled display can be pushed off the right screen edge.
-    expect(resolveInitialCompanionMenuBarDisplayMode()).toBe("donut");
     expect(resolveInitialCompanionDayReviewLayout()).toBe("minimal");
 
     persistCompanionPillEnabled(false);
     expect(resolveInitialCompanionPillEnabled()).toBe(false);
     expect(resolveInitialCompanionSurfacePolicy()).toBe("off");
-  });
-
-  it("keeps the timed menu-bar displays available as explicit choices", () => {
-    persistCompanionMenuBarDisplayMode("focusTime");
-    expect(resolveInitialCompanionMenuBarDisplayMode()).toBe("focusTime");
-
-    persistCompanionMenuBarDisplayMode("donutFocusTime");
-    expect(resolveInitialCompanionMenuBarDisplayMode()).toBe("donutFocusTime");
   });
 
   it("preserves the choice from the earlier Dev setting", () => {
@@ -66,10 +51,8 @@ describe("Companion visibility settings", () => {
 
   it("migrates a stored Floating choice to the production menu bar", () => {
     window.localStorage.setItem(COMPANION_SURFACE_POLICY_STORAGE_KEY, "floating");
-    persistCompanionMenuBarDisplayMode("donutFocusTime");
 
     expect(resolveInitialCompanionSurfacePolicy()).toBe("menuBar");
-    expect(resolveInitialCompanionMenuBarDisplayMode()).toBe("donutFocusTime");
   });
 
   it("persists the selected Day review layout", () => {

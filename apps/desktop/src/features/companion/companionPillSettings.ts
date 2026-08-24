@@ -1,11 +1,9 @@
-import type { TrayDisplayMode } from "@drifty/domain";
 import type { CompanionDayReviewLayout } from "./companionPillLayout";
 
 /** Persistent visibility for the resident Companion. */
 export const COMPANION_PILL_STORAGE_KEY = "drifty.companion.enabled.v1";
 export const LEGACY_COMPANION_PILL_STORAGE_KEY = "drifty.dev.companionPillEnabled";
 export const COMPANION_SURFACE_POLICY_STORAGE_KEY = "drifty.companion.surfacePolicy.v1";
-export const COMPANION_MENU_BAR_DISPLAY_STORAGE_KEY = "drifty.companion.menuBarDisplay.v1";
 export const COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY = "drifty.dev.companion.dayReviewLayout.v1";
 
 /** Stored user preference for the production resident Companion. */
@@ -14,26 +12,8 @@ export type CompanionResidentPreference = "menuBar" | "off";
 export type CompanionSurfacePolicy = "floating" | CompanionResidentPreference;
 
 export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionResidentPreference = "menuBar";
-/**
- * The donut is the default because it is the only display that always fits.
- * A `focusTime` title renders as `"7:39 focused"` and measured 134px wide in
- * the menu bar — wider than any other resident item — so on a busy menu bar
- * macOS pushes Drifty past the right screen edge and the icon silently
- * disappears. The 18px donut leaves that budget intact; the timed displays
- * stay available as explicit opt-in choices.
- */
-export const COMPANION_MENU_BAR_DISPLAY_DEFAULT: TrayDisplayMode = "donut";
 export const COMPANION_DAY_REVIEW_LAYOUT_DEFAULT: CompanionDayReviewLayout = "minimal";
 export const COMPANION_PILL_DEFAULT_ENABLED = true;
-
-export const COMPANION_MENU_BAR_DISPLAY_OPTIONS: ReadonlyArray<{
-  readonly value: TrayDisplayMode;
-  readonly label: string;
-}> = [
-  { value: "donut", label: "Donut" },
-  { value: "focusTime", label: "Focus time" },
-  { value: "donutFocusTime", label: "Donut + focus time" },
-];
 
 /** A timestamp keeps a temporary hide reliable across an app restart. */
 export const COMPANION_HIDDEN_UNTIL_STORAGE_KEY = "drifty.companion.hiddenUntil.v1";
@@ -89,28 +69,6 @@ export function resolveEffectiveCompanionSurfacePolicy(
   if (temporarilyHidden) return "off";
   if (floatingDevActive) return "floating";
   return preference;
-}
-
-export function resolveInitialCompanionMenuBarDisplayMode(): TrayDisplayMode {
-  if (typeof window === "undefined") return COMPANION_MENU_BAR_DISPLAY_DEFAULT;
-  try {
-    const stored = window.localStorage.getItem(COMPANION_MENU_BAR_DISPLAY_STORAGE_KEY);
-    return stored === "donut" || stored === "focusTime" || stored === "donutFocusTime"
-      ? stored
-      : COMPANION_MENU_BAR_DISPLAY_DEFAULT;
-  } catch {
-    return COMPANION_MENU_BAR_DISPLAY_DEFAULT;
-  }
-}
-
-export function persistCompanionMenuBarDisplayMode(mode: TrayDisplayMode): TrayDisplayMode {
-  if (typeof window === "undefined") return mode;
-  try {
-    window.localStorage.setItem(COMPANION_MENU_BAR_DISPLAY_STORAGE_KEY, mode);
-  } catch {
-    // Runtime state still changes when storage is unavailable.
-  }
-  return mode;
 }
 
 export function resolveInitialCompanionDayReviewLayout(): CompanionDayReviewLayout {

@@ -18,9 +18,8 @@ pub enum TrayIconStyle {
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum TrayDisplayMode {
-    /// Keep this default aligned with `COMPANION_MENU_BAR_DISPLAY_DEFAULT` in
-    /// `companionPillSettings.ts`. The donut is the only display narrow enough
-    /// to always survive a crowded menu bar.
+    /// Keep this default aligned with the production compact ring. The donut is
+    /// the only display narrow enough to always survive a crowded menu bar.
     #[default]
     Donut,
     FocusTime,
