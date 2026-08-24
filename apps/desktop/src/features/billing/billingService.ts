@@ -17,6 +17,29 @@ export type BillingResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
+export type CouponRedemption = {
+  readonly status: "redeemed" | "already_redeemed";
+  readonly grantedDays: number;
+  readonly trialEndsAt: string;
+  readonly redeemedAt: string;
+};
+
+export type CouponRedemptionFailureCode =
+  | "coupon_invalid"
+  | "coupon_inactive"
+  | "coupon_not_started"
+  | "coupon_expired"
+  | "coupon_exhausted"
+  | "coupon_rate_limited"
+  | "coupon_already_subscribed"
+  | "full_account_required"
+  | "sign_in_required"
+  | "coupon_unavailable";
+
+export type CouponRedemptionResult =
+  | { readonly success: true; readonly data: CouponRedemption }
+  | { readonly success: false; readonly code: CouponRedemptionFailureCode; readonly error: string };
+
 export type BillingInterval = "monthly" | "quarterly" | "yearly";
 
 type BillingEntitlementResponse = {
@@ -38,8 +61,16 @@ type BillingPortalResponse = {
   error?: string;
 };
 
+type CouponRedemptionResponse = {
+  readonly redemption?: unknown;
+  readonly code?: unknown;
+  readonly error?: unknown;
+};
+
 type BillingFunctionInvokeOptions = {
   readonly body?: unknown;
+  readonly signal?: AbortSignal;
+  readonly timeout?: number;
 };
 
 type BillingFunctionInvoker = {
@@ -51,6 +82,10 @@ type BillingClient = {
 } | null;
 
 const GENERIC_BILLING_ERROR = "Unable to check billing status.";
+// The Edge path has independent 8-second auth and RPC budgets. Keep the
+// desktop budget above their combined ceiling so a successful database commit
+// is not routinely reported as a client timeout.
+export const COUPON_REDEMPTION_TIMEOUT_MS = 20_000;
 
 export async function fetchBillingEntitlement(client: BillingClient = supabase): Promise<BillingResult<BillingEntitlement>> {
   if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
@@ -112,23 +147,100 @@ export async function createBillingPortalSession(client: BillingClient = supabas
   }
 }
 
+export async function redeemTrialCoupon(
+  code: string,
+  client: BillingClient = supabase,
+): Promise<CouponRedemptionResult> {
+  if (!client) {
+    return {
+      success: false,
+      code: "coupon_unavailable",
+      error: "Trial code redemption is unavailable because Supabase is not configured.",
+    };
+  }
+
+  try {
+    const { data, error } = await invokeCouponWithTimeout(client, code);
+
+    if (error) return readCouponFunctionFailure(error);
+    if (isRecord(data) && typeof data.error === "string") {
+      return {
+        success: false,
+        code: readCouponFailureCode(data.code),
+        error: data.error,
+      };
+    }
+    const redemption = readCouponRedemption(data?.redemption);
+    return redemption
+      ? { success: true, data: redemption }
+      : {
+        success: false,
+        code: "coupon_unavailable",
+        error: "Trial code redemption returned an invalid response.",
+      };
+  } catch (error) {
+    return {
+      success: false,
+      code: "coupon_unavailable",
+      error: error instanceof Error && error.message ? error.message : "Unable to redeem the trial code.",
+    };
+  }
+}
+
+async function invokeCouponWithTimeout(
+  client: NonNullable<BillingClient>,
+  code: string,
+): Promise<{ readonly data: CouponRedemptionResponse | null; readonly error: unknown }> {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      reject(new Error("Trial code redemption timed out."));
+    }, COUPON_REDEMPTION_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([
+      client.functions.invoke<CouponRedemptionResponse>("redeem-coupon", {
+        body: { code },
+        signal: controller.signal,
+        timeout: COUPON_REDEMPTION_TIMEOUT_MS,
+      }),
+      timeout,
+    ]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
+
 type JsonResponseLike = {
   readonly json: () => Promise<unknown>;
 };
 
 async function readFunctionError(error: unknown, fallback: string): Promise<string> {
-  if (!isRecord(error)) return fallback;
+  const body = await readFunctionErrorBody(error);
+  return readErrorMessage(body) ?? fallback;
+}
+
+async function readCouponFunctionFailure(error: unknown): Promise<CouponRedemptionResult> {
+  const body = await readFunctionErrorBody(error);
+  return {
+    success: false,
+    code: isRecord(body) ? readCouponFailureCode(body.code) : "coupon_unavailable",
+    error: readErrorMessage(body) ?? "Unable to redeem the trial code.",
+  };
+}
+
+async function readFunctionErrorBody(error: unknown): Promise<unknown> {
+  if (!isRecord(error)) return null;
   const context = error.context;
-  if (!isJsonResponseLike(context)) return fallback;
+  if (!isJsonResponseLike(context)) return null;
   try {
-    const body = await context.json();
-    const message = readErrorMessage(body);
-    if (message) return message;
-  } catch (nextError) {
-    if (nextError instanceof Error) return fallback;
-    return fallback;
+    return await context.json();
+  } catch {
+    return null;
   }
-  return fallback;
 }
 
 function readBillingPortalUrl(data: BillingPortalResponse | null): string | null {
@@ -140,6 +252,43 @@ function readBillingPortalUrl(data: BillingPortalResponse | null): string | null
 function readErrorMessage(body: unknown): string | null {
   if (!isRecord(body)) return null;
   return readNonEmptyString(body.error);
+}
+
+function readCouponFailureCode(value: unknown): CouponRedemptionFailureCode {
+  switch (value) {
+    case "coupon_invalid":
+    case "coupon_inactive":
+    case "coupon_not_started":
+    case "coupon_expired":
+    case "coupon_exhausted":
+    case "coupon_rate_limited":
+    case "coupon_already_subscribed":
+    case "full_account_required":
+    case "sign_in_required":
+    case "coupon_unavailable":
+      return value;
+    default:
+      return "coupon_unavailable";
+  }
+}
+
+function readCouponRedemption(value: unknown): CouponRedemption | null {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  const grantedDays = value.grantedDays;
+  const trialEndsAt = value.trialEndsAt;
+  const redeemedAt = value.redeemedAt;
+  if ((status !== "redeemed" && status !== "already_redeemed")
+    || typeof grantedDays !== "number"
+    || !Number.isInteger(grantedDays)
+    || grantedDays < 1
+    || typeof trialEndsAt !== "string"
+    || Number.isNaN(Date.parse(trialEndsAt))
+    || typeof redeemedAt !== "string"
+    || Number.isNaN(Date.parse(redeemedAt))) {
+    return null;
+  }
+  return { status, grantedDays, trialEndsAt, redeemedAt };
 }
 
 function isJsonResponseLike(value: unknown): value is JsonResponseLike {

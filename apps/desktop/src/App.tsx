@@ -1222,12 +1222,16 @@ export default function App() {
     billingEntitlementError,
     billingEntitlementLoading,
     billingPortalLoading,
+    couponRedemption,
+    couponRedemptionErrorCode,
+    couponRedemptionLoading,
     cloudDeviceActionError,
     cloudDeviceRevokingId,
     cloudDevices,
     cloudTrialStartedNotice,
     dismissCloudTrialStartedNotice,
     handleManageCloudBilling,
+    handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
     handleStartDriftyCloudSetup,
     openCloudTrialStartedNoticeAiSetup,
@@ -7516,6 +7520,9 @@ export default function App() {
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
                     billingPortalLoading={billingPortalLoading}
+                    couponRedemption={couponRedemption}
+                    couponRedemptionErrorCode={couponRedemptionErrorCode}
+                    couponRedemptionLoading={couponRedemptionLoading}
                     cloudDeviceAccess={effectiveBillingEntitlement?.deviceAccess ?? null}
                     cloudDeviceActionError={cloudDeviceActionError}
                     cloudDeviceRevokingId={cloudDeviceRevokingId}
@@ -7546,6 +7553,7 @@ export default function App() {
                           navigateToTab("leaderboard");
                         }}
 	                    onRefreshCloudStatus={refreshBillingEntitlement}
+                    onRedeemTrialCoupon={handleRedeemTrialCoupon}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
                     onSignIn={openDefaultAuthModal}
                     onStartCloudSetup={handleStartDriftyCloudSetup}

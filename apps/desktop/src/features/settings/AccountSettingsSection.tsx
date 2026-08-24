@@ -1,7 +1,13 @@
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { Toggle } from "../../components/Toggle";
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
-import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
+import { TrialCouponRedemption } from "./TrialCouponRedemption";
+import type {
+  BillingEntitlement,
+  BillingInterval,
+  CouponRedemption,
+  CouponRedemptionFailureCode,
+} from "../billing/billingService";
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
@@ -14,6 +20,9 @@ export type AccountSettingsSectionProps = {
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
   readonly billingPlansDisabled: boolean;
   readonly billingPortalLoading: boolean;
+  readonly couponRedemption: CouponRedemption | null;
+  readonly couponRedemptionErrorCode: CouponRedemptionFailureCode | null;
+  readonly couponRedemptionLoading: boolean;
   readonly cloudDeviceAccess: BillingEntitlement["deviceAccess"] | null;
   readonly cloudDeviceActionError: string | null;
   readonly cloudDeviceRevokingId: string | null;
@@ -36,6 +45,7 @@ export type AccountSettingsSectionProps = {
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onOpenLeaderboard?: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
+  readonly onRedeemTrialCoupon: (code: string) => void | Promise<void>;
   readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
   readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
@@ -54,6 +64,9 @@ export function AccountSettingsSection({
   billingEntitlementStatus,
   billingPlansDisabled,
   billingPortalLoading,
+  couponRedemption,
+  couponRedemptionErrorCode,
+  couponRedemptionLoading,
   cloudDeviceAccess,
   cloudDeviceActionError,
   cloudDeviceRevokingId,
@@ -76,6 +89,7 @@ export function AccountSettingsSection({
   onManageCloudBilling,
   onOpenLeaderboard,
   onRefreshCloudStatus,
+  onRedeemTrialCoupon,
   onRevokeCloudDevice,
   onSignIn,
   onStartCloudSetup,
@@ -163,6 +177,14 @@ export function AccountSettingsSection({
             <div className="desc">{cloudPlanLabel}</div>
           </div>
         </div>
+        <TrialCouponRedemption
+          disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
+          errorCode={couponRedemptionErrorCode}
+          isSignedIn={isSignedIn}
+          loading={couponRedemptionLoading}
+          redemption={couponRedemption}
+          onRedeem={onRedeemTrialCoupon}
+        />
         {shouldShowDeviceManagement ? (
           <div className="settings-row settings-row--cloud-devices">
             <CloudDeviceManagementPanel

@@ -27,6 +27,8 @@ const POSTHOG_BLOCKED_PROPERTY_KEYS = [
   "account_id",
   "supabase_user_id",
   "billing_customer_id",
+  "coupon_code",
+  "coupon_campaign",
   "profile_public_id",
   "display_name",
   "app_name",

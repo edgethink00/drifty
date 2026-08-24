@@ -5,8 +5,11 @@ import {
   createBillingPortalSession,
   createIndividualCheckout,
   fetchBillingEntitlement,
+  redeemTrialCoupon,
   type BillingEntitlement,
   type BillingInterval,
+  type CouponRedemption,
+  type CouponRedemptionFailureCode,
 } from "./billingService";
 import {
   claimCloudTrialStartedNotice,
@@ -32,12 +35,16 @@ type UseCloudBillingControllerResult = {
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLoading: boolean;
   readonly billingPortalLoading: boolean;
+  readonly couponRedemption: CouponRedemption | null;
+  readonly couponRedemptionErrorCode: CouponRedemptionFailureCode | null;
+  readonly couponRedemptionLoading: boolean;
   readonly cloudDeviceActionError: string | null;
   readonly cloudDeviceRevokingId: string | null;
   readonly cloudDevices: readonly CloudDeviceRecord[];
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
   readonly dismissCloudTrialStartedNotice: () => void;
   readonly handleManageCloudBilling: () => Promise<void>;
+  readonly handleRedeemTrialCoupon: (code: string) => Promise<void>;
   readonly handleRevokeCloudDevice: (deviceId: string) => Promise<void>;
   readonly handleStartDriftyCloudSetup: (billingInterval?: BillingInterval) => Promise<void>;
   readonly openCloudTrialStartedNoticeAiSetup: () => void;
@@ -74,10 +81,14 @@ export function useCloudBillingController({
   const [billingActionError, setBillingActionError] = useState<string | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
+  const [couponRedemption, setCouponRedemption] = useState<CouponRedemption | null>(null);
+  const [couponRedemptionErrorCode, setCouponRedemptionErrorCode] = useState<CouponRedemptionFailureCode | null>(null);
+  const [couponRedemptionLoading, setCouponRedemptionLoading] = useState(false);
   const [cloudDeviceActionError, setCloudDeviceActionError] = useState<string | null>(null);
   const [cloudDeviceRevokingId, setCloudDeviceRevokingId] = useState<string | null>(null);
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const billingEntitlementRequestRef = useRef(0);
+  const couponRedemptionRequestRef = useRef(0);
 
   const refreshBillingEntitlement = useCallback(async (): Promise<BillingEntitlement | null> => {
     if (!shouldCheckBillingEntitlement) {
@@ -93,9 +104,23 @@ export function useCloudBillingController({
     setBillingEntitlementLoading(true);
     setBillingEntitlementError(null);
     setCloudDeviceActionError(null);
-    const result = await fetchBillingEntitlementWithConfirmation(
-      () => requestId === billingEntitlementRequestRef.current,
-    );
+    let result: Awaited<ReturnType<typeof fetchBillingEntitlement>>;
+    try {
+      result = await fetchBillingEntitlementWithConfirmation(
+        () => requestId === billingEntitlementRequestRef.current,
+      );
+    } catch (error) {
+      if (requestId !== billingEntitlementRequestRef.current) return null;
+      const message = toErrorMessage(error);
+      setBillingEntitlementError(message);
+      setBillingEntitlementLoading(false);
+      capturePostHogEvent("billing_action", {
+        action: "entitlement_check",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+      return null;
+    }
     if (requestId !== billingEntitlementRequestRef.current) return null;
     if (result.success) {
       setBillingEntitlement(result.data);
@@ -172,7 +197,7 @@ export function useCloudBillingController({
     } finally {
       setBillingCheckoutLoadingInterval(null);
     }
-  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
+  }, [billingEntitlement, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
 
   const handleManageCloudBilling = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -234,6 +259,63 @@ export function useCloudBillingController({
       setBillingPortalLoading(false);
     }
   }, [billingEntitlement?.lockedReason, billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
+
+  const handleRedeemTrialCoupon = useCallback(async (code: string) => {
+    const requestId = ++couponRedemptionRequestRef.current;
+    setCouponRedemption(null);
+    setCouponRedemptionErrorCode(null);
+    if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
+      onAuthRequired();
+      setCouponRedemptionErrorCode("sign_in_required");
+      return;
+    }
+
+    setCouponRedemptionLoading(true);
+    try {
+      const result = await redeemTrialCoupon(code);
+      if (requestId !== couponRedemptionRequestRef.current) return;
+      if (!result.success) {
+        setCouponRedemptionErrorCode(result.code);
+        capturePostHogEvent("billing_action", {
+          action: "coupon_redeemed",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(result.code),
+        });
+        return;
+      }
+
+      const shouldApplyLocalGrant = couponRedemptionProvidesCurrentAccess(result.data)
+        && isCouponEntitlementOverlayEligible(billingEntitlement);
+      if (shouldApplyLocalGrant) {
+        setBillingEntitlement((current) => applyCouponEntitlementOverlay(current, result.data));
+      }
+      const refreshedEntitlement = await refreshBillingEntitlement();
+      if (requestId !== couponRedemptionRequestRef.current) return;
+      const grantConfirmed = entitlementConfirmsCouponGrant(refreshedEntitlement, result.data);
+      if (shouldApplyLocalGrant && !grantConfirmed) {
+        setBillingEntitlement((current) => applyCouponEntitlementOverlay(current, result.data));
+      }
+      setCouponRedemption(result.data);
+      capturePostHogEvent("billing_action", {
+        action: "coupon_redeemed",
+        result: "success",
+        entitlement_status: shouldApplyLocalGrant && !grantConfirmed
+          ? "trialing"
+          : refreshedEntitlement?.status
+          ?? (shouldApplyLocalGrant ? "trialing" : billingEntitlement?.status ?? "unknown"),
+      });
+    } catch (error) {
+      if (requestId !== couponRedemptionRequestRef.current) return;
+      setCouponRedemptionErrorCode("coupon_unavailable");
+      capturePostHogEvent("billing_action", {
+        action: "coupon_redeemed",
+        result: "error",
+        error_kind: toAnalyticsErrorKind(error),
+      });
+    } finally {
+      if (requestId === couponRedemptionRequestRef.current) setCouponRedemptionLoading(false);
+    }
+  }, [billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
 
   const dismissCloudTrialStartedNotice = useCallback(() => {
     setCloudTrialStartedNotice(null);
@@ -321,6 +403,13 @@ export function useCloudBillingController({
   }, [billingEntitlement, user?.id]);
 
   useEffect(() => {
+    couponRedemptionRequestRef.current += 1;
+    setCouponRedemption(null);
+    setCouponRedemptionErrorCode(null);
+    setCouponRedemptionLoading(false);
+  }, [user?.id]);
+
+  useEffect(() => {
     function handleBillingSuccess() {
       void refreshBillingEntitlement();
     }
@@ -336,12 +425,16 @@ export function useCloudBillingController({
     billingEntitlementError,
     billingEntitlementLoading,
     billingPortalLoading,
+    couponRedemption,
+    couponRedemptionErrorCode,
+    couponRedemptionLoading,
     cloudDeviceActionError,
     cloudDeviceRevokingId,
     cloudDevices: billingEntitlement?.cloudDevices ?? [],
     cloudTrialStartedNotice,
     dismissCloudTrialStartedNotice,
     handleManageCloudBilling,
+    handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
     handleStartDriftyCloudSetup,
     openCloudTrialStartedNoticeAiSetup,
@@ -358,4 +451,44 @@ async function openExternalUrl(url: string): Promise<void> {
     if (typeof window === "undefined") throw error;
     window.open(url, "_blank", "noopener,noreferrer");
   }
+}
+
+function applyCouponEntitlementOverlay(
+  current: BillingEntitlement | null,
+  redemption: CouponRedemption,
+): BillingEntitlement {
+  if (current && !isCouponEntitlementOverlayEligible(current)) return current;
+  return {
+    plan: "individual",
+    status: "trialing",
+    canUseApp: true,
+    trialEndsAt: redemption.trialEndsAt,
+    currentPeriodEnd: current?.currentPeriodEnd ?? null,
+    ...(current?.deviceAccess ? { deviceAccess: current.deviceAccess } : {}),
+    ...(current?.cloudDevices ? { cloudDevices: current.cloudDevices } : {}),
+  };
+}
+
+function couponRedemptionProvidesCurrentAccess(redemption: CouponRedemption): boolean {
+  const trialEnd = Date.parse(redemption.trialEndsAt);
+  return Number.isFinite(trialEnd) && trialEnd > Date.now();
+}
+
+function isCouponEntitlementOverlayEligible(entitlement: BillingEntitlement | null): boolean {
+  if (!entitlement) return true;
+  if (entitlement.status === "active") return false;
+  if (entitlement.lockedReason !== "payment_required" || !entitlement.currentPeriodEnd) return true;
+  const currentPeriodEnd = Date.parse(entitlement.currentPeriodEnd);
+  return !Number.isFinite(currentPeriodEnd) || currentPeriodEnd <= Date.now();
+}
+
+function entitlementConfirmsCouponGrant(
+  entitlement: BillingEntitlement | null,
+  redemption: CouponRedemption,
+): boolean {
+  if (entitlement?.status === "active") return true;
+  if (entitlement?.status !== "trialing" || !entitlement.trialEndsAt) return false;
+  const confirmedEnd = Date.parse(entitlement.trialEndsAt);
+  const grantedEnd = Date.parse(redemption.trialEndsAt);
+  return Number.isFinite(confirmedEnd) && Number.isFinite(grantedEnd) && confirmedEnd >= grantedEnd;
 }

@@ -30,6 +30,9 @@ describe("AccountSettingsSection", () => {
         billingEntitlementStatus="locked"
         billingPlansDisabled={false}
         billingPortalLoading={false}
+        couponRedemption={null}
+        couponRedemptionErrorCode={null}
+        couponRedemptionLoading={false}
         cloudDeviceAccess={{
           allowed: false,
           reason: "device_limit_reached",
@@ -72,6 +75,7 @@ describe("AccountSettingsSection", () => {
         userEmail="alex@example.com"
         onManageCloudBilling={vi.fn()}
         onRefreshCloudStatus={onRefreshCloudStatus}
+        onRedeemTrialCoupon={vi.fn()}
         onRevokeCloudDevice={onRevokeCloudDevice}
         onSignIn={vi.fn()}
         onStartCloudSetup={vi.fn()}
@@ -116,6 +120,9 @@ describe("AccountSettingsSection", () => {
       billingEntitlementStatus: null,
       billingPlansDisabled: false,
       billingPortalLoading: false,
+      couponRedemption: null,
+      couponRedemptionErrorCode: null,
+      couponRedemptionLoading: false,
       cloudDeviceAccess: null,
       cloudDeviceActionError: null,
       cloudDeviceRevokingId: null,
@@ -127,6 +134,7 @@ describe("AccountSettingsSection", () => {
       userEmail: null,
       onManageCloudBilling: vi.fn(),
       onRefreshCloudStatus: vi.fn(),
+      onRedeemTrialCoupon: vi.fn(),
       onRevokeCloudDevice: vi.fn(),
       onSignIn,
       onStartCloudSetup: vi.fn(),
@@ -141,6 +149,115 @@ describe("AccountSettingsSection", () => {
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 
+  it("normalizes and submits a trial code from Account settings", () => {
+    const onRedeemTrialCoupon = vi.fn();
+    const props: AccountSettingsSectionProps = {
+      billingCheckoutLoadingInterval: null,
+      billingEntitlementError: null,
+      billingEntitlementLockedReason: null,
+      billingEntitlementStatus: "trialing",
+      billingPlansDisabled: false,
+      billingPortalLoading: false,
+      couponRedemption: null,
+      couponRedemptionErrorCode: null,
+      couponRedemptionLoading: false,
+      cloudDeviceAccess: null,
+      cloudDeviceActionError: null,
+      cloudDeviceRevokingId: null,
+      cloudDevices: [],
+      cloudStatusRefreshing: false,
+      currentBillingPlan: "free",
+      isSupabaseConfigured: true,
+      shouldShowCloudCheckoutPlans: true,
+      userEmail: "alex@example.com",
+      onManageCloudBilling: vi.fn(),
+      onRefreshCloudStatus: vi.fn(),
+      onRedeemTrialCoupon,
+      onRevokeCloudDevice: vi.fn(),
+      onSignIn: vi.fn(),
+      onStartCloudSetup: vi.fn(),
+    };
+
+    const { rerender } = render(<AccountSettingsSection {...props} />);
+    const codeInput = screen.getByRole("textbox", { name: /Drifty trial code/i });
+
+    fireEvent.change(codeInput, { target: { value: " drft-test-2026 " } });
+    expect(screen.queryByText(/offline trial code/i)).toBeNull();
+    expect(screen.getByText("Trial code")).toBeTruthy();
+    expect(codeInput.getAttribute("placeholder")).toBe("DRFT-XXXX-XXXX");
+
+    fireEvent.click(screen.getByRole("button", { name: /^Apply code$/i }));
+
+    expect(onRedeemTrialCoupon).toHaveBeenCalledWith("DRFT-TEST-2026");
+
+    rerender(
+      <AccountSettingsSection
+        {...props}
+        couponRedemption={{
+          status: "redeemed",
+          grantedDays: 30,
+          trialEndsAt: "2026-10-01T00:00:00.000Z",
+          redeemedAt: "2026-08-24T00:00:00.000Z",
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("30 days added");
+
+    rerender(
+      <AccountSettingsSection
+        {...props}
+        couponRedemptionErrorCode="coupon_rate_limited"
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Try again in 15 minutes");
+    expect(codeInput.getAttribute("aria-invalid")).toBe("true");
+    expect(codeInput.getAttribute("aria-describedby")).toBe(alert.id);
+  });
+
+  it("keeps active subscription management visible beside an already-used coupon notice", () => {
+    const onManageCloudBilling = vi.fn();
+    render(
+      <AccountSettingsSection
+        billingCheckoutLoadingInterval={null}
+        billingEntitlementError={null}
+        billingEntitlementLockedReason={null}
+        billingEntitlementStatus="active"
+        billingPlansDisabled={false}
+        billingPortalLoading={false}
+        couponRedemption={{
+          status: "already_redeemed",
+          grantedDays: 30,
+          trialEndsAt: "2026-09-01T00:00:00.000Z",
+          redeemedAt: "2026-07-24T00:00:00.000Z",
+        }}
+        couponRedemptionErrorCode={null}
+        couponRedemptionLoading={false}
+        cloudDeviceAccess={null}
+        cloudDeviceActionError={null}
+        cloudDeviceRevokingId={null}
+        cloudDevices={[]}
+        cloudStatusRefreshing={false}
+        currentBillingPlan="individual"
+        isSupabaseConfigured={true}
+        shouldShowCloudCheckoutPlans={false}
+        userEmail="alex@example.com"
+        onManageCloudBilling={onManageCloudBilling}
+        onRefreshCloudStatus={vi.fn()}
+        onRedeemTrialCoupon={vi.fn()}
+        onRevokeCloudDevice={vi.fn()}
+        onSignIn={vi.fn()}
+        onStartCloudSetup={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("already used a trial code");
+    fireEvent.click(screen.getByRole("button", { name: /^Manage billing$/i }));
+    expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
+  });
+
   it("surfaces Cloud device access failures instead of presenting an empty device list", () => {
     render(
       <AccountSettingsSection
@@ -150,6 +267,9 @@ describe("AccountSettingsSection", () => {
         billingEntitlementStatus="active"
         billingPlansDisabled={false}
         billingPortalLoading={false}
+        couponRedemption={null}
+        couponRedemptionErrorCode={null}
+        couponRedemptionLoading={false}
         cloudDeviceAccess={{
           allowed: false,
           reason: "unavailable",
@@ -169,6 +289,7 @@ describe("AccountSettingsSection", () => {
         userEmail="alex@example.com"
         onManageCloudBilling={vi.fn()}
         onRefreshCloudStatus={vi.fn()}
+        onRedeemTrialCoupon={vi.fn()}
         onRevokeCloudDevice={vi.fn()}
         onSignIn={vi.fn()}
         onStartCloudSetup={vi.fn()}
@@ -211,5 +332,17 @@ describe("AccountSettingsSection", () => {
     expect(stackedRowRule).toContain("display: grid;");
     expect(stackedRowRule).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(stackedControlRule).toContain("justify-self: start;");
+  });
+  it("keeps the trial-code action on the shared Settings control language", () => {
+    const styles = readFileSync(desktopSourcePath("src/features/settings/TrialCouponRedemption.css"), "utf8");
+    const markup = readFileSync(desktopSourcePath("src/features/settings/TrialCouponRedemption.tsx"), "utf8");
+
+    expect(markup).toContain('className="settings-btn trial-coupon-form__submit"');
+    expect(markup).not.toContain("settings-btn--primary");
+    expect(styles).not.toContain("background: var(--accent);");
+    expect(styles).toContain("height: var(--settings-control-height);");
+    expect(styles).toContain("min-width: 10rem;");
+    expect(styles).toContain("width: min(100%, 28rem);");
+    expect(styles).not.toContain("grid-template-columns: minmax(12rem, 1fr) minmax(18rem, 24rem);");
   });
 });

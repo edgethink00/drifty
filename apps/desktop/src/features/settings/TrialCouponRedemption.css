@@ -1,0 +1,94 @@
+.content--settings .settings-row--coupon {
+  align-items: flex-start;
+}
+
+.content--settings .trial-coupon-form__layout {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+
+.content--settings .trial-coupon-form {
+  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.content--settings .trial-coupon-form__controls {
+  align-items: stretch;
+  display: flex;
+  gap: var(--space-2);
+  min-height: var(--settings-control-height);
+  width: min(100%, 28rem);
+}
+
+.content--settings .trial-coupon-form__input {
+  flex: 1 1 auto;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+  letter-spacing: 0.045em;
+  min-width: 0;
+  padding-inline: var(--space-3);
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.content--settings .trial-coupon-form__input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--warn) 46%, var(--line));
+}
+
+.content--settings .trial-coupon-form__submit {
+  flex: 0 0 auto;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+  min-width: 10rem;
+  padding-inline: var(--space-4);
+  white-space: nowrap;
+}
+
+.content--settings .trial-coupon-form__feedback {
+  align-items: baseline;
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.content--settings .trial-coupon-form__feedback::before {
+  background: currentColor;
+  border-radius: var(--radius-pill);
+  content: "";
+  flex: 0 0 auto;
+  height: 0.38rem;
+  margin-top: 0.32rem;
+  width: 0.38rem;
+}
+
+.content--settings .trial-coupon-form__feedback--success {
+  color: var(--productivity-focus);
+}
+
+.content--settings .trial-coupon-form__feedback--error {
+  color: var(--warn);
+}
+
+@media (max-width: 760px) {
+  .content--settings .trial-coupon-form__controls {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .content--settings .trial-coupon-form__input,
+  .content--settings .trial-coupon-form__submit {
+    flex-basis: auto;
+    min-width: 0;
+    width: 100%;
+  }
+}

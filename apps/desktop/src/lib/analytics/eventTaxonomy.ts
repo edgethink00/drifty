@@ -64,6 +64,7 @@ export const BILLING_ACTIONS = [
   "checkout_opened",
   "portal_created",
   "portal_opened",
+  "coupon_redeemed",
 ] as const;
 export const BILLING_INTERVALS = ["monthly", "quarterly", "yearly", "unknown"] as const;
 export const ENTITLEMENT_STATUSES = ["active", "trialing", "locked", "unknown"] as const;

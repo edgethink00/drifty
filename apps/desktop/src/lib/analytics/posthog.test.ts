@@ -29,6 +29,8 @@ describe("PostHog desktop analytics privacy boundary", () => {
       "$set": { email: "person@example.com" },
       email: "person@example.com",
       user_id: "user-123",
+      coupon_code: "DRFT-PRIVATE-CODE",
+      coupon_campaign: "Internal launch list",
     });
     const payload = createPostHogEventPayload({
       apiKey: "phc_test",
@@ -52,6 +54,8 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect("$set" in payload.properties).toBe(false);
     expect("email" in payload.properties).toBe(false);
     expect("user_id" in payload.properties).toBe(false);
+    expect("coupon_code" in payload.properties).toBe(false);
+    expect("coupon_campaign" in payload.properties).toBe(false);
   });
 
   it("keeps every desktop event behind an explicit property allowlist", () => {
