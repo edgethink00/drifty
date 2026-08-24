@@ -219,7 +219,7 @@ export const CATEGORY_COLOR_OPTIONS = [
   { key: "communication", label: "Communication", cssVariable: "--category-communication", defaultColor: "#476f8f" },
   { key: "music", label: "Music", cssVariable: "--category-music", defaultColor: "#7b5ea7" },
   { key: "game", label: "Game", cssVariable: "--category-game", defaultColor: "#9a6530" },
-  { key: "social_media", label: "Social media", cssVariable: "--category-social-media", defaultColor: "#b9565b" },
+  { key: "social_media", label: "Social media", cssVariable: "--category-social-media", defaultColor: "#9b5b91" },
   { key: "entertainment", label: "Entertainment", cssVariable: "--category-entertainment", defaultColor: "#c05d48" },
   { key: "shopping", label: "Shopping", cssVariable: "--category-shopping", defaultColor: "#a1792f" },
   { key: "utility", label: "Utility", cssVariable: "--category-utility", defaultColor: "#66707a" },
