@@ -215,7 +215,7 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_frontmost_lsappinfo_parses_real_quoted_header_name(self) -> None:
         info = '"Google Chrome" ASN:0x0-0x1c01c: (in front)\n    bundleID="com.google.Chrome"\n'
         with patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]):
-            app_name, bundle_id, fallback_error = _frontmost_via_lsappinfo()
+            app_name, bundle_id, fallback_error, _pid = _frontmost_via_lsappinfo()
 
         self.assertEqual(app_name, 'Google Chrome')
         self.assertEqual(bundle_id, 'com.google.Chrome')
@@ -224,7 +224,7 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_frontmost_lsappinfo_still_parses_name_field(self) -> None:
         info = '"name"="Notes"\n"bundleID"="com.apple.Notes"\n'
         with patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x2345:', info]):
-            app_name, bundle_id, fallback_error = _frontmost_via_lsappinfo()
+            app_name, bundle_id, fallback_error, _pid = _frontmost_via_lsappinfo()
 
         self.assertEqual(app_name, 'Notes')
         self.assertEqual(bundle_id, 'com.apple.Notes')
@@ -233,7 +233,7 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_frontmost_lsappinfo_keeps_error_when_name_is_missing(self) -> None:
         info = 'bundleID="com.google.Chrome"\n'
         with patch('app.tracker.macos_workspace._run_command', side_effect=['ASN:0x0-0x1c01c:', info]):
-            app_name, bundle_id, fallback_error = _frontmost_via_lsappinfo()
+            app_name, bundle_id, fallback_error, _pid = _frontmost_via_lsappinfo()
 
         self.assertIsNone(app_name)
         self.assertEqual(bundle_id, 'com.google.Chrome')
@@ -374,6 +374,19 @@ class MacosWorkspaceTests(unittest.TestCase):
         mock_window_title.assert_not_called()
         mock_browser_metadata.assert_called_once_with('Claude')
 
+    def test_current_snapshot_replaces_generic_native_chatgpt_title_with_session_header(self) -> None:
+        helper = chr(10).join(['ok=1', 'project=drifty_mac', 'thread=앱 버튼 UI 일관성 진단', ''])
+        with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
+             patch('app.tracker.macos_workspace._run_command', return_value=helper) as mock_command, \
+             patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
+            mock_run.return_value = chr(10).join(['ChatGPT', 'com.openai.codex', 'ChatGPT', '97939'])
+            snapshot = current_snapshot(include_system_transient=False)
+
+        self.assertEqual(snapshot.app_name, 'ChatGPT')
+        self.assertEqual(snapshot.bundle_id, 'com.openai.codex')
+        self.assertEqual(snapshot.window_title, '앱 버튼 UI 일관성 진단 - drifty_mac')
+        mock_command.assert_called()
+
     def test_current_snapshot_uses_same_frontmost_process_for_app_and_window_title(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript') as mock_run, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value='Virev AI - Google Chrome') as mock_window_title, \
@@ -391,7 +404,7 @@ class MacosWorkspaceTests(unittest.TestCase):
 
     def test_current_snapshot_falls_back_to_lsappinfo_when_system_events_lookup_fails(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('System Events lookup failed')) as mock_run, \
-             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes', None)) as mock_lsappinfo, \
+             patch('app.tracker.macos_workspace._frontmost_via_lsappinfo', return_value=('Notes', 'com.apple.Notes', None, None)) as mock_lsappinfo, \
              patch('app.tracker.macos_workspace.read_front_window_title', return_value=None), \
              patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):
             snapshot = current_snapshot()
@@ -592,7 +605,7 @@ class MacosWorkspaceTests(unittest.TestCase):
         with patch('app.tracker.macos_workspace._run_osascript', side_effect=RuntimeError('osascript timed out')), \
              patch(
                  'app.tracker.macos_workspace._frontmost_via_lsappinfo',
-                 return_value=(None, None, 'lsappinfo info returned no parseable app name.'),
+                 return_value=(None, None, 'lsappinfo info returned no parseable app name.', None),
              ), \
              patch('app.tracker.macos_workspace.read_front_window_title') as mock_window_title, \
              patch('app.tracker.macos_workspace._browser_metadata', return_value=BrowserMetadata()):

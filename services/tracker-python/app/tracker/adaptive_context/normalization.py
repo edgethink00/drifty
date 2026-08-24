@@ -194,6 +194,25 @@ AI_GENERIC_TITLES: Final = frozenset(
         "open codex",
     }
 )
+NATIVE_CHATGPT_NON_SESSION_TITLES: Final = frozenset(
+    {
+        "computer use controls",
+        "codex pet composition surface",
+        "drifty pet mode",
+        "codex",
+        "chatgpt",
+    }
+)
+NATIVE_CHATGPT_TITLE_LEAK_MARKERS: Final = (
+    " - discord",
+    " | discord",
+    " - youtube",
+    " - slack",
+    "비밀번호를 저장",
+    "휴지통",
+)
+NATIVE_CHATGPT_BUNDLE_IDS: Final = frozenset({"com.openai.codex", "com.openai.chat"})
+
 GENERIC_DEVELOPER_TITLES: Final = frozenset(
     {"cmux", "terminal", "cursor", "cursor agents", "visual studio code", "code", "shell", "zsh", "bash"}
 )
@@ -248,10 +267,27 @@ def document_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
     return capture.app_name in DOCUMENT_APPS or domain_matches(capture.site_domain, DOCUMENT_DOMAINS)
 
 
+def is_native_chatgpt_capture(capture: AdaptiveContextCaptureInput) -> bool:
+    return (capture.app_name or "").casefold() == "chatgpt" or (capture.bundle_id or "").casefold() in NATIVE_CHATGPT_BUNDLE_IDS
+
+
+def native_chatgpt_session_title_usable(window_title: str | None) -> bool:
+    title = (window_title or "").strip()
+    if not title:
+        return False
+    lowered = title.casefold()
+    if lowered in AI_GENERIC_TITLES or lowered in NATIVE_CHATGPT_NON_SESSION_TITLES:
+        return False
+    if any(marker in lowered for marker in NATIVE_CHATGPT_TITLE_LEAK_MARKERS):
+        return False
+    return True
+
+
 def ai_conversation_surface_matches(capture: AdaptiveContextCaptureInput) -> bool:
-    # Native ChatGPT dogfood titles contained system dialogs and stale titles from
-    # other frontmost apps. Until a native app exposes a verified conversation-title
-    # slot, only exact browser conversation hosts are eligible.
+    # Native ChatGPT window titles are generic unless the session AX helper has
+    # already replaced them with the Codex header thread/project.
+    if is_native_chatgpt_capture(capture):
+        return native_chatgpt_session_title_usable(capture.window_title)
     return domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS)
 
 
@@ -429,6 +465,15 @@ def ai_conversation_structured_fields(capture: AdaptiveContextCaptureInput) -> A
         return fields
 
     parts = title_parts(capture)
+    if is_native_chatgpt_capture(capture):
+        if not native_chatgpt_session_title_usable(capture.window_title):
+            return fields
+        if parts:
+            add_structured_values(fields, "thread", [parts[0]])
+            if len(parts) >= 2:
+                add_structured_values(fields, "workspace", [parts[1]])
+        add_structured_values(fields, "conversation_type", ["chat"])
+        return fields
     if parts and parts[0].casefold() not in AI_GENERIC_TITLES:
         add_structured_values(fields, "thread", [parts[0]])
 

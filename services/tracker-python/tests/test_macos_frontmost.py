@@ -20,7 +20,7 @@ class MacosFrontmostScriptTests(unittest.TestCase):
 
         result = frontmost_via_system_events(run_osascript)
 
-        self.assertEqual(result, ("Aside", "com.example.aside", "Recovered title"))
+        self.assertEqual(result[:3], ("Aside", "com.example.aside", "Recovered title"))
         script = run_osascript.call_args.args[0]
         self.assertIn('if appName is "Aside" and windowTitle is ""', script)
         self.assertIn('frontSubrole is "AXUnknown" and frontChildCount is 0', script)
@@ -36,7 +36,7 @@ class MacosFrontmostScriptTests(unittest.TestCase):
 
         result = frontmost_via_system_events(run_osascript)
 
-        self.assertEqual(result, ("Google Chrome", "com.google.Chrome", None))
+        self.assertEqual(result[:3], ("Google Chrome", "com.google.Chrome", None))
 
 
 if __name__ == "__main__":

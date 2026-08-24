@@ -49,10 +49,15 @@ const WINDOWS_RELEASE_PTH_FILES = Object.freeze({
 // explicit collection the frozen Windows sidecar would ship with an empty
 // TZPATH and fail every zone lookup, exactly as an unpackaged interpreter does.
 function extraPyInstallerArgs() {
-  if (process.platform !== "win32") {
-    return [];
+  const args = [];
+  if (process.platform === "darwin") {
+    const helperSource = resolve(trackerPythonRoot, "app/tracker/chatgpt_session_ax.swift");
+    args.push("--add-data", helperSource + ":app/tracker");
   }
-  return ["--collect-data", "tzdata", "--hidden-import", "tzdata"];
+  if (process.platform === "win32") {
+    args.push("--collect-data", "tzdata", "--hidden-import", "tzdata");
+  }
+  return args;
 }
 
 function fail(message, exitCode = 1) {

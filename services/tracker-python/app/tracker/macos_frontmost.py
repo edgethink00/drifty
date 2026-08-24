@@ -52,7 +52,7 @@ def lsappinfo_header_app_name(line: str) -> str | None:
     return lsappinfo_text(line)
 
 
-def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | None, str | None, str | None]:
+def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | None, str | None, str | None, int | None]:
     result = run_osascript(
         '''
         tell application "System Events"
@@ -91,7 +91,8 @@ def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | N
               end if
             end if
           end tell
-          return appName & linefeed & bundleId & linefeed & windowTitle
+          set unixId to unix id of frontApp
+          return appName & linefeed & bundleId & linefeed & windowTitle & linefeed & unixId
         end tell
         '''
     )
@@ -99,13 +100,15 @@ def frontmost_via_system_events(run_osascript: OsascriptRunner) -> tuple[str | N
     app_name = optional_text(parts[0] if len(parts) > 0 else None)
     bundle_id = optional_text(parts[1] if len(parts) > 1 else None)
     window_title = optional_text(parts[2] if len(parts) > 2 else None)
-    return app_name, bundle_id, window_title
+    pid_text = optional_text(parts[3] if len(parts) > 3 else None)
+    pid = int(pid_text) if pid_text and pid_text.isdigit() else None
+    return app_name, bundle_id, window_title, pid
 
 
-def frontmost_via_lsappinfo(run_command: CommandRunner) -> tuple[str | None, str | None, str | None]:
+def frontmost_via_lsappinfo(run_command: CommandRunner) -> tuple[str | None, str | None, str | None, int | None]:
     front = run_command(["lsappinfo", "front"])
     if "NULL" in front:
-        return None, None, "lsappinfo front returned NULL."
+        return None, None, "lsappinfo front returned NULL.", None
 
     asn = front.strip().strip("[]").strip()
     info = run_command(["lsappinfo", "info", asn])
@@ -125,4 +128,4 @@ def frontmost_via_lsappinfo(run_command: CommandRunner) -> tuple[str | None, str
     fallback_error = None
     if app_name is None:
         fallback_error = "lsappinfo info returned no parseable app name."
-    return app_name, bundle_id, fallback_error
+    return app_name, bundle_id, fallback_error, None

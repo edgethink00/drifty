@@ -90,6 +90,17 @@ class AdaptiveContextExtractorTests(unittest.TestCase):
         )
         self.assertEqual(ai_conversation_structured_fields(stale_native_title), {})
 
+        session_native = AdaptiveContextCaptureInput(
+            observed_at="2026-08-24T00:00:00+00:00",
+            app_name="ChatGPT",
+            bundle_id="com.openai.codex",
+            window_title="앱 버튼 UI 일관성 진단 - drifty_mac",
+        )
+        self.assertEqual(
+            ai_conversation_structured_fields(session_native),
+            {"thread": ["앱 버튼 UI 일관성 진단"], "workspace": ["drifty_mac"], "conversation_type": ["chat"]},
+        )
+
         learning_page = AdaptiveContextCaptureInput(
             observed_at="2026-08-24T00:00:00+00:00",
             app_name="Aside",

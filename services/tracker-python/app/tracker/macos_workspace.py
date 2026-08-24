@@ -32,6 +32,7 @@ from app.tracker.browser_history import (
     browser_history_metadata,
     is_browser_history_supported_app,
 )
+from app.tracker.chatgpt_session import apply_native_chatgpt_session_title
 from app.tracker.macos_frontmost import (
     frontmost_via_lsappinfo,
     frontmost_via_system_events,
@@ -118,21 +119,21 @@ def _should_try_browser_history_url_fallback(app_name: str | None, browser: Brow
     )
 
 
-def _frontmost_via_system_events() -> tuple[str | None, str | None, str | None]:
+def _frontmost_via_system_events() -> tuple[str | None, str | None, str | None, int | None]:
     return frontmost_via_system_events(_run_osascript)
 
 
-def _frontmost_via_lsappinfo() -> tuple[str | None, str | None, str | None]:
+def _frontmost_via_lsappinfo() -> tuple[str | None, str | None, str | None, int | None]:
     return frontmost_via_lsappinfo(_run_command)
 
 
-def _frontmost_via_fallback_capture() -> tuple[str | None, str | None, str | None, str | None]:
+def _frontmost_via_fallback_capture() -> tuple[str | None, str | None, str | None, str | None, int | None]:
     try:
-        app_name, bundle_id, frontmost_fallback_error = _frontmost_via_lsappinfo()
+        app_name, bundle_id, frontmost_fallback_error, pid = _frontmost_via_lsappinfo()
     except RuntimeError as fallback_error:
-        return None, None, None, _error_text(fallback_error)
+        return None, None, None, _error_text(fallback_error), None
     window_title = read_front_window_title() if app_name else None
-    return app_name, bundle_id, window_title, frontmost_fallback_error
+    return app_name, bundle_id, window_title, frontmost_fallback_error, pid
 
 
 def current_snapshot(include_system_transient: bool = True) -> Snapshot:
@@ -140,16 +141,17 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
     frontmost_capture_source: FrontmostCaptureSource = "system-events"
     frontmost_capture_error = None
     frontmost_fallback_error = None
+    pid = None
     if os.environ.get(FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV) == "1":
         frontmost_capture_error = "System Events frontmost capture skipped by developer diagnostics."
-        app_name, bundle_id, window_title, frontmost_fallback_error = _frontmost_via_fallback_capture()
+        app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
         frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
     else:
         try:
-            app_name, bundle_id, window_title = _frontmost_via_system_events()
+            app_name, bundle_id, window_title, pid = _frontmost_via_system_events()
         except RuntimeError as error:
             frontmost_capture_error = _error_text(error)
-            app_name, bundle_id, window_title, frontmost_fallback_error = _frontmost_via_fallback_capture()
+            app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
             frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
 
     system_transient_activity = (
@@ -161,6 +163,15 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
             frontmost_capture_error = "System Events returned no frontmost app name."
         frontmost_capture_source = "unavailable"
         app_name = "Unavailable"
+        pid = None
+
+    window_title = apply_native_chatgpt_session_title(
+        app_name,
+        bundle_id,
+        window_title,
+        pid,
+        _run_command,
+    )
 
     force_browser_history_url_fallback = os.environ.get(FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV) == "1"
     if force_browser_history_url_fallback:

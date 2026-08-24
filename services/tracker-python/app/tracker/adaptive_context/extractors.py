@@ -74,7 +74,7 @@ def derived_structured_fields(capture: AdaptiveContextCaptureInput) -> AdaptiveS
         fields = merge_structured_fields(fields, calendar_structured_fields(capture)) or fields
     if capture.app_name in COMMUNICATION_APPS or domain_matches(capture.site_domain, COMMUNICATION_DOMAINS):
         fields = merge_structured_fields(fields, communication_structured_fields(capture)) or fields
-    if domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS):
+    if domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS) or (capture.app_name or "").casefold() == "chatgpt" or (capture.bundle_id or "").casefold() in {"com.openai.codex", "com.openai.chat"}:
         fields = merge_structured_fields(fields, ai_conversation_structured_fields(capture)) or fields
     if capture.app_name.casefold() in DEVELOPER_WORKSPACE_APPS:
         fields = merge_structured_fields(fields, developer_workspace_structured_fields(capture)) or fields
@@ -304,6 +304,8 @@ def adaptive_content_context_for_capture(capture: AdaptiveContextCaptureInput) -
         items.extend(metadata_only_items(capture, "communication_metadata", "metadata_only"))
     if "ai_conversation" in enabled_families and (
         domain_exactly_matches(capture.site_domain, AI_CONVERSATION_DOMAINS)
+        or (capture.app_name or "").casefold() == "chatgpt"
+        or (capture.bundle_id or "").casefold() in {"com.openai.codex", "com.openai.chat"}
     ):
         items.extend(selected_metadata_items(capture, "ai_conversation", (
             ("workspace", 1, "workspace"),
