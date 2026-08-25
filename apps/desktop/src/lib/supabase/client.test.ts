@@ -1,16 +1,23 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const createClient = vi.hoisted(() => vi.fn(() => ({ auth: {} })));
+const createClient = vi.hoisted(() => vi.fn());
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient,
 }));
 
 describe("Supabase client", () => {
+  beforeEach(() => {
+    createClient.mockImplementation(() => ({ auth: {} }));
+    window.localStorage.clear();
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();
-    createClient.mockClear();
+    createClient.mockReset();
+    window.localStorage.clear();
   });
 
   it("uses manual PKCE OAuth handling for desktop browser callbacks", async () => {
@@ -59,6 +66,77 @@ describe("Supabase client", () => {
     expect(events).toEqual(["first:start", "first:end", "second:start"]);
   });
 
+  it("isolates pending Google PKCE verifiers until the current attempt explicitly activates", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+    vi.stubEnv("VITE_SUPABASE_ANON_KEY", "anon-key");
+
+    const { prepareGoogleOAuthAuthorization } = await import("./client");
+    const options = {
+      redirectTo: "https://drifty.so/auth/desktop-google-callback/",
+      skipBrowserRedirect: true as const,
+      queryParams: { prompt: "select_account" },
+    };
+    const [firstPreparation, secondPreparation] = await Promise.all([
+      prepareGoogleOAuthAuthorization(options),
+      prepareGoogleOAuthAuthorization(options),
+    ]);
+
+    expect(window.localStorage.getItem("drifty.desktop.auth-code-verifier")).toBeNull();
+    const expiresAt = Date.now() + 5 * 60 * 1000;
+    secondPreparation.activateVerifier(expiresAt);
+    const activeVerifier = window.localStorage.getItem("drifty.desktop.auth-code-verifier");
+    const firstUrl = new URL(firstPreparation.data.url!);
+    const secondUrl = new URL(secondPreparation.data.url!);
+
+    expect(activeVerifier).toMatch(/^"[A-Za-z0-9_-]{43,128}"$/);
+    expect(firstUrl.origin).toBe("https://project.supabase.co");
+    expect(secondUrl.pathname).toBe("/auth/v1/authorize");
+    expect(secondUrl.searchParams.get("provider")).toBe("google");
+    expect(secondUrl.searchParams.get("redirect_to")).toBe(options.redirectTo);
+    expect(secondUrl.searchParams.get("code_challenge_method")).toBe("s256");
+    expect(secondUrl.searchParams.get("prompt")).toBe("select_account");
+    expect(firstUrl.searchParams.get("code_challenge"))
+      .not.toBe(secondUrl.searchParams.get("code_challenge"));
+    expect(JSON.parse(window.localStorage.getItem("drifty.desktop.auth-google-oauth-attempt")!)).toEqual({
+      version: 1,
+      expiresAt,
+    });
+    expect(createClient).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects expired or malformed persisted verifiers and replaces stale state on fresh activation", async () => {
+    vi.stubEnv("VITE_SUPABASE_URL", "https://project.supabase.co");
+    vi.stubEnv("VITE_SUPABASE_ANON_KEY", "anon-key");
+    const now = Date.now();
+    window.localStorage.setItem("drifty.desktop.auth-code-verifier", JSON.stringify("stale-verifier-value-that-is-long-enough-123456789"));
+    window.localStorage.setItem("drifty.desktop.auth-google-oauth-attempt", JSON.stringify({
+      version: 1,
+      expiresAt: now,
+    }));
+
+    const {
+      clearGoogleOAuthVerifier,
+      hasUsableGoogleOAuthVerifier,
+      prepareGoogleOAuthAuthorization,
+    } = await import("./client");
+
+    expect(hasUsableGoogleOAuthVerifier(now)).toBe(false);
+    expect(window.localStorage.getItem("drifty.desktop.auth-code-verifier")).toBeNull();
+    expect(window.localStorage.getItem("drifty.desktop.auth-google-oauth-attempt")).toBeNull();
+
+    const preparation = await prepareGoogleOAuthAuthorization({
+      redirectTo: "https://drifty.so/auth/desktop-google-callback/",
+      skipBrowserRedirect: true,
+      queryParams: { prompt: "select_account" },
+    });
+    preparation.activateVerifier(now + 5 * 60 * 1000);
+
+    expect(hasUsableGoogleOAuthVerifier(now)).toBe(true);
+    expect(window.localStorage.getItem("drifty.desktop.auth-code-verifier"))
+      .not.toContain("stale-verifier-value");
+    expect(clearGoogleOAuthVerifier()).toBe(true);
+    expect(hasUsableGoogleOAuthVerifier(now)).toBe(false);
+  });
 
   it("defaults to optional auth mode with anonymous auth allowed", async () => {
     const { authModePolicy, hasBlockingAuthConfigurationError } = await import("./client");
@@ -83,7 +161,6 @@ describe("Supabase client", () => {
     expect(hasBlockingAuthConfigurationError()).toBe(true);
     expect(createClient).not.toHaveBeenCalled();
   });
-
 
   it("uses VITE_DRIFTY_AUTH_MODE for required auth mode", async () => {
     vi.stubEnv("VITE_DRIFTY_AUTH_MODE", "required");

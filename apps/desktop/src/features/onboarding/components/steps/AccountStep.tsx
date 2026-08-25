@@ -19,7 +19,15 @@ export function AccountStep({
   readonly onStartCloudTrialWithGoogle: () => void;
 }) {
   const { t } = useLocalization();
-  const isGoogleHandoffBusy = authCallbackStatus ? authCallbackStatus.phase !== "failed" : false;
+  const isGoogleHandoffBusy = authCallbackStatus?.googleAction === "opening"
+    || authCallbackStatus?.phase === "received"
+    || authCallbackStatus?.phase === "exchanging"
+    || authCallbackStatus?.phase === "completed";
+  const googleButtonLabel = authCallbackStatus?.googleAction === "reopen"
+    ? t("onboarding.account.reopenGoogle")
+    : authCallbackStatus?.googleAction === "retry"
+      ? t("onboarding.account.retryGoogle")
+      : t("onboarding.account.google");
   const callbackNoticeRole = authCallbackStatus?.phase === "failed" ? "alert" : "status";
   const callbackNoticeClassName = [
     "dc-onb-account__callback",
@@ -44,7 +52,7 @@ export function AccountStep({
             disabled={isGoogleHandoffBusy}
           >
             <GoogleMark />
-            <span>{t("onboarding.account.google")}</span>
+            <span>{googleButtonLabel}</span>
           </button>
           <div className="dc-onb-divider" aria-hidden="true">
             <span />

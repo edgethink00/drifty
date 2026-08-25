@@ -20,6 +20,39 @@ fn auth_deep_link_filter_accepts_drifty_callbacks() {
     assert!(!is_auth_callback_deep_link(
         "drifty://auth/not-callback?code=ignored"
     ));
+    assert!(!is_auth_callback_deep_link(
+        "drifty://auth/callback-evil?code=ignored"
+    ));
+    assert!(!is_auth_callback_deep_link(
+        "drifty://auth/google-callback/extra?code=ignored"
+    ));
+    assert!(!is_auth_callback_deep_link(
+        "drifty://auth/google-callback#access%5Ftoken=secret"
+    ));
+    assert!(!is_auth_callback_deep_link(
+        "drifty://auth/google-callback?code=ignored&access_token=secret"
+    ));
+    assert!(!is_auth_callback_deep_link(
+        "drifty://auth/google-callback?code=ignored#refresh_token=secret"
+    ));
+}
+
+#[test]
+fn auth_deep_link_filter_routes_code_boundaries_to_the_frontend() {
+    assert!(is_auth_callback_deep_link(
+        "drifty://auth/google-callback?code="
+    ));
+    assert!(is_auth_callback_deep_link(&format!(
+        "drifty://auth/google-callback?code={}",
+        "x".repeat(4_096)
+    )));
+    assert!(is_auth_callback_deep_link(&format!(
+        "drifty://auth/google-callback?code={}",
+        "x".repeat(4_097)
+    )));
+    assert!(is_auth_callback_deep_link(
+        "drifty://auth/google-callback?code=%E0%A4%A"
+    ));
 }
 
 #[test]

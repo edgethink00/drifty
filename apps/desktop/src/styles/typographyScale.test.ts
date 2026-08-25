@@ -45,7 +45,7 @@ function collectCssFiles(dir: string, found: string[] = []): string[] {
 }
 
 const cssFiles = collectCssFiles(SRC_ROOT).filter((file) => {
-  const rel = relative(SRC_ROOT, file);
+  const rel = relative(SRC_ROOT, file).replace(/\\/g, "/");
   return !EXCLUDED.some((skip) => rel.includes(skip));
 });
 

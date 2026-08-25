@@ -284,13 +284,27 @@ fn remember_auth_deep_links<R: Runtime>(
 }
 
 fn is_auth_callback_deep_link(url: &str) -> bool {
-    let is_callback = url.starts_with("drifty://auth/callback")
-        || url.starts_with("drifty://auth/google-callback");
-    is_callback && !contains_auth_session_token(url)
+    let Ok(parsed) = url::Url::parse(url) else {
+        return false;
+    };
+    let is_callback = parsed.scheme() == "drifty"
+        && parsed.host_str() == Some("auth")
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+        && parsed.port().is_none()
+        && matches!(
+            parsed.path(),
+            "/callback" | "/callback/" | "/google-callback" | "/google-callback/"
+        );
+    is_callback && !contains_auth_session_token(&parsed)
 }
 
-fn contains_auth_session_token(url: &str) -> bool {
-    url.contains("access_token=") || url.contains("refresh_token=")
+fn contains_auth_session_token(url: &url::Url) -> bool {
+    let is_session_token = |key: &str| matches!(key, "access_token" | "refresh_token");
+    url.query_pairs().any(|(key, _)| is_session_token(&key))
+        || url.fragment().is_some_and(|fragment| {
+            url::form_urlencoded::parse(fragment.as_bytes()).any(|(key, _)| is_session_token(&key))
+        })
 }
 
 fn is_billing_success_deep_link(url: &str) -> bool {
@@ -427,7 +441,9 @@ pub fn run() {
                     // same `remember_auth_deep_links` filter.
                     #[cfg(any(target_os = "macos", target_os = "ios"))]
                     tauri::RunEvent::Opened { urls } => {
-                        let _ = remember_auth_deep_links(app, urls.iter().map(ToString::to_string));
+                        if remember_auth_deep_links(app, urls.iter().map(ToString::to_string)) {
+                            reveal_main_window(app);
+                        }
                     }
                     // ExitRequested can still be prevented by another listener. Run irreversible
                     // cleanup only once the runtime commits to Exit.
@@ -460,6 +476,7 @@ pub fn run() {
         let handled_auth_callback = remember_auth_deep_links(app, args);
 
         if handled_auth_callback {
+            reveal_main_window(app);
             return;
         }
 

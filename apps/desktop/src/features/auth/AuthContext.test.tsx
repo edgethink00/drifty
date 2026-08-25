@@ -4,14 +4,32 @@ import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "@supabase/supabase-js";
 
+const GOOGLE_OAUTH_CHALLENGE = "a".repeat(43);
+
+function googleOAuthUrl(extraParams: Record<string, string> = {}) {
+  const url = new URL("https://project.supabase.co/auth/v1/authorize");
+  url.searchParams.set("provider", "google");
+  url.searchParams.set("redirect_to", "https://drifty.so/auth/desktop-google-callback/");
+  url.searchParams.set("code_challenge", GOOGLE_OAUTH_CHALLENGE);
+  url.searchParams.set("code_challenge_method", "s256");
+  for (const [key, value] of Object.entries(extraParams)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
 const {
   authMocks,
   getSession,
   onAuthStateChange,
   exchangeCodeForSession,
+  exchangeGoogleOAuthCodeForSession,
   setSession,
   signInAnonymously,
   signInWithOAuth,
+  activateGoogleOAuthVerifier,
+  clearGoogleOAuthVerifier,
+  hasUsableGoogleOAuthVerifier,
   signInWithPassword,
   signUp,
   signOut,
@@ -35,9 +53,13 @@ const {
       };
     }),
     exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+    exchangeGoogleOAuthCodeForSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
-    signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null }),
+    signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: "https://project.supabase.co/auth/v1/authorize?provider=google" }, error: null }),
+    activateGoogleOAuthVerifier: vi.fn(),
+    clearGoogleOAuthVerifier: vi.fn(() => true),
+    hasUsableGoogleOAuthVerifier: vi.fn(() => true),
     signInWithPassword: vi.fn().mockResolvedValue({ data: {}, error: null }),
     signUp: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signOut: vi.fn().mockResolvedValue({ error: null }),
@@ -75,7 +97,19 @@ const tauriMocks = vi.hoisted(() => {
 
 vi.mock("../../lib/supabase/client", () => ({
   authModePolicy: supabaseConfig.authModePolicy,
+  clearGoogleOAuthVerifier,
+  exchangeGoogleOAuthCodeForSession,
+  getGoogleOAuthAuthorizeUrl: () => "https://project.supabase.co/auth/v1/authorize",
   hasBlockingAuthConfigurationError: () => supabaseConfig.hasBlockingAuthConfigurationError,
+  hasUsableGoogleOAuthVerifier,
+  prepareGoogleOAuthAuthorization: async (options: {
+    redirectTo: string;
+    skipBrowserRedirect: true;
+    queryParams: Record<string, string>;
+  }) => {
+    const response = await signInWithOAuth({ provider: "google", options });
+    return { ...response, activateVerifier: activateGoogleOAuthVerifier };
+  },
   supabase: {
     auth: {
       getSession,
@@ -105,7 +139,14 @@ vi.mock("@tauri-apps/plugin-deep-link", () => ({
   onOpenUrl: tauriMocks.onOpenUrl,
 }));
 
-import { AuthProvider, hasRequiredAccountAuth, isAnonymousSupabaseUser, useAuth } from "./AuthContext";
+import {
+  AuthProvider,
+  GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS,
+  GOOGLE_OAUTH_OPERATION_TIMEOUT_MS,
+  hasRequiredAccountAuth,
+  isAnonymousSupabaseUser,
+  useAuth,
+} from "./AuthContext";
 import { clearAuthDiagnostics, readAuthDiagnostics } from "./authDiagnostics";
 
 function CaptureAuth({ onReady }: { onReady: (value: ReturnType<typeof useAuth>) => void }) {
@@ -147,8 +188,11 @@ describe("AuthContext", () => {
   beforeEach(() => {
     getSession.mockResolvedValue({ data: { session: null } });
     exchangeCodeForSession.mockResolvedValue({ error: null });
+    exchangeGoogleOAuthCodeForSession.mockResolvedValue({ data: { session: null }, error: null });
     setSession.mockResolvedValue({ data: { session: null }, error: null });
-    signInWithOAuth.mockResolvedValue({ data: { url: "https://accounts.google.com/oauth" }, error: null });
+    signInWithOAuth.mockResolvedValue({ data: { url: googleOAuthUrl() }, error: null });
+    clearGoogleOAuthVerifier.mockReturnValue(true);
+    hasUsableGoogleOAuthVerifier.mockReturnValue(true);
     signInWithPassword.mockResolvedValue({ data: {}, error: null });
     signUp.mockResolvedValue({ data: { session: null }, error: null });
     signOut.mockResolvedValue({ error: null });
@@ -271,11 +315,827 @@ describe("AuthContext", () => {
         },
       },
     });
-    expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://accounts.google.com/oauth");
+    expect(tauriMocks.openUrl).toHaveBeenCalledWith(googleOAuthUrl());
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledTimes(1);
     expect(tauriMocks.openUrl).not.toHaveBeenCalledWith("https://drifty.so/auth/login/");
     await waitFor(() => {
       expect(authApi?.callbackStatus?.message).toBe("Browser opened. Waiting for sign-in to return to Drifty.");
     });
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("reopens the active Google OAuth URL without creating a second PKCE flow", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(2);
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(1, googleOAuthUrl());
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(2, googleOAuthUrl());
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("starts a fresh Google flow instead of reopening when the persisted verifier is missing", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    signInWithOAuth
+      .mockResolvedValueOnce({
+        data: { url: googleOAuthUrl({ attempt: "first" }) },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { url: googleOAuthUrl({ attempt: "fresh" }) },
+        error: null,
+      });
+    hasUsableGoogleOAuthVerifier.mockReturnValueOnce(false);
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledTimes(2);
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(
+      1,
+      googleOAuthUrl({ attempt: "first" }),
+    );
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(
+      2,
+      googleOAuthUrl({ attempt: "fresh" }),
+    );
+    expect(clearGoogleOAuthVerifier).toHaveBeenCalled();
+  });
+
+  it("expires an unanswered Google OAuth handoff and allows a fresh attempt", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS);
+    });
+
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      message: "Google sign-in expired after 5 minutes. Try again.",
+      method: "google",
+      googleAction: "retry",
+    });
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(2);
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("reopens just before the handoff boundary and creates a fresh flow at expiry", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS - 1);
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(2);
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(3);
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("starts a full five-minute handoff window after a slow PKCE preparation", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let resolvePreparation: ((value: {
+      data: { url: string };
+      error: null;
+    }) => void) | null = null;
+    signInWithOAuth.mockImplementationOnce(() => new Promise((resolve) => {
+      resolvePreparation = resolve;
+    }));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      const pendingAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(10_000);
+      resolvePreparation?.({
+        data: { url: googleOAuthUrl({ attempt: "slow" }) },
+        error: null,
+      });
+      await pendingAttempt;
+    });
+
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledWith(Date.now() + GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS - 1);
+      await authApi!.signInWithGoogle();
+    });
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      await authApi!.signInWithGoogle();
+    });
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+  });
+
+  it("times out a hung PKCE request, releases the lock, and allows a fresh attempt", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    signInWithOAuth.mockImplementationOnce(() => new Promise(() => undefined));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    let firstError: Error | null | undefined;
+    await act(async () => {
+      const firstAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_OPERATION_TIMEOUT_MS);
+      firstError = (await firstAttempt).error;
+    });
+
+    expect(firstError?.message).toBe("Google sign-in took too long. Try again, or continue with email.");
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      method: "google",
+      googleAction: "retry",
+    });
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+    expect(activateGoogleOAuthVerifier).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(1);
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it.each([
+    ["callback notice dismissal", async (auth: ReturnType<typeof useAuth>) => auth.clearCallbackStatus()],
+    ["email sign-in", async (auth: ReturnType<typeof useAuth>) => auth.signInWithEmail("person@example.com", "password12345")],
+    ["sign-out", async (auth: ReturnType<typeof useAuth>) => auth.signOut()],
+  ])("ignores a PKCE preparation that settles after pending cancellation by %s", async (_name, cancelPending) => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let resolveFirstPreparation: ((value: {
+      data: { url: string };
+      error: null;
+    }) => void) | null = null;
+    signInWithOAuth.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFirstPreparation = resolve;
+    }));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let pendingAttempt: Promise<{ error: Error | null }> | null = null;
+    await act(async () => {
+      pendingAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+      await cancelPending(authApi!);
+      await pendingAttempt;
+    });
+
+    await act(async () => {
+      resolveFirstPreparation?.({
+        data: { url: googleOAuthUrl({ attempt: "cancelled" }) },
+        error: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(activateGoogleOAuthVerifier).not.toHaveBeenCalled();
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+    expect(activateGoogleOAuthVerifier).not.toHaveBeenCalled();
+    expect(requireCapturedAuth(authApi).callbackStatus).toBeNull();
+  });
+
+  it("keeps a late timed-out PKCE preparation isolated from a fresh retry", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let resolveFirstPreparation: ((value: {
+      data: { url: string };
+      error: null;
+    }) => void) | null = null;
+    signInWithOAuth.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFirstPreparation = resolve;
+    }));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      const timedOutAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_OPERATION_TIMEOUT_MS);
+      await timedOutAttempt;
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirstPreparation?.({
+        data: { url: googleOAuthUrl({ attempt: "stale" }) },
+        error: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(1);
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "waiting",
+      googleAction: "reopen",
+    });
+  });
+
+  it("ignores a pending PKCE preparation that settles after provider unmount", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let resolveFirstPreparation: ((value: {
+      data: { url: string };
+      error: null;
+    }) => void) | null = null;
+    signInWithOAuth.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFirstPreparation = resolve;
+    }));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    const view = render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let pendingAttempt: Promise<{ error: Error | null }> | null = null;
+    await act(async () => {
+      pendingAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+    });
+    view.unmount();
+
+    await act(async () => {
+      await pendingAttempt;
+      resolveFirstPreparation?.({
+        data: { url: googleOAuthUrl({ attempt: "unmounted" }) },
+        error: null,
+      });
+      await Promise.resolve();
+    });
+
+    expect(activateGoogleOAuthVerifier).not.toHaveBeenCalled();
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+  });
+
+  it("cancels the Google OAuth expiry timer when a callback is received", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    exchangeGoogleOAuthCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=completed-before-timeout"]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(exchangeGoogleOAuthCodeForSession).toHaveBeenCalledWith(
+      "completed-before-timeout",
+      expect.any(AbortSignal),
+    );
+    expect(requireCapturedAuth(authApi).callbackStatus?.phase).toBe("completed");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS);
+    });
+
+    expect(requireCapturedAuth(authApi).callbackStatus?.phase).toBe("completed");
+  });
+
+  it("times out a hung Google code exchange and keeps a late result from reviving the callback UI", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    let resolveExchange: ((value: { data: { session: Session }; error: null }) => void) | null = null;
+    exchangeGoogleOAuthCodeForSession.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveExchange = resolve;
+    }));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=hung-exchange"]);
+      await Promise.resolve();
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "exchanging",
+      method: "google",
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_OPERATION_TIMEOUT_MS);
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      message: "Google sign-in took too long. Try again, or continue with email.",
+      method: "google",
+      googleAction: "retry",
+    });
+
+    await act(async () => {
+      resolveExchange?.({ data: { session }, error: null });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      googleAction: "retry",
+    });
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the current Google handoff available when a stale callback code fails", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    exchangeGoogleOAuthCodeForSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: new Error("Google sign-in could not be completed. Try again."),
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=stale-code"]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus?.phase).toBe("failed");
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(1, googleOAuthUrl());
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(2, googleOAuthUrl());
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "waiting",
+      googleAction: "reopen",
+    });
+  });
+
+  it.each([
+    ["email sign-in", async (auth: ReturnType<typeof useAuth>) => auth.signInWithEmail("person@example.com", "password12345")],
+    ["callback notice dismissal", async (auth: ReturnType<typeof useAuth>) => auth.clearCallbackStatus()],
+    ["sign-out", async (auth: ReturnType<typeof useAuth>) => auth.signOut()],
+  ])("aborts an in-flight Google code exchange after %s", async (_name, cancelExchange) => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let exchangeSignal: AbortSignal | null = null;
+    exchangeGoogleOAuthCodeForSession.mockImplementationOnce((_code, signal: AbortSignal) => {
+      exchangeSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=cancel-in-flight"]);
+      await Promise.resolve();
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus?.phase).toBe("exchanging");
+
+    await act(async () => {
+      await cancelExchange(authApi!);
+      await Promise.resolve();
+    });
+
+    expect((exchangeSignal as AbortSignal | null)?.aborted).toBe(true);
+    expect(requireCapturedAuth(authApi).callbackStatus).toBeNull();
+  });
+
+  it("aborts an in-flight Google code exchange when the provider unmounts", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let exchangeSignal: AbortSignal | null = null;
+    exchangeGoogleOAuthCodeForSession.mockImplementationOnce((_code, signal: AbortSignal) => {
+      exchangeSignal = signal;
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    const view = render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=unmount-in-flight"]);
+      await Promise.resolve();
+    });
+
+    view.unmount();
+    expect((exchangeSignal as AbortSignal | null)?.aborted).toBe(true);
+  });
+
+  it.each(["TOKEN_REFRESHED", "USER_UPDATED"])(
+    "keeps the active Google handoff through a background %s auth event",
+    async (eventType) => {
+      Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+      const refreshedSession = createSession();
+      const callbackSession = createSession();
+      callbackSession.user.id = "google-callback-user";
+      exchangeGoogleOAuthCodeForSession.mockResolvedValueOnce({
+        data: { session: callbackSession },
+        error: null,
+      });
+      let authApi: ReturnType<typeof useAuth> | null = null;
+
+      render(
+        <AuthProvider>
+          <CaptureAuth onReady={(value) => {
+            authApi = value;
+          }} />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(authApi).not.toBeNull();
+        expect(authMocks.authChangeHandler).not.toBeNull();
+      });
+      await act(async () => {
+        await authApi!.signInWithGoogle();
+      });
+      const verifierClearCount = clearGoogleOAuthVerifier.mock.calls.length;
+
+      act(() => {
+        authMocks.authChangeHandler?.(eventType, refreshedSession);
+      });
+      expect(clearGoogleOAuthVerifier).toHaveBeenCalledTimes(verifierClearCount);
+
+      await act(async () => {
+        tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=after-background-event"]);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(exchangeGoogleOAuthCodeForSession).toHaveBeenCalledWith(
+        "after-background-event",
+        expect.any(AbortSignal),
+      );
+      expect(requireCapturedAuth(authApi).callbackStatus?.phase).toBe("completed");
+      expect(requireCapturedAuth(authApi).user?.id).toBe("google-callback-user");
+    },
+  );
+
+  it.each([
+    ["email sign-in", async (auth: ReturnType<typeof useAuth>) => auth.signInWithEmail("person@example.com", "password12345")],
+    ["callback notice dismissal", async (auth: ReturnType<typeof useAuth>) => auth.clearCallbackStatus()],
+    ["sign-out", async (auth: ReturnType<typeof useAuth>) => auth.signOut()],
+  ])("cancels the Google OAuth expiry timer after %s", async (_name, cancelAttempt) => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      await cancelAttempt(authApi!);
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS);
+    });
+
+    expect(requireCapturedAuth(authApi).callbackStatus).toBeNull();
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["email sign-in", async (auth: ReturnType<typeof useAuth>) => auth.signInWithEmail("person@example.com", "password12345")],
+    ["callback notice dismissal", async (auth: ReturnType<typeof useAuth>) => auth.clearCallbackStatus()],
+    ["sign-out", async (auth: ReturnType<typeof useAuth>) => auth.signOut()],
+  ])("rejects a late Google callback after active-attempt cancellation by %s", async (_name, cancelAttempt) => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      await cancelAttempt(authApi!);
+    });
+    hasUsableGoogleOAuthVerifier.mockReturnValue(false);
+
+    await act(async () => {
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=late-after-cancel"]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(exchangeGoogleOAuthCodeForSession).not.toHaveBeenCalled();
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      message: "That Google sign-in attempt expired or was cancelled. Start Google sign-in again.",
+    });
+    expect(clearGoogleOAuthVerifier).toHaveBeenCalled();
+  });
+
+  it("redacts a hostile Supabase code-exchange error from callback UI", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    exchangeGoogleOAuthCodeForSession.mockResolvedValueOnce({
+      data: { session: null },
+      error: new Error("SECRET_TOKEN=do-not-reflect"),
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=hostile-error"]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(requireCapturedAuth(authApi).callbackStatus?.message).toBe("Google sign-in could not be completed. Try again.");
+    expect(requireCapturedAuth(authApi).callbackStatus?.message).not.toContain("SECRET_TOKEN");
+  });
+
+  it("cancels the Google OAuth expiry timer when the provider unmounts", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    vi.useFakeTimers();
+
+    const view = render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(authApi).not.toBeNull();
+    const baselineTimerCount = vi.getTimerCount();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+    const timerCountWithAttempt = vi.getTimerCount();
+    expect(timerCountWithAttempt).toBeGreaterThan(baselineTimerCount);
+
+    view.unmount();
+    expect(vi.getTimerCount()).toBeLessThan(timerCountWithAttempt);
+  });
+
+  it("keeps repeated cancellation idempotent without reviving stale OAuth state", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+      authApi!.clearCallbackStatus();
+      authApi!.clearCallbackStatus();
+      await authApi!.signOut();
+      await authApi!.signOut();
+      authApi!.clearCallbackStatus();
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS * 2);
+    });
+
+    expect(requireCapturedAuth(authApi).callbackStatus).toBeNull();
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
   });
 
   it("returns explicit fallback guidance when the Google browser handoff fails", async () => {
@@ -302,11 +1162,103 @@ describe("AuthContext", () => {
     });
 
     expect(googleError?.message).toBe("Unable to open Google sign-in. Try again, or continue with email.");
-    expect(tauriMocks.openUrl).toHaveBeenCalledWith("https://accounts.google.com/oauth");
+    expect(tauriMocks.openUrl).toHaveBeenCalledWith(googleOAuthUrl());
     await waitFor(() => {
       expect(authApi?.callbackStatus?.phase).toBe("failed");
     });
     expect(requireCapturedAuth(authApi).callbackStatus?.message).toBe("Unable to open Google sign-in. Try again, or continue with email.");
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("times out a hung native opener, releases the lock, and reopens the same flow", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    tauriMocks.openUrl.mockImplementationOnce(() => new Promise(() => undefined));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+    vi.useFakeTimers();
+
+    let firstError: Error | null | undefined;
+    await act(async () => {
+      const firstAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(GOOGLE_OAUTH_OPERATION_TIMEOUT_MS);
+      firstError = (await firstAttempt).error;
+    });
+
+    expect(firstError?.message).toBe("Unable to open Google sign-in. Try again, or continue with email.");
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      method: "google",
+      googleAction: "reopen",
+    });
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await authApi!.signInWithGoogle();
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(2);
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(1, googleOAuthUrl());
+    expect(tauriMocks.openUrl).toHaveBeenNthCalledWith(2, googleOAuthUrl());
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("does not revive Google status when a pending native opener settles after repeated dismissal", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    let resolveOpen: (() => void) | null = null;
+    tauriMocks.openUrl.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveOpen = resolve;
+    }));
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let pendingAttempt: Promise<{ error: Error | null }> | null = null;
+    await act(async () => {
+      pendingAttempt = authApi!.signInWithGoogle();
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(tauriMocks.openUrl).toHaveBeenCalledTimes(1);
+    });
+
+    await act(async () => {
+      authApi!.clearCallbackStatus();
+      authApi!.clearCallbackStatus();
+      await pendingAttempt;
+    });
+
+    await act(async () => {
+      resolveOpen?.();
+      await Promise.resolve();
+    });
+
+    expect(activateGoogleOAuthVerifier).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.openUrl).toHaveBeenCalledTimes(1);
+    expect(requireCapturedAuth(authApi).callbackStatus).toBeNull();
+    expect(readAuthDiagnostics().some((entry) => entry.event === "auth.google_oauth.opened")).toBe(false);
   });
 
   it("rejects short signup passwords before calling Supabase", async () => {
@@ -422,7 +1374,85 @@ describe("AuthContext", () => {
     expect(authApi!.callbackStatus?.message).toBe("Google sign-in did not return an OAuth URL.");
   });
 
-  it("returns the Supabase error when direct Google OAuth fails", async () => {
+  it("rejects a malformed Google OAuth URL without opening or reflecting it", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    signInWithOAuth.mockResolvedValueOnce({ data: { url: "javascript:alert(document.cookie)" }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let googleError: Error | null | undefined;
+    await act(async () => {
+      googleError = (await authApi!.signInWithGoogle()).error;
+    });
+
+    expect(googleError?.message).toBe("Google sign-in returned an invalid OAuth URL. Try again.");
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      message: "Google sign-in returned an invalid OAuth URL. Try again.",
+      method: "google",
+      googleAction: "retry",
+    });
+    expect(JSON.stringify(readAuthDiagnostics())).not.toContain("document.cookie");
+  });
+
+  it.each([
+    ["structurally malformed", "https://[invalid"],
+    ["plain HTTP", "http://project.supabase.co/auth/v1/authorize"],
+    ["unrelated HTTPS origin", "https://example.com/auth/v1/authorize"],
+    ["wrong authorize path", "https://project.supabase.co/auth/v1/token"],
+    ["credential-bearing", "https://user:secret@project.supabase.co/auth/v1/authorize"],
+    ["wrong provider", googleOAuthUrl({ provider: "github" })],
+    ["wrong callback bridge", googleOAuthUrl({ redirect_to: "https://example.com/callback" })],
+    ["missing challenge", googleOAuthUrl({ code_challenge: "" })],
+    ["wrong challenge method", googleOAuthUrl({ code_challenge_method: "plain" })],
+    ["duplicate critical parameter", `${googleOAuthUrl()}&provider=google`],
+    ["fragment-bearing", `${googleOAuthUrl()}#unexpected`],
+    ["oversized", `https://project.supabase.co/auth/v1/authorize?state=${"a".repeat(8_192)}`],
+    ["wrong-shape", { href: "https://project.supabase.co/auth/v1/authorize" }],
+  ])("rejects a %s OAuth URL without opening or reflecting it", async (_name, untrustedUrl) => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    signInWithOAuth.mockResolvedValueOnce({ data: { url: untrustedUrl }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi).not.toBeNull();
+    });
+
+    let result: { error: Error | null } | undefined;
+    await act(async () => {
+      result = await authApi!.signInWithGoogle();
+    });
+
+    expect(result?.error?.message).toBe("Google sign-in returned an invalid OAuth URL. Try again.");
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+    expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("retry");
+    const diagnostics = JSON.stringify(readAuthDiagnostics());
+    expect(diagnostics).not.toContain("user:secret");
+    expect(diagnostics).not.toContain("example.com");
+    expect(diagnostics.length).toBeLessThan(20_000);
+  });
+
+  it("redacts the Supabase error when direct Google OAuth preparation fails", async () => {
     const oauthError = new Error("Google provider is disabled");
     signInWithOAuth.mockResolvedValueOnce({ data: { url: null }, error: oauthError });
     let authApi: ReturnType<typeof useAuth> | null = null;
@@ -444,12 +1474,13 @@ describe("AuthContext", () => {
       googleError = (await authApi!.signInWithGoogle()).error;
     });
 
-    expect(googleError).toBe(oauthError);
+    expect(googleError?.message).toBe("Unable to start Google sign-in. Try again, or continue with email.");
+    expect(googleError?.message).not.toContain(oauthError.message);
     expect(tauriMocks.openUrl).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(authApi?.callbackStatus?.phase).toBe("failed");
     });
-    expect(authApi!.callbackStatus?.message).toBe("Google provider is disabled");
+    expect(authApi!.callbackStatus?.message).toBe("Unable to start Google sign-in. Try again, or continue with email.");
   });
 
   it("exchanges startup Tauri deep-link auth codes", async () => {
@@ -477,6 +1508,34 @@ describe("AuthContext", () => {
     expect(exchangeCodeForSession).toHaveBeenCalledTimes(1);
     await waitFor(() => {
       expect(authApi?.callbackStatus?.phase).toBe("completed");
+    });
+  });
+
+  it("keeps website PKCE callbacks working without Google attempt metadata", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    hasUsableGoogleOAuthVerifier.mockReturnValue(false);
+    exchangeCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
+    tauriMocks.getCurrent.mockResolvedValueOnce([
+      "drifty://auth/callback?code=email-confirmation-code",
+    ]);
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(exchangeCodeForSession).toHaveBeenCalledWith("email-confirmation-code");
+    });
+    expect(hasUsableGoogleOAuthVerifier).not.toHaveBeenCalled();
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "completed",
+      method: "website",
     });
   });
 
@@ -532,7 +1591,7 @@ describe("AuthContext", () => {
   it("exchanges direct Google OAuth callbacks through the code-only path", async () => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
     const session = createSession();
-    exchangeCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
+    exchangeGoogleOAuthCodeForSession.mockResolvedValueOnce({ data: { session }, error: null });
 
     render(
       <AuthProvider>
@@ -551,7 +1610,10 @@ describe("AuthContext", () => {
     });
 
     await waitFor(() => {
-      expect(exchangeCodeForSession).toHaveBeenCalledWith("google-code");
+      expect(exchangeGoogleOAuthCodeForSession).toHaveBeenCalledWith(
+        "google-code",
+        expect.any(AbortSignal),
+      );
     });
     expect(setSession).not.toHaveBeenCalledWith({
       access_token: "google-access",
@@ -1184,8 +2246,32 @@ describe("AuthContext", () => {
     });
 
     expect(authApi).not.toBeNull();
-    expect(authApi!.callbackStatus?.message).toBe("OAuth callback failed: User denied access");
+    expect(authApi!.callbackStatus?.message).toBe("Sign-in was cancelled. Try again when you're ready.");
+    expect(authApi!.callbackStatus?.message).not.toContain("User denied access");
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
     expect(setSession).not.toHaveBeenCalled();
+  });
+
+  it("does not reflect hostile provider callback descriptions", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/auth/callback#error=server_error&error_description=SECRET_TOKEN%3Ddo-not-reflect",
+    );
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => {
+      expect(authApi?.callbackStatus?.phase).toBe("failed");
+    });
+    expect(authApi!.callbackStatus?.message).toBe("Sign-in could not be completed. Try again.");
+    expect(authApi!.callbackStatus?.message).not.toContain("SECRET_TOKEN");
   });
 });

@@ -113,6 +113,15 @@ export function AuthModal({
   const isSignUp = authMode === "sign-up";
   const submitLabel = isSignUp ? t("auth.modal.createAccount") : t("auth.modal.signIn");
   const isBusy = isSubmitting || isGoogleSubmitting || status === "loading";
+  const isGoogleCallbackBusy = callbackStatus?.googleAction === "opening"
+    || callbackStatus?.phase === "received"
+    || callbackStatus?.phase === "exchanging"
+    || callbackStatus?.phase === "completed";
+  const googleButtonLabel = callbackStatus?.googleAction === "reopen"
+    ? t("auth.modal.reopenGoogle")
+    : callbackStatus?.googleAction === "retry"
+      ? t("auth.modal.retryGoogle")
+      : t("auth.modal.continueGoogle");
 
   return (
     <div className="auth-modal__overlay">
@@ -211,10 +220,10 @@ export function AuthModal({
               type="button"
               className="modal-btn modal-btn--secondary modal-btn--block auth-modal__google"
               onClick={() => void handleGoogleSignIn()}
-              disabled={isBusy}
+              disabled={isBusy || isGoogleCallbackBusy}
             >
               <GoogleMark />
-              {isGoogleSubmitting ? t("auth.modal.opening") : t("auth.modal.continueGoogle")}
+              {isGoogleSubmitting ? t("auth.modal.opening") : googleButtonLabel}
             </button>
           </>
         ) : null}

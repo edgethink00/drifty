@@ -8,8 +8,13 @@ import {
 } from "react";
 import {
   authModePolicy,
+  clearGoogleOAuthVerifier,
+  exchangeGoogleOAuthCodeForSession,
+  getGoogleOAuthAuthorizeUrl,
   hasBlockingAuthConfigurationError,
+  hasUsableGoogleOAuthVerifier,
   isSupabaseEnabled,
+  prepareGoogleOAuthAuthorization,
   supabase,
   type DriftyAuthMode,
 } from "../../lib/supabase/client";
@@ -40,14 +45,125 @@ const DESKTOP_EMAIL_AUTH_BRIDGE_URL = "https://drifty.so/auth/callback/";
 const DESKTOP_GOOGLE_AUTH_BRIDGE_URL = "https://drifty.so/auth/desktop-google-callback/";
 const GOOGLE_BROWSER_OPENED_MESSAGE = "Browser opened. Waiting for sign-in to return to Drifty.";
 const GOOGLE_BROWSER_OPEN_FAILED_MESSAGE = "Unable to open Google sign-in. Try again, or continue with email.";
+const GOOGLE_BROWSER_REOPENING_MESSAGE = "Reopening Google sign-in...";
+const GOOGLE_OAUTH_REQUEST_TIMEOUT_MESSAGE = "Google sign-in took too long. Try again, or continue with email.";
+const GOOGLE_OAUTH_REQUEST_FAILED_MESSAGE = "Unable to start Google sign-in. Try again, or continue with email.";
+const GOOGLE_OAUTH_CALLBACK_FAILED_MESSAGE = "Google sign-in could not be completed. Try again.";
+const GOOGLE_OAUTH_CALLBACK_CANCELLED_MESSAGE = "That Google sign-in attempt expired or was cancelled. Start Google sign-in again.";
+const GOOGLE_SIGN_IN_EXPIRED_MESSAGE = "Google sign-in expired after 5 minutes. Try again.";
+const GOOGLE_OAUTH_URL_MAX_LENGTH = 8_192;
+const GOOGLE_OAUTH_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+
+export const GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS = 5 * 60 * 1000;
+export const GOOGLE_OAUTH_OPERATION_TIMEOUT_MS = 20 * 1000;
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 export type OAuthCallbackPhase = "waiting" | "received" | "exchanging" | "completed" | "failed";
+export type OAuthCallbackMethod = "google" | "website";
+export type GoogleSignInAction = "opening" | "reopen" | "retry";
 
 export interface OAuthCallbackStatus {
   phase: OAuthCallbackPhase;
   message: string;
+  method?: OAuthCallbackMethod;
+  googleAction?: GoogleSignInAction;
+}
+
+interface GoogleOAuthAttempt {
+  id: number;
+  url: string;
+  expiresAt: number;
+}
+
+interface GoogleOAuthOperationHandle {
+  id: number;
+  cancel: () => void;
+}
+
+class GoogleOAuthOperationTimeoutError extends Error {
+  constructor() {
+    super("Google OAuth operation timed out");
+    this.name = "GoogleOAuthOperationTimeoutError";
+  }
+}
+
+class GoogleOAuthOperationCancelledError extends Error {
+  constructor() {
+    super("Google OAuth operation cancelled");
+    this.name = "GoogleOAuthOperationCancelledError";
+  }
+}
+
+function withGoogleOAuthOperationTimeout<T>(
+  operation: PromiseLike<T>,
+  cancellation?: Promise<void>,
+  onTimeout?: () => void,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      onTimeout?.();
+      reject(new GoogleOAuthOperationTimeoutError());
+    }, GOOGLE_OAUTH_OPERATION_TIMEOUT_MS);
+
+    Promise.resolve(operation).then(
+      (value) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+
+    cancellation?.then(() => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      reject(new GoogleOAuthOperationCancelledError());
+    });
+  });
+}
+
+function isValidGoogleOAuthUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > GOOGLE_OAUTH_URL_MAX_LENGTH) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+    const expectedAuthorizeUrl = getGoogleOAuthAuthorizeUrl();
+    if (!expectedAuthorizeUrl) return false;
+    const expected = new URL(expectedAuthorizeUrl);
+    const provider = url.searchParams.getAll("provider");
+    const redirectTo = url.searchParams.getAll("redirect_to");
+    const challenge = url.searchParams.getAll("code_challenge");
+    const challengeMethod = url.searchParams.getAll("code_challenge_method");
+    return url.protocol === "https:"
+      && url.username === ""
+      && url.password === ""
+      && url.origin === expected.origin
+      && url.pathname === expected.pathname
+      && url.hash === ""
+      && provider.length === 1
+      && provider[0] === "google"
+      && redirectTo.length === 1
+      && redirectTo[0] === DESKTOP_GOOGLE_AUTH_BRIDGE_URL
+      && challenge.length === 1
+      && GOOGLE_OAUTH_CHALLENGE_PATTERN.test(challenge[0])
+      && challengeMethod.length === 1
+      && challengeMethod[0] === "s256";
+  } catch {
+    return false;
+  }
 }
 
 export interface AuthState {
@@ -82,7 +198,7 @@ function getOAuthSessionCallbackErrorMessage(error: string) {
     return "That sign-in link was incomplete or expired. Please sign in again on drifty.so.";
   }
 
-  return error;
+  return "Sign-in could not be completed. Try again.";
 }
 
 type TauriInvoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
@@ -126,6 +242,87 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sessionRef = useRef<Session | null>(null);
   const tauriInvokeRef = useRef<TauriInvoke | null>(null);
   const saveSequenceRef = useRef(0);
+  const googleOAuthAttemptSequenceRef = useRef(0);
+  const googleOAuthAttemptRef = useRef<GoogleOAuthAttempt | null>(null);
+  const googleOAuthExpiryTimeoutRef = useRef<number | null>(null);
+  const googleOAuthOperationSequenceRef = useRef(0);
+  const googleOAuthActiveOperationRef = useRef<GoogleOAuthOperationHandle | null>(null);
+
+  function cancelPendingGoogleOAuthOperation() {
+    googleOAuthActiveOperationRef.current?.cancel();
+    googleOAuthOperationSequenceRef.current += 1;
+    googleOAuthActiveOperationRef.current = null;
+  }
+
+  function clearGoogleOAuthAttempt({
+    cancelPending = true,
+    clearPersistedVerifier = true,
+  }: {
+    cancelPending?: boolean;
+    clearPersistedVerifier?: boolean;
+  } = {}) {
+    if (cancelPending) {
+      cancelPendingGoogleOAuthOperation();
+    }
+    if (googleOAuthExpiryTimeoutRef.current !== null) {
+      window.clearTimeout(googleOAuthExpiryTimeoutRef.current);
+      googleOAuthExpiryTimeoutRef.current = null;
+    }
+    googleOAuthAttemptRef.current = null;
+    if (clearPersistedVerifier) {
+      clearGoogleOAuthVerifier();
+    }
+  }
+
+  function expireGoogleOAuthAttempt(attemptId: number, { cancelPending = true }: { cancelPending?: boolean } = {}) {
+    if (googleOAuthAttemptRef.current?.id !== attemptId) {
+      return;
+    }
+
+    if (cancelPending) {
+      cancelPendingGoogleOAuthOperation();
+    }
+
+    googleOAuthAttemptRef.current = null;
+    googleOAuthExpiryTimeoutRef.current = null;
+    clearGoogleOAuthVerifier();
+    recordAuthDiagnostic("auth.google_oauth.timeout", {
+      reason: "oauth-state-expired",
+      timeoutMs: GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS,
+    });
+    setCallbackStatus((current) => {
+      if (sessionRef.current?.user || current?.method !== "google") {
+        return current;
+      }
+      return {
+        phase: "failed",
+        message: GOOGLE_SIGN_IN_EXPIRED_MESSAGE,
+        method: "google",
+        googleAction: "retry",
+      };
+    });
+    capturePostHogEvent("cloud_auth_action", {
+      action: "sign_in_completed",
+      method: "oauth",
+      result: "error",
+      error_kind: "timeout",
+    });
+  }
+
+  function rememberGoogleOAuthAttempt(url: string, expiresAt: number) {
+    clearGoogleOAuthAttempt({ cancelPending: false, clearPersistedVerifier: false });
+    const attempt = {
+      id: googleOAuthAttemptSequenceRef.current + 1,
+      url,
+      expiresAt,
+    };
+    googleOAuthAttemptSequenceRef.current = attempt.id;
+    googleOAuthAttemptRef.current = attempt;
+    googleOAuthExpiryTimeoutRef.current = window.setTimeout(() => {
+      expireGoogleOAuthAttempt(attempt.id);
+    }, Math.max(0, attempt.expiresAt - Date.now()));
+    return attempt;
+  }
 
   function applySessionState(nextSession: Session | null, nextCloudConnectionStatus: AuthConnectionStatus = "online") {
     sessionRef.current = nextSession;
@@ -302,96 +499,210 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSession("offline");
     }, AUTH_INITIALIZATION_TIMEOUT_MS);
 
-    const setCallbackReceived = () => {
+    const setCallbackReceived = (method: OAuthCallbackMethod) => {
       setCallbackStatus({
         phase: "received",
         message: "OAuth callback received.",
+        method,
       });
     };
 
-    const setCallbackExchanging = (message: string) => {
+    const setCallbackExchanging = (message: string, method: OAuthCallbackMethod) => {
       setCallbackStatus({
         phase: "exchanging",
         message,
+        method,
       });
     };
 
-    const setCallbackCompleted = () => {
+    const setCallbackCompleted = (method: OAuthCallbackMethod) => {
       setCallbackStatus({
         phase: "completed",
         message: "OAuth callback completed.",
+        method,
       });
     };
 
-    const setCallbackFailed = (message: string) => {
+    const setCallbackFailed = (message: string, method?: OAuthCallbackMethod) => {
       setCallbackStatus({
         phase: "failed",
         message,
+        method,
+        ...(method === "google" ? { googleAction: "retry" as const } : {}),
       });
     };
 
-    const exchangeAuthCode = async (authCode: string) => {
+    const exchangeAuthCode = async (authCode: string, method: OAuthCallbackMethod) => {
       if (exchangedCodes.has(authCode)) {
         recordAuthDiagnostic("auth.callback.code.duplicate", { callbackKind: "code" });
         return true;
       }
 
+      if (method === "google" && !hasUsableGoogleOAuthVerifier()) {
+        recordAuthDiagnostic("auth.callback.code.rejected", {
+          callbackKind: "code",
+          reason: "missing-expired-or-cancelled-verifier",
+        });
+        setCallbackFailed(GOOGLE_OAUTH_CALLBACK_CANCELLED_MESSAGE, method);
+        return true;
+      }
+
       exchangedCodes.add(authCode);
       const previousSession = sessionRef.current;
-      setCallbackReceived();
-      setCallbackExchanging("Exchanging OAuth authorization code.");
-      const { data, error } = await client.auth.exchangeCodeForSession(authCode);
-      if (error) {
+      let googleOperationId: number | null = null;
+      let googleAbortController: AbortController | null = null;
+      let googleOperationCancellation: Promise<void> | undefined;
+
+      if (method === "google") {
+        googleOperationId = googleOAuthOperationSequenceRef.current + 1;
+        googleOAuthOperationSequenceRef.current = googleOperationId;
+        googleAbortController = new AbortController();
+        let cancelOperation: () => void = () => undefined;
+        googleOperationCancellation = new Promise<void>((resolve) => {
+          cancelOperation = () => {
+            if (!googleAbortController?.signal.aborted) {
+              googleAbortController?.abort(new GoogleOAuthOperationCancelledError());
+            }
+            resolve();
+          };
+        });
+        googleOAuthActiveOperationRef.current = {
+          id: googleOperationId,
+          cancel: cancelOperation,
+        };
+      }
+
+      const isCurrentGoogleOperation = () => method !== "google"
+        || googleOAuthActiveOperationRef.current?.id === googleOperationId;
+      setCallbackReceived(method);
+      setCallbackExchanging("Exchanging OAuth authorization code.", method);
+      try {
+        const { data, error } = method === "google"
+          ? await withGoogleOAuthOperationTimeout(
+              exchangeGoogleOAuthCodeForSession(authCode, googleAbortController!.signal),
+              googleOperationCancellation,
+              () => googleAbortController?.abort(new GoogleOAuthOperationTimeoutError()),
+            )
+          : await client.auth.exchangeCodeForSession(authCode);
+        if (!isActive || !isCurrentGoogleOperation()) {
+          return true;
+        }
+        if (error) {
+          exchangedCodes.delete(authCode);
+          recordAuthDiagnostic("auth.callback.code.error", {
+            callbackKind: "code",
+            ...getAuthDiagnosticError(error),
+          });
+          setCallbackFailed(
+            method === "google"
+              ? GOOGLE_OAUTH_CALLBACK_FAILED_MESSAGE
+              : "Sign-in could not be completed. Try again.",
+            method,
+          );
+          applySession(previousSession);
+          capturePostHogEvent("cloud_auth_action", {
+            action: "sign_in_completed",
+            method: "oauth",
+            result: "error",
+            error_kind: toAnalyticsErrorKind(error),
+          });
+          return true;
+        }
+
+        const exchangedSession = data?.session ?? (
+          method === "website" ? (await client.auth.getSession()).data.session : null
+        );
+        if (!exchangedSession) {
+          recordAuthDiagnostic("auth.callback.code.no_session", { callbackKind: "code" });
+          setCallbackFailed(
+            method === "google"
+              ? GOOGLE_OAUTH_CALLBACK_FAILED_MESSAGE
+              : "Sign-in could not be completed. Try again.",
+            method,
+          );
+          applySession(previousSession);
+          capturePostHogEvent("cloud_auth_action", {
+            action: "sign_in_completed",
+            method: "oauth",
+            result: "error",
+            error_kind: "not_authenticated",
+          });
+          return true;
+        }
+
+        recordAuthDiagnostic("auth.callback.code.success", {
+          callbackKind: "code",
+          ...getSessionDiagnosticSummary(exchangedSession),
+        });
+        if (method === "google") {
+          clearGoogleOAuthAttempt({ cancelPending: false });
+        }
+        applySession(exchangedSession);
+        await saveDesktopSession(exchangedSession);
+        setCallbackCompleted(method);
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_completed",
+          method: "oauth",
+          result: "success",
+        });
+
+        return true;
+      } catch (error) {
         exchangedCodes.delete(authCode);
+        if (
+          !isActive
+          || !isCurrentGoogleOperation()
+          || error instanceof GoogleOAuthOperationCancelledError
+        ) {
+          return true;
+        }
+        const isTimeout = error instanceof GoogleOAuthOperationTimeoutError;
         recordAuthDiagnostic("auth.callback.code.error", {
           callbackKind: "code",
+          reason: isTimeout ? "exchange-timeout" : "exchange-threw",
           ...getAuthDiagnosticError(error),
         });
-        setCallbackFailed(`OAuth authorization code exchange failed: ${error.message}`);
+        setCallbackFailed(
+          isTimeout
+            ? (method === "google"
+                ? GOOGLE_OAUTH_REQUEST_TIMEOUT_MESSAGE
+                : "Sign-in took too long. Try again.")
+            : (method === "google"
+                ? GOOGLE_OAUTH_CALLBACK_FAILED_MESSAGE
+                : "Sign-in could not be completed. Try again."),
+          method,
+        );
         applySession(previousSession);
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_completed",
           method: "oauth",
           result: "error",
-          error_kind: toAnalyticsErrorKind(error),
+          error_kind: isTimeout ? "timeout" : toAnalyticsErrorKind(error),
         });
         return true;
+      } finally {
+        if (method === "website") {
+          clearGoogleOAuthVerifier();
+        }
+        if (
+          method === "google"
+          && googleOAuthActiveOperationRef.current?.id === googleOperationId
+        ) {
+          googleOAuthActiveOperationRef.current = null;
+        }
       }
-
-      const exchangedSession = data?.session ?? (await client.auth.getSession()).data.session;
-      if (!exchangedSession) {
-        recordAuthDiagnostic("auth.callback.code.no_session", { callbackKind: "code" });
-        setCallbackFailed("OAuth authorization code was accepted, but no Supabase session was available.");
-        applySession(previousSession);
-        capturePostHogEvent("cloud_auth_action", {
-          action: "sign_in_completed",
-          method: "oauth",
-          result: "error",
-          error_kind: "not_authenticated",
-        });
-        return true;
-      }
-
-      recordAuthDiagnostic("auth.callback.code.success", {
-        callbackKind: "code",
-        ...getSessionDiagnosticSummary(exchangedSession),
-      });
-      applySession(exchangedSession);
-      await saveDesktopSession(exchangedSession);
-      setCallbackCompleted();
-      capturePostHogEvent("cloud_auth_action", {
-        action: "sign_in_completed",
-        method: "oauth",
-        result: "success",
-      });
-
-      return true;
     };
 
     const handleAuthCallbackUrl = async (url: string, source: "web" | "tauri") => {
       const callbackResult = getOAuthCallbackResultFromUrl(url, source);
       if (!callbackResult) {
         return false;
+      }
+
+      if (callbackResult.kind === "code" && callbackResult.method === "google") {
+        cancelPendingGoogleOAuthOperation();
+      } else {
+        clearGoogleOAuthAttempt({ clearPersistedVerifier: callbackResult.kind !== "code" });
       }
 
       recordAuthDiagnostic("auth.callback.detected", {
@@ -405,7 +716,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           errorMessage: callbackResult.message,
           source,
         });
-        setCallbackFailed(callbackResult.message);
+        setCallbackFailed(callbackResult.message, callbackResult.method);
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_completed",
           method: "oauth",
@@ -416,7 +727,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (callbackResult.kind === "code") {
-        return exchangeAuthCode(callbackResult.code);
+        return exchangeAuthCode(callbackResult.code, callbackResult.method);
       }
 
       if (callbackResult.kind === "session") {
@@ -429,8 +740,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const previousSession = sessionRef.current;
-      setCallbackReceived();
-      setCallbackExchanging("Applying OAuth session.");
+      setCallbackReceived(callbackResult.method);
+      setCallbackExchanging("Applying OAuth session.", callbackResult.method);
 
       const { data, error } = await client.auth.setSession({
         access_token: callbackResult.accessToken,
@@ -444,7 +755,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           source,
           ...getAuthDiagnosticError(error ?? new Error("OAuth session callback did not return a session")),
         });
-        setCallbackFailed(error ? getOAuthSessionCallbackErrorMessage(error.message) : "OAuth session callback did not return a session.");
+        setCallbackFailed(
+          error ? getOAuthSessionCallbackErrorMessage(error.message) : "OAuth session callback did not return a session.",
+          callbackResult.method,
+        );
         applySession(previousSession);
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_completed",
@@ -462,7 +776,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       applySession(callbackSession);
       await saveDesktopSession(callbackSession);
-      setCallbackCompleted();
+      setCallbackCompleted(callbackResult.method);
       capturePostHogEvent("cloud_auth_action", {
         action: "sign_in_completed",
         method: "oauth",
@@ -601,6 +915,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       isActive = false;
+      clearGoogleOAuthAttempt({ clearPersistedVerifier: false });
       cleanupTauriEventListener(unlistenDeepLink);
       if (pendingDeepLinkInterval !== null) {
         window.clearInterval(pendingDeepLinkInterval);
@@ -621,6 +936,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error };
     }
+    clearGoogleOAuthAttempt();
+    setCallbackStatus(null);
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -694,6 +1011,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error, needsEmailConfirmation: false };
     }
+    clearGoogleOAuthAttempt();
+    setCallbackStatus(null);
     const validationError = validateAuthPasswordForSignUp(password);
     if (validationError) {
       capturePostHogEvent("cloud_auth_action", {
@@ -723,6 +1042,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function clearCallbackStatus() {
+    clearGoogleOAuthAttempt();
     setCallbackStatus(null);
   }
 
@@ -738,12 +1058,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error };
     }
     const isDesktop = isTauriRuntime();
+    clearGoogleOAuthAttempt();
 
     setCallbackStatus({
       phase: "waiting",
       message: isDesktop
         ? "Opening drifty.so in your browser. Sign in there, then choose Open Drifty."
         : "Opening drifty.so sign-in.",
+      method: "website",
     });
 
     if (isDesktop) {
@@ -753,6 +1075,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCallbackStatus({
           phase: "waiting",
           message: "Browser opened.",
+          method: "website",
         });
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_started",
@@ -766,6 +1089,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setCallbackStatus({
           phase: "failed",
           message: openError.message,
+          method: "website",
         });
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_started",
@@ -799,73 +1123,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error };
     }
+    if (googleOAuthActiveOperationRef.current !== null) {
+      recordAuthDiagnostic("auth.google_oauth.open.skipped", { reason: "open-in-progress" });
+      return { error: null };
+    }
+
     const isDesktop = isTauriRuntime();
-
-    setCallbackStatus({
-      phase: "waiting",
-      message: "Opening Google sign-in...",
+    const operationId = googleOAuthOperationSequenceRef.current + 1;
+    googleOAuthOperationSequenceRef.current = operationId;
+    let cancelOperation: () => void = () => undefined;
+    const operationCancellation = new Promise<void>((resolve) => {
+      cancelOperation = resolve;
     });
+    googleOAuthActiveOperationRef.current = { id: operationId, cancel: cancelOperation };
+    const isCurrentOperation = () => googleOAuthActiveOperationRef.current?.id === operationId;
+    const cancelledResult = () => {
+      recordAuthDiagnostic("auth.google_oauth.operation.cancelled", { operationId });
+      return { error: null };
+    };
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: DESKTOP_GOOGLE_AUTH_BRIDGE_URL,
-        skipBrowserRedirect: true,
-        queryParams: {
-          prompt: "select_account",
-        },
-      },
-    });
-
-    if (error) {
+    const openDesktopAttempt = async (attempt: GoogleOAuthAttempt, reopening: boolean) => {
+      if (!isCurrentOperation()) return cancelledResult();
       setCallbackStatus({
-        phase: "failed",
-        message: error.message,
+        phase: "waiting",
+        message: reopening ? GOOGLE_BROWSER_REOPENING_MESSAGE : "Opening Google sign-in...",
+        method: "google",
+        googleAction: "opening",
       });
-      capturePostHogEvent("cloud_auth_action", {
-        action: "sign_in_started",
-        method: "oauth",
-        result: "error",
-        error_kind: toAnalyticsErrorKind(error),
-      });
-      return { error };
-    }
 
-    if (!data.url) {
-      const missingUrlError = new Error("Google sign-in did not return an OAuth URL.");
-      setCallbackStatus({
-        phase: "failed",
-        message: missingUrlError.message,
-      });
-      capturePostHogEvent("cloud_auth_action", {
-        action: "sign_in_started",
-        method: "oauth",
-        result: "error",
-        error_kind: toAnalyticsErrorKind(missingUrlError),
-      });
-      return { error: missingUrlError };
-    }
-
-    if (isDesktop) {
       try {
         const { openUrl } = await import("@tauri-apps/plugin-opener");
-        await openUrl(data.url);
-        setCallbackStatus({
-          phase: "waiting",
-          message: GOOGLE_BROWSER_OPENED_MESSAGE,
+        if (!isCurrentOperation()) return cancelledResult();
+        await withGoogleOAuthOperationTimeout(openUrl(attempt.url), operationCancellation);
+        if (!isCurrentOperation()) return cancelledResult();
+        if (googleOAuthAttemptRef.current?.id === attempt.id) {
+          setCallbackStatus({
+            phase: "waiting",
+            message: GOOGLE_BROWSER_OPENED_MESSAGE,
+            method: "google",
+            googleAction: "reopen",
+          });
+        }
+        recordAuthDiagnostic(reopening ? "auth.google_oauth.reopened" : "auth.google_oauth.opened", {
+          attemptId: attempt.id,
         });
-        capturePostHogEvent("cloud_auth_action", {
-          action: "sign_in_started",
-          method: "oauth",
-          result: "success",
-        });
+        if (!reopening) {
+          capturePostHogEvent("cloud_auth_action", {
+            action: "sign_in_started",
+            method: "oauth",
+            result: "success",
+          });
+        }
+        return { error: null };
       } catch (error) {
+        if (!isCurrentOperation()) return cancelledResult();
         const analyticsError = error instanceof Error ? error : String(error ?? "");
         const openError = new Error(GOOGLE_BROWSER_OPEN_FAILED_MESSAGE);
-        setCallbackStatus({
-          phase: "failed",
-          message: openError.message,
-        });
+        recordAuthDiagnostic(
+          reopening ? "auth.google_oauth.reopen.error" : "auth.google_oauth.open.error",
+          getAuthDiagnosticError(error),
+        );
+        if (googleOAuthAttemptRef.current?.id === attempt.id) {
+          setCallbackStatus({
+            phase: "failed",
+            message: openError.message,
+            method: "google",
+            googleAction: "reopen",
+          });
+        }
         capturePostHogEvent("cloud_auth_action", {
           action: "sign_in_started",
           method: "oauth",
@@ -874,21 +1199,180 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         return { error: openError };
       }
+    };
 
+    try {
+      const activeAttempt = googleOAuthAttemptRef.current;
+      const now = Date.now();
+      if (
+        isDesktop
+        && activeAttempt
+        && activeAttempt.expiresAt > now
+        && hasUsableGoogleOAuthVerifier(now)
+      ) {
+        return await openDesktopAttempt(activeAttempt, true);
+      }
+      if (activeAttempt) {
+        if (activeAttempt.expiresAt <= now) {
+          expireGoogleOAuthAttempt(activeAttempt.id, { cancelPending: false });
+        } else {
+          recordAuthDiagnostic("auth.google_oauth.reopen.invalidated", {
+            attemptId: activeAttempt.id,
+            reason: "missing-or-invalid-verifier",
+          });
+          clearGoogleOAuthAttempt({ cancelPending: false });
+        }
+      }
+      clearGoogleOAuthVerifier();
+
+      if (!isCurrentOperation()) return cancelledResult();
+      setCallbackStatus({
+        phase: "waiting",
+        message: "Opening Google sign-in...",
+        method: "google",
+        googleAction: "opening",
+      });
+
+      let oauthResponse;
+      try {
+        oauthResponse = await withGoogleOAuthOperationTimeout(prepareGoogleOAuthAuthorization({
+            redirectTo: DESKTOP_GOOGLE_AUTH_BRIDGE_URL,
+            skipBrowserRedirect: true,
+            queryParams: {
+              prompt: "select_account",
+            },
+        }), operationCancellation);
+      } catch (error) {
+        if (!isCurrentOperation()) return cancelledResult();
+        const requestError = error instanceof GoogleOAuthOperationTimeoutError
+          ? new Error(GOOGLE_OAUTH_REQUEST_TIMEOUT_MESSAGE)
+          : new Error(GOOGLE_OAUTH_REQUEST_FAILED_MESSAGE);
+        setCallbackStatus({
+          phase: "failed",
+          message: requestError.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        recordAuthDiagnostic("auth.google_oauth.request.error", getAuthDiagnosticError(error));
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(error),
+        });
+        return { error: requestError };
+      }
+
+      if (!isCurrentOperation()) return cancelledResult();
+      const { data, error } = oauthResponse;
+
+      if (error) {
+        const requestError = new Error(GOOGLE_OAUTH_REQUEST_FAILED_MESSAGE);
+        setCallbackStatus({
+          phase: "failed",
+          message: requestError.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        recordAuthDiagnostic("auth.google_oauth.request.error", getAuthDiagnosticError(error));
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(error),
+        });
+        return { error: requestError };
+      }
+
+      if (!data.url) {
+        const missingUrlError = new Error("Google sign-in did not return an OAuth URL.");
+        setCallbackStatus({
+          phase: "failed",
+          message: missingUrlError.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(missingUrlError),
+        });
+        return { error: missingUrlError };
+      }
+
+      if (!isValidGoogleOAuthUrl(data.url)) {
+        const invalidUrlError = new Error("Google sign-in returned an invalid OAuth URL. Try again.");
+        setCallbackStatus({
+          phase: "failed",
+          message: invalidUrlError.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        recordAuthDiagnostic("auth.google_oauth.url.rejected", { reason: "untrusted-destination" });
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(invalidUrlError),
+        });
+        return { error: invalidUrlError };
+      }
+
+      try {
+        const expiresAt = Date.now() + GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS;
+        oauthResponse.activateVerifier(expiresAt);
+        if (!isCurrentOperation()) {
+          clearGoogleOAuthVerifier();
+          return cancelledResult();
+        }
+
+        if (isDesktop) {
+          const attempt = rememberGoogleOAuthAttempt(data.url, expiresAt);
+          return await openDesktopAttempt(attempt, false);
+        }
+      } catch (error) {
+        if (!isCurrentOperation()) return cancelledResult();
+        const storageError = new Error("Secure browser storage is unavailable for Google sign-in.");
+        setCallbackStatus({
+          phase: "failed",
+          message: storageError.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        recordAuthDiagnostic("auth.google_oauth.verifier.error", getAuthDiagnosticError(error));
+        capturePostHogEvent("cloud_auth_action", {
+          action: "sign_in_started",
+          method: "oauth",
+          result: "error",
+          error_kind: toAnalyticsErrorKind(storageError),
+        });
+        return { error: storageError };
+      }
+
+      if (!isCurrentOperation()) {
+        clearGoogleOAuthVerifier();
+        return cancelledResult();
+      }
+
+      window.location.assign(data.url);
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_started",
+        method: "oauth",
+        result: "success",
+      });
       return { error: null };
+    } finally {
+      if (googleOAuthActiveOperationRef.current?.id === operationId) {
+        googleOAuthActiveOperationRef.current = null;
+      }
     }
-
-    window.location.assign(data.url);
-    capturePostHogEvent("cloud_auth_action", {
-      action: "sign_in_started",
-      method: "oauth",
-      result: "success",
-    });
-    return { error: null };
   }
 
   async function signOut() {
     if (!supabase) return;
+    clearGoogleOAuthAttempt();
+    setCallbackStatus(null);
     recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
     try {
       await supabase.auth.signOut();

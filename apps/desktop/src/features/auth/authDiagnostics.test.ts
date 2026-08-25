@@ -59,7 +59,7 @@ describe("authDiagnostics", () => {
         refreshToken: "raw-refresh-token",
         email: "tester@example.com",
         url: "drifty://auth/callback#access_token=raw-access-token&refresh_token=raw-refresh-token",
-        errorMessage: "Refresh failed for tester@example.com with access_token=raw-access-token refresh_token=raw-refresh-token",
+        errorMessage: "Refresh failed for tester@example.com with access_token=raw-access-token refresh_token=raw-refresh-token SECRET_TOKEN=provider-secret API_KEY:provider-key Authorization: Bearer provider-bearer",
         eventType: "TOKEN_REFRESHED",
         hasSession: true,
       },
@@ -72,10 +72,16 @@ describe("authDiagnostics", () => {
     expect(serialized).not.toContain("raw-access-token");
     expect(serialized).not.toContain("raw-refresh-token");
     expect(serialized).not.toContain("tester@example.com");
+    expect(serialized).not.toContain("provider-secret");
+    expect(serialized).not.toContain("provider-key");
+    expect(serialized).not.toContain("provider-bearer");
     expect(serialized).not.toContain("drifty://auth/callback");
     expect(serialized).toContain("[redacted-email]");
     expect(serialized).toContain("access_token=[redacted]");
     expect(serialized).toContain("refresh_token=[redacted]");
+    expect(serialized).toContain("SECRET_TOKEN=[redacted]");
+    expect(serialized).toContain("API_KEY=[redacted]");
+    expect(serialized).toContain("Authorization: [redacted]");
   });
 
   it("summarizes sessions without raw tokens or user identifiers", () => {

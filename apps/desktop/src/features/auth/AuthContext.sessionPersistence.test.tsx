@@ -40,8 +40,12 @@ vi.mock("../../lib/supabase/client", () => ({
     isAuthRequired: false,
     allowsAnonymousAuth: true,
   },
+  clearGoogleOAuthVerifier: vi.fn(() => true),
+  getGoogleOAuthAuthorizeUrl: () => "https://project.supabase.co/auth/v1/authorize",
   hasBlockingAuthConfigurationError: () => false,
+  hasUsableGoogleOAuthVerifier: () => true,
   isSupabaseEnabled: () => true,
+  prepareGoogleOAuthAuthorization: vi.fn(),
   supabase: {
     auth: {
       exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),

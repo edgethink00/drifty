@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
+import type { OAuthCallbackStatus } from "./features/auth/AuthContext";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
@@ -25,7 +26,7 @@ const {
     user: null as { id: string; email: string | null; is_anonymous?: boolean } | null,
     session: null,
     status: "unauthenticated" as "loading" | "authenticated" | "unauthenticated",
-    callbackStatus: null as { phase: "waiting" | "received" | "exchanging" | "completed" | "failed"; message: string } | null,
+    callbackStatus: null as OAuthCallbackStatus | null,
     isEnabled: true,
     authMode: "optional" as "optional" | "required",
     isAuthRequired: false,
@@ -161,6 +162,7 @@ async function advanceRequiredOnboardingToAccountStep() {
 
 describe("App auth modal", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
     window.localStorage.clear();
     markOnboardingCompleted("local");
@@ -502,6 +504,40 @@ describe("App auth modal", () => {
     const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
     expect(within(dialog).getByRole("status").textContent).toMatch(/sign in again on drifty\.so/i);
     expect(screen.queryByText(/legacy-auth-domain\.example/i)).toBeNull();
+  });
+
+  it("offers reopening during an active Google handoff and a fresh attempt after expiry", async () => {
+    authState.callbackStatus = {
+      phase: "waiting",
+      message: "Opening Google sign-in...",
+      method: "google",
+      googleAction: "opening",
+    };
+
+    const { rerender } = render(<App />);
+    await openAuthModalFromAccountMenu();
+
+    const dialog = screen.getByRole("dialog", { name: /sign in to drifty/i });
+    expect((within(dialog).getByRole("button", { name: /continue with google/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    authState.callbackStatus = {
+      phase: "waiting",
+      message: "Browser opened. Waiting for sign-in to return to Drifty.",
+      method: "google",
+      googleAction: "reopen",
+    };
+    rerender(<App />);
+    expect((within(dialog).getByRole("button", { name: /open google sign-in again/i }) as HTMLButtonElement).disabled).toBe(false);
+
+    authState.callbackStatus = {
+      phase: "failed",
+      message: "Google sign-in expired after 5 minutes. Try again.",
+      method: "google",
+      googleAction: "retry",
+    };
+    rerender(<App />);
+
+    expect((within(dialog).getByRole("button", { name: /try google sign-in again/i }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("replaces a failed callback notice with waiting status when starting Google sign-in", async () => {

@@ -67,7 +67,9 @@ function sanitizeEventName(event: string): string {
 function sanitizeText(value: string): string {
   return value
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted-email]")
+    .replace(/\b(Authorization)\s*:\s*(?:Bearer|Basic)\s+[^\s,;}]+/gi, "$1: [redacted]")
     .replace(/([?&#](?:access_token|refresh_token|token|code)=)[^&#\s]+/gi, "$1[redacted]")
+    .replace(/\b([A-Z0-9_.-]*(?:TOKEN|SECRET|PASSWORD|API[_-]?KEY))\s*[:=]\s*[^\s,;}]+/gi, "$1=[redacted]")
     .replace(/\b(?:access_token|refresh_token|token|code)[:=][^\s,;}]+/gi, (match) => `${match.split(/[:=]/)[0]}=[redacted]`)
     .slice(0, 180);
 }

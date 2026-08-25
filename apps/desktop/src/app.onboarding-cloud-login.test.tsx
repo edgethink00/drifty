@@ -366,6 +366,8 @@ describe("App onboarding cloud login", () => {
     authState.callbackStatus = {
       phase: "waiting",
       message: "Browser opened. Waiting for sign-in to return to Drifty.",
+      method: "google",
+      googleAction: "reopen",
     };
 
     render(<App />);
@@ -373,18 +375,46 @@ describe("App onboarding cloud login", () => {
     await advanceToAccountStep();
 
     expect(screen.getByRole("status").textContent).toContain("Browser opened. Waiting for sign-in to return to Drifty.");
+    const reopenButton = screen.getByRole("button", { name: /open google sign-in again/i }) as HTMLButtonElement;
+    expect(reopenButton.disabled).toBe(false);
+  });
+
+  it("only disables Google handoff while the browser is opening or the callback is processing", async () => {
+    authState.callbackStatus = {
+      phase: "waiting",
+      message: "Opening Google sign-in...",
+      method: "google",
+      googleAction: "opening",
+    };
+
+    const { rerender } = render(<App />);
+    await advanceToAccountStep();
+
+    expect((screen.getByRole("button", { name: /continue with google/i }) as HTMLButtonElement).disabled).toBe(true);
+
+    authState.callbackStatus = {
+      phase: "received",
+      message: "OAuth callback received.",
+      method: "google",
+    };
+    rerender(<App />);
+    expect((screen.getByRole("button", { name: /continue with google/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("shows Google browser handoff failures on the account onboarding step", async () => {
     authState.callbackStatus = {
       phase: "failed",
-      message: "Unable to open Google sign-in. Try again, or continue with email.",
+      message: "Google sign-in expired after 5 minutes. Try again.",
+      method: "google",
+      googleAction: "retry",
     };
 
     render(<App />);
 
     await advanceToAccountStep();
 
-    expect(screen.getByRole("alert").textContent).toContain("Unable to open Google sign-in. Try again, or continue with email.");
+    expect(screen.getByRole("alert").textContent).toContain("Google sign-in expired after 5 minutes. Try again.");
+    const retryButton = screen.getByRole("button", { name: /try google sign-in again/i }) as HTMLButtonElement;
+    expect(retryButton.disabled).toBe(false);
   });
 });
