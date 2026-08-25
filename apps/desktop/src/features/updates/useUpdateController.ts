@@ -24,12 +24,17 @@ import {
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 type UpdateCheckMode = "manual" | "automatic";
 
+export type ManualUpdateCheckResult =
+  | { readonly kind: "available"; readonly version: string }
+  | { readonly kind: "none" }
+  | { readonly kind: "error"; readonly message: string };
+
 type UseUpdateControllerResult = {
   readonly autoInstallFutureUpdates: boolean;
   readonly availableUpdate: AvailableUpdate | null;
   readonly currentUpdatePolicy: UpdatePolicy | null;
   readonly dismissAvailableUpdate: () => void;
-  readonly handleCheckForUpdates: (mode?: UpdateCheckMode) => Promise<void>;
+  readonly handleCheckForUpdates: (mode?: UpdateCheckMode) => Promise<ManualUpdateCheckResult | void>;
   readonly handleInstallUpdate: () => Promise<void>;
   readonly setAutoInstallFutureUpdates: (autoInstall: boolean) => void;
   readonly shouldShowAvailableUpdateDialog: boolean;
@@ -86,7 +91,7 @@ export function useUpdateController(): UseUpdateControllerResult {
     }
   }, []);
 
-  const handleCheckForUpdates = useCallback(async (mode: UpdateCheckMode = "manual") => {
+  const handleCheckForUpdates = useCallback(async (mode: UpdateCheckMode = "manual"): Promise<ManualUpdateCheckResult | void> => {
     if (updaterCheckingRef.current || updaterInstallingRef.current) return;
 
     const isManualCheck = mode === "manual";
@@ -122,20 +127,23 @@ export function useUpdateController(): UseUpdateControllerResult {
           updateStoredInteractions((currentInteractions) => markUpdateAutoInstallAttempted(currentInteractions, nextUpdate.version, Date.now()));
           await installUpdate(nextUpdate);
         }
-        return;
+        return isManualCheck ? { kind: "available", version: nextUpdate.version } : undefined;
       }
       if (isManualCheck) {
         setAvailableUpdate(null);
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
         setUpdaterMessage("Drifty is up to date.");
+        return { kind: "none" };
       }
     } catch (nextError) {
       if (isManualCheck) {
+        const message = `Update check failed: ${toErrorMessage(nextError)}`;
         setAvailableUpdate(null);
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
-        setUpdaterError(`Update check failed: ${toErrorMessage(nextError)}`);
+        setUpdaterError(message);
+        return { kind: "error", message };
       }
     } finally {
       updaterCheckingRef.current = false;

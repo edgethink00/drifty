@@ -10,9 +10,10 @@ use objc2::MainThreadOnly;
 use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{
-    NSApplication, NSBackingStoreType, NSButton, NSColor, NSControlSize, NSControlStateValueOff,
-    NSControlStateValueOn, NSFont, NSImage, NSImageScaling, NSImageView, NSModalResponse,
-    NSModalResponseCancel, NSModalResponseOK, NSPanel, NSTextField, NSView, NSWindowStyleMask,
+    NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSColor,
+    NSControlSize, NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage, NSImageScaling,
+    NSImageView, NSModalPanelWindowLevel, NSModalResponse, NSModalResponseCancel, NSModalResponseOK,
+    NSPanel, NSTextField, NSView, NSWindowStyleMask,
 };
 #[cfg(target_os = "macos")]
 use objc2_foundation::{NSData, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
@@ -33,6 +34,12 @@ const SIDE_PADDING: f64 = 24.0;
 pub struct NativeUpdatePromptResult {
     confirmed: bool,
     auto_install_future_updates: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeUpdateStatusResult {
+    dismissed: bool,
 }
 
 #[cfg(target_os = "macos")]
@@ -89,6 +96,17 @@ pub async fn update_prompt_show_native(
     .map_err(|error| error.to_string())?
 }
 
+#[tauri::command]
+pub async fn update_status_show_native(
+    app: AppHandle,
+    title: String,
+    body: String,
+) -> Result<NativeUpdateStatusResult, String> {
+    async_runtime::spawn_blocking(move || show_native_update_status(app, title, body))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
 fn show_native_update_prompt(
     app: AppHandle,
     version: String,
@@ -110,6 +128,22 @@ fn show_native_update_prompt(
         .map_err(|error| format!("Native update prompt was interrupted: {error}"))?
 }
 
+fn show_native_update_status(
+    app: AppHandle,
+    title: String,
+    body: String,
+) -> Result<NativeUpdateStatusResult, String> {
+    let (sender, receiver) = mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = sender.send(show_native_update_status_on_main_thread(&title, &body));
+    })
+    .map_err(|error| error.to_string())?;
+
+    receiver
+        .recv()
+        .map_err(|error| format!("Native update status was interrupted: {error}"))?
+}
+
 #[cfg(target_os = "macos")]
 fn show_native_update_prompt_on_main_thread(
     version: &str,
@@ -123,6 +157,7 @@ fn show_native_update_prompt_on_main_thread(
 
         let app = NSApplication::sharedApplication(mtm);
         let prompt = update_prompt_panel(mtm, version, auto_install_future_updates);
+        present_update_panel(mtm, &prompt.panel);
         let response = app.runModalForWindow(&prompt.panel);
         prompt.panel.orderOut(None);
 
@@ -221,12 +256,116 @@ fn update_prompt_panel(
     update.setKeyEquivalent(&NSString::from_str("\r"));
     root.addSubview(&update);
 
-    panel.makeKeyAndOrderFront(None);
     NativeUpdatePrompt {
         panel,
         auto_install_checkbox,
         _later_target: later_target,
         _update_target: update_target,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn present_update_panel(mtm: MainThreadMarker, panel: &NSPanel) {
+    let app = NSApplication::sharedApplication(mtm);
+    if app.activationPolicy() != NSApplicationActivationPolicy::Prohibited {
+        app.activate();
+        panel.setLevel(NSModalPanelWindowLevel);
+        panel.makeKeyAndOrderFront(None);
+        return;
+    }
+    // Isolated/background sessions stay non-activatable, but the prompt still
+    // has to appear in front of other windows without stealing key focus.
+    panel.setLevel(NSModalPanelWindowLevel);
+    panel.orderFrontRegardless();
+}
+
+#[cfg(target_os = "macos")]
+fn show_native_update_status_on_main_thread(
+    title: &str,
+    body: &str,
+) -> Result<NativeUpdateStatusResult, String> {
+    autoreleasepool(|_| {
+        let Some(mtm) = MainThreadMarker::new() else {
+            return Err("Native update status must run on the macOS main thread.".to_string());
+        };
+
+        let app = NSApplication::sharedApplication(mtm);
+        let prompt = update_status_panel(mtm, title, body);
+        present_update_panel(mtm, &prompt.panel);
+        let _response = app.runModalForWindow(&prompt.panel);
+        prompt.panel.orderOut(None);
+        Ok(NativeUpdateStatusResult { dismissed: true })
+    })
+}
+
+#[cfg(target_os = "macos")]
+struct NativeUpdateStatus {
+    panel: Retained<NSPanel>,
+    _ok_target: Retained<UpdatePromptButtonTarget>,
+}
+
+#[cfg(target_os = "macos")]
+fn update_status_panel(mtm: MainThreadMarker, title: &str, body: &str) -> NativeUpdateStatus {
+    let panel_height = 164.0;
+    let content_rect = frame(0.0, 0.0, PANEL_WIDTH, panel_height);
+    let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
+        NSPanel::alloc(mtm),
+        content_rect,
+        NSWindowStyleMask::Titled.union(NSWindowStyleMask::Closable),
+        NSBackingStoreType::Buffered,
+        false,
+    );
+    unsafe {
+        panel.setReleasedWhenClosed(false);
+    }
+    panel.setTitle(&NSString::from_str(title));
+    panel.setOpaque(false);
+    panel.setHasShadow(true);
+    panel.setMovableByWindowBackground(true);
+    panel.setBackgroundColor(Some(&NSColor::clearColor()));
+    panel.center();
+
+    let root = NSView::initWithFrame(NSView::alloc(mtm), content_rect);
+    root.setWantsLayer(true);
+    if let Some(layer) = root.layer() {
+        layer.setCornerRadius(24.0);
+        layer.setMasksToBounds(true);
+        layer.setBackgroundColor(Some(
+            &NSColor::colorWithCalibratedWhite_alpha(0.38, 0.92).CGColor(),
+        ));
+        layer.setBorderWidth(0.5);
+        layer.setBorderColor(Some(
+            &NSColor::colorWithCalibratedWhite_alpha(0.78, 0.36).CGColor(),
+        ));
+    }
+    panel.setContentView(Some(&root));
+
+    let text_width = PANEL_WIDTH - SIDE_PADDING * 2.0;
+    let title_field = NSTextField::labelWithString(&NSString::from_str(title), mtm);
+    title_field.setFrame(frame(SIDE_PADDING, 112.0, text_width, 18.0));
+    title_field.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
+    title_field.setTextColor(Some(&NSColor::whiteColor().colorWithAlphaComponent(0.92)));
+    title_field.setEditable(false);
+    title_field.setSelectable(true);
+    root.addSubview(&title_field);
+
+    let body_field = NSTextField::wrappingLabelWithString(&NSString::from_str(body), mtm);
+    body_field.setFrame(frame(SIDE_PADDING, 70.0, text_width, 36.0));
+    body_field.setFont(Some(&NSFont::systemFontOfSize(13.0)));
+    body_field.setTextColor(Some(&NSColor::whiteColor().colorWithAlphaComponent(0.9)));
+    body_field.setEditable(false);
+    body_field.setSelectable(true);
+    root.addSubview(&body_field);
+
+    let ok_target = UpdatePromptButtonTarget::new(mtm, NSModalResponseOK);
+    let ok = update_prompt_primary_button(mtm, "OK", &ok_target);
+    ok.setFrame(frame(79.0, 16.0, 102.0, 28.0));
+    ok.setKeyEquivalent(&NSString::from_str("\r"));
+    root.addSubview(&ok);
+
+    NativeUpdateStatus {
+        panel,
+        _ok_target: ok_target,
     }
 }
 
@@ -302,6 +441,14 @@ fn show_native_update_prompt_on_main_thread(
 ) -> Result<NativeUpdatePromptResult, String> {
     let _ = auto_install_future_updates;
     Err("Native update prompt is only available on macOS.".to_string())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn show_native_update_status_on_main_thread(
+    _title: &str,
+    _body: &str,
+) -> Result<NativeUpdateStatusResult, String> {
+    Err("Native update status is only available on macOS.".to_string())
 }
 
 #[cfg(all(test, target_os = "macos"))]

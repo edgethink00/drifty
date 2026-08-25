@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-update-status-show-native"
+description = "Enables the update_status_show_native command without any pre-configured scope."
+commands.allow = ["update_status_show_native"]
+
+[[permission]]
+identifier = "deny-update-status-show-native"
+description = "Denies the update_status_show_native command without any pre-configured scope."
+commands.deny = ["update_status_show_native"]

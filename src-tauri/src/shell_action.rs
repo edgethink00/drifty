@@ -99,7 +99,6 @@ impl ShellAction {
                 ShellActionEffect::EmitMainWindowEvent(EVENT_OPEN_SETTINGS),
             ],
             Self::CheckForUpdates => &[
-                ShellActionEffect::RevealMainWindow,
                 ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_FOR_UPDATES),
             ],
             Self::ToggleDevMode => &[
@@ -423,7 +422,6 @@ mod tests {
             (
                 ShellAction::CheckForUpdates,
                 &[
-                    ShellActionEffect::RevealMainWindow,
                     ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_FOR_UPDATES),
                 ][..],
             ),

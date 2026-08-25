@@ -998,9 +998,17 @@ export default function App() {
   }, [canNavigateBack, navigateBack, navigateToTab]);
 
   const handleManualCheckForUpdates = useCallback(() => {
-    setManualUpdateNoticeVisible(true);
     setAccountMenuOpen(false);
-    void handleCheckForUpdates();
+    void handleCheckForUpdates().then((result) => {
+      if (!result) return;
+      if (result.kind === "available") return;
+      void invoke("update_status_show_native", {
+        title: result.kind === "error" ? "Update check failed" : "Drifty is up to date",
+        body: result.kind === "error" ? result.message : "No signed update is available.",
+      }).catch((error: unknown) => {
+        console.warn("Failed to show update status window.", error);
+      });
+    });
   }, [handleCheckForUpdates]);
 
   const handleAppMenuCheckLatestBuild = useCallback(() => {
