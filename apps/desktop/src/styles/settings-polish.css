@@ -1569,6 +1569,133 @@
   justify-content: flex-end;
 }
 
+.pet-mode-lab__row--hunt {
+  align-items: flex-start;
+}
+
+.pet-mode-lab__hunt-policy {
+  display: grid;
+  gap: var(--space-2);
+  width: min(100%, 24rem);
+}
+
+.content--settings .pet-mode-lab__hunt-policy .settings-mode-switch {
+  width: 100%;
+}
+
+.pet-mode-lab__hunt-enable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface));
+}
+
+.pet-mode-lab__hunt-enable > span {
+  display: grid;
+  gap: .16rem;
+}
+
+.pet-mode-lab__hunt-enable strong {
+  color: var(--text);
+  font-size: var(--type-caption-size);
+}
+
+.pet-mode-lab__hunt-enable small,
+.pet-mode-lab__carry-tiers small {
+  color: var(--muted);
+  font-size: .6875rem;
+}
+
+.pet-mode-lab__hunt-off {
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: var(--type-caption-size);
+  text-align: center;
+}
+
+.pet-mode-lab__carry-tiers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
+}
+
+.pet-mode-lab__hunt-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.pet-mode-lab__hunt-preview .pet-mode-lab__action {
+  width: 100%;
+}
+
+.pet-mode-lab__carry-tiers > span {
+  display: grid;
+  gap: .1rem;
+  padding: .45rem .5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  text-align: center;
+}
+
+.pet-mode-lab__carry-tiers strong {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: .72rem;
+}
+
+.pet-mode-lab__hunt-details {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.pet-mode-lab__hunt-details summary {
+  padding: var(--space-2) var(--space-3);
+  color: var(--muted);
+  font-size: var(--type-caption-size);
+  cursor: pointer;
+}
+
+.pet-mode-lab__hunt-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--type-caption-size);
+}
+
+.pet-mode-lab__duration-options {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.pet-mode-lab__duration-options button {
+  padding: .3rem .5rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.pet-mode-lab__duration-options button.is-active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .content--settings .pet-mode-lab__action {
   flex: 0 0 auto;
   width: auto;

@@ -22,6 +22,13 @@ import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import type { PetModeLabAction, PetModeLabState, PetModePreviewAction } from "../pet-mode/petModeData";
+import {
+  PET_MODE_DRIFT_CHASE_DURATION_OPTIONS,
+  PET_MODE_DRIFT_CURSOR_RETURN_TIERS,
+  persistPetModeDriftHuntSettings,
+  resolvePetModeDriftHuntSettings,
+  type PetModeDriftHuntSettings,
+} from "../pet-mode/petModeDriftHunt";
 import { BOOT_SHELL_PREVIEW_DURATION_SECONDS, showBootShellPreview } from "../loading/bootShell";
 import type {
   CompanionMilestonePreviewId,
@@ -163,6 +170,12 @@ export function DevSettingsSection({
 }: DevSettingsSectionProps) {
   const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
+  const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
+
+  const updateDriftHuntSettings = (next: PetModeDriftHuntSettings) => {
+    setDriftHuntSettings(next);
+    persistPetModeDriftHuntSettings(next);
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -186,6 +199,11 @@ export function DevSettingsSection({
     if (action === "stop") return false;
     if (action === "wake") return petModeLabState?.phase !== "sleep";
     if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
+    if (action === "cursor_hunt_single" || action === "cursor_hunt_chase") {
+      return petModeLabState !== null
+        && (petModeLabState.activeAction !== null
+          || (petModeLabState.phase !== "idle" && petModeLabState.phase !== "sit"));
+    }
     return petModeLabState !== null
       && (petModeLabState.activeAction !== null || petModeLabState.phase !== "idle");
   };
@@ -278,6 +296,50 @@ export function DevSettingsSection({
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
               <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
               <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact, drop calibration guides, and the live drop preview badge" title="Toggle feet contact line (93pt), calibration guides, and the live drop preview badge on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--hunt">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Cursor hunt</div>
+              <div className="desc">Dev-only cursor play. Off keeps the production cat passive during drift.</div>
+            </div>
+            <div className="pet-mode-lab__hunt-policy">
+              <div className="pet-mode-lab__hunt-enable">
+                <span><strong>{driftHuntSettings.enabled ? "Enabled for QA" : "Off by default"}</strong><small>다음 drift부터 적용</small></span>
+                <Toggle checked={driftHuntSettings.enabled} onChange={(enabled) => updateDriftHuntSettings({ ...driftHuntSettings, enabled })} ariaLabel="Toggle drift cursor hunt" />
+              </div>
+              {driftHuntSettings.enabled ? (
+                <>
+                  <div className="settings-mode-switch" role="radiogroup" aria-label="Cursor hunt policy">
+                    <button type="button" className={`settings-mode-option${driftHuntSettings.mode === "single" ? " is-active" : ""}`} role="radio" aria-checked={driftHuntSettings.mode === "single"} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, mode: "single" })}><span>한 번만 노림</span></button>
+                    <button type="button" className={`settings-mode-option${driftHuntSettings.mode === "chase" ? " is-active" : ""}`} role="radio" aria-checked={driftHuntSettings.mode === "chase"} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, mode: "chase" })}><span>몇 초간 추격</span></button>
+                  </div>
+                  <div className="pet-mode-lab__carry-tiers" aria-label="Cursor carry duration tiers">
+                    {PET_MODE_DRIFT_CURSOR_RETURN_TIERS.map(({ maxMovementDistance, durationMs }) => (
+                      <span key={maxMovementDistance}><strong>≤{maxMovementDistance}pt</strong><small>{durationMs / 1_000}초 물고 이동</small></span>
+                    ))}
+                  </div>
+                  <div className="pet-mode-lab__hunt-preview" aria-label="Cursor hunt native previews">
+                    <PetModeLabAction label="단발 사냥 재생" detail="현재 커서를 한 번 노리는 실제 native 경로" action="cursor_hunt_single" active={petModeLabState?.activeAction === "cursor_hunt_single"} disabled={isPetModeLabActionDisabled("cursor_hunt_single")} onAction={onPreviewPetModeAction} />
+                    <PetModeLabAction label="8초 추격 재생" detail="현재 커서를 최대 8초 추격하는 실제 native 경로" action="cursor_hunt_chase" active={petModeLabState?.activeAction === "cursor_hunt_chase"} disabled={isPetModeLabActionDisabled("cursor_hunt_chase")} onAction={onPreviewPetModeAction} />
+                  </div>
+                  <details className="pet-mode-lab__hunt-details">
+                    <summary>추격 세부 설정</summary>
+                    <div className="pet-mode-lab__hunt-detail-row">
+                      <span>지속 시간</span>
+                      <div className="pet-mode-lab__duration-options" role="radiogroup" aria-label="Cursor chase duration">
+                        {PET_MODE_DRIFT_CHASE_DURATION_OPTIONS.map((duration) => (
+                          <button key={duration} type="button" className={driftHuntSettings.chaseDurationMs === duration ? "is-active" : ""} role="radio" aria-checked={driftHuntSettings.chaseDurationMs === duration} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, chaseDurationMs: duration })}>{duration / 1_000}초</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="pet-mode-lab__hunt-detail-row">
+                      <span>급한 방향 전환 줄이기</span>
+                      <Toggle checked={driftHuntSettings.softTurns} onChange={(softTurns) => updateDriftHuntSettings({ ...driftHuntSettings, softTurns })} ariaLabel="Toggle soft cursor chase turns" />
+                    </div>
+                  </details>
+                </>
+              ) : <div className="pet-mode-lab__hunt-off">앉아 있기만 함 · 커서 접근 없음</div>}
             </div>
           </div>
           </div>
@@ -495,6 +557,9 @@ function formatPetModeLabPhase(phase: string): string {
   switch (phase) {
     case "walk": return "Walking";
     case "run": return "Running";
+    case "stalk": return "Hunting cursor";
+    case "bite": return "Holding cursor";
+    case "return": return "Carrying cursor";
     case "paw": return "Reaching";
     case "blink": return "Blinking";
     case "stretch": return "Stretching";

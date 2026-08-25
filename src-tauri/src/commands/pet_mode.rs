@@ -6,10 +6,17 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
-    async_runtime, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder, WindowEvent,
+    async_runtime, AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Monitor,
+    PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
+#[cfg(target_os = "macos")]
+use core_graphics::{
+    display::CGDisplay,
+    event::CGEvent,
+    event_source::{CGEventSource, CGEventSourceStateID},
+    geometry::CGPoint,
+};
 #[cfg(target_os = "macos")]
 use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
@@ -41,6 +48,22 @@ const PET_MODE_HOME_EDGE_INSET: f64 = 24.0;
 const PET_MODE_RESIDENT_BAND_RATIO: f64 = 0.32;
 const PET_MODE_RUN_SPEED: f64 = 300.0;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
+const PET_MODE_STALK_MIN_DURATION_MS: u64 = 600;
+const PET_MODE_STALK_MAX_DURATION_MS: u64 = 8_000;
+const PET_MODE_STALK_MIN_SPEED: f64 = 80.0;
+const PET_MODE_STALK_MAX_SPEED: f64 = 360.0;
+const PET_MODE_STALK_MIN_BITE_GAP: f64 = 0.0;
+const PET_MODE_STALK_MAX_BITE_GAP: f64 = 12.0;
+const PET_MODE_STALK_MAX_TURN_HYSTERESIS: f64 = 120.0;
+const PET_MODE_STALK_MAX_TURN_COOLDOWN_MS: u64 = 1_500;
+const PET_MODE_CARRY_MIN_DURATION_MS: u64 = 400;
+const PET_MODE_CARRY_MAX_DURATION_MS: u64 = 8_000;
+const PET_MODE_CARRY_MIN_DISTANCE: f64 = 48.0;
+const PET_MODE_CARRY_MAX_DISTANCE: f64 = 128.0;
+const PET_MODE_CARRY_MIN_CAPTURE_RADIUS: f64 = 8.0;
+const PET_MODE_CARRY_MAX_CAPTURE_RADIUS: f64 = 32.0;
+const PET_MODE_CARRY_ESCAPE_TOLERANCE: f64 = 7.0;
+const PET_MODE_CURSOR_BITE_CONTACT_RADIUS: f64 = 6.0;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
 // Native translation duration only. The hidden pre-paint hold and renderer
@@ -71,6 +94,11 @@ const PET_MODE_ENTRY_PAINT_DELAY_MS: u64 = 120;
 const PET_MODE_CONTACT_X_RIGHT: f64 = 143.0;
 const PET_MODE_CONTACT_X_LEFT: f64 = 1.0;
 const PET_MODE_CONTACT_Y: f64 = 40.0;
+// Walk SVG mouth centre after preserveAspectRatio fitting and the reviewed
+// gait registration, expressed in the base 144 x 99 native panel.
+const PET_MODE_CURSOR_MOUTH_X_RIGHT: f64 = 109.2;
+const PET_MODE_CURSOR_MOUTH_X_LEFT: f64 = 34.8;
+const PET_MODE_CURSOR_MOUTH_Y: f64 = 47.8;
 const PET_MODE_FALLBACK_TARGET_INSET: f64 = 28.0;
 const PET_MODE_AX_SCAN_LIMIT: usize = 360;
 
@@ -127,6 +155,8 @@ pub enum PetModePreviewAction {
     Wake,
     Pet,
     Outing,
+    CursorHuntSingle,
+    CursorHuntChase,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -200,6 +230,90 @@ pub struct PetModeCursorSample {
     pub window_width: f64,
     pub window_height: f64,
     pub visible: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeStalkRequest {
+    duration_ms: u64,
+    bite_gap: f64,
+    speed: f64,
+    retarget_cursor: bool,
+    turn_hysteresis: f64,
+    turn_cooldown_ms: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[serde(rename_all = "snake_case")]
+pub enum PetModeStalkOutcome {
+    Completed,
+    TimedOut,
+    Cancelled,
+    PointerPressed,
+    DifferentDisplay,
+    Disabled,
+    Hidden,
+    UnsupportedPlatform,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeStalkResult {
+    outcome: PetModeStalkOutcome,
+    facing: &'static str,
+    cursor_x: Option<f64>,
+    cursor_y: Option<f64>,
+    cursor_movement_distance: f64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeCursorCarryRequest {
+    target_x: f64,
+    target_y: f64,
+    approach_facing: String,
+    distance: f64,
+    duration_ms: u64,
+    capture_radius: f64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+#[serde(rename_all = "snake_case")]
+pub enum PetModeCursorCarryOutcome {
+    Completed,
+    Cancelled,
+    CursorEscaped,
+    PointerPressed,
+    DifferentDisplay,
+    Disabled,
+    Hidden,
+    UnsupportedPlatform,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeCursorCarryResult {
+    outcome: PetModeCursorCarryOutcome,
+    moved_distance: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PetModePhysicalRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+impl PetModePhysicalRect {
+    fn contains(self, point: (f64, f64)) -> bool {
+        point.0 >= self.x
+            && point.0 < self.x + self.width
+            && point.1 >= self.y
+            && point.1 < self.y + self.height
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1106,6 +1220,53 @@ pub fn pet_mode_cursor_sample(app: AppHandle) -> Result<PetModeCursorSample, Str
         window_height: size.height,
         visible,
     })
+}
+
+#[tauri::command]
+pub async fn pet_mode_stalk_cursor(
+    app: AppHandle,
+    request: PetModeStalkRequest,
+) -> Result<PetModeStalkResult, String> {
+    validate_pet_mode_stalk_request(request)?;
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, request);
+        return Ok(PetModeStalkResult {
+            outcome: PetModeStalkOutcome::UnsupportedPlatform,
+            facing: "right",
+            cursor_x: None,
+            cursor_y: None,
+            cursor_movement_distance: 0.0,
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    async_runtime::spawn_blocking(move || stalk_pet_toward_cursor(&app, request))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn pet_mode_carry_cursor(
+    app: AppHandle,
+    request: PetModeCursorCarryRequest,
+) -> Result<PetModeCursorCarryResult, String> {
+    validate_pet_mode_cursor_carry_request(&request)?;
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, request);
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::UnsupportedPlatform,
+            moved_distance: 0.0,
+        });
+    }
+
+    #[cfg(target_os = "macos")]
+    async_runtime::spawn_blocking(move || carry_pet_mode_cursor(&app, request))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -2171,6 +2332,616 @@ fn preferred_pet_position_after_drop(
     }
 }
 
+fn validate_pet_mode_stalk_request(request: PetModeStalkRequest) -> Result<(), String> {
+    if !(PET_MODE_STALK_MIN_DURATION_MS..=PET_MODE_STALK_MAX_DURATION_MS)
+        .contains(&request.duration_ms)
+    {
+        return Err("Pet Mode stalk duration is outside the safe range".to_string());
+    }
+    if !request.bite_gap.is_finite()
+        || !(PET_MODE_STALK_MIN_BITE_GAP..=PET_MODE_STALK_MAX_BITE_GAP).contains(&request.bite_gap)
+    {
+        return Err("Pet Mode stalk bite gap is outside the safe range".to_string());
+    }
+    if !request.speed.is_finite()
+        || !(PET_MODE_STALK_MIN_SPEED..=PET_MODE_STALK_MAX_SPEED).contains(&request.speed)
+    {
+        return Err("Pet Mode stalk speed is outside the safe range".to_string());
+    }
+    if !request.turn_hysteresis.is_finite()
+        || !(0.0..=PET_MODE_STALK_MAX_TURN_HYSTERESIS).contains(&request.turn_hysteresis)
+    {
+        return Err("Pet Mode stalk turn hysteresis is outside the safe range".to_string());
+    }
+    if request.turn_cooldown_ms > PET_MODE_STALK_MAX_TURN_COOLDOWN_MS {
+        return Err("Pet Mode stalk turn cooldown is outside the safe range".to_string());
+    }
+    Ok(())
+}
+
+fn validate_pet_mode_cursor_carry_request(
+    request: &PetModeCursorCarryRequest,
+) -> Result<(), String> {
+    if !request.target_x.is_finite() || !request.target_y.is_finite() {
+        return Err("Pet Mode cursor target is invalid".to_string());
+    }
+    if request.approach_facing != "left" && request.approach_facing != "right" {
+        return Err("Pet Mode cursor approach facing is invalid".to_string());
+    }
+    if !(PET_MODE_CARRY_MIN_DURATION_MS..=PET_MODE_CARRY_MAX_DURATION_MS)
+        .contains(&request.duration_ms)
+    {
+        return Err("Pet Mode cursor carry duration is outside the safe range".to_string());
+    }
+    if !request.distance.is_finite()
+        || !(PET_MODE_CARRY_MIN_DISTANCE..=PET_MODE_CARRY_MAX_DISTANCE).contains(&request.distance)
+    {
+        return Err("Pet Mode cursor carry distance is outside the safe range".to_string());
+    }
+    if !request.capture_radius.is_finite()
+        || !(PET_MODE_CARRY_MIN_CAPTURE_RADIUS..=PET_MODE_CARRY_MAX_CAPTURE_RADIUS)
+            .contains(&request.capture_radius)
+    {
+        return Err("Pet Mode cursor capture radius is outside the safe range".to_string());
+    }
+    Ok(())
+}
+
+fn pet_mode_cursor_carry_progress(elapsed: Duration, duration: Duration) -> f64 {
+    let timeline = (elapsed.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
+    timeline * timeline * (3.0 - 2.0 * timeline)
+}
+
+fn pet_mode_cursor_return_delta(
+    cursor_x: f64,
+    window_x: f64,
+    window_width: f64,
+    return_facing: &str,
+    distance: f64,
+    screen_frame: PetModePhysicalRect,
+    work_area: PetModePhysicalRect,
+) -> f64 {
+    let desired = if return_facing == "right" {
+        distance
+    } else {
+        -distance
+    };
+    if desired >= 0.0 {
+        desired
+            .min(screen_frame.x + screen_frame.width - 1.0 - cursor_x)
+            .min(work_area.x + work_area.width - window_width - window_x)
+            .max(0.0)
+    } else {
+        desired
+            .max(screen_frame.x + 1.0 - cursor_x)
+            .max(work_area.x - window_x)
+            .min(0.0)
+    }
+}
+
+fn pet_mode_cursor_within_capture(
+    cursor: (f64, f64),
+    captured: (f64, f64),
+    capture_radius: f64,
+) -> bool {
+    (cursor.0 - captured.0).hypot(cursor.1 - captured.1) <= capture_radius
+}
+
+fn pet_mode_cursor_movement_distance(cursor: (f64, f64), origin: (f64, f64)) -> f64 {
+    (cursor.0 - origin.0).hypot(cursor.1 - origin.1)
+}
+
+fn pet_mode_cursor_mouth_offset(panel_size: (f64, f64), facing: &str) -> (f64, f64) {
+    let mouth_x = if facing == "left" {
+        PET_MODE_CURSOR_MOUTH_X_LEFT
+    } else {
+        PET_MODE_CURSOR_MOUTH_X_RIGHT
+    };
+    (
+        panel_size.0 * mouth_x / PET_MODE_WIDTH,
+        panel_size.1 * PET_MODE_CURSOR_MOUTH_Y / PET_MODE_HEIGHT,
+    )
+}
+
+fn pet_mode_stalk_target(
+    cursor: (f64, f64),
+    panel_size: (f64, f64),
+    facing: &str,
+    bite_gap: f64,
+    bounds: PetModePhysicalRect,
+) -> (f64, f64) {
+    let mouth = pet_mode_cursor_mouth_offset(panel_size, facing);
+    let horizontal_gap = if facing == "left" {
+        bite_gap
+    } else {
+        -bite_gap
+    };
+    let desired = (cursor.0 - mouth.0 + horizontal_gap, cursor.1 - mouth.1);
+    (
+        desired.0.clamp(
+            bounds.x,
+            (bounds.x + bounds.width - panel_size.0).max(bounds.x),
+        ),
+        desired.1.clamp(
+            bounds.y,
+            (bounds.y + bounds.height - panel_size.1).max(bounds.y),
+        ),
+    )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PetModeStalkIntent {
+    target: (f64, f64),
+    facing: &'static str,
+}
+
+fn capture_pet_mode_stalk_intent(
+    current_origin: (f64, f64),
+    cursor: (f64, f64),
+    panel_size: (f64, f64),
+    bite_gap: f64,
+    bounds: PetModePhysicalRect,
+) -> PetModeStalkIntent {
+    let panel_center_x = current_origin.0 + panel_size.0 / 2.0;
+    let facing = if cursor.0 >= panel_center_x {
+        "right"
+    } else {
+        "left"
+    };
+    PetModeStalkIntent {
+        target: pet_mode_stalk_target(cursor, panel_size, facing, bite_gap, bounds),
+        facing,
+    }
+}
+
+fn pet_mode_chase_facing(
+    current_origin: (f64, f64),
+    cursor: (f64, f64),
+    panel_size: (f64, f64),
+    current_facing: &'static str,
+    hysteresis: f64,
+    may_turn: bool,
+) -> &'static str {
+    if !may_turn {
+        return current_facing;
+    }
+    let center_x = current_origin.0 + panel_size.0 / 2.0;
+    if cursor.0 >= center_x + hysteresis {
+        "right"
+    } else if cursor.0 <= center_x - hysteresis {
+        "left"
+    } else {
+        current_facing
+    }
+}
+
+fn pet_mode_stalk_step(current: (f64, f64), target: (f64, f64), max_step: f64) -> (f64, f64) {
+    let delta = (target.0 - current.0, target.1 - current.1);
+    let distance = delta.0.hypot(delta.1);
+    if distance <= max_step || distance < 0.001 {
+        return target;
+    }
+    (
+        current.0 + delta.0 / distance * max_step,
+        current.1 + delta.1 / distance * max_step,
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn primary_pointer_pressed() -> bool {
+    #[link(name = "ApplicationServices", kind = "framework")]
+    unsafe extern "C" {
+        fn CGEventSourceButtonState(state_id: u32, button: u32) -> bool;
+    }
+    const COMBINED_SESSION_STATE: u32 = 0;
+    const LEFT_MOUSE_BUTTON: u32 = 0;
+    // SAFETY: This process-independent CoreGraphics query accepts the
+    // documented combined-session and left-button enum values.
+    unsafe { CGEventSourceButtonState(COMBINED_SESSION_STATE, LEFT_MOUSE_BUTTON) }
+}
+
+#[cfg(target_os = "macos")]
+fn stalk_pet_toward_cursor(
+    app: &AppHandle,
+    request: PetModeStalkRequest,
+) -> Result<PetModeStalkResult, String> {
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+        return Ok(PetModeStalkResult {
+            outcome: PetModeStalkOutcome::Disabled,
+            facing: "right",
+            cursor_x: None,
+            cursor_y: None,
+            cursor_movement_distance: 0.0,
+        });
+    }
+    if !window.is_visible().unwrap_or(false) {
+        return Ok(PetModeStalkResult {
+            outcome: PetModeStalkOutcome::Hidden,
+            facing: "right",
+            cursor_x: None,
+            cursor_y: None,
+            cursor_movement_distance: 0.0,
+        });
+    }
+
+    let screens = app
+        .available_monitors()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|monitor| {
+            let frame_position = monitor.position();
+            let frame_size = monitor.size();
+            let work_area = monitor.work_area();
+            (
+                PetModePhysicalRect {
+                    x: frame_position.x as f64,
+                    y: frame_position.y as f64,
+                    width: frame_size.width as f64,
+                    height: frame_size.height as f64,
+                },
+                PetModePhysicalRect {
+                    x: work_area.position.x as f64,
+                    y: work_area.position.y as f64,
+                    width: work_area.size.width as f64,
+                    height: work_area.size.height as f64,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let initial_cursor = app.cursor_position().map_err(|error| error.to_string())?;
+    let initial_position = window.outer_position().map_err(|error| error.to_string())?;
+    let panel_size = window.outer_size().map_err(|error| error.to_string())?;
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let cursor_point = (initial_cursor.x, initial_cursor.y);
+    let panel_size = (panel_size.width as f64, panel_size.height as f64);
+    let panel_center = (
+        initial_position.x as f64 + panel_size.0 / 2.0,
+        initial_position.y as f64 + panel_size.1 / 2.0,
+    );
+    let Some((screen_frame, work_area)) = screens
+        .iter()
+        .copied()
+        .find(|(frame, _)| frame.contains(cursor_point))
+    else {
+        return Ok(PetModeStalkResult {
+            outcome: PetModeStalkOutcome::DifferentDisplay,
+            facing: "right",
+            cursor_x: None,
+            cursor_y: None,
+            cursor_movement_distance: 0.0,
+        });
+    };
+    if !screen_frame.contains(panel_center) {
+        return Ok(PetModeStalkResult {
+            outcome: PetModeStalkOutcome::DifferentDisplay,
+            facing: "right",
+            cursor_x: None,
+            cursor_y: None,
+            cursor_movement_distance: 0.0,
+        });
+    }
+
+    let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
+    // Single-attempt mode captures one target. Chase mode may refresh it below,
+    // but only for the selected bounded duration and with turn hysteresis.
+    let intent = capture_pet_mode_stalk_intent(
+        (initial_position.x as f64, initial_position.y as f64),
+        cursor_point,
+        panel_size,
+        request.bite_gap * scale_factor,
+        work_area,
+    );
+    let mut facing = intent.facing;
+    let mut target = intent.target;
+    let mut captured_cursor = cursor_point;
+    let mut cursor_movement_distance: f64 = 0.0;
+    emit_pet_event(&window, json!({ "kind": "facing", "facing": facing }))?;
+    emit_pet_event(&window, json!({ "kind": "motion", "motion": "stalk" }))?;
+    thread::sleep(Duration::from_millis(34));
+
+    let started_at = Instant::now();
+    let duration = Duration::from_millis(request.duration_ms);
+    let turn_cooldown = Duration::from_millis(request.turn_cooldown_ms);
+    let mut last_turn_at = started_at;
+    let mut last_frame_at = Instant::now();
+    let outcome = loop {
+        if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
+            break PetModeStalkOutcome::Cancelled;
+        }
+        if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+            break PetModeStalkOutcome::Disabled;
+        }
+        if primary_pointer_pressed() {
+            break PetModeStalkOutcome::PointerPressed;
+        }
+        let cursor = app.cursor_position().map_err(|error| error.to_string())?;
+        let cursor = (cursor.x, cursor.y);
+        cursor_movement_distance = cursor_movement_distance
+            .max(pet_mode_cursor_movement_distance(cursor, cursor_point) / scale_factor);
+        if !screen_frame.contains(cursor) {
+            break PetModeStalkOutcome::DifferentDisplay;
+        }
+        let position = window.outer_position().map_err(|error| error.to_string())?;
+        let current = (position.x as f64, position.y as f64);
+        if request.retarget_cursor {
+            captured_cursor = cursor;
+            let next_facing = pet_mode_chase_facing(
+                current,
+                cursor,
+                panel_size,
+                facing,
+                request.turn_hysteresis * scale_factor,
+                last_turn_at.elapsed() >= turn_cooldown,
+            );
+            if next_facing != facing {
+                facing = next_facing;
+                last_turn_at = Instant::now();
+                emit_pet_event(&window, json!({ "kind": "facing", "facing": facing }))?;
+            }
+            target = pet_mode_stalk_target(
+                cursor,
+                panel_size,
+                facing,
+                request.bite_gap * scale_factor,
+                work_area,
+            );
+        }
+        if (current.0 - target.0).hypot(current.1 - target.1) <= 0.75 {
+            break PetModeStalkOutcome::Completed;
+        }
+        if started_at.elapsed() >= duration {
+            // A fixed target that cannot be reached within its budget is a
+            // miss, not mouth contact. Only the proximity check above may
+            // produce `Completed` and unlock the bite/carry sequence.
+            break PetModeStalkOutcome::TimedOut;
+        }
+        let elapsed = last_frame_at
+            .elapsed()
+            .as_secs_f64()
+            .clamp(1.0 / 240.0, 0.05);
+        last_frame_at = Instant::now();
+        let next = pet_mode_stalk_step(current, target, request.speed * scale_factor * elapsed);
+        window
+            .set_position(PhysicalPosition::new(
+                next.0.round() as i32,
+                next.1.round() as i32,
+            ))
+            .map_err(|error| error.to_string())?;
+        thread::sleep(Duration::from_micros(16_667));
+    };
+
+    Ok(PetModeStalkResult {
+        outcome,
+        facing,
+        cursor_x: Some(captured_cursor.0),
+        cursor_y: Some(captured_cursor.1),
+        cursor_movement_distance,
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn carry_pet_mode_cursor(
+    app: &AppHandle,
+    request: PetModeCursorCarryRequest,
+) -> Result<PetModeCursorCarryResult, String> {
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::Disabled,
+            moved_distance: 0.0,
+        });
+    }
+    if !window.is_visible().unwrap_or(false) {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::Hidden,
+            moved_distance: 0.0,
+        });
+    }
+
+    let screens = app
+        .available_monitors()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|monitor| {
+            let frame_position = monitor.position();
+            let frame_size = monitor.size();
+            let work_area = monitor.work_area();
+            (
+                PetModePhysicalRect {
+                    x: frame_position.x as f64,
+                    y: frame_position.y as f64,
+                    width: frame_size.width as f64,
+                    height: frame_size.height as f64,
+                },
+                PetModePhysicalRect {
+                    x: work_area.position.x as f64,
+                    y: work_area.position.y as f64,
+                    width: work_area.size.width as f64,
+                    height: work_area.size.height as f64,
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let captured = (request.target_x, request.target_y);
+    let Some((screen_frame, work_area)) = screens
+        .iter()
+        .copied()
+        .find(|(frame, _)| frame.contains(captured))
+    else {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::DifferentDisplay,
+            moved_distance: 0.0,
+        });
+    };
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let initial = app.cursor_position().map_err(|error| error.to_string())?;
+    let initial = (initial.x, initial.y);
+    let native_initial = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+        .and_then(CGEvent::new)
+        .map_err(|_| "Could not read the macOS cursor position".to_string())?
+        .location();
+    let initial_window = window.outer_position().map_err(|error| error.to_string())?;
+    let initial_window = (initial_window.x as f64, initial_window.y as f64);
+    let panel_size = window.outer_size().map_err(|error| error.to_string())?;
+    let panel_size = (panel_size.width as f64, panel_size.height as f64);
+    if !screen_frame.contains(initial) {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::DifferentDisplay,
+            moved_distance: 0.0,
+        });
+    }
+    if !pet_mode_cursor_within_capture(initial, captured, request.capture_radius * scale_factor) {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::CursorEscaped,
+            moved_distance: 0.0,
+        });
+    }
+
+    let approach_mouth = pet_mode_cursor_mouth_offset(panel_size, &request.approach_facing);
+    let mouth_position = (
+        initial_window.0 + approach_mouth.0,
+        initial_window.1 + approach_mouth.1,
+    );
+    if !pet_mode_cursor_within_capture(
+        initial,
+        mouth_position,
+        PET_MODE_CURSOR_BITE_CONTACT_RADIUS * scale_factor,
+    ) {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::CursorEscaped,
+            moved_distance: 0.0,
+        });
+    }
+
+    let return_facing = if request.approach_facing == "right" {
+        "left"
+    } else {
+        "right"
+    };
+    let return_mouth = pet_mode_cursor_mouth_offset(panel_size, return_facing);
+    // Repositioning the transparent panel by the difference between the two
+    // mouth anchors while mirroring the cat keeps the cursor fixed at its
+    // teeth. Visually the body pivots around the bite instead of teleporting.
+    let return_window = (
+        initial_window.0 + approach_mouth.0 - return_mouth.0,
+        initial_window.1 + approach_mouth.1 - return_mouth.1,
+    );
+    if return_window.0 < work_area.x
+        || return_window.0 + panel_size.0 > work_area.x + work_area.width
+        || return_window.1 < work_area.y
+        || return_window.1 + panel_size.1 > work_area.y + work_area.height
+    {
+        return Ok(PetModeCursorCarryResult {
+            outcome: PetModeCursorCarryOutcome::CursorEscaped,
+            moved_distance: 0.0,
+        });
+    }
+
+    window
+        .set_position(PhysicalPosition::new(
+            return_window.0.round() as i32,
+            return_window.1.round() as i32,
+        ))
+        .map_err(|error| format!("Could not pivot the Pet Mode window: {error}"))?;
+    emit_pet_event(
+        &window,
+        json!({ "kind": "facing", "facing": return_facing }),
+    )?;
+    emit_pet_event(&window, json!({ "kind": "motion", "motion": "return" }))?;
+    thread::sleep(Duration::from_millis(34));
+
+    let carry_delta = pet_mode_cursor_return_delta(
+        initial.0,
+        return_window.0,
+        panel_size.0,
+        return_facing,
+        request.distance * scale_factor,
+        screen_frame,
+        work_area,
+    );
+    let duration = Duration::from_millis(request.duration_ms);
+    let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
+    let started_at = Instant::now();
+    let mut last_commanded = initial;
+    let outcome = loop {
+        if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
+            break PetModeCursorCarryOutcome::Cancelled;
+        }
+        if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+            break PetModeCursorCarryOutcome::Disabled;
+        }
+        if !window.is_visible().unwrap_or(false) {
+            break PetModeCursorCarryOutcome::Hidden;
+        }
+        if primary_pointer_pressed() {
+            break PetModeCursorCarryOutcome::PointerPressed;
+        }
+
+        let cursor = app.cursor_position().map_err(|error| error.to_string())?;
+        let cursor = (cursor.x, cursor.y);
+        if !screen_frame.contains(cursor) {
+            break PetModeCursorCarryOutcome::DifferentDisplay;
+        }
+        if (cursor.0 - last_commanded.0).hypot(cursor.1 - last_commanded.1)
+            > PET_MODE_CARRY_ESCAPE_TOLERANCE * scale_factor
+        {
+            break PetModeCursorCarryOutcome::CursorEscaped;
+        }
+
+        let elapsed = started_at.elapsed();
+        let progress = pet_mode_cursor_carry_progress(elapsed.min(duration), duration);
+        let next_window_x = return_window.0 + carry_delta * progress;
+        let next = (initial.0 + carry_delta * progress, initial.1);
+        window
+            .set_position(PhysicalPosition::new(
+                next_window_x.round() as i32,
+                return_window.1.round() as i32,
+            ))
+            .map_err(|error| format!("Could not carry the Pet Mode window: {error}"))?;
+        let native_next = pet_mode_core_graphics_cursor_point(
+            (native_initial.x, native_initial.y),
+            initial,
+            next,
+            scale_factor,
+        );
+        CGDisplay::warp_mouse_cursor_position(CGPoint::new(native_next.0, native_next.1))
+            .map_err(|error| format!("Could not carry the Pet Mode cursor: {error}"))?;
+        last_commanded = next;
+        if elapsed >= duration {
+            break PetModeCursorCarryOutcome::Completed;
+        }
+        thread::sleep(Duration::from_micros(16_667));
+    };
+
+    Ok(PetModeCursorCarryResult {
+        outcome,
+        moved_distance: (last_commanded.0 - initial.0).hypot(last_commanded.1 - initial.1)
+            / scale_factor,
+    })
+}
+
+fn pet_mode_core_graphics_cursor_point(
+    native_initial: (f64, f64),
+    physical_initial: (f64, f64),
+    physical_next: (f64, f64),
+    scale_factor: f64,
+) -> (f64, f64) {
+    let scale = if scale_factor <= 0.0 {
+        1.0
+    } else {
+        scale_factor
+    };
+    (
+        native_initial.0 + (physical_next.0 - physical_initial.0) / scale,
+        native_initial.1 + (physical_next.1 - physical_initial.1) / scale,
+    )
+}
+
 fn animate_pet_window_toward(
     window: &WebviewWindow,
     target: LogicalPosition<f64>,
@@ -2530,6 +3301,226 @@ mod tests {
     }
 
     #[test]
+    fn stalk_target_places_the_captured_cursor_at_the_mouth_and_clamps_edges() {
+        let bounds = PetModePhysicalRect {
+            x: 0.0,
+            y: 25.0,
+            width: 1440.0,
+            height: 775.0,
+        };
+        let target = pet_mode_stalk_target((500.0, 300.0), (144.0, 99.0), "right", 0.0, bounds);
+        let mouth = pet_mode_cursor_mouth_offset((144.0, 99.0), "right");
+        assert!((target.0 + mouth.0 - 500.0).abs() < f64::EPSILON);
+        assert!((target.1 + mouth.1 - 300.0).abs() < f64::EPSILON);
+
+        let edge = pet_mode_stalk_target((1438.0, 798.0), (144.0, 99.0), "right", 0.0, bounds);
+        assert!((0.0..=1296.0).contains(&edge.0));
+        assert!((25.0..=701.0).contains(&edge.1));
+    }
+
+    #[test]
+    fn stalk_intent_captures_one_pointer_target_and_facing() {
+        let bounds = PetModePhysicalRect {
+            x: 0.0,
+            y: 25.0,
+            width: 1440.0,
+            height: 775.0,
+        };
+        let captured = capture_pet_mode_stalk_intent(
+            (100.0, 100.0),
+            (600.0, 300.0),
+            (144.0, 99.0),
+            0.0,
+            bounds,
+        );
+        let later_pointer = capture_pet_mode_stalk_intent(
+            (100.0, 100.0),
+            (20.0, 300.0),
+            (144.0, 99.0),
+            0.0,
+            bounds,
+        );
+
+        assert_eq!(captured.facing, "right");
+        assert_eq!(later_pointer.facing, "left");
+        assert_ne!(captured.target, later_pointer.target);
+    }
+
+    #[test]
+    fn stalk_step_never_overshoots_the_captured_cursor_target() {
+        assert_eq!(pet_mode_stalk_step((0.0, 0.0), (3.0, 4.0), 2.0), (1.2, 1.6));
+        assert_eq!(pet_mode_stalk_step((0.0, 0.0), (3.0, 4.0), 8.0), (3.0, 4.0));
+    }
+
+    #[test]
+    fn chase_facing_holds_near_the_cat_and_turns_after_the_dead_zone() {
+        let origin = (100.0, 100.0);
+        let panel = (144.0, 99.0);
+        assert_eq!(
+            pet_mode_chase_facing(origin, (190.0, 200.0), panel, "left", 48.0, true),
+            "left"
+        );
+        assert_eq!(
+            pet_mode_chase_facing(origin, (240.0, 200.0), panel, "left", 48.0, true),
+            "right"
+        );
+        assert_eq!(
+            pet_mode_chase_facing(origin, (20.0, 200.0), panel, "right", 48.0, false),
+            "right"
+        );
+    }
+
+    #[test]
+    fn stalk_request_rejects_unbounded_motion() {
+        let valid = PetModeStalkRequest {
+            duration_ms: 3_200,
+            bite_gap: 0.0,
+            speed: 220.0,
+            retarget_cursor: false,
+            turn_hysteresis: 48.0,
+            turn_cooldown_ms: 500,
+        };
+        assert!(validate_pet_mode_stalk_request(valid).is_ok());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            duration_ms: 8_000,
+            ..valid
+        })
+        .is_ok());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            duration_ms: 8_001,
+            ..valid
+        })
+        .is_err());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            duration_ms: 30_000,
+            ..valid
+        })
+        .is_err());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            speed: f64::INFINITY,
+            ..valid
+        })
+        .is_err());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            turn_cooldown_ms: 2_000,
+            ..valid
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn cursor_return_moves_cat_and_pointer_on_one_bounded_path() {
+        let screen = PetModePhysicalRect {
+            x: 0.0,
+            y: 0.0,
+            width: 1440.0,
+            height: 800.0,
+        };
+        let work = PetModePhysicalRect {
+            x: 0.0,
+            y: 25.0,
+            width: 1440.0,
+            height: 775.0,
+        };
+        assert_eq!(
+            pet_mode_cursor_return_delta(600.0, 470.0, 144.0, "right", 96.0, screen, work),
+            96.0,
+        );
+        assert_eq!(
+            pet_mode_cursor_return_delta(600.0, 614.0, 144.0, "left", 96.0, screen, work),
+            -96.0,
+        );
+        assert_eq!(
+            pet_mode_cursor_return_delta(1420.0, 1280.0, 144.0, "right", 96.0, screen, work),
+            16.0,
+        );
+        assert_eq!(
+            pet_mode_cursor_return_delta(20.0, 10.0, 144.0, "left", 96.0, screen, work),
+            -10.0,
+        );
+
+        let duration = Duration::from_millis(920);
+        assert_eq!(
+            pet_mode_cursor_carry_progress(Duration::ZERO, duration),
+            0.0
+        );
+        assert_eq!(pet_mode_cursor_carry_progress(duration, duration), 1.0);
+        assert!(
+            (pet_mode_cursor_carry_progress(Duration::from_millis(460), duration) - 0.5).abs()
+                < f64::EPSILON
+        );
+        assert!(pet_mode_cursor_within_capture(
+            (612.0, 312.0),
+            (600.0, 300.0),
+            18.0,
+        ));
+        assert!(!pet_mode_cursor_within_capture(
+            (620.0, 300.0),
+            (600.0, 300.0),
+            18.0,
+        ));
+        assert_eq!(
+            pet_mode_cursor_movement_distance((607.0, 300.0), (600.0, 300.0)),
+            7.0,
+        );
+
+        // Tauri reports physical pixels while CoreGraphics warps in native
+        // logical points. Preserve the current native origin and convert only
+        // the carry delta so Retina and mixed-display origins cannot clamp the
+        // pointer to a screen edge.
+        assert_eq!(
+            pet_mode_core_graphics_cursor_point(
+                (1_200.0, 700.0),
+                (2_400.0, 1_400.0),
+                (2_304.0, 1_400.0),
+                2.0,
+            ),
+            (1_152.0, 700.0),
+        );
+    }
+
+    #[test]
+    fn cursor_carry_request_rejects_unbounded_pointer_mutation() {
+        let valid = PetModeCursorCarryRequest {
+            target_x: 600.0,
+            target_y: 300.0,
+            approach_facing: "right".to_string(),
+            distance: 96.0,
+            duration_ms: 920,
+            capture_radius: 18.0,
+        };
+        assert!(validate_pet_mode_cursor_carry_request(&valid).is_ok());
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                duration_ms: 8_000,
+                ..valid.clone()
+            })
+            .is_ok()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                duration_ms: 8_001,
+                ..valid.clone()
+            })
+            .is_err()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                distance: 240.0,
+                ..valid.clone()
+            })
+            .is_err()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                approach_facing: "up".to_string(),
+                ..valid
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
     fn only_upper_band_drops_redefine_the_resident_home() {
         let work_position = LogicalPosition::new(0.0, 25.0);
         let original_home = Some(LogicalPosition::new(320.0, 60.0));
@@ -2740,12 +3731,21 @@ mod tests {
     }
 
     #[test]
-    fn preview_actions_accept_active_life_loop_tail_and_sit_wire_values() {
+    fn preview_actions_accept_active_life_loop_tail_sit_and_cursor_hunt_wire_values() {
         let life_loop: PetModePreviewAction = serde_json::from_str("\"life_loop\"").unwrap();
         let tail: PetModePreviewAction = serde_json::from_str("\"tail_flick\"").unwrap();
         let sit: PetModePreviewAction = serde_json::from_str("\"sit\"").unwrap();
+        let hunt_single: PetModePreviewAction =
+            serde_json::from_str("\"cursor_hunt_single\"").unwrap();
+        let hunt_chase: PetModePreviewAction =
+            serde_json::from_str("\"cursor_hunt_chase\"").unwrap();
         assert!(matches!(life_loop, PetModePreviewAction::LifeLoop));
         assert!(matches!(tail, PetModePreviewAction::TailFlick));
         assert!(matches!(sit, PetModePreviewAction::Sit));
+        assert!(matches!(
+            hunt_single,
+            PetModePreviewAction::CursorHuntSingle
+        ));
+        assert!(matches!(hunt_chase, PetModePreviewAction::CursorHuntChase));
     }
 }

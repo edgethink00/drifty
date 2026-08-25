@@ -7,6 +7,7 @@ import {
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS,
   DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS,
   DEFAULT_ENHANCED_CONTEXT_SETTINGS,
+  DEV_MODE_STORAGE_KEY,
   ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY,
   ENHANCED_CONTEXT_DEBUG_LOGGING_STORAGE_KEY,
   ENHANCED_CONTEXT_ENABLED_STORAGE_KEY,
@@ -60,6 +61,8 @@ describe("DevSettingsSection", () => {
   });
 
   beforeEach(() => {
+    window.localStorage.clear();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
     bootShellActions.showBootShellPreview.mockClear();
     petModeLabEvents.listener = null;
@@ -146,6 +149,47 @@ describe("DevSettingsSection", () => {
 
     expect(screen.getByText("Sitting", { selector: ".pet-mode-lab__status" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Sit G pose QA/ }).classList.contains("is-active")).toBe(true);
+  });
+
+  it("keeps explicit cursor hunt previews available while the focused cat is sitting", async () => {
+    window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
+    renderProductionDevSettings({ petModeEnabled: true });
+    await act(async () => undefined);
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "sit", activeAction: null, lifeLoopEnabled: false });
+    });
+
+    expect(screen.getByRole("button", { name: /단발 사냥 재생/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /8초 추격 재생/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+  });
+
+  it("persists a bounded cursor chase policy from the Pet Mode Lab", () => {
+    const props = renderProductionDevSettings({ petModeEnabled: true });
+
+    expect(screen.queryByRole("radio", { name: "몇 초간 추격" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /단발 사냥 재생/ })).toBeNull();
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle drift cursor hunt" }));
+    expect(screen.getByText("≤7pt")).toBeTruthy();
+    expect(screen.getByText("8초 물고 이동")).toBeTruthy();
+    expect(screen.getByText("≤12pt")).toBeTruthy();
+    expect(screen.getByText("5초 물고 이동")).toBeTruthy();
+    expect(screen.getByText("≤18pt")).toBeTruthy();
+    expect(screen.getByText("2.5초 물고 이동")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /단발 사냥 재생/ }));
+    expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_single");
+    fireEvent.click(screen.getByRole("button", { name: /8초 추격 재생/ }));
+    expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_chase");
+    fireEvent.click(screen.getByRole("radio", { name: "몇 초간 추격" }));
+    fireEvent.click(screen.getByText("추격 세부 설정"));
+    fireEvent.click(screen.getByRole("radio", { name: "8초" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle soft cursor chase turns" }));
+
+    expect(window.localStorage.getItem("drifty.pet.driftHuntEnabled.v1")).toBe("true");
+    expect(window.localStorage.getItem("drifty.pet.driftHuntMode.v1")).toBe("chase");
+    expect(window.localStorage.getItem("drifty.pet.driftHuntChaseDuration.v1")).toBe("8000");
+    expect(window.localStorage.getItem("drifty.pet.driftHuntSoftTurns.v1")).toBe("false");
   });
 
   it("keeps the floating Companion behind an explicit Dev toggle", () => {

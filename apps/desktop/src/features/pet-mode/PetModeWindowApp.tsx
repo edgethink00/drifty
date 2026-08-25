@@ -26,10 +26,13 @@ import {
   roamNativePet,
   sampleNativePetCursor,
   setNativePetPresence,
+  stalkNativePetCursor,
+  returnWithNativePetCursor,
   triggerNativePetVisibilityAction,
 } from "./petModeBridge";
 import { openNativePetModeMenu } from "./petModeNativeMenu";
 import { preloadPetModeHitRegions, stagePetModeHitRegionTransition } from "./petModeHitRegions";
+import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
   PET_MODE_AWAY_MS,
   PET_MODE_BLINK_DURATION_MS,
@@ -76,10 +79,21 @@ import {
   resolvePetModeGazeOffset,
   type PetModeGazeOffset,
 } from "./petModeGaze";
+import {
+  EMPTY_PET_MODE_DRIFT_HUNT_STATE,
+  PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS,
+  PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
+  PET_MODE_DRIFT_NOTICE_MS,
+  PET_MODE_DRIFT_STALK_SETTLE_MS,
+  advancePetModeDriftHunt,
+  resolvePetModeDriftHuntSettings,
+  type PetModeDriftHuntSettings,
+  type PetModeDriftHuntState,
+} from "./petModeDriftHunt";
 import "./petMode.css";
 
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
-type LifeAction = PetModePreviewAction;
+type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase">;
 
 export function PetModeWindowApp() {
   // The native window is created hidden and normally has time to mount before
@@ -137,6 +151,10 @@ export function PetModeWindowApp() {
   const poseTransitionRef = useRef(0);
   const facingTransitionRef = useRef(0);
   const activeLabActionRef = useRef<PetModeLabAction | null>(null);
+  // `intervention` is also used by product-triggered nudges. This separate bit
+  // lets focus preserve deliberate Lab previews without allowing an automatic
+  // nudge to retain motion ownership.
+  const automaticInterventionRef = useRef(false);
   const menuOpenRef = useRef(false);
   const labLifeLoopEnabledRef = useRef(false);
   const petModeEnabledRef = useRef(initialAppearance.enabled);
@@ -152,6 +170,9 @@ export function PetModeWindowApp() {
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
   const gazeEngagedRef = useRef(false);
+  const focusRestingRef = useRef(false);
+  const focusRestAppliedRef = useRef(false);
+  const driftHuntRef = useRef<PetModeDriftHuntState>(EMPTY_PET_MODE_DRIFT_HUNT_STATE);
 
   const reportLabState = useCallback((nextPhase = phaseRef.current) => {
     void reportNativePetModeLabState({
@@ -273,7 +294,9 @@ export function PetModeWindowApp() {
         }
       }
 
-      if (releaseToken === actionTokenRef.current) commitPhase("idle");
+      if (releaseToken === actionTokenRef.current) {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
       if (rememberPosition) {
         // Position persistence is bookkeeping, not part of the visual handoff.
         // Never strand the cat in the held/release silhouette while a native
@@ -400,6 +423,26 @@ export function PetModeWindowApp() {
     };
   }, []);
 
+  // Cursor hunt is owned by the Dev settings webview. Turning it off is a
+  // hard safety boundary, not merely a policy for the next drift episode, so
+  // the pet webview must cancel any stalk/carry already in flight.
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key !== null
+        && event.key !== PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY
+        && event.key !== DEV_MODE_STORAGE_KEY
+      ) return;
+      if (resolvePetModeDriftHuntSettings().enabled) return;
+      actionTokenRef.current += 1;
+      void cancelNativePetMotion().catch(() => undefined);
+      setActiveLabAction(null);
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [commitPhase, setActiveLabAction]);
+
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -462,7 +505,7 @@ export function PetModeWindowApp() {
       const resolved = await moveNativePetToTarget(target);
       if (token !== actionTokenRef.current) return;
       if (resolved.targetKind === "fallback" && !target.preview) {
-        commitPhase("idle");
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
         await reportNativePetContact(target.id, false);
         return;
       }
@@ -522,7 +565,9 @@ export function PetModeWindowApp() {
         commitPhase("walk");
         await returnNativePetHome();
       }
-      if (token === actionTokenRef.current) commitPhase("idle");
+      if (token === actionTokenRef.current) {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
     }
   }, [commitFacing, commitPhase, revealForAction]);
 
@@ -542,7 +587,9 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       await returnNativePetFromOuting(exitSide);
     } finally {
-      if (token === actionTokenRef.current && visibleRef.current) commitPhase("idle");
+      if (token === actionTokenRef.current && visibleRef.current) {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
     }
   }, [commitPhase, commitVisibility, revealForAction]);
 
@@ -552,7 +599,7 @@ export function PetModeWindowApp() {
       sleepTouchRef.current = 0;
       setLifeLoopEnabled(false);
       commitVisibility(true);
-      commitPhase("idle");
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
     }
     if (action === "life_loop") {
@@ -570,7 +617,7 @@ export function PetModeWindowApp() {
     sleepTouchRef.current = 0;
 
     if (action === "wake") {
-      commitPhase("idle");
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
     }
     if (action === "sleep") {
@@ -601,8 +648,57 @@ export function PetModeWindowApp() {
       await delay(prefersReducedMotion() ? 40 : durationByAction[action]);
     }
 
-    if (token === actionTokenRef.current) commitPhase("idle");
+    if (token === actionTokenRef.current) {
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+    }
   }, [commitPhase, commitVisibility, playOuting, revealForAction, setLifeLoopEnabled]);
+
+  const playCursorHunt = useCallback(async (
+    huntSettings: PetModeDriftHuntSettings,
+    options: { allowWhileResting?: boolean } = {},
+  ) => {
+    const focusBlocksHunt = () => !options.allowWhileResting && focusRestingRef.current;
+    if (!huntSettings.enabled || focusBlocksHunt()) return;
+    const token = ++actionTokenRef.current;
+    restartAutonomousCycle();
+    await cancelNativePetMotion().catch(() => undefined);
+    await revealForAction().catch(() => undefined);
+    if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+    setPreserveEntryLanding(false);
+    commitPhase("stalk");
+
+    const stalk = await stalkNativePetCursor(huntSettings).catch(() => null);
+    if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+    if (
+      stalk?.outcome === "completed"
+      && stalk.cursorX !== null
+      && stalk.cursorY !== null
+    ) {
+      commitFacing(stalk.facing);
+      // The stalk target is authored from the walk SVG's mouth centre, so
+      // contact no longer borrows the unrelated browser-tab paw sequence.
+      // Hold the closed mouth long enough to read, then let native pivot the
+      // body around that exact point and return with the cursor along the
+      // approach path. Native emits the one intentional facing change together
+      // with the return gait so React never servo-flips mid-walk.
+      commitPhase("bite");
+      await delay(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS);
+      if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+      await returnWithNativePetCursor({
+        targetX: stalk.cursorX,
+        targetY: stalk.cursorY,
+        approachFacing: stalk.facing,
+        cursorMovementDistance: stalk.cursorMovementDistance,
+      }).catch(() => null);
+      if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+      commitPhase("bite");
+      await delay(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS);
+    }
+    if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+    commitPhase("sit");
+    await delay(PET_MODE_DRIFT_STALK_SETTLE_MS);
+    if (token === actionTokenRef.current && !focusRestingRef.current) commitPhase("idle");
+  }, [commitFacing, commitPhase, restartAutonomousCycle, revealForAction]);
 
   useEffect(() => {
     let disposed = false;
@@ -626,6 +722,7 @@ export function PetModeWindowApp() {
           || phaseRef.current === "drag"
           || phaseRef.current === "release"
         ) return;
+        if (focusRestingRef.current) return;
         if (event.motion === "entry") {
           // Native cancellation normally prevents stale entry events after the
           // toggle turns off. Re-check the shared setting here as a webview-side
@@ -651,6 +748,11 @@ export function PetModeWindowApp() {
       }
       if (event.kind === "entry_complete") {
         if (!resolvePetModePresent()) return;
+        if (focusRestingRef.current) {
+          setPreserveEntryLanding(false);
+          commitPhase("sit");
+          return;
+        }
         const beganANewResidence = phaseRef.current === "entry" || !petModeEnabledRef.current;
         petModeEnabledRef.current = true;
         commitVisibility(true);
@@ -665,19 +767,47 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "preview_action") {
+        const previewAction = event.action;
+        const isCursorHuntPreview = previewAction === "cursor_hunt_single"
+          || previewAction === "cursor_hunt_chase";
         // Lab previews are deliberately single-flight. A walk moves the native
         // overlay independently, so letting another pose start during that trip
         // makes the cat look as if it is stretching or sleeping while walking.
         // Wake is the one intentional interruption: it clears the persistent
         // sleep pose immediately.
-        if (phaseRef.current !== "idle" && event.action !== "wake" && event.action !== "stop") {
+        if (
+          phaseRef.current !== "idle"
+          && !(isCursorHuntPreview && phaseRef.current === "sit")
+          && previewAction !== "wake"
+          && previewAction !== "stop"
+        ) {
           reportLabState();
           return;
         }
+        if (isCursorHuntPreview) {
+          const huntSettings = resolvePetModeDriftHuntSettings();
+          if (!huntSettings.enabled) {
+            reportLabState();
+            return;
+          }
+          void (async () => {
+            setActiveLabAction(previewAction);
+            try {
+              await playCursorHunt({
+                ...huntSettings,
+                mode: previewAction === "cursor_hunt_chase" ? "chase" : "single",
+                chaseDurationMs: previewAction === "cursor_hunt_chase" ? 8_000 : huntSettings.chaseDurationMs,
+              }, { allowWhileResting: true });
+            } finally {
+              setActiveLabAction(null);
+            }
+          })();
+          return;
+        }
         void (async () => {
-          setActiveLabAction(event.action);
+          setActiveLabAction(previewAction);
           try {
-            await playLifeAction(event.action);
+            await playLifeAction(previewAction);
           } catch {
             commitPhase("idle");
           } finally {
@@ -687,7 +817,8 @@ export function PetModeWindowApp() {
         return;
       }
       if (
-        manualDragRef.current
+        focusRestingRef.current
+        || manualDragRef.current
         || phaseRef.current === "drag"
         || phaseRef.current === "release"
       ) {
@@ -695,6 +826,7 @@ export function PetModeWindowApp() {
         return;
       }
       void (async () => {
+        automaticInterventionRef.current = !event.target.preview;
         setActiveLabAction("intervention");
         try {
           await playIntervention(event.target);
@@ -702,7 +834,16 @@ export function PetModeWindowApp() {
           commitPhase("idle");
           void returnNativePetHome().catch(() => undefined);
         } finally {
+          automaticInterventionRef.current = false;
           setActiveLabAction(null);
+          // Focus may have ended while a cancelled native move was still
+          // resolving. The focus-exit effect deliberately waits for action
+          // ownership to clear, so finish that deferred sit -> idle handoff
+          // here instead of stranding the autonomous scheduler in `sit`.
+          if (!focusRestingRef.current && phaseRef.current === "sit") {
+            restartAutonomousCycle();
+            commitPhase("idle");
+          }
         }
       })();
     }).then((nextUnlisten) => {
@@ -717,7 +858,82 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [commitFacing, commitPhase, commitVisibility, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
+  }, [commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
+
+  useEffect(() => {
+    const resting = snapshot?.productivity === "focus";
+    const wasResting = focusRestingRef.current;
+    focusRestingRef.current = resting;
+
+    if (!petModeEnabled) {
+      focusRestAppliedRef.current = false;
+      return;
+    }
+    if (resting) {
+      if (focusRestAppliedRef.current) return;
+      restartAutonomousCycle();
+      gazeEngagedRef.current = false;
+      setGazeOffset({ x: 0, y: 0 });
+
+      // Direct manipulation and explicit Lab previews keep ownership until
+      // their normal completion; every automatic action is interruptible.
+      const explicitLabPreviewOwnsMotion = activeLabActionRef.current !== null
+        && !automaticInterventionRef.current;
+      if (manualDragRef.current || explicitLabPreviewOwnsMotion) return;
+      focusRestAppliedRef.current = true;
+      actionTokenRef.current += 1;
+      void cancelNativePetMotion().catch(() => undefined);
+      if (!visibleRef.current) {
+        commitVisibility(true);
+        void setNativePetPresence(true).catch(() => undefined);
+      }
+      setPreserveEntryLanding(false);
+      commitPhase("sit");
+      return;
+    }
+
+    const hadAppliedRest = focusRestAppliedRef.current;
+    focusRestAppliedRef.current = false;
+    if (wasResting || hadAppliedRest) {
+      restartAutonomousCycle();
+      if (!manualDragRef.current && !activeLabActionRef.current && phaseRef.current === "sit") {
+        commitPhase("idle");
+      }
+    }
+  }, [commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, snapshot?.productivity]);
+
+  useEffect(() => {
+    const next = advancePetModeDriftHunt(
+      driftHuntRef.current,
+      snapshot,
+      prefersReducedMotion(),
+    );
+    driftHuntRef.current = next.state;
+    if (!petModeEnabled || !next.action || manualDragRef.current || activeLabActionRef.current) return;
+
+    const huntSettings = resolvePetModeDriftHuntSettings();
+    if (!huntSettings.enabled) return;
+    if (next.action === "stalk") {
+      void playCursorHunt(huntSettings);
+      return;
+    }
+    const token = ++actionTokenRef.current;
+    restartAutonomousCycle();
+    void cancelNativePetMotion().catch(() => undefined);
+    void (async () => {
+      if (!visibleRef.current) {
+        commitVisibility(true);
+        await setNativePetPresence(true).catch(() => undefined);
+      }
+      if (token !== actionTokenRef.current || focusRestingRef.current) return;
+      setPreserveEntryLanding(false);
+
+      commitPhase("notice");
+      await delay(PET_MODE_DRIFT_NOTICE_MS);
+
+      if (token === actionTokenRef.current && !focusRestingRef.current) commitPhase("idle");
+    })();
+  }, [commitPhase, commitVisibility, petModeEnabled, playCursorHunt, restartAutonomousCycle, snapshot]);
 
   useEffect(() => {
     if (phase !== "entry") return;
@@ -759,7 +975,7 @@ export function PetModeWindowApp() {
   }, [labLifeLoopEnabled, playLifeAction]);
 
   useEffect(() => {
-    if (!petModeEnabled) return;
+    if (!petModeEnabled || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -803,10 +1019,10 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, petModeEnabled, playOuting]);
+  }, [autonomousCycle, petModeEnabled, playOuting, snapshot?.productivity]);
 
   useEffect(() => {
-    if (!petModeEnabled) return;
+    if (!petModeEnabled || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -860,6 +1076,7 @@ export function PetModeWindowApp() {
   }, [autonomousCycle, petModeEnabled, playLifeAction, snapshot?.productivity]);
 
   useEffect(() => {
+    if (snapshot?.productivity === "focus") return undefined;
     let disposed = false;
     let resetTimerId = 0;
     let timerId = 0;
@@ -881,9 +1098,10 @@ export function PetModeWindowApp() {
       window.clearTimeout(timerId);
       window.clearTimeout(resetTimerId);
     };
-  }, [commitPhase]);
+  }, [commitPhase, snapshot?.productivity]);
 
   useEffect(() => {
+    if (snapshot?.productivity === "focus") return undefined;
     let disposed = false;
     let resetTimerId = 0;
     let timerId = 0;
@@ -909,10 +1127,20 @@ export function PetModeWindowApp() {
       window.clearTimeout(timerId);
       window.clearTimeout(resetTimerId);
     };
-  }, [commitPhase]);
+  }, [commitPhase, snapshot?.productivity]);
 
   useEffect(() => {
-    if (!petModeEnabled || !petVisible) {
+    // Focus and drift are both intentionally self-contained states. Looking at
+    // every nearby pointer during either one makes the pet read like an eager
+    // assistant waiting for input rather than a cat with its own attention.
+    // Neutral time still keeps the small proximity response for users who
+    // deliberately approach the resting pet.
+    if (
+      !petModeEnabled
+      || !petVisible
+      || snapshot?.productivity === "focus"
+      || snapshot?.productivity === "drift"
+    ) {
       gazeEngagedRef.current = false;
       setGazeOffset({ x: 0, y: 0 });
       return undefined;
@@ -966,7 +1194,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [petModeEnabled, petVisible]);
+  }, [petModeEnabled, petVisible, snapshot?.productivity]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     // The overlay is a separate, non-focusable window. It must still consume
@@ -1006,12 +1234,16 @@ export function PetModeWindowApp() {
         // gesture is a normal petting tap. Cancel any interrupted life pose
         // before playing the existing happy reaction, while preserving the
         // deliberate two-touch wake behavior for a sleeping cat.
-        if (phaseRef.current !== "sleep") commitPhase("idle");
+        if (phaseRef.current !== "sleep") {
+          commitPhase(focusRestingRef.current ? "sit" : "idle");
+        }
         handlePet();
       } catch (error) {
         void reportNativePetDragError(error).catch(() => undefined);
         manualDragRef.current = false;
-        if (dragToken === actionTokenRef.current) commitPhase("idle");
+        if (dragToken === actionTokenRef.current) {
+          commitPhase(focusRestingRef.current ? "sit" : "idle");
+        }
       }
     })();
   };

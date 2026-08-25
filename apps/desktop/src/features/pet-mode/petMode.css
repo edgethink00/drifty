@@ -198,6 +198,9 @@
 .pet-mode-cat--entry .pet-mode-cat__motion,
 .pet-mode-cat--walk .pet-mode-cat__motion,
 .pet-mode-cat--run .pet-mode-cat__motion,
+.pet-mode-cat--stalk .pet-mode-cat__motion,
+.pet-mode-cat--bite .pet-mode-cat__motion,
+.pet-mode-cat--return .pet-mode-cat__motion,
 .pet-mode-cat--paw .pet-mode-cat__motion,
 .pet-mode-cat--drag .pet-mode-cat__motion,
 .pet-mode-cat--release .pet-mode-cat__motion,
@@ -237,6 +240,12 @@
 
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
+.pet-mode-cat__walk-mouth {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 90ms cubic-bezier(.2, .8, .2, 1);
+}
+.pet-mode-cat__walk-mouth--bite { transform: translateY(.45px) scaleY(.48); }
 /* Measured in the fixed 121.2×92.4 cat box: the last 150×120 walk-frames-v2
    vector sits 3.76px above and 6.383px right of the 797×581 paw/f001.png idle
    raster. Register the visible silhouette rather than the unequal source
@@ -244,6 +253,9 @@
 .pet-mode-cat--entry .pet-mode-cat__vector,
 .pet-mode-cat--walk .pet-mode-cat__vector,
 .pet-mode-cat--run .pet-mode-cat__vector,
+.pet-mode-cat--stalk .pet-mode-cat__vector,
+.pet-mode-cat--bite .pet-mode-cat__vector,
+.pet-mode-cat--return .pet-mode-cat__vector,
 .pet-mode-cat__landed-vector {
   transform: translate(
     var(--pet-gait-center-shift, -6.383px),
@@ -475,6 +487,9 @@
 }
 .pet-mode-cat--walk .pet-mode-cat__shadow { animation: pet-mode-shadow 480ms ease-in-out infinite; }
 .pet-mode-cat--run .pet-mode-cat__shadow { animation: pet-mode-shadow 240ms ease-in-out infinite; }
+.pet-mode-cat--stalk .pet-mode-cat__shadow { animation: pet-mode-shadow 320ms ease-in-out infinite; }
+.pet-mode-cat--bite .pet-mode-cat__shadow { scale: .96 .9; opacity: .7; }
+.pet-mode-cat--return .pet-mode-cat__shadow { animation: pet-mode-shadow 460ms ease-in-out infinite; }
 .pet-mode-cat--drag .pet-mode-cat__shadow { opacity: 0; }
 .pet-mode-cat--release .pet-mode-cat__shadow {
   animation: pet-mode-release-shadow var(--pet-drag-release-duration) linear both;
@@ -513,10 +528,13 @@
   opacity: 0;
 }
 .pet-mode-cat--run .pet-mode-cat__alert,
-.pet-mode-cat--paw .pet-mode-cat__alert {
+.pet-mode-cat--paw .pet-mode-cat__alert,
+.pet-mode-cat--notice .pet-mode-cat__alert {
   opacity: 1;
   animation: pet-mode-alert 620ms ease-in-out infinite;
 }
+.pet-mode-cat--notice .pet-mode-cat__alert { color: #ff9f0a; }
+.pet-mode-cat.is-playful-paw .pet-mode-cat__alert { opacity: 0; animation: none; }
 
 @keyframes pet-mode-alert {
   0%, 100% { transform: translateY(0) scale(1); }
@@ -627,7 +645,8 @@
   .pet-mode-cat__release-held,
   .pet-mode-cat__release-idle,
   .pet-mode-cat__sit-eye-open,
-  .pet-mode-cat__sit-eye-closed {
+  .pet-mode-cat__sit-eye-closed,
+  .pet-mode-cat__walk-mouth {
     animation: none !important;
     transition: none !important;
   }

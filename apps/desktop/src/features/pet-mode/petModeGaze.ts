@@ -55,8 +55,11 @@ function petModeGazeHead(sample: PetModeGazeSample): { readonly x: number; reado
 }
 
 export function petModeGazePoseForPhase(phase: string): PetModeGazePose | null {
-  if (phase === "idle" || phase === "sit") {
-    return phase;
+  if (phase === "idle" || phase === "notice") {
+    return "idle";
+  }
+  if (phase === "sit") {
+    return "sit";
   }
   return null;
 }

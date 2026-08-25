@@ -97,6 +97,7 @@ describe("petModeGaze", () => {
   it("does not follow during reduced motion or non-resting poses", () => {
     expect(petModeGazePoseForPhase("idle")).toBe("idle");
     expect(petModeGazePoseForPhase("sit")).toBe("sit");
+    expect(petModeGazePoseForPhase("notice")).toBe("idle");
     expect(petModeGazePoseForPhase("blink")).toBeNull();
     expect(petModeGazePoseForPhase("walk")).toBeNull();
     expect(petModeGazePoseForPhase("sleep")).toBeNull();

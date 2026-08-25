@@ -20,6 +20,10 @@ type PetModeCatPhase =
   | "entry"
   | "walk"
   | "run"
+  | "stalk"
+  | "bite"
+  | "return"
+  | "notice"
   | "paw"
   | "happy"
   | "blink"
@@ -58,6 +62,7 @@ export function PetModeCat({
   gazeOffset = { x: 0, y: 0 },
   publishHitRegion = true,
   decorative = false,
+  playfulPaw = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -73,9 +78,11 @@ export function PetModeCat({
   readonly gazeOffset?: PetModeGazeOffset;
   readonly publishHitRegion?: boolean;
   readonly decorative?: boolean;
+  readonly playfulPaw?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
+  const walkFrameRef = useRef(0);
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
   const renderedEntrySequenceRef = useRef<number | null>(null);
 
@@ -138,20 +145,35 @@ export function PetModeCat({
   }, [decorative]);
 
   useEffect(() => {
-    const moving = phase === "entry" || phase === "walk" || phase === "run";
+    const moving = phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "return";
     if (!moving || walkFrames.length === 0) return undefined;
-    setWalkFrame(0);
     // Native emits `motion: entry` before its one-frame WebView handoff, and
     // entrySequence restarts this renderer clock on that event. Both sides then
     // use the same duration and distance-based travel progress; the final frame
     // clamp absorbs the remaining compositor-frame skew before `entry_complete`.
-    const motion = phase === "run" ? "run" : phase === "walk" ? "walk" : "entry";
+    const motion = phase === "run"
+      ? "run"
+      : phase === "return"
+        ? "return"
+        : phase === "stalk"
+          ? "stalk"
+          : phase === "walk"
+            ? "walk"
+            : "entry";
     const resolvedEntryDurationMs = resolvePetModeEntryDurationMs(
       entryTravelDistance,
       entryDurationMs,
     );
+    // Entry is synchronized to native's own travel clock. Later motion phases
+    // continue from the silhouette already on screen so stalk -> bite ->
+    // return never snaps back to the first gait drawing.
+    const startingFrame = motion === "entry" ? 0 : walkFrameRef.current;
+    if (motion === "entry") {
+      walkFrameRef.current = 0;
+      setWalkFrame(0);
+    }
     const startedAt = performance.now();
-    let displayedFrame = 0;
+    let displayedFrame = startingFrame;
     let animationFrameId = 0;
     let stagingReleaseFrameId = 0;
     let stagingFrame = false;
@@ -160,7 +182,7 @@ export function PetModeCat({
       // The prototype advances gait in its requestAnimationFrame loop. Do the
       // same here: at run speed it may skip source indices, but it never queues
       // several full-silhouette React updates between display refreshes.
-      const nextFrame = getPetModeGaitFrameIndex(
+      const timelineFrame = getPetModeGaitFrameIndex(
         motion,
         now - startedAt,
         walkFrames.length,
@@ -172,10 +194,14 @@ export function PetModeCat({
           }
           : undefined,
       );
+      const nextFrame = motion === "entry"
+        ? timelineFrame
+        : (startingFrame + timelineFrame) % walkFrames.length;
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
           if (disposed) return;
           displayedFrame = nextFrame;
+          walkFrameRef.current = nextFrame;
           setWalkFrame(nextFrame);
           stagingReleaseFrameId = window.requestAnimationFrame(() => {
             stagingFrame = false;
@@ -267,11 +293,12 @@ export function PetModeCat({
     && preserveEntryLanding
     && walkFrames.length > 0
     && renderedEntrySequenceRef.current === entrySequence;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy";
   const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")
     && !holdsRenderedEntryVector;
+  const usesNoticeGaze = phase === "notice";
   const lifeMotionAsset = isLifeMotionPhase(phase)
     ? LIFE_MOTION_ASSET_BY_PHASE[phase]
     : null;
@@ -291,10 +318,13 @@ export function PetModeCat({
   const walkVectorBody = (
     <>
       <path d={walkFrames[renderedWalkFrame]} fill="currentColor" />
-      <PetModeWalkFace gazing={holdsRenderedEntryVector && (gazeOffset.x !== 0 || gazeOffset.y !== 0)} />
+      <PetModeWalkFace
+        biting={phase === "bite" || phase === "return"}
+        gazing={holdsRenderedEntryVector && (gazeOffset.x !== 0 || gazeOffset.y !== 0)}
+      />
     </>
   );
-  const regionId = holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run"
+  const regionId = holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
     ? (walkFrames.length > 0 ? `gait:${renderedWalkFrame}` : "idle")
     : phase === "paw"
       ? `paw:${pawFrame}`
@@ -508,11 +538,11 @@ export function PetModeCat({
           >
             {walkVectorBody}
           </svg>
-        ) : (phase === "entry" || phase === "walk" || phase === "run") && walkFrames.length > 0 ? (
+        ) : (phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return") && walkFrames.length > 0 ? (
           <svg ref={registerWalkVector} className="pet-mode-cat__vector" viewBox="0 0 150 120" aria-hidden="true">
             {walkVectorBody}
           </svg>
-        ) : usesIdleGaze ? (
+        ) : usesIdleGaze || usesNoticeGaze ? (
           <>
             <img className="pet-mode-cat__raster" src="/pet-mode/gaze/idle-no-pupils.png" alt="" draggable={false} />
             <span className="pet-mode-cat__idle-pupils" aria-hidden="true">
@@ -591,10 +621,12 @@ function PetModeWalkFace({
   transform,
   animatedBlink = false,
   gazing = false,
+  biting = false,
 }: {
   readonly transform?: string;
   readonly animatedBlink?: boolean;
   readonly gazing?: boolean;
+  readonly biting?: boolean;
 }) {
   return (
     <g className="pet-mode-cat__face" transform={transform}>
@@ -614,7 +646,14 @@ function PetModeWalkFace({
           strokeLinecap="round"
         />
       ) : null}
-      <path d="M127.6 50.2 Q129.6 52.8 131.6 50.5 Q133.6 52.8 135.7 50.2" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
+      <path
+        className={biting ? "pet-mode-cat__walk-mouth pet-mode-cat__walk-mouth--bite" : "pet-mode-cat__walk-mouth"}
+        d="M127.6 50.2 Q129.6 52.8 131.6 50.5 Q133.6 52.8 135.7 50.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
     </g>
   );
 }

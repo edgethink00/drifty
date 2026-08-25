@@ -10,6 +10,14 @@ import type {
   PetModeSnapshot,
   PetModeWindowEvent,
 } from "./petModeData";
+import {
+  PET_MODE_DRIFT_CURSOR_CAPTURE_RADIUS,
+  PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE,
+  PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS,
+  PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS,
+  resolvePetModeDriftCursorReturnDuration,
+  type PetModeDriftHuntSettings,
+} from "./petModeDriftHunt";
 
 type UnlistenFn = () => void;
 
@@ -50,6 +58,19 @@ export type PetModeCursorSample = {
   readonly windowWidth: number;
   readonly windowHeight: number;
   readonly visible: boolean;
+};
+
+export type PetModeStalkResult = {
+  readonly outcome: "completed" | "timed_out" | "cancelled" | "pointer_pressed" | "different_display" | "disabled" | "hidden" | "unsupported_platform";
+  readonly facing: "left" | "right";
+  readonly cursorX: number | null;
+  readonly cursorY: number | null;
+  readonly cursorMovementDistance: number;
+};
+
+export type PetModeCursorReturnResult = {
+  readonly outcome: "completed" | "cancelled" | "cursor_escaped" | "pointer_pressed" | "different_display" | "disabled" | "hidden" | "unsupported_platform";
+  readonly movedDistance: number;
 };
 
 // Native travel can legitimately use the full six-second cap before the paw
@@ -137,6 +158,45 @@ export async function previewNativePetModeAction(action: PetModePreviewAction): 
 export async function cancelNativePetMotion(): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("pet_mode_cancel_motion");
+}
+
+export async function stalkNativePetCursor(settings: PetModeDriftHuntSettings): Promise<PetModeStalkResult | null> {
+  if (!isTauriRuntime()) return null;
+  const chase = settings.mode === "chase";
+  return invoke<PetModeStalkResult>("pet_mode_stalk_cursor", {
+    request: {
+      durationMs: chase ? settings.chaseDurationMs : 3_200,
+      biteGap: 0,
+      speed: 220,
+      retargetCursor: chase,
+      turnHysteresis: chase && settings.softTurns ? PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS : 0,
+      turnCooldownMs: chase && settings.softTurns ? PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS : 0,
+    },
+  });
+}
+
+export async function returnWithNativePetCursor({
+  targetX,
+  targetY,
+  approachFacing,
+  cursorMovementDistance,
+}: {
+  readonly targetX: number;
+  readonly targetY: number;
+  readonly approachFacing: "left" | "right";
+  readonly cursorMovementDistance: number;
+}): Promise<PetModeCursorReturnResult | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<PetModeCursorReturnResult>("pet_mode_carry_cursor", {
+    request: {
+      targetX,
+      targetY,
+      approachFacing,
+      distance: PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE,
+      durationMs: resolvePetModeDriftCursorReturnDuration(cursorMovementDistance),
+      captureRadius: PET_MODE_DRIFT_CURSOR_CAPTURE_RADIUS,
+    },
+  });
 }
 
 export async function applyNativePetModeLabTarget(

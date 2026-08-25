@@ -92,4 +92,75 @@ describe("pet mode enabled bridge", () => {
       },
     });
   });
+
+  it("keeps single-target hunts fixed and gives chase hunts bounded soft turns", async () => {
+    tauri.invoke.mockResolvedValue(null);
+    const { stalkNativePetCursor } = await import("./petModeBridge");
+
+    await stalkNativePetCursor({ enabled: true, mode: "single", chaseDurationMs: 8_000, softTurns: true });
+    expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_stalk_cursor", {
+      request: {
+        durationMs: 3_200,
+        biteGap: 0,
+        speed: 220,
+        retargetCursor: false,
+        turnHysteresis: 0,
+        turnCooldownMs: 0,
+      },
+    });
+
+    await stalkNativePetCursor({ enabled: true, mode: "chase", chaseDurationMs: 8_000, softTurns: true });
+    expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_stalk_cursor", {
+      request: {
+        durationMs: 8_000,
+        biteGap: 0,
+        speed: 220,
+        retargetCursor: true,
+        turnHysteresis: 48,
+        turnCooldownMs: 500,
+      },
+    });
+  });
+
+  it("carries calm, alert, and evasive cursors on three bounded durations", async () => {
+    tauri.invoke.mockResolvedValue(null);
+    const { returnWithNativePetCursor } = await import("./petModeBridge");
+    const base = { targetX: 640, targetY: 320, approachFacing: "right" as const };
+
+    await returnWithNativePetCursor({ ...base, cursorMovementDistance: 7 });
+    expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_carry_cursor", {
+      request: {
+        targetX: 640,
+        targetY: 320,
+        approachFacing: "right",
+        distance: 128,
+        durationMs: 8_000,
+        captureRadius: 18,
+      },
+    });
+
+    await returnWithNativePetCursor({ ...base, cursorMovementDistance: 12 });
+    expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_carry_cursor", {
+      request: {
+        targetX: 640,
+        targetY: 320,
+        approachFacing: "right",
+        distance: 128,
+        durationMs: 5_000,
+        captureRadius: 18,
+      },
+    });
+
+    await returnWithNativePetCursor({ ...base, cursorMovementDistance: 18 });
+    expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_carry_cursor", {
+      request: {
+        targetX: 640,
+        targetY: 320,
+        approachFacing: "right",
+        distance: 128,
+        durationMs: 2_500,
+        captureRadius: 18,
+      },
+    });
+  });
 });

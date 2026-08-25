@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   PET_MODE_AWAY_MS,
   PET_MODE_BLINK_DURATION_MS,
+  PET_MODE_RETURN_SPEED,
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
   PET_MODE_DRAG_PICKUP_MS,
@@ -28,6 +29,7 @@ import {
   PET_MODE_PRESENT_MS,
   PET_MODE_SETTLED_ACTION_INTERVAL_MS,
   PET_MODE_STORAGE_KEY,
+  PET_MODE_STALK_SPEED,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeDefaultEntryTravelDistance,
   getPetModeEntryDurationMs,
@@ -129,6 +131,10 @@ describe("petModeData", () => {
     expect(getPetModeGaitFrameIndex("entry", 0, 0)).toBe(0);
     expect(getPetModeGaitFramesPerSecond("walk")).toBeCloseTo(21.6, 6);
     expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(112.5, 6);
+    expect(getPetModeGaitFramesPerSecond("stalk")).toBeCloseTo(95.8064516, 6);
+    expect(getPetModeGaitFramesPerSecond("return")).toBeCloseTo(58.6956522, 6);
+    expect(PET_MODE_STALK_SPEED).toBe(220);
+    expect(PET_MODE_RETURN_SPEED).toBeCloseTo(104.3478261, 6);
     expect(getPetModeGaitFrameIndex("walk", 1_400)).toBe(0);
     const travel = getPetModeDefaultEntryTravelDistance();
     const stride = getPetModeGaitStride("run");

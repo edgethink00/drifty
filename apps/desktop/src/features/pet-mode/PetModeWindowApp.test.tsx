@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import {
   PET_MODE_BLINK_DURATION_MS,
@@ -18,6 +19,13 @@ import {
   PET_MODE_TAIL_FLICK_DURATION_MS,
   type PetModeWindowEvent,
 } from "./petModeData";
+import {
+  PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS,
+  PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
+  PET_MODE_DRIFT_NOTICE_MS,
+  PET_MODE_DRIFT_NOTICE_SECONDS,
+  PET_MODE_DRIFT_STALK_SECONDS,
+} from "./petModeDriftHunt";
 
 const walkFrames = (JSON.parse(
   readFileSync("public/pet-mode/walk-frames-v2.json", "utf8"),
@@ -99,6 +107,14 @@ const bridge = vi.hoisted(() => ({
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   resolveNativePetDrop: vi.fn().mockResolvedValue({ kind: "hop", distance: 4, durationMs: 16, targetY: 0, ledge: "hop" }),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
+  stalkNativePetCursor: vi.fn().mockResolvedValue({
+    outcome: "completed",
+    facing: "right",
+    cursorX: 640,
+    cursorY: 320,
+    cursorMovementDistance: 0,
+  }),
+  returnWithNativePetCursor: vi.fn().mockResolvedValue({ outcome: "completed", movedDistance: 128 }),
   triggerNativePetVisibilityAction: vi.fn().mockResolvedValue(undefined),
   triggerNativeEndOfDayReviewAction: vi.fn().mockResolvedValue(undefined),
   openNativePetModeMenu: vi.fn().mockResolvedValue(true),
@@ -130,6 +146,8 @@ vi.mock("./petModeBridge", () => ({
   rememberNativePetPosition: bridge.rememberNativePetPosition,
   resolveNativePetDrop: bridge.resolveNativePetDrop,
   setNativePetPresence: bridge.setNativePetPresence,
+  stalkNativePetCursor: bridge.stalkNativePetCursor,
+  returnWithNativePetCursor: bridge.returnWithNativePetCursor,
   triggerNativePetVisibilityAction: bridge.triggerNativePetVisibilityAction,
 }));
 
@@ -164,6 +182,336 @@ describe("PetModeWindowApp", () => {
     window.localStorage.clear();
     vi.unstubAllGlobals();
     delete document.documentElement.dataset.surface;
+  });
+
+  it("hard-stops automatic motion and gaze while focus is active", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    bridge.sampleNativePetCursor.mockClear();
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "motion", motion: "walk" });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 20_000); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+    expect(bridge.sampleNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("enters the focus rest pose when the pet is enabled during an active focus episode", async () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 12 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.cancelNativePetMotion).not.toHaveBeenCalled();
+
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_STORAGE_KEY,
+        newValue: "1",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(1);
+  });
+
+  it("hard-stops an in-flight automatic intervention when focus starts", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishMove!: () => void;
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
+      finishMove = () => resolve({
+        facing: "right",
+        targetKind: "browser_tab_close",
+        confidence: "high",
+        diagnostic: "ax_selected_tab_close",
+        targetX: 640,
+        targetY: 48,
+      });
+    }));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "automatic-drift-nudge",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "neutral", contextLabel: "editor", durationSeconds: 2 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    await act(async () => {
+      finishMove();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("automatic-drift-nudge", false);
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("automatic-drift-nudge");
+    expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("notices a drift episode once, then bites and returns with a stationary cursor once", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let finishStalk!: () => void;
+    let finishCarry!: () => void;
+    bridge.stalkNativePetCursor.mockImplementationOnce(() => new Promise((resolve) => {
+      finishStalk = () => resolve({
+        outcome: "completed",
+        facing: "right",
+        cursorX: 640,
+        cursorY: 320,
+        cursorMovementDistance: 0,
+      });
+    }));
+    bridge.returnWithNativePetCursor.mockImplementationOnce(() => new Promise((resolve) => {
+      finishCarry = () => resolve({ outcome: "completed", movedDistance: 128 });
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    bridge.sampleNativePetCursor.mockClear();
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_NOTICE_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("notice");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_NOTICE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(bridge.sampleNativePetCursor).not.toHaveBeenCalled();
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledWith({
+      enabled: true,
+      mode: "single",
+      chaseDurationMs: 8_000,
+      softTurns: true,
+    });
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS + 5 },
+      });
+    });
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
+    await act(async () => { finishStalk(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("bite");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS - 1); });
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(bridge.returnWithNativePetCursor).toHaveBeenCalledWith({
+      targetX: 640,
+      targetY: 320,
+      approachFacing: "right",
+      cursorMovementDistance: 0,
+    });
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "facing", facing: "left" });
+      bridge.eventHandler?.({ kind: "motion", motion: "return" });
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("return");
+    await act(async () => { finishCarry(); await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+  });
+
+  it("keeps cursor hunting inert until the Dev toggle is enabled", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).not.toBe("stalk");
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "cursor_hunt_single" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("runs the same native cursor hunt path from the enabled Dev preview", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 120 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "cursor_hunt_chase" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledWith({
+      enabled: true,
+      mode: "chase",
+      chaseDurationMs: 8_000,
+      softTurns: true,
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("bite");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS); });
+    expect(bridge.returnWithNativePetCursor).toHaveBeenCalledWith({
+      targetX: 640,
+      targetY: 320,
+      approachFacing: "right",
+      cursorMovementDistance: 0,
+    });
+  });
+
+  it("hard-stops an active cursor hunt when Dev mode turns off", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishStalk: (() => void) | null = null;
+    bridge.stalkNativePetCursor.mockImplementationOnce(() => new Promise((resolve) => {
+      finishStalk = () => resolve({
+        outcome: "completed",
+        facing: "right",
+        cursorX: 640,
+        cursorY: 320,
+        cursorMovementDistance: 0,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "cursor_hunt_chase" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stalk");
+
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: DEV_MODE_STORAGE_KEY,
+        newValue: "0",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+    act(() => finishStalk?.());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
   });
 
   it("opens its own menu on right-click and routes each choice natively", async () => {

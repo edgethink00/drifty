@@ -34,6 +34,10 @@ export const PET_MODE_WALK_SPEED = 20.8;
 export const PET_MODE_WALK_STRIDE = 26;
 export const PET_MODE_RUN_SPEED = 300;
 export const PET_MODE_RUN_STRIDE = 72;
+export const PET_MODE_STALK_SPEED = 220;
+export const PET_MODE_STALK_STRIDE = 62;
+export const PET_MODE_RETURN_SPEED = 96 / 0.92;
+export const PET_MODE_RETURN_STRIDE = 48;
 export const PET_MODE_GAIT_CADENCE = 0.9;
 export const PET_MODE_GAIT_FRAME_COUNT = 30;
 export const PET_MODE_HOME_EDGE_INSET = 24;
@@ -136,7 +140,7 @@ export const PET_MODE_PAW_TIMELINE = [
   })),
 ] as const;
 
-export type PetModeMotionKind = "entry" | "walk" | "run";
+export type PetModeMotionKind = "entry" | "walk" | "run" | "stalk" | "return";
 
 export type PetModePreviewAction =
   | "stop"
@@ -149,7 +153,9 @@ export type PetModePreviewAction =
   | "sit"
   | "wake"
   | "pet"
-  | "outing";
+  | "outing"
+  | "cursor_hunt_single"
+  | "cursor_hunt_chase";
 
 export type PetModeLabAction = PetModePreviewAction | "intervention";
 
@@ -209,12 +215,24 @@ export type PetModeContactAlignment = {
 };
 
 export function getPetModeGaitStride(motion: PetModeMotionKind): number {
-  const stride = motion === "walk" ? PET_MODE_WALK_STRIDE : PET_MODE_RUN_STRIDE;
+  const stride = motion === "walk"
+    ? PET_MODE_WALK_STRIDE
+    : motion === "return"
+      ? PET_MODE_RETURN_STRIDE
+    : motion === "stalk"
+      ? PET_MODE_STALK_STRIDE
+      : PET_MODE_RUN_STRIDE;
   return stride / PET_MODE_GAIT_CADENCE;
 }
 
 export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number {
-  const speed = motion === "walk" ? PET_MODE_WALK_SPEED : PET_MODE_RUN_SPEED;
+  const speed = motion === "walk"
+    ? PET_MODE_WALK_SPEED
+    : motion === "return"
+      ? PET_MODE_RETURN_SPEED
+    : motion === "stalk"
+      ? PET_MODE_STALK_SPEED
+      : PET_MODE_RUN_SPEED;
   return PET_MODE_GAIT_FRAME_COUNT * speed / getPetModeGaitStride(motion);
 }
 

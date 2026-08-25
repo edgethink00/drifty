@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-stalk-cursor"
+description = "Enables the pet_mode_stalk_cursor command without any pre-configured scope."
+commands.allow = ["pet_mode_stalk_cursor"]
+
+[[permission]]
+identifier = "deny-pet-mode-stalk-cursor"
+description = "Denies the pet_mode_stalk_cursor command without any pre-configured scope."
+commands.deny = ["pet_mode_stalk_cursor"]
