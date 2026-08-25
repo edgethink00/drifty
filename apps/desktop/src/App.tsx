@@ -1685,6 +1685,16 @@ export default function App() {
     loadMissingSiteIconDomains(ruleDomains);
   }, [classificationRules, loadMissingSiteIconDomains]);
 
+  const resetHistorySearch = useCallback(() => {
+    setHistorySearchQuery("");
+    historySearchRequestRef.current += 1;
+    setHistorySearchSegments([]);
+    setHistorySearchNextCursor(null);
+    setHistorySearchHasMoreSegments(false);
+    setHistorySearchLoading(false);
+    setHistorySearchError(null);
+  }, []);
+
   useEffect(() => {
     const query = normalizedHistorySearchQuery;
     if (query.length === 0) {
@@ -1750,6 +1760,28 @@ export default function App() {
     materializeBuiltInHeuristicTimeline,
     normalizedHistorySearchQuery,
     shouldBlockLocalTrackerAccess,
+  ]);
+
+  useEffect(() => {
+    if (activeTab === "history") return;
+    if (
+      historySearchQuery === ""
+      && historySearchSegments.length === 0
+      && historySearchNextCursor === null
+      && !historySearchHasMoreSegments
+      && !historySearchLoading
+      && historySearchError === null
+    ) return;
+    resetHistorySearch();
+  }, [
+    activeTab,
+    historySearchError,
+    historySearchHasMoreSegments,
+    historySearchLoading,
+    historySearchNextCursor,
+    historySearchQuery,
+    historySearchSegments,
+    resetHistorySearch,
   ]);
 
   const publishNativeDriftAlarmTrayStatus = useCallback((nextStatus: DriftAlarmTrayStatus) => {
