@@ -15,6 +15,7 @@ export type LeaderboardPageProps = {
   isSupabaseEnabled: boolean;
   leaderboard: LeaderboardRow[];
   ownFocusSeconds?: number | null;
+  ownParticipantCount?: number | null;
   ownRank?: number | null;
   profileDisplayName?: string | null;
   publicProfile?: LeaderboardPublicProfileControls;
@@ -41,6 +42,7 @@ export function LeaderboardPage({
   isSupabaseEnabled,
   leaderboard,
   ownFocusSeconds,
+  ownParticipantCount,
   ownRank,
   profileDisplayName,
   publicProfile,
@@ -71,6 +73,7 @@ export function LeaderboardPage({
           isOptedIn={isOptedIn}
           isParticipationResolved={isParticipationResolved}
           ownFocusSeconds={ownFocusSeconds}
+          ownParticipantCount={ownParticipantCount}
           ownRank={ownRank}
           activePeriod={activePeriod}
           leaderboard={leaderboard}

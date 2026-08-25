@@ -39,6 +39,7 @@ export type LeaderboardViewProps = {
    */
   isParticipationResolved?: boolean;
   ownRank?: number | null;
+  ownParticipantCount?: number | null;
   activePeriod?: LeaderboardPeriod;
   leaderboard?: LeaderboardRow[];
   ownFocusSeconds?: number | null;
@@ -65,6 +66,7 @@ export function LeaderboardView({
   isOptedIn,
   isParticipationResolved = true,
   ownRank = null,
+  ownParticipantCount = null,
   activePeriod = "weekly",
   leaderboard = [],
   ownFocusSeconds = null,
@@ -122,6 +124,7 @@ export function LeaderboardView({
   const resolvedOwnFocusSeconds = ownFocusSeconds
     ?? matchedOwnRow?.focus_seconds
     ?? (activePeriod === "weekly" ? publicProfile?.focusSeconds7d ?? 0 : 0);
+  const participantCount = resolveParticipantCount(leaderboard, ownParticipantCount, currentUserRank);
   const publicRankReady = Boolean(publicProfile?.publicId && publicProfile.draft.isPublic && currentUserRank !== null);
 
   return (
@@ -327,11 +330,11 @@ export function LeaderboardView({
           isLoading={isLoading}
           isOptedIn={isOptedIn}
           leaderboard={leaderboard}
-          previewName={previewName}
+          participantCount={participantCount}
           searchQuery={searchQuery}
           statusMessage={statusMessage}
           statusTone={statusTone}
-          totalFocusSeconds7d={totalFocusSeconds7d}
+          topScopeFocusSeconds={totalFocusSeconds7d}
           onPeriodChange={onPeriodChange}
           onSearchQueryChange={setSearchQuery}
           onSelectProfile={onSelectProfile}
@@ -354,6 +357,16 @@ export function LeaderboardView({
       ) : null}
     </section>
   );
+}
+
+function resolveParticipantCount(rows: readonly LeaderboardRow[], ownParticipantCount: number | null, ownRank: number | null): number | null {
+  const reportedCounts = [ownParticipantCount, ...rows.map((row) => row.participant_count)]
+    .filter((count): count is number => typeof count === "number" && Number.isFinite(count) && count >= 0);
+  if (reportedCounts.length === 0) return null;
+
+  const resolved = Math.max(...reportedCounts);
+  const observedMinimum = Math.max(ownRank ?? 0, ...rows.map((row) => row.rank));
+  return resolved < observedMinimum ? null : resolved;
 }
 
 function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null) {

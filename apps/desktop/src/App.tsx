@@ -7565,6 +7565,9 @@ export default function App() {
             ownFocusSeconds={leaderboardUsesPreviewProfile
               ? leaderboardRows.find((row) => row.rank === 6)?.focus_seconds ?? null
               : ownLeaderboardEntry?.focus_seconds ?? null}
+            ownParticipantCount={leaderboardUsesPreviewProfile
+              ? leaderboardRows.length
+              : ownLeaderboardEntry?.participant_count ?? null}
             ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
             profileDisplayName={leaderboardProfileDisplayName}
             publicProfile={{

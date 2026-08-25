@@ -24,6 +24,7 @@ import {
   type LeaderboardAutoPublishDecision,
   type LeaderboardAutoPublishRecord,
 } from "./leaderboardAutoPublishState";
+import { LEADERBOARD_PUBLIC_RESULT_LIMIT } from "./leaderboardConfig";
 import { getLeaderboardWindowStartDay } from "./leaderboardWindow";
 import {
   DEFAULT_LEADERBOARD_PERIOD,
@@ -474,7 +475,7 @@ export function useLeaderboardProfileController({
 
     try {
       const [globalResult, ownResult] = await Promise.all([
-        fetchGlobalLeaderboard(activeLeaderboardPeriod, 100),
+        fetchGlobalLeaderboard(activeLeaderboardPeriod, LEADERBOARD_PUBLIC_RESULT_LIMIT),
         canLoadOwnLeaderboardEntry ? fetchOwnLeaderboardEntry(activeLeaderboardPeriod) : Promise.resolve({ success: true, error: null, data: null }),
       ]);
 

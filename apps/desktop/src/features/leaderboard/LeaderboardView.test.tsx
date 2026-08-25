@@ -614,7 +614,115 @@ describe("LeaderboardView", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(1);
     expect(within(list).getByText("Sam")).toBeTruthy();
     expect(within(list).queryByText("Alex")).toBeNull();
-    expect(screen.getByText("1 of 2")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–1 of 1 matches in all ranked/i);
+  });
+
+  it("labels the loaded top slice separately from the full participant count", () => {
+    const leaderboard = Array.from({ length: 100 }, (_, index) => makeLeaderboardRow({
+      rank: index + 1,
+      participant_count: 2_858,
+      public_id: `profile-${index + 1}`,
+      display_name: `Person ${index + 1}`,
+      focus_seconds: (100 - index) * 600,
+      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    }));
+
+    renderView({ leaderboard, ownParticipantCount: 2_858, ownRank: 117 });
+
+    const scope = screen.getByLabelText(/leaderboard scope/i);
+    expect(within(scope).getByText("2,858")).toBeTruthy();
+    expect(within(scope).getByText("Top 100")).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: /search leaderboard/i }).getAttribute("placeholder")).toBe("Search top 100…");
+  });
+
+  it("does not invent a participant total when count metadata is missing or inconsistent", () => {
+    const leaderboard = Array.from({ length: 100 }, (_, index) => makeLeaderboardRow({
+      rank: index + 1,
+      participant_count: null,
+      public_id: `profile-${index + 1}`,
+      display_name: `Person ${index + 1}`,
+      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    }));
+
+    renderView({ leaderboard, ownParticipantCount: 90, ownRank: 117 });
+
+    const scope = screen.getByLabelText(/leaderboard scope/i);
+    expect(within(scope).getByText("—")).toBeTruthy();
+    expect(within(scope).getByText("Top 100")).toBeTruthy();
+    expect(screen.getByRole("searchbox", { name: /search leaderboard/i }).getAttribute("placeholder")).toBe("Search top 100…");
+  });
+
+  it("rejects a participant total below the highest observed rank", () => {
+    const leaderboard = Array.from({ length: 31 }, (_, index) => makeLeaderboardRow({
+      display_name: `Person ${index + 1}`,
+      participant_count: 5,
+      rank: index + 1,
+    }));
+
+    renderView({ leaderboard, ownParticipantCount: 5, ownRank: null });
+
+    const scope = screen.getByLabelText("Leaderboard scope");
+    expect(within(scope).getByText("—")).toBeTruthy();
+    expect(within(scope).getByText("All ranked")).toBeTruthy();
+  });
+
+  it("keeps an explicit zero participant total for an empty board", () => {
+    renderView({ leaderboard: [], ownParticipantCount: 0 });
+
+    const scope = screen.getByLabelText("Leaderboard scope");
+    expect(within(scope).getByText("0")).toBeTruthy();
+  });
+
+  it("paginates the loaded board in groups of 25", () => {
+    const leaderboard = Array.from({ length: 60 }, (_, index) => makeLeaderboardRow({
+      rank: index + 1,
+      public_id: `profile-${index + 1}`,
+      display_name: `Person ${index + 1}`,
+      focus_seconds: (60 - index) * 600,
+      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    }));
+
+    renderView({ leaderboard });
+
+    let list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(25);
+    expect(within(list).getByText("#1")).toBeTruthy();
+    expect(within(list).queryByText("#26")).toBeNull();
+    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–25 of 60/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /next leaderboard page/i }));
+
+    list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(25);
+    expect(within(list).getByText("#26")).toBeTruthy();
+    expect(within(list).queryByText("#1")).toBeNull();
+    expect(screen.getByText(/page 2 of 3/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /next leaderboard page/i }));
+
+    list = screen.getByRole("list", { name: /global focus leaderboard rankings/i });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(list).getByText("#60")).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 51–60 of 60/i);
+    expect((screen.getByRole("button", { name: /next leaderboard page/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("returns to the first page when search scope changes", () => {
+    const leaderboard = Array.from({ length: 40 }, (_, index) => makeLeaderboardRow({
+      rank: index + 1,
+      public_id: `profile-${index + 1}`,
+      display_name: `Person ${index + 1}`,
+      updated_at: `2026-04-07T12:${String(index % 60).padStart(2, "0")}:00.000Z`,
+    }));
+
+    renderView({ leaderboard });
+    fireEvent.click(screen.getByRole("button", { name: /next leaderboard page/i }));
+    expect(screen.getByText(/page 2 of 2/i)).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: /search leaderboard/i }), { target: { value: "Person 3" } });
+
+    expect(screen.getByText(/page 1 of 1/i)).toBeTruthy();
+    expect(screen.getByRole("navigation", { name: /leaderboard pages/i }).textContent).toMatch(/showing 1–11 of 11 matches/i);
   });
 
   it("opens the selected participant profile from a ranked row", () => {
