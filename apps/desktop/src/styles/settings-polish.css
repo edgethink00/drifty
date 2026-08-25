@@ -1315,7 +1315,13 @@
 }
 
 .settings-row--pet-mode {
-  padding-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+}
+
+/* Keep the mirrored close control with Show pet, then let coat/size read as
+   appearance rather than another behavior switch. */
+.settings-row--pet-automatic-close {
+  padding-bottom: var(--space-4);
 }
 
 /* The coat picker wraps instead of using a fixed column count, so adding a

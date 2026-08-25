@@ -73,11 +73,12 @@ describe("NotificationsSettingsSection", () => {
   });
 
 
-  it("shows a persistent Beta status label on Extreme nudge", () => {
+  it("shows a persistent Beta status label on Automatic close", () => {
     renderSettings();
-    const beta = screen.getByText("Beta");
-    expect(beta.className).toContain("status-badge--beta");
-    expect(beta.getAttribute("aria-hidden")).toBeNull();
+    const badges = screen.getAllByText("Beta");
+    expect(badges).toHaveLength(2);
+    expect(badges.every((badge) => badge.className.includes("status-badge--beta"))).toBe(true);
+    expect(badges.every((badge) => badge.getAttribute("aria-hidden") === null)).toBe(true);
   });
 
   it("localizes the production pet settings in Korean", () => {
@@ -85,11 +86,55 @@ describe("NotificationsSettingsSection", () => {
 
     expect(screen.getByRole("heading", { name: "데스크톱 펫" })).toBeTruthy();
     expect(screen.getByText("New")).toBeTruthy();
-    expect(screen.getByText("Beta")).toBeTruthy();
+    expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText("신규")).toBeNull();
     expect(screen.queryByText("베타")).toBeNull();
     expect(screen.getByText("펫 표시")).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "펫 크기" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "아이보리" })).toBeTruthy();
+  });
+
+  it("mirrors Automatic close between Drift alerts and Desktop pet", () => {
+    const props = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false });
+
+    const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
+    expect(toggles).toHaveLength(2);
+    expect(toggles.every((toggle) => toggle.getAttribute("aria-checked") === "false")).toBe(true);
+
+    fireEvent.click(toggles[1]!);
+    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(true);
+  });
+
+  it("disables both Automatic close toggles until Drift alerts are on", () => {
+    renderSettings({ driftAlertsEnabled: false, extremeNudgeEnabled: true });
+
+    const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
+    expect(toggles).toHaveLength(2);
+    expect(toggles.every((toggle) => toggle.hasAttribute("disabled"))).toBe(true);
+    expect(screen.getAllByText(/Turn on Drift alerts before enabling Automatic close\./).length).toBe(2);
+  });
+
+  it("keeps Automatic close available while the pet is off", () => {
+    renderSettings({ petModeEnabled: false, driftAlertsEnabled: true, extremeNudgeEnabled: true });
+
+    expect(screen.getByText(/Closes the distracting tab or app without the pet animation/i)).toBeTruthy();
+    const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
+    expect(toggles).toHaveLength(2);
+    expect(toggles.every((toggle) => toggle.getAttribute("aria-checked") === "true")).toBe(true);
+    expect(toggles.every((toggle) => toggle.hasAttribute("disabled") === false)).toBe(true);
+  });
+
+  it("connects each Automatic close switch to its row copy", () => {
+    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: false });
+
+    const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
+    expect(toggles).toHaveLength(2);
+    for (const toggle of toggles) {
+      const describedBy = toggle.getAttribute("aria-describedby") ?? "";
+      expect(describedBy.split(" ").filter(Boolean).length).toBe(2);
+      for (const id of describedBy.split(" ").filter(Boolean)) {
+        expect(document.getElementById(id)).not.toBeNull();
+      }
+    }
   });
 });

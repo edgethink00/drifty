@@ -5,11 +5,13 @@ export function Toggle({
   disabled = false,
   onChange,
   ariaLabel,
+  ariaDescribedBy,
 }: {
   checked?: boolean;
   disabled?: boolean;
   onChange?: (checked: boolean) => void;
   ariaLabel?: string;
+  ariaDescribedBy?: string;
 }) {
   const [internalChecked, setInternalChecked] = useState(false);
   const isControlled = checked !== undefined;
@@ -22,5 +24,5 @@ export function Toggle({
     onChange?.(nextChecked);
   }
 
-  return <button type="button" className={`toggle${isChecked ? " on" : ""}`} onClick={handleToggle} role="switch" aria-checked={isChecked} aria-label={ariaLabel} disabled={disabled} />;
+  return <button type="button" className={`toggle${isChecked ? " on" : ""}`} onClick={handleToggle} role="switch" aria-checked={isChecked} aria-label={ariaLabel} aria-describedby={ariaDescribedBy} disabled={disabled} />;
 }

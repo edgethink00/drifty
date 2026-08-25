@@ -44,8 +44,8 @@ const NOTIFICATION_COPY_SECTION = {
 
 const EXTREME_NUDGE_COPY_SECTION = {
   key: "extremeNudge",
-  title: "Extreme nudge",
-  description: "Customize the representative title used by the extreme nudge toast.",
+  title: "Automatic close",
+  description: "Customize the representative title used by the Automatic close toast.",
   fields: [
     { key: "extremeNudgeTitle", label: "Title", hint: "{closed}" },
   ],

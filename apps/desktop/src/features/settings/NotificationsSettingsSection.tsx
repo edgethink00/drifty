@@ -4,6 +4,7 @@ import type { DriftAlarmCopySettingsValue } from "../companion/driftAlarmCopy";
 import { DriftAlarmCopySettings } from "../companion/DriftAlarmCopySettings";
 import type { CompanionResidentPreference } from "../companion/companionPillSettings";
 import { SettingsSelect } from "./SettingsSelect";
+import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { PetSettings } from "./PetCoatPicker";
 import type { PetModeCoat, PetModeSize } from "../pet-mode/petModeData";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
@@ -144,24 +145,14 @@ export function NotificationsSettingsSection({
             />
           </div>
         </div>
-        <div className={`settings-row${driftAlertsEnabled ? "" : " settings-row--disabled"}`}>
-          <div>
-            <div className="lbl settings-label-with-badge">{t("settings.notifications.extreme")} <span className="status-badge status-badge--beta">{t("common.beta")}</span></div>
-            <div className="desc">
-              {driftAlertsEnabled
-                ? t("settings.notifications.extremeOnDescription")
-                : t("settings.notifications.extremeOffDescription")}
-            </div>
-          </div>
-          <div className="ctrl">
-            <Toggle
-              checked={driftAlertsEnabled && extremeNudgeEnabled}
-              disabled={!driftAlertsEnabled}
-              onChange={onExtremeNudgeChange}
-              ariaLabel={t("settings.notifications.toggleExtreme")}
-            />
-          </div>
-        </div>
+        <AutomaticCloseSettingsRow
+          checked={extremeNudgeEnabled}
+          disabled={!driftAlertsEnabled}
+          onChange={onExtremeNudgeChange}
+          onDescription={t("settings.notifications.extremeOnDescription")}
+          offDescription={t("settings.notifications.extremeOffDescription")}
+          toggleAriaLabel={t("settings.notifications.toggleExtreme")}
+        />
         <div className="settings-row">
           <div>
             <div className="lbl">{t("settings.notifications.timing")}</div>
@@ -192,6 +183,9 @@ export function NotificationsSettingsSection({
           onCoatChange={onPetModeCoatChange}
           size={petModeSize}
           onSizeChange={onPetModeSizeChange}
+          automaticCloseEnabled={extremeNudgeEnabled}
+          automaticCloseDisabled={!driftAlertsEnabled}
+          onAutomaticCloseChange={onExtremeNudgeChange}
         />
       </div>
     </div>

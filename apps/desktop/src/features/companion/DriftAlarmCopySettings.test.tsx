@@ -54,7 +54,7 @@ describe("DriftAlarmCopySettings", () => {
     expect(within(notificationPreview).getByLabelText("Notification source youtube.com")).toBeTruthy();
     expect(notificationPreview.querySelector(".drift-copy-preview__notification-source .site-favicon")).toBeTruthy();
 
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Extreme nudge" }));
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Automatic close" }));
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Removed {closed}" } });
     expect(onChange).not.toHaveBeenCalled();

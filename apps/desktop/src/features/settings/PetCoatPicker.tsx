@@ -5,6 +5,7 @@ import {
   type PetModeCoat,
   type PetModeSize,
 } from "../pet-mode/petModeData";
+import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 
@@ -17,6 +18,9 @@ export function PetSettings({
   onCoatChange,
   size,
   onSizeChange,
+  automaticCloseEnabled,
+  automaticCloseDisabled,
+  onAutomaticCloseChange,
 }: {
   readonly enabled: boolean;
   readonly onEnabledChange: (enabled: boolean) => void;
@@ -24,6 +28,9 @@ export function PetSettings({
   readonly onCoatChange: (coat: PetModeCoat) => void;
   readonly size: PetModeSize;
   readonly onSizeChange: (size: PetModeSize) => void;
+  readonly automaticCloseEnabled: boolean;
+  readonly automaticCloseDisabled: boolean;
+  readonly onAutomaticCloseChange: (enabled: boolean) => void;
 }) {
   const { t } = useLocalization();
   return (
@@ -40,8 +47,19 @@ export function PetSettings({
           <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel={t("settings.pet.toggleAria")} />
         </div>
       </div>
-      {/* Kept visible but inert while the pet is off, matching how Extreme
-          nudge dims under Drift alerts. Hiding them made the block change
+      <AutomaticCloseSettingsRow
+        checked={automaticCloseEnabled}
+        disabled={automaticCloseDisabled}
+        onChange={onAutomaticCloseChange}
+        onDescription={enabled
+          ? t("settings.pet.automaticCloseOnDescription")
+          : t("settings.pet.automaticClosePetOffDescription")}
+        offDescription={t("settings.pet.automaticCloseOffDescription")}
+        toggleAriaLabel={t("settings.pet.toggleAutomaticClose")}
+        className="settings-row--pet-automatic-close"
+      />
+      {/* Kept visible but inert while the pet is off, matching how Automatic
+          close dims under Drift alerts. Hiding them made the block change
           height on every toggle and hid the fact that a coat is already
           chosen. */}
       <PetCoatPicker value={coat} onChange={onCoatChange} disabled={!enabled} />

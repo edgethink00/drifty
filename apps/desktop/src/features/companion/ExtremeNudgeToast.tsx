@@ -189,7 +189,7 @@ export function ExtremeNudgeToast({
         <ExtremeNudgeScissorsIcon />
       </div>
       <div className="extreme-nudge-toast__copy">
-        <p className="extreme-nudge-toast__eyebrow">Extreme nudge</p>
+        <p className="extreme-nudge-toast__eyebrow">Automatic close</p>
         <h2>{event.title}</h2>
         <p>{event.focusLabel ? `Focus switched to ${event.focusLabel}` : "Focus target was not available"}</p>
       </div>
