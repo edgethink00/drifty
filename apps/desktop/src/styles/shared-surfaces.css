@@ -206,9 +206,11 @@
 .app-glyph--md, .app-icon--md { width: 36px; height: 36px; }
 .app-glyph--lg, .app-icon--lg { width: 48px; height: 48px; }
 .app-icon, .site-favicon {
-  display: block;
   flex: 0 0 auto;
   border-radius: 12px;
+}
+.app-icon, img.site-favicon {
+  display: block;
   object-fit: cover;
 }
 .usage-identity-icon--md .app-glyph--md, .usage-identity-icon--md .app-icon--md, .usage-identity-icon--md .site-favicon { width: 44px; height: 44px; }

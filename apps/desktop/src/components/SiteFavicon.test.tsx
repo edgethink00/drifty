@@ -37,6 +37,17 @@ describe("SiteFavicon", () => {
     expect(screen.getByText("E")).toBeTruthy();
   });
 
+  it("uses a lettered fallback for a prefiltered browser-internal domain", () => {
+    const { container } = renderWithIcons({}, <SiteFavicon domain="newtab" size={20} />);
+
+    const fallback = screen.getByText("N");
+    expect(fallback.classList.contains("site-favicon")).toBe(true);
+    expect(fallback.classList.contains("site-favicon--fallback")).toBe(true);
+    expect(fallback.getAttribute("style")).toContain("width: 20px");
+    expect(fallback.getAttribute("style")).toContain("height: 20px");
+    expect(container.querySelector("img.site-favicon")).toBeNull();
+  });
+
   it("never emits a remote image source", () => {
     const { container } = renderWithIcons(
       { "example.com": "data:image/png;base64,cached" },
