@@ -1,4 +1,5 @@
 import logoUrl from "../../assets/drifty-icon.png";
+import markUrl from "../../assets/drifty-mark.svg";
 
 export function AuthConfigurationGate() {
   return (
@@ -30,8 +31,15 @@ export function AuthRequiredGate({ onSignIn }: { onSignIn: () => void }) {
 
 export function AuthLoadingGate() {
   return (
-    <main className="auth-gate auth-gate--loading" aria-busy="true" aria-label="Loading saved Drifty session">
-      <span className="auth-gate__pulse">drifty loading…</span>
-    </main>
+    <>
+      <span className="boot-sr-only" role="status" aria-live="polite">Loading saved Drifty session…</span>
+      <main className="auth-gate auth-gate--loading" aria-busy="true" aria-label="Loading saved Drifty session">
+        <div className="boot-window-drag-strip" data-tauri-drag-region aria-hidden="true" />
+        <div className="boot-loading__content" aria-hidden="true">
+          <img className="boot-loading__mark" src={markUrl} alt="" />
+          <span className="boot-loading">drifty loading…</span>
+        </div>
+      </main>
+    </>
   );
 }

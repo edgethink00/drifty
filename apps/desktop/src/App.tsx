@@ -310,7 +310,7 @@ import {
 } from "./app/appAnalytics";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
 import { AccountMenu } from "./features/auth/AccountMenu";
-import { AuthConfigurationGate, AuthRequiredGate } from "./features/auth/AuthGates";
+import { AuthConfigurationGate, AuthLoadingGate, AuthRequiredGate } from "./features/auth/AuthGates";
 import type { ClassificationPanelStyle } from "./features/classification/ClassificationBreakdownCards";
 import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
@@ -6776,6 +6776,10 @@ export default function App() {
         <AuthConfigurationGate />
       </>
     );
+  }
+
+  if (isEffectiveAuthRequired && authStatus === "loading" && !onboardingOpen) {
+    return <AuthLoadingGate />;
   }
 
   if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {

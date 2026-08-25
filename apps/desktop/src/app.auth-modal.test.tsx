@@ -202,6 +202,79 @@ describe("App auth modal", () => {
     expect(screen.getByRole("button", { name: /^unknown$/i })).toBeTruthy();
   });
 
+  it("keeps optional auth in the local workspace while cloud session restore is unresolved", async () => {
+    authState.status = "loading";
+
+    render(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: /loading saved drifty session/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
+    await waitFor(() => {
+      expect(trackerClient.getStatus).toHaveBeenCalled();
+      expect(trackerClient.getTimeline).toHaveBeenCalled();
+    });
+  });
+
+  it("keeps required auth on the loading surface while a saved session is unresolved", async () => {
+    authState.status = "loading";
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.hasRequiredAccountAuth = false;
+
+    const { rerender } = render(<App />);
+
+    const loadingGate = await screen.findByRole("main", { name: /loading saved drifty session/i });
+    const dragStrip = loadingGate.querySelector(".boot-window-drag-strip");
+    expect(dragStrip?.hasAttribute("data-tauri-drag-region")).toBe(true);
+    expect(loadingGate.querySelector(".boot-loading__mark")).toBeTruthy();
+    expect(loadingGate.textContent).toMatch(/drifty loading/i);
+    expect(screen.getByRole("status").textContent).toMatch(/loading saved drifty session/i);
+    expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: /primary navigation/i })).toBeNull();
+
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(trackerClient.getStatus).not.toHaveBeenCalled();
+    expect(trackerClient.getTimeline).not.toHaveBeenCalled();
+    expect(trackerClient.getDashboardWeekTimeline).not.toHaveBeenCalled();
+    expect(trackerClient.start).not.toHaveBeenCalled();
+
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+    rerender(<App />);
+
+    expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: /loading saved drifty session/i })).toBeNull();
+    expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
+    await waitFor(() => {
+      expect(trackerClient.getStatus).toHaveBeenCalled();
+      expect(trackerClient.getTimeline).toHaveBeenCalled();
+    });
+  });
+
+  it("leaves required-auth loading when session restore resolves without an account", async () => {
+    appFeatureSwitches.devOnboardingBypassEnabled = true;
+    authState.status = "loading";
+    authState.authMode = "required";
+    authState.isAuthRequired = true;
+    authState.allowsAnonymousAuth = false;
+    authState.hasRequiredAccountAuth = false;
+
+    const { rerender } = render(<App />);
+
+    expect(await screen.findByRole("main", { name: /loading saved drifty session/i })).toBeTruthy();
+
+    authState.status = "unauthenticated";
+    rerender(<App />);
+
+    expect(await screen.findByRole("main", { name: /sign in required/i })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: /loading saved drifty session/i })).toBeNull();
+    expect(screen.getByRole("heading", { name: /sign in to use drifty/i })).toBeTruthy();
+  });
+
   it("requires account onboarding when required auth mode has no signed-in user", async () => {
     authState.authMode = "required";
     authState.isAuthRequired = true;
