@@ -56,18 +56,26 @@
 
 /* Chrome comes from the shared `.help-trigger`; only the hover-through-wrapper
    behaviour is local, so pointing anywhere in the group lights the trigger.
-   Values are inherited from that rule's hover state rather than restated. */
+   The shared hover still draws a stroked, solid pill; here the fill is a
+   faint wash so the `?` does not suddenly become a chip. */
 .projects-help:hover .projects-help__trigger,
 .projects-help:focus-within .projects-help__trigger {
-  background: var(--bg-2);
-  border-color: var(--line);
-  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-color: transparent;
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.projects-help .projects-help__trigger:hover,
+.projects-help .projects-help__trigger:focus-visible {
+  border-color: transparent;
 }
 
 .projects-help__tip {
   position: absolute;
-  top: calc(100% + 0.45rem);
-  left: 0;
+  /* Right of the `?`. A little overlap with the subtitle is fine; dropping
+     it under the heading copy severs the pointer-to-tip relationship. */
+  top: 0;
+  left: calc(100% + 0.45rem);
   z-index: 30;
   width: max-content;
   max-width: 24rem;
@@ -80,7 +88,7 @@
   font-size: 0.8rem;
   line-height: 1.45;
   opacity: 0;
-  transform: translateY(-3px);
+  transform: translateX(-3px);
   pointer-events: none;
   transition: opacity var(--transition-fast), transform var(--transition-fast);
 }
