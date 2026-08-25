@@ -61,4 +61,10 @@ describe("pet mode hit target", () => {
     );
     expect(permission).toContain('commands.allow = ["pet_mode_update_hit_region"]');
   });
+
+  it("skips native hit-region publication for decorative previews", () => {
+    expect(cat).toContain("publishHitRegion = true");
+    expect(cat).toContain("if (decorative || !publishHitRegion) return;");
+    expect(cat).toContain("decorative = false");
+  });
 });

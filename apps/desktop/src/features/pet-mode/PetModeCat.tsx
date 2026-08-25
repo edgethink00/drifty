@@ -56,6 +56,8 @@ export function PetModeCat({
   hitRegionInteractive = false,
   hitRegionCommitRevision = 0,
   gazeOffset = { x: 0, y: 0 },
+  publishHitRegion = true,
+  decorative = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -69,6 +71,8 @@ export function PetModeCat({
   readonly hitRegionInteractive?: boolean;
   readonly hitRegionCommitRevision?: number;
   readonly gazeOffset?: PetModeGazeOffset;
+  readonly publishHitRegion?: boolean;
+  readonly decorative?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -76,6 +80,7 @@ export function PetModeCat({
   const renderedEntrySequenceRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (decorative) return;
     let active = true;
     void fetch("/pet-mode/walk-frames-v2.json")
       .then((response) => response.json() as Promise<WalkFramesFile>)
@@ -97,9 +102,10 @@ export function PetModeCat({
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "walk-frames" } });
       });
     return () => { active = false; };
-  }, []);
+  }, [decorative]);
 
   useEffect(() => {
+    if (decorative) return;
     for (const motion of Object.values(LIFE_MOTION_ASSET_BY_PHASE)) {
       for (let frame = 1; frame <= PET_MODE_LIFE_MOTION_FRAME_COUNT; frame += 1) {
         const image = new Image();
@@ -107,9 +113,10 @@ export function PetModeCat({
         void image.decode?.().catch(() => undefined);
       }
     }
-  }, []);
+  }, [decorative]);
 
   useEffect(() => {
+    if (decorative) return;
     // The F12 frames are deliberately high-resolution source crops. Decode the
     // whole reviewed range before it can be requested by an intervention so a
     // src swap never produces a white/transparent decode flash mid-reach.
@@ -118,16 +125,17 @@ export function PetModeCat({
       image.src = `/pet-mode/paw/f${String(frame).padStart(3, "0")}.png`;
       void image.decode?.().catch(() => undefined);
     }
-  }, []);
+  }, [decorative]);
 
   useEffect(() => {
+    if (decorative) return;
     // Drag feedback has to be available on the very first grab. Waiting for
     // the phase swap to request this bitmap creates a one-frame empty pet while
     // the native window has already started following the pointer.
     const image = new Image();
     image.src = DRAG_SCRUFF_ASSET;
     void image.decode?.().catch(() => undefined);
-  }, []);
+  }, [decorative]);
 
   useEffect(() => {
     const moving = phase === "entry" || phase === "walk" || phase === "run";
@@ -299,6 +307,7 @@ export function PetModeCat({
           : "idle";
 
   useLayoutEffect(() => {
+    if (decorative || !publishHitRegion) return;
     // Publish from the component that owns the rendered frame. Parent/child
     // layout-effect ordering otherwise lets a parent briefly publish the prior
     // frame id during the same commit.
@@ -307,10 +316,10 @@ export function PetModeCat({
       mirrored,
       interactive: hitRegionInteractive,
     });
-  }, [hitRegionCommitRevision, hitRegionInteractive, mirrored, regionId]);
+  }, [decorative, hitRegionCommitRevision, hitRegionInteractive, mirrored, publishHitRegion, regionId]);
 
   return (
-    <div className={rootClass} aria-label="Drifty pet cat" data-phase={phase} data-region-id={regionId} style={motionGeometry}>
+    <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} style={motionGeometry}>
       <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
         {/* The baked frames are effectively two-tone: body pixels sit near
             luminance 226 and facial detail near 20, with only anti-aliasing in

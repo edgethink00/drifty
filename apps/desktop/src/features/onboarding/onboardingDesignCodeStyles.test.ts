@@ -37,3 +37,16 @@ describe("onboarding design-code accessibility styles", () => {
     expect(dotBlock).not.toContain("transition: width");
   });
 });
+
+describe("onboarding desktop cat preview", () => {
+  it("keeps a clipped stage large enough for the happy heart", () => {
+    expect(styles).toContain(".dc-onb-cat-preview {");
+    expect(styles).toContain("overflow: hidden;");
+    expect(styles).toContain("width: 92px;");
+    expect(styles).toContain("height: 80px;");
+    expect(styles).not.toContain("@keyframes dcOnbCatArrive");
+    expect(styles).toContain(".dc-onb-cat-preview:focus-visible");
+    expect(styles).toContain(".dc-onb-cat-preview:hover");
+    expect(styles).toContain("transform: none");
+  });
+});

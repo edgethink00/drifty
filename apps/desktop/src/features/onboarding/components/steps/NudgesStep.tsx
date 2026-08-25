@@ -1,4 +1,5 @@
 import { ToggleButton } from "./shared";
+import { OnboardingCatPreview } from "../OnboardingCatPreview";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 
@@ -51,10 +52,11 @@ export function NudgesStep({
       <p className="dc-onb-copy">{t("onboarding.nudges.intro")}</p>
 
       <div className={`dc-onb-cat-card${petModeEnabled ? " dc-onb-cat-card--on" : ""}`}>
-        <div className="dc-onb-cat-stage" aria-hidden="true">
-          <div className="dc-onb-cat-stage__floor" />
-          <img className="dc-onb-cat-stage__cat" src="/pet-mode/paw/f001.png" alt="" draggable={false} />
-        </div>
+        <OnboardingCatPreview
+          enabled={petModeEnabled}
+          label={t("onboarding.nudges.petPreview")}
+          onEnable={onPetToggle}
+        />
         <div className="dc-onb-cat-card__copy">
           <span className="dc-onb-cat-card__title">{t("onboarding.nudges.pet")}</span>
           <span className="dc-onb-cat-card__desc">{t("onboarding.nudges.petDescription")}</span>
