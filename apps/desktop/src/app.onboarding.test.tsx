@@ -8,6 +8,8 @@ import { DISPLAY_LANGUAGE_STORAGE_KEY, KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY }
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 
+const NUDGES_DIALOG_NAME = /what should drifty do when you drift/i;
+
 const {
   authState,
   fetchGlobalLeaderboard,
@@ -378,7 +380,7 @@ async function chooseSimpleSetup(options: { activity?: string; workDescription?:
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /choose how drifty intervenes/i }, { timeout: 6_000 });
+  await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME }, { timeout: 6_000 });
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /you're ready to go/i }, { timeout: 6_000 });
 }
@@ -610,7 +612,7 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Screen Recording")).toBeNull();
     expect(screen.queryByText("Browser Activity")).toBeNull();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /just record/i })).toHaveProperty("checked", true);
     expect(screen.getByRole("radio", { name: /alert me/i })).toHaveProperty("checked", false);
     expect(screen.getByRole("radio", { name: /automatic close/i })).toHaveProperty("checked", false);
@@ -995,7 +997,7 @@ describe("App onboarding", () => {
 
     await advanceToPermissionsStep();
     await clickEnabledNext();
-    await screen.findByRole("dialog", { name: /choose how drifty intervenes/i });
+    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
 
     const offRadio = screen.getByRole("radio", { name: /just record/i });
     const alertRadio = screen.getByRole("radio", { name: /alert me/i });
@@ -1036,10 +1038,10 @@ describe("App onboarding", () => {
     expect(closeRadio).toHaveProperty("checked", true);
     expect(alertRadio).toHaveProperty("checked", false);
     expect(offRadio).toHaveProperty("checked", false);
-    expect(screen.queryByText(/the cat runs over and closes/i)).toBeNull();
+    expect(screen.queryByText(/the cat closes the distracting tab or app after repeated drift/i)).toBeNull();
     fireEvent.click(petToggle);
     expect(petToggle.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText(/the cat runs over and closes the distracting tab or app/i)).toBeTruthy();
+    expect(screen.getByText(/the cat closes the distracting tab or app after repeated drift/i)).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
 
@@ -1064,7 +1066,7 @@ describe("App onboarding", () => {
 
     await advanceToPermissionsStep();
     await clickEnabledNext();
-    await screen.findByRole("dialog", { name: /choose how drifty intervenes/i });
+    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME });
 
     const offRadio = screen.getByRole("radio", { name: /just record/i });
     const alertRadio = screen.getByRole("radio", { name: /alert me/i });
@@ -1573,7 +1575,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
     expect(screen.getByText(/local model downloading/i)).toBeTruthy();
@@ -1930,7 +1932,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
@@ -1969,7 +1971,7 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Browser Activity")).toBeNull();
 
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();

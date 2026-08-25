@@ -205,6 +205,10 @@
   max-width: 56ch;
 }
 
+.dc-onb-content--nudges .dc-onb-copy {
+  margin-bottom: 9px;
+}
+
 .dc-onb-ready-copy {
   margin-bottom: 18px;
 }
@@ -573,9 +577,12 @@
   color: var(--dc-onb-text);
 }
 
+/* Keep typing visually quiet with a theme-colored caret; forced-colors mode
+   restores the OS focus outline for users who rely on system contrast settings. */
 .dc-onb-textarea:focus {
-  border-color: rgba(28, 28, 25, 0.22);
-  box-shadow: 0 0 0 3px rgba(28, 28, 25, 0.06);
+  border-color: color-mix(in srgb, var(--dc-onb-text) 10%, transparent);
+  box-shadow: none;
+  caret-color: var(--dc-onb-accent);
 }
 
 .dc-onb-natural-language {
@@ -736,7 +743,7 @@
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 14px;
+  padding: 9px 12px;
   border: 1px solid var(--dc-onb-line);
   border-radius: 14px;
   background: #fff;
@@ -862,14 +869,14 @@
 .dc-onb-intervene {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 12px 0 0;
+  gap: 6px;
+  margin: 8px 0 0;
   padding: 0;
   border: 0;
 }
 
 .dc-onb-intervene__label {
-  margin: 0 0 2px;
+  margin: 0 0 3px;
   padding: 0;
   color: var(--dc-onb-soft);
   font-size: 11px;
@@ -882,8 +889,8 @@
 .dc-onb-intervene__option {
   display: flex;
   align-items: flex-start;
-  gap: 13px;
-  padding: 10px 14px;
+  gap: 11px;
+  padding: 8px 12px;
   border: 1px solid var(--dc-onb-line);
   border-radius: 13px;
   background: #fff;
@@ -952,7 +959,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .dc-onb-intervene__title {
@@ -966,7 +973,7 @@
 }
 
 .dc-onb-intervene__recommended {
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--dc-onb-accent) 14%, transparent);
   color: var(--dc-onb-accent);
@@ -979,7 +986,7 @@
 .dc-onb-intervene__desc {
   color: var(--dc-onb-soft);
   font-size: 12.5px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .dc-onb-row {
@@ -1675,7 +1682,7 @@
   width: min(100%, 640px);
   min-height: 41px;
   margin: auto 0 0;
-  padding-top: 22px;
+  padding-top: 13px;
   flex-shrink: 0;
 }
 
@@ -1717,10 +1724,10 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: rgba(28, 28, 25, 0.18);
+  background: color-mix(in srgb, var(--dc-onb-text) 18%, transparent);
   content: "";
-  transform: scaleX(1);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+  transform: scale(0.8333);
+  transition: transform 0.2s ease, background 0.2s ease;
 }
 
 .dc-onb-card .dc-onb-dot--active {
@@ -1729,7 +1736,7 @@
 
 .dc-onb-card .dc-onb-dot--active::before {
   background: var(--dc-onb-accent);
-  transform: scaleX(3.3333);
+  transform: scale(1.1667);
 }
 
 .dc-onb-actions-spacer {
@@ -1870,7 +1877,7 @@
   .dc-onb-account__google,
   .dc-onb-account__email,
   .dc-onb-account__dev-skip-button,
-  .dc-onb-input,
+  .dc-onb-input:not(.dc-onb-textarea),
   .dc-onb-tag,
   .dc-onb-dropdown-option,
   .dc-onb-secondary-button,
@@ -1891,7 +1898,7 @@
     .dc-onb-account__google,
     .dc-onb-account__email,
     .dc-onb-account__dev-skip-button,
-    .dc-onb-input,
+    .dc-onb-input:not(.dc-onb-textarea),
     .dc-onb-tag,
     .dc-onb-dropdown-option,
     .dc-onb-secondary-button,
@@ -1904,6 +1911,11 @@
   ):focus-visible,
   .dc-onb-confirm :is(.dc-onb-confirm__secondary, .dc-onb-confirm__primary):focus-visible {
     outline-color: Highlight;
+  }
+
+  .onboarding-card.dc-onb-card .dc-onb-textarea:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 
   .onboarding-card.dc-onb-card :is(

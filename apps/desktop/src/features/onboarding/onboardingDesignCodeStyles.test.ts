@@ -11,7 +11,7 @@ describe("onboarding design-code accessibility styles", () => {
     const focusBlock = styles.match(/\/\* Keep keyboard focus deterministic[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(focusBlock).toContain(".dc-onb-primary");
-    expect(focusBlock).toContain(".dc-onb-input");
+    expect(focusBlock).toContain(".dc-onb-input:not(.dc-onb-textarea)");
     expect(focusBlock).toContain(".dc-onb-setup-card");
     expect(focusBlock).toContain(".dc-onb-toggle");
     expect(focusBlock).toContain(".dc-onb-confirm__primary");
@@ -24,17 +24,40 @@ describe("onboarding design-code accessibility styles", () => {
     const forcedColorsBlock = styles.slice(styles.indexOf("@media (forced-colors: active)"));
 
     expect(forcedColorsBlock).toContain("outline-color: Highlight");
+    expect(forcedColorsBlock).toContain(".dc-onb-textarea:focus-visible");
     expect(forcedColorsBlock).toContain("border: 1px solid ButtonText");
     expect(forcedColorsBlock).toContain("background: ButtonFace");
     expect(forcedColorsBlock).toContain("color: ButtonText");
   });
 
-  it("animates progress with composited transforms instead of layout width", () => {
+  it("keeps progress dots circular while animating with composited transforms", () => {
     const dotBlock = styles.match(/\.dc-onb-card \.dc-onb-dot::before \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const activeDotBlock = styles.match(/\.dc-onb-card \.dc-onb-dot--active::before \{[\s\S]*?\n\}/)?.[0] ?? "";
 
-    expect(dotBlock).toContain("transform: scaleX(1)");
+    expect(dotBlock).toContain("transform: scale(0.8333)");
     expect(dotBlock).toContain("transition: transform");
+    expect(dotBlock).toContain("var(--dc-onb-text) 18%");
     expect(dotBlock).not.toContain("transition: width");
+    expect(activeDotBlock).toContain("transform: scale(1.1667)");
+    expect(activeDotBlock).not.toContain("scaleX");
+  });
+
+  it("keeps the work description field visually quiet while typing", () => {
+    const textareaFocusBlock = styles.match(/\.dc-onb-textarea:focus \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(textareaFocusBlock).toContain("box-shadow: none");
+    expect(textareaFocusBlock).toContain("caret-color: var(--dc-onb-accent)");
+    expect(textareaFocusBlock).not.toContain("outline:");
+  });
+
+  it("keeps the nudge spacing balance explicit", () => {
+    const nudgeCopyBlock = styles.match(/\.dc-onb-content--nudges \.dc-onb-copy \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const interventionBlock = styles.match(/\.dc-onb-intervene \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const interventionLabelBlock = styles.match(/\.dc-onb-intervene__label \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(nudgeCopyBlock).toContain("margin-bottom: 9px");
+    expect(interventionBlock).toContain("gap: 6px");
+    expect(interventionLabelBlock).toContain("margin: 0 0 3px");
   });
 });
 

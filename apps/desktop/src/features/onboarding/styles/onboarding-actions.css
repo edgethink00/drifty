@@ -6,7 +6,7 @@
   gap: 14px;
   width: 100%;
   min-height: 41px;
-  padding-top: 22px;
+  padding-top: 13px;
   margin-top: 32px;
   border-top: 0;
   flex-shrink: 0;
@@ -33,7 +33,7 @@
 }
 
 .onboarding-card .onb-actions__dot--active {
-  width: 20px;
+  width: 6px;
   background: var(--onb-accent-strong);
 }
 

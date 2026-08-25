@@ -45,6 +45,7 @@ export function OnboardingDesignCodeContent({
     "dc-onb-content",
     flow.step === "account" ? "dc-onb-content--account" : "",
     flow.step === "welcome" ? "dc-onb-content--welcome" : "",
+    flow.step === "nudges" ? "dc-onb-content--nudges" : "",
   ].filter(Boolean).join(" ");
 
   function handleActivityToggle(option: string) {
