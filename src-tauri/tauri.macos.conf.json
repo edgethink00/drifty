@@ -1,7 +1,8 @@
 {
   "bundle": {
     "externalBin": [
-      "binaries/drifty-tracker"
+      "binaries/drifty-tracker",
+      "binaries/chatgpt-session-ax"
     ]
   }
 }

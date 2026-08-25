@@ -3,13 +3,15 @@ import { access, constants } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const trackerEntry = resolve(repoRoot, "services/tracker-python/app/main.py");
 const trackerPythonRoot = resolve(repoRoot, "services/tracker-python");
 const binariesDir = resolve(repoRoot, "src-tauri/binaries");
 const artifactBaseName = "drifty-tracker";
+const chatgptHelperBaseName = "chatgpt-session-ax";
+const chatgptHelperSource = resolve(trackerPythonRoot, "app/tracker/chatgpt_session_ax.swift");
 // Tauri resolves a macOS externalBin as `<name>-<triple><exeSuffix>`, so the
 // suffix has to match the host or the build succeeds and then fails at bundle
 // time with a missing resource.
@@ -48,16 +50,26 @@ const WINDOWS_RELEASE_PTH_FILES = Object.freeze({
 // nothing imports by name - `zoneinfo` discovers it at runtime. Without an
 // explicit collection the frozen Windows sidecar would ship with an empty
 // TZPATH and fail every zone lookup, exactly as an unpackaged interpreter does.
-function extraPyInstallerArgs() {
-  const args = [];
-  if (process.platform === "darwin") {
-    const helperSource = resolve(trackerPythonRoot, "app/tracker/chatgpt_session_ax.swift");
-    args.push("--add-data", helperSource + ":app/tracker");
+export function extraPyInstallerArgs(platform = process.platform) {
+  return platform === "win32"
+    ? ["--collect-data", "tzdata", "--hidden-import", "tzdata"]
+    : [];
+}
+
+export function chatgptHelperSwiftTarget(target) {
+  const [rustArchitecture, vendor, operatingSystem] = target.split("-");
+  if (vendor !== "apple" || operatingSystem !== "darwin") {
+    throw new Error(`native ChatGPT helper requires an Apple Darwin target, received ${target}`);
   }
-  if (process.platform === "win32") {
-    args.push("--collect-data", "tzdata", "--hidden-import", "tzdata");
+  const swiftArchitecture = rustArchitecture === "aarch64"
+    ? "arm64"
+    : rustArchitecture === "x86_64"
+      ? "x86_64"
+      : undefined;
+  if (!swiftArchitecture) {
+    throw new Error(`unsupported native ChatGPT helper architecture: ${rustArchitecture}`);
   }
-  return args;
+  return `${swiftArchitecture}-apple-macos13.0`;
 }
 
 function fail(message, exitCode = 1) {
@@ -250,6 +262,40 @@ async function assertExecutable(path) {
   });
 }
 
+function buildChatgptHelper(target, outputPath) {
+  const swiftTarget = chatgptHelperSwiftTarget(target);
+  const result = run(
+    "xcrun",
+    [
+      "swiftc",
+      "-O",
+      "-target",
+      swiftTarget,
+      "-framework",
+      "ApplicationServices",
+      "-o",
+      outputPath,
+      chatgptHelperSource,
+    ],
+    { capture: true },
+  );
+  if (result.status !== 0) {
+    fail(`native ChatGPT helper build failed with exit status ${result.status}: ${result.stderr.trim()}`);
+  }
+}
+
+function assertMacosBinaryArchitecture(path, target) {
+  const expected = chatgptHelperSwiftTarget(target).split("-", 1)[0];
+  const result = run("lipo", ["-archs", path], { capture: true });
+  if (result.status !== 0) {
+    fail(`could not inspect native ChatGPT helper architecture: ${result.stderr.trim()}`);
+  }
+  const observed = result.stdout.trim().split(/\s+/u);
+  if (!observed.includes(expected)) {
+    fail(`native ChatGPT helper architecture mismatch: expected ${expected}, found ${observed.join(", ")}`);
+  }
+}
+
 function assertSmokeTest(path) {
   // A frozen PyInstaller build can succeed while the interpreter that built it
   // (e.g. Xcode's bundled Python 3.9) rejects a 3.10+-only construct at import
@@ -293,6 +339,9 @@ async function main() {
   const outputExecutable = useOneDir
     ? resolve(outputPath, `${artifactBaseName}${exeSuffix}`)
     : outputPath;
+  const chatgptHelperOutput = process.platform === "darwin"
+    ? resolve(binariesDir, `${chatgptHelperBaseName}-${target}`)
+    : undefined;
   const tempRoot = mkdtempSync(resolve(tmpdir(), "drifty-tracker-sidecar-"));
   const distPath = resolve(tempRoot, "dist");
   const buildPath = resolve(tempRoot, "build");
@@ -311,6 +360,13 @@ async function main() {
   try {
     mkdirSync(binariesDir, { recursive: true });
     rmSync(outputPath, { recursive: true, force: true });
+    if (chatgptHelperOutput) {
+      rmSync(chatgptHelperOutput, { force: true });
+      buildChatgptHelper(target, chatgptHelperOutput);
+      chmodSync(chatgptHelperOutput, 0o755);
+      await assertExecutable(chatgptHelperOutput);
+      assertMacosBinaryArchitecture(chatgptHelperOutput, target);
+    }
 
     const env = {
       ...process.env,
@@ -365,8 +421,12 @@ async function main() {
 
   console.log(`elapsed_ms=${Date.now() - startedAt}`);
   console.log(`created=${outputPath}`);
+  if (chatgptHelperOutput) console.log(`created=${chatgptHelperOutput}`);
 }
 
-main().catch((error) => {
-  fail(error instanceof Error ? error.message : String(error));
-});
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  main().catch((error) => {
+    fail(error instanceof Error ? error.message : String(error));
+  });
+}

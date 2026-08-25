@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -9,6 +10,7 @@ if str(SERVICE_ROOT) not in sys.path:
 
 from app.tracker.chatgpt_session import (
     apply_native_chatgpt_session_title,
+    packaged_helper_path,
     parse_helper_output,
 )
 
@@ -79,3 +81,11 @@ class ChatGPTSessionTests(unittest.TestCase):
             )
         self.assertEqual(title, 'ChatGPT')
         run_command.assert_not_called()
+
+    def test_packaged_helper_is_discovered_beside_the_frozen_tracker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            executable = Path(temp_dir) / 'drifty-tracker'
+            helper = Path(temp_dir) / 'chatgpt-session-ax'
+            helper.write_bytes(b'packaged helper')
+            with patch('app.tracker.chatgpt_session.sys.executable', str(executable)):
+                self.assertEqual(packaged_helper_path(), helper.resolve())
