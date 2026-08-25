@@ -15,6 +15,7 @@ mod pet_drop;
 mod pet_drop_windows;
 mod pet_hit_region;
 mod pet_mode;
+mod pet_mode_ax_control_veto;
 mod pet_panel;
 mod sentry_smoke;
 mod share_card;

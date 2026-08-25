@@ -375,7 +375,7 @@ pub fn pet_mode_set_enabled(
     cancel_pet_motion();
     let monitor = resolve_pet_home_monitor(&app)
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
-    let remembered_home = calculate_pet_home_position(&monitor);
+    let remembered_home = calculate_pet_home_position_with_nudge(Some(&app), &monitor);
     let (final_width, final_height) = pet_size();
     let scale_factor = monitor.scale_factor();
     let screen_position = monitor.position().to_logical::<f64>(scale_factor);
@@ -568,9 +568,8 @@ fn pet_entry_travel_distance(start_x: f64, home_x: f64) -> f64 {
 }
 
 fn pet_entry_max_travel_distance(pet_width: f64) -> f64 {
-    pet_entry_default_travel_distance(pet_width).max(
-        PET_MODE_RUN_SPEED * PET_MODE_ENTRY_MAX_DURATION_MS as f64 / 1000.0,
-    )
+    pet_entry_default_travel_distance(pet_width)
+        .max(PET_MODE_RUN_SPEED * PET_MODE_ENTRY_MAX_DURATION_MS as f64 / 1000.0)
 }
 
 fn pet_entry_duration_ms(travel_distance: f64) -> u64 {
@@ -892,7 +891,7 @@ pub async fn pet_mode_return_home(app: AppHandle) -> Result<(), String> {
                 .lock()
                 .map_err(|_| "Pet Mode preview position lock is unavailable".to_string())?
                 .take()
-                .unwrap_or_else(|| calculate_pet_home_position(&monitor));
+                .unwrap_or_else(|| calculate_pet_home_position_with_nudge(Some(&app), &monitor));
             animate_pet_window_toward(&window, target, PET_MODE_RUN_SPEED, 0.8, "run")
         } else {
             position_pet_home(&app, &window, true)
@@ -1148,7 +1147,7 @@ pub async fn pet_mode_roam(app: AppHandle) -> Result<(), String> {
             .ok_or_else(|| "Pet Mode window is not available".to_string())?;
         let monitor = resolve_pet_home_monitor(&app)
             .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
-        let target = calculate_pet_roam_position(&monitor);
+        let target = calculate_pet_roam_position_with_nudge(Some(&app), &monitor);
         animate_pet_window_toward(
             &window,
             target,
@@ -1204,7 +1203,7 @@ pub async fn pet_mode_return_from_outing(app: AppHandle, side: String) -> Result
             .set_position(start)
             .map_err(|error| error.to_string())?;
         show_pet_panel(&app, &window)?;
-        let target = calculate_pet_home_position(&monitor);
+        let target = calculate_pet_home_position_with_nudge(Some(&app), &monitor);
         animate_pet_window_with_facing(
             &window,
             target,
@@ -1412,9 +1411,22 @@ pub fn pet_mode_remember_position(app: AppHandle) -> Result<(), String> {
     let mut preferred = PET_MODE_PREFERRED_POSITION
         .lock()
         .map_err(|_| "Pet Mode position lock is unavailable".to_string())?;
+    let candidate_center_y = position.y + pet_height() / 2.0;
+    let resident_band_bottom = work_position.y + work_size.height * PET_MODE_RESIDENT_BAND_RATIO;
+    let candidate = if candidate_center_y <= resident_band_bottom {
+        nudge_resident_seat(
+            &app,
+            position,
+            work_position,
+            work_size.width,
+            work_size.height,
+        )
+    } else {
+        position
+    };
     *preferred = preferred_pet_position_after_drop(
         *preferred,
-        position,
+        candidate,
         work_position,
         work_size.width,
         work_size.height,
@@ -1904,7 +1916,7 @@ fn position_pet_home(
 ) -> Result<(), String> {
     let monitor = resolve_pet_home_monitor(app)
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
-    let target = calculate_pet_home_position(&monitor);
+    let target = calculate_pet_home_position_with_nudge(Some(app), &monitor);
     if animated {
         animate_pet_window_toward(
             window,
@@ -1920,23 +1932,82 @@ fn position_pet_home(
     }
 }
 
+fn pet_excluded_window_ids(app: &AppHandle) -> Vec<i64> {
+    [
+        "main",
+        PET_MODE_WINDOW_LABEL,
+        "watcher-peek",
+        "companion-pill",
+        "drift-alarm",
+    ]
+    .into_iter()
+    .filter_map(|label| app.get_webview_window(label))
+    .filter_map(|window| super::pet_mode_ax_control_veto::native_window_number(&window))
+    .collect()
+}
+
+fn nudge_resident_seat(
+    app: &AppHandle,
+    seat: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_width: f64,
+    work_height: f64,
+) -> LogicalPosition<f64> {
+    let (width, height) = pet_size();
+    let (x, y) = super::pet_mode_ax_control_veto::nudge_seat_off_ax_controls(
+        pet_excluded_window_ids(app),
+        seat.x,
+        seat.y,
+        width,
+        height,
+        work_position.x,
+        work_width,
+    );
+    clamp_pet_position(
+        LogicalPosition::new(x, y),
+        work_position,
+        work_width,
+        work_height,
+    )
+}
+
 fn calculate_pet_home_position(monitor: &Monitor) -> LogicalPosition<f64> {
+    calculate_pet_home_position_with_nudge(None, monitor)
+}
+
+fn calculate_pet_home_position_with_nudge(
+    app: Option<&AppHandle>,
+    monitor: &Monitor,
+) -> LogicalPosition<f64> {
     let scale_factor = monitor.scale_factor();
     let work_area = monitor.work_area();
     let position = work_area.position.to_logical::<f64>(scale_factor);
     let size = work_area.size.to_logical::<f64>(scale_factor);
-    if let Ok(preferred) = PET_MODE_PREFERRED_POSITION.lock() {
+    let raw = if let Ok(preferred) = PET_MODE_PREFERRED_POSITION.lock() {
         if let Some(preferred) = *preferred {
-            return clamp_pet_position(preferred, position, size.width, size.height);
+            clamp_pet_position(preferred, position, size.width, size.height)
+        } else {
+            let x = default_pet_home_x(position.x, size.width, pet_width());
+            clamp_pet_position(
+                LogicalPosition::new(x, position.y + PET_MODE_HOME_Y),
+                position,
+                size.width,
+                size.height,
+            )
         }
+    } else {
+        let x = default_pet_home_x(position.x, size.width, pet_width());
+        clamp_pet_position(
+            LogicalPosition::new(x, position.y + PET_MODE_HOME_Y),
+            position,
+            size.width,
+            size.height,
+        )
+    };
+    match app {
+        Some(app) => nudge_resident_seat(app, raw, position, size.width, size.height),
+        None => raw,
     }
-    let x = default_pet_home_x(position.x, size.width, pet_width());
-    clamp_pet_position(
-        LogicalPosition::new(x, position.y + PET_MODE_HOME_Y),
-        position,
-        size.width,
-        size.height,
-    )
 }
 
 fn pet_entry_default_travel_distance(pet_width: f64) -> f64 {
@@ -1955,7 +2026,11 @@ fn clamp_pet_entry_destination(
     if travel <= max_travel {
         return preferred;
     }
-    let direction = if unconstrained.facing == "left" { -1.0 } else { 1.0 };
+    let direction = if unconstrained.facing == "left" {
+        -1.0
+    } else {
+        1.0
+    };
     // Show Pet stays a short run from the nearest edge. Remembered inland homes
     // remain the resident target for later walks; they just do not stretch this
     // entrance into a cross-screen slide.
@@ -1966,7 +2041,10 @@ fn default_pet_home_x(work_x: f64, work_width: f64, pet_width: f64) -> f64 {
     work_x + (work_width - pet_width - PET_MODE_HOME_EDGE_INSET).max(0.0)
 }
 
-fn calculate_pet_roam_position(monitor: &Monitor) -> LogicalPosition<f64> {
+fn calculate_pet_roam_position_with_nudge(
+    app: Option<&AppHandle>,
+    monitor: &Monitor,
+) -> LogicalPosition<f64> {
     let scale_factor = monitor.scale_factor();
     let work_area = monitor.work_area();
     let position = work_area.position.to_logical::<f64>(scale_factor);
@@ -1975,12 +2053,16 @@ fn calculate_pet_roam_position(monitor: &Monitor) -> LogicalPosition<f64> {
     let move_right = PET_MODE_ROAM_RIGHT.fetch_xor(true, Ordering::Relaxed);
     let direction = if move_right { 1.0 } else { -1.0 };
     let travel = (size.width * 0.22).clamp(180.0, 320.0);
-    clamp_pet_position(
+    let raw = clamp_pet_position(
         LogicalPosition::new(home.x + direction * travel, home.y),
         position,
         size.width,
         size.height,
-    )
+    );
+    match app {
+        Some(app) => nudge_resident_seat(app, raw, position, size.width, size.height),
+        None => raw,
+    }
 }
 
 fn calculate_pet_exit_position(
@@ -2205,7 +2287,6 @@ fn resolve_pet_home_monitor(app: &AppHandle) -> Option<Monitor> {
     app.primary_monitor().ok().flatten()
 }
 
-
 #[cfg(test)]
 fn pet_mode_logical_cursor_sample(
     scale_factor: f64,
@@ -2216,7 +2297,11 @@ fn pet_mode_logical_cursor_sample(
     window_width: f64,
     window_height: f64,
 ) -> (f64, f64, f64, f64, f64, f64) {
-    let scale = if scale_factor <= 0.0 { 1.0 } else { scale_factor };
+    let scale = if scale_factor <= 0.0 {
+        1.0
+    } else {
+        scale_factor
+    };
     (
         cursor_x / scale,
         cursor_y / scale,
@@ -2396,19 +2481,11 @@ mod tests {
         assert_eq!(pet_entry_duration_ms(144.671), 482);
         assert_eq!(pet_entry_duration_ms(54.0), 180);
         assert_eq!(pet_entry_duration_ms(900.0), 700);
-        let inland = clamp_pet_entry_destination(
-            LogicalPosition::new(700.0, 14.0),
-            0.0,
-            1440.0,
-            144.0,
-        );
+        let inland =
+            clamp_pet_entry_destination(LogicalPosition::new(700.0, 14.0), 0.0, 1440.0, 144.0);
         assert!((inland.x - (1416.671 - 210.0)).abs() < 1e-9);
-        let default_home = clamp_pet_entry_destination(
-            LogicalPosition::new(1272.0, 14.0),
-            0.0,
-            1440.0,
-            144.0,
-        );
+        let default_home =
+            clamp_pet_entry_destination(LogicalPosition::new(1272.0, 14.0), 0.0, 1440.0, 144.0);
         assert_eq!(default_home.x, 1272.0);
         assert_eq!(pet_entry_travel_progress(-1.0), 0.0);
         assert_eq!(pet_entry_travel_progress(0.0), 0.0);

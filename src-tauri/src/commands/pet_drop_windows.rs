@@ -11,6 +11,7 @@ const DOCK_STRIP_MIN_WIDTH: f64 = 200.0;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ListedWindow {
     pub id: i64,
+    pub pid: i64,
     pub owner: String,
     pub name: String,
     pub layer: i64,
@@ -128,13 +129,13 @@ fn ledge_name(window: &ListedWindow) -> String {
 }
 
 #[cfg(target_os = "macos")]
-fn copy_listed_windows() -> Result<Vec<ListedWindow>, String> {
+pub(super) fn copy_listed_windows() -> Result<Vec<ListedWindow>, String> {
     use core_foundation::base::TCFType;
     use core_foundation::dictionary::CFDictionary;
     use core_graphics::window::{
         copy_window_info, kCGNullWindowID, kCGWindowAlpha, kCGWindowBounds, kCGWindowLayer,
         kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly, kCGWindowName,
-        kCGWindowNumber, kCGWindowOwnerName,
+        kCGWindowNumber, kCGWindowOwnerName, kCGWindowOwnerPID,
     };
 
     let array = copy_window_info(
@@ -154,6 +155,7 @@ fn copy_listed_windows() -> Result<Vec<ListedWindow>, String> {
         if let Some(window) = listed_window_from_dictionary(
             &dict,
             unsafe { kCGWindowNumber },
+            unsafe { kCGWindowOwnerPID },
             unsafe { kCGWindowOwnerName },
             unsafe { kCGWindowName },
             unsafe { kCGWindowLayer },
@@ -171,6 +173,7 @@ fn copy_listed_windows() -> Result<Vec<ListedWindow>, String> {
 fn listed_window_from_dictionary(
     dict: &core_foundation::dictionary::CFDictionary,
     number_key: core_foundation::string::CFStringRef,
+    pid_key: core_foundation::string::CFStringRef,
     owner_key: core_foundation::string::CFStringRef,
     name_key: core_foundation::string::CFStringRef,
     layer_key: core_foundation::string::CFStringRef,
@@ -183,6 +186,7 @@ fn listed_window_from_dictionary(
     use core_foundation::string::CFString;
 
     let id = dict_number(dict, number_key)?.round() as i64;
+    let pid = dict_number(dict, pid_key)?.round() as i64;
     let owner = dict_string(dict, owner_key).unwrap_or_default();
     let name = dict_string(dict, name_key).unwrap_or_default();
     let layer = dict_number(dict, layer_key).unwrap_or(0.0).round() as i64;
@@ -196,6 +200,7 @@ fn listed_window_from_dictionary(
     let _ = (CFNumber::type_id(), CFString::type_id());
     Some(ListedWindow {
         id,
+        pid,
         owner,
         name,
         layer,
@@ -273,6 +278,7 @@ mod tests {
     ) -> ListedWindow {
         ListedWindow {
             id,
+            pid: id,
             owner: owner.into(),
             name: String::new(),
             layer,
