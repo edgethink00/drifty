@@ -378,7 +378,7 @@ async function chooseSimpleSetup(options: { activity?: string; workDescription?:
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
   await clickEnabledNext();
-  await screen.findByRole("dialog", { name: /set up drift alerts/i }, { timeout: 6_000 });
+  await screen.findByRole("dialog", { name: /choose how drifty intervenes/i }, { timeout: 6_000 });
   await clickEnabledAction(/^continue$/i);
   await screen.findByRole("dialog", { name: /you're ready to go/i }, { timeout: 6_000 });
 }
@@ -610,9 +610,16 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Screen Recording")).toBeNull();
     expect(screen.queryByText("Browser Activity")).toBeNull();
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /drift alarm/i }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByRole("button", { name: /extreme nudge/i }).getAttribute("aria-pressed")).toBe("false");
+    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: /just record/i })).toHaveProperty("checked", true);
+    expect(screen.getByRole("radio", { name: /alert me/i })).toHaveProperty("checked", false);
+    expect(screen.getByRole("radio", { name: /automatic close/i })).toHaveProperty("checked", false);
+    expect(screen.getByRole("button", { name: "Show desktop cat" }).getAttribute("aria-pressed")).toBe("false");
+    const alertRow = screen.getByRole("radio", { name: /alert me/i }).closest("label");
+    const closeRow = screen.getByRole("radio", { name: /automatic close/i }).closest("label");
+    expect(alertRow?.textContent).toContain("Recommended");
+    expect(closeRow?.textContent).not.toContain("Recommended");
+    expect(closeRow?.textContent).toContain("Beta");
   }, 15_000);
 
   it("opens the provided welcome-first onboarding for a local unauthenticated user without local completion state", async () => {
@@ -983,37 +990,56 @@ describe("App onboarding", () => {
     expect(screen.queryByRole("status", { name: /drifty cloud trial started/i })).toBeNull();
   });
 
-  it("stores selected drift alarm and extreme nudge preferences from onboarding", async () => {
+  it("stores selected drift alert, automatic close, and desktop cat preferences from onboarding", async () => {
     render(<App />);
 
     await advanceToPermissionsStep();
     await clickEnabledNext();
-    await screen.findByRole("dialog", { name: /set up drift alerts/i });
+    await screen.findByRole("dialog", { name: /choose how drifty intervenes/i });
 
-    const driftAlarmToggle = screen.getByRole("button", { name: "Drift alarm" });
-    const extremeNudgeToggle = screen.getByRole("button", { name: "Extreme nudge" });
-    extremeNudgeToggle.focus();
-    fireEvent.click(extremeNudgeToggle);
+    const offRadio = screen.getByRole("radio", { name: /just record/i });
+    const alertRadio = screen.getByRole("radio", { name: /alert me/i });
+    const closeRadio = screen.getByRole("radio", { name: /automatic close/i });
+    const petToggle = screen.getByRole("button", { name: "Show desktop cat" });
+    expect(offRadio).toHaveProperty("checked", true);
+    expect(alertRadio).toHaveProperty("checked", false);
+    expect(closeRadio).toHaveProperty("checked", false);
+    expect(petToggle.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(alertRadio);
+    expect(alertRadio).toHaveProperty("checked", true);
+    expect(offRadio).toHaveProperty("checked", false);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    closeRadio.focus();
+    fireEvent.click(closeRadio);
     const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
     const keepOffButton = within(confirmDialog).getByRole("button", { name: /keep off/i });
     const allowClosingButton = within(confirmDialog).getByRole("button", { name: /allow closing/i });
     expect(confirmDialog.textContent).toContain("close the distracting browser tab or quit the distracting app");
+    expect(closeRadio).toHaveProperty("checked", false);
+    expect(alertRadio).toHaveProperty("checked", true);
     await waitFor(() => expect(document.activeElement).toBe(keepOffButton));
     allowClosingButton.focus();
     fireEvent.keyDown(confirmDialog, { key: "Tab" });
     expect(document.activeElement).toBe(keepOffButton);
     fireEvent.keyDown(confirmDialog, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(allowClosingButton);
-    expect(driftAlarmToggle.getAttribute("aria-pressed")).toBe("false");
-    expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("false");
     fireEvent.keyDown(confirmDialog, { key: "Escape" });
     expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
-    expect(document.activeElement).toBe(extremeNudgeToggle);
+    expect(document.activeElement).toBe(closeRadio);
+    expect(alertRadio).toHaveProperty("checked", true);
+    expect(closeRadio).toHaveProperty("checked", false);
 
-    fireEvent.click(extremeNudgeToggle);
+    fireEvent.click(closeRadio);
     fireEvent.click(await screen.findByRole("button", { name: /allow closing/i }));
-    expect(driftAlarmToggle.getAttribute("aria-pressed")).toBe("true");
-    expect(extremeNudgeToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(closeRadio).toHaveProperty("checked", true);
+    expect(alertRadio).toHaveProperty("checked", false);
+    expect(offRadio).toHaveProperty("checked", false);
+    expect(screen.queryByText(/the cat runs over and closes/i)).toBeNull();
+    fireEvent.click(petToggle);
+    expect(petToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText(/the cat runs over and closes the distracting tab or app/i)).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
 
@@ -1027,8 +1053,37 @@ describe("App onboarding", () => {
     const storedRecord = JSON.parse(storedValue ?? "{}") as Record<string, unknown>;
     expect(storedRecord.driftAlarmEnabled).toBe(true);
     expect(storedRecord.extremeNudgeEnabled).toBe(true);
+    expect(storedRecord.petModeEnabled).toBe(true);
     expect(window.localStorage.getItem("drifty.notifications.driftAlerts")).toBe("1");
     expect(window.localStorage.getItem("drifty.notifications.extremeNudge")).toBe("1");
+    expect(window.localStorage.getItem("drifty.pet.enabled")).toBe("1");
+  });
+
+  it("keeps the current intervention when automatic close confirmation is cancelled", async () => {
+    render(<App />);
+
+    await advanceToPermissionsStep();
+    await clickEnabledNext();
+    await screen.findByRole("dialog", { name: /choose how drifty intervenes/i });
+
+    const offRadio = screen.getByRole("radio", { name: /just record/i });
+    const alertRadio = screen.getByRole("radio", { name: /alert me/i });
+    const closeRadio = screen.getByRole("radio", { name: /automatic close/i });
+
+    fireEvent.click(alertRadio);
+    expect(alertRadio).toHaveProperty("checked", true);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    fireEvent.click(closeRadio);
+    const confirmDialog = await screen.findByRole("alertdialog", { name: /let drifty close drift/i });
+    expect(closeRadio).toHaveProperty("checked", false);
+    expect(alertRadio).toHaveProperty("checked", true);
+
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: /keep off/i }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(offRadio).toHaveProperty("checked", false);
+    expect(alertRadio).toHaveProperty("checked", true);
+    expect(closeRadio).toHaveProperty("checked", false);
   });
 
   it("enables login startup by default when onboarding completes in the Mac app", async () => {
@@ -1518,7 +1573,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to start/i })).toBeTruthy();
     expect(screen.getByText(/local model downloading/i)).toBeTruthy();
@@ -1875,7 +1930,7 @@ describe("App onboarding", () => {
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /set up permissions/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
-    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     fireEvent.click(await screen.findByRole("button", { name: /start tracking/i }));
 
@@ -1914,7 +1969,7 @@ describe("App onboarding", () => {
     expect(screen.queryByText("Browser Activity")).toBeNull();
 
     await clickEnabledNext();
-    expect(await screen.findByRole("dialog", { name: /set up drift alerts/i })).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /choose how drifty intervenes/i })).toBeTruthy();
     await clickEnabledAction(/^continue$/i);
     expect(await screen.findByRole("dialog", { name: /you're ready to go/i })).toBeTruthy();
     expect(screen.queryByText(/permissions enabled/i)).toBeNull();

@@ -22,6 +22,7 @@ const baseProgress: OnboardingProgressInput = {
   workDescription: "I build a small AI product.",
   driftAlarmEnabled: true,
   extremeNudgeEnabled: false,
+  petModeEnabled: true,
   openAtLoginEnabled: true,
   customEndpointDraft: {
     baseUrl: "http://localhost:11434/v1",

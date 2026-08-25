@@ -23,6 +23,7 @@ function storeCompletedOnboarding(userId: string, displayName: string) {
       jobTypeOther: "",
       driftAlarmEnabled: true,
       extremeNudgeEnabled: false,
+      petModeEnabled: true,
       focusGoalHours: null,
       driftThresholdMinutes: null,
       purpose: null,
@@ -46,6 +47,23 @@ describe("onboardingState", () => {
     expect(window.localStorage.getItem(getUserOnboardingStorageKey("cloud-user-1"))).toBeTruthy();
   });
 
+  it("normalizes automatic close off when drift alerts are off", () => {
+    storeCompletedOnboarding("local", "Local Alex");
+    const key = getUserOnboardingStorageKey("local");
+    const current = JSON.parse(window.localStorage.getItem(key) ?? "{}") as Record<string, unknown>;
+    window.localStorage.setItem(key, JSON.stringify({
+      ...current,
+      driftAlarmEnabled: false,
+      extremeNudgeEnabled: true,
+    }));
+
+    expect(readUserOnboardingState("local")).toMatchObject({
+      driftAlarmEnabled: false,
+      extremeNudgeEnabled: false,
+      petModeEnabled: true,
+    });
+  });
+
   it("preserves multiple work activities for AI work profile settings", () => {
     storeCompletedOnboarding("local", "Local Alex");
 
@@ -64,6 +82,7 @@ describe("onboardingState", () => {
       jobTypeOther: "",
       workDomain: null,
       workDescription: "I build product features and help customers.",
+      petModeEnabled: true,
     });
     expect(readUserWorkProfileSettings("local").workActivities).toEqual(["Coding", "Writing"]);
     expect(readUserWorkProfileSettings("local").workDescription).toBe("I build product features and help customers.");

@@ -97,7 +97,10 @@ export function useOnboardingFlow({
   const [jobType] = useState<string | null>(null);
   const [jobTypeOther] = useState("");
   const [driftAlarmEnabled, setDriftAlarmEnabled] = useState(restoredProgress?.driftAlarmEnabled ?? false);
-  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(restoredProgress?.extremeNudgeEnabled ?? false);
+  const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(
+    Boolean(restoredProgress?.driftAlarmEnabled && restoredProgress.extremeNudgeEnabled),
+  );
+  const [petModeEnabled, setPetModeEnabled] = useState(restoredProgress?.petModeEnabled ?? false);
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
   const [accountSkippedForDev, setAccountSkippedForDev] = useState(false);
@@ -218,6 +221,7 @@ export function useOnboardingFlow({
       workDescription,
       driftAlarmEnabled,
       extremeNudgeEnabled,
+      petModeEnabled,
       openAtLoginEnabled,
       customEndpointDraft: connection.customEndpointDraft,
     });
@@ -226,6 +230,7 @@ export function useOnboardingFlow({
     connection.setupChoice,
     driftAlarmEnabled,
     extremeNudgeEnabled,
+    petModeEnabled,
     mainActivities,
     mainActivityOther,
     openAtLoginEnabled,
@@ -244,6 +249,7 @@ export function useOnboardingFlow({
       displayName,
       driftAlarmEnabled,
       extremeNudgeEnabled,
+      petModeEnabled,
       browserHistoryBootstrapEnabled,
       jobType,
       jobTypeOther,
@@ -271,6 +277,9 @@ export function useOnboardingFlow({
         accessibility_granted: permissions.accessibilityGranted,
         notifications_granted: permissions.notificationPermission === "granted",
         account_connected: accountConnected,
+        drift_alarm_enabled: driftAlarmEnabled,
+        extreme_nudge_enabled: extremeNudgeEnabled,
+        pet_enabled: petModeEnabled,
       });
     }
   }
@@ -322,6 +331,7 @@ export function useOnboardingFlow({
     cloudTrialStartedNotice,
     driftAlarmEnabled,
     extremeNudgeEnabled,
+    petModeEnabled,
     footerLabel,
     goToPreviousStep,
     handleSubmit,
@@ -333,6 +343,7 @@ export function useOnboardingFlow({
     setDriftAlarmEnabled,
     setBrowserHistoryBootstrapEnabled,
     setExtremeNudgeEnabled,
+    setPetModeEnabled,
     setMainActivityOther,
     setOpenAtLoginEnabled,
     skipAccountForDev,

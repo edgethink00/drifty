@@ -27,6 +27,7 @@ export function saveUserOnboardingState({
   jobTypeOther,
   driftAlarmEnabled,
   extremeNudgeEnabled,
+  petModeEnabled,
   browserHistoryBootstrapEnabled,
   focusGoalHours,
   driftThresholdMinutes,
@@ -42,6 +43,7 @@ export function saveUserOnboardingState({
   jobTypeOther: string;
   driftAlarmEnabled: boolean;
   extremeNudgeEnabled: boolean;
+  petModeEnabled: boolean;
   browserHistoryBootstrapEnabled: boolean;
   focusGoalHours: number | null;
   driftThresholdMinutes: number | null;
@@ -58,7 +60,8 @@ export function saveUserOnboardingState({
     jobType,
     jobTypeOther,
     driftAlarmEnabled,
-    extremeNudgeEnabled,
+    extremeNudgeEnabled: driftAlarmEnabled && extremeNudgeEnabled,
+    petModeEnabled,
     browserHistoryBootstrapEnabled,
     focusGoalHours,
     driftThresholdMinutes,

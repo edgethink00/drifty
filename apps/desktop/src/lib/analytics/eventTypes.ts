@@ -56,6 +56,9 @@ export type PostHogEventPropertiesByName = {
     readonly accessibility_granted?: boolean;
     readonly notifications_granted?: boolean;
     readonly account_connected?: boolean;
+    readonly drift_alarm_enabled?: boolean;
+    readonly extreme_nudge_enabled?: boolean;
+    readonly pet_enabled?: boolean;
   };
   readonly permission_action: {
     readonly permission: (typeof PERMISSIONS)[number];

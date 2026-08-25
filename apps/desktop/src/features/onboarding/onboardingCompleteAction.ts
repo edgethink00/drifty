@@ -9,6 +9,7 @@ type CompleteOnboardingInput = {
   readonly displayName: string;
   readonly driftAlarmEnabled: boolean;
   readonly extremeNudgeEnabled: boolean;
+  readonly petModeEnabled: boolean;
   readonly browserHistoryBootstrapEnabled: boolean;
   readonly jobType: string | null;
   readonly jobTypeOther: string;
@@ -32,6 +33,7 @@ export async function completeOnboardingAction({
   displayName,
   driftAlarmEnabled,
   extremeNudgeEnabled,
+  petModeEnabled,
   browserHistoryBootstrapEnabled,
   jobType,
   jobTypeOther,
@@ -88,6 +90,7 @@ export async function completeOnboardingAction({
     driftThresholdMinutes: null,
     driftAlarmEnabled,
     extremeNudgeEnabled,
+    petModeEnabled,
     browserHistoryBootstrapEnabled,
   });
   if (!result.success) {

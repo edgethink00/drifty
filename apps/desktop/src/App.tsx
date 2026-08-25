@@ -6191,6 +6191,7 @@ export default function App() {
     }
     setDriftAlertsEnabled(state.driftAlarmEnabled);
     setExtremeNudgeEnabled(state.extremeNudgeEnabled);
+    setPetModeEnabled(state.petModeEnabled);
     setBrowserHistoryBootstrapEnabled(state.browserHistoryBootstrapEnabled);
     resetBrowserHistoryBootstrap();
     selectDay(logicalTodayIsoDate(startOfDayMinutes));

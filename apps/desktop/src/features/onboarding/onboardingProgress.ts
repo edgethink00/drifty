@@ -22,6 +22,7 @@ export type OnboardingProgressSnapshot = {
   readonly workDescription: string;
   readonly driftAlarmEnabled: boolean;
   readonly extremeNudgeEnabled: boolean;
+  readonly petModeEnabled: boolean;
   readonly openAtLoginEnabled: boolean;
   readonly customEndpointDraft: CustomEndpointDraft;
   readonly savedAt: string;
@@ -118,7 +119,8 @@ function parseOnboardingProgress(rawValue: string | null, now: Date): Onboarding
       workDomainOther: parseString(parsedValue.workDomainOther),
       workDescription: parseString(parsedValue.workDescription),
       driftAlarmEnabled: parsedValue.driftAlarmEnabled === true,
-      extremeNudgeEnabled: parsedValue.extremeNudgeEnabled === true,
+      extremeNudgeEnabled: parsedValue.driftAlarmEnabled === true && parsedValue.extremeNudgeEnabled === true,
+      petModeEnabled: parsedValue.petModeEnabled === true,
       openAtLoginEnabled: parsedValue.openAtLoginEnabled !== false,
       customEndpointDraft: parseCustomEndpointDraft(parsedValue.customEndpointDraft),
       savedAt,

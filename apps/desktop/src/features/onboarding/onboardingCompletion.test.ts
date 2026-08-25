@@ -18,6 +18,7 @@ function storeCompletedOnboarding(userId: string) {
       jobTypeOther: "",
       driftAlarmEnabled: true,
       extremeNudgeEnabled: false,
+      petModeEnabled: false,
       browserHistoryBootstrapEnabled: false,
       focusGoalHours: null,
       driftThresholdMinutes: null,

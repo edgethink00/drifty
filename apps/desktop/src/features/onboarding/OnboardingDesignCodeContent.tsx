@@ -6,6 +6,7 @@ import { AccountStep } from "./components/steps/AccountStep";
 import { JobStep } from "./components/steps/JobStep";
 import { PermissionsStep } from "./components/steps/PermissionsStep";
 import { NudgesStep } from "./components/steps/NudgesStep";
+import type { DriftIntervention } from "./components/steps/NudgesStep";
 import { SetupChoiceStep } from "./components/steps/SetupChoiceStep";
 import { ConnectServerStep } from "./components/steps/ConnectServerStep";
 import { TestConnectionStep } from "./components/steps/TestConnectionStep";
@@ -29,7 +30,7 @@ export function OnboardingDesignCodeContent({
 }: OnboardingDesignCodeContentProps) {
   const { t } = useLocalization();
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [confirmExtremeOpen, setConfirmExtremeOpen] = useState(false);
+  const [confirmCloseOpen, setConfirmCloseOpen] = useState(false);
 
   const title = flow.title;
   const showTitle = flow.step !== "welcome" && flow.step !== "account";
@@ -58,27 +59,24 @@ export function OnboardingDesignCodeContent({
     if (!flow.workType) flow.setWorkType(option);
   }
 
-  function handleDriftToggle() {
-    if (flow.driftAlarmEnabled) {
+  function handleInterventionChange(next: DriftIntervention) {
+    if (next === "off") {
       flow.setDriftAlarmEnabled(false);
       flow.setExtremeNudgeEnabled(false);
       return;
     }
-    flow.setDriftAlarmEnabled(true);
-  }
-
-  function handleExtremeToggle() {
-    if (flow.extremeNudgeEnabled) {
+    if (next === "alert") {
+      flow.setDriftAlarmEnabled(true);
       flow.setExtremeNudgeEnabled(false);
       return;
     }
-    setConfirmExtremeOpen(true);
+    if (!flow.extremeNudgeEnabled) setConfirmCloseOpen(true);
   }
 
-  function handleConfirmExtreme() {
+  function handleConfirmClose() {
     flow.setDriftAlarmEnabled(true);
     flow.setExtremeNudgeEnabled(true);
-    setConfirmExtremeOpen(false);
+    setConfirmCloseOpen(false);
   }
 
   return (
@@ -124,8 +122,9 @@ export function OnboardingDesignCodeContent({
                 <NudgesStep
                   driftAlarmEnabled={flow.driftAlarmEnabled}
                   extremeNudgeEnabled={flow.extremeNudgeEnabled}
-                  onDriftToggle={handleDriftToggle}
-                  onExtremeToggle={handleExtremeToggle}
+                  petModeEnabled={flow.petModeEnabled}
+                  onInterventionChange={handleInterventionChange}
+                  onPetToggle={() => flow.setPetModeEnabled((enabled) => !enabled)}
                 />
               ) : null}
               {flow.step === "choose_setup" ? (
@@ -180,8 +179,11 @@ export function OnboardingDesignCodeContent({
         ) : null}
       </form>
 
-      {confirmExtremeOpen ? (
-        <ExtremeConfirmDialog onCancel={() => setConfirmExtremeOpen(false)} onConfirm={handleConfirmExtreme} />
+      {confirmCloseOpen ? (
+        <ExtremeConfirmDialog
+          onCancel={() => setConfirmCloseOpen(false)}
+          onConfirm={handleConfirmClose}
+        />
       ) : null}
     </>
   );

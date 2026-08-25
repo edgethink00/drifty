@@ -20,6 +20,7 @@ export type UserOnboardingState = {
   workDescription?: string;
   driftAlarmEnabled: boolean;
   extremeNudgeEnabled: boolean;
+  petModeEnabled: boolean;
   browserHistoryBootstrapEnabled: boolean;
   focusGoalHours: number | null;
   driftThresholdMinutes: number | null;
@@ -98,7 +99,8 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
     const jobTypeOther = typeof record.jobTypeOther === "string" ? record.jobTypeOther : "";
     const workDescription = typeof record.workDescription === "string" ? record.workDescription : "";
     const driftAlarmEnabled = typeof record.driftAlarmEnabled === "boolean" ? record.driftAlarmEnabled : false;
-    const extremeNudgeEnabled = typeof record.extremeNudgeEnabled === "boolean" ? record.extremeNudgeEnabled : false;
+    const extremeNudgeEnabled = driftAlarmEnabled && record.extremeNudgeEnabled === true;
+    const petModeEnabled = typeof record.petModeEnabled === "boolean" ? record.petModeEnabled : false;
     const browserHistoryBootstrapEnabled =
       typeof record.browserHistoryBootstrapEnabled === "boolean" ? record.browserHistoryBootstrapEnabled : false;
     const focusGoalHours = typeof record.focusGoalHours === "number" ? record.focusGoalHours : null;
@@ -118,6 +120,7 @@ function parseUserOnboardingState(rawValue: string | null): UserOnboardingState 
       workDescription,
       driftAlarmEnabled,
       extremeNudgeEnabled,
+      petModeEnabled,
       browserHistoryBootstrapEnabled,
       focusGoalHours,
       driftThresholdMinutes,
@@ -211,6 +214,7 @@ export function saveUserWorkProfileSettings(
     workDescription: persistedDescription,
     driftAlarmEnabled: currentState.driftAlarmEnabled,
     extremeNudgeEnabled: currentState.extremeNudgeEnabled,
+    petModeEnabled: currentState.petModeEnabled,
     browserHistoryBootstrapEnabled: currentState.browserHistoryBootstrapEnabled,
     focusGoalHours: currentState.focusGoalHours,
     driftThresholdMinutes: currentState.driftThresholdMinutes,

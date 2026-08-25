@@ -204,6 +204,7 @@ describe("Living Soul feedback lifecycle", () => {
       jobTypeOther: "",
       driftAlarmEnabled: true,
       extremeNudgeEnabled: true,
+      petModeEnabled: false,
       browserHistoryBootstrapEnabled: false,
       focusGoalHours: null,
       driftThresholdMinutes: null,

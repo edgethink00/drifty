@@ -128,6 +128,9 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     accessibility_granted: "boolean",
     notifications_granted: "boolean",
     account_connected: "boolean",
+    drift_alarm_enabled: "boolean",
+    extreme_nudge_enabled: "boolean",
+    pet_enabled: "boolean",
   },
   permission_action: {
     permission: PERMISSIONS,
