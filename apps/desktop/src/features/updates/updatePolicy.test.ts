@@ -1,13 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GENERAL_PROMPT_AFTER_MS,
   fallbackUpdatePolicy,
+  fetchUpdatePolicy,
   markUpdateAutoInstallAttempted,
   markUpdateInteracted,
   normalizeUpdatePolicyMetadata,
   parseUpdateInteractionMap,
   shouldAutoInstallUpdate,
   shouldShowAutomaticUpdateDialog,
+  updatePolicyUrl,
   upsertUpdateSeen,
 } from "./updatePolicy";
 
@@ -48,6 +50,25 @@ describe("updatePolicy", () => {
       autoInstallEligible: true,
       message: "Security fix.",
     });
+  });
+
+  it("fetches policy metadata from the matching versioned release", async () => {
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        version: VERSION,
+        urgency: "general",
+        autoInstall: false,
+      }),
+    });
+
+    const policy = await fetchUpdatePolicy(VERSION, fetcher);
+
+    expect(updatePolicyUrl(VERSION)).toBe(
+      "https://github.com/edgethink00/drifty_releases/releases/download/1.0.12/update-policy.json",
+    );
+    expect(fetcher).toHaveBeenCalledWith(updatePolicyUrl(VERSION), expect.objectContaining({ cache: "no-store" }));
+    expect(policy.version).toBe(VERSION);
   });
 
   it("shows general automatic prompts only after three days without interaction", () => {

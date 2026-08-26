@@ -18,7 +18,7 @@ export type UpdateInteractionMap = Record<string, UpdateInteraction>;
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export const UPDATE_POLICY_URL = "https://github.com/edgethink00/drifty_releases/releases/latest/download/update-policy.json";
+const UPDATE_POLICY_RELEASES_URL = "https://github.com/edgethink00/drifty_releases/releases/download";
 export const UPDATE_AUTO_INSTALL_STORAGE_KEY = "drifty.updates.autoInstallFuture";
 export const UPDATE_INTERACTION_STORAGE_KEY = "drifty.updates.interactions.v1";
 export const POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY = "drifty.updates.focusAfterRelaunch";
@@ -33,6 +33,10 @@ export function fallbackUpdatePolicy(version: string): UpdatePolicy {
     autoInstallEligible: false,
     message: null,
   };
+}
+
+export function updatePolicyUrl(version: string): string {
+  return `${UPDATE_POLICY_RELEASES_URL}/${encodeURIComponent(version)}/update-policy.json`;
 }
 
 export function normalizeUpdatePolicyMetadata(metadata: unknown, expectedVersion: string): UpdatePolicy | null {
@@ -68,7 +72,7 @@ export async function fetchUpdatePolicy(version: string, fetcher: FetchLike = gl
     : null;
 
   try {
-    const response = await fetcher(UPDATE_POLICY_URL, {
+    const response = await fetcher(updatePolicyUrl(version), {
       cache: "no-store",
       signal: controller?.signal,
     });
