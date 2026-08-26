@@ -15,7 +15,9 @@ export function NavIcon({ type }: { type: NavIconType }) {
     case "classification":
       return (<svg {...props}><path d="M4 5h16M4 12h10M4 19h14" /><circle cx="18" cy="12" r="2" /><circle cx="20" cy="19" r="2" /></svg>);
     case "projects":
-      return (<svg {...props}><path d="M12 3 3 8l9 5 9-5-9-5Z" /><path d="M3 13l9 5 9-5" /><path d="M3 8v5m18-5v5" /></svg>);
+      // Shifted down 2 units so the stacked layers sit on the same optical
+      // midline as Classification/Trends instead of hugging the top of the 24 box.
+      return (<svg {...props}><path d="M12 5 3 10l9 5 9-5-9-5Z" /><path d="M3 15l9 5 9-5" /><path d="M3 10v5m18-5v5" /></svg>);
     case "history":
       return (<svg {...props}><path d="M12 8v5l3 2" /><path d="M5.6 5.6A9 9 0 1 1 3 12" /><path d="M3 4v5h5" /></svg>);
     case "trends":
