@@ -1,0 +1,31 @@
+span.hover-metadata-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  justify-self: start;
+  flex: 0 0 auto;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.19rem 0.44rem;
+  border: 1px solid color-mix(in srgb, var(--line-strong) 58%, transparent);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-strong) 76%, transparent);
+  font-family: var(--font-sans);
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+span.hover-metadata-chip.classification-source-badge {
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+span.hover-metadata-chip.classification-source-badge--ai {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent-soft) 58%, var(--surface));
+  color: var(--accent-strong);
+}

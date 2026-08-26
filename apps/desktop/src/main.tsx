@@ -13,6 +13,7 @@ import {
 } from "./lib/bootstrap/rejectionAction";
 import "./styles.css";
 import "./features/dashboard/dashboard.css";
+import "./styles/hover-metadata-chip.css";
 import "./features/dashboard/compact-charts.css";
 import "./features/flow-chart/flow-chart.css";
 import "./features/dashboard/week-dashboard.css";

@@ -1,10 +1,10 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { classificationSourceLabel, formatCategoryPercentage, productivityMixAriaLabel, usageItemLabel } from "./classificationViewData";
+import { formatCategoryPercentage, productivityMixAriaLabel, usageItemLabel } from "./classificationViewData";
 import type { CategoryBreakdownUsageItem, ClassificationCategoryBreakdown, TimelineItem } from "./classificationViewData";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/formatting";
-import type { AppIconMap, CategoryDuration, ClassificationSource } from "@drifty/domain";
+import type { AppIconMap, CategoryDuration } from "@drifty/domain";
 import type { CSSProperties } from "react";
 import "./classificationBreakdownCards.css";
 
@@ -147,9 +147,4 @@ export function CategoryUsageList({
       )}
     </div>
   );
-}
-
-export function ClassificationSourcePill({ source, ai, aiCached }: { source?: ClassificationSource | string | null; ai?: boolean | null; aiCached?: boolean | null }) {
-  const label = classificationSourceLabel(source, ai, aiCached);
-  return <span className={`classification-source-pill${ai ? " classification-source-pill--ai" : ""}`}>{label}</span>;
 }

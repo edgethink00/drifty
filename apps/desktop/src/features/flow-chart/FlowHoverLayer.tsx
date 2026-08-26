@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FlowIntervalMinutes } from "@drifty/domain";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
-import { FlowHoverCard, type FlowHoverState } from "./FlowChartHoverCards";
+import { FlowHoverCard, moveFlowHoverCardToPointer, type FlowHoverState } from "./FlowChartHoverCards";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useFlowChartHoverDelegation } from "./useFlowChartHoverDelegation";
@@ -33,6 +33,11 @@ export function FlowHoverLayer({
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   useFlowChartHoverDelegation({ gridElement, cardRef, hoverGroupsByCell, setHoveredBlock });
+
+  useLayoutEffect(() => {
+    if (!hoveredBlock) return;
+    moveFlowHoverCardToPointer(cardRef.current, hoveredBlock.x, hoveredBlock.y);
+  }, [hoveredBlock]);
 
   return (
     <>

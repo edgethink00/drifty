@@ -722,20 +722,16 @@
   min-width: 0;
 }
 
-.flow-hover-card__identity-pill {
-  display: inline-flex;
-  align-items: center;
+span.flow-hover-card__identity-pill {
   gap: 0.28rem;
-  min-width: 0;
-  padding: 0.19rem 0.44rem;
-  border: 1px solid color-mix(in srgb, var(--line-strong) 58%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-strong) 76%, transparent);
   color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 0.7rem;
-  font-weight: 600;
-  line-height: 1;
+}
+
+.flow-hover-card__identity-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flow-hover-card__identity-dot {

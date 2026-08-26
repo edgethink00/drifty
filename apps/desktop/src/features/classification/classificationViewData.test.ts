@@ -17,9 +17,9 @@ function segment(overrides: Partial<ActivitySegment>): ActivitySegment {
 
 describe("classificationSourceLabel", () => {
   it("labels predefined, keyword, and custom rule sources distinctly", () => {
-    expect(classificationSourceLabel("domain-db")).toBe("Predefined rule");
-    expect(classificationSourceLabel("app-db")).toBe("Predefined rule");
-    expect(classificationSourceLabel("youtube")).toBe("Predefined rule");
+    expect(classificationSourceLabel("domain-db")).toBe("Predefined");
+    expect(classificationSourceLabel("app-db")).toBe("Predefined");
+    expect(classificationSourceLabel("youtube")).toBe("Predefined");
     expect(classificationSourceLabel("context")).toBe("Keyword rule");
     expect(classificationSourceLabel("rule")).toBe("Custom rule");
   });

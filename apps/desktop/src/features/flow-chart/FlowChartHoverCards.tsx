@@ -2,7 +2,8 @@ import type { CSSProperties, Ref } from "react";
 import { secondsToLabel, type FlowBlock } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { ClassificationSourcePill } from "../classification/ClassificationBreakdownCards";
+import { ClassificationSourceBadge } from "../classification/ClassificationSourceBadge";
+import { getViewportSafeHoverPosition, HOVER_CARD_OFFSET } from "../../components/hoverCardPosition";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
@@ -31,16 +32,16 @@ export type FlowLegendHoverState = {
   readonly y: number;
 };
 
-const FLOW_HOVER_CARD_OFFSET_PX = 16;
-
 function flowHoverCardPosition(x: number, y: number): CSSProperties {
-  return { left: x + FLOW_HOVER_CARD_OFFSET_PX, top: y + FLOW_HOVER_CARD_OFFSET_PX };
+  return { left: x + HOVER_CARD_OFFSET, top: y + HOVER_CARD_OFFSET };
 }
 
 export function moveFlowHoverCardToPointer(card: HTMLDivElement | null, x: number, y: number): void {
   if (!card) return;
-  card.style.left = `${x + FLOW_HOVER_CARD_OFFSET_PX}px`;
-  card.style.top = `${y + FLOW_HOVER_CARD_OFFSET_PX}px`;
+  const bounds = card.getBoundingClientRect();
+  const position = getViewportSafeHoverPosition(x, y, bounds.width, bounds.height);
+  card.style.left = `${position.left}px`;
+  card.style.top = `${position.top}px`;
 }
 
 export function buildLegendActivityBreakdown(
@@ -135,18 +136,18 @@ export function FlowHoverCard({
         <FlowIdentityPill color={PRODUCTIVITY_COLORS[block.productivity]} label={productivityLabel(block.productivity)} />
         {project ? <FlowIdentityPill color={block.projectColor ?? project.color} label={project.name} /> : null}
         {deviceLabel ? <span className="flow-hover-card__device-pill">{deviceLabel}</span> : null}
+        <ClassificationSourceBadge source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} />
       </div>
       {detailLabel ? <p className="flow-hover-card__detail">{detailLabel}</p> : null}
-      <ClassificationSourcePill source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} />
     </div>
   );
 }
 
 function FlowIdentityPill({ color, label }: { readonly color: string; readonly label: string }) {
   return (
-    <span className="flow-hover-card__identity-pill">
+    <span className="hover-metadata-chip flow-hover-card__identity-pill">
       <span className="flow-hover-card__identity-dot" style={{ "--flow-hover-identity-color": color } as CSSProperties & Record<"--flow-hover-identity-color", string>} />
-      {label}
+      <span className="flow-hover-card__identity-label">{label}</span>
     </span>
   );
 }

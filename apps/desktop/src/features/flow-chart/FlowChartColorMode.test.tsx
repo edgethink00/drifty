@@ -159,7 +159,7 @@ describe("FlowChartView color mode", () => {
   });
 
   it("shows readable identity chips before the hover detail and avoids repeated site pills", async () => {
-    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+    render(<FlowChartView blocks={[makeFlowBlock({ classificationSource: "domain-db" })]} appIcons={{}} intervalMinutes={3} />);
 
     fireEvent(screen.getByRole("button", { name: /^workspace.*focus/i }), new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
     await waitFor(() => expect(document.querySelector(".flow-hover-card")).toBeTruthy());
@@ -169,8 +169,11 @@ describe("FlowChartView color mode", () => {
 
     expect(hoverCard).toBeTruthy();
     expect(identityRow.querySelectorAll(".flow-hover-card__identity-dot")).toHaveLength(2);
+    expect(identityRow.querySelectorAll(".flow-hover-card__identity-label")).toHaveLength(2);
+    expect(identityRow.querySelectorAll(".hover-metadata-chip")).toHaveLength(3);
     expect(within(identityRow).getByText("Workspace")).toBeTruthy();
     expect(within(identityRow).getByText("Focus")).toBeTruthy();
+    expect(within(identityRow).getByText("Predefined")).toBeTruthy();
     expect(detail.textContent).toBe("Docs");
     expect(identityRow.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(hoverCard.querySelector(".flow-hover-card__site")).toBeNull();

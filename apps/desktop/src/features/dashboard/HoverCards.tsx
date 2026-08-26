@@ -6,7 +6,8 @@ import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds, formatQuarterHourLabel } from "../../lib/formatting";
 import { secondsToLabel } from "@drifty/domain";
 import type { AppIconMap, DayRibbonSegment } from "@drifty/domain";
-import { ClassificationSourcePill } from "../classification/ClassificationBreakdownCards";
+import { ClassificationSourceBadge } from "../classification/ClassificationSourceBadge";
+import { getViewportSafeHoverPosition, type FixedHoverPosition } from "../../components/hoverCardPosition";
 import { WeekCalendarIdentityIcon } from "./WeekDashboard";
 import { createPortal } from "react-dom";
 import { useLayoutEffect, useRef, useState } from "react";
@@ -56,15 +57,6 @@ export type WeekCalendarHoverState = {
   x: number;
   y: number;
 };
-
-export type FixedHoverPosition = {
-  left: number;
-  top: number;
-};
-
-export const HOVER_CARD_OFFSET = 16;
-
-export const HOVER_CARD_VIEWPORT_PADDING = 16;
 
 export function CompactClassificationHoverCard({ hover, appIcons }: { hover: CompactClassificationHoverState; appIcons: AppIconMap }) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -144,7 +136,7 @@ export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRe
         <strong>{categoryLabel(hover.event.category)}</strong>
       </div>
       <div className="timeline-hover-card__duration">{hover.event.startLabel}–{hover.event.endLabel}</div>
-      <ClassificationSourcePill source={hover.event.classificationSource} ai={hover.event.aiClassification} />
+      <ClassificationSourceBadge source={hover.event.classificationSource} ai={hover.event.aiClassification} />
       <div className="category-hover-card__apps">
         {hover.event.identities.map((identity) => (
           <div className="category-hover-card__app" key={identity.id}>
@@ -160,33 +152,8 @@ export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRe
   );
 }
 
-export function clampHoverCoordinate(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
-
 export function formatSharePercent(value: number): string {
   return `${Math.round(value)}%`;
-}
-
-export function getViewportSafeHoverPosition(anchorX: number, anchorY: number, width: number, height: number): FixedHoverPosition {
-  if (typeof window === "undefined") {
-    return { left: anchorX + HOVER_CARD_OFFSET, top: anchorY + HOVER_CARD_OFFSET };
-  }
-
-  const { innerWidth, innerHeight } = window;
-  const maxLeft = innerWidth - width - HOVER_CARD_VIEWPORT_PADDING;
-  const maxTop = innerHeight - height - HOVER_CARD_VIEWPORT_PADDING;
-  const preferredLeft = anchorX + HOVER_CARD_OFFSET;
-  const preferredTop = anchorY + HOVER_CARD_OFFSET;
-  const flippedLeft = anchorX - width - HOVER_CARD_OFFSET;
-  const flippedTop = anchorY - height - HOVER_CARD_OFFSET;
-  const left = preferredLeft > maxLeft && flippedLeft >= HOVER_CARD_VIEWPORT_PADDING ? flippedLeft : preferredLeft;
-  const top = preferredTop > maxTop && flippedTop >= HOVER_CARD_VIEWPORT_PADDING ? flippedTop : preferredTop;
-
-  return {
-    left: clampHoverCoordinate(left, HOVER_CARD_VIEWPORT_PADDING, maxLeft),
-    top: clampHoverCoordinate(top, HOVER_CARD_VIEWPORT_PADDING, maxTop),
-  };
 }
 
 export function TimelineHoverCard({ hover }: { hover: TimelineHoverState }) {
@@ -200,7 +167,7 @@ export function TimelineHoverCard({ hover }: { hover: TimelineHoverState }) {
         <strong>{heading}</strong>
       </div>
       <div className="timeline-hover-card__duration">{duration}</div>
-      <ClassificationSourcePill source={hover.segment.classificationSource} ai={hover.segment.aiClassification} aiCached={hover.segment.aiCachedClassification} />
+      <ClassificationSourceBadge source={hover.segment.classificationSource} ai={hover.segment.aiClassification} aiCached={hover.segment.aiCachedClassification} />
       {activityLines.length > 0 ? (
         <div className="timeline-hover-card__activities">
           {activityLines.map((line) => <span key={line}>{line.replace(/^-\s*/, "")}</span>)}

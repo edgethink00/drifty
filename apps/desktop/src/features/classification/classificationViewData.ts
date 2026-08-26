@@ -425,7 +425,7 @@ export function productivityMixAriaLabel(label: string, entries: CategoryProduct
 
 export function classificationSourceLabel(source?: ClassificationSource | string | null, ai?: boolean | null, aiCached?: boolean | null): string {
   if (ai || source === "llm") return aiCached ? "AI cache" : "AI";
-  if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefined rule";
+  if (source === "domain-db" || source === "app-db" || source === "youtube") return "Predefined";
   if (source === "context") return "Keyword rule";
   if (source === "fallback") return "Fallback";
   if (source === "manual") return "Manual";

@@ -3,7 +3,8 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/formatting";
 import type { AppIconMap } from "@drifty/domain";
 import type { FocusDriftPoint, FocusDriftSourceSummary } from "./focusDriftChart";
-import { formatSharePercent, getViewportSafeHoverPosition } from "./HoverCards";
+import { getViewportSafeHoverPosition } from "../../components/hoverCardPosition";
+import { formatSharePercent } from "./HoverCards";
 import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
 import { useLayoutEffect, useRef, useState } from "react";
 

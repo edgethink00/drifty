@@ -97,6 +97,15 @@ describe("FlowChartView", () => {
     expect(stackBreakpoint).toBeGreaterThan(-1);
   });
 
+  it("constrains long hover identity labels inside their compact chips", () => {
+    const identityLabelRule = cssRule(".flow-hover-card__identity-label");
+
+    expect(identityLabelRule).toContain("min-width: 0;");
+    expect(identityLabelRule).toContain("overflow: hidden;");
+    expect(identityLabelRule).toContain("text-overflow: ellipsis;");
+    expect(identityLabelRule).toContain("white-space: nowrap;");
+  });
+
   it("keeps category legend dots at the JEO-10 enlarged marker size", () => {
     const categoryDotRule = cssRule(".flow-chart-legend__dot");
     const toneDotRule = cssRule(".flow-chart-legend__tone-dot");
@@ -357,6 +366,42 @@ describe("FlowChartView", () => {
       expect(hoverCard.style.left).toBe("336px");
       expect(hoverCard.style.top).toBe("206px");
     });
+  });
+
+  it("keeps the rendered flow hover card inside a narrow viewport", async () => {
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+
+    try {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: 480 });
+      render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+
+      const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+      fireNativePointerMove(cell, 120, 80);
+      const card = document.querySelector(".flow-hover-card") as HTMLElement;
+      card.getBoundingClientRect = () => ({
+        bottom: 360,
+        height: 120,
+        left: 0,
+        right: 352,
+        top: 240,
+        width: 352,
+        x: 0,
+        y: 240,
+        toJSON: () => ({}),
+      });
+
+      fireNativePointerMove(cell, 350, 240);
+
+      await waitFor(() => {
+        expect(card.style.left).toBe("22px");
+        expect(card.style.top).toBe("256px");
+      });
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalInnerHeight });
+    }
   });
 
   it("moves an active flow hover card while moving through the same hover group", async () => {
