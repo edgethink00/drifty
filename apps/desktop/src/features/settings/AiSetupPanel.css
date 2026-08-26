@@ -237,7 +237,10 @@
   width: 100%;
 }
 
+/* AI actions are pinned absolutely below, so they must not reserve an in-flow grid track. */
 .ai-setup-select-control .settings-select-control__option-row.has-action {
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
   position: relative;
 }
 

@@ -730,9 +730,14 @@
 .settings-select-control__option-row {
   align-items: center;
   display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.settings-select-control__option-row.has-action {
   gap: var(--space-1);
   grid-template-columns: minmax(0, 1fr) auto;
-  min-width: 0;
 }
 
 .settings-select-control__chevron {

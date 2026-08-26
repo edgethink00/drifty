@@ -104,6 +104,30 @@ describe("Settings content styles", () => {
     expect(popoverRule).toContain("z-index: 25;");
   });
 
+  it("keeps select option fills balanced while reserving a second column only for in-flow actions", () => {
+    const styles = readAppStyles();
+    const optionRowRule = cssRule(styles, ".settings-select-control__option-row");
+    const actionRowRule = cssRule(styles, ".settings-select-control__option-row.has-action");
+    const aiActionRowRule = cssRule(
+      readAiSetupStyles(),
+      ".ai-setup-select-control .settings-select-control__option-row.has-action",
+    );
+
+    expectRuleToContain(optionRowRule, [
+      "gap: 0;",
+      "grid-template-columns: minmax(0, 1fr);",
+    ]);
+    expectRuleToContain(actionRowRule, [
+      "gap: var(--space-1);",
+      "grid-template-columns: minmax(0, 1fr) auto;",
+    ]);
+    expectRuleToContain(aiActionRowRule, [
+      "gap: 0;",
+      "grid-template-columns: minmax(0, 1fr);",
+      "position: relative;",
+    ]);
+  });
+
   it("keeps exact URL classification rule controls compact and readable", () => {
     const styles = readAppStyles();
     const modeControlRule = cssRule(styles, ".classification-rule-mode-control");

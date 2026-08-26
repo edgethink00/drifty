@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+import type { CSSProperties, FocusEvent, KeyboardEvent, ReactNode } from "react";
 
 /** A trailing action button rendered inside an option row (e.g. Download, Delete, Show in Finder). */
 export type SettingsSelectRowAction = {
@@ -86,6 +86,7 @@ export function SettingsSelect<TValue extends string>({
   const controlId = useId();
   const listboxId = `${controlId}-listbox`;
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const matchedOption = options.find((option) => option.value === value);
   const showPlaceholder = !matchedOption && placeholder != null;
@@ -135,6 +136,18 @@ export function SettingsSelect<TValue extends string>({
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (options.length === 0) return;
 
+    const rowActionHasFocus = event.target instanceof Element
+      && event.target.closest(".settings-select-control__option-action") != null;
+    if (rowActionHasFocus) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        setIsOpen(false);
+        triggerRef.current?.focus();
+      }
+      return;
+    }
+
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -165,10 +178,12 @@ export function SettingsSelect<TValue extends string>({
       case "Escape":
         setIsOpen(false);
         break;
-      case "Tab":
-        setIsOpen(false);
-        break;
     }
+  }
+
+  function handleBlur(event: FocusEvent<HTMLDivElement>) {
+    if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+    setIsOpen(false);
   }
 
   return (
@@ -179,9 +194,11 @@ export function SettingsSelect<TValue extends string>({
       data-has-accent={selectedOption.accentColor ? "true" : undefined}
       data-placeholder={showPlaceholder ? "true" : undefined}
       style={optionStyle(selectedOption.accentColor)}
+      onBlur={handleBlur}
       onKeyDown={handleKeyDown}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="settings-select-control__trigger"
         role="combobox"
@@ -225,6 +242,7 @@ export function SettingsSelect<TValue extends string>({
                   role="option"
                   aria-selected={showsSelectedState}
                   aria-disabled={optionDisabled}
+                  tabIndex={-1}
                   className={`settings-select-control__option${showsSelectedState ? " is-selected" : ""}${isActive ? " is-active" : ""}${optionDisabled ? " is-disabled" : ""}${option.muted ? " is-muted" : ""}`}
                   data-has-accent={option.accentColor ? "true" : undefined}
                   disabled={optionDisabled}
@@ -248,6 +266,7 @@ export function SettingsSelect<TValue extends string>({
                         aria-label={action.label}
                         title={action.label}
                         disabled={action.disabled}
+                        onFocus={() => setActiveIndex(index)}
                         onClick={(event) => {
                           event.stopPropagation();
                           action.onAction();
