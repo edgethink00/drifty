@@ -67,28 +67,30 @@ export function FlowChartHeader({
   return (
     <div className="flow-chart-head">
       <div className="flow-chart-head__actions">
-        {onIntervalChange ? (
-          <SettingsSelect
-            ariaLabel="Flow detail"
-            className="flow-detail-select"
-            value={FLOW_DETAIL_COPY_BY_INTERVAL[intervalMinutes].value}
-            options={FLOW_DETAIL_OPTIONS}
-            onChange={(value) => onIntervalChange(flowIntervalFromDetailValue(value))}
-            triggerVisual={<FlowDetailIcon />}
-          />
-        ) : null}
-        <div className="seg flow-color-mode-control" aria-label="Flow chart color mode">
-          {colorModeOptions.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={option.id === colorMode ? "on" : undefined}
-              aria-pressed={option.id === colorMode}
-              onClick={() => onColorModeChange(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="flow-chart-head__controls">
+          {onIntervalChange ? (
+            <SettingsSelect
+              ariaLabel="Flow detail"
+              className="flow-detail-select"
+              value={FLOW_DETAIL_COPY_BY_INTERVAL[intervalMinutes].value}
+              options={FLOW_DETAIL_OPTIONS}
+              onChange={(value) => onIntervalChange(flowIntervalFromDetailValue(value))}
+              triggerVisual={<FlowDetailIcon />}
+            />
+          ) : null}
+          <div className="seg flow-color-mode-control" aria-label="Flow chart color mode">
+            {colorModeOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={option.id === colorMode ? "on" : undefined}
+                aria-pressed={option.id === colorMode}
+                onClick={() => onColorModeChange(option.id)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
         </div>
         <FlowChartLegend
           blocks={blocks}

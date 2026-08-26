@@ -167,6 +167,22 @@ describe("FlowChartView", () => {
     expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
   });
 
+  it("keeps the density overflow visually before the color mode toggle", () => {
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
+
+    const actions = document.querySelector(".flow-chart-head__actions") as HTMLElement;
+    const controls = actions.querySelector(".flow-chart-head__controls") as HTMLElement;
+    const controlChildren = Array.from(controls.children).map((child) => child.className);
+    const actionChildren = Array.from(actions.children).map((child) => child.className);
+
+    expect(actionChildren[0]).toContain("flow-chart-head__controls");
+    expect(actionChildren[1]).toContain("flow-chart-legend");
+    expect(controlChildren[0]).toContain("flow-detail-select");
+    expect(controlChildren[1]).toContain("flow-color-mode-control");
+    expect(cssRule(".flow-chart-head__actions")).toContain("flex-direction: row-reverse;");
+    expect(cssRule(".flow-chart-head__controls")).toContain("gap: 2px;");
+  });
+
   it("uses the actionless SettingsSelect row treatment", () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
 
