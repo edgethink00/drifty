@@ -46,7 +46,7 @@ describe("AiSetupPanel", () => {
     const setupTabs = screen.getByRole("tablist", { name: /AI setup sections/i });
     expect(within(setupTabs).getByRole("tab", { name: /^Classification$/i }).getAttribute("aria-selected")).toBe("true");
     expect(within(setupTabs).getByRole("tab", { name: /^Intelligence$/i }).getAttribute("aria-selected")).toBe("false");
-    expect(within(setupTabs).getByRole("tab", { name: /^Profile & info$/i }).getAttribute("aria-selected")).toBe("false");
+    expect(within(setupTabs).getByRole("tab", { name: /^Memory$/i }).getAttribute("aria-selected")).toBe("false");
     expect(screen.queryByRole("button", { name: /^Work profile$/i })).toBeNull();
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
@@ -150,7 +150,12 @@ describe("AiSetupPanel", () => {
 
     renderPanel();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+    const memoryInputs = screen.getByLabelText(/Memory sources/i);
+    expect(within(memoryInputs).getByText("Work profile")).toBeTruthy();
+    expect(within(memoryInputs).getByText("Main activities and one description you can edit here.")).toBeTruthy();
+    expect(within(memoryInputs).getByText("Learned patterns")).toBeTruthy();
+    expect(within(memoryInputs).getByText("Short patterns from corrections and repeated context, not a copy of your timeline.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /^Work profile$/i }));
     expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
@@ -187,7 +192,7 @@ describe("AiSetupPanel", () => {
       workDomainOther: "",
       workDescription: "I build product features and help customers.",
     });
-    expect(screen.getByRole("status").textContent).toContain("Work profile saved");
+    expect(screen.getByRole("status").textContent).toContain("Memory updated");
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
   });
@@ -286,7 +291,7 @@ describe("AiSetupPanel", () => {
   it("persists shared AI privacy request controls across AI setup and privacy settings", () => {
     renderPanel();
 
-    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     expect(screen.getByRole("button", { name: /Privacy review/i }).getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
     expect(screen.getByRole("region", { name: /AI privacy review/i })).toBeTruthy();
@@ -354,7 +359,7 @@ describe("AiSetupPanel", () => {
 
   it("explains every receipt row and every never-sent claim in the two disclosure details", () => {
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
 
     // Glossary: one definition per row the receipt shows, including the two rows that are
@@ -397,7 +402,7 @@ describe("AiSetupPanel", () => {
     window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, "{broken json");
 
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
 
     const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });
@@ -418,7 +423,7 @@ describe("AiSetupPanel", () => {
     }));
 
     renderPanel();
-    fireEvent.click(screen.getByRole("tab", { name: /^Profile & info$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     fireEvent.click(screen.getByRole("button", { name: /Privacy review/i }));
 
     const optionalFields = screen.getByRole("list", { name: /Optional AI classification fields/i });

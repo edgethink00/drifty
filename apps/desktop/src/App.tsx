@@ -2684,7 +2684,7 @@ export default function App() {
       setClassificationCorrectionDraft(null);
       setClassificationCorrectionNotice({
         kind: "success",
-        message: `${draft.displayLabel ?? draft.targetValue} is now ${categoryLabel(draft.category)} · ${productivityLabel(draft.productivity)}.`,
+        message: `${draft.displayLabel ?? draft.targetValue} is now ${categoryLabel(draft.category)} · ${productivityLabel(draft.productivity)}. This correction helps Memory classify similar activity.`,
       });
       await refresh(selectedDayRef.current);
     } catch (nextError) {

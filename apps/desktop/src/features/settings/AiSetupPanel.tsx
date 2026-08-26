@@ -272,6 +272,16 @@ export function AiSetupPanel({
               </div>
               <p>{t("settings.ai.promptSettingsDescription")}</p>
             </div>
+            <dl className="ai-setup-memory-summary" aria-label={t("settings.ai.memorySummaryAria")}>
+              <div>
+                <dt>{t("settings.ai.memoryWorkContextLabel")}</dt>
+                <dd>{t("settings.ai.memoryWorkContextDescription")}</dd>
+              </div>
+              <div>
+                <dt>{t("settings.ai.memoryCorrectionsLabel")}</dt>
+                <dd>{t("settings.ai.memoryCorrectionsDescription")}</dd>
+              </div>
+            </dl>
             <AiSetupSupportSections
               workProfileDraft={workProfileSettings.workProfileDraft}
               workProfileMessage={workProfileSettings.workProfileMessage}

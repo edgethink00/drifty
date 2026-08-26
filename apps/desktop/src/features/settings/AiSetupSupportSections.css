@@ -43,6 +43,41 @@
   max-width: 34rem;
 }
 
+.ai-setup-memory-summary {
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: var(--space-2) 0;
+  min-width: 0;
+}
+
+.ai-setup-memory-summary > div {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: var(--space-3);
+}
+
+.ai-setup-memory-summary > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.ai-setup-memory-summary dt {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--type-setting-label-size);
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.ai-setup-memory-summary dd {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.4;
+  margin: 0;
+}
+
 .ai-setup-support-list {
   display: grid;
   gap: var(--space-2);

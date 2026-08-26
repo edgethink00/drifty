@@ -60,12 +60,13 @@ describe("DeveloperSettingsSection", () => {
     expect(screen.getByRole("button", { name: "Add skill to…" })).toBeTruthy();
     expect(screen.getByText("Command line tools")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "CLI" })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Agent skill" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Add Drifty to your agent" })).toBeTruthy();
     expect(screen.getAllByText("drifty summary --day 2026-08-04").length).toBe(1);
     expect(screen.getByText("drifty search --query \"CLI\"")).toBeTruthy();
     expect(screen.getByText("~/.codex/skills/drifty")).toBeTruthy();
     expect(screen.queryByText('export PATH="$HOME/.local/bin:$PATH"')).toBeNull();
-    expect(screen.getByText(/use --detail full for URLs and window titles/i)).toBeTruthy();
+    expect(screen.getByText(/Ask what you worked on and when from Terminal/i)).toBeTruthy();
+    expect(screen.getByText(/Ask Codex, Claude Code, Cursor, or OpenCode about your recorded day/i)).toBeTruthy();
     expect(screen.getByText(/does not add network access/i)).toBeTruthy();
     expect(screen.queryByText(/Give local agents a safe, read-only way/i)).toBeNull();
     expect(screen.queryByText(/Query summaries, matching activity, and timelines/i)).toBeNull();
