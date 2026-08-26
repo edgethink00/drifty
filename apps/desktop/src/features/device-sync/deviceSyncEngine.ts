@@ -7,6 +7,8 @@ export const SYNC_PUSH_SEQ_KEY = "sync_push_seq";
 export const SYNC_PULL_CURSOR_KEY = "sync_pull_cursor";
 export const SYNC_DELETION_PULL_CURSOR_KEY = "sync_deletion_pull_cursor";
 export const SYNC_DEVICE_ID_KEY = "sync_device_id";
+export const SYNC_GENERATION_KEY = "sync_generation";
+export const SYNC_ACCOUNT_ID_KEY = "sync_account_id";
 export const SYNC_LAST_PUSHED_AT_KEY = "sync_last_pushed_at";
 export const SYNC_LAST_PULLED_AT_KEY = "sync_last_pulled_at";
 
@@ -43,6 +45,7 @@ export type DeviceSyncEngineDeps = {
   readonly pushBatch: (
     segments: readonly SyncOutboxSegment[],
     deletions: readonly SyncDeletionRecord[],
+    syncGeneration: number | null,
   ) => Promise<SyncPushResponse>;
   readonly fetchPullPage?: (cursor: string | null, excludeDeviceId: string | null) => Promise<SyncPullPage>;
   readonly fetchDeletionsPullPage?: (cursor: string | null, excludeDeviceId: string | null) => Promise<SyncDeletionsPullPage>;
@@ -50,6 +53,10 @@ export type DeviceSyncEngineDeps = {
   readonly resolveDeviceId?: () => Promise<string | null>;
   readonly sleep?: (ms: number) => Promise<void>;
   readonly now?: () => Date;
+  /** Prevents an in-flight cycle from writing state after the signed-in account changes. */
+  readonly syncAccountId?: string;
+  /** Re-checks the live auth owner after each awaited cloud request. */
+  readonly isSyncAccountCurrent?: () => boolean;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -61,12 +68,40 @@ function parseSeq(value: string | undefined): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function parseSyncGeneration(value: string | undefined): number | null {
+  const parsed = Number.parseInt(value ?? "", 10);
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : null;
+}
+
+function assertSyncAccount(
+  snapshot: Awaited<ReturnType<TrackerApi["getSyncState"]>>,
+  deps: Pick<DeviceSyncEngineDeps, "syncAccountId" | "isSyncAccountCurrent">,
+  expectedGeneration?: number | null,
+): void {
+  if (
+    (deps.syncAccountId && snapshot.state[SYNC_ACCOUNT_ID_KEY] !== deps.syncAccountId)
+    || (expectedGeneration !== undefined && parseSyncGeneration(snapshot.state[SYNC_GENERATION_KEY]) !== expectedGeneration)
+    || (deps.isSyncAccountCurrent && !deps.isSyncAccountCurrent())
+  ) {
+    throw new Error("Device sync account scope changed.");
+  }
+}
+
+function accountBoundState(
+  deps: Pick<DeviceSyncEngineDeps, "syncAccountId">,
+  entries: Record<string, string | null>,
+): Record<string, string | null> {
+  return deps.syncAccountId ? { ...entries, [SYNC_ACCOUNT_ID_KEY]: deps.syncAccountId } : entries;
+}
+
 export async function runSyncPushCycle(deps: DeviceSyncEngineDeps, _reason: DeviceSyncCycleReason): Promise<DeviceSyncStatus> {
   const sleep = deps.sleep ?? defaultSleep;
   const now = deps.now ?? (() => new Date());
 
   const snapshot = await deps.tracker.getSyncState();
+  assertSyncAccount(snapshot, deps);
   let afterSeq = parseSeq(snapshot.state[SYNC_PUSH_SEQ_KEY]);
+  let syncGeneration = parseSyncGeneration(snapshot.state[SYNC_GENERATION_KEY]);
   let deviceId = snapshot.state[SYNC_DEVICE_ID_KEY] ?? null;
   let lastPushedAt = snapshot.state[SYNC_LAST_PUSHED_AT_KEY] ?? null;
   let pendingPushCount = 0;
@@ -79,8 +114,10 @@ export async function runSyncPushCycle(deps: DeviceSyncEngineDeps, _reason: Devi
       break;
     }
 
-    const response = await deps.pushBatch(outbox.items, deletions);
+    const response = await deps.pushBatch(outbox.items, deletions, syncGeneration);
+    assertSyncAccount(await deps.tracker.getSyncState(), deps, syncGeneration);
     deviceId = response.deviceId;
+    syncGeneration = response.syncGeneration;
     lastPushedAt = response.serverTime ?? now().toISOString();
 
     // Advance the cursor only past what the server actually accepted; the hot
@@ -90,10 +127,12 @@ export async function runSyncPushCycle(deps: DeviceSyncEngineDeps, _reason: Devi
     }
     const entries: Record<string, string | null> = {
       [SYNC_PUSH_SEQ_KEY]: String(afterSeq),
+      [SYNC_GENERATION_KEY]: String(syncGeneration),
       [SYNC_DEVICE_ID_KEY]: deviceId,
       [SYNC_LAST_PUSHED_AT_KEY]: lastPushedAt,
     };
-    await deps.tracker.setSyncState(entries);
+    await deps.tracker.setSyncState(accountBoundState(deps, entries));
+    assertSyncAccount(await deps.tracker.getSyncState(), deps, syncGeneration);
     if (deletions.length > 0) {
       await deps.tracker.markSyncDeletionsPushed(deletions.map((deletion) => deletion.deletionUid));
     }
@@ -135,11 +174,15 @@ export async function runSyncPullCycle(deps: DeviceSyncEngineDeps): Promise<Sync
   const now = deps.now ?? (() => new Date());
 
   const snapshot = await deps.tracker.getSyncState();
+  assertSyncAccount(snapshot, deps);
+  const scopeGeneration = parseSyncGeneration(snapshot.state[SYNC_GENERATION_KEY]);
   let deviceId: string | null = snapshot.state[SYNC_DEVICE_ID_KEY] ?? null;
   if (!deviceId && deps.resolveDeviceId) {
     deviceId = await deps.resolveDeviceId();
+    assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
     if (deviceId) {
-      await deps.tracker.setSyncState({ [SYNC_DEVICE_ID_KEY]: deviceId });
+      await deps.tracker.setSyncState(accountBoundState(deps, { [SYNC_DEVICE_ID_KEY]: deviceId }));
+      assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
     }
   }
   // Without a known own-device id the pull cannot exclude this device's rows, and
@@ -155,17 +198,20 @@ export async function runSyncPullCycle(deps: DeviceSyncEngineDeps): Promise<Sync
 
   for (let chunk = 0; chunk < SYNC_MAX_CHUNKS_PER_CYCLE; chunk += 1) {
     const page = await fetchPullPage(cursor, deviceId);
+    assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
     if (page.segments.length === 0) {
       break;
     }
     const result = await deps.tracker.applySyncedSegments(page.segments);
+    assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
     appliedCount += result.inserted + result.updated;
     cursor = page.nextCursor;
     lastPulledAt = now().toISOString();
-    await deps.tracker.setSyncState({
+    await deps.tracker.setSyncState(accountBoundState(deps, {
       [SYNC_PULL_CURSOR_KEY]: cursor,
       [SYNC_LAST_PULLED_AT_KEY]: lastPulledAt,
-    });
+    }));
+    assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
     if (!page.hasMore) {
       break;
     }
@@ -178,17 +224,20 @@ export async function runSyncPullCycle(deps: DeviceSyncEngineDeps): Promise<Sync
     let deletionCursor: string | null = snapshot.state[SYNC_DELETION_PULL_CURSOR_KEY] ?? null;
     for (let chunk = 0; chunk < SYNC_MAX_CHUNKS_PER_CYCLE; chunk += 1) {
       const page = await deps.fetchDeletionsPullPage(deletionCursor, deviceId);
+      assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
       if (page.deletions.length === 0) {
         break;
       }
       const result = await deps.tracker.applySyncedDeletions(page.deletions);
+      assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
       appliedCount += result.applied;
       deletionCursor = page.nextCursor;
       lastPulledAt = now().toISOString();
-      await deps.tracker.setSyncState({
+      await deps.tracker.setSyncState(accountBoundState(deps, {
         [SYNC_DELETION_PULL_CURSOR_KEY]: deletionCursor,
         [SYNC_LAST_PULLED_AT_KEY]: lastPulledAt,
-      });
+      }));
+      assertSyncAccount(await deps.tracker.getSyncState(), deps, scopeGeneration);
       if (!page.hasMore) {
         break;
       }

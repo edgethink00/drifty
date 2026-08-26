@@ -43,6 +43,11 @@ import {
   openRouterEmbeddedIssueKind,
   openRouterIssueKindFromResponse,
 } from "../ai-connection/openRouterError";
+import {
+  cloudAiBackoffMessage,
+  cloudAiRequestBackoffs,
+  type CloudAiBackoffStatus,
+} from "./cloudAiRequestBackoff";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -124,6 +129,17 @@ export type AiClassificationRunOptions = {
   persistLiveResult?: boolean;
   level?: ClassificationLevel;
   contextSegments?: readonly ActivitySegment[];
+  /** User-initiated retries may probe immediately after account/device recovery. */
+  bypassCloudRequestBackoff?: boolean;
+};
+
+type CloudAiClassificationAccess =
+  | { readonly kind: "allowed"; readonly requestKey: string }
+  | { readonly kind: "blocked"; readonly summary: AiClassificationSummary };
+
+type CloudAiRequestContext = {
+  readonly requestKey: string;
+  readonly bypassBackoff: boolean;
 };
 
 type ClassificationCluster = {
@@ -405,10 +421,10 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
     return await runLocalAiClassification(query, payload.length, preAiSavedRecords + reusableResult.saved, representatives, membersByRepSegmentId, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, representatives.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments));
   }
 
-  const cloudAvailability = await requireCloudAiClassification();
-  if (cloudAvailability) {
-    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
-    return partialSummary ?? cloudAvailability;
+  const cloudAccess = await requireCloudAiClassification();
+  if (cloudAccess.kind === "blocked") {
+    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, cloudAccess.summary.message);
+    return partialSummary ?? cloudAccess.summary;
   }
   const cloudClient = supabase;
   if (!cloudClient) {
@@ -417,7 +433,10 @@ async function runAiClassificationImpl(query: UnclassifiedSegmentsQuery, batchSi
   }
 
   const aiRecords = expandClusterRecords(
-    await classifyCloudPayloadBatches(cloudClient, representatives, workProfile, memoryContext),
+    await classifyCloudPayloadBatches(cloudClient, representatives, workProfile, memoryContext, {
+      requestKey: cloudAccess.requestKey,
+      bypassBackoff: options.bypassCloudRequestBackoff === true,
+    }),
     membersByRepSegmentId,
   );
   if (aiRecords.length === 0) {
@@ -527,10 +546,10 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     return await runLocalAiClassification(query, unknownPayload.length, preAiSavedRecords + reusableResult.saved, reusableResult.misses, null, options.localProvider, promptWorkProfile, memoryContextForItems(memoryContext, reusableResult.misses.map((item) => item.segmentId)), adaptiveContextBySegmentId(segments));
   }
 
-  const cloudAvailability = await requireCloudAiClassification();
-  if (cloudAvailability) {
-    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, cloudAvailability.message);
-    return partialSummary ?? cloudAvailability;
+  const cloudAccess = await requireCloudAiClassification();
+  if (cloudAccess.kind === "blocked") {
+    const partialSummary = await savedPartialAiSummary(query, preAiSavedRecords, reusableResult.saved, reusableResult.misses.length, cloudAccess.summary.message);
+    return partialSummary ?? cloudAccess.summary;
   }
   const cloudClient = supabase;
   if (!cloudClient) {
@@ -543,6 +562,10 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
     reusableResult.misses,
     workProfile,
     memoryContext,
+    {
+      requestKey: cloudAccess.requestKey,
+      bypassBackoff: options.bypassCloudRequestBackoff === true,
+    },
   );
   if (aiRecords.length === 0) {
     const metrics = await trackerClient.getClassificationMetrics(query);
@@ -606,7 +629,7 @@ export async function classifyLiveActivityWithAi(segment: ActivitySegment, optio
     }
 
     return await saveLiveResultIfRequested(
-      await classifyLivePayloadWithCloudAi(payload, workProfile, memoryContext),
+      await classifyLivePayloadWithCloudAi(payload, workProfile, memoryContext, options.bypassCloudRequestBackoff === true),
       options,
     );
   } catch (error) {
@@ -1362,19 +1385,38 @@ async function classifyLivePayloadWithCloudAi(
   payload: MinimizedActivityPayload,
   workProfile: string | null,
   memoryContext: LiveClassificationMemoryContext,
+  bypassBackoff = false,
 ): Promise<LiveAiClassificationResult> {
-  const cloudAvailability = await requireCloudAiClassification();
-  if (cloudAvailability) return unavailableLiveClassification(cloudAvailability.message);
+  const cloudAccess = await requireCloudAiClassification();
+  if (cloudAccess.kind === "blocked") return unavailableLiveClassification(cloudAccess.summary.message);
 
   const cloudClient = supabase;
   if (!cloudClient) return unavailableLiveClassification("Supabase is not configured.");
 
   try {
+    assertCloudAiRequestAllowed({ requestKey: cloudAccess.requestKey, bypassBackoff });
+    const requestRevision = cloudAiRequestBackoffs.revision(cloudAccess.requestKey);
     const { data, error } = await cloudClient.functions.invoke("classify-activity", {
       body: await withCloudDevicePayload(cloudClassificationRequestBody([payload], workProfile, memoryContext)),
     });
 
-    if (error) return unavailableLiveClassification((await describeAiClassificationFailure(error)).message);
+    if (error) {
+      const failure = await describeAiClassificationFailure(error);
+      if (failure.failureKind === "quota") {
+        const context = isRecord(error) ? error.context : null;
+        const status = context instanceof Response ? context.status : null;
+        if (status === 402 || status === 429) {
+          cloudAiRequestBackoffs.record({
+            key: cloudAccess.requestKey,
+            status: status as CloudAiBackoffStatus,
+            message: failure.message,
+            retryAfter: context instanceof Response ? context.headers.get("Retry-After") : null,
+          });
+        }
+      }
+      return unavailableLiveClassification(failure.message);
+    }
+    cloudAiRequestBackoffs.clear(cloudAccess.requestKey, requestRevision);
     return firstLiveClassification(data, payload, "AI classification returned no usable classification.", memoryContext, "cloud");
   } catch (error) {
     return unavailableLiveClassification(messageFromUnknownError(error, "AI classification failed."));
@@ -1386,14 +1428,30 @@ async function classifyCloudPayloadBatches(
   payloads: readonly MinimizedActivityPayload[],
   workProfile: string | null,
   memoryContext: LiveClassificationMemoryContext,
+  requestContext: CloudAiRequestContext,
 ): Promise<ActivityClassificationRecord[]> {
   const records: ActivityClassificationRecord[] = [];
   for (const batch of partitionCloudPayloads(payloads, workProfile, memoryContext)) {
+    assertCloudAiRequestAllowed(requestContext);
+    const requestRevision = cloudAiRequestBackoffs.revision(requestContext.requestKey);
     const { data, error } = await cloudClient.functions.invoke("classify-activity", {
       body: await withCloudDevicePayload(cloudClassificationRequestBody(batch, workProfile, memoryContext)),
     });
-    if (error) throw await edgeFunctionInvocationError(error);
-    records.push(...toClassificationRecords(data, [...batch], memoryContext, "cloud"));
+    if (error) {
+      const edgeError = await edgeFunctionInvocationError(error);
+      if (edgeError.status === 402 || edgeError.status === 429) {
+        const context = isRecord(error) ? error.context : null;
+        cloudAiRequestBackoffs.record({
+          key: requestContext.requestKey,
+          status: edgeError.status as CloudAiBackoffStatus,
+          message: edgeError.message,
+          retryAfter: context instanceof Response ? context.headers.get("Retry-After") : null,
+        });
+      }
+      throw edgeError;
+    }
+    cloudAiRequestBackoffs.clear(requestContext.requestKey, requestRevision);
+   records.push(...toClassificationRecords(data, [...batch], memoryContext, "cloud"));
   }
   return records;
 }
@@ -1890,27 +1948,57 @@ function stripLeadingReasoningBlock(text: string): string {
   return text.replace(/^<think>[\s\S]*?<\/think>\s*/i, "").trim();
 }
 
-async function requireCloudAiClassification(): Promise<AiClassificationSummary | null> {
+async function requireCloudAiClassification(): Promise<CloudAiClassificationAccess> {
   if (!supabase) {
     return {
-      status: "disabled",
-      selectedSegments: 0,
-      savedRecords: 0,
-      message: "Supabase is not configured.",
+      kind: "blocked",
+      summary: {
+        status: "disabled",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message: "Supabase is not configured.",
+      },
     };
   }
 
   const { data: authData } = await supabase.auth.getSession();
   if (!authData.session) {
     return {
-      status: "disabled",
-      selectedSegments: 0,
-      savedRecords: 0,
-      message: "Sign in to run AI classification.",
+      kind: "blocked",
+      summary: {
+        status: "disabled",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message: "Sign in to run AI classification.",
+      },
     };
   }
 
-  return null;
+  const session = isRecord(authData.session) ? authData.session : null;
+  const sessionUser = session && isRecord(session.user) ? session.user : null;
+  const userId = sessionUser && typeof sessionUser.id === "string" ? sessionUser.id.trim() : "";
+  if (!userId) {
+    return {
+      kind: "blocked",
+      summary: {
+        status: "disabled",
+        selectedSegments: 0,
+        savedRecords: 0,
+        message: "Account identity is unavailable. Sign in again to run AI classification.",
+      },
+    };
+  }
+  return { kind: "allowed", requestKey: userId };
+}
+
+function assertCloudAiRequestAllowed(context: CloudAiRequestContext): void {
+  if (context.bypassBackoff) return;
+  const backoff = cloudAiRequestBackoffs.current(context.requestKey);
+  if (backoff) throw new Error(cloudAiBackoffMessage(backoff));
+}
+
+export function clearCloudAiRequestBackoff(): void {
+  cloudAiRequestBackoffs.clear();
 }
 
 function isActivityCategory(value: unknown): value is ActivityCategory {

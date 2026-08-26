@@ -180,6 +180,7 @@ vi.mock("./features/classification/aiClassificationService", () => {
     toClassificationQueryForDay: (day: string, limit?: number) => (limit ? { day, limit } : { day }),
     getAiClassificationUsageSummary: aiClassificationMocks.getAiClassificationUsageSummary,
     runAiClassification: aiClassificationMocks.runAiClassification,
+    clearCloudAiRequestBackoff: vi.fn(),
     classifyLiveActivityWithAi: aiClassificationMocks.classifyLiveActivityWithAi,
     describeAiClassificationFailure: aiClassificationMocks.describeAiClassificationFailure,
     runAiClassificationForUnknownThreshold: aiClassificationMocks.runAiClassificationForUnknownThreshold,

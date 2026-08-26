@@ -30,6 +30,7 @@ class DeviceSyncTestCase(unittest.TestCase):
         self.tempdir = TemporaryDirectory()
         self.db_path = Path(self.tempdir.name) / "tracker.sqlite3"
         self.database = TrackerDatabase(self.db_path)
+        self.database.set_sync_state({"sync_account_id": "account-a"})
 
     def tearDown(self) -> None:
         cleanup_temp_dir(self.tempdir)
@@ -84,6 +85,42 @@ class DeviceSyncTestCase(unittest.TestCase):
 
 
 class SyncSchemaTests(DeviceSyncTestCase):
+    def test_existing_sync_deletion_table_adds_account_scope_without_claiming_legacy_rows(self) -> None:
+        with self.database.connect() as conn:
+            conn.execute("DROP INDEX IF EXISTS idx_sync_deletions_account_pending")
+            conn.execute("ALTER TABLE sync_deletions RENAME TO sync_deletions_current")
+            conn.execute(
+                """
+                CREATE TABLE sync_deletions (
+                  deletion_uid TEXT PRIMARY KEY,
+                  kind TEXT NOT NULL CHECK (kind IN ('range', 'uids')),
+                  range_start TEXT,
+                  range_end TEXT,
+                  segment_uids_json TEXT,
+                  created_at TEXT NOT NULL,
+                  pushed INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO sync_deletions(deletion_uid, kind, created_at)
+                VALUES ('legacy-delete', 'range', '2026-07-06T00:00:00+00:00')
+                """
+            )
+            conn.execute("DROP TABLE sync_deletions_current")
+
+        reopened = TrackerDatabase(self.db_path)
+        with reopened.connect() as conn:
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(sync_deletions)")}
+            legacy = conn.execute(
+                "SELECT account_id, pushed FROM sync_deletions WHERE deletion_uid = 'legacy-delete'"
+            ).fetchone()
+
+        self.assertIn("account_id", columns)
+        self.assertIsNone(legacy["account_id"])
+        self.assertEqual(reopened.get_pending_sync_deletions(), [])
+
     def test_inserted_segments_get_uid_and_monotonic_sync_seq(self) -> None:
         self._insert_local_segment(0)
         self._insert_local_segment(1)
@@ -500,6 +537,26 @@ class ApplySyncedSegmentsTests(DeviceSyncTestCase):
 
 
 class SyncDeletionTests(DeviceSyncTestCase):
+    def test_pending_tombstones_remain_bound_to_the_account_that_created_them(self) -> None:
+        self._insert_local_segment(0)
+        with self.database.connect() as conn:
+            row = conn.execute("SELECT id FROM activity_segments").fetchone()
+        self.database.delete_activity_segments([str(row["id"])])
+
+        pending_a = self.database.get_pending_sync_deletions()
+        self.assertEqual(len(pending_a), 1)
+
+        self.database.set_sync_state({"sync_account_id": "account-b"})
+        self.assertEqual(self.database.get_pending_sync_deletions(), [])
+        self.assertEqual(self.database.get_sync_state()["pendingDeletions"], 0)
+        self.assertEqual(
+            self.database.mark_sync_deletions_pushed([pending_a[0]["deletionUid"]]),
+            0,
+        )
+
+        self.database.set_sync_state({"sync_account_id": "account-a"})
+        self.assertEqual(self.database.get_pending_sync_deletions(), pending_a)
+
     def test_delete_activity_segments_records_uid_tombstone(self) -> None:
         self._insert_local_segment(0)
         with self.database.connect() as conn:

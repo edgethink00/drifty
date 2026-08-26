@@ -29,6 +29,7 @@ export type DeviceSyncCycleReason = "startup" | "interval" | "focus" | "visibili
 
 export type SyncPushResponse = {
   readonly deviceId: string;
+  readonly syncGeneration: number;
   readonly acceptedSegments: number;
   readonly acceptedDeletions: number;
   readonly serverTime: string;
@@ -44,12 +45,23 @@ export type SyncDeviceEntry = {
 
 export type SyncDevicesResponse = {
   readonly deviceId: string;
+  readonly syncGeneration: number;
+  readonly syncStatus: "active" | "paused";
   readonly devices: readonly SyncDeviceEntry[];
   readonly serverTime: string;
 };
 
 export type SyncPurgeResponse = {
   readonly deviceId: string;
+  readonly syncGeneration: number;
+  readonly syncStatus: "paused";
   readonly purgedSegments: number | null;
+  readonly serverTime: string;
+};
+
+export type SyncResumeResponse = {
+  readonly deviceId: string;
+  readonly syncGeneration: number;
+  readonly syncStatus: "active";
   readonly serverTime: string;
 };

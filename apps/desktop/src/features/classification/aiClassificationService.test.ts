@@ -298,7 +298,7 @@ describe("runAiClassification cloud contract", () => {
     const getClassificationMetrics = vi.fn().mockResolvedValue(baseMetrics);
     const getReusableAiClassifications = vi.fn((fingerprints: string[]) => Promise.resolve(options.reusable?.(fingerprints) ?? {}));
     const getSession = vi.fn().mockResolvedValue({
-      data: { session: "session" in options ? options.session : { access_token: "token" } },
+      data: { session: "session" in options ? options.session : { access_token: "token", user: { id: "user-1" } } },
     });
     const nativeInvoke = vi.fn().mockResolvedValue({
       status: options.nativeStatus ?? 200,
@@ -603,7 +603,7 @@ describe("runAiClassification cloud contract", () => {
 
     vi.doMock("../../lib/supabase/client", () => ({
       supabase: {
-        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token" } } }) },
+        auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: "token", user: { id: "user-1" } } } }) },
         functions: { invoke },
       },
     }));
@@ -633,6 +633,81 @@ describe("runAiClassification cloud contract", () => {
       vi.doUnmock("../../lib/supabase/client");
       vi.doUnmock("../../lib/api/trackerClient");
       vi.resetModules();
+    }
+  });
+
+  it("suppresses repeated automatic Cloud requests after a quota response", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([segment], {
+        session: { access_token: "token", user: { id: "user-1" } },
+      });
+      invoke.mockReset().mockResolvedValue({
+        data: null,
+        error: {
+          context: new Response(JSON.stringify({
+            error: "Daily AI classification quota exceeded. Please try again tomorrow.",
+            errorType: "quota",
+          }), { status: 429 }),
+        },
+      });
+
+      await expect(runAiClassification({ day: "2026-05-22" })).rejects.toThrow("Daily AI classification quota exceeded");
+      await expect(runAiClassification({ day: "2026-05-22" })).rejects.toThrow("Automatic requests resume");
+
+      expect(invoke).toHaveBeenCalledTimes(1);
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("allows a user-initiated Cloud retry to probe and clear the backoff", async () => {
+    const segment = createUnknownSegment(1);
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([segment], {
+        session: { access_token: "token", user: { id: "user-1" } },
+      });
+      invoke.mockReset()
+        .mockResolvedValueOnce({
+          data: null,
+          error: {
+            context: new Response(JSON.stringify({
+              error: "Minute AI classification quota exceeded. Please wait before trying again.",
+              errorType: "quota",
+            }), { status: 429 }),
+          },
+        })
+        .mockResolvedValue({
+          data: {
+            model: "gemini-3.1-flash-lite",
+            results: [{
+              id: segment.id,
+              category: "workspace",
+              productivity: "focus",
+              confidence: 0.8,
+              reason: "Work context",
+            }],
+          },
+          error: null,
+        });
+
+      await expect(runAiClassification({ day: "2026-05-22" })).rejects.toThrow("Minute AI classification quota exceeded");
+      const manualResult = await runAiClassification(
+        { day: "2026-05-22" },
+        undefined,
+        { bypassCloudRequestBackoff: true },
+      );
+      const automaticResult = await runAiClassification({ day: "2026-05-22" });
+
+      expect(manualResult.status).toBe("saved");
+      expect(automaticResult.status).toBe("saved");
+      expect(invoke).toHaveBeenCalledTimes(3);
+      expect(saveClassifications).toHaveBeenCalledTimes(2);
+    } finally {
+      cleanupServiceMocks();
     }
   });
 

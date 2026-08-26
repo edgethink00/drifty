@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { SyncDeletionRecord, SyncedSegmentInput, SyncOutboxSegment } from "@drifty/domain";
 import { supabase } from "../../lib/supabase/client";
 import { readCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
-import type { SyncDevicesResponse, SyncPurgeResponse, SyncPushResponse } from "./deviceSyncTypes";
+import type { SyncDevicesResponse, SyncPurgeResponse, SyncPushResponse, SyncResumeResponse } from "./deviceSyncTypes";
 
 const SYNC_EDGE_FUNCTION = "sync-activity";
 // Initial-backfill batches can be a few hundred KB; native HTTP (not WebView
@@ -18,23 +18,41 @@ type CloudSyncHttpResponse = {
 export class DeviceSyncHttpError extends Error {
   readonly status: number;
   readonly lockedReason: string | null;
+  readonly code: string | null;
+  readonly syncGeneration: number | null;
 
-  constructor(status: number, message: string, lockedReason: string | null = null) {
+  constructor(
+    status: number,
+    message: string,
+    lockedReason: string | null = null,
+    code: string | null = null,
+    syncGeneration: number | null = null,
+  ) {
     super(message);
     this.name = "DeviceSyncHttpError";
     this.status = status;
     this.lockedReason = lockedReason;
+    this.code = code;
+    this.syncGeneration = syncGeneration;
   }
 }
 
-async function postSyncAction<TResponse>(action: "push" | "purge" | "devices", extra: Record<string, unknown> = {}): Promise<TResponse> {
+async function postSyncAction<TResponse>(
+  action: "push" | "purge" | "devices" | "resume",
+  expectedAccountId: string,
+  extra: Record<string, unknown> = {},
+): Promise<TResponse> {
   if (!supabase) {
     throw new Error("Supabase is not configured.");
   }
   const { data } = await supabase.auth.getSession();
   const accessToken = data.session?.access_token;
+  const sessionAccountId = data.session?.user?.id;
   if (!accessToken) {
     throw new Error("Sign in to use device sync.");
+  }
+  if (!sessionAccountId || sessionAccountId !== expectedAccountId) {
+    throw new DeviceSyncHttpError(409, "The signed-in account changed during device sync.", null, "sync_account_changed");
   }
   const cloudDevice = await readCloudDevicePayload();
   if (!cloudDevice) {
@@ -48,7 +66,7 @@ async function postSyncAction<TResponse>(action: "push" | "purge" | "devices", e
       url: `${supabaseUrl}/functions/v1/${SYNC_EDGE_FUNCTION}`,
       bearerToken: accessToken,
       apikey: anonKey,
-      bodyJson: { action, cloudDevice, ...extra },
+      bodyJson: { ...extra, action, accountId: expectedAccountId, cloudDevice },
       timeoutMs: SYNC_HTTP_TIMEOUT_MS,
     },
   });
@@ -62,7 +80,11 @@ async function postSyncAction<TResponse>(action: "push" | "purge" | "devices", e
   if (response.status >= 400) {
     const message = typeof parsed.error === "string" ? parsed.error : `Device sync failed (HTTP ${response.status})`;
     const lockedReason = typeof parsed.lockedReason === "string" ? parsed.lockedReason : null;
-    throw new DeviceSyncHttpError(response.status, message, lockedReason);
+    const code = typeof parsed.code === "string" ? parsed.code : null;
+    const syncGeneration = typeof parsed.syncGeneration === "number" && Number.isSafeInteger(parsed.syncGeneration)
+      ? parsed.syncGeneration
+      : null;
+    throw new DeviceSyncHttpError(response.status, message, lockedReason, code, syncGeneration);
   }
   return parsed as TResponse;
 }
@@ -70,19 +92,36 @@ async function postSyncAction<TResponse>(action: "push" | "purge" | "devices", e
 export async function pushSyncBatch(
   segments: readonly SyncOutboxSegment[],
   deletions: readonly SyncDeletionRecord[],
+  syncGeneration: number | null,
+  expectedAccountId: string,
 ): Promise<SyncPushResponse> {
-  return postSyncAction<SyncPushResponse>("push", {
+  return postSyncAction<SyncPushResponse>("push", expectedAccountId, {
     segments,
     deletions,
+    ...(syncGeneration === null ? {} : { syncGeneration }),
   });
 }
 
-export async function purgeCloudSyncData(): Promise<SyncPurgeResponse> {
-  return postSyncAction<SyncPurgeResponse>("purge");
+export async function purgeCloudSyncData(
+  expectedAccountId: string,
+  expectedSyncGeneration: number,
+): Promise<SyncPurgeResponse> {
+  return postSyncAction<SyncPurgeResponse>("purge", expectedAccountId, {
+    expectedSyncGeneration,
+  });
 }
 
-export async function fetchSyncDevices(): Promise<SyncDevicesResponse> {
-  return postSyncAction<SyncDevicesResponse>("devices");
+export async function resumeCloudSyncData(
+  expectedAccountId: string,
+  expectedSyncGeneration: number,
+): Promise<SyncResumeResponse> {
+  return postSyncAction<SyncResumeResponse>("resume", expectedAccountId, {
+    expectedSyncGeneration,
+  });
+}
+
+export async function fetchSyncDevices(expectedAccountId: string): Promise<SyncDevicesResponse> {
+  return postSyncAction<SyncDevicesResponse>("devices", expectedAccountId);
 }
 
 export type SyncedSegmentsPage = {
@@ -194,6 +233,7 @@ type SyncedDeletionRow = {
 export async function fetchSyncedDeletionsPage(
   cursor: string | null,
   excludeDeviceId: string | null,
+  expectedAccountId: string,
   limit: number = SYNC_PULL_PAGE_LIMIT,
 ): Promise<SyncedDeletionsPage> {
   if (!supabase) {
@@ -202,6 +242,7 @@ export async function fetchSyncedDeletionsPage(
   let query = supabase
     .from("synced_deletions")
     .select("*")
+    .eq("user_id", expectedAccountId)
     .order("server_updated_at", { ascending: true })
     .order("deletion_uid", { ascending: true })
     .limit(limit);
@@ -243,6 +284,7 @@ export async function fetchSyncedDeletionsPage(
 export async function fetchSyncedSegmentsPage(
   cursor: string | null,
   excludeDeviceId: string | null,
+  expectedAccountId: string,
   limit: number = SYNC_PULL_PAGE_LIMIT,
 ): Promise<SyncedSegmentsPage> {
   if (!supabase) {
@@ -251,6 +293,7 @@ export async function fetchSyncedSegmentsPage(
   let query = supabase
     .from("synced_activity_segments")
     .select("*")
+    .eq("user_id", expectedAccountId)
     .order("server_updated_at", { ascending: true })
     .order("segment_uid", { ascending: true })
     .limit(limit);

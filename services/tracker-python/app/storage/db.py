@@ -460,6 +460,7 @@ class TrackerDatabase:
 
                 CREATE TABLE IF NOT EXISTS sync_deletions (
                   deletion_uid TEXT PRIMARY KEY,
+                  account_id TEXT,
                   kind TEXT NOT NULL CHECK (kind IN ('range', 'uids')),
                   range_start TEXT,
                   range_end TEXT,
@@ -581,6 +582,10 @@ class TrackerDatabase:
         for column, column_type in rule_optional_columns.items():
             if column not in rule_existing:
                 conn.execute(f"ALTER TABLE classification_rules ADD COLUMN {column} {column_type}")
+
+        sync_deletion_existing = {row["name"] for row in conn.execute("PRAGMA table_info(sync_deletions)")}
+        if "account_id" not in sync_deletion_existing:
+            conn.execute("ALTER TABLE sync_deletions ADD COLUMN account_id TEXT")
         conn.execute("UPDATE classification_rules SET match_scope = 'surface' WHERE match_scope IS NULL OR match_scope = ''")
         conn.execute("UPDATE classification_rules SET detail_kind = '' WHERE match_scope = 'surface'")
         conn.execute("UPDATE classification_rules SET normalized_detail_value = '' WHERE match_scope = 'surface'")
@@ -605,6 +610,12 @@ class TrackerDatabase:
         )
 
     def _ensure_sync_schema(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_sync_deletions_account_pending
+            ON sync_deletions(account_id, pushed, created_at)
+            """
+        )
         conn.execute(
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_activity_segments_segment_uid
@@ -1558,14 +1569,19 @@ class TrackerDatabase:
         range_end: str | None = None,
         segment_uids: list[str] | None = None,
     ) -> None:
+        account_row = conn.execute(
+            "SELECT value FROM tracker_meta WHERE key = 'sync_account_id'"
+        ).fetchone()
+        account_id = account_row["value"] if account_row and account_row["value"] else None
         conn.execute(
             """
             INSERT INTO sync_deletions (
-                deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?)
+                deletion_uid, account_id, kind, range_start, range_end, segment_uids_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(uuid.uuid4()),
+                account_id,
                 kind,
                 range_start,
                 range_end,
@@ -1938,7 +1954,16 @@ class TrackerDatabase:
             ).fetchall()
             counter_seq = int(conn.execute("SELECT seq FROM sync_counter WHERE id = 1").fetchone()["seq"])
             pending_deletions = int(
-                conn.execute("SELECT COUNT(*) AS count FROM sync_deletions WHERE pushed = 0").fetchone()["count"]
+                conn.execute(
+                    """
+                    SELECT COUNT(*) AS count
+                    FROM sync_deletions
+                    WHERE pushed = 0
+                      AND account_id = (
+                        SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
+                      )
+                    """
+                ).fetchone()["count"]
             )
         return {
             "state": {row["key"]: row["value"] for row in rows},
@@ -2100,6 +2125,9 @@ class TrackerDatabase:
                 SELECT deletion_uid, kind, range_start, range_end, segment_uids_json, created_at
                 FROM sync_deletions
                 WHERE pushed = 0
+                  AND account_id = (
+                    SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
+                  )
                 ORDER BY created_at ASC
                 LIMIT ?
                 """,
@@ -2124,7 +2152,14 @@ class TrackerDatabase:
         placeholders = ",".join("?" for _ in uids)
         with self.connect() as conn:
             cursor = conn.execute(
-                f"UPDATE sync_deletions SET pushed = 1 WHERE deletion_uid IN ({placeholders})",
+                f"""
+                UPDATE sync_deletions
+                SET pushed = 1
+                WHERE deletion_uid IN ({placeholders})
+                  AND account_id = (
+                    SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
+                  )
+                """,
                 tuple(uids),
             )
             return cursor.rowcount

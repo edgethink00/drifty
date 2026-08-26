@@ -451,7 +451,7 @@ describe("useFirstDayPreparation", () => {
   it("waits out the trial minute quota instead of exhausting all transient retries", async () => {
     vi.setSystemTime(new Date("2026-08-26T00:00:10.000Z"));
     const trialAccess = evaluateAiClassificationAccess(
-      { id: "trial-user", email: "trial@example.com" },
+      { id: "trial-user", email: "trial@example.com", isAnonymous: false },
       { status: "trialing", canUseApp: true },
     );
     if (trialAccess.kind !== "allowed") throw new Error("Expected the trial quota policy.");

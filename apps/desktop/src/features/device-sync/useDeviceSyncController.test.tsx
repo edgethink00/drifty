@@ -8,15 +8,40 @@ const engineMocks = vi.hoisted(() => ({
   runSyncCycle: vi.fn(),
 }));
 
-vi.mock("./deviceSyncEngine", () => ({ runSyncCycle: engineMocks.runSyncCycle }));
+vi.mock("./deviceSyncEngine", () => ({
+  runSyncCycle: engineMocks.runSyncCycle,
+  SYNC_DEVICE_ID_KEY: "sync.deviceId",
+  SYNC_GENERATION_KEY: "sync.generation",
+}));
 vi.mock("../../lib/api/previewData", () => ({ shouldUsePreviewData: () => false }));
-vi.mock("../../lib/api/trackerClient", () => ({ trackerClient: {} }));
+vi.mock("../../lib/api/trackerClient", () => ({
+  trackerClient: {
+    getSyncState: vi.fn(async () => ({ state: { "sync.generation": "1" } })),
+    setSyncState: vi.fn(async () => {}),
+    purgeRemoteSegments: vi.fn(async () => {}),
+  },
+}));
 vi.mock("./deviceSyncApi", () => ({
-  fetchSyncDevices: vi.fn(async () => ({ deviceId: null, devices: [] })),
+  DeviceSyncHttpError: class DeviceSyncHttpError extends Error {
+    readonly code: string | null = null;
+    readonly syncGeneration: number | null = null;
+  },
+  fetchSyncDevices: vi.fn(async () => ({ deviceId: "device-1", devices: [], syncStatus: "active", syncGeneration: 1 })),
   fetchSyncedDeletionsPage: vi.fn(),
   fetchSyncedSegmentsPage: vi.fn(),
   pushSyncBatch: vi.fn(),
 }));
+vi.mock("./deviceSyncAccountScope", () => ({
+  prepareDeviceSyncAccountScope: vi.fn(async () => {}),
+  suspendDeviceSyncAccountScope: vi.fn(),
+}));
+vi.mock("./deviceSyncPurgeState", () => ({
+  buildSyncStateAfterCloudPurge: vi.fn(() => ({})),
+}));
+vi.mock("./deviceSyncState", async (importOriginal) => {
+  const original = await importOriginal<Record<string, unknown>>();
+  return { ...original };
+});
 
 describe("useDeviceSyncController", () => {
   beforeEach(() => {
@@ -33,6 +58,7 @@ describe("useDeviceSyncController", () => {
     const { result } = renderHook(() => useDeviceSyncController({
       syncActive: true,
       userScopeKey: "user-1",
+      syncAccountId: "account-1",
     }));
     await waitFor(() => expect(engineMocks.runSyncCycle).toHaveBeenCalledTimes(1));
 

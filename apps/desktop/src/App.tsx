@@ -1,6 +1,6 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
@@ -70,7 +70,7 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIconDomain, type SiteIconMap } from "./features/app-icons/siteIconRequests";
 import { SiteIconProvider } from "./components/SiteIconContext";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, describeAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -213,7 +213,7 @@ import {
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
-import { purgeCloudSyncData } from "./features/device-sync/deviceSyncApi";
+import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
 import { resetAccountSyncIdentity } from "./features/device-sync/accountDeletionSyncReset";
 import {
   clearDeviceSyncCycleRecordsForUser,
@@ -225,11 +225,14 @@ import {
 import {
   SYNC_DELETION_PULL_CURSOR_KEY,
   SYNC_DEVICE_ID_KEY,
+  SYNC_GENERATION_KEY,
   SYNC_LAST_PULLED_AT_KEY,
   SYNC_LAST_PUSHED_AT_KEY,
   SYNC_PULL_CURSOR_KEY,
   SYNC_PUSH_SEQ_KEY,
 } from "./features/device-sync/deviceSyncEngine";
+import { buildSyncStateAfterCloudPurge } from "./features/device-sync/deviceSyncPurgeState";
+import { prepareDeviceSyncAccountScope, suspendDeviceSyncAccountScope } from "./features/device-sync/deviceSyncAccountScope";
 import { DeviceSyncPurgeConfirmation } from "./features/device-sync/DeviceSyncPurgeConfirmation";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
@@ -316,7 +319,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_ENABLED_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, resetDemoDashboardReplaySettings, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme } from "./features/settings/settingsStorage";
+import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
@@ -663,9 +666,11 @@ export default function App() {
   // Project classification (Projects tab + Intelligence analysis) shipped as a
   // default-on production surface — the Dev-mode preview gate is retired.
   const projectClassificationFeatureEnabled = true;
-  const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(resolveInitialDeviceSyncEnabled);
+  const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(false);
   const [deviceSyncAccountResetPending, setDeviceSyncAccountResetPending] = useState(hasPendingDeviceSyncAccountReset);
   const recoverPendingDeviceSyncAccountResetOnLaunchRef = useRef(deviceSyncAccountResetPending);
+  const [deviceSyncPreferenceOwnerId, setDeviceSyncPreferenceOwnerId] = useState<string | null>(null);
+  const deviceSyncToggleGenerationRef = useRef(0);
   const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
   // Dev-only gate for the web account preview: embed detail-share toggles on the Profile
@@ -1244,6 +1249,11 @@ export default function App() {
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
   } = useAuth();
+  const deviceSyncAccountId = authStatus === "authenticated" && hasRequiredAccountAuth && user?.id
+    ? user.id
+    : null;
+  const deviceSyncAccountIdRef = useRef(deviceSyncAccountId);
+  deviceSyncAccountIdRef.current = deviceSyncAccountId;
   const onboardingCompletedAt = readUserOnboardingState(user?.id ?? "local", ["local"])?.completedAt ?? null;
   const featureNewBadges = useFeatureNewBadges(onboardingCompletedAt, petModeEnabled);
   const authMetadataAvatarUrl = getAuthMetadataAvatarUrl(user);
@@ -1297,6 +1307,8 @@ export default function App() {
   const deviceSyncFeatureVisible = isDevModeActive && devDeviceSyncPreviewEnabled;
   const deviceSyncActive =
     deviceSyncFeatureVisible &&
+    deviceSyncAccountId !== null &&
+    deviceSyncPreferenceOwnerId === deviceSyncAccountId &&
     deviceSyncEnabled && !deviceSyncAccountResetPending
     && isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
   const deviceSyncUserScopeKey = user?.id ?? "anonymous";
@@ -1307,9 +1319,105 @@ export default function App() {
   deviceSyncRefreshRef.current = () => {
     void refresh(undefined, { foreground: false });
   };
+  useEffect(() => {
+    const identityGeneration = deviceSyncToggleGenerationRef.current + 1;
+    deviceSyncToggleGenerationRef.current = identityGeneration;
+    retireLegacyDeviceSyncEnabledPreference();
+    setDeviceSyncPreferenceOwnerId(null);
+    setDeviceSyncEnabled(false);
+    const syncTracker = trackerClient as unknown as Record<string, unknown>;
+    const hasAccountScopeCommands = [
+      "getSyncState",
+      "purgeRemoteSegments",
+      "setSyncState",
+    ].every((command) => typeof syncTracker[command] === "function");
+    if (!isTauri() || !hasAccountScopeCommands) return;
+    // Capture one coherent tracker surface for the async transition. Test and
+    // hot-reload harnesses may replace the shared client object between turns.
+    const accountScopeTracker = {
+      getSyncState: trackerClient.getSyncState.bind(trackerClient),
+      purgeRemoteSegments: trackerClient.purgeRemoteSegments.bind(trackerClient),
+      setSyncState: trackerClient.setSyncState.bind(trackerClient),
+    };
+
+    const accountId = deviceSyncAccountId;
+    const isCurrent = () => (
+      deviceSyncAccountIdRef.current === accountId
+      && deviceSyncToggleGenerationRef.current === identityGeneration
+    );
+    void (async () => {
+      try {
+        if (accountId) {
+          await prepareDeviceSyncAccountScope(accountScopeTracker, accountId, isCurrent);
+        } else {
+          await suspendDeviceSyncAccountScope(accountScopeTracker, isCurrent);
+        }
+        if (!isCurrent()) return;
+        setDeviceSyncPreferenceOwnerId(accountId);
+        setDeviceSyncEnabled(accountId ? resolveDeviceSyncEnabled(accountId) : false);
+        deviceSyncRefreshRef.current?.();
+      } catch (error) {
+        console.warn("Failed to prepare device sync account scope", error);
+        // Fail closed and retain the saved account preference for a later retry.
+        if (isCurrent()) setDeviceSyncPreferenceOwnerId(null);
+      }
+    })();
+  }, [deviceSyncAccountId]);
   const handleRemoteSegmentsApplied = useCallback(() => {
     deviceSyncRefreshRef.current?.();
   }, []);
+  const handleDeviceSyncAccountPaused = useCallback((syncGeneration: number | null) => {
+    deviceSyncToggleGenerationRef.current += 1;
+    setDeviceSyncEnabled(false);
+    if (syncGeneration !== null) {
+      void (async () => {
+        await trackerClient.setSyncState(buildSyncStateAfterCloudPurge(syncGeneration));
+        await trackerClient.purgeRemoteSegments();
+        deviceSyncRefreshRef.current?.();
+      })().catch((error) => {
+        console.warn("Failed to reconcile a paused device sync account", error);
+      });
+    }
+  }, []);
+  const handleDeviceSyncEnabledChange = useCallback(async (enabled: boolean) => {
+    const toggleGeneration = deviceSyncToggleGenerationRef.current + 1;
+    deviceSyncToggleGenerationRef.current = toggleGeneration;
+    if (!enabled) {
+      setDeviceSyncEnabled(false);
+      return;
+    }
+    if (!deviceSyncAccountId || deviceSyncPreferenceOwnerId !== deviceSyncAccountId) {
+      setDeviceSyncEnabled(false);
+      return;
+    }
+    try {
+      const isCurrent = () => (
+        deviceSyncAccountIdRef.current === deviceSyncAccountId
+        && deviceSyncToggleGenerationRef.current === toggleGeneration
+      );
+      await prepareDeviceSyncAccountScope(trackerClient, deviceSyncAccountId, isCurrent);
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      const accountState = await fetchSyncDevices(deviceSyncAccountId);
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      if (accountState.syncStatus === "paused") {
+        await trackerClient.setSyncState(buildSyncStateAfterCloudPurge(accountState.syncGeneration));
+        await trackerClient.purgeRemoteSegments();
+        deviceSyncRefreshRef.current?.();
+      }
+      // Invalidate any generation-bound pull before the server mutation. A
+      // stale response can no longer apply rows after a concurrent purge.
+      await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: null });
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      const resumed = await resumeCloudSyncData(deviceSyncAccountId, accountState.syncGeneration);
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: String(resumed.syncGeneration) });
+      if (deviceSyncToggleGenerationRef.current !== toggleGeneration) return;
+      setDeviceSyncEnabled(true);
+    } catch (error) {
+      console.warn("Failed to resume device sync", error);
+      if (deviceSyncToggleGenerationRef.current === toggleGeneration) setDeviceSyncEnabled(false);
+    }
+  }, [deviceSyncAccountId, deviceSyncPreferenceOwnerId]);
   const {
     status: deviceSyncStatus,
     deviceLabelById: syncDeviceLabelById,
@@ -1318,7 +1426,9 @@ export default function App() {
   } = useDeviceSyncController({
     syncActive: deviceSyncActive,
     userScopeKey: deviceSyncUserScopeKey,
+    syncAccountId: deviceSyncAccountId,
     onRemoteSegmentsApplied: handleRemoteSegmentsApplied,
+    onAccountSyncPaused: handleDeviceSyncAccountPaused,
   });
   // The filter row lists other devices only (the current device is implicit).
   const remoteDeviceLabelById = useMemo(() => {
@@ -1346,15 +1456,33 @@ export default function App() {
     setDeviceSyncPurgeConfirmOpen(false);
     setDeviceSyncPurging(true);
     try {
-      await purgeCloudSyncData();
+      if (!deviceSyncAccountId) throw new Error("Device sync requires a signed-in account.");
+      const purgeAccountId = deviceSyncAccountId;
+      const purgeOperationGeneration = deviceSyncToggleGenerationRef.current + 1;
+      deviceSyncToggleGenerationRef.current = purgeOperationGeneration;
+      setDeviceSyncEnabled(false);
+      const accountState = await fetchSyncDevices(purgeAccountId);
+      if (
+        deviceSyncAccountIdRef.current !== purgeAccountId
+        || deviceSyncToggleGenerationRef.current !== purgeOperationGeneration
+      ) return;
+      await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: null });
+      const purge = await purgeCloudSyncData(purgeAccountId, accountState.syncGeneration);
+      if (deviceSyncAccountIdRef.current !== purgeAccountId) return;
+      if (deviceSyncToggleGenerationRef.current !== purgeOperationGeneration) {
+        // The cloud deletion still happened. Reconcile its local copy even if
+        // a newer toggle now owns the visible enabled state.
+        await trackerClient.setSyncState(buildSyncStateAfterCloudPurge(purge.syncGeneration));
+        await trackerClient.purgeRemoteSegments();
+        deviceSyncRefreshRef.current?.();
+        return;
+      }
+      setDeviceSyncEnabled(false);
+      // Keep the push cursor: deleting the cloud copy must not become an
+      // implicit full-history re-upload. Explicit re-enable resumes only with
+      // activity recorded after the prior cursor.
+      await trackerClient.setSyncState(buildSyncStateAfterCloudPurge(purge.syncGeneration));
       await trackerClient.purgeRemoteSegments();
-      // Reset the cursors so re-enabling sync re-uploads this device's full
-      // history (the cloud copy was just deleted) and re-pulls from scratch.
-      await trackerClient.setSyncState({
-        sync_push_seq: "0",
-        sync_pull_cursor: null,
-        sync_deletion_pull_cursor: null,
-      });
       deviceSyncRefreshRef.current?.();
     } catch (error) {
       console.warn("Failed to purge device sync data", error);
@@ -1369,7 +1497,7 @@ export default function App() {
       // Write both fail-closed values synchronously before touching remote
       // state. React's persistence effect may not run before an app exit.
       markDeviceSyncAccountResetPending(deletedUserId);
-      window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, "0");
+      window.localStorage.setItem(LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, "0");
       setDeviceSyncEnabled(false);
       // A cycle that started before the toggle changed can still write the old
       // pacing record, device id, and cursors. Drain it before clearing either.
@@ -1412,7 +1540,7 @@ export default function App() {
   useEffect(() => {
     if (!recoverPendingDeviceSyncAccountResetOnLaunchRef.current) return;
     recoverPendingDeviceSyncAccountResetOnLaunchRef.current = false;
-    window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, "0");
+    window.localStorage.setItem(LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY, "0");
     setDeviceSyncEnabled(false);
     const pendingReset = readPendingDeviceSyncAccountReset();
     if (pendingReset?.userScopeKey) clearDeviceSyncCycleRecordsForUser(pendingReset.userScopeKey);
@@ -1589,6 +1717,7 @@ export default function App() {
       return current?.status === "error" ? null : current;
     });
     setCloudAiConnectionCheck(null);
+    clearCloudAiRequestBackoff();
     cloudAiConnectionGenerationRef.current += 1;
     previousAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
   }, [aiClassificationProviderKey]);
@@ -3522,8 +3651,9 @@ export default function App() {
 
 
   useEffect(() => {
-    window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, deviceSyncEnabled ? "1" : "0");
-  }, [deviceSyncEnabled]);
+    if (!deviceSyncAccountId || deviceSyncPreferenceOwnerId !== deviceSyncAccountId) return;
+    persistDeviceSyncEnabled(deviceSyncAccountId, deviceSyncEnabled);
+  }, [deviceSyncAccountId, deviceSyncEnabled, deviceSyncPreferenceOwnerId]);
 
   useEffect(() => {
     window.localStorage.setItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY, devDeviceSyncPreviewEnabled ? "1" : "0");
@@ -6658,7 +6788,7 @@ export default function App() {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
       const summary = localAiClassificationOptions
         ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
-        : await runAiClassification(toClassificationQueryForDay(selectedDay));
+        : await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, { bypassCloudRequestBackoff: true });
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary(summary);
@@ -6711,7 +6841,7 @@ export default function App() {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
       const summary = localAiClassificationOptions
         ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, localAiClassificationOptions)
-        : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay));
+        : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, { bypassCloudRequestBackoff: true });
       if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary({
@@ -7899,7 +8029,7 @@ export default function App() {
 	                    deviceSyncGateActive={deviceSyncActive}
 	                    deviceSyncStatus={deviceSyncStatus}
 	                    deviceSyncPurging={deviceSyncPurging}
-	                    onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? setDeviceSyncEnabled : undefined}
+	                    onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? handleDeviceSyncEnabledChange : undefined}
 	                    onDeviceSyncNow={deviceSyncNow}
 	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
 	                    onDeleteAccount={() => setAccountDeletionModalOpen(true)}

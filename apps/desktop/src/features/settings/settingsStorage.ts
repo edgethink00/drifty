@@ -19,7 +19,8 @@ export const DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY = "drifty.dashboard.breakdownO
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
-export const DEVICE_SYNC_ENABLED_STORAGE_KEY = "drifty.deviceSync.enabled";
+export const LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY = "drifty.deviceSync.enabled";
+const DEVICE_SYNC_ENABLED_STORAGE_PREFIX = "drifty.deviceSync.enabled.v2";
 export const DEVICE_SYNC_PREVIEW_STORAGE_KEY = "drifty.dev.deviceSyncPreview";
 export const WEB_ACCOUNT_PREVIEW_STORAGE_KEY = "drifty.dev.webAccountPreview";
 
@@ -409,9 +410,26 @@ export function resolveInitialDevModeEnabled(): boolean {
 // Off by default (explicit opt-in): device sync uploads raw activity segments to the
 // user's private cloud space, so each Mac must be enabled deliberately — never by a
 // build default or a remote flag.
-export function resolveInitialDeviceSyncEnabled(): boolean {
+export function getDeviceSyncEnabledStorageKey(userId: string): string {
+  const normalizedUserId = userId.trim();
+  if (!normalizedUserId) throw new Error("Device sync preference requires an account id.");
+  return `${DEVICE_SYNC_ENABLED_STORAGE_PREFIX}.${encodeURIComponent(normalizedUserId)}`;
+}
+
+export function resolveDeviceSyncEnabled(userId: string): boolean {
   if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(DEVICE_SYNC_ENABLED_STORAGE_KEY) === "1";
+  return window.localStorage.getItem(getDeviceSyncEnabledStorageKey(userId)) === "1";
+}
+
+export function persistDeviceSyncEnabled(userId: string, enabled: boolean): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY);
+  window.localStorage.setItem(getDeviceSyncEnabledStorageKey(userId), enabled ? "1" : "0");
+}
+
+export function retireLegacyDeviceSyncEnabledPreference(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY);
 }
 
 // Off by default (opt-in): the Dev-settings toggle is the sole gate for the device-sync
