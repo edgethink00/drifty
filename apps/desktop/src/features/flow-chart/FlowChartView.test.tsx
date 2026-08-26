@@ -167,6 +167,24 @@ describe("FlowChartView", () => {
     expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
   });
 
+  it("uses the actionless SettingsSelect row treatment", () => {
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Flow detail: 4 min · Balanced" }));
+
+    const options = screen.getAllByRole("option");
+    expect(options).toHaveLength(4);
+    for (const option of options) {
+      const optionRow = option.closest(".settings-select-control__option-row");
+      expect(optionRow).toBeTruthy();
+      expect(optionRow?.classList.contains("has-action")).toBe(false);
+    }
+
+    const selectedOption = screen.getByRole("option", { name: "4 min · Balanced" });
+    expect(selectedOption.classList.contains("is-selected")).toBe(true);
+    expect(selectedOption.querySelector(".settings-select-control__check")).toBeTruthy();
+  });
+
   it("supports keyboard-only Flow detail selection", () => {
     const onIntervalChange = vi.fn();
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
