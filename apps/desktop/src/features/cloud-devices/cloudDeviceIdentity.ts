@@ -1,5 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { CLOUD_API_CLIENT_VERSION } from "../../lib/cloudContract";
+import { BUILD_INFO } from "../../buildInfo";
 
 export type CloudDevicePayload = {
   readonly installId: string;
@@ -47,7 +47,10 @@ function toCloudDevicePayload(identity: NativeCloudDeviceIdentity): CloudDeviceP
     installId: identity.installId,
     label: identity.label || (identity.platform === "windows" ? "Windows PC" : "Mac"),
     platform: identity.platform,
-    appVersion: CLOUD_API_CLIENT_VERSION,
+    // The device row shows which build a person is actually running, so it must
+    // carry the real app version. CLOUD_API_CLIENT_VERSION is the frozen
+    // cloud-api-v1 compatibility floor and stays pinned for request metadata.
+    appVersion: BUILD_INFO.version,
   };
 }
 

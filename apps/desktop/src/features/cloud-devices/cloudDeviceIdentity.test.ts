@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { BUILD_INFO } from "../../buildInfo";
 import { CLOUD_API_CLIENT_VERSION } from "../../lib/cloudContract";
 
 type MockInvoke = (command: string) => Promise<unknown>;
@@ -33,7 +34,7 @@ describe("cloudDeviceIdentity", () => {
       installId: "11111111-1111-4111-8111-111111111111",
       label: "MacBook Pro (Apple M1 Pro)",
       platform: "macos",
-      appVersion: CLOUD_API_CLIENT_VERSION,
+      appVersion: BUILD_INFO.version,
     });
   });
 
@@ -51,7 +52,7 @@ describe("cloudDeviceIdentity", () => {
       installId: "33333333-3333-4333-8333-333333333333",
       label: "LG 16Z90Q (Intel Core i5)",
       platform: "windows",
-      appVersion: CLOUD_API_CLIENT_VERSION,
+      appVersion: BUILD_INFO.version,
     });
   });
 
@@ -72,7 +73,7 @@ describe("cloudDeviceIdentity", () => {
       installId: "22222222-2222-4222-8222-222222222222",
       label: "Mac",
       platform: "macos",
-      appVersion: CLOUD_API_CLIENT_VERSION,
+      appVersion: BUILD_INFO.version,
     });
   });
 
@@ -84,5 +85,24 @@ describe("cloudDeviceIdentity", () => {
 
     expect(tauriCoreMock.invoke).not.toHaveBeenCalled();
     expect(payload).toBeNull();
+  });
+
+  it("reports the running build version, not the frozen cloud contract floor", async () => {
+    tauriCoreMock.isTauri.mockReturnValue(true);
+    tauriCoreMock.invoke.mockResolvedValue({
+      installId: "44444444-4444-4444-8444-444444444444",
+      label: "MacBook Air (Apple M2)",
+      platform: "macos",
+    });
+
+    const { readCloudDevicePayload } = await import("./cloudDeviceIdentity");
+    const payload = await readCloudDevicePayload();
+
+    // Cloud device rows drive the Account settings version label and the only
+    // server-side view of which build each install is running. Pinning them to
+    // CLOUD_API_CLIENT_VERSION made every device report the same frozen value,
+    // which hid real rollout state.
+    expect(payload?.appVersion).toBe(BUILD_INFO.version);
+    expect(payload?.appVersion).not.toBe(CLOUD_API_CLIENT_VERSION);
   });
 });
