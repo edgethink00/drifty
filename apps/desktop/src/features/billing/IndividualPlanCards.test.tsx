@@ -27,17 +27,18 @@ describe("IndividualPlanCards", () => {
     expect(within(freePlan).getAllByText("Current plan").length).toBeGreaterThan(0);
     expect(within(freePlan).getByText(/Local classification/)).toBeTruthy();
     expect(within(freePlan).getAllByText(/API key/).length).toBeGreaterThan(0);
-    expect(within(freePlan).getAllByText(/Self-hosted local AI/).length).toBeGreaterThan(0);
+    expect(within(freePlan).getAllByText(/On-device AI classification/).length).toBeGreaterThan(0);
     expect(within(freePlan).queryByText(/^Local-first$/i)).toBeNull();
 
     expect(within(proPlan).getByText("Pro")).toBeTruthy();
     expect(within(proPlan).getByText("$5")).toBeTruthy();
     expect(within(proPlan).getByText("/ month")).toBeTruthy();
     expect(within(proPlan).getByText("Recommended")).toBeTruthy();
-    expect(within(proPlan).getByText(/Automatic AI classification while tracking stays local-first/i)).toBeTruthy();
+    expect(within(proPlan).getByText(/A stronger model, hosted by us/i)).toBeTruthy();
     expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
-    expect(within(proPlan).getByText("No API keys or models to manage")).toBeTruthy();
-    expect(within(proPlan).getByText("Cloud AI classification on up to 2 Macs")).toBeTruthy();
+    expect(within(proPlan).getByText("No downloads, API keys, or models to manage")).toBeTruthy();
+    expect(within(proPlan).getByText(/Cloud AI classification on up to 2 Macs/)).toBeTruthy();
+    expect(within(proPlan).getByText(/7-day free trial/)).toBeTruthy();
     // Device management lives in the Account rows below, not as a plan benefit.
     expect(within(proPlan).queryByText(/Manage old devices/i)).toBeNull();
     expect(within(proPlan).getByText("Upgrade to Pro")).toBeTruthy();

@@ -29,17 +29,17 @@ const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, IndividualPri
 };
 
 const FREE_PLAN_FEATURES = [
-  "Local classification and predefined rules",
-  "OpenRouter API key supported",
-  "Self-hosted local AI endpoint supported",
-  "No drifty Cloud billing required",
+  "Automatic tracking, timeline, and daily review",
+  "On-device AI classification, no account needed",
+  "Local classification and predefined rules you control",
+  "Bring your own API key or endpoint if you prefer",
 ] as const;
 
 const INDIVIDUAL_PLAN_FEATURES = [
   "Includes all Free plan features",
-  "No API keys or models to manage",
-  "Richer focus and drift summaries",
-  "Cloud AI classification on up to 2 Macs",
+  "Stronger than the on-device model, hosted by drifty",
+  "No downloads, API keys, or models to manage",
+  "Cloud AI classification on up to 2 Macs · 7-day free trial",
 ] as const;
 
 function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
@@ -106,7 +106,7 @@ export function IndividualPlanCards({
           <small className="individual-plan-card__badge">{individualBadgeLabel}</small>
         </span>
         <span className="individual-plan-card__note">
-          {loadingInterval === selectedInterval ? "Opening checkout..." : "Automatic AI classification while tracking stays local-first."}
+          {loadingInterval === selectedInterval ? "Opening checkout..." : "A stronger model, hosted by us — sharper focus and drift analysis, nothing to run."}
         </span>
         <span className="individual-plan-card__price-row">
           <span className="individual-plan-card__price-stack">
@@ -180,7 +180,7 @@ export function IndividualPlanCards({
             <span className="individual-plan-card__topline">
               <span>Free</span>
             </span>
-            <span className="individual-plan-card__note">Use drifty locally with rule-based classification and your own optional AI setup.</span>
+            <span className="individual-plan-card__note">Automatic tracking with AI classification that runs entirely on your Mac.</span>
             <span className="individual-plan-card__price-row">
               <span className="individual-plan-card__price-stack">
                 <span className="individual-plan-card__price-line">
