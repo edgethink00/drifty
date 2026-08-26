@@ -458,6 +458,11 @@ describe("useFirstDayPreparation", () => {
     let classifiedSegments = 0;
     let quotaMinute = -1;
     let callsInQuotaMinute = 0;
+    // Preparation issues three passes, so squeeze the burst allowance below that
+    // to exercise the wait. Binding to the live policy number instead would make
+    // this test silently stop covering the retry path whenever the burst is
+    // raised above the pass count.
+    const burstAllowanceUnderTest = 2;
     const callTimes: number[] = [];
     const runAiClassification = vi.fn(async (): Promise<AiClassificationSummary> => {
       const now = Date.now();
@@ -468,7 +473,7 @@ describe("useFirstDayPreparation", () => {
       }
       callsInQuotaMinute += 1;
       callTimes.push(now);
-      if (callsInQuotaMinute > trialAccess.policy.minuteLlmRequestLimit) {
+      if (callsInQuotaMinute > burstAllowanceUnderTest) {
         throw new Error("Minute AI classification quota exceeded. Please wait before trying again.");
       }
       classifiedSegments += 5;
