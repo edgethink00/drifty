@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type FormEvent,
@@ -107,6 +108,8 @@ export function useOnboardingFlow({
   const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? "welcome");
   const [storageError, setStorageError] = useState<string | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
+  const completionInFlightRef = useRef(false);
+  const [isCompleting, setIsCompleting] = useState(false);
 
   const { screenRef, stepBodyRef, titleRef } = useOnboardingModalA11y(step);
   const connection = useOnboardingConnectionFlow({
@@ -243,44 +246,57 @@ export function useOnboardingFlow({
   ]);
 
   async function completeOnboarding() {
-    let didComplete = false;
-    await completeOnboardingAction({
-      cloudTrialStartedNoticePresent: Boolean(cloudTrialStartedNotice),
-      displayName,
-      driftAlarmEnabled,
-      extremeNudgeEnabled,
-      petModeEnabled,
-      browserHistoryBootstrapEnabled,
-      jobType,
-      jobTypeOther,
-      mainActivities,
-      mainActivityOther,
-      onAcknowledgeCloudTrialStartedNotice,
-      onComplete: (state) => {
-        didComplete = true;
-        onComplete(state);
-      },
-      onStartTracking,
-      openAtLoginEnabled,
-      setSetupError,
-      setStorageError,
-      setupChoice: connection.setupChoice,
-      userId,
-      workDescription,
-      workType,
-      workTypeOther,
-    });
-    if (didComplete) {
-      clearOnboardingProgress(userId);
-      capturePostHogEvent("onboarding_completed", {
-        ...(connection.setupChoice ? { setup_choice: connection.setupChoice } : {}),
-        accessibility_granted: permissions.accessibilityGranted,
-        notifications_granted: permissions.notificationPermission === "granted",
-        account_connected: accountConnected,
-        drift_alarm_enabled: driftAlarmEnabled,
-        extreme_nudge_enabled: extremeNudgeEnabled,
-        pet_enabled: petModeEnabled,
+    if (completionInFlightRef.current) return;
+
+    completionInFlightRef.current = true;
+    setIsCompleting(true);
+    let committedState: UserOnboardingState | null = null;
+    try {
+      await completeOnboardingAction({
+        cloudTrialStartedNoticePresent: Boolean(cloudTrialStartedNotice),
+        displayName,
+        driftAlarmEnabled,
+        extremeNudgeEnabled,
+        petModeEnabled,
+        browserHistoryBootstrapEnabled,
+        jobType,
+        jobTypeOther,
+        mainActivities,
+        mainActivityOther,
+        onAcknowledgeCloudTrialStartedNotice,
+        onCommitted: (state) => {
+          committedState = state;
+        },
+        onComplete,
+        onStartTracking,
+        openAtLoginEnabled,
+        setSetupError,
+        setStorageError,
+        setupChoice: connection.setupChoice,
+        userId,
+        workDescription,
+        workType,
+        workTypeOther,
       });
+    } catch (error) {
+      if (!committedState) throw error;
+      console.error("Onboarding presentation failed after local completion was saved.", error);
+    } finally {
+      if (committedState) {
+        clearOnboardingProgress(userId);
+        capturePostHogEvent("onboarding_completed", {
+          ...(connection.setupChoice ? { setup_choice: connection.setupChoice } : {}),
+          accessibility_granted: permissions.accessibilityGranted,
+          notifications_granted: permissions.notificationPermission === "granted",
+          account_connected: accountConnected,
+          drift_alarm_enabled: driftAlarmEnabled,
+          extreme_nudge_enabled: extremeNudgeEnabled,
+          pet_enabled: petModeEnabled,
+        });
+      } else {
+        completionInFlightRef.current = false;
+        setIsCompleting(false);
+      }
     }
   }
 
@@ -333,6 +349,7 @@ export function useOnboardingFlow({
     extremeNudgeEnabled,
     petModeEnabled,
     footerLabel,
+    isCompleting,
     goToPreviousStep,
     handleSubmit,
     mainActivities,

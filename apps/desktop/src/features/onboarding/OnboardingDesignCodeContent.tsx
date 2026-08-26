@@ -39,7 +39,9 @@ export function OnboardingDesignCodeContent({
   const showFooter = flow.step !== "account";
   const showDots = flow.step !== "welcome" && flow.step !== "account";
   const showBack = flow.stepIndex > 0;
-  const footerLabel = flow.footerLabel;
+  const footerLabel = flow.isCompleting
+    ? t("onboarding.action.finishing")
+    : flow.footerLabel;
   const selectedActivities = flow.mainActivities;
 
   const advancedVisible = advancedOpen || flow.isUserManagedProviderSetup;
@@ -84,7 +86,11 @@ export function OnboardingDesignCodeContent({
 
   return (
     <>
-      <form className="onboarding-card dc-onb-card" onSubmit={flow.handleSubmit}>
+      <form
+        className="onboarding-card dc-onb-card"
+        onSubmit={flow.handleSubmit}
+        aria-busy={flow.isCompleting}
+      >
         <div className="dc-onb-scroll">
           <div className={contentClassName}>
             {showTitle ? (
@@ -160,7 +166,12 @@ export function OnboardingDesignCodeContent({
         {showFooter ? (
           <div className="onb-actions dc-onb-actions">
             {showBack ? (
-              <button type="button" className="onb-actions__back dc-onb-back" onClick={flow.goToPreviousStep}>
+              <button
+                type="button"
+                className="onb-actions__back dc-onb-back"
+                onClick={flow.goToPreviousStep}
+                disabled={flow.isCompleting}
+              >
                 {t("common.back")}
               </button>
             ) : null}
@@ -176,7 +187,11 @@ export function OnboardingDesignCodeContent({
             ) : null}
             <span className="dc-onb-actions-spacer" />
             {flow.step === "permissions" && flow.blockedHint ? <p className="dc-onb-hint">{flow.blockedHint}</p> : null}
-            <button type="submit" className="onb-button onb-button--primary dc-onb-primary" disabled={!flow.canAdvance}>
+            <button
+              type="submit"
+              className="onb-button onb-button--primary dc-onb-primary"
+              disabled={!flow.canAdvance || flow.isCompleting}
+            >
               {footerLabel}
             </button>
           </div>

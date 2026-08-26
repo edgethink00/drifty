@@ -5,18 +5,20 @@ export const TRIAL_DAYS = 7;
 type ToggleButtonProps = {
   readonly label: string;
   readonly on: boolean;
+  readonly disabled?: boolean;
   readonly tone?: "default" | "extreme";
   readonly compact?: boolean;
   readonly onClick: () => void;
 };
 
-export function ToggleButton({ compact = false, label, on, onClick, tone = "default" }: ToggleButtonProps) {
+export function ToggleButton({ compact = false, disabled = false, label, on, onClick, tone = "default" }: ToggleButtonProps) {
   const { t } = useLocalization();
   return (
     <button
       type="button"
       className={`dc-onb-toggle${compact ? " dc-onb-toggle--compact" : ""}`}
       onClick={onClick}
+      disabled={disabled}
       aria-label={label}
       aria-pressed={on}
     >

@@ -1126,6 +1126,11 @@
   cursor: pointer;
 }
 
+.dc-onb-toggle:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
 .dc-onb-toggle__track {
   position: relative;
   display: inline-block;
@@ -1653,6 +1658,11 @@
 .dc-onb-card .onb-browser-history-preference {
   margin-top: 8px;
   color: var(--dc-onb-text);
+}
+
+.dc-onb-card .onb-browser-history-preference:has(.onb-browser-history-preference__input:disabled) {
+  cursor: default;
+  opacity: 0.58;
 }
 
 .dc-onb-card .onb-browser-history-preference__title {

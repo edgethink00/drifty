@@ -33,6 +33,8 @@ const {
   trackerGetBrowserHistoryEnvironment,
   openSystemSettingsPane,
   openFullDiskAccessSettingsPane,
+  capturePostHogEvent,
+  browserHistoryBootstrapReset,
   billingMocks,
   appFeatureSwitches,
   startupSettingsClient,
@@ -80,6 +82,8 @@ const {
   trackerGetBrowserHistoryEnvironment: vi.fn(),
   openSystemSettingsPane: vi.fn(),
   openFullDiskAccessSettingsPane: vi.fn(),
+  capturePostHogEvent: vi.fn(),
+  browserHistoryBootstrapReset: vi.fn(),
   billingMocks: {
     fetchBillingEntitlement: vi.fn().mockResolvedValue({ success: true, data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null } }),
     createIndividualCheckout: vi.fn().mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } }),
@@ -138,6 +142,29 @@ vi.mock("./lib/api/systemSettingsClient", () => ({
 vi.mock("./lib/api/startupSettingsClient", () => ({
   startupSettingsClient,
 }));
+
+vi.mock("./lib/analytics/posthogClient", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./lib/analytics/posthogClient")>(),
+  capturePostHogEvent,
+}));
+
+vi.mock("./features/dashboard/useBrowserHistoryBootstrap", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./features/dashboard/useBrowserHistoryBootstrap")>();
+
+  return {
+    ...actual,
+    useBrowserHistoryBootstrap: (...args: Parameters<typeof actual.useBrowserHistoryBootstrap>) => {
+      const result = actual.useBrowserHistoryBootstrap(...args);
+      return {
+        ...result,
+        reset: () => {
+          browserHistoryBootstrapReset();
+          result.reset();
+        },
+      };
+    },
+  };
+});
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
@@ -960,6 +987,177 @@ describe("App onboarding", () => {
     expect(storedRecord.driftThresholdMinutes).toBeNull();
     expect(typeof storedRecord.completedAt).toBe("string");
     expect(saveOwnProfile).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it("submits final onboarding only once while tracker startup is pending", async () => {
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const startButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+    const readyForm = startButton.closest("form");
+    const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
+    const pendingTrackerStart = createDeferred<TrackerStatus>();
+    trackerStart.mockReturnValue(pendingTrackerStart.promise);
+
+    fireEvent.click(startButton);
+    expect(startButton.disabled).toBe(true);
+    expect(startButton.textContent).toMatch(/finishing/i);
+    expect((within(readyDialog).getByRole("button", { name: /start drifty at login/i }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(readyDialog).getByRole("checkbox", { name: /import from browser history/i }) as HTMLInputElement).disabled).toBe(true);
+
+    if (!readyForm) throw new Error("Expected final onboarding button to belong to the onboarding form.");
+    fireEvent.submit(readyForm);
+    expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
+
+    await act(async () => {
+      pendingTrackerStart.resolve(makeTrackerStatus());
+      await pendingTrackerStart.promise;
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    });
+    expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
+  }, 15_000);
+
+  it("allows final onboarding to be retried after tracker startup fails", async () => {
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
+    trackerStart.mockRejectedValueOnce(new Error("Tracker start failed"));
+
+    fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+    expect((await within(readyDialog).findByRole("alert")).textContent).toContain("Tracker start failed");
+    const retryButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+    expect(retryButton.disabled).toBe(false);
+    expect((within(readyDialog).getByRole("button", { name: /^back$/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((within(readyDialog).getByRole("button", { name: /start drifty at login/i }) as HTMLButtonElement).disabled).toBe(false);
+    expect((within(readyDialog).getByRole("checkbox", { name: /import from browser history/i }) as HTMLInputElement).disabled).toBe(false);
+    expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
+
+    trackerStart.mockResolvedValue(makeTrackerStatus());
+    fireEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    });
+    expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 2);
+    expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
+  }, 15_000);
+
+  it("locks before the start-at-login request and ignores a second final submit", async () => {
+    startupSettingsClient.isAvailable.mockReturnValue(true);
+    const pendingStartupSetting = createDeferred<{
+      success: boolean;
+      enabled: boolean;
+      status: string;
+      backend: string;
+    }>();
+    startupSettingsClient.setOpenAtLoginEnabled.mockReturnValue(pendingStartupSetting.promise);
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const startButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+    const readyForm = startButton.closest("form");
+    const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
+
+    fireEvent.click(startButton);
+    if (!readyForm) throw new Error("Expected final onboarding button to belong to the onboarding form.");
+    fireEvent.submit(readyForm);
+
+    expect(startupSettingsClient.setOpenAtLoginEnabled).toHaveBeenCalledTimes(1);
+    expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion);
+    expect(startButton.disabled).toBe(true);
+
+    await act(async () => {
+      pendingStartupSetting.resolve({
+        success: true,
+        enabled: true,
+        status: "enabled",
+        backend: "smAppService",
+      });
+      await pendingStartupSetting.promise;
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+    });
+    expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
+    expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
+  }, 15_000);
+
+  it("unlocks every final control after local completion storage fails and then retries", async () => {
+    render(<App />);
+
+    await advanceToReadyStep({ activity: "Coding" });
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+    const completionStorageKey = getUserOnboardingStorageKey("user-1");
+    const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation((key, value) => {
+      if (key === completionStorageKey) throw new DOMException("Storage quota exceeded", "QuotaExceededError");
+      originalSetItem(key, value);
+    });
+    const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
+
+    try {
+      fireEvent.click(within(readyDialog).getByRole("button", { name: /start tracking/i }));
+
+      expect((await within(readyDialog).findByRole("alert")).textContent).toContain("Unable to save setup locally");
+      const retryButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+      expect(retryButton.disabled).toBe(false);
+      expect((within(readyDialog).getByRole("button", { name: /^back$/i }) as HTMLButtonElement).disabled).toBe(false);
+      expect((within(readyDialog).getByRole("button", { name: /start drifty at login/i }) as HTMLButtonElement).disabled).toBe(false);
+      expect((within(readyDialog).getByRole("checkbox", { name: /import from browser history/i }) as HTMLInputElement).disabled).toBe(false);
+      expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
+      expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(0);
+
+      setItemSpy.mockRestore();
+      fireEvent.click(retryButton);
+
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
+      });
+      expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 2);
+      expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
+    } finally {
+      setItemSpy.mockRestore();
+    }
+  }, 15_000);
+
+  it("keeps completion terminal when presentation fails after local persistence", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    browserHistoryBootstrapReset.mockImplementationOnce(() => {
+      throw new Error("Presentation update failed");
+    });
+
+    try {
+      render(<App />);
+      await advanceToReadyStep({ activity: "Coding" });
+      const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i });
+      const startButton = within(readyDialog).getByRole("button", { name: /start tracking/i }) as HTMLButtonElement;
+      const readyForm = startButton.closest("form");
+      const trackerStartsBeforeCompletion = trackerStart.mock.calls.length;
+
+      fireEvent.click(startButton);
+      await waitFor(() => {
+        expect(window.localStorage.getItem(getUserOnboardingStorageKey("user-1"))).toBeTruthy();
+      });
+      expect(startButton.disabled).toBe(true);
+      if (!readyForm) throw new Error("Expected final onboarding button to belong to the onboarding form.");
+      fireEvent.submit(readyForm);
+
+      expect(trackerStart).toHaveBeenCalledTimes(trackerStartsBeforeCompletion + 1);
+      expect(capturePostHogEvent.mock.calls.filter(([event]) => event === "onboarding_completed")).toHaveLength(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        "Onboarding presentation failed after local completion was saved.",
+        expect.any(Error),
+      );
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   }, 15_000);
 
   it("shows the free trial started notice inside Cloud onboarding", async () => {

@@ -1,10 +1,12 @@
 type BrowserHistoryBootstrapPreferenceProps = {
   readonly enabled: boolean;
+  readonly disabled?: boolean;
   readonly onChange: (enabled: boolean) => void;
 };
 
 export function BrowserHistoryBootstrapPreference({
   enabled,
+  disabled = false,
   onChange,
 }: BrowserHistoryBootstrapPreferenceProps) {
   const { t } = useLocalization();
@@ -17,6 +19,7 @@ export function BrowserHistoryBootstrapPreference({
         type="checkbox"
         className="onb-browser-history-preference__input"
         checked={enabled}
+        disabled={disabled}
         onChange={(event) => onChange(event.currentTarget.checked)}
       />
       <span

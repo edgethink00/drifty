@@ -31,11 +31,13 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
           label={t("onboarding.ready.startAtLogin")}
           on={flow.openAtLoginEnabled}
           compact
+          disabled={flow.isCompleting}
           onClick={() => flow.setOpenAtLoginEnabled((current) => !current)}
         />
       </div>
       <BrowserHistoryBootstrapPreference
         enabled={flow.browserHistoryBootstrapEnabled}
+        disabled={flow.isCompleting}
         onChange={flow.setBrowserHistoryBootstrapEnabled}
       />
       <p className="dc-onb-muted-note dc-onb-muted-note--ready">{t("onboarding.ready.pauseNote")}</p>

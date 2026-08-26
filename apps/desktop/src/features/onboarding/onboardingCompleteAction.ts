@@ -16,6 +16,7 @@ type CompleteOnboardingInput = {
   readonly mainActivities: readonly string[];
   readonly mainActivityOther: string;
   readonly onAcknowledgeCloudTrialStartedNotice: () => void;
+  readonly onCommitted: (state: UserOnboardingState) => void;
   readonly onComplete: (state: UserOnboardingState) => void;
   readonly onStartTracking: () => Promise<void>;
   readonly openAtLoginEnabled: boolean;
@@ -40,6 +41,7 @@ export async function completeOnboardingAction({
   mainActivities,
   mainActivityOther,
   onAcknowledgeCloudTrialStartedNotice,
+  onCommitted,
   onComplete,
   onStartTracking,
   openAtLoginEnabled,
@@ -97,6 +99,10 @@ export async function completeOnboardingAction({
     setStorageError(result.error);
     return;
   }
+  // Local persistence is the terminal completion boundary. Notify the caller
+  // before presentation-only follow-up so an unexpected downstream exception
+  // can never make the completed onboarding retryable.
+  onCommitted(result.state);
   void synchronizeLivingSoulDeclaredContextForUser(userId, result.state).catch((error) => {
     console.warn("Unable to initialize Living Soul after onboarding.", error);
   });
