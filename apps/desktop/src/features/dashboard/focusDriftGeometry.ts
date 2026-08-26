@@ -1,6 +1,6 @@
 import type { FocusDriftPoint } from "./focusDriftChart";
 
-type FocusDriftPathPoint = {
+export type FocusDriftPathPoint = {
   readonly x: number;
   readonly y: number;
 };
@@ -74,6 +74,45 @@ export function buildSmoothPath(points: readonly FocusDriftPoint[], yKey: "focus
   return pathParts.join(" ");
 }
 
+/** Returns the exact point on the cubic spline that buildSmoothPath renders
+ *  at x. Interior source points are smoothing controls, not necessarily points
+ *  on the visible curve, so hover markers must use this instead of a raw
+ *  FocusDriftPoint y coordinate. */
+export function getSmoothPathPointAtX(
+  points: readonly FocusDriftPoint[],
+  yKey: "focusY" | "driftY",
+  x: number,
+): FocusDriftPathPoint | null {
+  const pathPoints = points.map((point) => ({
+    x: clampFocusDriftChartX(point.x),
+    y: clampFocusDriftChartY(point[yKey]),
+  }));
+  const firstPoint = pathPoints[0];
+  const lastPoint = pathPoints[pathPoints.length - 1];
+  if (!firstPoint || !lastPoint) return null;
+  if (pathPoints.length === 1) return firstPoint;
+
+  const targetX = Math.min(Math.max(x, firstPoint.x), lastPoint.x);
+  const basisPoints = padBasisSplineEndpoints(pathPoints);
+  let segmentStart = firstPoint;
+
+  for (let index = 0; index <= basisPoints.length - 4; index += 1) {
+    const basisWindow = basisWindowAt(basisPoints, index);
+    if (!basisWindow) continue;
+    const segment = basisBezierSegment(basisWindow);
+    const isLastSegment = index === basisPoints.length - 4;
+
+    if (targetX <= segment.end.x || isLastSegment) {
+      const t = solveCubicBezierTForX(segmentStart, segment, targetX);
+      return cubicBezierPointAt(segmentStart, segment, t);
+    }
+
+    segmentStart = segment.end;
+  }
+
+  return lastPoint;
+}
+
 function padBasisSplineEndpoints(points: readonly FocusDriftPathPoint[]): readonly FocusDriftPathPoint[] {
   const firstPoint = points[0];
   const lastPoint = points[points.length - 1];
@@ -102,6 +141,44 @@ function basisControlPoint(near: FocusDriftPathPoint, far: FocusDriftPathPoint):
   return {
     x: (2 * near.x + far.x) / 3,
     y: (2 * near.y + far.y) / 3,
+  };
+}
+
+function solveCubicBezierTForX(
+  start: FocusDriftPathPoint,
+  segment: FocusDriftBezierSegment,
+  targetX: number,
+): number {
+  let lower = 0;
+  let upper = 1;
+
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    const midpoint = (lower + upper) / 2;
+    if (cubicBezierPointAt(start, segment, midpoint).x < targetX) {
+      lower = midpoint;
+    } else {
+      upper = midpoint;
+    }
+  }
+
+  return (lower + upper) / 2;
+}
+
+function cubicBezierPointAt(
+  start: FocusDriftPathPoint,
+  segment: FocusDriftBezierSegment,
+  t: number,
+): FocusDriftPathPoint {
+  const inverseT = 1 - t;
+  return {
+    x: inverseT ** 3 * start.x
+      + 3 * inverseT ** 2 * t * segment.controlStart.x
+      + 3 * inverseT * t ** 2 * segment.controlEnd.x
+      + t ** 3 * segment.end.x,
+    y: inverseT ** 3 * start.y
+      + 3 * inverseT ** 2 * t * segment.controlStart.y
+      + 3 * inverseT * t ** 2 * segment.controlEnd.y
+      + t ** 3 * segment.end.y,
   };
 }
 

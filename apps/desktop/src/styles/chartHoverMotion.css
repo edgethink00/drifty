@@ -21,22 +21,13 @@
   opacity: 0.94;
 }
 
-.focus-drift__target {
-  transition: fill 180ms var(--ease-out-quart), stroke 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart), filter 180ms var(--ease-out-quart);
+.focus-drift__hover-dot {
+  animation: focus-drift-hover-dot-in 100ms var(--ease-out-quart) both;
 }
 
-.focus-drift__target--focus:hover,
-.focus-drift__target--focus:focus {
-  stroke-width: 0.68;
-  filter: drop-shadow(0 0 0.42rem color-mix(in srgb, var(--productivity-focus) 34%, transparent));
+@keyframes focus-drift-hover-dot-in {
+  from { opacity: 0; }
 }
-
-.focus-drift__target--drift:hover,
-.focus-drift__target--drift:focus {
-  stroke-width: 0.68;
-  filter: drop-shadow(0 0 0.42rem color-mix(in srgb, var(--productivity-drift) 34%, transparent));
-}
-
 .flow-compact-productivity-circle__segment {
   transition: filter 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart), opacity 180ms var(--ease-out-quart);
 }
@@ -165,7 +156,7 @@ button.flow-cell:focus {
 @media (prefers-reduced-motion: reduce) {
   .bar-fill,
   .focus-drift__line,
-  .focus-drift__target,
+  .focus-drift__hover-dot,
   .flow-compact-productivity-circle__segment,
   .eodr-dial__segment,
   .flow-compact-split-chart__segment,
@@ -186,5 +177,11 @@ button.flow-cell:focus {
 
   .flow-compact-productivity-circle__segment {
     transform: rotate(-90deg) !important;
+  }
+
+  /* The blanket transform:none above would drop the dot's translate(-50%)
+     centering, so keep the centering and only kill the motion. */
+  .focus-drift__hover-dot {
+    transform: translate(-50%, -50%) !important;
   }
 }

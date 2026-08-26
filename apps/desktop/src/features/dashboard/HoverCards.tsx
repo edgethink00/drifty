@@ -23,6 +23,8 @@ export type FocusDriftHoverKind = "focus" | "drift";
 export type FocusDriftHoverState = {
   point: FocusDriftPoint;
   kind: FocusDriftHoverKind;
+  markerX: number;
+  markerY: number;
   x: number;
   y: number;
 };

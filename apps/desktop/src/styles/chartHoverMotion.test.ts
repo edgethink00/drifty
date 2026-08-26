@@ -58,20 +58,32 @@ describe("chart hover motion", () => {
     expect(barHoverRule).toContain("transform: scaleY(1.35);");
   });
 
-  it("gives focus-drift line and SVG targets hover and keyboard focus emphasis", () => {
+  it("keeps focus-drift hover feedback to a quiet snapped HTML dot", () => {
     const lineRule = cssRule(motionStyles, ".focus-drift__line");
     const lineHoverRule = cssRule(motionStyles, ".focus-drift:has(.focus-drift-hover-card) .focus-drift__line");
-    const targetRule = cssRule(motionStyles, ".focus-drift__target");
-    const focusHoverRule = motionStyles.match(/\.focus-drift__target--focus:hover,\s*\.focus-drift__target--focus:focus\s*\{([\s\S]*?)\}/)?.[1] ?? "";
-    const driftHoverRule = motionStyles.match(/\.focus-drift__target--drift:hover,\s*\.focus-drift__target--drift:focus\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const dotRule = motionStyles.match(/\.focus-drift__hover-dot\s*\{([\s\S]*?)\}/)?.[1] ?? "";
+    const dotKeyframes = motionStyles.match(/@keyframes focus-drift-hover-dot-in\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
 
     expect(lineRule).toContain("transition: filter 180ms var(--ease-out-quart), opacity 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart);");
     expect(lineHoverRule).toContain("filter: drop-shadow(0 0 0.32rem color-mix(in srgb, var(--text) 18%, transparent));");
-    expect(targetRule).toContain("transition: fill 180ms var(--ease-out-quart), stroke 180ms var(--ease-out-quart), stroke-width 180ms var(--ease-out-quart), filter 180ms var(--ease-out-quart);");
-    expect(focusHoverRule).toContain("stroke-width: 0.68;");
-    expect(focusHoverRule).toContain("filter: drop-shadow(0 0 0.42rem color-mix(in srgb, var(--productivity-focus) 34%, transparent));");
-    expect(driftHoverRule).toContain("stroke-width: 0.68;");
-    expect(driftHoverRule).toContain("filter: drop-shadow(0 0 0.42rem color-mix(in srgb, var(--productivity-drift) 34%, transparent));");
+    expect(lineHoverRule).toContain("opacity: 0.94;");
+    expect(dotRule).toContain("animation: focus-drift-hover-dot-in 100ms var(--ease-out-quart) both;");
+    expect(dotKeyframes).toContain("opacity: 0;");
+    expect(motionStyles).not.toContain("data-hover-kind");
+    expect(motionStyles).not.toContain("focus-drift__drift-mist {\n  opacity: 0.3");
+    expect(motionStyles).not.toContain(".focus-drift__target--focus:hover");
+    expect(motionStyles).not.toContain(".focus-drift__target--drift:hover");
+  });
+
+  it("keeps the SVG coordinate box flush with the HTML hover-dot overlay", () => {
+    const svgRule = cssRule(baseStyles, ".focus-drift__svg");
+    const targetRule = cssRule(baseStyles, ".focus-drift__target");
+
+    // An inline SVG reserves a text baseline gap below itself. The dot is an
+    // HTML overlay positioned against the plot, so that gap would shift it
+    // away from the curve even when both use the same viewBox coordinates.
+    expect(svgRule).toContain("display: block;");
+    expect(targetRule).toContain("pointer-events: none;");
   });
 
   it("adds Your Week hover motion to the hovered block or bar only", () => {

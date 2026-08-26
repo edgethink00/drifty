@@ -556,6 +556,7 @@
 }
 
 .focus-drift__svg {
+  display: block;
   position: relative;
   z-index: 1;
   width: 100%;
@@ -624,25 +625,29 @@
   pointer-events: all;
 }
 
+/* The per-window SVG circles are keyboard targets only. The visible marker
+   lives outside the stretched SVG so it remains circular. */
 .focus-drift__target {
   fill: transparent;
-  stroke: transparent;
-  stroke-width: 0.45;
+  stroke: none;
   cursor: crosshair;
-  pointer-events: all;
-  vector-effect: non-scaling-stroke;
-  transition: fill var(--transition-fast), stroke var(--transition-fast);
+  pointer-events: none;
 }
 .focus-drift__target:focus { outline: none; }
-.focus-drift__target--focus:hover,
-.focus-drift__target--focus:focus {
-  fill: color-mix(in srgb, var(--productivity-focus) 14%, transparent);
-  stroke: var(--productivity-focus);
+
+.focus-drift__hover-dot {
+  position: absolute;
+  z-index: 3;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--productivity-focus);
+  border: 1.5px solid var(--dashboard-plot-surface);
+  pointer-events: none;
 }
-.focus-drift__target--drift:hover,
-.focus-drift__target--drift:focus {
-  fill: color-mix(in srgb, var(--productivity-drift) 14%, transparent);
-  stroke: var(--productivity-drift);
+.focus-drift__hover-dot--drift {
+  background: var(--productivity-drift);
 }
 
 .focus-drift__now-marker {

@@ -3,7 +3,11 @@ import type { ActivitySegment } from "@drifty/domain";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { FocusDriftSection } from "./FocusDriftSection";
-import { applyFocusDriftReplayReveal, buildFocusDriftChart } from "./focusDriftChart";
+import {
+  applyFocusDriftReplayReveal,
+  buildFocusDriftChart,
+  getSmoothPathPointAtX,
+} from "./focusDriftChart";
 
 function focusSegment(): ActivitySegment {
   return {
@@ -62,6 +66,20 @@ describe("FocusDriftSection", () => {
     // a fully-focused line at the chart top (y=8).
     fireEvent.mouseMove(lineTarget, { clientX: 74, clientY: 8 });
     expect(container.querySelector(".focus-drift-hover-card")).toBeTruthy();
+    const nearestTrackedPoint = chart.points
+      .filter((point) => point.totalSeconds > 0)
+      .reduce((nearest, point) => (Math.abs(point.x - 74) < Math.abs(nearest.x - 74) ? point : nearest));
+    const dot = container.querySelector<HTMLElement>(".focus-drift__hover-dot");
+    const visibleFocusMarker = getSmoothPathPointAtX(
+      chart.points.filter((point) => !point.isFuture),
+      "focusY",
+      nearestTrackedPoint.x,
+    );
+    if (!dot || !visibleFocusMarker) throw new Error("focus hover dot or visible curve marker missing");
+    expect(Number.parseFloat(dot.style.left)).toBeCloseTo(nearestTrackedPoint.x, 5);
+    expect(Number.parseFloat(dot.style.top)).toBeCloseTo(visibleFocusMarker.y, 5);
+    expect(container.querySelector('circle[role="button"]')).toBeNull();
+    expect(container.querySelector('circle[role="img"]')).toBeTruthy();
 
     // Far to the right of the last tracked window, the same y no longer snaps.
     fireEvent.mouseMove(lineTarget, { clientX: 95, clientY: 8 });

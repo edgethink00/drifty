@@ -55,7 +55,7 @@ describe("FocusDriftHoverCard", () => {
             "com.google.Chrome": "data:image/png;base64,chrome",
             "com.microsoft.VSCode": "data:image/png;base64,code",
           }}
-          hover={{ point: focusDriftPoint, kind: "focus", x: 20, y: 20 }}
+          hover={{ point: focusDriftPoint, kind: "focus", markerX: 24, markerY: 40, x: 20, y: 20 }}
         />
       </SiteIconProvider>,
     );

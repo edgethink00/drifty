@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { CSSProperties, FocusEvent, MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
 import { EmptyState } from "../../components/EmptyState";
@@ -12,6 +12,7 @@ import {
   FOCUS_DRIFT_GRID_PATH,
   FOCUS_DRIFT_MINUTES_PER_DAY,
   FOCUS_DRIFT_Y_AXIS_TICKS,
+  getSmoothPathPointAtX,
   type FocusDriftAxisTickStyle,
   type FocusDriftChart,
   type FocusDriftPoint,
@@ -117,7 +118,6 @@ export const FocusDriftSection = memo(function FocusDriftSection({
   chart,
 }: FocusDriftSectionProps) {
   const [hover, setHover] = useState<FocusDriftHoverState | null>(null);
-  const chartBoundsRef = useRef<DOMRect | null>(null);
   const hoverPoints = useMemo(
     () => chart.points.filter((point) => point.totalSeconds > 0 && isPointRevealed(point, chart)),
     [chart],
@@ -148,24 +148,51 @@ export const FocusDriftSection = memo(function FocusDriftSection({
       ? `Focus and drift curves in progress through ${chart.currentTimeLabel}`
       : "Focus and drift curves";
 
-  function readChartBounds(event: MouseEvent<SVGRectElement>): DOMRect | null {
-    const bounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
-    chartBoundsRef.current = bounds;
-    return bounds;
+  function buildHoverState(
+    point: FocusDriftPoint,
+    kind: FocusDriftHoverKind,
+    x: number,
+    y: number,
+    markerX = point.x,
+  ): FocusDriftHoverState {
+    const yKey = kind === "focus" ? "focusY" : "driftY";
+    const marker = getSmoothPathPointAtX(measuredPoints, yKey, markerX);
+
+    return {
+      point,
+      kind,
+      markerX: marker?.x ?? markerX,
+      markerY: marker?.y ?? point[yKey],
+      x,
+      y,
+    };
   }
 
   function clearHover() {
-    chartBoundsRef.current = null;
     setHover(null);
   }
 
   function updateKeyboardHover(kind: FocusDriftHoverKind, point: FocusDriftPoint, event: FocusEvent<SVGCircleElement>) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    setHover({ point, kind, x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 });
+    const marker = buildHoverState(point, kind, 0, 0);
+    const svgBounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
+    if (svgBounds) {
+      setHover({
+        ...marker,
+        x: svgBounds.left + (marker.markerX / 100) * svgBounds.width,
+        y: svgBounds.top + (marker.markerY / 100) * svgBounds.height,
+      });
+      return;
+    }
+    const targetBounds = event.currentTarget.getBoundingClientRect();
+    setHover({ ...marker, x: targetBounds.left + targetBounds.width / 2, y: targetBounds.top + targetBounds.height / 2 });
   }
 
   function updateLineHover(event: MouseEvent<SVGRectElement>) {
-    const svgRect = chartBoundsRef.current ?? readChartBounds(event);
+    // Read bounds fresh on every move: a rect cached on mouseenter goes stale
+    // when the layout shifts while the pointer stays inside (window resize,
+    // sidebar toggle, a modal scale animation moving the chart), and no
+    // mouseleave fires to clear it because the cursor itself never moved.
+    const svgRect = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
     if (!svgRect || hoverPoints.length === 0) return;
 
     const chartX = ((event.clientX - svgRect.left) / svgRect.width) * 100;
@@ -176,10 +203,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     const rightIndex = hoverPoints.findIndex((point) => point.x >= hoverX);
     const nextPoint = hoverPoints[rightIndex] ?? lastPoint;
     const previousPoint = hoverPoints[Math.max(0, rightIndex - 1)] ?? firstPoint;
-    const span = Math.max(nextPoint.x - previousPoint.x, 0.0001);
-    const ratio = Math.min(Math.max((hoverX - previousPoint.x) / span, 0), 1);
-    const focusY = previousPoint.focusY + (nextPoint.focusY - previousPoint.focusY) * ratio;
-    const driftY = previousPoint.driftY + (nextPoint.driftY - previousPoint.driftY) * ratio;
+    const focusY = getSmoothPathPointAtX(measuredPoints, "focusY", hoverX)?.y
+      ?? previousPoint.focusY;
+    const driftY = getSmoothPathPointAtX(measuredPoints, "driftY", hoverX)?.y
+      ?? previousPoint.driftY;
     const focusDistance = Math.abs(chartY - focusY);
     const driftDistance = Math.abs(chartY - driftY);
     const distance = Math.min(focusDistance, driftDistance);
@@ -195,7 +222,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
       setHover(null);
       return;
     }
-    setHover({ point: nearestPoint, kind, x: event.clientX, y: event.clientY });
+    // The card describes one 30-minute window, so the dot shares that
+    // window's x coordinate. Its y still comes from the rendered spline,
+    // never from the raw source control point.
+    setHover(buildHoverState(nearestPoint, kind, event.clientX, event.clientY));
   }
 
   return (
@@ -245,14 +275,26 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                 <rect className="focus-drift__line-target" x={FOCUS_DRIFT_CHART_BOUNDS.left} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left} height={100 - FOCUS_DRIFT_CHART_BOUNDS.top} aria-label="Focus and drift curve hover target" onMouseEnter={updateLineHover} onMouseMove={updateLineHover} onMouseLeave={clearHover} />
                 {hoverPoints.map((point) => (
                   <g key={point.id}>
-                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="button" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus")} onMouseEnter={(event) => setHover({ point, kind: "focus", x: event.clientX, y: event.clientY })} onMouseMove={(event) => setHover({ point, kind: "focus", x: event.clientX, y: event.clientY })} onMouseLeave={clearHover} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
-                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="button" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift")} onMouseEnter={(event) => setHover({ point, kind: "drift", x: event.clientX, y: event.clientY })} onMouseMove={(event) => setHover({ point, kind: "drift", x: event.clientX, y: event.clientY })} onMouseLeave={clearHover} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus")} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift")} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
                   </g>
                 ))}
               </svg>
               {shouldRenderMarker ? (
                 <div
                   className={`focus-drift__now-marker${chart.revealX !== null ? " focus-drift__now-marker--replay" : ""}`}
+                  aria-hidden="true"
+                />
+              ) : null}
+              {hover ? (
+                /* The visible marker is outside the stretched SVG so it stays
+                   circular, then snaps to the same window as the hover card. */
+                <div
+                  className={`focus-drift__hover-dot focus-drift__hover-dot--${hover.kind}`}
+                  style={{
+                    left: `${hover.markerX}%`,
+                    top: `${hover.markerY}%`,
+                  }}
                   aria-hidden="true"
                 />
               ) : null}

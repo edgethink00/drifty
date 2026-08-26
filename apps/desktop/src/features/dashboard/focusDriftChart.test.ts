@@ -7,6 +7,7 @@ import {
   applyFocusDriftReplayReveal,
   buildFocusDriftChart,
   buildSmoothPath,
+  getSmoothPathPointAtX,
   scaleFocusDriftY,
   type FocusDriftPoint,
 } from "./focusDriftChart";
@@ -233,6 +234,37 @@ describe("buildSmoothPath", () => {
 
     expect(interiorEnds.length).toBeGreaterThan(0);
     expect(interiorEnds.every((y) => y > topY)).toBe(true);
+  });
+
+  it("returns the rendered spline coordinate rather than an interior control point", () => {
+    const bottomY = scaleFocusDriftY(0);
+    const topY = scaleFocusDriftY(100);
+    const points = [
+      makePoint(0, 10, bottomY),
+      makePoint(1, 20, topY),
+      makePoint(2, 30, bottomY),
+    ];
+
+    const renderedPoint = getSmoothPathPointAtX(points, "focusY", 20);
+
+    // A basis spline softens this source control point to y=36 at x=20;
+    // hover markers must follow that visible curve, never the raw y=8 input.
+    expect(renderedPoint?.x).toBeCloseTo(20, 5);
+    expect(renderedPoint?.y).toBeCloseTo(36, 5);
+    expect(renderedPoint?.y).not.toBe(topY);
+  });
+
+  it("clamps hover marker lookup to the visible spline endpoints", () => {
+    const bottomY = scaleFocusDriftY(0);
+    const topY = scaleFocusDriftY(100);
+    const points = [
+      makePoint(0, 10, bottomY),
+      makePoint(1, 20, topY),
+      makePoint(2, 30, bottomY),
+    ];
+
+    expect(getSmoothPathPointAtX(points, "focusY", -20)).toEqual({ x: 10, y: bottomY });
+    expect(getSmoothPathPointAtX(points, "focusY", 90)).toEqual({ x: 30, y: bottomY });
   });
 });
 

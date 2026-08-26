@@ -11,6 +11,7 @@ import {
   FOCUS_DRIFT_CHART_BOUNDS,
   FOCUS_DRIFT_MINUTES_PER_DAY,
   buildSmoothPath,
+  getSmoothPathPointAtX,
   scaleFocusDriftY,
 } from "./focusDriftGeometry";
 
@@ -24,6 +25,7 @@ export {
   buildSmoothPath,
   clampFocusDriftChartX,
   clampFocusDriftChartY,
+  getSmoothPathPointAtX,
   scaleFocusDriftY,
 } from "./focusDriftGeometry";
 
