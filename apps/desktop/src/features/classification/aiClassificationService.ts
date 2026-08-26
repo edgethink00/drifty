@@ -217,11 +217,12 @@ type AiClassificationUsageRow = {
 export type AiClassificationStatus = "disabled" | "idle" | "running" | "saved" | "empty" | "error";
 
 // "transport" — the provider was unreachable (fetch/HTTP/timeout failures).
+// "quota" — Cloud answered with an account/provider quota response.
 // "content" — the provider responded but the result was unusable; the
 // connection itself is fine, so connection status must not treat it as a
-// disconnect. Error summaries returned (not thrown) by this service are
-// always content-level; transport failures propagate as thrown errors.
-export type AiClassificationFailureKind = "transport" | "content";
+// disconnect.
+export type AiClassificationFailureKind = "transport" | "quota" | "content";
+export type AiClassificationQuotaWindow = "minute" | "hour" | "day" | "unknown";
 
 export interface AiClassificationSummary {
   status: AiClassificationStatus;
@@ -230,6 +231,7 @@ export interface AiClassificationSummary {
   message: string;
   metrics?: ClassificationMetrics;
   failureKind?: AiClassificationFailureKind;
+  quotaWindow?: AiClassificationQuotaWindow;
   // True only when this run completed a real provider round-trip; summaries
   // satisfied purely by deterministic rules or reused classifications carry no
   // evidence about provider connectivity.
@@ -1372,7 +1374,7 @@ async function classifyLivePayloadWithCloudAi(
       body: await withCloudDevicePayload(cloudClassificationRequestBody([payload], workProfile, memoryContext)),
     });
 
-    if (error) return unavailableLiveClassification(await edgeFunctionErrorMessage(error));
+    if (error) return unavailableLiveClassification((await describeAiClassificationFailure(error)).message);
     return firstLiveClassification(data, payload, "AI classification returned no usable classification.", memoryContext, "cloud");
   } catch (error) {
     return unavailableLiveClassification(messageFromUnknownError(error, "AI classification failed."));
@@ -1390,7 +1392,7 @@ async function classifyCloudPayloadBatches(
     const { data, error } = await cloudClient.functions.invoke("classify-activity", {
       body: await withCloudDevicePayload(cloudClassificationRequestBody(batch, workProfile, memoryContext)),
     });
-    if (error) throw new Error(await edgeFunctionErrorMessage(error));
+    if (error) throw await edgeFunctionInvocationError(error);
     records.push(...toClassificationRecords(data, [...batch], memoryContext, "cloud"));
   }
   return records;
@@ -1958,37 +1960,131 @@ function resolveProviderProductivity(
   );
 }
 
-async function edgeFunctionErrorMessage(error: unknown): Promise<string> {
+type EdgeFunctionFailureDetail = {
+  readonly message: string;
+  readonly status: number | null;
+  readonly errorType: string | null;
+  readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
+};
+
+class AiClassificationEdgeError extends Error {
+  readonly status: number | null;
+  readonly errorType: string | null;
+  readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
+
+  constructor(detail: EdgeFunctionFailureDetail) {
+    super(detail.message);
+    this.name = "AiClassificationEdgeError";
+    this.status = detail.status;
+    this.errorType = detail.errorType;
+    this.quotaWindow = detail.quotaWindow;
+  }
+}
+
+async function edgeFunctionInvocationError(error: unknown): Promise<AiClassificationEdgeError> {
+  return new AiClassificationEdgeError(await edgeFunctionFailureDetail(error));
+}
+
+export async function describeAiClassificationFailure(error: unknown): Promise<{
+  readonly message: string;
+  readonly failureKind: AiClassificationFailureKind;
+  readonly quotaWindow?: AiClassificationQuotaWindow;
+}> {
+  const detail = error instanceof AiClassificationEdgeError
+    ? {
+        message: error.message,
+        status: error.status,
+        errorType: error.errorType,
+        quotaWindow: error.quotaWindow,
+      }
+    : await edgeFunctionFailureDetail(error);
+  const quotaWindow = detail.quotaWindow ?? legacyQuotaWindowFromMessage(detail.message);
+  if (detail.errorType === "quota" || detail.status === 429 || quotaWindow) {
+    return {
+      message: detail.message,
+      failureKind: "quota",
+      quotaWindow: quotaWindow ?? "unknown",
+    };
+  }
+  return { message: detail.message, failureKind: "transport" };
+}
+
+async function edgeFunctionFailureDetail(error: unknown): Promise<EdgeFunctionFailureDetail> {
   const fallback = error instanceof Error && error.message ? error.message : "AI classification failed.";
   const context = isRecord(error) ? error.context : null;
   if (context instanceof Response) {
     const detail = await readEdgeErrorBody(context);
-    if (detail) return `AI classification failed: ${detail}`;
+    if (detail) {
+      return {
+        message: `AI classification failed: ${detail.message}`,
+        status: context.status || null,
+        errorType: detail.errorType,
+        quotaWindow: detail.quotaWindow,
+      };
+    }
   }
-  return fallback;
+  return { message: fallback, status: null, errorType: null, quotaWindow: null };
 }
 
-async function readEdgeErrorBody(response: Response): Promise<string | null> {
+async function readEdgeErrorBody(response: Response): Promise<{
+  readonly message: string;
+  readonly errorType: string | null;
+  readonly quotaWindow: Exclude<AiClassificationQuotaWindow, "unknown"> | null;
+} | null> {
   let text = "";
   try {
     text = await response.clone().text();
   } catch {
-    return response.status ? `${response.status} ${response.statusText}`.trim() : null;
+    const message = response.status ? `${response.status} ${response.statusText}`.trim() : null;
+    return message ? { message, errorType: null, quotaWindow: null } : null;
   }
 
-  if (!text) return response.status ? `${response.status} ${response.statusText}`.trim() : null;
+  if (!text) {
+    const message = response.status ? `${response.status} ${response.statusText}`.trim() : null;
+    return message ? { message, errorType: null, quotaWindow: null } : null;
+  }
 
   try {
     const parsed: unknown = JSON.parse(text);
     if (isRecord(parsed)) {
-      if (typeof parsed.error === "string") return parsed.error;
-      if (typeof parsed.message === "string") return parsed.message;
+      const errorType = typeof parsed.errorType === "string" ? parsed.errorType : null;
+      const quotaWindow = isQuotaWindow(parsed.quotaWindow) ? parsed.quotaWindow : null;
+      const message = typeof parsed.error === "string"
+        ? parsed.error
+        : typeof parsed.message === "string"
+          ? parsed.message
+          : null;
+      if (message) {
+        return {
+          message,
+          errorType,
+          quotaWindow,
+        };
+      }
+      if (errorType || quotaWindow) {
+        return {
+          message: response.status ? `${response.status} ${response.statusText}`.trim() : "AI classification failed.",
+          errorType,
+          quotaWindow,
+        };
+      }
     }
   } catch {
     // fall through to plain text
   }
 
-  return text.slice(0, 240);
+  return { message: text.slice(0, 240), errorType: null, quotaWindow: null };
+}
+
+function isQuotaWindow(value: unknown): value is Exclude<AiClassificationQuotaWindow, "unknown"> {
+  return value === "minute" || value === "hour" || value === "day";
+}
+
+function legacyQuotaWindowFromMessage(message: string): Exclude<AiClassificationQuotaWindow, "unknown"> | null {
+  if (/minute ai classification quota exceeded/i.test(message)) return "minute";
+  if (/hourly ai classification quota exceeded/i.test(message)) return "hour";
+  if (/daily ai classification quota exceeded/i.test(message)) return "day";
+  return null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

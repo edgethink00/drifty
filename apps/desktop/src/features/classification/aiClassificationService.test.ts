@@ -1,7 +1,16 @@
 import type { ActivityClassificationRecord, ActivitySegment, AdaptiveContentContext, ClassificationMetrics } from "@drifty/domain";
 import { describe, expect, it, vi } from "vitest";
 import { CLOUD_API_CLIENT_VERSION, CLOUD_API_CONTRACT_VERSION } from "../../lib/cloudContract";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, diffAiClassificationUsageSummary, estimateAiClassificationCostUsd, projectAiClassificationCost, type AiClassificationUsageSummary } from "./aiClassificationService";
+import {
+  AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+  AI_CLASSIFICATION_FOCUSED_IDLE_MS,
+  AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD,
+  describeAiClassificationFailure,
+  diffAiClassificationUsageSummary,
+  estimateAiClassificationCostUsd,
+  projectAiClassificationCost,
+  type AiClassificationUsageSummary,
+} from "./aiClassificationService";
 
 const AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY = "drifty.aiPrivacyRequestSettings.v1";
 const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
@@ -43,6 +52,95 @@ const baseMetrics: ClassificationMetrics = {
   aiClassifiedSegments: 10,
   staleClassifications: 0,
 };
+
+describe("describeAiClassificationFailure", () => {
+  it("prefers structured quota metadata even when the human-readable copy changes", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: Response.json({
+        error: "Please slow down.",
+        errorType: "quota",
+        quotaWindow: "minute",
+      }, { status: 429 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: Please slow down.",
+      failureKind: "quota",
+      quotaWindow: "minute",
+    });
+  });
+
+  it("keeps recognizing the currently deployed legacy quota response", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: Response.json({
+        error: "Hourly AI classification quota exceeded. Please try again later.",
+        errorType: "quota",
+      }, { status: 429 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: Hourly AI classification quota exceeded. Please try again later.",
+      failureKind: "quota",
+      quotaWindow: "hour",
+    });
+  });
+
+  it("fails closed for a quota response with an unknown window", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: Response.json({
+        error: "Cloud allowance unavailable.",
+        errorType: "quota",
+      }, { status: 429 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: Cloud allowance unavailable.",
+      failureKind: "quota",
+      quotaWindow: "unknown",
+    });
+  });
+
+  it("fails closed for an unstructured HTTP 429 response", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: new Response("Upstream rate limit", { status: 429 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: Upstream rate limit",
+      failureKind: "quota",
+      quotaWindow: "unknown",
+    });
+  });
+
+  it("keeps structured quota metadata when the response omits display copy", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: Response.json({
+        errorType: "quota",
+        quotaWindow: "minute",
+      }, { status: 429 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: 429",
+      failureKind: "quota",
+      quotaWindow: "minute",
+    });
+  });
+
+  it("keeps quota-service failures as transport errors", async () => {
+    const failure = await describeAiClassificationFailure({
+      context: Response.json({
+        error: "AI classification quota is unavailable.",
+        errorType: "request",
+      }, { status: 503 }),
+    });
+
+    expect(failure).toEqual({
+      message: "AI classification failed: AI classification quota is unavailable.",
+      failureKind: "transport",
+    });
+  });
+});
 
 describe("projectAiClassificationCost", () => {
   it("scales measured selected-day cost by processed sample coverage", () => {

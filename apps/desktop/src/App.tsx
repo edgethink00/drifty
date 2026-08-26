@@ -70,7 +70,7 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIconDomain, type SiteIconMap } from "./features/app-icons/siteIconRequests";
 import { SiteIconProvider } from "./components/SiteIconContext";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, describeAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -1126,6 +1126,7 @@ export default function App() {
   const cloudAiConnectionGenerationRef = useRef(0);
   const recordCloudAiClassificationSummary = useCallback((summary: AiClassificationSummary, generation: number) => {
     if (generation !== cloudAiConnectionGenerationRef.current) return;
+    if (summary.status === "error" && summary.failureKind === "quota") return;
     if (summary.status === "error" && summary.failureKind !== "content") {
       setCloudAiConnectionCheck((current) => nextCloudAiConnectionCheck(current, {
         kind: "classification_transport_failure",
@@ -1139,12 +1140,14 @@ export default function App() {
       message: summary.message,
     }, Date.now()));
   }, []);
-  const recordCloudAiClassificationError = useCallback((message: string, generation: number) => {
-    if (generation !== cloudAiConnectionGenerationRef.current) return;
+  const recordCloudAiClassificationError = useCallback(async (error: unknown, generation: number) => {
+    const failure = await describeAiClassificationFailure(error);
+    if (generation !== cloudAiConnectionGenerationRef.current || failure.failureKind === "quota") return failure;
     setCloudAiConnectionCheck((current) => nextCloudAiConnectionCheck(current, {
       kind: "classification_transport_failure",
-      message,
+      message: failure.message,
     }, Date.now()));
+    return failure;
   }, []);
   const [rendererFocused, setRendererFocused] = useState(isRendererFocused);
   const [timelineHover, setTimelineHover] = useState<TimelineHoverState | null>(null);
@@ -3016,9 +3019,8 @@ export default function App() {
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       return summary;
     } catch (error) {
-      const message = toErrorMessage(error);
-      if (args[2]?.localProvider) recordLocalAiClassificationError(message);
-      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
+      if (args[2]?.localProvider) recordLocalAiClassificationError(toErrorMessage(error));
+      else await recordCloudAiClassificationError(error, cloudAiConnectionGeneration);
       throw error;
     }
   }, [recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary]);
@@ -3032,9 +3034,8 @@ export default function App() {
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       return summary;
     } catch (error) {
-      const message = toErrorMessage(error);
-      if (args[2]?.localProvider) recordLocalAiClassificationError(message);
-      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
+      if (args[2]?.localProvider) recordLocalAiClassificationError(toErrorMessage(error));
+      else await recordCloudAiClassificationError(error, cloudAiConnectionGeneration);
       throw error;
     }
   }, [recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary]);
@@ -6219,17 +6220,18 @@ export default function App() {
         await refreshLeaderboardData();
       }
     } catch (nextError) {
-      const message = toErrorMessage(nextError);
-      if (localAiClassificationOptions) recordLocalAiClassificationError(message);
-      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
+      const failure = localAiClassificationOptions
+        ? { message: toErrorMessage(nextError), failureKind: "transport" as const }
+        : await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
+      if (localAiClassificationOptions) recordLocalAiClassificationError(failure.message);
       captureAiClassificationRun(trigger, providerKind, "current_day", {
         status: "error",
         selectedSegments: 0,
         savedRecords: 0,
-        message,
+        ...failure,
       });
       if (selectedDayRef.current === today) {
-        setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
+        setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       }
     } finally {
       aiClassificationInFlightRef.current = false;
@@ -6670,15 +6672,16 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
       captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
-      const message = toErrorMessage(nextError);
-      if (localAiClassificationOptions) recordLocalAiClassificationError(message);
-      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
-      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
+      const failure = localAiClassificationOptions
+        ? { message: toErrorMessage(nextError), failureKind: "transport" as const }
+        : await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
+      if (localAiClassificationOptions) recordLocalAiClassificationError(failure.message);
+      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
         selectedSegments: 0,
         savedRecords: 0,
-        message,
+        ...failure,
       });
     } finally {
       aiClassificationInFlightRef.current = false;
@@ -6725,15 +6728,16 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
       captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
-      const message = toErrorMessage(nextError);
-      if (localAiClassificationOptions) recordLocalAiClassificationError(message);
-      else recordCloudAiClassificationError(message, cloudAiConnectionGeneration);
-      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, message, failureKind: "transport" });
+      const failure = localAiClassificationOptions
+        ? { message: toErrorMessage(nextError), failureKind: "transport" as const }
+        : await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
+      if (localAiClassificationOptions) recordLocalAiClassificationError(failure.message);
+      setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
         selectedSegments: 0,
         savedRecords: 0,
-        message,
+        ...failure,
       });
     } finally {
       aiClassificationInFlightRef.current = false;

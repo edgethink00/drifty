@@ -1,7 +1,14 @@
-import type { COUNT_BUCKETS, ERROR_KINDS } from "./eventTaxonomy";
+import type {
+  COUNT_BUCKETS,
+  ERROR_KINDS,
+  FIRST_DAY_PREPARATION_DURATION_BUCKETS,
+  FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
+} from "./eventTaxonomy";
 
 export type CountBucket = (typeof COUNT_BUCKETS)[number];
 export type AnalyticsErrorKind = (typeof ERROR_KINDS)[number];
+export type FirstDayPreparationDurationBucket = (typeof FIRST_DAY_PREPARATION_DURATION_BUCKETS)[number];
+export type FirstDayPreparationSegmentCountBucket = (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
 
 export function toCountBucket(value: number): CountBucket {
   if (!Number.isFinite(value) || value <= 0) return "none";
@@ -10,6 +17,22 @@ export function toCountBucket(value: number): CountBucket {
   if (value <= 20) return "6_20";
   if (value <= 50) return "21_50";
   return "50_plus";
+}
+
+export function toFirstDayPreparationDurationBucket(valueMs: number): FirstDayPreparationDurationBucket {
+  if (!Number.isFinite(valueMs) || valueMs < 30_000) return "under_30s";
+  if (valueMs < 90_000) return "30_90s";
+  if (valueMs < 180_000) return "90_180s";
+  if (valueMs < 300_000) return "180_300s";
+  return "300s_plus";
+}
+
+export function toFirstDayPreparationSegmentCountBucket(value: number): FirstDayPreparationSegmentCountBucket {
+  if (!Number.isFinite(value) || value <= 0) return "none";
+  if (value <= 20) return "1_20";
+  if (value <= 50) return "21_50";
+  if (value <= 100) return "51_100";
+  return "100_plus";
 }
 
 export function toAnalyticsErrorKind(error: unknown): AnalyticsErrorKind {

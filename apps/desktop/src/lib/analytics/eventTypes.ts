@@ -16,6 +16,10 @@ import type {
   DASHBOARD_PERIODS,
   ENTITLEMENT_STATUSES,
   ERROR_KINDS,
+  FIRST_DAY_PREPARATION_DURATION_BUCKETS,
+  FIRST_DAY_PREPARATION_OUTCOMES,
+  FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
+  FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
   LEADERBOARD_ACTIONS,
   LEADERBOARD_PERIODS,
   LOCKED_REASONS,
@@ -59,6 +63,15 @@ export type PostHogEventPropertiesByName = {
     readonly drift_alarm_enabled?: boolean;
     readonly extreme_nudge_enabled?: boolean;
     readonly pet_enabled?: boolean;
+  };
+  readonly first_day_preparation: {
+    readonly provider_kind: (typeof AI_PROVIDER_KINDS)[number];
+    readonly outcome: (typeof FIRST_DAY_PREPARATION_OUTCOMES)[number];
+    readonly quota_window?: (typeof FIRST_DAY_PREPARATION_QUOTA_WINDOWS)[number];
+    readonly quota_wait_count_bucket: (typeof COUNT_BUCKETS)[number];
+    readonly duration_bucket: (typeof FIRST_DAY_PREPARATION_DURATION_BUCKETS)[number];
+    readonly initial_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
+    readonly remaining_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
   };
   readonly permission_action: {
     readonly permission: (typeof PERMISSIONS)[number];

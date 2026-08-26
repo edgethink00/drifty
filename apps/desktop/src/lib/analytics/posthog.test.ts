@@ -13,6 +13,8 @@ import {
   shouldEnablePostHog,
   toAnalyticsErrorKind,
   toCountBucket,
+  toFirstDayPreparationDurationBucket,
+  toFirstDayPreparationSegmentCountBucket,
   type PostHogIdentity,
   type PostHogEventPropertiesByName,
 } from "./posthog";
@@ -68,6 +70,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
         "app_surface_opened",
         "app_active",
         "onboarding_completed",
+        "first_day_preparation",
         "permission_action",
         "tracker_action",
         "cloud_auth_action",
@@ -96,6 +99,15 @@ describe("PostHog desktop analytics privacy boundary", () => {
       correction_count_bucket: expect.any(Array),
       error_kind: expect.any(Array),
     });
+    expect(POSTHOG_EVENT_PROPERTY_ALLOWLIST.first_day_preparation).toMatchObject({
+      provider_kind: expect.any(Array),
+      outcome: expect.any(Array),
+      quota_window: expect.any(Array),
+      quota_wait_count_bucket: expect.any(Array),
+      duration_bucket: expect.any(Array),
+      initial_segment_count_bucket: expect.any(Array),
+      remaining_segment_count_bucket: expect.any(Array),
+    });
   });
 
   it("maps counts and errors to bounded analytics values", () => {
@@ -105,12 +117,46 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(toCountBucket(20)).toBe("6_20");
     expect(toCountBucket(50)).toBe("21_50");
     expect(toCountBucket(51)).toBe("50_plus");
+    expect(toFirstDayPreparationDurationBucket(29_999)).toBe("under_30s");
+    expect(toFirstDayPreparationDurationBucket(30_000)).toBe("30_90s");
+    expect(toFirstDayPreparationDurationBucket(300_000)).toBe("300s_plus");
+    expect(toFirstDayPreparationSegmentCountBucket(0)).toBe("none");
+    expect(toFirstDayPreparationSegmentCountBucket(20)).toBe("1_20");
+    expect(toFirstDayPreparationSegmentCountBucket(100)).toBe("51_100");
+    expect(toFirstDayPreparationSegmentCountBucket(101)).toBe("100_plus");
 
     expect(toAnalyticsErrorKind(new Error("Network request failed"))).toBe("network");
     expect(toAnalyticsErrorKind(new Error("Permission denied"))).toBe("permission_denied");
     expect(toAnalyticsErrorKind(new Error("Not authenticated"))).toBe("not_authenticated");
     expect(toAnalyticsErrorKind(new Error("Provider model returned an error"))).toBe("provider_error");
     expect(toAnalyticsErrorKind(new Error("Unexpected failure"))).toBe("unknown");
+  });
+
+  it("keeps first-day preparation telemetry bounded and strips raw activity fields", () => {
+    const properties = {
+      provider_kind: "cloud",
+      outcome: "success",
+      quota_window: "minute",
+      quota_wait_count_bucket: "1",
+      duration_bucket: "30_90s",
+      initial_segment_count_bucket: "21_50",
+      remaining_segment_count_bucket: "none",
+    } satisfies PostHogEventPropertiesByName["first_day_preparation"];
+    const sanitized = sanitizePostHogEventProperties("first_day_preparation", {
+      ...properties,
+      app_name: "Code",
+      site_domain: "example.com",
+      window_title: "Private work",
+      segment_id: "segment-123",
+      raw_segment_count: 37,
+    });
+
+    expect(sanitized).toEqual(properties);
+    expect("app_name" in sanitized).toBe(false);
+    expect("site_domain" in sanitized).toBe(false);
+    expect("window_title" in sanitized).toBe(false);
+    expect("segment_id" in sanitized).toBe(false);
+    expect("raw_segment_count" in sanitized).toBe(false);
   });
 
   it("builds a privacy-safe AI classification payload with typed properties", () => {

@@ -53,6 +53,19 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
   },
   aiClassificationMocks: {
     classifyLiveActivityWithAi: vi.fn(),
+    describeAiClassificationFailure: vi.fn(async (error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error ?? "AI classification failed.");
+      const quotaWindow = /minute ai classification quota exceeded/i.test(message)
+        ? "minute" as const
+        : /hourly ai classification quota exceeded/i.test(message)
+          ? "hour" as const
+          : /daily ai classification quota exceeded/i.test(message)
+            ? "day" as const
+            : null;
+      return quotaWindow
+        ? { message, failureKind: "quota" as const, quotaWindow }
+        : { message, failureKind: "transport" as const };
+    }),
     getAiClassificationUsageSummary: vi.fn(),
     runAiClassification: vi.fn(),
     runAiClassificationForUnknownThreshold: vi.fn(),
@@ -168,6 +181,7 @@ vi.mock("./features/classification/aiClassificationService", () => {
     getAiClassificationUsageSummary: aiClassificationMocks.getAiClassificationUsageSummary,
     runAiClassification: aiClassificationMocks.runAiClassification,
     classifyLiveActivityWithAi: aiClassificationMocks.classifyLiveActivityWithAi,
+    describeAiClassificationFailure: aiClassificationMocks.describeAiClassificationFailure,
     runAiClassificationForUnknownThreshold: aiClassificationMocks.runAiClassificationForUnknownThreshold,
     runAiClassificationUntilEmpty: aiClassificationMocks.runAiClassificationUntilEmpty,
   };
@@ -740,6 +754,32 @@ describe("App AI classification controls", () => {
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
     ));
+  });
+
+  it("does not turn repeated Cloud quota denials into a connection issue", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
+    const today = "2026-06-16";
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
+    aiClassificationMocks.runAiClassificationForUnknownThreshold.mockRejectedValue(
+      new Error("Minute AI classification quota exceeded. Please wait before trying again."),
+    );
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledTimes(2));
+
+    expect(await screen.findByRole("button", {
+      name: /AI connection: Connected, Drifty Cloud\. Open AI settings/i,
+    })).toBeTruthy();
+    expect(screen.queryByRole("button", {
+      name: /AI connection: Connection issue, Drifty Cloud\. Open AI settings/i,
+    })).toBeNull();
   });
 
   it("runs live AI classification for current unknown drift alarm activity before the batch threshold", async () => {

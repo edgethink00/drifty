@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
 import type { LocalAiClassificationOptions } from "../settings/localAiClassificationOptions";
+import { evaluateAiClassificationAccess } from "../../../supabase/functions/classify-activity/quota";
 import {
   FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS,
   FIRST_DAY_PREPARATION_MAX_MS,
@@ -21,6 +22,14 @@ const trackerMocks = vi.hoisted(() => ({
   previewBrowserHistoryImport: vi.fn(),
   getTimeline: vi.fn(),
   getUnclassifiedSegments: vi.fn(),
+}));
+
+const analyticsMocks = vi.hoisted(() => ({
+  capturePostHogEvent: vi.fn(),
+}));
+
+vi.mock("../../lib/analytics/posthogClient", () => ({
+  capturePostHogEvent: analyticsMocks.capturePostHogEvent,
 }));
 
 vi.mock("../../lib/api/trackerClient", () => ({
@@ -120,6 +129,7 @@ describe("useFirstDayPreparation", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    analyticsMocks.capturePostHogEvent.mockReset();
     managedAiMocks.getManagedLocalAiStatus.mockReset().mockResolvedValue({
       state: "not_installed",
       selectedModelId: null,
@@ -374,6 +384,19 @@ describe("useFirstDayPreparation", () => {
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
+  it("reveals the dashboard even when analytics capture throws", async () => {
+    analyticsMocks.capturePostHogEvent.mockImplementationOnce(() => {
+      throw new Error("analytics unavailable");
+    });
+    const options = makeOptions();
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+    expect(result.current.failure).toBeNull();
+  });
+
   it("waits for live Cloud readiness instead of treating the initial false snapshot as final", async () => {
     const cloudReadyRef = { current: false };
     const options = makeOptions({ canUseCloudAiClassificationRef: cloudReadyRef });
@@ -423,6 +446,146 @@ describe("useFirstDayPreparation", () => {
     await flushAsync(20);
     expect(runAiClassification).toHaveBeenCalledTimes(2);
     expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits out the trial minute quota instead of exhausting all transient retries", async () => {
+    vi.setSystemTime(new Date("2026-08-26T00:00:10.000Z"));
+    const trialAccess = evaluateAiClassificationAccess(
+      { id: "trial-user", email: "trial@example.com" },
+      { status: "trialing", canUseApp: true },
+    );
+    if (trialAccess.kind !== "allowed") throw new Error("Expected the trial quota policy.");
+    let classifiedSegments = 0;
+    let quotaMinute = -1;
+    let callsInQuotaMinute = 0;
+    const callTimes: number[] = [];
+    const runAiClassification = vi.fn(async (): Promise<AiClassificationSummary> => {
+      const now = Date.now();
+      const currentQuotaMinute = Math.floor(now / 60_000);
+      if (currentQuotaMinute !== quotaMinute) {
+        quotaMinute = currentQuotaMinute;
+        callsInQuotaMinute = 0;
+      }
+      callsInQuotaMinute += 1;
+      callTimes.push(now);
+      if (callsInQuotaMinute > trialAccess.policy.minuteLlmRequestLimit) {
+        throw new Error("Minute AI classification quota exceeded. Please wait before trying again.");
+      }
+      classifiedSegments += 5;
+      return summary({
+        status: "saved",
+        selectedSegments: 5,
+        savedRecords: 5,
+        metrics: metrics(15, classifiedSegments),
+        usedAiProvider: true,
+      });
+    });
+    const options = makeOptions({ runAiClassification });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(3);
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(3);
+
+    await vi.advanceTimersByTimeAsync(101);
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(4);
+    expect(callTimes[3]! - callTimes[2]!).toBeGreaterThanOrEqual(60_000);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", {
+      provider_kind: "cloud",
+      outcome: "success",
+      quota_window: "minute",
+      quota_wait_count_bucket: "1",
+      duration_bucket: "30_90s",
+      initial_segment_count_bucket: "1_20",
+      remaining_segment_count_bucket: "none",
+    });
+  });
+
+  it("waits for the next quota minute when another Cloud path already consumed the available slots", async () => {
+    vi.setSystemTime(new Date("2026-08-26T00:00:10.000Z"));
+    const runAiClassification = vi.fn()
+      .mockRejectedValueOnce(new Error("Minute AI classification quota exceeded. Please wait before trying again."))
+      .mockResolvedValueOnce(emptySummary);
+    const options = makeOptions({ runAiClassification });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    await flushAsync(20);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(101);
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(2);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry a minute quota after the preparation effect is unmounted", async () => {
+    const runAiClassification = vi.fn()
+      .mockRejectedValue(new Error("Minute AI classification quota exceeded. Please wait before trying again."));
+    const options = makeOptions({ runAiClassification });
+
+    const { unmount } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(60_000);
+    await flushAsync(20);
+
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).not.toHaveBeenCalled();
+  });
+
+  it("keeps minute quota waits outside the generic transient retry budget", async () => {
+    const runAiClassification = vi.fn()
+      .mockRejectedValueOnce(new Error("Minute AI classification quota exceeded. Please wait before trying again."))
+      .mockRejectedValueOnce(new Error("Minute AI classification quota exceeded. Please wait before trying again."))
+      .mockResolvedValueOnce(emptySummary);
+    const options = makeOptions({ runAiClassification });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(2);
+    expect(result.current.failure).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await flushAsync(30);
+    expect(runAiClassification).toHaveBeenCalledTimes(3);
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not hammer an exhausted hourly Cloud quota", async () => {
+    const runAiClassification = vi.fn()
+      .mockRejectedValue(new Error("Hourly AI classification quota exceeded. Please try again later."));
+    const options = makeOptions({ runAiClassification });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(40));
+
+    expect(runAiClassification).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", {
+      provider_kind: "cloud",
+      outcome: "classification_incomplete",
+      quota_window: "hour",
+      quota_wait_count_bucket: "none",
+      duration_bucket: "under_30s",
+      initial_segment_count_bucket: "1_20",
+      remaining_segment_count_bucket: "1_20",
+    });
   });
 
   it("requires three consecutive transient failures before pausing", async () => {

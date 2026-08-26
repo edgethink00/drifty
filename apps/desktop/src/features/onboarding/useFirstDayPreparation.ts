@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { shiftIsoDate } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
+import {
+  toCountBucket,
+  toFirstDayPreparationDurationBucket,
+  toFirstDayPreparationSegmentCountBucket,
+} from "../../lib/analytics/eventHelpers";
+import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 import {
+  describeAiClassificationFailure,
   toClassificationQueryForDay,
   type AiClassificationRunOptions,
+  type AiClassificationQuotaWindow,
   type AiClassificationSummary,
   type ClassificationLevel,
 } from "../classification/aiClassificationService";
@@ -28,6 +36,9 @@ const FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS = 75 * 1000; // per-batch hang cut
 const FIRST_DAY_PREPARATION_CLASSIFY_NO_PROGRESS_LIMIT = 4; // give up only after this many consecutive no-save batches
 export const FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT = 3;
 export const FIRST_DAY_PREPARATION_RETRY_BASE_MS = 1_000;
+// Wait from the server denial instead of guessing its fixed-minute boundary
+// from the client clock; this remains safe when the two clocks differ.
+const FIRST_DAY_PREPARATION_MINUTE_QUOTA_RETRY_MS = 60_000;
 // Onboarding classifies at "normal" granularity (one AI call per domain+title signature,
 // fanned out to matching segments) — ~fine accuracy at meaningfully fewer AI calls.
 const FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL: ClassificationLevel = "normal";
@@ -59,7 +70,6 @@ function firstDayPreparationRaceTimeout<T>(promise: Promise<T>, ms: number, fall
 function firstDayPreparationDelay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
-
 
 type RunAiClassificationBatch = (
   query: ReturnType<typeof toClassificationQueryForDay>,
@@ -176,18 +186,52 @@ export function useFirstDayPreparation({
     let settled = false;
     let cancelled = false;
     let revealed = false;
+    const attemptStartedAt = Date.now();
+    let quotaWaitCount = 0;
+    let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
+    let initialSegmentCount: number | null = null;
+    let remainingSegmentCount: number | null = null;
+    const providerKind = () => {
+      const localProvider = localAiClassificationOptionsRef.current?.localProvider.provider;
+      if (localProvider === "managed_local") return "local" as const;
+      if (localProvider === "openrouter_byok" || localProvider === "self_hosted") return "custom" as const;
+      if (managedLocalSelected) return "local" as const;
+      if (cloudAiSelected || canUseCloudAiClassificationRef.current) return "cloud" as const;
+      return "none" as const;
+    };
+    const captureOutcome = (outcome: "success" | FirstDayPreparationFailureReason) => {
+      try {
+        capturePostHogEvent("first_day_preparation", {
+          provider_kind: providerKind(),
+          outcome,
+          ...(lastQuotaWindow ? { quota_window: lastQuotaWindow } : {}),
+          quota_wait_count_bucket: toCountBucket(quotaWaitCount),
+          duration_bucket: toFirstDayPreparationDurationBucket(Date.now() - attemptStartedAt),
+          ...(initialSegmentCount === null ? {} : {
+            initial_segment_count_bucket: toFirstDayPreparationSegmentCountBucket(initialSegmentCount),
+          }),
+          ...(remainingSegmentCount === null ? {} : {
+            remaining_segment_count_bucket: toFirstDayPreparationSegmentCountBucket(remainingSegmentCount),
+          }),
+        });
+      } catch {
+        // Analytics is best-effort and must never block the dashboard reveal or retry UI.
+      }
+    };
     const reveal = () => {
       if (settled || cancelled) return;
       settled = true;
       revealed = true;
       setFailure(null);
       onReveal();
+      captureOutcome("success");
     };
     const fail = (reason: FirstDayPreparationFailureReason, detail?: unknown) => {
       if (settled || cancelled) return;
       settled = true;
       if (detail) console.warn("First-day preparation paused", detail);
       setFailure(reason);
+      captureOutcome(reason);
     };
     const safetyTimeout = setTimeout(
       () => fail("preparation_timed_out"),
@@ -259,6 +303,8 @@ export function useFirstDayPreparation({
       const dayQuery = toClassificationQueryForDay(day);
 
       const applyProgress = (metrics: Awaited<ReturnType<typeof trackerClient.getClassificationMetrics>>) => {
+        if (initialSegmentCount === null) initialSegmentCount = metrics.totalSegments;
+        remainingSegmentCount = metrics.unclassifiedSegments;
         if (metrics.totalSegments > 0) {
           setProgress(Math.min(1, metrics.classifiedSegments / metrics.totalSegments));
         }
@@ -312,13 +358,15 @@ export function useFirstDayPreparation({
         // A rejected batch (e.g. a provider that is still coming up) counts as a
         // failed batch instead of aborting the whole gate run.
         const summary = await firstDayPreparationRaceTimeout(
-          pendingBatch.catch((error): AiClassificationSummary => ({
-            status: "error",
-            selectedSegments: 0,
-            savedRecords: 0,
-            message: error instanceof Error ? error.message : "Classification failed.",
-            failureKind: "transport",
-          })),
+          pendingBatch.catch(async (error): Promise<AiClassificationSummary> => {
+            const failure = await describeAiClassificationFailure(error);
+            return {
+              status: "error",
+              selectedSegments: 0,
+              savedRecords: 0,
+              ...failure,
+            };
+          }),
           FIRST_DAY_PREPARATION_CLASSIFY_STALL_MS,
           batchTimeoutSummary,
         );
@@ -341,6 +389,16 @@ export function useFirstDayPreparation({
           || summary.status === "disabled"
           || (summary.status === "error" && summary.failureKind !== "content");
         if (transientFailure) {
+          if (!timedOut && !classifyOptions && summary.failureKind === "quota") {
+            lastQuotaWindow = summary.quotaWindow ?? "unknown";
+            if (summary.quotaWindow === "minute") {
+              quotaWaitCount += 1;
+              await firstDayPreparationDelay(FIRST_DAY_PREPARATION_MINUTE_QUOTA_RETRY_MS);
+              if (settled || cancelled) break;
+              continue;
+            }
+            break;
+          }
           consecutiveTransientFailures += 1;
           if (consecutiveTransientFailures >= FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT) break;
           if (!timedOut) {

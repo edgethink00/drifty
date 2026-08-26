@@ -5,6 +5,7 @@ export const POSTHOG_EVENT_NAMES = [
   "onboarding_opened",
   "onboarding_step_viewed",
   "onboarding_completed",
+  "first_day_preparation",
   "permission_action",
   "tracker_action",
   "auth_state_changed",
@@ -73,6 +74,10 @@ export const LEADERBOARD_ACTIONS = ["load", "publish", "opt_out"] as const;
 export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
 export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none"] as const;
+export const FIRST_DAY_PREPARATION_OUTCOMES = ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"] as const;
+export const FIRST_DAY_PREPARATION_QUOTA_WINDOWS = ["minute", "hour", "day", "unknown"] as const;
+export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "90_180s", "180_300s", "300s_plus"] as const;
+export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
 export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "live", "drift_alarm"] as const;
 export const PROJECT_CLASSIFICATION_TRIGGERS = ["schedule", "open", "eod"] as const;
 export const PROJECT_CLASSIFICATION_SKIP_REASONS = ["analysis_disconnected", "no_work"] as const;
@@ -131,6 +136,15 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     drift_alarm_enabled: "boolean",
     extreme_nudge_enabled: "boolean",
     pet_enabled: "boolean",
+  },
+  first_day_preparation: {
+    provider_kind: AI_PROVIDER_KINDS,
+    outcome: FIRST_DAY_PREPARATION_OUTCOMES,
+    quota_window: FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
+    quota_wait_count_bucket: COUNT_BUCKETS,
+    duration_bucket: FIRST_DAY_PREPARATION_DURATION_BUCKETS,
+    initial_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
+    remaining_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
   },
   permission_action: {
     permission: PERMISSIONS,
