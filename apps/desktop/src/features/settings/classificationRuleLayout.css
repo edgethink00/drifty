@@ -1,29 +1,60 @@
+/* Domain rule row: the Rule type toggle now rides in the field label row, so the
+   grid no longer reserves a separate full-width "mode" band. */
 .classification-rule-form__grid:not(.classification-rule-form__grid--app) {
   grid-template-columns: minmax(15rem, 1.35fr) minmax(10rem, 0.8fr) minmax(10rem, 0.8fr) minmax(10rem, auto);
-  grid-template-areas:
-    "mode mode mode mode"
-    "target category productivity action";
+  grid-template-areas: "target category productivity action";
 }
 
 .classification-rule-form__grid:not(.classification-rule-form__grid--app) > .classification-rule-field--wide {
   grid-area: target;
 }
 
-.classification-rule-form__grid:not(.classification-rule-form__grid--app) > .classification-rule-mode-field {
-  grid-area: mode;
-  width: min(100%, 15.5rem);
-}
-
-.classification-rule-form__grid:not(.classification-rule-form__grid--app) > .classification-rule-picker-field:nth-child(3) {
+.classification-rule-form__grid:not(.classification-rule-form__grid--app) > .classification-rule-picker-field--category {
   grid-area: category;
 }
 
-.classification-rule-form__grid:not(.classification-rule-form__grid--app) > .classification-rule-picker-field:nth-child(4) {
+.classification-rule-form__grid:not(.classification-rule-form__grid--app) > .classification-rule-picker-field--productivity {
   grid-area: productivity;
 }
 
 .classification-rule-form__grid:not(.classification-rule-form__grid--app) > .settings-btn {
   grid-area: action;
+}
+
+/* Label row holds the field label on the left and the inline Rule type toggle on
+   the right. The toggle only mounts once the typed value can resolve to a URL. */
+.classification-rule-field__labelrow {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-height: 1.5rem;
+}
+
+/* The label must not be the thing that collapses when the toggle mounts: the
+   toggle is the compressible element here. */
+.classification-rule-field__labelrow > label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.classification-rule-field__labelrow .classification-rule-mode-control {
+  flex: 0 1 auto;
+  width: auto;
+  min-height: 1.5rem;
+  padding: 0.1rem;
+}
+
+.classification-rule-field__labelrow .classification-rule-mode-control .settings-mode-option {
+  min-height: 1.24rem;
+  padding: 0 var(--space-2);
+}
+
+.classification-rule-field__labelrow .classification-rule-mode-control .settings-mode-option span {
+  font-size: 0.7rem;
 }
 
 .classification-rule-mode-control .settings-mode-option span {
@@ -34,7 +65,6 @@
   .classification-rule-form__grid:not(.classification-rule-form__grid--app) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-areas:
-      "mode mode"
       "target target"
       "category productivity"
       "action action";
@@ -45,7 +75,6 @@
   .classification-rule-form__grid:not(.classification-rule-form__grid--app) {
     grid-template-columns: 1fr;
     grid-template-areas:
-      "mode"
       "target"
       "category"
       "productivity"

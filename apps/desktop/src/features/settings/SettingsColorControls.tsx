@@ -45,6 +45,7 @@ type ClassificationPickerProps<TValue extends string> = {
   readonly getLabel: (value: TValue) => string;
   readonly getColor: (value: TValue) => string;
   readonly onChange: (value: TValue) => void;
+  readonly variant?: "category" | "productivity";
 };
 
 const BALANCED_PRESETS = [
@@ -252,9 +253,9 @@ function localizedThemeColorOptionLabel(
   }
 }
 
-export function ClassificationPicker<TValue extends string>({ label, ariaLabel, value, options, getLabel, getColor, onChange }: ClassificationPickerProps<TValue>) {
+export function ClassificationPicker<TValue extends string>({ label, ariaLabel, value, options, getLabel, getColor, onChange, variant = "category" }: ClassificationPickerProps<TValue>) {
   return (
-    <label className="classification-rule-field classification-rule-picker-field">
+    <label className={`classification-rule-field classification-rule-picker-field classification-rule-picker-field--${variant}`}>
       <span>{label}</span>
       <SettingsSelect
         ariaLabel={ariaLabel}

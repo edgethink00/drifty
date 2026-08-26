@@ -144,12 +144,13 @@ export function ClassificationSettingsSection({
     <div className="settings-section settings-section--classification">
       <div className="settings-block cloud-overview">
         <h3>{t("settings.section.classification")}</h3>
-        <div className="settings-row">
+        <div className="settings-row settings-row--classification-intro">
           <div>
-            <div className="lbl">{t("settings.classification.rules")}</div>
-            <div className="desc">{t("settings.classification.rulesDescription")}</div>
+            <div className="desc">
+              {t("settings.classification.rulesDescription")}{" "}
+              <span className="chip green classification-rule-local-chip">{t("settings.classification.localOnly")}</span>
+            </div>
           </div>
-          <div className="ctrl"><span className="chip green">{t("settings.classification.localOnly")}</span></div>
         </div>
         <div className="settings-row settings-row--fallback classification-rule-form">
           <div>
@@ -158,7 +159,19 @@ export function ClassificationSettingsSection({
           </div>
           <div className="ctrl classification-rule-form__grid">
             <div ref={domainRuleSearchRef} className="classification-rule-field classification-rule-field--wide classification-rule-search" onFocus={onDomainRuleSearchFocus} onBlur={onDomainRuleSearchBlur}>
-              <label htmlFor="classification-domain-rule-search">{t("settings.classification.domainOrUrl")}</label>
+              <div className="classification-rule-field__labelrow">
+                <label htmlFor="classification-domain-rule-search">{t("settings.classification.domainOrUrl")}</label>
+                {exactUrlAvailable ? (
+                  <div className="settings-mode-switch settings-mode-switch--compact classification-rule-mode-control" role="radiogroup" aria-label={t("settings.classification.ruleType")}>
+                    <button type="button" className={`settings-mode-option${effectiveDomainRuleMode === "domain" ? " is-active" : ""}`} role="radio" aria-checked={effectiveDomainRuleMode === "domain"} onClick={() => onDomainRuleModeChange("domain")}>
+                      <span>{t("settings.classification.domain")}</span>
+                    </button>
+                    <button type="button" className={`settings-mode-option${effectiveDomainRuleMode === "url" ? " is-active" : ""}`} role="radio" aria-checked={effectiveDomainRuleMode === "url"} onClick={() => onDomainRuleModeChange("url")}>
+                      <span>{t("settings.classification.exactUrl")}</span>
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <input id="classification-domain-rule-search" className="settings-input" type="search" value={domainRuleInput} onChange={(event) => onDomainRuleInputChange(event.target.value)} placeholder="example.com" aria-label={t("settings.classification.domainRuleAria")} autoComplete="off" aria-expanded={domainRuleSearchPanelOpen} aria-controls="classification-domain-rule-candidates" />
               {domainRuleSearchPanelOpen ? (
                 <div id="classification-domain-rule-candidates" className="classification-rule-candidates classification-rule-search__popover" aria-label={t("settings.classification.recordedSites")}>
@@ -181,19 +194,8 @@ export function ClassificationSettingsSection({
                 </div>
               ) : null}
             </div>
-            <div className="classification-rule-field classification-rule-mode-field">
-              <span>{t("settings.classification.ruleType")}</span>
-              <div className="settings-mode-switch settings-mode-switch--compact classification-rule-mode-control" role="radiogroup" aria-label={t("settings.classification.ruleType")}>
-                <button type="button" className={`settings-mode-option${effectiveDomainRuleMode === "domain" ? " is-active" : ""}`} role="radio" aria-checked={effectiveDomainRuleMode === "domain"} onClick={() => onDomainRuleModeChange("domain")}>
-                  <span>{t("settings.classification.domain")}</span>
-                </button>
-                <button type="button" className={`settings-mode-option${effectiveDomainRuleMode === "url" ? " is-active" : ""}`} role="radio" aria-checked={effectiveDomainRuleMode === "url"} onClick={() => onDomainRuleModeChange("url")} disabled={!exactUrlAvailable}>
-                  <span>{t("settings.classification.exactUrl")}</span>
-                </button>
-              </div>
-            </div>
             <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.domainCategoryAria")} value={domainRuleCategory} options={CATEGORY_ORDER} getLabel={(category) => localizedCategoryLabel(category, t)} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={onDomainRuleCategoryChange} />
-            <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.domainProductivityAria")} value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={(productivity) => localizedProductivityLabel(productivity, t)} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onDomainRuleProductivityChange} />
+            <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.domainProductivityAria")} value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={(productivity) => localizedProductivityLabel(productivity, t)} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onDomainRuleProductivityChange} variant="productivity" />
             <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveDomainRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? t("settings.classification.saving") : domainRuleSaveLabel}</button>
           </div>
           {effectiveDomainRuleMode === "url" && exactUrlValue ? <p className="classification-rule-selected classification-rule-selected--url" role="status">{t("settings.classification.exactUrlSelected", { url: exactUrlValue })}</p> : null}
@@ -227,8 +229,8 @@ export function ClassificationSettingsSection({
               ) : null}
             </div>
             <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.appCategoryAria")} value={appRuleCategory} options={CATEGORY_ORDER} getLabel={(category) => localizedCategoryLabel(category, t)} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={onAppRuleCategoryChange} />
-            <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.appProductivityAria")} value={appRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={(productivity) => localizedProductivityLabel(productivity, t)} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onAppRuleProductivityChange} />
-            <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveAppRule} disabled={classificationRuleSavingKind !== null || !appRuleTargetValue.trim()}>{classificationRuleSavingKind === "app" ? t("settings.classification.saving") : t("settings.classification.saveApp")}</button>
+            <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.appProductivityAria")} value={appRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={(productivity) => localizedProductivityLabel(productivity, t)} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onAppRuleProductivityChange} variant="productivity" />
+            <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveAppRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "app" ? t("settings.classification.saving") : t("settings.classification.saveApp")}</button>
           </div>
           {appRuleDisplayName ? <p className="classification-rule-selected" role="status">{t("settings.classification.selectedApp", { app: appRuleDisplayName })}</p> : null}
         </div>

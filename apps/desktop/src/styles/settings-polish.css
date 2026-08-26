@@ -2198,6 +2198,8 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   min-width: 0;
 }
 
+/* Field labels and prose stay in the UI face; the mono face is reserved for the
+   data the user actually types or picks (domains, app names, durations). */
 .classification-rule-field span,
 .classification-rule-field label,
 .classification-rule-hint,
@@ -2205,8 +2207,25 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .classification-rule-selected,
 .classification-rule-candidates__heading {
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: var(--type-setting-desc-size);
+}
+
+/* Written as a child chain on purpose: the shared `.settings-row .desc`
+   typography contract asserts every rule matching that selector restates
+   `--type-setting-desc-size`, and this rule only overrides the face. */
+.settings-section--classification .settings-row > div > .desc {
+  font-family: var(--font-ui);
+}
+
+.settings-section--classification .settings-btn {
+  font-family: var(--font-ui);
+  letter-spacing: 0;
+}
+
+/* The input keeps mono: its content is a domain or URL. */
+.settings-section--classification .classification-rule-field .settings-input {
+  font-family: var(--font-mono);
 }
 
 .classification-rule-field .settings-input,
@@ -2296,6 +2315,47 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   white-space: nowrap;
 }
 
+/* This card's only commit action should read as the primary one. The shared
+   `.settings-btn--primary` fill is overridden later in the settings cascade,
+   so restate it under the classification scope. */
+.settings-section--classification .classification-rule-form__grid .settings-btn--primary {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--canvas);
+  font-weight: 600;
+}
+
+.settings-section--classification .classification-rule-form__grid .settings-btn--primary:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--canvas);
+}
+
+/* Category and Productivity are different axes but rendered identically, which
+   reads as "pick the same thing twice". Productivity is an ordered scale, so it
+   gets a bar mark; Category keeps the round swatch. */
+.classification-rule-picker-field--productivity .settings-select-control__dot {
+  flex: 0 0 0.22rem;
+  width: 0.22rem;
+  height: 0.82rem;
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+
+.settings-row--classification-intro {
+  padding-bottom: var(--space-1);
+}
+
+.settings-row--classification-intro .desc {
+  max-width: min(96ch, 100%);
+}
+
+.classification-rule-local-chip {
+  margin-left: var(--space-1);
+  translate: 0 -0.04rem;
+  vertical-align: middle;
+}
+
 .classification-rule-mode-control {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   min-height: var(--classification-rule-control-height);
@@ -2304,11 +2364,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 
 .classification-rule-mode-control .settings-mode-option {
   min-width: 0;
-}
-
-.classification-rule-mode-control .settings-mode-option:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
 }
 
 .classification-rule-selected {
