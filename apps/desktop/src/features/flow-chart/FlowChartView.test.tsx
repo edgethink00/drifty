@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 import { SiteIconProvider } from "../../components/SiteIconContext";
@@ -74,6 +74,7 @@ const blockPlacementCases: BlockPlacementCase[] = [
   { intervalMinutes: 3, minuteOffset: 6, rowLabel: ":06", endTime: "14:09" },
   { intervalMinutes: 4, minuteOffset: 8, rowLabel: ":08", endTime: "14:12" },
   { intervalMinutes: 5, minuteOffset: 5, rowLabel: ":05", endTime: "14:10" },
+  { intervalMinutes: 6, minuteOffset: 12, rowLabel: ":12", endTime: "14:18" },
 ];
 
 describe("FlowChartView", () => {
@@ -122,20 +123,63 @@ describe("FlowChartView", () => {
     expect(toneDotRule).toContain("aspect-ratio: 1;");
   });
 
-  it("keeps interval controls compact without flattening the color mode toggle", () => {
-    const intervalControlRule = cssRule(".flow-interval-control");
-    const intervalButtonRule = cssRule(".flow-interval-control button");
+  it("keeps the detail overflow quiet without flattening the color mode toggle", () => {
+    const detailControlRule = cssRule(".flow-detail-select");
+    const detailTriggerRule = cssRule(".flow-detail-select .settings-select-control__trigger");
+    const detailMenuRule = cssRule(".flow-detail-select .settings-select-control__menu");
     const colorModeControlRule = cssRule(".flow-color-mode-control");
     const colorModeButtonRule = cssRule(".flow-color-mode-control button");
 
-    expect(intervalControlRule).toContain("padding: 1.78px;");
-    expect(intervalButtonRule).toContain("padding: 1.78px var(--space-2);");
-    expect(intervalButtonRule).toContain("font-size: 0.6875rem;");
+    expect(detailControlRule).toContain("width: 1.7rem;");
+    expect(detailControlRule).toContain("min-width: 1.7rem;");
+    expect(detailTriggerRule).toContain("border-color: transparent;");
+    expect(detailTriggerRule).toContain("background: transparent;");
+    expect(detailMenuRule).toContain("width: 14.75rem;");
     expect(colorModeControlRule).toContain("padding: 1.78px;");
     expect(colorModeButtonRule).toContain("min-height: 1.08rem;");
     expect(colorModeButtonRule).toContain("padding: 0.1rem 0.38rem;");
     expect(colorModeButtonRule).toContain("font-size: 0.6875rem;");
     expect(colorModeButtonRule).toContain("letter-spacing: 0.05em;");
+  });
+
+  it("moves 3m through 6m chart density behind a number-first detail menu", () => {
+    const onIntervalChange = vi.fn();
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
+
+    expect(screen.queryByRole("button", { name: "3m" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "4m" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "5m" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "6m" })).toBeNull();
+
+    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4 min · Balanced" });
+    expect(detailTrigger.getAttribute("title")).toBe("Flow detail: 4 min · Balanced");
+    fireEvent.click(detailTrigger);
+
+    expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "3 min · More detail" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("option", { name: "4 min · Balanced" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("option", { name: "5 min · Less detail" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("option", { name: "6 min · Least detail" }).getAttribute("aria-selected")).toBe("false");
+
+    fireEvent.click(screen.getByRole("option", { name: "6 min · Least detail" }));
+
+    expect(onIntervalChange).toHaveBeenCalledWith(6);
+    expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
+  });
+
+  it("supports keyboard-only Flow detail selection", () => {
+    const onIntervalChange = vi.fn();
+    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
+
+    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4 min · Balanced" });
+    fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
+    expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
+
+    fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
+    fireEvent.keyDown(detailTrigger, { key: "Enter" });
+
+    expect(onIntervalChange).toHaveBeenCalledWith(5);
+    expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
   });
 
   it("tightens only the flow chart shell spacing while preserving cell scale", () => {
@@ -202,7 +246,7 @@ describe("FlowChartView", () => {
     expect(styles).toMatch(/\.flow-breakdown-layout__chart \.flow-chart-row,\s*\.flow-breakdown-layout__chart \.flow-chart-hours\s*\{[\s\S]*width:\s*100%;[\s\S]*min-width:\s*0;/);
   });
 
-  it.each([3, 4, 5] as const)("renders %dm-specific minute rows", (intervalMinutes: FlowIntervalMinutes) => {
+  it.each([3, 4, 5, 6] as const)("renders %dm-specific minute rows", (intervalMinutes: FlowIntervalMinutes) => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={intervalMinutes} />);
 
     const rowLabels = Array.from(document.querySelectorAll(".flow-chart-row-label"), (label) => label.textContent);
@@ -300,13 +344,12 @@ describe("FlowChartView", () => {
       durationSeconds: 240,
     });
 
-    render(<FlowChartView blocks={[block]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
+    render(<FlowChartView blocks={[block]} appIcons={{}} intervalMinutes={4} />);
 
     const cell = screen.getByRole("button", { name: /time block: 14:08–14:12/i });
     const row = cell.closest(".flow-chart-row") as HTMLElement;
 
     expect(document.querySelector(".flow-chart-card")?.getAttribute("data-flow-interval")).toBe("4");
-    expect(screen.getByRole("button", { name: "4m" }).getAttribute("aria-pressed")).toBe("true");
     expect(cell.getAttribute("aria-label")).toContain("Time block: 14:08–14:12");
     expect(row.querySelector(".flow-chart-row-label")?.textContent).toBe(":08");
     expect(Array.from(document.querySelectorAll(".flow-chart-row-label"), (label) => label.textContent)).not.toContain(":09");

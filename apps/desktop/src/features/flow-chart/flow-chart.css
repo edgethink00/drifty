@@ -105,6 +105,43 @@
   background: var(--flow-legend-tone);
 }
 
+.flow-detail-select {
+  z-index: 4;
+  flex: 0 0 1.7rem;
+  width: 1.7rem;
+  min-width: 1.7rem;
+}
+
+.flow-detail-select .settings-select-control__trigger {
+  justify-content: center;
+  width: 1.7rem;
+  min-height: 1.48rem;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+}
+
+.flow-detail-select .settings-select-control__trigger:hover,
+.flow-detail-select[data-open="true"] .settings-select-control__trigger {
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  color: var(--text);
+}
+
+.flow-detail-select .settings-select-control__menu {
+  width: 14.75rem;
+  min-width: 14.75rem;
+}
+
+.flow-detail-select__icon {
+  display: block;
+  width: 1rem;
+  height: 0.42rem;
+}
+
+/* The internal Agents timeline still exposes all domain-supported intervals. */
 .flow-interval-control {
   flex: 0 0 auto;
   padding: 1.78px;

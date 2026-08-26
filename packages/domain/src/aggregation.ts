@@ -408,6 +408,11 @@ type FlowBlockCandidate = {
   strongestOverlapSeconds: number;
 };
 
+type FlowBlockBuildContext = {
+  readonly classificationBySegmentId: ReadonlyMap<string, ActivityClassificationDetail>;
+  readonly effectiveProductivityBySegmentId: ReadonlyMap<string, EffectiveProductivityResolution>;
+};
+
 // One segment's overlap contribution to a single flow-chart bucket. Emitted in the same
 // segment-then-bucket order used by `buildFlowBlocks`, so any aggregation built on top of
 // this iterator sees candidates inserted in the exact order `buildFlowBlocks` relies on.
@@ -541,16 +546,69 @@ export function buildFlowBlocks(
   projectIdBySegment?: ReadonlyMap<string, string>,
   projectSegments?: readonly ActivitySegment[],
 ): FlowBlock[] {
+  const context = createFlowBlockBuildContext(segments, options);
+  return buildFlowBlocksWithContext(
+    segments,
+    day,
+    intervalMinutes,
+    startOfDayMinutes,
+    context,
+    projectColorBySegment,
+    projectIdBySegment,
+    projectSegments,
+  );
+}
+
+/**
+ * Builds several interval views while sharing classification and contextual
+ * productivity work. This keeps display-only density preferences from
+ * multiplying the most expensive part of Flow aggregation.
+ */
+export function buildFlowBlocksForIntervals<TInterval extends FlowIntervalMinutes>(
+  segments: ActivitySegment[],
+  day: string,
+  intervalMinutes: readonly TInterval[],
+  options?: ClassificationOptions,
+  startOfDayMinutes = 0,
+  projectColorBySegment?: ReadonlyMap<string, string>,
+  projectIdBySegment?: ReadonlyMap<string, string>,
+  projectSegments?: readonly ActivitySegment[],
+): ReadonlyMap<TInterval, FlowBlock[]> {
+  const blocksByInterval = new Map<TInterval, FlowBlock[]>();
+  if (intervalMinutes.length === 0) return blocksByInterval;
+
+  const context = createFlowBlockBuildContext(segments, options);
+  for (const interval of new Set(intervalMinutes)) {
+    blocksByInterval.set(interval, buildFlowBlocksWithContext(
+      segments,
+      day,
+      interval,
+      startOfDayMinutes,
+      context,
+      projectColorBySegment,
+      projectIdBySegment,
+      projectSegments,
+    ));
+  }
+  return blocksByInterval;
+}
+
+function buildFlowBlocksWithContext(
+  segments: ActivitySegment[],
+  day: string,
+  intervalMinutes: FlowIntervalMinutes,
+  startOfDayMinutes: number,
+  context: FlowBlockBuildContext,
+  projectColorBySegment?: ReadonlyMap<string, string>,
+  projectIdBySegment?: ReadonlyMap<string, string>,
+  projectSegments?: readonly ActivitySegment[],
+): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
-  const effectiveProductivityBySegmentId = buildEffectiveProductivityBySegmentId(segments, options);
+  const { classificationBySegmentId, effectiveProductivityBySegmentId } = context;
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
-  const classificationBySegmentId = new Map<string, ActivityClassificationDetail>();
   const classificationFor = (segment: ActivitySegment): ActivityClassificationDetail => {
-    let classification = classificationBySegmentId.get(segment.id);
-    if (!classification) {
-      classification = classifyActivityDetailed(segment, options);
-      classificationBySegmentId.set(segment.id, classification);
-    }
+    const classification = classificationBySegmentId.get(segment.id);
+    if (!classification) throw new Error(`Missing Flow classification for segment: ${segment.id}`);
     return classification;
   };
 
@@ -1448,8 +1506,26 @@ const MIXED_COMMUNICATION_BUNDLE_IDS: readonly string[] = [
 ] as const;
 const MIXED_COMMUNICATION_DOMAINS: readonly string[] = ["discord.com", "whatsapp.com", "web.whatsapp.com", "telegram.org", "web.telegram.org"] as const;
 
-function buildEffectiveProductivityBySegmentId(segments: ActivitySegment[], options?: ClassificationOptions): Map<string, EffectiveProductivityResolution> {
+function createFlowBlockBuildContext(
+  segments: ActivitySegment[],
+  options?: ClassificationOptions,
+): FlowBlockBuildContext {
   const classifiedSegments = classifiedSegmentsInTimeOrder(segments, options);
+  return {
+    classificationBySegmentId: new Map(
+      classifiedSegments.map(({ segment, classification }) => [segment.id, classification]),
+    ),
+    effectiveProductivityBySegmentId: buildEffectiveProductivityFromClassifiedSegments(classifiedSegments),
+  };
+}
+
+function buildEffectiveProductivityBySegmentId(segments: ActivitySegment[], options?: ClassificationOptions): Map<string, EffectiveProductivityResolution> {
+  return buildEffectiveProductivityFromClassifiedSegments(classifiedSegmentsInTimeOrder(segments, options));
+}
+
+function buildEffectiveProductivityFromClassifiedSegments(
+  classifiedSegments: readonly ClassifiedSegment[],
+): Map<string, EffectiveProductivityResolution> {
   const productivities = new Map<string, EffectiveProductivityResolution>();
   const episodes = communicationEpisodes(classifiedSegments);
 

@@ -60,6 +60,8 @@ type SettingsSelectProps<TValue extends string> = {
   readonly options: readonly SettingsSelectOption<TValue>[];
   readonly onChange: (value: TValue) => void;
   readonly className?: string;
+  /** Optional compact visual for icon-only triggers. The accessible name still comes from `ariaLabel`. */
+  readonly triggerVisual?: ReactNode;
   /** Shown (greyed) in the trigger when `value` matches no option — a "nothing selected yet" state. */
   readonly placeholder?: string;
 };
@@ -78,6 +80,7 @@ export function SettingsSelect<TValue extends string>({
   options,
   onChange,
   className,
+  triggerVisual,
   placeholder,
 }: SettingsSelectProps<TValue>) {
   const controlId = useId();
@@ -111,6 +114,7 @@ export function SettingsSelect<TValue extends string>({
 
   const activeOption = options[activeIndex] ?? selectedOption;
   const rootClassName = ["settings-select-control", className].filter(Boolean).join(" ");
+  const triggerLabel = triggerVisual ? `${ariaLabel}: ${selectedOption.label}` : ariaLabel;
   const optionId = (optionValue: TValue) => `${controlId}-option-${optionValue}`;
 
   function openMenu() {
@@ -181,18 +185,25 @@ export function SettingsSelect<TValue extends string>({
         type="button"
         className="settings-select-control__trigger"
         role="combobox"
-        aria-label={ariaLabel}
+        aria-label={triggerLabel}
+        title={triggerVisual ? triggerLabel : undefined}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-activedescendant={isOpen ? optionId(activeOption.value) : undefined}
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
       >
-        <span className="settings-select-control__value">
-          {showPlaceholder ? null : <OptionIcon option={selectedOption} />}
-          <span>{showPlaceholder ? placeholder : selectedOption.label}</span>
-        </span>
-        <span className="settings-select-control__chevron" aria-hidden="true" />
+        {triggerVisual ? (
+          <span className="settings-select-control__trigger-visual" aria-hidden="true">{triggerVisual}</span>
+        ) : (
+          <>
+            <span className="settings-select-control__value">
+              {showPlaceholder ? null : <OptionIcon option={selectedOption} />}
+              <span>{showPlaceholder ? placeholder : selectedOption.label}</span>
+            </span>
+            <span className="settings-select-control__chevron" aria-hidden="true" />
+          </>
+        )}
       </button>
       {isOpen ? (
         <div className="settings-select-control__menu" id={listboxId} role="listbox" aria-label={ariaLabel}>

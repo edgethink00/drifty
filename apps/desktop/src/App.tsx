@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
-  buildFlowBlocks,
+  buildFlowBlocksForIntervals,
   filterSegmentsByDevice,
   buildRollingFocusSeconds,
   buildCategoryDurations,
@@ -115,6 +115,11 @@ import { useAnalysisModelSetup } from "./features/settings/useAnalysisModelSetup
 import { useProjectClassification } from "./features/classification/useProjectClassification";
 import { CommandBar } from "./features/command-bar/CommandBar";
 import { NO_PROJECT_COLOR, NO_PROJECT_LABEL as FLOW_NO_PROJECT_LABEL, projectColorMap, type ProjectLegendEntry } from "./features/flow-chart/projectFlowView";
+import {
+  DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES,
+  persistDashboardFlowIntervalMinutes,
+  resolveInitialDashboardFlowIntervalMinutes,
+} from "./features/flow-chart/flowChartDetailPreference";
 
 const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
@@ -509,7 +514,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(3);
+  const [flowIntervalMinutes, setFlowIntervalMinutes] = useState<FlowIntervalMinutes>(resolveInitialDashboardFlowIntervalMinutes);
+  const handleFlowIntervalChange = useCallback((intervalMinutes: FlowIntervalMinutes) => {
+    setFlowIntervalMinutes(persistDashboardFlowIntervalMinutes(intervalMinutes));
+  }, []);
   const [classificationRange, setClassificationRange] = useState<ClassificationRange>("Day");
   const [trendsRange, setTrendsRange] = useState<InsightRange>("Week");
   const [weeklyChartMode, setWeeklyChartMode] = useState<WeeklyChartMode>("category");
@@ -5833,7 +5841,22 @@ export default function App() {
     const centerPercent = total > 0 ? Math.round(((entries[0]?.totalSeconds ?? 0) / total) * 100) : 0;
     return { entries, centerPercent };
   }, [projectClassification.projects, selectedDayProjectProjection.projectBySegmentId, selectedDayProjectProjection.segments]);
-  const flowBlocks = useMemo(() => buildFlowBlocks(effectiveSelectedDaySegments, selectedDay, flowIntervalMinutes, effectiveSelectedDayClassificationOptions, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment, selectedDayProjectProjection.segments), [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, selectedDayProjectProjection.segments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
+  const [flowBlocks, summaryFlowBlocks] = useMemo(() => {
+    const blocksByInterval = buildFlowBlocksForIntervals(
+      effectiveSelectedDaySegments,
+      selectedDay,
+      [flowIntervalMinutes, DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES],
+      effectiveSelectedDayClassificationOptions,
+      startOfDayMinutes,
+      flowProjectColorBySegment,
+      flowProjectIdBySegment,
+      selectedDayProjectProjection.segments,
+    );
+    return [
+      blocksByInterval.get(flowIntervalMinutes) ?? [],
+      blocksByInterval.get(DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES) ?? [],
+    ] as const;
+  }, [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, selectedDayProjectProjection.segments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
   const [projectPassConsented, setProjectPassConsented] = useState(() => {
     try {
       return typeof window !== "undefined" && window.localStorage.getItem(PROJECT_PASS_CONSENT_STORAGE_KEY) === "1";
@@ -7449,6 +7472,7 @@ export default function App() {
             dashboardRange={effectiveDashboardRange}
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
+            summaryFlowBlocks={summaryFlowBlocks}
             flowIntervalMinutes={flowIntervalMinutes}
             deviceLabelById={remoteDeviceLabelById}
             deviceTimelineFilter={deviceTimelineFilter}
@@ -7476,7 +7500,7 @@ export default function App() {
             weekCurrentCalendarDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveTodayDayForWeekModel : null}
             weekCurrentMinuteOfDay={isDashboardDemoReplayActive && dashPeriod === "Week" ? effectiveCurrentMinuteOfDay : null}
             onDismissDashboardAiRecovery={handleDismissDashboardAiRecovery}
-            onFlowIntervalChange={setFlowIntervalMinutes}
+            onFlowIntervalChange={handleFlowIntervalChange}
             onOpenDashboardAiSetup={openDashboardAiSetup}
             onJoinLeaderboard={handleLeaderboardOptIn}
             onManageCloudBilling={() => {

@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { FlowBlock } from "@drifty/domain";
 import { DashboardPage } from "./DashboardPage";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 
@@ -15,11 +16,14 @@ type DashboardPageFixtureOptions = {
   readonly browserHistoryBootstrapNotice?: ComponentProps<typeof DashboardPage>["browserHistoryBootstrapNotice"];
   readonly dashboardEffectiveProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardEffectiveProductivityTotals"];
   readonly dashboardDateNavigator?: ComponentProps<typeof DashboardPage>["dashboardDateNavigator"];
+  readonly dashboardCategoryTotals?: ComponentProps<typeof DashboardPage>["dashboardCategoryTotals"];
   readonly dashboardProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardProductivityTotals"];
   readonly dashboardReplay?: ComponentProps<typeof DashboardPage>["dashboardReplay"];
   readonly dashPeriod?: ComponentProps<typeof DashboardPage>["dashPeriod"];
   readonly hasTimelineData?: boolean;
   readonly initialDataLoading?: boolean;
+  readonly flowBlocks?: FlowBlock[];
+  readonly summaryFlowBlocks?: FlowBlock[];
   readonly totalSeconds?: number;
 };
 
@@ -35,14 +39,15 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       dashboardSegments={[]}
       dashboardClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
-      dashboardCategoryTotals={[]}
+      dashboardCategoryTotals={options.dashboardCategoryTotals ?? []}
       dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}
       dashboardEffectiveProductivityTotals={options.dashboardEffectiveProductivityTotals ?? []}
       dashboardProductivityTotals={options.dashboardProductivityTotals ?? []}
       dashboardReplay={options.dashboardReplay === undefined ? { phase: "playing", progress: 0, onRestart: noop, onStop: noop } : options.dashboardReplay}
       dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
       dashPeriod={options.dashPeriod ?? "Today"}
-      flowBlocks={[]}
+      flowBlocks={options.flowBlocks ?? []}
+      summaryFlowBlocks={options.summaryFlowBlocks ?? []}
       flowIntervalMinutes={3}
       focusDriftSection={<div data-testid="focus-drift-placeholder" />}
       dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
@@ -163,6 +168,50 @@ describe("DashboardPage day metrics without measured activity", () => {
   });
 });
 
+describe("DashboardPage stable summary detail", () => {
+  it("uses canonical summary blocks for Breakdown app details", () => {
+    const displayBlock: FlowBlock = {
+      id: "display-block",
+      day: "2026-06-29",
+      hour: 9,
+      quarter: 0,
+      minuteOfDay: 9 * 60,
+      appName: "Display-only app",
+      bundleId: "com.example.display",
+      category: "workspace",
+      productivity: "focus",
+      colorKey: "Display-only app",
+      durationSeconds: 180,
+    };
+    const summaryBlock: FlowBlock = {
+      ...displayBlock,
+      id: "summary-block",
+      appName: "Canonical summary app",
+      bundleId: "com.example.summary",
+      colorKey: "Canonical summary app",
+      durationSeconds: 300,
+    };
+
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      dashboardCategoryTotals: [{ category: "workspace", totalSeconds: 300, segments: 1, ratio: 1 }],
+      dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 300, segments: 1, ratio: 1 }],
+      dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 300, segments: 1, ratio: 1 }],
+      flowBlocks: [displayBlock],
+      summaryFlowBlocks: [summaryBlock],
+      hasTimelineData: true,
+      totalSeconds: 300,
+    });
+
+    const categoriesPanel = screen.getByLabelText("Category compact classification");
+    const categorySegment = categoriesPanel.querySelector(".flow-compact-split-chart__segment") as HTMLElement;
+    fireEvent.mouseEnter(categorySegment, { clientX: 120, clientY: 80 });
+
+    expect(document.querySelector(".compact-classification-hover-card")?.textContent).toContain("Canonical summary app");
+    expect(document.querySelector(".compact-classification-hover-card")?.textContent).not.toContain("Display-only app");
+  });
+});
+
 describe("DashboardPage header concepts", () => {
   it("uses focus duration, not total captured time, as the Day heading", () => {
     renderDashboardWithNoData({
@@ -265,6 +314,7 @@ describe("DashboardPage billing recovery overlay", () => {
         dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
         dashPeriod="Today"
         flowBlocks={[]}
+        summaryFlowBlocks={[]}
         flowIntervalMinutes={3}
         focusDriftSection={<div data-testid="focus-drift-placeholder" />}
         dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}

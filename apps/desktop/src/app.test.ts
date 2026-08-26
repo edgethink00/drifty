@@ -4,6 +4,7 @@ import {
   FLOW_INTERVAL_OPTIONS,
   buildAppUsageSummaries,
   buildFlowBlocks,
+  buildFlowBlocksForIntervals,
   buildDailyTotals,
   buildHourlyBuckets,
   buildEffectiveProductivityDurations,
@@ -698,7 +699,7 @@ describe('domain helpers', () => {
   });
 
   it('offers compact flow block intervals', () => {
-    expect(FLOW_INTERVAL_OPTIONS).toEqual([3, 4, 5]);
+    expect(FLOW_INTERVAL_OPTIONS).toEqual([3, 4, 5, 6]);
 
     const blocks = buildFlowBlocks([
       {
@@ -712,6 +713,20 @@ describe('domain helpers', () => {
     expect(blocks).toHaveLength(8);
     expect(blocks.map((block) => block.minuteOfDay)).toEqual([9 * 60, 9 * 60 + 4, 9 * 60 + 8, 9 * 60 + 12, 9 * 60 + 16, 9 * 60 + 20, 9 * 60 + 24, 9 * 60 + 28]);
     expect(blocks.map((block) => block.durationSeconds)).toEqual([240, 240, 240, 240, 240, 240, 240, 120]);
+  });
+
+  it('builds several Flow intervals from one shared classification pass', () => {
+    const source = [{
+      ...segments[0],
+      startedAt: localIso(9, 0),
+      endedAt: localIso(9, 30),
+      durationSeconds: 1800,
+    }];
+    const blocksByInterval = buildFlowBlocksForIntervals(source, '2026-04-06', [4, 5, 4]);
+
+    expect([...blocksByInterval.keys()]).toEqual([4, 5]);
+    expect(blocksByInterval.get(4)).toEqual(buildFlowBlocks(source, '2026-04-06', 4));
+    expect(blocksByInterval.get(5)).toEqual(buildFlowBlocks(source, '2026-04-06', 5));
   });
 
   it('classifies unmatched activity as unknown instead of focus workspace', () => {

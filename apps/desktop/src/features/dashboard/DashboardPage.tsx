@@ -51,6 +51,8 @@ type DashboardPageProps = {
   };
   readonly dashPeriod: DashboardPeriod;
   readonly flowBlocks: FlowBlock[];
+  /** Stable 5-minute blocks for summaries whose meaning must not change with the chart display preference. */
+  readonly summaryFlowBlocks: FlowBlock[];
   readonly flowIntervalMinutes: FlowIntervalMinutes;
   readonly projectModeAvailable?: boolean;
   readonly projectLegend?: readonly ProjectLegendEntry[];
@@ -106,6 +108,7 @@ export function DashboardPage({
   dashboardRange,
   dashPeriod,
   flowBlocks,
+  summaryFlowBlocks,
   flowIntervalMinutes,
   projectModeAvailable,
   projectLegend,
@@ -216,13 +219,13 @@ export function DashboardPage({
         totalSeconds,
         categoryTotals: dashboardCategoryTotals,
         productivityTotals: dashboardProductivityTotals,
-        flowBlocks,
+        flowBlocks: summaryFlowBlocks,
         deltaSeconds: dayFocusDeltaSeconds,
         comparisonProgress: dailyFocusComparisonProgress(selectedDay, logicalToday, currentLogicalMinute),
         isCurrentPeriod: selectedDay === logicalToday,
       }),
     };
-  }, [currentLogicalMinute, dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, flowBlocks, logicalToday, selectedDay, shareCardOpen, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
+  }, [currentLogicalMinute, dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, logicalToday, selectedDay, shareCardOpen, summaryFlowBlocks, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
   const pageHead = (
     <DashboardPageHeader
       dashPeriod={dashPeriod}
@@ -396,7 +399,7 @@ export function DashboardPage({
                     entries={flowProjectRingEntries ?? []}
                     totalSeconds={totalSeconds}
                     centerPercent={flowProjectCenterPercent ?? 0}
-                    flowBlocks={flowBlocks}
+                    flowBlocks={summaryFlowBlocks}
                     appIcons={appIcons}
                   />
                 ) : (
@@ -405,7 +408,7 @@ export function DashboardPage({
                     entries={dayProductivityRingEntries}
                     totalSeconds={totalSeconds}
                     centerPercent={dayProductivityCenterPercent}
-                    flowBlocks={flowBlocks}
+                    flowBlocks={summaryFlowBlocks}
                     appIcons={appIcons}
                   />
                 )}
@@ -418,7 +421,7 @@ export function DashboardPage({
                   getLabel={(entry) => categoryLabel(entry.category)}
                   getColor={(entry) => CATEGORY_COLORS[entry.category]}
                   getDotClassName={(entry) => `category-dot--${entry.category}`}
-                  getAppBreakdown={(entry) => buildCompactClassificationBreakdown(flowBlocks, (block) => block.category === entry.category)}
+                  getAppBreakdown={(entry) => buildCompactClassificationBreakdown(summaryFlowBlocks, (block) => block.category === entry.category)}
                   appIcons={appIcons}
                   visibleLimit={5}
                 />
