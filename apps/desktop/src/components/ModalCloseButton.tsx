@@ -2,6 +2,8 @@ type ModalCloseButtonProps = {
   /** Accessible label, e.g. "Close", "Close profile editor". */
   readonly label: string;
   readonly onClick: () => void;
+  /** Prevent dismissal while the owning modal is completing an atomic action. */
+  readonly disabled?: boolean;
   /** Extra class names appended after the shared `modal-x` chrome class. */
   readonly className?: string;
 };
@@ -10,12 +12,18 @@ type ModalCloseButtonProps = {
  * The shared circular top-right close button used by every app modal.
  * Styling lives in `styles/modal-chrome.css` (`.modal-x`).
  */
-export function ModalCloseButton({ label, onClick, className }: ModalCloseButtonProps): JSX.Element {
+export function ModalCloseButton({
+  label,
+  onClick,
+  disabled = false,
+  className,
+}: ModalCloseButtonProps): JSX.Element {
   return (
     <button
       type="button"
       className={className ? `modal-x ${className}` : "modal-x"}
       aria-label={label}
+      disabled={disabled}
       onClick={onClick}
     >
       <svg

@@ -510,6 +510,10 @@
   max-height: min(88vh, 58rem);
 }
 
+.dashboard-ai-recovery--upgrade .dashboard-ai-recovery__panel {
+  max-height: min(88vh, 58rem);
+}
+
 .dashboard-ai-recovery--cloud-billing .dashboard-ai-recovery__panel {
   max-height: min(88vh, 58rem);
   width: min(64rem, 100%);
@@ -548,6 +552,13 @@
 .dashboard-ai-recovery__actions {
   grid-auto-flow: column;
   justify-content: start;
+}
+
+.dashboard-ai-recovery__error {
+  color: var(--warn);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin: 0;
 }
 
 /* 24h timeline */

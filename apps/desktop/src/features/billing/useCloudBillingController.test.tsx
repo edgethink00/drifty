@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,6 +57,7 @@ describe("useCloudBillingController", () => {
   });
 
   afterEach(() => {
+    cleanup();
     vi.useRealTimers();
   });
 
@@ -216,6 +217,52 @@ describe("useCloudBillingController", () => {
     expect(billingMocks.createBillingPortalSession).toHaveBeenCalledTimes(1);
     expect(openUrl).toHaveBeenCalledWith("https://portal.example.test");
     expect(billingMocks.createIndividualCheckout).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      label: "an active subscription",
+      entitlement: {
+        plan: "individual" as const,
+        status: "active" as const,
+        canUseApp: true,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+      },
+    },
+    {
+      label: "a device-limit lock",
+      entitlement: {
+        plan: "individual" as const,
+        status: "locked" as const,
+        canUseApp: false,
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        lockedReason: "device_limit_reached" as const,
+      },
+    },
+  ])("refreshes instead of opening checkout for $label", async ({ entitlement }) => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: entitlement });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      onOpenAiSetup: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.billingEntitlement).toEqual(entitlement));
+    const entitlementChecksBeforeAction = billingMocks.fetchBillingEntitlement.mock.calls.length;
+    await act(async () => {
+      await result.current.startCloudCheckout("yearly");
+    });
+
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(entitlementChecksBeforeAction + 1);
+    expect(billingMocks.createIndividualCheckout).not.toHaveBeenCalled();
+    expect(openUrl).not.toHaveBeenCalled();
   });
 
   it("opens Polar checkout when a plan is explicitly selected", async () => {

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IndividualPlanCards } from "./IndividualPlanCards";
 import { readAppStyles } from "../../test/readStyles";
+
+afterEach(cleanup);
 
 describe("IndividualPlanCards", () => {
   it("shows Free and Pro with a monthly/yearly interval switch", () => {
@@ -92,6 +94,13 @@ describe("IndividualPlanCards", () => {
     expect(onSelectPlan).toHaveBeenCalledWith("monthly");
   });
 
+  it("keeps the displayed cadence stable while checkout is opening", () => {
+    render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval="monthly" onSelectPlan={vi.fn()} />);
+
+    expect(screen.getByRole("radio", { name: /monthly/i })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("radio", { name: /yearly/i })).toHaveProperty("disabled", true);
+  });
+
   it("opens AI setup from the Free plan card when shown with a free-plan handler", () => {
     const onSelectFreePlan = vi.fn();
 
@@ -119,5 +128,4 @@ describe("IndividualPlanCards", () => {
     expect(onManageCurrentPlan).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: /^Manage billing$/i })).toBeNull();
   });
-
 });

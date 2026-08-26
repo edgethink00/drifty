@@ -17,6 +17,7 @@ import {
 } from "./CloudTrialStartedNotice";
 import { toErrorMessage } from "../../lib/formatting";
 import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthogClient";
+import { canStartIndividualCheckout } from "./billingEligibility";
 
 type UseCloudBillingControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
@@ -220,6 +221,7 @@ export function useCloudBillingController({
       onAuthRequired();
       return;
     }
+    if (cloudCheckoutPendingRef.current) return;
 
     // A blocked payment already owns a subscription. Opening checkout here would
     // sell a second one instead of recovering the one Polar already has.
@@ -227,7 +229,10 @@ export function useCloudBillingController({
       await handleManageCloudBilling();
       return;
     }
-    if (cloudCheckoutPendingRef.current) return;
+    if (!canStartIndividualCheckout(billingEntitlement)) {
+      await refreshBillingEntitlement();
+      return;
+    }
 
     setBillingActionError(null);
     cloudCheckoutPendingRef.current = true;
@@ -273,7 +278,16 @@ export function useCloudBillingController({
       if (!openedCheckout) cloudCheckoutPendingRef.current = false;
       setBillingCheckoutLoadingInterval(null);
     }
-  }, [billingEntitlement?.lockedReason, handleManageCloudBilling, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, user]);
+  }, [
+    billingEntitlement?.lockedReason,
+    billingEntitlement?.status,
+    handleManageCloudBilling,
+    hasRequiredAccountAuth,
+    isSupabaseConfigured,
+    onAuthRequired,
+    refreshBillingEntitlement,
+    user,
+  ]);
 
   const handleRedeemTrialCoupon = useCallback(async (code: string) => {
     const requestId = ++couponRedemptionRequestRef.current;

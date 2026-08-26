@@ -29,6 +29,7 @@ const modalSurfaces = [
   ["Command palette", "./features/command-bar/CommandBar.tsx", /className="cmd-box modal-shell"\s+data-modal-variant="utility"/],
   ["Edit drift alarm copy", "./features/companion/DriftAlarmCopySettings.tsx", /className="auth-modal modal-shell drift-copy-modal"\s+data-modal-variant="workspace"/],
   ["Restore AI analysis", "./features/dashboard/DashboardAiRecoveryOverlay.tsx", /className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"/],
+  ["Upgrade to Pro", "./features/billing/UpgradePlanModal.tsx", /className="dashboard-ai-recovery__panel modal-shell"\s+data-modal-variant="workspace"/],
 ] as const;
 
 describe("modal system v2 contract", () => {
@@ -47,7 +48,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every production popup surface under one explicit variant", () => {
-    expect(modalSurfaces).toHaveLength(23);
+    expect(modalSurfaces).toHaveLength(24);
 
     for (const [name, path, pattern] of modalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);

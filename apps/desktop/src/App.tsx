@@ -50,6 +50,8 @@ import { TEAM_INVITE_DEEP_LINK_EVENT, readPendingTeamInviteFromEvent, type Pendi
 import { HISTORY_TIMELINE_PAGE_SIZE, mergeHistoryTimelinePages } from "./features/history/historyPagination";
 import { AiConnectionStatusBar, resolveAiConnectionStatus } from "./features/ai-connection/AiConnectionStatusBar";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./features/sidebar/SidebarCtaSlot";
+import { UpgradePlanModal } from "./features/billing/UpgradePlanModal";
+import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
 import {
   buildSidebarCtaPreviewInput,
   type SidebarCtaPreviewCase,
@@ -1072,6 +1074,8 @@ export default function App() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalShowsGoogle, setAuthModalShowsGoogle] = useState(true);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
+  const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -1532,6 +1536,7 @@ export default function App() {
   const shouldShowSidebarCtaSlot = !isSettingsTab
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
+  const billingEntitlementSupportsUpgrade = canStartIndividualCheckout(billingEntitlement);
   const handleStartDriftyCloudSetup = useCallback(async () => {
     if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
       requestCloudBillingAuth();
@@ -1539,6 +1544,27 @@ export default function App() {
     }
     openAccountSettings();
   }, [hasRequiredAccountAuth, isSupabaseConfigured, openAccountSettings, requestCloudBillingAuth, user]);
+  const handleOpenUpgradePlanModal = useCallback(() => {
+    if (!isSupabaseConfigured) {
+      requestCloudBillingAuth();
+      return;
+    }
+    if (!user || !hasRequiredAccountAuth) {
+      setResumeUpgradePlanAfterAuth(true);
+      requestCloudBillingAuth();
+      return;
+    }
+    if (!isSidebarCtaPreviewActive && (billingEntitlementLoading || !billingEntitlementSupportsUpgrade)) return;
+    setUpgradePlanModalOpen(true);
+  }, [
+    billingEntitlementLoading,
+    billingEntitlementSupportsUpgrade,
+    hasRequiredAccountAuth,
+    isSidebarCtaPreviewActive,
+    isSupabaseConfigured,
+    requestCloudBillingAuth,
+    user,
+  ]);
 
   const refreshRequestRef = useRef(0);
   const trackerMutationGenerationRef = useRef(0);
@@ -5174,6 +5200,7 @@ export default function App() {
     || isDashboardDemoReplayUpdateDialogBlocking(dashboardDemoReplayState)
     || authModalOpen
     || feedbackModalOpen
+    || upgradePlanModalOpen
     || aiSetupDialogOpen
     || onboardingOpen
     || selectedLeaderboardRow
@@ -6161,6 +6188,61 @@ export default function App() {
     }
   }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired]);
 
+  useEffect(() => {
+    if (!resumeUpgradePlanAfterAuth) return;
+    if (authStatus !== "authenticated" || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) return;
+    if (isSidebarCtaPreviewActive) {
+      setUpgradePlanModalOpen(true);
+      setResumeUpgradePlanAfterAuth(false);
+      return;
+    }
+    if (billingEntitlementLoading) return;
+    if (billingEntitlementError) {
+      setResumeUpgradePlanAfterAuth(false);
+      return;
+    }
+    if (!billingEntitlement) return;
+    setResumeUpgradePlanAfterAuth(false);
+    if (billingEntitlementSupportsUpgrade) setUpgradePlanModalOpen(true);
+  }, [
+    authStatus,
+    billingEntitlement,
+    billingEntitlementError,
+    billingEntitlementLoading,
+    billingEntitlementSupportsUpgrade,
+    hasRequiredAccountAuth,
+    isEffectiveAuthRequired,
+    isSidebarCtaPreviewActive,
+    resumeUpgradePlanAfterAuth,
+  ]);
+
+  useEffect(() => {
+    if (isSidebarCtaPreviewActive) return;
+    if (!upgradePlanModalOpen) return;
+    if (authStatus !== "authenticated" || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
+      setUpgradePlanModalOpen(false);
+      return;
+    }
+    if (billingEntitlementLoading) return;
+    if (billingEntitlementError || !billingEntitlementSupportsUpgrade) setUpgradePlanModalOpen(false);
+  }, [
+    authStatus,
+    billingEntitlementError,
+    billingEntitlementLoading,
+    billingEntitlementSupportsUpgrade,
+    hasRequiredAccountAuth,
+    isEffectiveAuthRequired,
+    isSidebarCtaPreviewActive,
+    upgradePlanModalOpen,
+  ]);
+
+  const shouldRenderUpgradePlanModal = upgradePlanModalOpen
+    && (isSidebarCtaPreviewActive
+      || (authStatus === "authenticated"
+        && (!isEffectiveAuthRequired || hasRequiredAccountAuth)
+        && billingEntitlementSupportsUpgrade
+        && billingEntitlementError === null));
+
   const handleCloseAuthModal = useCallback(() => {
     setAuthModalOpen(false);
     setAuthModalShowsGoogle(true);
@@ -6168,6 +6250,7 @@ export default function App() {
       setOnboardingOpen(true);
     }
     setResumeOnboardingAfterAuthModal(false);
+    setResumeUpgradePlanAfterAuth(false);
   }, [hasRequiredAccountAuth, resumeOnboardingAfterAuthModal]);
 
   const openDashboardAiSetup = useCallback(() => {
@@ -7232,7 +7315,7 @@ export default function App() {
                   void handleManageCloudBilling();
                   return;
                 }
-                void handleStartDriftyCloudSetup();
+                handleOpenUpgradePlanModal();
               }}
             />
           ) : null}
@@ -7353,7 +7436,7 @@ export default function App() {
             billingPlansDisabled={billingCheckoutAwaitingConfirmation}
             billingPortalLoading={billingPortalLoading}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
-            dashboardAiRecoveryState={dashboardAiRecoveryState}
+            dashboardAiRecoveryState={upgradePlanModalOpen ? null : dashboardAiRecoveryState}
             dashboardAppUsage={stickyDashboardAppUsage}
             dashboardSegments={effectiveDashboardSegments}
             dashboardClassificationOptions={dashboardClassificationOptions}
@@ -7984,6 +8067,19 @@ export default function App() {
       ) : null}
 
       {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+
+      {shouldRenderUpgradePlanModal ? (
+        <UpgradePlanModal
+          billingActionError={billingActionError}
+          billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+          billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || isSidebarCtaPreviewActive}
+          onClose={() => setUpgradePlanModalOpen(false)}
+          onSelectBillingPlan={(billingInterval) => {
+            if (isSidebarCtaPreviewActive) return;
+            void startCloudCheckout(billingInterval);
+          }}
+        />
+      ) : null}
 
       {feedbackModalOpen ? (
         <Suspense fallback={null}>

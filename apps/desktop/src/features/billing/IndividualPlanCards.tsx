@@ -161,6 +161,7 @@ export function IndividualPlanCards({
           className={`individual-plan-interval${selectedInterval === option.id ? " is-active" : ""}`}
           role="radio"
           aria-checked={selectedInterval === option.id}
+          disabled={loadingInterval !== null}
           onClick={() => handleIntervalChange(option.id)}
         >
           <span>{option.label}</span>
