@@ -348,10 +348,6 @@
     padding: var(--space-4);
   }
 
-  .individual-plan-cards {
-    grid-template-columns: 1fr;
-  }
-
   .content--trends .insight-summary {
     padding: var(--space-1);
   }

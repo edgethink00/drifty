@@ -2,6 +2,12 @@
   gap: var(--space-5);
 }
 
+/* Account owns its vertical rhythm. Clear the legacy block margin so the
+   section gap is the single source of spacing between its groups. */
+.content--settings .settings-section--account > .settings-block {
+  margin-bottom: 0;
+}
+
 .content--settings .settings-section--account .settings-row--stacked-action {
   align-items: flex-start;
   display: grid;
@@ -17,4 +23,86 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* The plan cards carry their own frame, so the row that holds them drops the
+   settings card chrome instead of drawing a second box around them. */
+.content--settings .settings-section--account .settings-block--plans > .settings-row--cloud-pricing {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  justify-content: flex-start;
+  padding: 0;
+}
+
+/* Keep the pricing decision surface on the Account content axis. The switch
+   and cards use one explicit 8px gap with no inherited optical offset. */
+.content--settings .settings-section--account .individual-plan-suite--display {
+  flex: 0 1 42rem;
+}
+
+/* `h3 + .settings-row` and `:last-child` both add a card edge in the shared
+   settings rules; the plan row is the only child here, so both must be cleared. */
+.content--settings .settings-section--account .settings-block--plans > h3 + .settings-row--cloud-pricing,
+.content--settings .settings-section--account .settings-block--plans > .settings-row--cloud-pricing:last-child {
+  border: 0;
+  border-radius: 0;
+}
+
+.content--settings .settings-section--account .settings-block--plans > .settings-row--cloud-pricing::after {
+  content: none;
+}
+
+.content--settings .settings-section--account .settings-block:has(> h3) > .settings-row:not(:last-child):not(.settings-row--group-end)::after {
+  content: none;
+}
+
+/* Promo code sits directly under the pricing cards, outside the Account block,
+   so it must not pick up the shared settings-row card chrome. */
+.content--settings .settings-section--account > .settings-row--coupon {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  min-height: 0;
+  padding: 0;
+}
+
+.content--settings .settings-section--account .settings-block--plans + .settings-row--coupon {
+  margin-bottom: calc(var(--space-6) - var(--space-5));
+  margin-top: calc(var(--space-3) - var(--space-5));
+}
+
+.content--settings .settings-section--account .settings-block--cloud-account > .settings-row--cloud-devices {
+  align-items: stretch;
+  padding-top: 0.2rem;
+}
+
+/* Cloud devices belong to the signed-in account. Inside that shared Settings
+   card, the row supplies the chrome and the panel supplies only its content. */
+.content--settings .settings-section--account .settings-block--cloud-account .cloud-device-management {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
+.content--settings .settings-section--account .settings-block--plans > .account-plan-notice {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+  margin: -0.15rem auto 0.35rem;
+  max-width: 36rem;
+  padding: 0;
+  text-align: center;
+}
+
+.content--settings .settings-section--account .account-plan-notice p {
+  margin: 0;
+}
+
+.content--settings .settings-section--account .account-plan-notice__error {
+  color: var(--warn);
 }

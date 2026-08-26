@@ -30,6 +30,7 @@ type UseCloudBillingControllerInput = {
 type UseCloudBillingControllerResult = {
   /** Errors from an explicit checkout/portal action; shown locally, never used as global Cloud health. */
   readonly billingActionError: string | null;
+  readonly billingCheckoutAwaitingConfirmation: boolean;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlement: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
@@ -46,7 +47,8 @@ type UseCloudBillingControllerResult = {
   readonly handleManageCloudBilling: () => Promise<void>;
   readonly handleRedeemTrialCoupon: (code: string) => Promise<void>;
   readonly handleRevokeCloudDevice: (deviceId: string) => Promise<void>;
-  readonly handleStartDriftyCloudSetup: (billingInterval?: BillingInterval) => Promise<void>;
+  /** Creates the Polar checkout for an interval the user explicitly picked. */
+  readonly startCloudCheckout: (billingInterval: BillingInterval) => Promise<void>;
   readonly openCloudTrialStartedNoticeAiSetup: () => void;
   readonly refreshBillingEntitlement: () => Promise<BillingEntitlement | null>;
 };
@@ -87,7 +89,10 @@ export function useCloudBillingController({
   const [cloudDeviceActionError, setCloudDeviceActionError] = useState<string | null>(null);
   const [cloudDeviceRevokingId, setCloudDeviceRevokingId] = useState<string | null>(null);
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
+  const [cloudCheckoutAwaitingBrowser, setCloudCheckoutAwaitingBrowser] = useState(false);
   const billingEntitlementRequestRef = useRef(0);
+  const cloudCheckoutPendingRef = useRef(false);
+  const cloudCheckoutConfirmationInFlightRef = useRef(false);
   const couponRedemptionRequestRef = useRef(0);
 
   const refreshBillingEntitlement = useCallback(async (): Promise<BillingEntitlement | null> => {
@@ -144,61 +149,7 @@ export function useCloudBillingController({
     return null;
   }, [shouldCheckBillingEntitlement]);
 
-  const handleStartDriftyCloudSetup = useCallback(async (billingInterval: BillingInterval = "monthly") => {
-    if (!isSupabaseConfigured) {
-      onAuthRequired();
-      return;
-    }
-
-    if (!user || !hasRequiredAccountAuth) {
-      onAuthRequired();
-      return;
-    }
-
-    setBillingActionError(null);
-    if (billingEntitlement?.status === "active") {
-      void refreshBillingEntitlement();
-      return;
-    }
-
-    setBillingCheckoutLoadingInterval(billingInterval);
-    try {
-      const checkoutResult = await createIndividualCheckout(billingInterval);
-      if (!checkoutResult.success) {
-        setBillingActionError(checkoutResult.error);
-        capturePostHogEvent("billing_action", {
-          action: "checkout_created",
-          result: "error",
-          billing_interval: billingInterval,
-          error_kind: toAnalyticsErrorKind(checkoutResult.error),
-        });
-        return;
-      }
-
-      capturePostHogEvent("billing_action", {
-        action: "checkout_created",
-        result: "success",
-        billing_interval: billingInterval,
-      });
-      await openExternalUrl(checkoutResult.data.url);
-      capturePostHogEvent("billing_action", {
-        action: "checkout_opened",
-        result: "success",
-        billing_interval: billingInterval,
-      });
-    } catch (error) {
-      setBillingActionError(toErrorMessage(error));
-      capturePostHogEvent("billing_action", {
-        action: "checkout_opened",
-        result: "error",
-        billing_interval: billingInterval,
-        error_kind: toAnalyticsErrorKind(error),
-      });
-    } finally {
-      setBillingCheckoutLoadingInterval(null);
-    }
-  }, [billingEntitlement, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
-
+  /** Opens billing management for an existing or recoverable subscription. */
   const handleManageCloudBilling = useCallback(async () => {
     if (!isSupabaseConfigured) {
       onAuthRequired();
@@ -211,8 +162,11 @@ export function useCloudBillingController({
     }
 
     setBillingActionError(null);
+    // `payment_required` reaches the portal too: the subscription exists and only
+    // its payment is blocked, so recovery belongs in the portal, not a checkout.
     const canOpenBillingPortal = billingEntitlement?.status === "active"
-      || billingEntitlement?.lockedReason === "device_limit_reached";
+      || billingEntitlement?.lockedReason === "device_limit_reached"
+      || billingEntitlement?.lockedReason === "payment_required";
     if (!canOpenBillingPortal) {
       void refreshBillingEntitlement();
       return;
@@ -259,6 +213,67 @@ export function useCloudBillingController({
       setBillingPortalLoading(false);
     }
   }, [billingEntitlement?.lockedReason, billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
+
+  /** Creates checkout only after the user explicitly selects a visible cadence. */
+  const startCloudCheckout = useCallback(async (billingInterval: BillingInterval) => {
+    if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
+      onAuthRequired();
+      return;
+    }
+
+    // A blocked payment already owns a subscription. Opening checkout here would
+    // sell a second one instead of recovering the one Polar already has.
+    if (billingEntitlement?.lockedReason === "payment_required") {
+      await handleManageCloudBilling();
+      return;
+    }
+    if (cloudCheckoutPendingRef.current) return;
+
+    setBillingActionError(null);
+    cloudCheckoutPendingRef.current = true;
+    let openedCheckout = false;
+    setBillingCheckoutLoadingInterval(billingInterval);
+    try {
+      const checkoutResult = await createIndividualCheckout(billingInterval);
+      if (!checkoutResult.success) {
+        setBillingActionError(checkoutResult.error);
+        capturePostHogEvent("billing_action", {
+          action: "checkout_created",
+          result: "error",
+          billing_interval: billingInterval,
+          error_kind: toAnalyticsErrorKind(checkoutResult.error),
+        });
+        return;
+      }
+
+      capturePostHogEvent("billing_action", {
+        action: "checkout_created",
+        result: "success",
+        billing_interval: billingInterval,
+      });
+      await openExternalUrl(checkoutResult.data.url);
+      // Payment happens in the browser. Hold duplicate attempts until the app
+      // returns and finishes a bounded entitlement confirmation.
+      setCloudCheckoutAwaitingBrowser(true);
+      openedCheckout = true;
+      capturePostHogEvent("billing_action", {
+        action: "checkout_opened",
+        result: "success",
+        billing_interval: billingInterval,
+      });
+    } catch (error) {
+      setBillingActionError(toErrorMessage(error));
+      capturePostHogEvent("billing_action", {
+        action: "checkout_opened",
+        result: "error",
+        billing_interval: billingInterval,
+        error_kind: toAnalyticsErrorKind(error),
+      });
+    } finally {
+      if (!openedCheckout) cloudCheckoutPendingRef.current = false;
+      setBillingCheckoutLoadingInterval(null);
+    }
+  }, [billingEntitlement?.lockedReason, handleManageCloudBilling, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, user]);
 
   const handleRedeemTrialCoupon = useCallback(async (code: string) => {
     const requestId = ++couponRedemptionRequestRef.current;
@@ -410,16 +425,65 @@ export function useCloudBillingController({
   }, [user?.id]);
 
   useEffect(() => {
+    cloudCheckoutPendingRef.current = false;
+    cloudCheckoutConfirmationInFlightRef.current = false;
+    setCloudCheckoutAwaitingBrowser(false);
+  }, [shouldCheckBillingEntitlement, user?.id]);
+
+  const confirmCloudCheckoutAfterBrowser = useCallback(async () => {
+    if (cloudCheckoutConfirmationInFlightRef.current) return;
+    cloudCheckoutConfirmationInFlightRef.current = true;
+    try {
+      // A focus event can beat Polar's webhook. Confirm a successful-but-stale
+      // entitlement once more before allowing another checkout attempt.
+      const firstEntitlement = await refreshBillingEntitlement();
+      if (firstEntitlement?.status !== "active") {
+        await cloudEntitlementRetryDelay();
+        await refreshBillingEntitlement();
+      }
+    } finally {
+      cloudCheckoutPendingRef.current = false;
+      cloudCheckoutConfirmationInFlightRef.current = false;
+      setCloudCheckoutAwaitingBrowser(false);
+    }
+  }, [refreshBillingEntitlement]);
+
+  useEffect(() => {
     function handleBillingSuccess() {
+      if (cloudCheckoutPendingRef.current) {
+        void confirmCloudCheckoutAfterBrowser();
+        return;
+      }
       void refreshBillingEntitlement();
     }
 
     window.addEventListener("drifty:billing-success", handleBillingSuccess);
     return () => window.removeEventListener("drifty:billing-success", handleBillingSuccess);
-  }, [refreshBillingEntitlement]);
+  }, [confirmCloudCheckoutAfterBrowser, refreshBillingEntitlement]);
+
+  // Payment completes in the browser, so run the bounded confirmation when the
+  // app regains focus. A canceled or delayed checkout is then safe to retry.
+  useEffect(() => {
+    if (!cloudCheckoutAwaitingBrowser) return undefined;
+
+    function handleFocus() {
+      void confirmCloudCheckoutAfterBrowser();
+    }
+
+    window.addEventListener("focus", handleFocus);
+    return () => window.removeEventListener("focus", handleFocus);
+  }, [cloudCheckoutAwaitingBrowser, confirmCloudCheckoutAfterBrowser]);
+
+  useEffect(() => {
+    if (!cloudCheckoutAwaitingBrowser) return;
+    if (billingEntitlement?.status !== "active") return;
+    cloudCheckoutPendingRef.current = false;
+    setCloudCheckoutAwaitingBrowser(false);
+  }, [billingEntitlement?.status, cloudCheckoutAwaitingBrowser]);
 
   return {
     billingActionError,
+    billingCheckoutAwaitingConfirmation: cloudCheckoutAwaitingBrowser,
     billingCheckoutLoadingInterval,
     billingEntitlement,
     billingEntitlementError,
@@ -436,9 +500,9 @@ export function useCloudBillingController({
     handleManageCloudBilling,
     handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
-    handleStartDriftyCloudSetup,
     openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,
+    startCloudCheckout,
   };
 }
 

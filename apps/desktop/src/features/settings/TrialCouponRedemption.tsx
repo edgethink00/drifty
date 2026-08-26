@@ -26,13 +26,23 @@ export function TrialCouponRedemption({
   const { effectiveLanguage, t } = useLocalization();
   const inputId = useId();
   const feedbackId = useId();
+  const formId = useId();
   const [code, setCode] = useState("");
+  // Collapsed by default: a promo code is a rare, deliberate action, so it
+  // should not compete with the plan cards for attention.
+  const [expanded, setExpanded] = useState(false);
   const normalizedCode = normalizeCouponCode(code);
   const codeReady = isCouponCodeReady(normalizedCode);
 
   useEffect(() => {
     if (redemption) setCode("");
   }, [redemption]);
+
+  // Keep the panel open whenever there is something to read: a success notice
+  // or an error the user still has to act on.
+  useEffect(() => {
+    if (redemption || errorCode) setExpanded(true);
+  }, [errorCode, redemption]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,13 +59,21 @@ export function TrialCouponRedemption({
   return (
     <div className="settings-row settings-row--coupon">
       <div className="trial-coupon-form__layout">
-        <div className="trial-coupon-form__copy">
-          <label className="lbl" htmlFor={inputId}>{t("settings.account.couponTitle")}</label>
-          <div className="desc">
+        <button
+          type="button"
+          className="trial-coupon-form__toggle"
+          aria-expanded={expanded}
+          aria-controls={formId}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          <span className="lbl">{t("settings.account.couponTitle")}</span>
+          <span className="trial-coupon-form__toggle-icon" aria-hidden="true">{expanded ? "−" : "+"}</span>
+        </button>
+        {expanded ? (
+        <form id={formId} className="trial-coupon-form" onSubmit={handleSubmit} aria-busy={loading}>
+          <label className="desc trial-coupon-form__hint" htmlFor={inputId}>
             {isSignedIn ? t("settings.account.couponDescription") : t("settings.account.couponSignIn")}
-          </div>
-        </div>
-        <form className="trial-coupon-form" onSubmit={handleSubmit} aria-busy={loading}>
+          </label>
           <div className="trial-coupon-form__controls">
             <input
               id={inputId}
@@ -91,6 +109,7 @@ export function TrialCouponRedemption({
             </p>
           ) : null}
         </form>
+        ) : null}
       </div>
     </div>
   );

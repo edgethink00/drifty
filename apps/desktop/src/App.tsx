@@ -1223,6 +1223,7 @@ export default function App() {
   const requestCloudBillingAuth = openDefaultAuthModal;
   const {
     billingActionError,
+    billingCheckoutAwaitingConfirmation,
     billingCheckoutLoadingInterval,
     billingEntitlement,
     billingEntitlementError,
@@ -1239,9 +1240,9 @@ export default function App() {
     handleManageCloudBilling,
     handleRedeemTrialCoupon,
     handleRevokeCloudDevice,
-    handleStartDriftyCloudSetup,
     openCloudTrialStartedNoticeAiSetup,
     refreshBillingEntitlement,
+    startCloudCheckout,
   } = useCloudBillingController({
     hasRequiredAccountAuth,
     isSupabaseConfigured,
@@ -1515,7 +1516,7 @@ export default function App() {
       ? sidebarCtaPreviewInput
       : {
         aiStatus: aiConnectionStatus,
-        billingCheckoutLoading: billingCheckoutLoadingInterval !== null,
+        billingCheckoutLoading: billingCheckoutLoadingInterval !== null || billingCheckoutAwaitingConfirmation || billingPortalLoading,
         billingEntitlement,
         billingEntitlementError,
         billingEntitlementLoading,
@@ -1531,6 +1532,14 @@ export default function App() {
   const shouldShowSidebarCtaSlot = !isSettingsTab
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
+  const handleStartDriftyCloudSetup = useCallback(async () => {
+    if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
+      requestCloudBillingAuth();
+      return;
+    }
+    openAccountSettings();
+  }, [hasRequiredAccountAuth, isSupabaseConfigured, openAccountSettings, requestCloudBillingAuth, user]);
+
   const refreshRequestRef = useRef(0);
   const trackerMutationGenerationRef = useRef(0);
   const trackerStopInFlightRef = useRef(false);
@@ -6811,9 +6820,10 @@ export default function App() {
     : effectiveCloudConnectionStatus === "checking"
       ? "Checking"
       : aiServerStatusLabelForCloud(effectiveBillingEntitlement, effectiveBillingEntitlementLoading, effectiveIsSupabaseConfigured, effectiveHasRequiredAccountAuth);
-  const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked" && !isDeviceLimitLocked;
+  const isPaymentRequiredLocked = effectiveBillingEntitlement?.lockedReason === "payment_required";
+  const shouldShowCloudCheckoutPlans = effectiveBillingEntitlement?.status === "locked" && !isDeviceLimitLocked && !isPaymentRequiredLocked;
   const currentBillingPlan =
-    effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing" || isDeviceLimitLocked
+    effectiveBillingEntitlement?.status === "active" || effectiveBillingEntitlement?.status === "trialing" || isDeviceLimitLocked || isPaymentRequiredLocked
       ? "individual"
       : !effectiveHasRequiredAccountAuth || !effectiveIsSupabaseConfigured
         ? "free"
@@ -7216,6 +7226,12 @@ export default function App() {
                   return;
                 }
                 if (sidebarCtaSlot.kind === "download") return;
+                if (sidebarCtaSlot.kind === "billing") {
+                  // Existing subscription with a blocked payment: recover it in
+                  // the portal instead of starting a second one.
+                  void handleManageCloudBilling();
+                  return;
+                }
                 void handleStartDriftyCloudSetup();
               }}
             />
@@ -7334,6 +7350,8 @@ export default function App() {
             appIcons={appIcons}
             appTheme={theme}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+            billingPlansDisabled={billingCheckoutAwaitingConfirmation}
+            billingPortalLoading={billingPortalLoading}
             currentMinuteOfDay={effectiveCurrentMinuteOfDay}
             dashboardAiRecoveryState={dashboardAiRecoveryState}
             dashboardAppUsage={stickyDashboardAppUsage}
@@ -7378,7 +7396,18 @@ export default function App() {
             onFlowIntervalChange={setFlowIntervalMinutes}
             onOpenDashboardAiSetup={openDashboardAiSetup}
             onJoinLeaderboard={handleLeaderboardOptIn}
-            onSelectBillingPlan={(billingInterval) => void handleStartDriftyCloudSetup(billingInterval)}
+            onManageCloudBilling={() => {
+              // Same preview guard as checkout: the overlay is synthetic and must
+              // not open Polar against the signed-in account.
+              if (dashboardAiUnavailablePreview) return;
+              void handleManageCloudBilling();
+            }}
+            onSelectBillingPlan={(billingInterval) => {
+              // The dashboard recovery preview renders a synthetic entitlement,
+              // so its plan cards must not bill the real account behind it.
+              if (dashboardAiUnavailablePreview) return;
+              void startCloudCheckout(billingInterval);
+            }}
             onSelectDay={selectDay}
           />
         ) : null}
@@ -7628,7 +7657,7 @@ export default function App() {
                     billingEntitlementError={effectiveBillingSettingsError}
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
-                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}
                     billingPortalLoading={billingPortalLoading}
                     couponRedemption={couponRedemption}
                     couponRedemptionErrorCode={couponRedemptionErrorCode}
@@ -7659,6 +7688,7 @@ export default function App() {
 	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
 	                    onEditPublicProfile={openProfileEditor}
 	                    onManageCloudBilling={handleManageCloudBilling}
+	                    onOpenAiSetup={openAiSetupSettings}
 	                    onOpenLeaderboard={() => {
                           navigateToTab("leaderboard");
                         }}
@@ -7666,7 +7696,7 @@ export default function App() {
                     onRedeemTrialCoupon={handleRedeemTrialCoupon}
                     onRevokeCloudDevice={handleRevokeCloudDevice}
                     onSignIn={openDefaultAuthModal}
-                    onStartCloudSetup={handleStartDriftyCloudSetup}
+                    onStartCloudSetup={startCloudCheckout}
                   />
                 )}
                 {settingsSection === "general" && (
@@ -7761,7 +7791,7 @@ export default function App() {
                   <AiSetupSettingsSection
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
-                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive}
+                    billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
                     connectionStatus={aiConnectionStatus}
                     connectionTest={aiConnectionTest}

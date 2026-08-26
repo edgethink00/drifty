@@ -8,22 +8,29 @@ import { useModalDismiss } from "../../lib/useModalDismiss";
 
 type DashboardAiRecoveryOverlayProps = {
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  readonly billingPlansDisabled?: boolean;
+  readonly billingPortalLoading?: boolean;
   readonly state: DashboardAiUnavailableState;
   readonly onClose: () => void;
+  readonly onManageCloudBilling?: () => void;
   readonly onOpenAiSetup: () => void;
   readonly onSelectBillingPlan: (interval: BillingInterval) => void;
 };
 
 export function DashboardAiRecoveryOverlay({
   billingCheckoutLoadingInterval,
+  billingPlansDisabled = false,
+  billingPortalLoading = false,
   state,
   onClose,
+  onManageCloudBilling,
   onOpenAiSetup,
   onSelectBillingPlan,
 }: DashboardAiRecoveryOverlayProps) {
   useModalDismiss(onClose);
+  const recoversExistingSubscription = state.variant === "cloud-billing";
   return (
-    <div className={`dashboard-ai-recovery dashboard-ai-recovery--${state.variant}`}>
+    <div className={"dashboard-ai-recovery dashboard-ai-recovery--" + state.variant}>
       <section className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace" role="dialog" aria-modal="true" aria-label="Restore AI analysis">
         <ModalCloseButton label="Dismiss AI recovery" onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">
@@ -31,13 +38,31 @@ export function DashboardAiRecoveryOverlay({
           <h2>{state.title}</h2>
           <p>{state.body}</p>
         </div>
-        <div className="dashboard-ai-recovery__plans">
-          <IndividualPlanCards
-            loadingInterval={billingCheckoutLoadingInterval}
-            onSelectFreePlan={onOpenAiSetup}
-            onSelectPlan={onSelectBillingPlan}
-          />
-        </div>
+        {recoversExistingSubscription ? (
+          <div className="dashboard-ai-recovery__actions">
+            <button
+              type="button"
+              className="modal-btn modal-btn--primary"
+              disabled={billingPortalLoading || !onManageCloudBilling}
+              onClick={onManageCloudBilling}
+            >
+              {billingPortalLoading ? "Opening billing..." : "Fix billing"}
+            </button>
+            <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
+              Continue with local AI
+            </button>
+          </div>
+        ) : (
+          <div className="dashboard-ai-recovery__plans">
+            <IndividualPlanCards
+              disabled={billingPlansDisabled}
+              loadingInterval={billingCheckoutLoadingInterval}
+              mode="checkout"
+              onSelectFreePlan={onOpenAiSetup}
+              onSelectPlan={onSelectBillingPlan}
+            />
+          </div>
+        )}
       </section>
     </div>
   );

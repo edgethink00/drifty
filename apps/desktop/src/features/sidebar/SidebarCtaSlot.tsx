@@ -152,16 +152,30 @@ export function resolveSidebarCtaSlot({
       return trialEndedState(billingCheckoutLoading);
     }
 
-    return {
-      actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+    if (billingEntitlement.lockedReason === "payment_required") return {
+      actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingBilling" : "sidebar.cta.billing.action",
       alert: "critical",
-      copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.billing.detail",
+      copyKey: billingCheckoutLoading ? "sidebar.cta.openingBilling" : "sidebar.cta.billing.detail",
       direction: "external",
       disabled: billingCheckoutLoading,
       kind: "billing",
       titleKey: "sidebar.cta.billing.title",
       titleEmphasisCount: null,
       tone: "billing",
+    };
+
+    // No recoverable subscription exists. Route to Account plan selection,
+    // never to the customer portal that requires an existing Polar customer.
+    return {
+      actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+      alert: null,
+      copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.noAiDetail",
+      direction: "forward",
+      disabled: billingCheckoutLoading,
+      kind: "upgrade",
+      titleKey: "sidebar.cta.upgrade.noAiTitle",
+      titleEmphasisCount: null,
+      tone: "upgrade",
     };
   }
 
@@ -189,7 +203,7 @@ export function resolveSidebarCtaSlot({
         actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
         alert: trialAlert(days),
         copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.trial.detail",
-        direction: "external",
+        direction: "forward",
         disabled: billingCheckoutLoading,
         kind: "trial",
         titleKey: "sidebar.cta.trial.title",
@@ -211,7 +225,7 @@ export function resolveSidebarCtaSlot({
         : runsLocalModel
           ? "sidebar.cta.upgrade.localDetail"
           : "sidebar.cta.upgrade.noAiDetail",
-      direction: "external",
+      direction: "forward",
       disabled: billingCheckoutLoading,
       kind: "upgrade",
       titleKey: runsLocalModel ? "sidebar.cta.upgrade.localTitle" : "sidebar.cta.upgrade.noAiTitle",
@@ -400,7 +414,7 @@ function trialEndedState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
     actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
     alert: "critical",
     copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.trialEnded.detail",
-    direction: "external",
+    direction: "forward",
     disabled: billingCheckoutLoading,
     kind: "trial-ended",
     titleKey: "sidebar.cta.trialEnded.title",

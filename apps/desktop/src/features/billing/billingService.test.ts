@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   COUPON_REDEMPTION_TIMEOUT_MS,
   createBillingPortalSession,
+  createIndividualCheckout,
   redeemTrialCoupon,
 } from "./billingService";
 
@@ -11,6 +12,21 @@ type MockBillingClient = Parameters<typeof createBillingPortalSession>[0];
 describe("billingService", () => {
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each(["monthly", "yearly"] as const)("sends the selected %s interval to checkout", async (billingInterval) => {
+    const invoke = vi.fn().mockResolvedValue({
+      data: { url: "https://checkout.example.test" },
+      error: null,
+    });
+    const client: MockBillingClient = { functions: { invoke } };
+
+    const result = await createIndividualCheckout(billingInterval, client);
+
+    expect(result).toEqual({ success: true, data: { url: "https://checkout.example.test" } });
+    expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
+      body: { plan: "individual", billingInterval },
+    });
   });
 
   it("creates a Polar customer portal session", async () => {

@@ -26,8 +26,8 @@ describe("resolveDashboardAiUnavailableState", () => {
     })).toMatchObject({ variant: "trial-ended", title: "Free trial ended" });
   });
 
-  it("keeps billing and device recovery reasons distinct", () => {
-    const resolveLocked = (lockedReason: "payment_required" | "device_limit_reached") => resolveDashboardAiUnavailableState({
+  it("keeps plan, billing, and device recovery reasons distinct", () => {
+    const resolveLocked = (lockedReason: "payment_required" | "billing_missing" | "device_limit_reached") => resolveDashboardAiUnavailableState({
       billingEntitlement: { ...trialExpiredEntitlement, lockedReason },
       billingEntitlementError: null,
       billingEntitlementLoading: false,
@@ -37,7 +37,8 @@ describe("resolveDashboardAiUnavailableState", () => {
       localAiReady: false,
     });
 
-    expect(resolveLocked("payment_required")?.variant).toBe("cloud-billing");
+    expect(resolveLocked("payment_required")).toMatchObject({ variant: "cloud-billing", ctaLabel: "Fix billing" });
+    expect(resolveLocked("billing_missing")).toMatchObject({ variant: "cloud-plan", ctaLabel: "Choose a plan" });
     expect(resolveLocked("device_limit_reached")?.variant).toBe("device-limit");
   });
 

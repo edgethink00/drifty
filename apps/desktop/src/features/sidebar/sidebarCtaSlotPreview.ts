@@ -64,7 +64,7 @@ export const SIDEBAR_CTA_PREVIEW_OPTIONS = [
   { id: "trial-2", label: "Trial · 2 days", detail: "Amber shadow" },
   { id: "trial-1", label: "Trial · 1 day", detail: "Red shadow" },
   { id: "trial-ended", label: "Trial ended", detail: "Upgrade to Pro" },
-  { id: "billing", label: "Billing issue", detail: "Upgrade to Pro" },
+  { id: "billing", label: "Billing issue", detail: "Fix billing" },
   { id: "device-limit", label: "Device limit", detail: "Manage devices" },
   { id: "model-download", label: "Model download", detail: "42% · status only" },
   { id: "byok-hidden", label: "BYOK · hidden", detail: "Slot stays empty" },

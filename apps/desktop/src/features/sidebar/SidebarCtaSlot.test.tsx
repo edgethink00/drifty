@@ -344,7 +344,7 @@ describe("SidebarCtaSlot", () => {
   });
 
   it("surfaces each locked reason with its own recovery action", () => {
-    const locked = (lockedReason: "trial_expired" | "payment_required" | "device_limit_reached") => resolveSidebarCtaSlot({
+    const locked = (lockedReason: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached") => resolveSidebarCtaSlot({
       ...baseInput,
       aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" },
       billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason },
@@ -359,6 +359,11 @@ describe("SidebarCtaSlot", () => {
     expect(locked("payment_required")).toMatchObject({
       kind: "billing",
       titleKey: "sidebar.cta.billing.title",
+      actionLabelKey: "sidebar.cta.billing.action",
+    });
+    expect(locked("billing_missing")).toMatchObject({
+      kind: "upgrade",
+      titleKey: "sidebar.cta.upgrade.noAiTitle",
       actionLabelKey: "sidebar.cta.upgrade.action",
     });
     expect(locked("device_limit_reached")).toMatchObject({

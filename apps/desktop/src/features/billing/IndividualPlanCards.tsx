@@ -2,7 +2,8 @@ import { useState } from "react";
 
 import type { BillingInterval } from "./billingService";
 
-export type BillingPlanId = "free" | "individual" | "pro";
+// `individual` remains the billing wire id; Pro is its customer-facing name.
+export type BillingPlanId = "free" | "individual";
 
 type VisibleBillingInterval = Extract<BillingInterval, "monthly" | "yearly">;
 
@@ -35,11 +36,10 @@ const FREE_PLAN_FEATURES = [
 ] as const;
 
 const INDIVIDUAL_PLAN_FEATURES = [
-  "Drifty Cloud AI analysis",
-  "2 active desktop devices included",
+  "Includes all Free plan features",
+  "No API keys or models to manage",
   "Richer focus and drift summaries",
-  "Manage old devices from Account settings",
-  "Local tracking remains local-first",
+  "Cloud AI classification on up to 2 Macs",
 ] as const;
 
 function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
@@ -61,15 +61,27 @@ export function IndividualPlanCards({
   onBillingIntervalChange,
   onSelectFreePlan,
   onSelectPlan,
+  onManageCurrentPlan,
+  manageCurrentPlanLabel = "Manage billing",
+  manageCurrentPlanLoading = false,
 }: {
   readonly billingInterval?: VisibleBillingInterval;
   readonly currentPlan?: BillingPlanId | null;
   readonly disabled?: boolean;
   readonly loadingInterval: BillingInterval | null;
+  /** `checkout` and `display` name the host surface for styling. */
   readonly mode?: "checkout" | "display";
   readonly onBillingIntervalChange?: (interval: VisibleBillingInterval) => void;
   readonly onSelectFreePlan?: () => void;
   readonly onSelectPlan?: (interval: VisibleBillingInterval) => void;
+  /**
+   * When Pro is the current plan its action becomes billing management.
+   * The card already names the plan the user owns, so managing it here removes
+   * the need for a separate status row that repeats the same plan name.
+   */
+  readonly onManageCurrentPlan?: () => void;
+  readonly manageCurrentPlanLabel?: string;
+  readonly manageCurrentPlanLoading?: boolean;
 }) {
   const [internalBillingInterval, setInternalBillingInterval] = useState<VisibleBillingInterval>("monthly");
   const selectedInterval = billingInterval ?? internalBillingInterval;
@@ -82,15 +94,19 @@ export function IndividualPlanCards({
     onBillingIntervalChange?.(interval);
   };
 
+  const individualBadgeLabel = individualIsCurrent
+    ? "Current plan"
+    : "Recommended";
+
   const individualContent = (
     <>
       <span className="individual-plan-card__top">
         <span className="individual-plan-card__topline">
-          <span>Individual</span>
-          <small className="individual-plan-card__badge">{individualIsCurrent ? "Current plan" : "Cloud AI"}</small>
+          <span>Pro</span>
+          <small className="individual-plan-card__badge">{individualBadgeLabel}</small>
         </span>
         <span className="individual-plan-card__note">
-          {loadingInterval === selectedInterval ? "Opening checkout..." : "For one person who wants hosted Cloud AI analysis on up to 2 active desktop devices without managing keys or models."}
+          {loadingInterval === selectedInterval ? "Opening checkout..." : "Automatic AI classification while tracking stays local-first."}
         </span>
         <span className="individual-plan-card__price-row">
           <span className="individual-plan-card__price-stack">
@@ -102,33 +118,66 @@ export function IndividualPlanCards({
         </span>
       </span>
       <PlanFeatureList items={INDIVIDUAL_PLAN_FEATURES} />
-      <span className="individual-plan-card__cta">{individualIsCurrent ? "Current plan" : "Start Individual"}</span>
+      {individualIsCurrent && onManageCurrentPlan ? (
+        <button
+          type="button"
+          className="individual-plan-card__cta individual-plan-card__cta--manage"
+          disabled={disabled || manageCurrentPlanLoading}
+          onClick={onManageCurrentPlan}
+        >
+          {manageCurrentPlanLoading ? "Opening billing..." : manageCurrentPlanLabel}
+        </button>
+      ) : (
+        <span className="individual-plan-card__cta">{individualIsCurrent ? "Current plan" : "Upgrade to Pro"}</span>
+      )}
     </>
+  );
+
+  const individualCard = canSelectIndividual ? (
+    <button
+      type="button"
+      className="individual-plan-card individual-plan-card--featured"
+      aria-label="Choose Pro plan"
+      onClick={() => onSelectPlan?.(selectedInterval)}
+      disabled={disabled || loadingInterval !== null}
+    >
+      {individualContent}
+    </button>
+  ) : (
+    <article
+      className={`individual-plan-card individual-plan-card--featured${individualIsCurrent ? " individual-plan-card--current" : ""}`}
+      aria-label="Pro plan"
+    >
+      {individualContent}
+    </article>
+  );
+
+  const intervalSwitch = (
+    <div className="individual-plan-intervals" role="radiogroup" aria-label="Billing interval">
+      {INTERVAL_OPTIONS.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          className={`individual-plan-interval${selectedInterval === option.id ? " is-active" : ""}`}
+          role="radio"
+          aria-checked={selectedInterval === option.id}
+          onClick={() => handleIntervalChange(option.id)}
+        >
+          <span>{option.label}</span>
+          {option.savings ? <small className="individual-plan-interval__save">{option.savings}</small> : null}
+        </button>
+      ))}
+    </div>
   );
 
   return (
     <div className={`individual-plan-suite individual-plan-suite--${mode}`} aria-label="Drifty billing plans">
-      <div className="individual-plan-intervals" role="radiogroup" aria-label="Billing interval">
-        {INTERVAL_OPTIONS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            className={`individual-plan-interval${selectedInterval === option.id ? " is-active" : ""}`}
-            role="radio"
-            aria-checked={selectedInterval === option.id}
-            onClick={() => handleIntervalChange(option.id)}
-          >
-            <span>{option.label}</span>
-            {option.savings ? <small className="individual-plan-interval__save">{option.savings}</small> : null}
-          </button>
-        ))}
-      </div>
+      {intervalSwitch}
       <div className="individual-plan-cards">
         <article className={`individual-plan-card${currentPlan === "free" ? " individual-plan-card--current" : ""}`} aria-label="Free plan">
           <span className="individual-plan-card__top">
             <span className="individual-plan-card__topline">
               <span>Free</span>
-              <small className="individual-plan-card__badge">Local-first</small>
             </span>
             <span className="individual-plan-card__note">Use drifty locally with rule-based classification and your own optional AI setup.</span>
             <span className="individual-plan-card__price-row">
@@ -149,24 +198,7 @@ export function IndividualPlanCards({
             <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
           )}
         </article>
-        {canSelectIndividual ? (
-          <button
-            type="button"
-            className="individual-plan-card individual-plan-card--featured"
-            aria-label="Choose Individual plan"
-            onClick={() => onSelectPlan?.(selectedInterval)}
-            disabled={disabled || loadingInterval !== null}
-          >
-            {individualContent}
-          </button>
-        ) : (
-          <article
-            className={`individual-plan-card individual-plan-card--featured${individualIsCurrent ? " individual-plan-card--current" : ""}`}
-            aria-label="Individual plan"
-          >
-            {individualContent}
-          </article>
-        )}
+        {individualCard}
       </div>
     </div>
   );

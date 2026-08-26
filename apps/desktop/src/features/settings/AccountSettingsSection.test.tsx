@@ -36,7 +36,7 @@ describe("AccountSettingsSection", () => {
         cloudDeviceAccess={{
           allowed: false,
           reason: "device_limit_reached",
-          message: "This Drifty Cloud Individual plan is already active on 2 desktop devices.",
+          message: "This Drifty Pro plan is already active on 2 desktop devices.",
           activeDeviceCount: 2,
           maxActiveDevices: 2,
           activeWindowDays: 30,
@@ -86,6 +86,15 @@ describe("AccountSettingsSection", () => {
     expect(screen.getByText(/Device limit reached/i)).toBeTruthy();
 
     const cloudDevices = screen.getByRole("region", { name: /Cloud devices/i });
+    const accountHeading = screen.getByRole("heading", { name: /Signed-in account/i });
+    const accountBlock = accountHeading.closest(".settings-block");
+    expect(accountBlock).toBeTruthy();
+    expect(accountBlock?.contains(screen.getByText("alex@example.com"))).toBe(true);
+    expect(accountBlock?.contains(cloudDevices)).toBe(true);
+    expect(
+      screen.getByText("alex@example.com").compareDocumentPosition(cloudDevices)
+        & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(within(cloudDevices).getByText(/2\/2 active desktop devices/i)).toBeTruthy();
     expect(within(cloudDevices).getByText("Current Mac")).toBeTruthy();
     expect(within(cloudDevices).getByText("Current")).toBeTruthy();
@@ -143,6 +152,9 @@ describe("AccountSettingsSection", () => {
     render(<AccountSettingsSection {...props} />);
 
     expect(screen.getByText("Not signed in")).toBeTruthy();
+    const publicProfileHeading = screen.getByRole("heading", { name: /^Public profile$/i });
+    expect(within(publicProfileHeading).getByText("Beta").className).toContain("settings-beta-badge");
+    expect(screen.queryByRole("heading", { name: /Public profile Beta/i })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /^Sign in$/i }));
 
@@ -179,11 +191,19 @@ describe("AccountSettingsSection", () => {
     };
 
     const { rerender } = render(<AccountSettingsSection {...props} />);
-    const codeInput = screen.getByRole("textbox", { name: /Drifty trial code/i });
+    // The promo field is collapsed by default so it does not compete with the
+    // plan cards; expand it before entering a code.
+    expect(screen.queryByRole("textbox", { name: /Drifty promo code/i })).toBeNull();
+    const promoToggle = screen.getByRole("button", { name: /Promo code/i });
+    expect(promoToggle.firstElementChild?.textContent).toBe("Promo code");
+    expect(promoToggle.lastElementChild?.textContent).toBe("+");
+    fireEvent.click(promoToggle);
+    expect(promoToggle.lastElementChild?.textContent).toBe("−");
+    const codeInput = screen.getByRole("textbox", { name: /Drifty promo code/i });
 
     fireEvent.change(codeInput, { target: { value: " drft-test-2026 " } });
-    expect(screen.queryByText(/offline trial code/i)).toBeNull();
-    expect(screen.getByText("Trial code")).toBeTruthy();
+    expect(screen.queryByText(/offline promo code/i)).toBeNull();
+    expect(screen.getByText("Promo code")).toBeTruthy();
     expect(codeInput.getAttribute("placeholder")).toBe("DRFT-XXXX");
 
     fireEvent.click(screen.getByRole("button", { name: /^Apply code$/i }));
@@ -253,7 +273,7 @@ describe("AccountSettingsSection", () => {
       />,
     );
 
-    expect(screen.getByRole("status").textContent).toContain("already used a trial code");
+    expect(screen.getByRole("status").textContent).toContain("already used a promo code");
     fireEvent.click(screen.getByRole("button", { name: /^Manage billing$/i }));
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
   });
@@ -322,16 +342,86 @@ describe("AccountSettingsSection", () => {
     expect(styles).not.toContain(".cloud-device-confirm__remove");
   });
 
+  it("recovers a blocked payment from the Pro card instead of starting checkout", () => {
+    const onManageCloudBilling = vi.fn();
+    const onStartCloudSetup = vi.fn();
+
+    render(
+      <AccountSettingsSection
+        billingCheckoutLoadingInterval={null}
+        billingEntitlementError={null}
+        billingEntitlementLockedReason="payment_required"
+        billingEntitlementStatus="locked"
+        billingPlansDisabled={false}
+        billingPortalLoading={false}
+        couponRedemption={null}
+        couponRedemptionErrorCode={null}
+        couponRedemptionLoading={false}
+        cloudDeviceAccess={null}
+        cloudDeviceActionError={null}
+        cloudDeviceRevokingId={null}
+        cloudDevices={[]}
+        cloudStatusRefreshing={false}
+        currentBillingPlan="individual"
+        isSupabaseConfigured={true}
+        shouldShowCloudCheckoutPlans={false}
+        userEmail="alex@example.com"
+        onManageCloudBilling={onManageCloudBilling}
+        onRefreshCloudStatus={vi.fn()}
+        onRedeemTrialCoupon={vi.fn()}
+        onRevokeCloudDevice={vi.fn()}
+        onSignIn={vi.fn()}
+        onStartCloudSetup={onStartCloudSetup}
+      />,
+    );
+
+    expect(screen.getByText(/Update payment on this subscription to resume Cloud AI/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i }));
+    expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
+    expect(onStartCloudSetup).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /choose pro plan/i })).toBeNull();
+  });
+
+  it("keeps Promo code outside the Account heading block, directly under the plan cards", () => {
+    const markup = readFileSync(desktopSourcePath("src/features/settings/AccountSettingsSection.tsx"), "utf8");
+    const plansClose = markup.indexOf("</div>", markup.indexOf("settings-block--plans"));
+    const coupon = markup.indexOf("<TrialCouponRedemption");
+    const signedIn = markup.indexOf("settings.account.signedIn");
+    expect(coupon).toBeGreaterThan(plansClose);
+    expect(coupon).toBeLessThan(signedIn);
+    expect(markup.indexOf("<TrialCouponRedemption", markup.indexOf("settings-block--plans"))).toBe(coupon);
+  });
+
   it("keeps consistent spacing between Account settings sections", () => {
     const styles = readFileSync(desktopSourcePath("src/features/settings/AccountSettingsSection.css"), "utf8");
+    const sharedPlanStyles = readFileSync(desktopSourcePath("src/styles/settings-polish.css"), "utf8");
     const sectionRule = cssRule(styles, ".content--settings .settings-section--account");
     const stackedRowRule = cssRule(styles, ".content--settings .settings-section--account .settings-row--stacked-action");
     const stackedControlRule = cssRule(styles, ".content--settings .settings-section--account .settings-row--stacked-action > .ctrl");
+    const cloudDevicePanelRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--cloud-account .cloud-device-management");
+    const planSuiteRule = cssRule(styles, ".content--settings .settings-section--account .individual-plan-suite--display");
+    const sharedPlanSuiteRule = cssRule(sharedPlanStyles, ".individual-plan-suite");
+    const sharedPlanIntervalsRule = cssRule(sharedPlanStyles, ".individual-plan-intervals");
+    const sharedPlanCardsRule = cssRule(sharedPlanStyles, ".individual-plan-cards");
+    const couponRowRule = cssRule(styles, ".content--settings .settings-section--account > .settings-row--coupon");
+    const couponSpacingRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--plans + .settings-row--coupon");
 
     expect(sectionRule).toContain("gap: var(--space-5);");
     expect(stackedRowRule).toContain("display: grid;");
     expect(stackedRowRule).toContain("grid-template-columns: minmax(0, 1fr);");
     expect(stackedControlRule).toContain("justify-self: start;");
+    expect(cloudDevicePanelRule).toContain("background: transparent;");
+    expect(cloudDevicePanelRule).toContain("border: 0;");
+    expect(cloudDevicePanelRule).toContain("padding: 0;");
+    expect(planSuiteRule).toContain("flex: 0 1 42rem;");
+    expect(sharedPlanSuiteRule).toContain("gap: var(--space-2);");
+    expect(sharedPlanSuiteRule).toContain("max-width: 42rem;");
+    expect(sharedPlanIntervalsRule).toContain("justify-self: start;");
+    expect(sharedPlanIntervalsRule).toContain("margin: 0;");
+    expect(sharedPlanCardsRule).toContain("margin: 0;");
+    expect(couponRowRule).toContain("min-height: 0;");
+    expect(couponSpacingRule).toContain("margin-bottom: calc(var(--space-6) - var(--space-5));");
+    expect(couponSpacingRule).toContain("margin-top: calc(var(--space-3) - var(--space-5));");
   });
   it("keeps the trial-code action on the shared Settings control language", () => {
     const styles = readFileSync(desktopSourcePath("src/features/settings/TrialCouponRedemption.css"), "utf8");

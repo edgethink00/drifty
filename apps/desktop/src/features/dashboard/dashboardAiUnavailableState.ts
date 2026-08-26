@@ -1,6 +1,6 @@
 import type { BillingEntitlement } from "../billing/billingService";
 
-export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-billing" | "device-limit" | "connect-ai";
+export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-plan" | "cloud-billing" | "device-limit" | "connect-ai";
 
 export type DashboardAiUnavailableState = {
   readonly variant: DashboardAiUnavailableVariant;
@@ -29,14 +29,21 @@ const TRIAL_ENDED_STATE = {
 const CLOUD_BILLING_STATE = {
   variant: "cloud-billing",
   title: "Drifty Cloud billing needs attention",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Review plans or billing to resume richer Cloud AI analysis.",
-  ctaLabel: "Review plans",
+  body: "Your local timeline, predefined rules, and local rules are still shown. Update the payment on this subscription to resume richer Cloud AI analysis.",
+  ctaLabel: "Fix billing",
+} satisfies DashboardAiUnavailableState;
+
+const CLOUD_PLAN_STATE = {
+  variant: "cloud-plan",
+  title: "Choose a Drifty Cloud plan",
+  body: "Your local timeline, predefined rules, and local rules are still shown. Choose Pro to resume richer Drifty Cloud AI analysis.",
+  ctaLabel: "Choose a plan",
 } satisfies DashboardAiUnavailableState;
 
 const DEVICE_LIMIT_STATE = {
   variant: "device-limit",
   title: "Drifty Cloud device limit reached",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Individual includes 2 active desktop devices. Remove an old device to use Cloud AI here.",
+  body: "Your local timeline, predefined rules, and local rules are still shown. Pro includes 2 active desktop devices. Remove an old device to use Cloud AI here.",
   ctaLabel: "Manage devices",
 } satisfies DashboardAiUnavailableState;
 
@@ -52,7 +59,8 @@ export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailable
   if (input.canUseCloudAiClassification) return null;
   if (input.billingEntitlement?.status === "locked") {
     if (input.billingEntitlement.lockedReason === "device_limit_reached") return DEVICE_LIMIT_STATE;
-    return input.billingEntitlement.lockedReason === "trial_expired" ? TRIAL_ENDED_STATE : CLOUD_BILLING_STATE;
+    if (input.billingEntitlement.lockedReason === "trial_expired") return TRIAL_ENDED_STATE;
+    return input.billingEntitlement.lockedReason === "payment_required" ? CLOUD_BILLING_STATE : CLOUD_PLAN_STATE;
   }
   if (input.billingEntitlementLoading && input.isSupabaseConfigured && input.hasRequiredAccountAuth) return null;
   if (input.billingEntitlementError) return CONNECT_AI_STATE;
@@ -61,5 +69,5 @@ export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailable
 }
 
 export function isCloudBillingVariant(variant: DashboardAiUnavailableVariant): boolean {
-  return variant === "trial-ended" || variant === "cloud-billing";
+  return variant === "trial-ended" || variant === "cloud-plan" || variant === "cloud-billing";
 }

@@ -4,7 +4,7 @@ import { isRetryableManagedModelError } from "./managedLocalAiLabels";
 import type { LocalizationController } from "../localization/LocalizationContext";
 
 export const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
-export const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Individual (Cloud)";
+export const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Pro (Cloud)";
 
 export type DriftyModelOptionsParams = {
   readonly catalog: readonly ManagedLocalAiModel[];

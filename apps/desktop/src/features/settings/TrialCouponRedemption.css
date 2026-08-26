@@ -10,6 +10,51 @@
   width: 100%;
 }
 
+/* Collapsed by default; the toggle reads as a quiet disclosure row rather than
+   a competing action next to the plan cards. */
+.content--settings .trial-coupon-form__toggle {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  gap: var(--space-2);
+  justify-self: start;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  width: max-content;
+}
+
+.content--settings .trial-coupon-form__toggle .lbl {
+  color: inherit;
+}
+
+.content--settings .trial-coupon-form__toggle:hover .lbl,
+.content--settings .trial-coupon-form__toggle:focus-visible .lbl {
+  color: var(--accent);
+}
+
+.content--settings .trial-coupon-form__toggle-icon {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--text-soft);
+  display: inline-flex;
+  font-size: 0.9rem;
+  height: 1.15rem;
+  justify-content: center;
+  line-height: 1;
+  width: 1.15rem;
+}
+
+.content--settings .trial-coupon-form__hint {
+  display: block;
+}
+
 
 .content--settings .trial-coupon-form {
   align-items: stretch;

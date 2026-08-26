@@ -506,7 +506,10 @@
   width: min(45rem, 100%);
 }
 
-.dashboard-ai-recovery--trial-ended .dashboard-ai-recovery__panel,
+.dashboard-ai-recovery--trial-ended .dashboard-ai-recovery__panel {
+  max-height: min(88vh, 58rem);
+}
+
 .dashboard-ai-recovery--cloud-billing .dashboard-ai-recovery__panel {
   max-height: min(88vh, 58rem);
   width: min(64rem, 100%);
@@ -536,9 +539,15 @@
   max-width: 62ch;
 }
 
-.dashboard-ai-recovery__plans {
+.dashboard-ai-recovery__plans,
+.dashboard-ai-recovery__actions {
   display: grid;
   gap: var(--space-2);
+}
+
+.dashboard-ai-recovery__actions {
+  grid-auto-flow: column;
+  justify-content: start;
 }
 
 /* 24h timeline */

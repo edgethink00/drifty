@@ -23,7 +23,7 @@ export const DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS = [
   {
     id: "cloud-billing",
     label: "Billing issue",
-    detail: "Cloud billing review CTA",
+    detail: "Fix billing in Polar portal",
   },
   {
     id: "device-limit",
@@ -57,7 +57,7 @@ const DEVICE_LIMIT_ENTITLEMENT = {
   deviceAccess: {
     allowed: false,
     reason: "device_limit_reached",
-    message: "This Drifty Cloud Individual plan is already active on 2 desktop devices. Remove a device in Account settings to use Cloud AI here.",
+    message: "This Drifty Pro plan is already active on 2 desktop devices. Remove a device in Account settings to use Cloud AI here.",
     activeDeviceCount: 2,
     maxActiveDevices: 2,
     activeWindowDays: 30,

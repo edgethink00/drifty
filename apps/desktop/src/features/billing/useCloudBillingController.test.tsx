@@ -157,15 +157,15 @@ describe("useCloudBillingController", () => {
   });
 
   it("keeps an explicit checkout failure local instead of marking Cloud unhealthy", async () => {
-    const lockedEntitlement: BillingEntitlement = {
+    const trialExpiredEntitlement: BillingEntitlement = {
       plan: "individual",
       status: "locked",
       canUseApp: false,
       trialEndsAt: null,
       currentPeriodEnd: null,
-      lockedReason: "payment_required",
+      lockedReason: "trial_expired",
     };
-    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: lockedEntitlement });
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: trialExpiredEntitlement });
     billingMocks.createIndividualCheckout.mockResolvedValue({ success: false, error: "Checkout is temporarily unavailable." });
 
     const { result } = renderHook(() => useCloudBillingController({
@@ -179,11 +179,124 @@ describe("useCloudBillingController", () => {
 
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
     await act(async () => {
-      await result.current.handleStartDriftyCloudSetup();
+      await result.current.startCloudCheckout("monthly");
     });
 
     expect(result.current.billingActionError).toBe("Checkout is temporarily unavailable.");
     expect(result.current.billingEntitlementError).toBeNull();
+  });
+
+  it("opens the billing portal instead of a second checkout when payment is blocked", async () => {
+    const lockedEntitlement: BillingEntitlement = {
+      plan: "individual",
+      status: "locked",
+      canUseApp: false,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      lockedReason: "payment_required",
+    };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: lockedEntitlement });
+    billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      onOpenAiSetup: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.billingEntitlement?.lockedReason).toBe("payment_required"));
+    await act(async () => {
+      await result.current.startCloudCheckout("yearly");
+    });
+
+    expect(billingMocks.createBillingPortalSession).toHaveBeenCalledTimes(1);
+    expect(openUrl).toHaveBeenCalledWith("https://portal.example.test");
+    expect(billingMocks.createIndividualCheckout).not.toHaveBeenCalled();
+  });
+
+  it("opens Polar checkout when a plan is explicitly selected", async () => {
+    const trialExpiredEntitlement: BillingEntitlement = {
+      plan: "individual",
+      status: "locked",
+      canUseApp: false,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      lockedReason: "trial_expired",
+    };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: trialExpiredEntitlement });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      onOpenAiSetup: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
+    await act(async () => {
+      await result.current.startCloudCheckout("yearly");
+    });
+
+    expect(billingMocks.createIndividualCheckout).toHaveBeenCalledWith("yearly");
+    expect(openUrl).toHaveBeenCalledWith("https://checkout.example.test");
+  });
+
+  it("blocks duplicate checkout attempts until the browser return is confirmed", async () => {
+    const trialExpiredEntitlement: BillingEntitlement = {
+      plan: "individual",
+      status: "locked",
+      canUseApp: false,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      lockedReason: "trial_expired",
+    };
+    const activeEntitlement: BillingEntitlement = {
+      ...trialExpiredEntitlement,
+      status: "active",
+      canUseApp: true,
+      lockedReason: undefined,
+    };
+    billingMocks.fetchBillingEntitlement
+      .mockResolvedValueOnce({ success: true, data: trialExpiredEntitlement })
+      .mockResolvedValueOnce({ success: true, data: trialExpiredEntitlement })
+      .mockResolvedValueOnce({ success: true, data: activeEntitlement });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      onOpenAiSetup: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
+    await act(async () => {
+      await result.current.startCloudCheckout("monthly");
+      await result.current.startCloudCheckout("monthly");
+    });
+
+    expect(billingMocks.createIndividualCheckout).toHaveBeenCalledTimes(1);
+    expect(result.current.billingCheckoutAwaitingConfirmation).toBe(true);
+
+    vi.useFakeTimers();
+    act(() => window.dispatchEvent(new Event("focus")));
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS);
+    });
+
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(3);
+    expect(result.current.billingEntitlement?.status).toBe("active");
+    expect(result.current.billingCheckoutAwaitingConfirmation).toBe(false);
   });
 
   it("opens billing management when Cloud is locked only by the device limit", async () => {

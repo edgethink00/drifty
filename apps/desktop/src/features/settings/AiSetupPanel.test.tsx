@@ -53,7 +53,7 @@ describe("AiSetupPanel", () => {
     const providerSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i });
     const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
     expect(providerSelect.textContent).toContain("Drifty");
-    expect(modelSelect.textContent).toContain("Drifty Individual (Cloud)");
+    expect(modelSelect.textContent).toContain("Drifty Pro (Cloud)");
 
     // The Drifty provider is managed entirely from the dropdown; only OpenRouter and
     // Custom endpoint have provider cards, and neither is expanded on a fresh setup.
@@ -274,7 +274,7 @@ describe("AiSetupPanel", () => {
     });
 
     const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
-    expect(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Drifty Individual (Cloud)");
+    expect(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }).textContent).toContain("Drifty Pro (Cloud)");
     fireEvent.click(screen.getByRole("button", { name: /test ai connection/i }));
 
     expect(await screen.findByText(/Cloud AI connected via Google in 42 ms/i)).toBeTruthy();

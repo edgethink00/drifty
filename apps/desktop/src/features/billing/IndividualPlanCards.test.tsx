@@ -7,11 +7,11 @@ import { IndividualPlanCards } from "./IndividualPlanCards";
 import { readAppStyles } from "../../test/readStyles";
 
 describe("IndividualPlanCards", () => {
-  it("shows Free and Individual with a monthly/yearly interval switch", () => {
+  it("shows Free and Pro with a monthly/yearly interval switch", () => {
     render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} onSelectPlan={vi.fn()} />);
 
     const freePlan = screen.getByRole("article", { name: /free plan/i });
-    const individualPlan = screen.getByRole("button", { name: /choose individual plan/i });
+    const proPlan = screen.getByRole("button", { name: /choose pro plan/i });
 
     expect(screen.getByRole("radio", { name: /monthly/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /yearly/i })).toBeTruthy();
@@ -26,45 +26,68 @@ describe("IndividualPlanCards", () => {
     expect(within(freePlan).getByText(/Local classification/)).toBeTruthy();
     expect(within(freePlan).getAllByText(/API key/).length).toBeGreaterThan(0);
     expect(within(freePlan).getAllByText(/Self-hosted local AI/).length).toBeGreaterThan(0);
+    expect(within(freePlan).queryByText(/^Local-first$/i)).toBeNull();
 
-    expect(within(individualPlan).getByText("$5")).toBeTruthy();
-    expect(within(individualPlan).getByText("/ month")).toBeTruthy();
-    expect(within(individualPlan).getByText("Cloud AI")).toBeTruthy();
-    expect(within(individualPlan).getByText("2 active desktop devices included")).toBeTruthy();
-    expect(within(individualPlan).getByText("Manage old devices from Account settings")).toBeTruthy();
-    expect(within(individualPlan).getByText("Start Individual")).toBeTruthy();
+    expect(within(proPlan).getByText("Pro")).toBeTruthy();
+    expect(within(proPlan).getByText("$5")).toBeTruthy();
+    expect(within(proPlan).getByText("/ month")).toBeTruthy();
+    expect(within(proPlan).getByText("Recommended")).toBeTruthy();
+    expect(within(proPlan).getByText(/Automatic AI classification while tracking stays local-first/i)).toBeTruthy();
+    expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
+    expect(within(proPlan).getByText("No API keys or models to manage")).toBeTruthy();
+    expect(within(proPlan).getByText("Cloud AI classification on up to 2 Macs")).toBeTruthy();
+    // Device management lives in the Account rows below, not as a plan benefit.
+    expect(within(proPlan).queryByText(/Manage old devices/i)).toBeNull();
+    expect(within(proPlan).getByText("Upgrade to Pro")).toBeTruthy();
 
-    expect(screen.queryByRole("article", { name: /pro plan/i })).toBeNull();
+    expect(screen.queryByText("Individual")).toBeNull();
     expect(screen.queryByText("Launch pricing")).toBeNull();
     expect(screen.queryByText("Coming soon")).toBeNull();
   });
 
-  it("keeps the billing interval switch ten percent shorter without changing its width rhythm", () => {
+  it("keeps the interval switch subordinate to the plan cards", () => {
     const styles = readAppStyles();
 
-    expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*height:\s*2\.390625rem;/);
-    expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*padding:\s*0\.225rem 0\.25rem;/);
-    expect(styles).toMatch(/\.individual-plan-interval\s*\{[\s\S]*height:\s*1\.940625rem;/);
-    expect(styles).toMatch(/\.individual-plan-interval\s*\{[\s\S]*min-width:\s*6\.5rem;/);
+    // The switch is a secondary control: it stays under the settings control
+    // height and carries no elevation of its own, so the cards read first.
+    expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*height:\s*2\.125rem;/);
+    expect(styles).toMatch(/\.individual-plan-intervals\s*\{[\s\S]*box-shadow:\s*none;/);
+    expect(styles).toMatch(/\.individual-plan-interval\s*\{[\s\S]*height:\s*1\.75rem;/);
   });
 
-  it("marks Individual as current during an active trial", () => {
+  it("lets both plan cards size to their content instead of a fixed card height", () => {
+    const styles = readAppStyles();
+
+    // A fixed min-height left the shorter Free card with dead space; the grid
+    // now equalizes the pair from real content.
+    expect(styles).not.toMatch(/\.individual-plan-card\s*\{[\s\S]*min-height:\s*24\.75rem;/);
+    expect(styles).toMatch(/\.individual-plan-cards\s*\{[\s\S]*align-items:\s*stretch;/);
+  });
+
+  it("gives the paid card the only accent so the pair is not visually identical", () => {
+    const styles = readAppStyles();
+
+    expect(styles).toMatch(/\.individual-plan-card--featured\s*\{[\s\S]*border-color:\s*color-mix\(in srgb, var\(--accent\)/);
+    expect(styles).toMatch(/\.individual-plan-card--featured \.individual-plan-card__badge\s*\{[\s\S]*background:\s*var\(--accent-soft\);/);
+  });
+
+  it("marks Pro as current during an active trial", () => {
     render(<IndividualPlanCards billingInterval="yearly" currentPlan="individual" loadingInterval={null} />);
 
-    const individualPlan = screen.getByRole("article", { name: /individual plan/i });
+    const proPlan = screen.getByRole("article", { name: /pro plan/i });
 
-    expect(within(individualPlan).getAllByText("Current plan").length).toBeGreaterThan(0);
-    expect(within(individualPlan).getByText("$4")).toBeTruthy();
-    expect(within(individualPlan).queryByText("$5")).toBeNull();
-    expect(within(individualPlan).getByText("/ month · $48 billed yearly")).toBeTruthy();
+    expect(within(proPlan).getAllByText("Current plan").length).toBeGreaterThan(0);
+    expect(within(proPlan).getByText("$4")).toBeTruthy();
+    expect(within(proPlan).queryByText("$5")).toBeNull();
+    expect(within(proPlan).getByText("/ month · $48 billed yearly")).toBeTruthy();
   });
 
-  it("starts Individual setup from the card when shown in display mode with a select handler", () => {
+  it("starts Pro setup from the card when shown in display mode with a select handler", () => {
     const onSelectPlan = vi.fn();
 
     render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} mode="display" onSelectPlan={onSelectPlan} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /choose individual plan/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose pro plan/i }));
 
     expect(onSelectPlan).toHaveBeenCalledWith("monthly");
   });
@@ -78,4 +101,23 @@ describe("IndividualPlanCards", () => {
 
     expect(onSelectFreePlan).toHaveBeenCalledTimes(1);
   });
+
+  it("lets a current Pro plan recover billing with a custom action label", () => {
+    const onManageCurrentPlan = vi.fn();
+
+    render(
+      <IndividualPlanCards
+        billingInterval="monthly"
+        currentPlan="individual"
+        loadingInterval={null}
+        manageCurrentPlanLabel="Fix billing"
+        onManageCurrentPlan={onManageCurrentPlan}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i }));
+    expect(onManageCurrentPlan).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /^Manage billing$/i })).toBeNull();
+  });
+
 });

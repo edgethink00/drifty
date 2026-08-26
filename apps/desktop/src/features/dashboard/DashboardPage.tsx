@@ -33,6 +33,8 @@ type DashboardPageProps = {
   readonly appIcons: AppIconMap;
   readonly appTheme: ThemeMode;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  readonly billingPlansDisabled?: boolean;
+  readonly billingPortalLoading?: boolean;
   readonly currentMinuteOfDay: number | null;
   readonly dashboardAiRecoveryState: DashboardAiUnavailableState | null;
   readonly dashboardAppUsage: AppUsagePanelItem[];
@@ -80,6 +82,7 @@ type DashboardPageProps = {
   readonly onFlowIntervalChange?: (intervalMinutes: FlowIntervalMinutes) => void;
   readonly onOpenDashboardAiSetup: () => void;
   readonly onJoinLeaderboard?: () => Promise<void>;
+  readonly onManageCloudBilling?: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
   readonly onSelectDay: (day: string) => void;
 };
@@ -88,6 +91,8 @@ export function DashboardPage({
   appIcons,
   appTheme,
   billingCheckoutLoadingInterval,
+  billingPlansDisabled = false,
+  billingPortalLoading = false,
   currentMinuteOfDay,
   dashboardAiRecoveryState,
   dashboardAppUsage,
@@ -132,6 +137,7 @@ export function DashboardPage({
   onFlowIntervalChange,
   onOpenDashboardAiSetup,
   onJoinLeaderboard,
+  onManageCloudBilling,
   onSelectBillingPlan,
   onSelectDay,
 }: DashboardPageProps) {
@@ -242,8 +248,11 @@ export function DashboardPage({
       {dashboardAiRecoveryState ? (
         <DashboardAiRecoveryOverlay
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+          billingPlansDisabled={billingPlansDisabled}
+          billingPortalLoading={billingPortalLoading}
           state={dashboardAiRecoveryState}
           onClose={onDismissDashboardAiRecovery}
+          onManageCloudBilling={onManageCloudBilling}
           onOpenAiSetup={onOpenDashboardAiSetup}
           onSelectBillingPlan={onSelectBillingPlan}
         />

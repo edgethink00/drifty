@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DashboardPage } from "./DashboardPage";
+import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 
 // Auto-cleanup isn't unmounting between cases here, so broad role/text queries
 // otherwise collide with a prior render's DOM. Tear down explicitly.
@@ -64,6 +65,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       onDismissDashboardAiRecovery={noop}
       onFlowIntervalChange={noop}
       onOpenDashboardAiSetup={noop}
+      onManageCloudBilling={noop}
       onSelectBillingPlan={noop}
       onSelectDay={noop}
     />,
@@ -228,5 +230,72 @@ describe("DashboardPage share card", () => {
   it("keeps Share hidden during replay and without measured activity", () => {
     renderDashboardWithNoData();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  });
+});
+
+
+describe("DashboardPage billing recovery overlay", () => {
+  const billingState: DashboardAiUnavailableState = {
+    variant: "cloud-billing",
+    title: "Drifty Cloud billing needs attention",
+    body: "Update the payment on this subscription to resume richer Cloud AI analysis.",
+    ctaLabel: "Fix billing",
+  };
+
+  it("recovers a blocked payment through billing management instead of plan cards", () => {
+    const onManageCloudBilling = vi.fn();
+    const onSelectBillingPlan = vi.fn();
+
+    render(
+      <DashboardPage
+        appIcons={{}}
+        appTheme="light"
+        billingCheckoutLoadingInterval={null}
+        currentMinuteOfDay={4 * 60}
+        dashboardAiRecoveryState={billingState}
+        dashboardAppUsage={[]}
+        dashboardSegments={[]}
+        dashboardClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
+        browserHistoryBootstrapNotice={null}
+        dashboardCategoryTotals={[]}
+        dashboardDateNavigator={<div aria-label="date navigator" />}
+        dashboardEffectiveProductivityTotals={[]}
+        dashboardProductivityTotals={[]}
+        dashboardReplay={null}
+        dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
+        dashPeriod="Today"
+        flowBlocks={[]}
+        flowIntervalMinutes={3}
+        focusDriftSection={<div data-testid="focus-drift-placeholder" />}
+        dayBreakdownTiles={<div data-testid="day-breakdown-tiles-placeholder" />}
+        dayFocusDeltaSeconds={null}
+        hasTimelineData={true}
+        historyClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
+        historySegments={[]}
+        initialDataLoading={false}
+        selectedDay="2026-06-29"
+        selectedDayLabel="Mon, Jun 29"
+        startOfDayMinutes={4 * 60}
+        statusRunning={true}
+        totalSeconds={3600}
+        weekCalendarEvents={new Map()}
+        weekCurrentCalendarDay={null}
+        weekCurrentMinuteOfDay={null}
+        weekFocusDeltaSeconds={null}
+        weekRefreshStatus="idle"
+        weekRows={[]}
+        onDismissDashboardAiRecovery={noop}
+        onFlowIntervalChange={noop}
+        onOpenDashboardAiSetup={noop}
+        onManageCloudBilling={onManageCloudBilling}
+        onSelectBillingPlan={onSelectBillingPlan}
+        onSelectDay={noop}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i }));
+    expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
+    expect(onSelectBillingPlan).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /choose pro plan/i })).toBeNull();
   });
 });

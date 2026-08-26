@@ -1,6 +1,6 @@
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { Toggle } from "../../components/Toggle";
-import type { BillingPlanId } from "../billing/IndividualPlanCards";
+import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
 import type {
   BillingEntitlement,
@@ -43,18 +43,13 @@ export type AccountSettingsSectionProps = {
   readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
   readonly onEditPublicProfile?: () => void;
   readonly onManageCloudBilling: () => void | Promise<void>;
+  readonly onOpenAiSetup?: () => void;
   readonly onOpenLeaderboard?: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onRedeemTrialCoupon: (code: string) => void | Promise<void>;
   readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
-  readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
-};
-
-type CloudAccountAction = {
-  readonly disabled: boolean;
-  readonly label: string;
-  readonly onSelect: () => void | Promise<unknown>;
+  readonly onStartCloudSetup: (billingInterval: BillingInterval) => void | Promise<void>;
 };
 
 export function AccountSettingsSection({
@@ -87,6 +82,7 @@ export function AccountSettingsSection({
   onPurgeDeviceSyncData,
   onEditPublicProfile,
   onManageCloudBilling,
+  onOpenAiSetup,
   onOpenLeaderboard,
   onRefreshCloudStatus,
   onRedeemTrialCoupon,
@@ -96,38 +92,68 @@ export function AccountSettingsSection({
 }: AccountSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
+  const isPaymentRequiredLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "payment_required";
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
   const shouldShowDeviceManagement = isCurrentCloudPlan || isDeviceLimitLocked || cloudDevices.length > 0;
-  const cloudAction = resolveCloudAccountAction({
-    billingCheckoutLoadingInterval,
-    billingEntitlementLockedReason,
-    billingEntitlementStatus,
-    billingPortalLoading,
-    cloudStatusRefreshing,
-    isCurrentCloudPlan,
-    isSupabaseConfigured,
-    onManageCloudBilling,
-    onRefreshCloudStatus,
-    onStartCloudSetup,
-  });
+  // During a trial the plan is not owned yet: the cards must stay purchasable so
+  // the user can convert, instead of reading as "Current plan" and locking.
+  const planCardsCurrentPlan = billingEntitlementStatus === "trialing" ? "free" : currentBillingPlan;
+  // The Pro card already names the plan a subscriber owns, so it also
+  // carries billing management. That removes the separate status row that would
+  // otherwise repeat the same plan name directly under the same card.
+  const canManageCurrentPlan = isCurrentCloudPlan || billingEntitlementStatus === "active" || isDeviceLimitLocked || isPaymentRequiredLocked;
   const trimmedUserEmail = userEmail?.trim() ?? "";
   const isSignedIn = trimmedUserEmail.length > 0;
   const accountEmail = isSignedIn ? trimmedUserEmail : t("settings.account.notSignedIn");
-  const cloudPlanLabel = currentBillingPlan === "individual" || isDeviceLimitLocked ? t("settings.account.individual") : currentBillingPlan === "free" ? t("settings.account.free") : t("settings.data.unknown");
-  const cloudStatusCopy = isDeviceLimitLocked
-    ? t("settings.account.deviceLimit")
-    : isCurrentCloudPlan
-      ? t("settings.account.cloudActive")
-      : t("settings.account.cloudUpgrade");
+
+  const planCards = (
+    <div className="settings-row settings-row--cloud-pricing">
+      <IndividualPlanCards
+        currentPlan={planCardsCurrentPlan}
+        disabled={billingPlansDisabled}
+        loadingInterval={billingCheckoutLoadingInterval}
+        manageCurrentPlanLabel={isPaymentRequiredLocked ? t("settings.account.fixBilling") : undefined}
+        manageCurrentPlanLoading={billingPortalLoading}
+        mode="display"
+        onManageCurrentPlan={canManageCurrentPlan ? () => void onManageCloudBilling() : undefined}
+        onSelectFreePlan={onOpenAiSetup}
+        onSelectPlan={(interval) => {
+          void onStartCloudSetup(interval);
+        }}
+      />
+    </div>
+  );
 
   return (
     <div className="settings-section settings-section--account">
-      <div className="settings-block">
+      {/* Plans lead the page in every state: the card names the plan, states the
+          price, and carries either the purchase or billing management. */}
+      <div className="settings-block settings-block--plans">
         <h3>{t("settings.section.account")}</h3>
+        {isDeviceLimitLocked || isPaymentRequiredLocked || billingEntitlementError ? (
+          <div className="account-plan-notice" role="status">
+            {isDeviceLimitLocked ? <p>{t("settings.account.deviceLimit")}</p> : null}
+            {isPaymentRequiredLocked ? <p>{t("settings.account.paymentRequired")}</p> : null}
+            {billingEntitlementError ? <p className="account-plan-notice__error">{localizeSettingsError(billingEntitlementError, effectiveLanguage, t)}</p> : null}
+          </div>
+        ) : null}
+        {planCards}
+      </div>
+
+      <TrialCouponRedemption
+        disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
+        errorCode={couponRedemptionErrorCode}
+        isSignedIn={isSignedIn}
+        loading={couponRedemptionLoading}
+        redemption={couponRedemption}
+        onRedeem={onRedeemTrialCoupon}
+      />
+
+      <div className="settings-block settings-block--cloud-account">
+        <h3>{t("settings.account.signedIn")}</h3>
         <div className="settings-row settings-row--stacked-action">
           <div>
-            <div className="lbl">{t("settings.account.signedIn")}</div>
-            <div className="desc">{accountEmail}</div>
+            <div className="lbl">{accountEmail}</div>
           </div>
           {!isSignedIn ? (
             <div className="ctrl">
@@ -137,10 +163,26 @@ export function AccountSettingsSection({
             </div>
           ) : null}
         </div>
+        {shouldShowDeviceManagement ? (
+          <div className="settings-row settings-row--cloud-devices">
+            <CloudDeviceManagementPanel
+              access={cloudDeviceAccess}
+              actionError={cloudDeviceActionError}
+              devices={cloudDevices}
+              isRefreshing={cloudStatusRefreshing}
+              revokingId={cloudDeviceRevokingId}
+              onRefresh={onRefreshCloudStatus}
+              onRevoke={onRevokeCloudDevice}
+            />
+          </div>
+        ) : null}
       </div>
 
       <div className="settings-block">
-        <h3>{t("settings.account.publicProfile")}</h3>
+        <h3 className="settings-block__title-with-badge" aria-label={t("settings.account.publicProfile")}>
+          <span>{t("settings.account.publicProfile")}</span>
+          <span className="settings-beta-badge">{t("common.beta")}</span>
+        </h3>
         <div className="settings-row settings-row--stacked-action">
           <div>
             <div className="lbl">{publicProfileDisplayName?.trim() || t("settings.account.leaderboardProfile")}</div>
@@ -155,49 +197,6 @@ export function AccountSettingsSection({
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="settings-block">
-        <h3>Drifty Cloud</h3>
-        <div className="settings-row settings-row--stacked-action">
-          <div>
-            <div className="lbl">{t("settings.account.plan")}</div>
-            <div className="desc">{cloudStatusCopy}</div>
-            {billingEntitlementError ? <p className="capture-recency capture-recency--error" role="status">{localizeSettingsError(billingEntitlementError, effectiveLanguage, t)}</p> : null}
-          </div>
-          <div className="ctrl">
-            <button type="button" className="settings-btn" onClick={() => void cloudAction.onSelect()} disabled={billingPlansDisabled || cloudAction.disabled}>
-              {translateCloudActionLabel(cloudAction.label, t)}
-            </button>
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.account.cloudPlan")}</div>
-            <div className="desc">{cloudPlanLabel}</div>
-          </div>
-        </div>
-        <TrialCouponRedemption
-          disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
-          errorCode={couponRedemptionErrorCode}
-          isSignedIn={isSignedIn}
-          loading={couponRedemptionLoading}
-          redemption={couponRedemption}
-          onRedeem={onRedeemTrialCoupon}
-        />
-        {shouldShowDeviceManagement ? (
-          <div className="settings-row settings-row--cloud-devices">
-            <CloudDeviceManagementPanel
-              access={cloudDeviceAccess}
-              actionError={cloudDeviceActionError}
-              devices={cloudDevices}
-              isRefreshing={cloudStatusRefreshing}
-              revokingId={cloudDeviceRevokingId}
-              onRefresh={onRefreshCloudStatus}
-              onRevoke={onRevokeCloudDevice}
-            />
-          </div>
-        ) : null}
       </div>
 
       {onDeviceSyncEnabledChange ? (
@@ -270,46 +269,4 @@ function formatSyncTimestamp(value: string): string {
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) return value;
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-function translateCloudActionLabel(label: string, t: LocalizationController["t"]): string {
-  switch (label) {
-    case "Opening billing...": return t("settings.account.openingBilling");
-    case "Opening checkout...": return t("settings.account.openingCheckout");
-    case "Checking...": return t("settings.account.checking");
-    case "Upgrade to Individual": return t("settings.account.upgrade");
-    case "Manage billing": return t("settings.account.manageBilling");
-    default: return label;
-  }
-}
-
-function resolveCloudAccountAction({
-  billingCheckoutLoadingInterval,
-  billingEntitlementLockedReason,
-  billingEntitlementStatus,
-  billingPortalLoading,
-  cloudStatusRefreshing,
-  isCurrentCloudPlan,
-  isSupabaseConfigured,
-  onManageCloudBilling,
-  onRefreshCloudStatus,
-  onStartCloudSetup,
-}: {
-  readonly billingCheckoutLoadingInterval: BillingInterval | null;
-  readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
-  readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
-  readonly billingPortalLoading: boolean;
-  readonly cloudStatusRefreshing: boolean;
-  readonly isCurrentCloudPlan: boolean;
-  readonly isSupabaseConfigured: boolean;
-  readonly onManageCloudBilling: () => void | Promise<void>;
-  readonly onRefreshCloudStatus: () => void | Promise<unknown>;
-  readonly onStartCloudSetup: (billingInterval?: BillingInterval) => void | Promise<void>;
-}): CloudAccountAction {
-  if (billingPortalLoading) return { disabled: true, label: "Opening billing...", onSelect: onManageCloudBilling };
-  if (billingCheckoutLoadingInterval !== null) return { disabled: true, label: "Opening checkout...", onSelect: () => onStartCloudSetup() };
-  if (cloudStatusRefreshing) return { disabled: true, label: "Checking...", onSelect: onRefreshCloudStatus };
-  if (!isSupabaseConfigured || billingEntitlementStatus === "trialing") return { disabled: false, label: "Upgrade to Individual", onSelect: () => onStartCloudSetup() };
-  if (isCurrentCloudPlan || billingEntitlementLockedReason === "device_limit_reached") return { disabled: false, label: "Manage billing", onSelect: onManageCloudBilling };
-  return { disabled: false, label: "Upgrade to Individual", onSelect: () => onStartCloudSetup() };
 }

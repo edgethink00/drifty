@@ -108,7 +108,7 @@ export async function fetchBillingEntitlement(client: BillingClient = supabase):
 }
 
 export async function createIndividualCheckout(
-  billingInterval: BillingInterval = "monthly",
+  billingInterval: BillingInterval,
   client: BillingClient = supabase,
 ): Promise<BillingResult<{ url: string }>> {
   if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
