@@ -62,4 +62,30 @@ describe("buildWeekBreakdownHoverRows", () => {
 
     expect(rows.map((row) => row.appName)).toEqual(["Visual Studio Code"]);
   });
+
+  it("combines multiple category keys for grouped legend hover", () => {
+    const rows = buildWeekBreakdownHoverRows({
+      segments: [
+        segment({ id: "workspace", appName: "Code" }),
+        segment({
+          id: "learning",
+          appName: "Books",
+          classification: { category: "learning", productivity: "focus", source: "manual", confidence: 1 },
+        }),
+        segment({
+          id: "music",
+          appName: "Music",
+          classification: { category: "music", productivity: "neutral", source: "manual", confidence: 1 },
+        }),
+      ],
+      classificationOptions: { includeAiClassifications: false },
+      startDay: "2024-01-03",
+      endDay: "2024-01-03",
+      startOfDayMinutes: 0,
+      mode: "category",
+      key: ["workspace", "learning"],
+    });
+
+    expect(rows.map((row) => row.appName)).toEqual(["Books", "Code"]);
+  });
 });

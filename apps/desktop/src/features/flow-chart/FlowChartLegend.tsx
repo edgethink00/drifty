@@ -10,13 +10,31 @@ type FlowCategoryGroup = {
   readonly categories: readonly ActivityCategory[];
 };
 
-type FlowChartLegendProps = {
-  readonly blocks: readonly FlowBlock[];
+type FlowChartLegendBaseProps = {
   readonly colorMode: FlowColorMode;
   readonly hoveredLegendCardRef: RefObject<HTMLDivElement | null>;
   readonly setHoveredLegend: Dispatch<SetStateAction<FlowLegendHoverState | null>>;
   readonly projectLegend?: readonly ProjectLegendEntry[];
+  readonly ariaLabel?: string;
 };
+
+type FlowChartLegendProps = FlowChartLegendBaseProps & (
+  | {
+      readonly blocks: readonly FlowBlock[];
+      readonly getAppBreakdown?: never;
+      readonly hasUnclassified?: never;
+    }
+  | {
+      readonly blocks?: never;
+      readonly getAppBreakdown: (request: FlowLegendBreakdownRequest) => FlowLegendHoverState["appBreakdown"];
+      readonly hasUnclassified: boolean;
+    }
+);
+
+export type FlowLegendBreakdownRequest =
+  | { readonly kind: "category"; readonly category: ActivityCategory }
+  | { readonly kind: "category-group"; readonly categories: readonly ActivityCategory[] }
+  | { readonly kind: "productivity"; readonly productivity: ProductivityLabel };
 
 type FlowLegendToneStyle = CSSProperties & Record<"--flow-legend-tone", string>;
 
@@ -34,12 +52,23 @@ function blockMatchesCategories(categories: readonly ActivityCategory[]): (block
   return (block) => categories.some((category) => category === block.category);
 }
 
+function blockMatchesRequest(request: FlowLegendBreakdownRequest): (block: FlowBlock) => boolean {
+  switch (request.kind) {
+    case "category": return (block) => block.category === request.category;
+    case "category-group": return blockMatchesCategories(request.categories);
+    case "productivity": return (block) => block.productivity === request.productivity;
+  }
+}
+
 export function FlowChartLegend({
-  blocks,
+  blocks = [],
   colorMode,
   hoveredLegendCardRef,
   setHoveredLegend,
   projectLegend,
+  ariaLabel = "Flow chart tones",
+  getAppBreakdown,
+  hasUnclassified,
 }: FlowChartLegendProps) {
   if (colorMode === "project") {
     return (
@@ -62,11 +91,11 @@ export function FlowChartLegend({
     event: MouseEvent<HTMLElement>,
     label: string,
     detailLabel: string,
-    matchesBlock: (block: FlowBlock) => boolean,
+    request: FlowLegendBreakdownRequest,
   ) => setHoveredLegend({
     label,
     detailLabel,
-    appBreakdown: buildLegendActivityBreakdown(blocks, matchesBlock),
+    appBreakdown: getAppBreakdown?.(request) ?? buildLegendActivityBreakdown(blocks, blockMatchesRequest(request)),
     x: event.clientX,
     y: event.clientY,
   });
@@ -76,13 +105,13 @@ export function FlowChartLegend({
      normal window sizes (the head is only meant to stack under the narrow
      container breakpoint). It also only explains something the user can
      actually see, so it rides along with the gray cells it describes. */
-  const hasUnclassifiedBlocks = blocks.some((block) => block.category === "unknown");
+  const hasUnclassifiedBlocks = hasUnclassified ?? blocks.some((block) => block.category === "unknown");
   const unclassifiedLegend = hasUnclassifiedBlocks ? (
     <span className="flow-chart-legend__group flow-chart-legend__group--unclassified">
       <span
         className="flow-chart-legend__parent flow-chart-legend__parent--tone"
         aria-label={categoryLabel("unknown")}
-        onMouseEnter={(event) => showLegendHover(event, categoryLabel("unknown"), "Not classified yet", (block) => block.category === "unknown")}
+        onMouseEnter={(event) => showLegendHover(event, categoryLabel("unknown"), "Not classified yet", { kind: "category", category: "unknown" })}
         onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
         onMouseLeave={() => setHoveredLegend(null)}
         title="Unclassified blocks"
@@ -94,13 +123,13 @@ export function FlowChartLegend({
   ) : null;
 
   return (
-    <div className="flow-chart-legend" aria-label="Flow chart tones">
+    <div className="flow-chart-legend" aria-label={ariaLabel}>
       {colorMode === "category" ? (
         FLOW_CATEGORY_GROUPS.map((group) => (
           <span className="flow-chart-legend__group" key={group.productivity}>
             <span
               className="flow-chart-legend__parent"
-              onMouseEnter={(event) => showLegendHover(event, productivityLabel(group.productivity), categoryGroupLabel(group.categories), blockMatchesCategories(group.categories))}
+              onMouseEnter={(event) => showLegendHover(event, productivityLabel(group.productivity), categoryGroupLabel(group.categories), { kind: "category-group", categories: group.categories })}
               onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
               onMouseLeave={() => setHoveredLegend(null)}
               title={`${productivityLabel(group.productivity)} categories`}
@@ -113,7 +142,7 @@ export function FlowChartLegend({
                   aria-label={categoryLabel(category)}
                   className={`flow-chart-legend__dot flow-chart-legend__dot--${category}`}
                   key={category}
-                  onMouseEnter={(event) => showLegendHover(event, categoryLabel(category), "Category color", (block) => block.category === category)}
+                  onMouseEnter={(event) => showLegendHover(event, categoryLabel(category), "Category color", { kind: "category", category })}
                   onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
                   onMouseLeave={() => setHoveredLegend(null)}
                   title={categoryLabel(category)}
@@ -129,7 +158,7 @@ export function FlowChartLegend({
             <span className="flow-chart-legend__group flow-chart-legend__group--productivity" key={group.productivity}>
               <span
                 className="flow-chart-legend__parent flow-chart-legend__parent--tone"
-                onMouseEnter={(event) => showLegendHover(event, productivityLabel(group.productivity), "Productivity color", (block) => block.productivity === group.productivity)}
+                onMouseEnter={(event) => showLegendHover(event, productivityLabel(group.productivity), "Productivity color", { kind: "productivity", productivity: group.productivity })}
                 onMouseMove={(event) => moveFlowHoverCardToPointer(hoveredLegendCardRef.current, event.clientX, event.clientY)}
                 onMouseLeave={() => setHoveredLegend(null)}
                 title={`${productivityLabel(group.productivity)} blocks`}

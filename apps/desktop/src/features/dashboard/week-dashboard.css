@@ -1972,6 +1972,10 @@
 
 /* Legend row hosts the color-mode segment control, matching the Day flow chart head */
 .page--week-dashboard .week-v2-calendar__legend {
+  /* Give the shared Day/Week legend the same responsive boundary. At the
+     calendar's narrower width this folds Unclassified to its gray dot while
+     preserving its accessible label and hover details. */
+  container-type: inline-size;
   padding: 7px 8px 9px;
 }
 

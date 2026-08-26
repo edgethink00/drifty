@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, CategoryDuration, ProductivityDuration } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
+import { readAppStyles } from "../../test/readStyles";
+
+const styles = readAppStyles();
 
 afterEach(cleanup);
 
@@ -103,8 +106,10 @@ function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): Week
 type WeekDashboardRenderOverrides = {
   readonly axisScalePercent?: number;
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
+  readonly categoryEntries?: CategoryDuration[];
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
+  readonly productivityEntries?: ProductivityDuration[];
   readonly rows?: WeekDayRow[];
   readonly segments?: ActivitySegment[];
   readonly sideOpen?: boolean;
@@ -116,6 +121,8 @@ function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
   const {
     axisScalePercent,
     calendarEvents = new Map(),
+    categoryEntries: overrideCategoryEntries = categoryEntries,
+    productivityEntries: overrideProductivityEntries = productivityEntries,
     rows = weekRows,
     segments = weekSegments,
     totalSeconds = 4500,
@@ -129,9 +136,9 @@ function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
       calendarEvents={calendarEvents}
       segments={segments}
       classificationOptions={{ includeAiClassifications: false }}
-      categoryEntries={categoryEntries}
+      categoryEntries={overrideCategoryEntries}
       endDay="2024-01-07"
-      productivityEntries={productivityEntries}
+      productivityEntries={overrideProductivityEntries}
       refreshStatus="idle"
       rows={rows}
       startDay="2024-01-01"
@@ -309,5 +316,66 @@ describe("WeekDashboard breakdown panel", () => {
     expect(categoryHoverCard).toBeTruthy();
     expect(within(categoryHoverCard!).getByText("Visual Studio Code")).toBeTruthy();
     expect(within(categoryHoverCard!).getByText("news.example")).toBeTruthy();
+  });
+});
+
+describe("WeekDashboard legend", () => {
+  it("gives the Week legend a container so the shared Unclassified fold breakpoint applies", () => {
+    expect(styles).toMatch(/\.page--week-dashboard \.week-v2-calendar__legend\s*\{[^}]*container-type:\s*inline-size;/);
+  });
+
+  it("uses the Day legend grouping and keeps Unclassified separate from Neutral", () => {
+    const categoryEntriesWithUnknown: CategoryDuration[] = [
+      ...categoryEntries,
+      { category: "unknown", ratio: 0.1, segments: 1, totalSeconds: 300 },
+    ];
+    renderWeekDashboard({ categoryEntries: categoryEntriesWithUnknown });
+
+    const legend = screen.getByLabelText("Week category tones");
+    const neutralGroup = legend.querySelector('.flow-chart-legend__categories[aria-label="Neutral categories"]');
+
+    expect(neutralGroup?.querySelectorAll(".flow-chart-legend__dot")).toHaveLength(3);
+    expect(neutralGroup?.querySelector(".flow-chart-legend__dot--unknown")).toBeNull();
+    expect(within(legend).getByLabelText("Unclassified")).toBeTruthy();
+  });
+
+  it("shows weekly app detail when hovering category, productivity, and Unclassified legend entries", () => {
+    const unclassifiedSegment: ActivitySegment = {
+      ...weekSegments[0],
+      id: "week-unclassified-terminal",
+      appName: "Terminal",
+      bundleId: "com.apple.Terminal",
+      durationSeconds: 300,
+      startedAt: "2024-01-03T11:00:00",
+      endedAt: "2024-01-03T11:05:00",
+      classification: {
+        category: "unknown",
+        productivity: "neutral",
+        source: "unknown",
+        confidence: 0,
+      },
+    };
+    renderWeekDashboard({
+      categoryEntries: [
+        ...categoryEntries,
+        { category: "unknown", ratio: 0.06, segments: 1, totalSeconds: 300 },
+      ],
+      segments: [...weekSegments, unclassifiedSegment],
+    });
+
+    const categoryLegend = screen.getByLabelText("Week category tones");
+    fireEvent.mouseEnter(within(categoryLegend).getByText("Focus"), { clientX: 120, clientY: 80 });
+    expect(within(document.querySelector<HTMLElement>(".category-hover-card")!).getByText("Visual Studio Code")).toBeTruthy();
+    fireEvent.mouseLeave(within(categoryLegend).getByText("Focus"));
+
+    fireEvent.mouseEnter(within(categoryLegend).getByLabelText("Unclassified"), { clientX: 120, clientY: 80 });
+    expect(within(document.querySelector<HTMLElement>(".category-hover-card")!).getByText("Terminal")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
+    expect(document.querySelector(".category-hover-card")).toBeNull();
+
+    const productivityLegend = screen.getByLabelText("Week productivity tones");
+    fireEvent.mouseEnter(within(productivityLegend).getByText("Drift"), { clientX: 120, clientY: 80 });
+    expect(within(document.querySelector<HTMLElement>(".category-hover-card")!).getByText("news.example")).toBeTruthy();
   });
 });

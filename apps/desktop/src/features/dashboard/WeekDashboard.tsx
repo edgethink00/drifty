@@ -17,6 +17,10 @@ import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationHoverState } from "./HoverCards";
 import { buildWeekBreakdownHoverRows } from "./weekBreakdownHover";
 import { MetricTile } from "../../components/MetricTile";
+import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
+import type { FlowLegendBreakdownRequest } from "../flow-chart/FlowChartLegend";
+import { FlowLegendHoverCard } from "../flow-chart/FlowChartHoverCards";
+import type { FlowLegendHoverState } from "../flow-chart/FlowChartHoverCards";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
@@ -31,54 +35,6 @@ const WEEK_COLOR_MODE_OPTIONS = [
   { id: "category", label: "Category" },
   { id: "productivity", label: "Productivity" },
 ] as const satisfies readonly { readonly id: WeekDashboardColorMode; readonly label: string }[];
-
-/* Categories grouped by their productivity tone, mirroring the Day flow chart legend. */
-const WEEK_LEGEND_GROUPS = [
-  { productivity: "focus", categories: ["workspace", "learning"] },
-  { productivity: "neutral", categories: ["communication", "music", "utility", "unknown"] },
-  { productivity: "drift", categories: ["entertainment", "social_media", "shopping", "game"] },
-] as const;
-
-function WeekCalendarLegend({ colorMode }: { colorMode: WeekDashboardColorMode }) {
-  if (colorMode === "productivity") {
-    return (
-      <div className="flow-chart-legend" aria-label="Week productivity tones">
-        {WEEK_LEGEND_GROUPS.map((group) => (
-          <span className="flow-chart-legend__group flow-chart-legend__group--productivity" key={group.productivity}>
-            <span className="flow-chart-legend__parent flow-chart-legend__parent--tone" title={`${productivityLabel(group.productivity)} blocks`}>
-              <span className="flow-chart-legend__tone-dot" style={{ "--flow-legend-tone": PRODUCTIVITY_COLORS[group.productivity] } as WeekLegendToneStyle} />
-              {productivityLabel(group.productivity)}
-            </span>
-          </span>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div className="flow-chart-legend" aria-label="Week category tones">
-      {WEEK_LEGEND_GROUPS.map((group) => (
-        <span className="flow-chart-legend__group" key={group.productivity}>
-          <span className="flow-chart-legend__parent" title={`${productivityLabel(group.productivity)} categories`}>
-            {productivityLabel(group.productivity)}
-          </span>
-          <span className="flow-chart-legend__categories" aria-label={`${productivityLabel(group.productivity)} categories`}>
-            {group.categories.map((category) => (
-              <span
-                aria-label={categoryLabel(category)}
-                className={`flow-chart-legend__dot flow-chart-legend__dot--${category}`}
-                key={category}
-                title={categoryLabel(category)}
-              />
-            ))}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-type WeekLegendToneStyle = CSSProperties & { "--flow-legend-tone": string };
 
 type WeekIdentityStripStyle = CSSProperties & {
   "--week-identity-tile": string;
@@ -257,7 +213,9 @@ export function WeekDashboard({
   const sideOpen = controlledSideOpen ?? localSideOpen;
   const toggleSide = onToggleSide ?? (() => setLocalSideOpen((open) => !open));
   const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
+  const [legendHover, setLegendHover] = useState<FlowLegendHoverState | null>(null);
   const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
+  const legendHoverCardRef = useRef<HTMLDivElement>(null);
   // Element state (not just a ref) so the hover layer's delegation effect can
   // re-subscribe when the calendar body mounts.
   const [calendarBodyElement, setCalendarBodyElement] = useState<HTMLDivElement | null>(null);
@@ -277,7 +235,7 @@ export function WeekDashboard({
     [rows, segments, totalSeconds],
   );
   const sideTrendChart = useMemo(() => buildWeekSideTrendChart(rows, colorMode), [colorMode, rows]);
-  const buildHoverRows = useCallback((key: string, mode: WeekDashboardColorMode, day?: string) => (
+  const buildHoverRows = useCallback((key: string | readonly string[], mode: WeekDashboardColorMode, day?: string) => (
     buildWeekBreakdownHoverRows({
       segments,
       classificationOptions,
@@ -289,6 +247,14 @@ export function WeekDashboard({
       day,
     })
   ), [classificationOptions, endDay, segments, startDay, startOfDayMinutes]);
+  const buildLegendHoverRows = useCallback((request: FlowLegendBreakdownRequest) => {
+    switch (request.kind) {
+      case "category": return buildHoverRows(request.category, "category");
+      case "category-group": return buildHoverRows(request.categories, "category");
+      case "productivity": return buildHoverRows(request.productivity, "productivity");
+    }
+  }, [buildHoverRows]);
+  const hasUnclassified = categoryEntries.some((entry) => entry.category === "unknown" && entry.totalSeconds > 0);
   const todayDay = logicalTodayIsoDate(startOfDayMinutes);
   const calendarStartHour = 0;
   const calendarEndHour = 24;
@@ -412,6 +378,7 @@ export function WeekDashboard({
                     aria-pressed={option.id === colorMode}
                     onClick={() => {
                       setBreakdownHover(null);
+                      setLegendHover(null);
                       setColorMode(option.id);
                     }}
                   >
@@ -419,7 +386,14 @@ export function WeekDashboard({
                   </button>
                 ))}
               </div>
-              <WeekCalendarLegend colorMode={colorMode} />
+              <FlowChartLegend
+                ariaLabel={colorMode === "category" ? "Week category tones" : "Week productivity tones"}
+                colorMode={colorMode}
+                getAppBreakdown={buildLegendHoverRows}
+                hasUnclassified={hasUnclassified}
+                hoveredLegendCardRef={legendHoverCardRef}
+                setHoveredLegend={setLegendHover}
+              />
             </div>
             {refreshStatusLabel ? (
               <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
@@ -536,6 +510,7 @@ export function WeekDashboard({
           </div>
         </section>
         <WeekCalendarHoverLayer appIcons={appIcons} bodyElement={calendarBodyElement} eventsById={eventsById} />
+        {legendHover ? <FlowLegendHoverCard hover={legendHover} appIcons={appIcons} cardRef={legendHoverCardRef} /> : null}
 
         <BreakdownSidePanel
           open={sideOpen}

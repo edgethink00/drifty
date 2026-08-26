@@ -13,7 +13,7 @@ type WeekBreakdownHoverInput = {
   readonly endDay: string;
   readonly startOfDayMinutes: number;
   readonly mode: WeekDashboardColorMode;
-  readonly key: string;
+  readonly key: string | readonly string[];
   readonly day?: string;
 };
 
@@ -36,12 +36,13 @@ export function buildWeekBreakdownHoverRows({
   const rangeStartDay = day ?? startDay;
   const rangeEndDay = day ?? endDay;
   const clippedSegments: ActivitySegment[] = [];
+  const keys = typeof key === "string" ? [key] : key;
 
   for (const segment of segments) {
     const classification = classifyActivity(segment, classificationOptions);
     const matches = mode === "productivity"
-      ? classification.productivity === key
-      : classification.category === key;
+      ? keys.includes(classification.productivity)
+      : keys.includes(classification.category);
     if (!matches) continue;
 
     for (const overlap of splitSegmentIntoDayOverlaps(segment, rangeStartDay, rangeEndDay, startOfDayMinutes)) {
