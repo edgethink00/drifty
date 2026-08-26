@@ -3,8 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEVICE_SYNC_FAILURE_BACKOFF_MS,
   DEVICE_SYNC_MIN_CYCLE_INTERVAL_MS,
+  DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY,
   DEVICE_SYNC_STATE_STORAGE_KEY,
+  clearPendingDeviceSyncAccountReset,
   findDeviceSyncCycleRecord,
+  hasPendingDeviceSyncAccountReset,
+  markDeviceSyncAccountResetPending,
+  readPendingDeviceSyncAccountReset,
   readDeviceSyncCycleRecords,
   shouldRunDeviceSyncCycle,
   upsertDeviceSyncCycleRecord,
@@ -71,6 +76,7 @@ describe("shouldRunDeviceSyncCycle", () => {
 describe("device sync cycle records storage", () => {
   beforeEach(() => {
     window.localStorage.removeItem(DEVICE_SYNC_STATE_STORAGE_KEY);
+    window.localStorage.removeItem(DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY);
   });
 
   it("round-trips records per user scope", () => {
@@ -91,4 +97,27 @@ describe("device sync cycle records storage", () => {
     window.localStorage.setItem(DEVICE_SYNC_STATE_STORAGE_KEY, "{not json");
     expect(readDeviceSyncCycleRecords()).toEqual([]);
   });
+
+  it("persists an account-reset guard until durable tracker cursors are cleared", () => {
+    expect(hasPendingDeviceSyncAccountReset()).toBe(false);
+    markDeviceSyncAccountResetPending("user-1");
+    expect(hasPendingDeviceSyncAccountReset()).toBe(true);
+    expect(readPendingDeviceSyncAccountReset()).toEqual({ userScopeKey: "user-1" });
+    clearPendingDeviceSyncAccountReset();
+    expect(hasPendingDeviceSyncAccountReset()).toBe(false);
+  });
+
+  it("recovers the legacy pending marker without inventing a user scope", () => {
+    window.localStorage.setItem(DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY, "1");
+    expect(readPendingDeviceSyncAccountReset()).toEqual({ userScopeKey: null });
+  });
+
+  it.each(["{not json", JSON.stringify({}), JSON.stringify({ userScopeKey: 42 })])(
+    "fails closed for a non-empty malformed account-reset marker: %s",
+    (value) => {
+      window.localStorage.setItem(DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY, value);
+      expect(hasPendingDeviceSyncAccountReset()).toBe(true);
+      expect(readPendingDeviceSyncAccountReset()).toEqual({ userScopeKey: null });
+    },
+  );
 });

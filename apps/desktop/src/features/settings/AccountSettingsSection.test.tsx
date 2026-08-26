@@ -161,6 +161,74 @@ describe("AccountSettingsSection", () => {
     expect(onSignIn).toHaveBeenCalledTimes(1);
   });
 
+  it("exposes account deletion only for a signed-in account", () => {
+    const onDeleteAccount = vi.fn();
+    const props: AccountSettingsSectionProps = {
+      billingCheckoutLoadingInterval: null,
+      billingEntitlementError: null,
+      billingEntitlementLockedReason: null,
+      billingEntitlementStatus: "trialing",
+      billingPlansDisabled: false,
+      billingPortalLoading: false,
+      couponRedemption: null,
+      couponRedemptionErrorCode: null,
+      couponRedemptionLoading: false,
+      cloudDeviceAccess: null,
+      cloudDeviceActionError: null,
+      cloudDeviceRevokingId: null,
+      cloudDevices: [],
+      cloudStatusRefreshing: false,
+      currentBillingPlan: "free",
+      isSupabaseConfigured: true,
+      shouldShowCloudCheckoutPlans: true,
+      userEmail: "alex@example.com",
+      onDeleteAccount,
+      onManageCloudBilling: vi.fn(),
+      onRefreshCloudStatus: vi.fn(),
+      onRedeemTrialCoupon: vi.fn(),
+      onRevokeCloudDevice: vi.fn(),
+      onSignIn: vi.fn(),
+      onStartCloudSetup: vi.fn(),
+    };
+
+    const { rerender } = render(<AccountSettingsSection {...props} />);
+    const dangerHeading = screen.getByRole("heading", { name: /^Danger zone$/i });
+    expect(dangerHeading.closest(".settings-block")?.textContent).toContain("Local activity and locally saved work or setup state stay");
+    fireEvent.click(screen.getByRole("button", { name: /^Delete account$/i }));
+    expect(onDeleteAccount).toHaveBeenCalledTimes(1);
+
+    rerender(<AccountSettingsSection {...props} userEmail={null} />);
+    expect(screen.queryByRole("heading", { name: /^Danger zone$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Delete account$/i })).toBeNull();
+
+    rerender(<AccountSettingsSection {...props} hasSignedInAccount userEmail={null} />);
+    expect(screen.getByText("Signed in")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Delete account$/i })).toBeTruthy();
+
+    rerender(<AccountSettingsSection {...props} hasSignedInAccount={false} />);
+    expect(screen.queryByRole("heading", { name: /^Danger zone$/i })).toBeNull();
+
+    rerender(
+      <AccountSettingsSection
+        {...props}
+        hasAuthenticatedSession
+        hasSignedInAccount={false}
+        userEmail={null}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /^Delete account$/i })).toBeTruthy();
+
+    rerender(
+      <AccountSettingsSection
+        {...props}
+        hasAuthenticatedSession={false}
+        hasSignedInAccount={false}
+        userEmail={null}
+      />,
+    );
+    expect(screen.queryByRole("heading", { name: /^Danger zone$/i })).toBeNull();
+  });
+
   it("normalizes and submits a trial code from Account settings", () => {
     const onRedeemTrialCoupon = vi.fn();
     const props: AccountSettingsSectionProps = {
@@ -386,7 +454,7 @@ describe("AccountSettingsSection", () => {
     const markup = readFileSync(desktopSourcePath("src/features/settings/AccountSettingsSection.tsx"), "utf8");
     const plansClose = markup.indexOf("</div>", markup.indexOf("settings-block--plans"));
     const coupon = markup.indexOf("<TrialCouponRedemption");
-    const signedIn = markup.indexOf("settings.account.signedIn");
+    const signedIn = markup.indexOf('t("settings.account.signedIn")');
     expect(coupon).toBeGreaterThan(plansClose);
     expect(coupon).toBeLessThan(signedIn);
     expect(markup.indexOf("<TrialCouponRedemption", markup.indexOf("settings-block--plans"))).toBe(coupon);
@@ -403,8 +471,10 @@ describe("AccountSettingsSection", () => {
     const sharedPlanSuiteRule = cssRule(sharedPlanStyles, ".individual-plan-suite");
     const sharedPlanIntervalsRule = cssRule(sharedPlanStyles, ".individual-plan-intervals");
     const sharedPlanCardsRule = cssRule(sharedPlanStyles, ".individual-plan-cards");
+    const sharedSectionHeadingRule = cssRule(sharedPlanStyles, ".content--settings .settings-block > h3");
     const couponRowRule = cssRule(styles, ".content--settings .settings-section--account > .settings-row--coupon");
     const couponSpacingRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--plans + .settings-row--coupon");
+    const dangerLabelRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--danger-zone .lbl");
 
     expect(sectionRule).toContain("gap: var(--space-5);");
     expect(stackedRowRule).toContain("display: grid;");
@@ -419,9 +489,12 @@ describe("AccountSettingsSection", () => {
     expect(sharedPlanIntervalsRule).toContain("justify-self: start;");
     expect(sharedPlanIntervalsRule).toContain("margin: 0;");
     expect(sharedPlanCardsRule).toContain("margin: 0;");
+    expect(sharedSectionHeadingRule).toContain("color: var(--text-soft);");
     expect(couponRowRule).toContain("min-height: 0;");
     expect(couponSpacingRule).toContain("margin-bottom: calc(var(--space-6) - var(--space-5));");
     expect(couponSpacingRule).toContain("margin-top: calc(var(--space-3) - var(--space-5));");
+    expect(dangerLabelRule).toContain("color: var(--warn);");
+    expect(styles).not.toContain(".settings-block--danger-zone h3");
   });
   it("keeps the trial-code action on the shared Settings control language", () => {
     const styles = readFileSync(desktopSourcePath("src/features/settings/TrialCouponRedemption.css"), "utf8");

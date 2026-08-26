@@ -382,19 +382,21 @@ describe("AI privacy disclosure contract", () => {
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("클라우드 경로는 이 항목을 받지 않습니다");
   });
 
-  it("describes classification samples as service-side, not as account data", () => {
-    // ai_classification_records is service-role only and keyed by a salted hash, not
-    // auth.users.id, so the user cannot read or delete it from their account. Saying it
-    // lives "in your Drifty account" overclaims user control.
+  it("describes classification samples as service-side and account-deletion linked", () => {
+    // ai_classification_records is service-role only and keyed by salted hashes, not
+    // auth.users.id. Users cannot browse individual rows, while the delete-account
+    // path derives current and retained hashes and removes matching samples.
     for (const translations of [ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS]) {
       expect(
         translations["settings.aiPrivacy.footnote"],
         "Samples are not stored in the user's account; they are service-role rows keyed by a salted hash.",
       ).not.toMatch(/stored in your Drifty account|Drifty 계정에 저장/);
     }
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/salted hash/i);
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/cannot read or delete/i);
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.footnote"]).toContain("솔트");
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/salted account hashes/i);
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/deleting the account removes samples/i);
+    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/blocks.*24 hours.*expired marker.*later sample-cleanup/i);
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.footnote"]).toContain("계정을 삭제하면");
+    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/24시간 차단.*만료된 표식.*이후 샘플 정리/);
   });
 
   it("discloses the truncation limit for both window title and page address", () => {

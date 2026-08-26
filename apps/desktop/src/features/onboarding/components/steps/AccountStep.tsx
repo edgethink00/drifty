@@ -10,6 +10,7 @@ export function AccountStep({
   onSkipAuthForDev,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
+  onDeleteAnonymousAccount,
 }: {
   readonly accountConnected: boolean;
   readonly authCallbackStatus: OAuthCallbackStatus | null;
@@ -17,6 +18,7 @@ export function AccountStep({
   readonly onSkipAuthForDev: () => void;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
+  readonly onDeleteAnonymousAccount?: () => void;
 }) {
   const { t } = useLocalization();
   const isGoogleHandoffBusy = authCallbackStatus?.googleAction === "opening"
@@ -71,6 +73,14 @@ export function AccountStep({
       {!accountConnected && authCallbackStatus ? (
         <div className={callbackNoticeClassName} role={callbackNoticeRole}>
           {authCallbackStatus.message}
+        </div>
+      ) : null}
+      {!accountConnected && onDeleteAnonymousAccount ? (
+        <div className="dc-onb-account__delete-guest">
+          <button type="button" onClick={onDeleteAnonymousAccount}>
+            {t("onboarding.account.deleteGuest")}
+          </button>
+          <p>{t("onboarding.account.deleteGuestHelper")}</p>
         </div>
       ) : null}
       {!accountConnected && devAuthSkipEnabled ? (

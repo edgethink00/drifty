@@ -29,6 +29,8 @@ export type AccountSettingsSectionProps = {
   readonly cloudDevices: BillingEntitlement["cloudDevices"];
   readonly cloudStatusRefreshing: boolean;
   readonly currentBillingPlan: BillingPlanId | null;
+  readonly hasAuthenticatedSession?: boolean;
+  readonly hasSignedInAccount?: boolean;
   readonly isSupabaseConfigured: boolean;
   readonly publicProfileDisplayName?: string | null;
   readonly publicProfileStatus?: string | null;
@@ -41,6 +43,7 @@ export type AccountSettingsSectionProps = {
   readonly onDeviceSyncEnabledChange?: (enabled: boolean) => void;
   readonly onDeviceSyncNow?: () => void | Promise<void>;
   readonly onPurgeDeviceSyncData?: () => void | Promise<void>;
+  readonly onDeleteAccount?: () => void;
   readonly onEditPublicProfile?: () => void;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onOpenAiSetup?: () => void;
@@ -68,6 +71,8 @@ export function AccountSettingsSection({
   cloudDevices = [],
   cloudStatusRefreshing,
   currentBillingPlan,
+  hasAuthenticatedSession,
+  hasSignedInAccount,
   isSupabaseConfigured,
   publicProfileDisplayName,
   publicProfileStatus,
@@ -80,6 +85,7 @@ export function AccountSettingsSection({
   onDeviceSyncEnabledChange,
   onDeviceSyncNow,
   onPurgeDeviceSyncData,
+  onDeleteAccount,
   onEditPublicProfile,
   onManageCloudBilling,
   onOpenAiSetup,
@@ -103,8 +109,11 @@ export function AccountSettingsSection({
   // otherwise repeat the same plan name directly under the same card.
   const canManageCurrentPlan = isCurrentCloudPlan || billingEntitlementStatus === "active" || isDeviceLimitLocked || isPaymentRequiredLocked;
   const trimmedUserEmail = userEmail?.trim() ?? "";
-  const isSignedIn = trimmedUserEmail.length > 0;
-  const accountEmail = isSignedIn ? trimmedUserEmail : t("settings.account.notSignedIn");
+  const isSignedIn = hasSignedInAccount ?? trimmedUserEmail.length > 0;
+  const canDeleteAccount = hasAuthenticatedSession ?? isSignedIn;
+  const accountEmail = trimmedUserEmail || (isSignedIn
+    ? t("settings.account.signedInWithoutEmail")
+    : t("settings.account.notSignedIn"));
 
   const planCards = (
     <div className="settings-row settings-row--cloud-pricing">
@@ -244,6 +253,23 @@ export function AccountSettingsSection({
               </div>
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {canDeleteAccount && onDeleteAccount ? (
+        <div className="settings-block settings-block--danger-zone">
+          <h3>{t("settings.account.dangerZone")}</h3>
+          <div className="settings-row settings-row--stacked-action">
+            <div>
+              <div className="lbl">{t("settings.account.deleteTitle")}</div>
+              <div className="desc">{t("settings.account.deleteSettingsDescription")}</div>
+            </div>
+            <div className="ctrl">
+              <button type="button" className="settings-btn danger" onClick={onDeleteAccount}>
+                {t("settings.account.deleteAction")}
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

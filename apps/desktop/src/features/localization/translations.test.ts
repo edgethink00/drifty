@@ -63,6 +63,20 @@ describe("Korean translations", () => {
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.rawLocal"]).toContain("AI 제공업체에 전송하지 않음");
   });
 
+  it("keeps Korean account-deletion claims aligned with actual deletion and retention behavior", () => {
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteCloudImpact"]).toMatch(/있다면 즉시 종료/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteLocalImpact"]).toMatch(/삭제되지 않습니다.*동기화는 꺼지고.*클라우드 사본은 삭제/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteFutureSyncImpact"]).toMatch(/다른 계정.*업로드될 수/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteBillingRetention"]).toMatch(/Polar.*과거 결제 기록이 남/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteAnalyticsRetention"]).toMatch(/PostHog.*삭제되지/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteTeamsImpact"]).toMatch(/다른 멤버.*계정 삭제를 차단/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toMatch(/데이터를 보호.*계정 삭제를 차단.*직접 정리를 지원하지 않습니다/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).not.toContain("지원팀");
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorBillingStopped"]).toMatch(/결제 고객 정리는 완료.*구독이 있었다면 종료.*계정 삭제는 끝나지/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorGuestBillingCleared"]).toMatch(/결제 고객은 정리.*게스트 계정 삭제가 끝나지/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorGuestBillingCleared"]).not.toContain("구독");
+  });
+
   it("localizes update states and preserves technical error details", () => {
     expect(localizeUpdateMessage("Drifty 1.2.17 is available.", "status", "ko", koreanT)).toBe("새 버전 설치 가능 · Drifty 1.2.17");
     expect(localizeUpdateMessage("Update check failed: offline", "error", "ko", koreanT)).toBe("업데이트를 확인하지 못했습니다. 세부 정보: offline");

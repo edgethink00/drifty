@@ -349,6 +349,40 @@
   border-top: 1px solid var(--dc-onb-line);
 }
 
+.dc-onb-account__delete-guest {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding-top: 16px;
+  border-top: 1px solid var(--dc-onb-line);
+}
+
+.dc-onb-account__delete-guest button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--dc-onb-warn);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 6px;
+}
+
+.dc-onb-account__delete-guest button:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--dc-onb-warn) 58%, transparent);
+  outline-offset: 2px;
+  border-radius: 7px;
+}
+
+.dc-onb-account__delete-guest p {
+  margin: 0;
+  color: var(--dc-onb-pale);
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+}
+
 .dc-onb-account__dev-skip-button {
   appearance: none;
   display: inline-flex;

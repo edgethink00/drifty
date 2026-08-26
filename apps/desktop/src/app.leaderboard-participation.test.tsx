@@ -871,6 +871,13 @@ describe("App leaderboard participation", () => {
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
     expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /delete guest cloud account/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /delete guest cloud account/i }));
+    const deletionDialog = await screen.findByRole("dialog", { name: /delete Drifty account/i });
+    expect(within(deletionDialog).getByText(
+      /billing customer linked to this guest identity.*cloud profile and published leaderboard data/i,
+    )).toBeTruthy();
 
     await waitFor(() => {
       expect(authState.signInAnonymously).not.toHaveBeenCalled();

@@ -20,6 +20,7 @@ type OnboardingDesignCodeContentProps = {
   readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
+  readonly onDeleteAnonymousAccount?: () => void;
 };
 
 export function OnboardingDesignCodeContent({
@@ -27,6 +28,7 @@ export function OnboardingDesignCodeContent({
   authCallbackStatus,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
+  onDeleteAnonymousAccount,
 }: OnboardingDesignCodeContentProps) {
   const { t } = useLocalization();
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -108,6 +110,7 @@ export function OnboardingDesignCodeContent({
                   onSkipAuthForDev={flow.skipAccountForDev}
                   onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
                   onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+                  onDeleteAnonymousAccount={onDeleteAnonymousAccount}
                 />
               ) : null}
               {flow.step === "job" ? (

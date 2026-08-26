@@ -1,0 +1,98 @@
+.account-deletion-modal {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 30rem;
+  width: min(30rem, calc(100vw - var(--space-6)));
+}
+
+.account-deletion-modal__impact {
+  background: var(--warn-soft);
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+}
+
+.account-deletion-modal__impact strong {
+  color: var(--warn);
+  font-size: 0.84rem;
+}
+
+.account-deletion-modal__impact ul {
+  color: var(--text-soft);
+  display: grid;
+  font-size: var(--type-setting-desc-size);
+  gap: var(--space-1);
+  line-height: 1.5;
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.account-deletion-modal__retention {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+}
+
+.account-deletion-modal__retention strong {
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.account-deletion-modal__retention p {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.account-deletion-modal__confirmation {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.account-deletion-modal__confirmation span {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+}
+
+.account-deletion-modal__confirmation input {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+  min-height: var(--settings-control-height);
+  padding: 0 var(--space-3);
+}
+
+.account-deletion-modal__confirmation input:focus-visible {
+  border-color: var(--warn);
+  outline: 2px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  outline-offset: 1px;
+}
+
+.account-deletion-modal .auth-modal__error {
+  margin-bottom: 0;
+}
+
+@media (max-width: 34rem) {
+  .account-deletion-modal .modal-foot {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .account-deletion-modal .modal-foot__note {
+    grid-column: 1 / -1;
+    padding-right: 0;
+  }
+
+  .account-deletion-modal .modal-btn {
+    width: 100%;
+  }
+}

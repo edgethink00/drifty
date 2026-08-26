@@ -37,6 +37,7 @@ export function OnboardingModal({
   authCallbackStatus,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithEmail,
+  onDeleteAnonymousAccount,
   onAcknowledgeCloudTrialStartedNotice,
   onComplete,
   __devInitialStep,
@@ -58,6 +59,7 @@ export function OnboardingModal({
   authCallbackStatus: OAuthCallbackStatus | null;
   onStartCloudTrialWithGoogle: () => void;
   onStartCloudTrialWithEmail: () => void;
+  onDeleteAnonymousAccount?: () => void;
   onAcknowledgeCloudTrialStartedNotice: () => void;
   onComplete: Parameters<typeof useOnboardingFlow>[0]["onComplete"];
   /** Dev-only: start on a specific step for visual review / Playwright. */
@@ -104,6 +106,7 @@ export function OnboardingModal({
           authCallbackStatus={authCallbackStatus}
           onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
           onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+          onDeleteAnonymousAccount={onDeleteAnonymousAccount}
         />
       </div>
     </section>

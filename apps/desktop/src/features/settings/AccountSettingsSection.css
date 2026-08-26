@@ -106,3 +106,7 @@
 .content--settings .settings-section--account .account-plan-notice__error {
   color: var(--warn);
 }
+
+.content--settings .settings-section--account .settings-block--danger-zone .lbl {
+  color: var(--warn);
+}

@@ -94,6 +94,8 @@ import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
+import { AccountDeletionModal } from "./features/auth/AccountDeletionModal";
+import { deleteDriftyAccount, type AccountDeletionResult } from "./features/auth/accountDeletionService";
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
@@ -212,6 +214,22 @@ import {
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
 import { purgeCloudSyncData } from "./features/device-sync/deviceSyncApi";
+import { resetAccountSyncIdentity } from "./features/device-sync/accountDeletionSyncReset";
+import {
+  clearDeviceSyncCycleRecordsForUser,
+  clearPendingDeviceSyncAccountReset,
+  hasPendingDeviceSyncAccountReset,
+  markDeviceSyncAccountResetPending,
+  readPendingDeviceSyncAccountReset,
+} from "./features/device-sync/deviceSyncState";
+import {
+  SYNC_DELETION_PULL_CURSOR_KEY,
+  SYNC_DEVICE_ID_KEY,
+  SYNC_LAST_PULLED_AT_KEY,
+  SYNC_LAST_PUSHED_AT_KEY,
+  SYNC_PULL_CURSOR_KEY,
+  SYNC_PUSH_SEQ_KEY,
+} from "./features/device-sync/deviceSyncEngine";
 import { DeviceSyncPurgeConfirmation } from "./features/device-sync/DeviceSyncPurgeConfirmation";
 import { AiSetupSettingsSection } from "./features/settings/AiSetupSettingsSection";
 import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
@@ -646,6 +664,8 @@ export default function App() {
   // default-on production surface — the Dev-mode preview gate is retired.
   const projectClassificationFeatureEnabled = true;
   const [deviceSyncEnabled, setDeviceSyncEnabled] = useState(resolveInitialDeviceSyncEnabled);
+  const [deviceSyncAccountResetPending, setDeviceSyncAccountResetPending] = useState(hasPendingDeviceSyncAccountReset);
+  const recoverPendingDeviceSyncAccountResetOnLaunchRef = useRef(deviceSyncAccountResetPending);
   const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
   // Dev-only gate for the web account preview: embed detail-share toggles on the Profile
@@ -1084,6 +1104,7 @@ export default function App() {
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
   const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
+  const [accountDeletionModalOpen, setAccountDeletionModalOpen] = useState(false);
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -1273,7 +1294,8 @@ export default function App() {
   const deviceSyncFeatureVisible = isDevModeActive && devDeviceSyncPreviewEnabled;
   const deviceSyncActive =
     deviceSyncFeatureVisible &&
-    deviceSyncEnabled && isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+    deviceSyncEnabled && !deviceSyncAccountResetPending
+    && isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
   const deviceSyncUserScopeKey = user?.id ?? "anonymous";
   // `refresh` is re-created every render (function declaration below); the ref
   // keeps the sync controller's callback pointed at the current one instead of
@@ -1289,6 +1311,7 @@ export default function App() {
     status: deviceSyncStatus,
     deviceLabelById: syncDeviceLabelById,
     syncNow: deviceSyncNow,
+    quiesce: quiesceDeviceSync,
   } = useDeviceSyncController({
     syncActive: deviceSyncActive,
     userScopeKey: deviceSyncUserScopeKey,
@@ -1335,6 +1358,74 @@ export default function App() {
     } finally {
       setDeviceSyncPurging(false);
     }
+  }, []);
+
+  const handleDeleteAccount = useCallback(async (confirmation: string): Promise<AccountDeletionResult> => {
+    const deletedUserId = user?.id ?? null;
+    try {
+      // Write both fail-closed values synchronously before touching remote
+      // state. React's persistence effect may not run before an app exit.
+      markDeviceSyncAccountResetPending(deletedUserId);
+      window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, "0");
+      setDeviceSyncEnabled(false);
+      // A cycle that started before the toggle changed can still write the old
+      // pacing record, device id, and cursors. Drain it before clearing either.
+      await resetAccountSyncIdentity({
+        userScopeKey: deletedUserId,
+        quiesce: quiesceDeviceSync,
+        setSyncState: (state) => trackerClient.setSyncState(state),
+      });
+      clearPendingDeviceSyncAccountReset();
+      setDeviceSyncAccountResetPending(false);
+    } catch (resetError) {
+      // Keep this session fail-closed too. Recovery is intentionally armed only
+      // from the marker observed at launch, so setting this flag cannot race an
+      // immediate second tracker write against the deletion attempt.
+      setDeviceSyncAccountResetPending(true);
+      console.warn("Unable to reset local sync identity before account deletion.", resetError);
+      return {
+        success: false,
+        code: "local_sync_reset_failed",
+        stage: "not_started",
+        error: resetError instanceof Error ? resetError.message : "Unable to reset local sync identity.",
+      };
+    }
+
+    const result = await deleteDriftyAccount(confirmation);
+    if (!result.success) return result;
+
+    setAccountDeletionModalOpen(false);
+    try {
+      await signOut();
+    } catch (signOutError) {
+      // The remote auth user is already gone. The next auth refresh will also
+      // clear the session; keep account deletion successful and surface only a
+      // non-sensitive diagnostic for this local cleanup failure.
+      console.warn("Unable to clear the deleted account session immediately.", signOutError);
+    }
+    return result;
+  }, [quiesceDeviceSync, signOut, user?.id]);
+
+  useEffect(() => {
+    if (!recoverPendingDeviceSyncAccountResetOnLaunchRef.current) return;
+    recoverPendingDeviceSyncAccountResetOnLaunchRef.current = false;
+    window.localStorage.setItem(DEVICE_SYNC_ENABLED_STORAGE_KEY, "0");
+    setDeviceSyncEnabled(false);
+    const pendingReset = readPendingDeviceSyncAccountReset();
+    if (pendingReset?.userScopeKey) clearDeviceSyncCycleRecordsForUser(pendingReset.userScopeKey);
+    void trackerClient.setSyncState({
+      [SYNC_PUSH_SEQ_KEY]: "0",
+      [SYNC_PULL_CURSOR_KEY]: null,
+      [SYNC_DELETION_PULL_CURSOR_KEY]: null,
+      [SYNC_DEVICE_ID_KEY]: null,
+      [SYNC_LAST_PUSHED_AT_KEY]: null,
+      [SYNC_LAST_PULLED_AT_KEY]: null,
+    }).then(() => {
+      clearPendingDeviceSyncAccountReset();
+      setDeviceSyncAccountResetPending(false);
+    }).catch((resetError) => {
+      console.warn("Unable to recover pending account-deletion sync reset.", resetError);
+    });
   }, []);
   const requestLeaderboardAuth = openDefaultAuthModal;
   const requestTeamAuth = openDefaultAuthModal;
@@ -5209,6 +5300,7 @@ export default function App() {
     || authModalOpen
     || feedbackModalOpen
     || upgradePlanModalOpen
+    || accountDeletionModalOpen
     || aiSetupDialogOpen
     || onboardingOpen
     || selectedLeaderboardRow
@@ -6975,6 +7067,9 @@ export default function App() {
       authCallbackStatus={callbackStatus}
       onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
       onStartCloudTrialWithEmail={openOnboardingEmailAuthModal}
+      onDeleteAnonymousAccount={user?.is_anonymous === true
+        ? () => setAccountDeletionModalOpen(true)
+        : undefined}
       onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
       onComplete={handleOnboardingComplete}
     />
@@ -6993,6 +7088,14 @@ export default function App() {
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
           {onboardingModal}
           {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+          {accountDeletionModalOpen ? (
+            <AccountDeletionModal
+              accountEmail={user?.email ?? null}
+              isAnonymousAccount={user?.is_anonymous === true}
+              onClose={() => setAccountDeletionModalOpen(false)}
+              onDelete={handleDeleteAccount}
+            />
+          ) : null}
         </>
       </LocalizationProvider>
       </SiteIconProvider>
@@ -7775,6 +7878,8 @@ export default function App() {
                     cloudDevices={effectiveBillingEntitlement?.cloudDevices ?? cloudDevices}
                     cloudStatusRefreshing={effectiveBillingEntitlementLoading}
 	                    currentBillingPlan={currentBillingPlan}
+	                    hasAuthenticatedSession={Boolean(user)}
+	                    hasSignedInAccount={hasRequiredAccountAuth}
 	                    isSupabaseConfigured={effectiveIsSupabaseConfigured}
 	                    publicProfileDisplayName={leaderboardProfileDisplayName}
 	                    publicProfileStatus={
@@ -7793,6 +7898,7 @@ export default function App() {
 	                    onDeviceSyncEnabledChange={deviceSyncFeatureVisible ? setDeviceSyncEnabled : undefined}
 	                    onDeviceSyncNow={deviceSyncNow}
 	                    onPurgeDeviceSyncData={handlePurgeDeviceSyncData}
+	                    onDeleteAccount={() => setAccountDeletionModalOpen(true)}
 	                    onEditPublicProfile={openProfileEditor}
 	                    onManageCloudBilling={handleManageCloudBilling}
 	                    onOpenAiSetup={openAiSetupSettings}
@@ -8102,6 +8208,15 @@ export default function App() {
             if (isSidebarCtaPreviewActive) return;
             void startCloudCheckout(billingInterval);
           }}
+        />
+      ) : null}
+
+      {accountDeletionModalOpen ? (
+        <AccountDeletionModal
+          accountEmail={user?.email ?? null}
+          isAnonymousAccount={user?.is_anonymous === true}
+          onClose={() => setAccountDeletionModalOpen(false)}
+          onDelete={handleDeleteAccount}
         />
       ) : null}
 

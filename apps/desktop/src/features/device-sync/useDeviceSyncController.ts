@@ -27,6 +27,8 @@ export type DeviceSyncController = {
   readonly status: DeviceSyncStatus;
   readonly deviceLabelById: ReadonlyMap<string, string>;
   readonly syncNow: () => Promise<void>;
+  /** Blocks new cycles and resolves only after the current cycle has settled. */
+  readonly quiesce: () => Promise<void>;
 };
 
 export function useDeviceSyncController({
@@ -36,7 +38,8 @@ export function useDeviceSyncController({
 }: UseDeviceSyncControllerOptions): DeviceSyncController {
   const [status, setStatus] = useState<DeviceSyncStatus>(IDLE_DEVICE_SYNC_STATUS);
   const [deviceLabelById, setDeviceLabelById] = useState<ReadonlyMap<string, string>>(new Map());
-  const inFlightRef = useRef(false);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const quiescedRef = useRef(false);
   const syncActiveRef = useRef(syncActive);
   syncActiveRef.current = syncActive;
   const onRemoteSegmentsAppliedRef = useRef(onRemoteSegmentsApplied);
@@ -59,59 +62,68 @@ export function useDeviceSyncController({
 
   const runCycle = useCallback(
     async (reason: DeviceSyncCycleReason) => {
-      if (!syncActiveRef.current || inFlightRef.current || shouldUsePreviewData()) return;
+      if (!syncActiveRef.current || quiescedRef.current || inFlightPromiseRef.current || shouldUsePreviewData()) return;
 
       const records = readDeviceSyncCycleRecords();
       const record = findDeviceSyncCycleRecord(records, userScopeKey);
       const decision = shouldRunDeviceSyncCycle({ record, now: new Date(), reason });
       if (!decision.shouldRun) return;
 
-      inFlightRef.current = true;
       const attemptAt = new Date().toISOString();
+      const cyclePromise = (async () => {
+        try {
+          const result = await runSyncCycle(
+            {
+              tracker: trackerClient,
+              pushBatch: pushSyncBatch,
+              fetchPullPage: fetchSyncedSegmentsPage,
+              fetchDeletionsPullPage: fetchSyncedDeletionsPage,
+              resolveDeviceId: refreshDeviceLabels,
+            },
+            reason,
+          );
+          setStatus(result.status);
+          writeDeviceSyncCycleRecords(
+            upsertDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), {
+              userScopeKey,
+              lastAttemptAt: attemptAt,
+              lastSuccessAt: new Date().toISOString(),
+              lastErrorAt: null,
+            }),
+          );
+          if (deviceLabelById.size === 0 || result.pulledCount > 0) {
+            void refreshDeviceLabels();
+          }
+          if (result.pulledCount > 0) {
+            onRemoteSegmentsAppliedRef.current?.(result.pulledCount);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setStatus((previous) => ({ ...previous, enabled: true, lastError: message }));
+          writeDeviceSyncCycleRecords(
+            upsertDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), {
+              userScopeKey,
+              lastAttemptAt: attemptAt,
+              lastSuccessAt: record?.lastSuccessAt ?? null,
+              lastErrorAt: new Date().toISOString(),
+            }),
+          );
+          console.warn("device sync cycle failed", error);
+        }
+      })();
+      inFlightPromiseRef.current = cyclePromise;
       try {
-        const result = await runSyncCycle(
-          {
-            tracker: trackerClient,
-            pushBatch: pushSyncBatch,
-            fetchPullPage: fetchSyncedSegmentsPage,
-            fetchDeletionsPullPage: fetchSyncedDeletionsPage,
-            resolveDeviceId: refreshDeviceLabels,
-          },
-          reason,
-        );
-        setStatus(result.status);
-        writeDeviceSyncCycleRecords(
-          upsertDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), {
-            userScopeKey,
-            lastAttemptAt: attemptAt,
-            lastSuccessAt: new Date().toISOString(),
-            lastErrorAt: null,
-          }),
-        );
-        if (deviceLabelById.size === 0 || result.pulledCount > 0) {
-          void refreshDeviceLabels();
-        }
-        if (result.pulledCount > 0) {
-          onRemoteSegmentsAppliedRef.current?.(result.pulledCount);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus((previous) => ({ ...previous, enabled: true, lastError: message }));
-        writeDeviceSyncCycleRecords(
-          upsertDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), {
-            userScopeKey,
-            lastAttemptAt: attemptAt,
-            lastSuccessAt: record?.lastSuccessAt ?? null,
-            lastErrorAt: new Date().toISOString(),
-          }),
-        );
-        console.warn("device sync cycle failed", error);
+        await cyclePromise;
       } finally {
-        inFlightRef.current = false;
+        if (inFlightPromiseRef.current === cyclePromise) inFlightPromiseRef.current = null;
       }
     },
     [deviceLabelById.size, refreshDeviceLabels, userScopeKey],
   );
+
+  useEffect(() => {
+    if (syncActive) quiescedRef.current = false;
+  }, [syncActive]);
 
   useEffect(() => {
     if (!syncActive || shouldUsePreviewData()) {
@@ -145,5 +157,10 @@ export function useDeviceSyncController({
     await runCycle("manual");
   }, [runCycle]);
 
-  return { status, deviceLabelById, syncNow };
+  const quiesce = useCallback((): Promise<void> => {
+    quiescedRef.current = true;
+    return inFlightPromiseRef.current ?? Promise.resolve();
+  }, []);
+
+  return { status, deviceLabelById, syncNow, quiesce };
 }

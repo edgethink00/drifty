@@ -5,6 +5,7 @@ import type { DeviceSyncCycleReason } from "./deviceSyncTypes";
 // hammering the edge function after failures. Mirrors the leaderboard
 // auto-publish state machine (leaderboardAutoPublishState.ts).
 export const DEVICE_SYNC_STATE_STORAGE_KEY = "drifty.deviceSync.state.v1";
+export const DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY = "drifty.deviceSync.accountResetPending.v1";
 export const DEVICE_SYNC_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
 export const DEVICE_SYNC_MIN_CYCLE_INTERVAL_MS = 60 * 1000;
 
@@ -18,6 +19,10 @@ export type DeviceSyncCycleRecord = {
 export type DeviceSyncCycleDecision = {
   readonly shouldRun: boolean;
   readonly reason: "no_record" | "due" | "manual" | "failure_backoff" | "too_soon";
+};
+
+export type DeviceSyncAccountResetPendingRecord = {
+  readonly userScopeKey: string | null;
 };
 
 function getStorage(): Storage | null {
@@ -128,4 +133,40 @@ export function shouldRunDeviceSyncCycle({
 
 export function clearDeviceSyncCycleRecordsForUser(userScopeKey: string): void {
   writeDeviceSyncCycleRecords(readDeviceSyncCycleRecords().filter((record) => record.userScopeKey !== userScopeKey));
+}
+
+export function hasPendingDeviceSyncAccountReset(): boolean {
+  return readPendingDeviceSyncAccountReset() !== null;
+}
+
+export function readPendingDeviceSyncAccountReset(): DeviceSyncAccountResetPendingRecord | null {
+  const value = getStorage()?.getItem(DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY) ?? null;
+  if (!value) return null;
+  // Preserve recovery for the original marker written by preview builds.
+  if (value === "1") return { userScopeKey: null };
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (typeof parsed !== "object" || parsed === null || !("userScopeKey" in parsed)) {
+      return { userScopeKey: null };
+    }
+    return parsed.userScopeKey === null || typeof parsed.userScopeKey === "string"
+      ? { userScopeKey: parsed.userScopeKey }
+      : { userScopeKey: null };
+  } catch {
+    // A non-empty but unreadable guard is still evidence that a reset may have
+    // been interrupted. Fail closed and clear the global tracker identity even
+    // though the original user-scoped pacing record cannot be identified.
+    return { userScopeKey: null };
+  }
+}
+
+export function markDeviceSyncAccountResetPending(userScopeKey: string | null = null): void {
+  getStorage()?.setItem(
+    DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY,
+    JSON.stringify({ userScopeKey }),
+  );
+}
+
+export function clearPendingDeviceSyncAccountReset(): void {
+  getStorage()?.removeItem(DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY);
 }
