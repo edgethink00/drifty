@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase/client";
+import { BUILD_INFO } from "../../buildInfo";
 import { cloudApiClientMetadata } from "../../lib/cloudContract";
 
 export type FeedbackPayload = {
@@ -52,6 +53,9 @@ export async function submitFeedback(payload: FeedbackPayload, client: FeedbackC
     const { data, error } = await client.functions.invoke<FeedbackFunctionResponse>("send-feedback", {
       body: {
         ...cloudApiClientMetadata,
+        // clientVersion stays pinned to the cloud-api-v1 floor, so it cannot say
+        // which build a report came from. Send the running build separately.
+        appVersion: BUILD_INFO.version,
         email,
         message,
         ...(payload.attachments?.length ? { attachments: payload.attachments } : {}),
