@@ -175,38 +175,7 @@ fn update_prompt_panel(
     version: &str,
     auto_install_future_updates: bool,
 ) -> NativeUpdatePrompt {
-    let content_rect = frame(0.0, 0.0, PANEL_WIDTH, PANEL_HEIGHT);
-    let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
-        NSPanel::alloc(mtm),
-        content_rect,
-        NSWindowStyleMask::Borderless,
-        NSBackingStoreType::Buffered,
-        false,
-    );
-    unsafe {
-        panel.setReleasedWhenClosed(false);
-    }
-    panel.setTitle(&NSString::from_str("Drifty update"));
-    panel.setOpaque(false);
-    panel.setHasShadow(true);
-    panel.setMovableByWindowBackground(true);
-    panel.setBackgroundColor(Some(&NSColor::clearColor()));
-    panel.center();
-
-    let root = NSView::initWithFrame(NSView::alloc(mtm), content_rect);
-    root.setWantsLayer(true);
-    if let Some(layer) = root.layer() {
-        layer.setCornerRadius(24.0);
-        layer.setMasksToBounds(true);
-        layer.setBackgroundColor(Some(
-            &NSColor::colorWithCalibratedWhite_alpha(0.38, 0.92).CGColor(),
-        ));
-        layer.setBorderWidth(0.5);
-        layer.setBorderColor(Some(
-            &NSColor::colorWithCalibratedWhite_alpha(0.78, 0.36).CGColor(),
-        ));
-    }
-    panel.setContentView(Some(&root));
+    let (panel, root) = create_update_panel(mtm, "Drifty update", PANEL_WIDTH, PANEL_HEIGHT);
 
     let icon_data = NSData::with_bytes(UPDATE_DIALOG_ICON_PNG);
     if let Some(icon) = NSImage::initWithData(NSImage::alloc(), &icon_data) {
@@ -307,38 +276,7 @@ struct NativeUpdateStatus {
 #[cfg(target_os = "macos")]
 fn update_status_panel(mtm: MainThreadMarker, title: &str, body: &str) -> NativeUpdateStatus {
     let panel_height = 164.0;
-    let content_rect = frame(0.0, 0.0, PANEL_WIDTH, panel_height);
-    let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
-        NSPanel::alloc(mtm),
-        content_rect,
-        NSWindowStyleMask::Titled.union(NSWindowStyleMask::Closable),
-        NSBackingStoreType::Buffered,
-        false,
-    );
-    unsafe {
-        panel.setReleasedWhenClosed(false);
-    }
-    panel.setTitle(&NSString::from_str(title));
-    panel.setOpaque(false);
-    panel.setHasShadow(true);
-    panel.setMovableByWindowBackground(true);
-    panel.setBackgroundColor(Some(&NSColor::clearColor()));
-    panel.center();
-
-    let root = NSView::initWithFrame(NSView::alloc(mtm), content_rect);
-    root.setWantsLayer(true);
-    if let Some(layer) = root.layer() {
-        layer.setCornerRadius(24.0);
-        layer.setMasksToBounds(true);
-        layer.setBackgroundColor(Some(
-            &NSColor::colorWithCalibratedWhite_alpha(0.38, 0.92).CGColor(),
-        ));
-        layer.setBorderWidth(0.5);
-        layer.setBorderColor(Some(
-            &NSColor::colorWithCalibratedWhite_alpha(0.78, 0.36).CGColor(),
-        ));
-    }
-    panel.setContentView(Some(&root));
+    let (panel, root) = create_update_panel(mtm, title, PANEL_WIDTH, panel_height);
 
     let text_width = PANEL_WIDTH - SIDE_PADDING * 2.0;
     let title_field = NSTextField::labelWithString(&NSString::from_str(title), mtm);
@@ -433,6 +371,53 @@ fn frame(x: f64, y: f64, width: f64, height: f64) -> NSRect {
     NSRect::new(NSPoint::new(x, y), NSSize::new(width, height))
 }
 
+#[cfg(target_os = "macos")]
+fn update_panel_style_mask() -> NSWindowStyleMask {
+    NSWindowStyleMask::Borderless
+}
+
+#[cfg(target_os = "macos")]
+fn create_update_panel(
+    mtm: MainThreadMarker,
+    title: &str,
+    width: f64,
+    height: f64,
+) -> (Retained<NSPanel>, Retained<NSView>) {
+    let content_rect = frame(0.0, 0.0, width, height);
+    let panel = NSPanel::initWithContentRect_styleMask_backing_defer(
+        NSPanel::alloc(mtm),
+        content_rect,
+        update_panel_style_mask(),
+        NSBackingStoreType::Buffered,
+        false,
+    );
+    unsafe {
+        panel.setReleasedWhenClosed(false);
+    }
+    panel.setTitle(&NSString::from_str(title));
+    panel.setOpaque(false);
+    panel.setHasShadow(true);
+    panel.setMovableByWindowBackground(true);
+    panel.setBackgroundColor(Some(&NSColor::clearColor()));
+    panel.center();
+
+    let root = NSView::initWithFrame(NSView::alloc(mtm), content_rect);
+    root.setWantsLayer(true);
+    if let Some(layer) = root.layer() {
+        layer.setCornerRadius(24.0);
+        layer.setMasksToBounds(true);
+        layer.setBackgroundColor(Some(
+            &NSColor::colorWithCalibratedWhite_alpha(0.38, 0.92).CGColor(),
+        ));
+        layer.setBorderWidth(0.5);
+        layer.setBorderColor(Some(
+            &NSColor::colorWithCalibratedWhite_alpha(0.78, 0.36).CGColor(),
+        ));
+    }
+    panel.setContentView(Some(&root));
+    (panel, root)
+}
+
 #[cfg(not(target_os = "macos"))]
 fn show_native_update_prompt_on_main_thread(
     _version: &str,
@@ -472,5 +457,22 @@ mod tests {
             &Retained<UpdatePromptButtonTarget>,
             &Retained<UpdatePromptButtonTarget>,
         ) = retained_targets;
+    }
+
+    #[test]
+    fn native_update_panels_share_borderless_chrome() {
+        let mask = update_panel_style_mask();
+        assert!(
+            mask.contains(NSWindowStyleMask::Borderless),
+            "native update panels must stay borderless so the custom card is the only chrome"
+        );
+        assert!(
+            !mask.contains(NSWindowStyleMask::Titled),
+            "native update panels must not add a system title bar over the custom card"
+        );
+        assert!(
+            !mask.contains(NSWindowStyleMask::Closable),
+            "native update panels must not mix system window buttons with the custom card"
+        );
     }
 }
