@@ -45,6 +45,16 @@ export type LeaderboardCheckpointEntry = OwnLeaderboardEntry & {
   participant_count: number;
 };
 
+/** Aggregate-only, real-account model parameters for community estimates. */
+export type CommunityFocusPercentileModelRow = {
+  readonly period: "daily" | "weekly";
+  readonly sample_size: number;
+  readonly participant_count: number;
+  readonly log_mean_minutes: number;
+  readonly log_standard_deviation_minutes: number;
+  readonly generated_at: string;
+};
+
 export interface LeaderboardPayload {
   profileDisplayName?: string | null;
   period?: LeaderboardPeriod;
@@ -114,7 +124,7 @@ type LeaderboardClient = {
     };
   };
   rpc: (
-    procedure: "get_global_focus_leaderboard" | "get_own_leaderboard_entry" | "get_own_leaderboard_checkpoint" | "publish_own_leaderboard_checkpoint",
+    procedure: "get_global_focus_leaderboard" | "get_community_focus_percentile_model" | "get_own_leaderboard_entry" | "get_own_leaderboard_checkpoint" | "publish_own_leaderboard_checkpoint",
     args?: {
       period_name?: LeaderboardPeriod;
       limit_count?: number;
@@ -143,6 +153,15 @@ type OwnLeaderboardRpcRow = LeaderboardRpcRow & {
   rank: number | string | null;
   timezone: string;
   opted_in: boolean | string;
+};
+
+type CommunityFocusPercentileModelRpcRow = {
+  period?: string | null;
+  sample_size?: number | string | null;
+  participant_count?: number | string | null;
+  log_mean_minutes?: number | string | null;
+  log_standard_deviation_minutes?: number | string | null;
+  generated_at?: string | null;
 };
 
 function resolveClient(client?: LeaderboardClient | null): LeaderboardClient | null {
@@ -190,6 +209,7 @@ function toLeaderboardErrorMessage(error: { message: string } | Error | unknown)
   if (
     (
       message.includes("get_global_focus_leaderboard")
+      || message.includes("get_community_focus_percentile_model")
       || message.includes("get_own_leaderboard_entry")
       || message.includes("get_own_leaderboard_checkpoint")
       || message.includes("publish_own_leaderboard_checkpoint")
@@ -236,6 +256,21 @@ function normalizeLeaderboardRow(row: LeaderboardRpcRow): LeaderboardRow {
     window_start_date: String(row.window_start_date),
     window_end_date: String(row.window_end_date),
     updated_at: String(row.updated_at),
+  };
+}
+
+function normalizeCommunityFocusPercentileModelRow(
+  row: CommunityFocusPercentileModelRpcRow,
+): CommunityFocusPercentileModelRow | null {
+  const period = row.period === "daily" || row.period === "weekly" ? row.period : null;
+  if (!period) return null;
+  return {
+    period,
+    sample_size: Number(row.sample_size),
+    participant_count: Number(row.participant_count),
+    log_mean_minutes: Number(row.log_mean_minutes),
+    log_standard_deviation_minutes: Number(row.log_standard_deviation_minutes),
+    generated_at: String(row.generated_at ?? ""),
   };
 }
 
@@ -295,6 +330,35 @@ export async function fetchGlobalLeaderboard(
       success: true,
       error: null,
       data: (data ?? []).map((row) => normalizeLeaderboardRow(row as LeaderboardRpcRow)),
+    };
+  } catch (err) {
+    return { success: false, error: toLeaderboardErrorMessage(err) };
+  }
+}
+
+/**
+ * Read anonymous aggregate-only model parameters. The backing RPC never returns
+ * participant identities or rows.
+ */
+export async function fetchCommunityFocusPercentileModel(
+  period: "daily" | "weekly",
+  client?: LeaderboardClient | null,
+): Promise<LeaderboardResult<CommunityFocusPercentileModelRow | null>> {
+  if (shouldUsePreviewData()) return { success: true, error: null, data: null };
+  const resolvedClient = resolveClient(client);
+  if (!resolvedClient) return { success: false, error: "Supabase is not configured" };
+
+  try {
+    const { data, error } = await resolvedClient.rpc("get_community_focus_percentile_model", {
+      period_name: period,
+    });
+    if (error) return { success: false, error: toLeaderboardErrorMessage(error) };
+
+    const row = data?.[0] as CommunityFocusPercentileModelRpcRow | undefined;
+    return {
+      success: true,
+      error: null,
+      data: row ? normalizeCommunityFocusPercentileModelRow(row) : null,
     };
   } catch (err) {
     return { success: false, error: toLeaderboardErrorMessage(err) };

@@ -284,6 +284,7 @@ import { useCompanionDailyFocusMilestones } from "./features/companion/useCompan
 import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
 import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
+import { useCompanionCommunityMilestones } from "./features/companion/useCompanionCommunityMilestones";
 import { toLeaderboardCelebration, type LeaderboardCelebration } from "./features/companion/companionLeaderboardMilestones";
 import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
@@ -5567,14 +5568,23 @@ export default function App() {
     companionTodaySnapshot.focusSecondsToday,
   ]);
 
+  const companionAchievementAnnouncementsEnabled = status?.running === true
+    && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt);
+
+  useCompanionCommunityMilestones({
+    ready: companionDailyFocusEvaluable && isSupabaseConfigured && !shouldUsePreviewData(),
+    day: todayDay,
+    focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
+    announcementsEnabled: companionAchievementAnnouncementsEnabled,
+  });
+
   useCompanionDailyFocusMilestones({
     ready: companionDailyFocusEvaluable,
     day: todayDay,
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     /* Visibility controls only the resident capsule. A milestone is an alert,
        so a running tracker may announce it through the standalone surface. */
-    announcementsEnabled: status?.running === true
-      && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt),
+    announcementsEnabled: companionAchievementAnnouncementsEnabled,
   });
 
   useCompanionReentryMoment({
@@ -5590,8 +5600,7 @@ export default function App() {
     startOfDayMinutes,
     currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,
     classificationOptions: companionFocusRecordClassificationOptions,
-    announcementsEnabled: status?.running === true
-      && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt),
+    announcementsEnabled: companionAchievementAnnouncementsEnabled,
   });
 
   useCompanionLeaderboardMilestones({

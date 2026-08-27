@@ -62,7 +62,7 @@ describe("Companion focus-run records", () => {
     expect(baseline.bestSeconds.record7d).toBe(30 * 60);
   });
 
-  it("emits every newly beaten window in ascending strength for the queue", () => {
+  it("emits only the longest newly beaten window", () => {
     const baseline = {
       bestSeconds: { record7d: 40 * 60, record14d: 45 * 60, record30d: 50 * 60 },
       trackedDays: { record7d: 7, record14d: 14, record30d: 20 },
@@ -76,11 +76,7 @@ describe("Companion focus-run records", () => {
       announce: true,
     });
 
-    expect(result.events.map((event) => event.title)).toEqual([
-      "Longest focus in 7 days",
-      "Longest focus in 14 days",
-      "Longest focus in 30 days",
-    ]);
+    expect(result.events.map((event) => event.title)).toEqual(["Longest focus in 30 days"]);
   });
 
   it("requires 4, 7 and 14 tracked days before 7-, 14- and 30-day claims", () => {
@@ -107,11 +103,7 @@ describe("Companion focus-run records", () => {
       announce: true,
     });
 
-    expect(eligible.events.map((event) => event.title)).toEqual([
-      "Longest focus in 7 days",
-      "Longest focus in 14 days",
-      "Longest focus in 30 days",
-    ]);
+    expect(eligible.events.map((event) => event.title)).toEqual(["Longest focus in 30 days"]);
   });
 
   it("announces each record window only once in one run", () => {
@@ -137,5 +129,23 @@ describe("Companion focus-run records", () => {
 
     expect(crossed.events).toHaveLength(1);
     expect(nextTick.events).toEqual([]);
+  });
+
+  it("announces a record that is beaten by one second", () => {
+    const baseline = {
+      bestSeconds: { record7d: 60 * 60, record14d: 90 * 60, record30d: 120 * 60 },
+      trackedDays: { record7d: 7, record14d: 14, record30d: 20 },
+    } as const;
+    const progress = initializeCompanionFocusRunRecords("2026-07-20", 59 * 60, baseline);
+
+    const result = evaluateCompanionFocusRunRecords({
+      progress,
+      day: "2026-07-20",
+      currentRunSeconds: 60 * 60 + 1,
+      trackedDays: baseline.trackedDays,
+      announce: true,
+    });
+
+    expect(result.events.map((event) => event.title)).toEqual(["Longest focus in 7 days"]);
   });
 });

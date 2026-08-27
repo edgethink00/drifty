@@ -51,6 +51,7 @@ vi.mock("../../lib/supabase/client", () => ({
 }));
 
 import {
+  fetchCommunityFocusPercentileModel,
   fetchOwnLeaderboardCheckpoint,
   fetchOwnLeaderboardEntry,
   fetchGlobalLeaderboard,
@@ -520,6 +521,42 @@ describe("leaderboardService", () => {
       ] satisfies LeaderboardRow[],
     });
     expect(result.data?.[0]).not.toHaveProperty("user_id");
+  });
+
+  it("reads aggregate-only real-account percentile parameters anonymously", async () => {
+    const client = createClient();
+    client.rpc.mockResolvedValue({
+      data: [{
+        period: "daily",
+        sample_size: "150",
+        participant_count: "150",
+        log_mean_minutes: "5.19",
+        log_standard_deviation_minutes: "0.61",
+        generated_at: "2026-08-28T12:00:00.000Z",
+        user_id: "must-not-survive",
+      }],
+      error: null,
+    });
+
+    const result = await fetchCommunityFocusPercentileModel("daily", client);
+
+    expect(client.auth.getUser).not.toHaveBeenCalled();
+    expect(client.rpc).toHaveBeenCalledWith("get_community_focus_percentile_model", {
+      period_name: "daily",
+    });
+    expect(result).toEqual({
+      success: true,
+      error: null,
+      data: {
+        period: "daily",
+        sample_size: 150,
+        participant_count: 150,
+        log_mean_minutes: 5.19,
+        log_standard_deviation_minutes: 0.61,
+        generated_at: "2026-08-28T12:00:00.000Z",
+      },
+    });
+    expect(result.data).not.toHaveProperty("user_id");
   });
 
   it("turns a missing schema-cache RPC error into an actionable setup message", async () => {

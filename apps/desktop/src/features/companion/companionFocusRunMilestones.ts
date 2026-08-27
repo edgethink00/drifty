@@ -155,7 +155,10 @@ export function evaluateCompanionFocusRunRecords({
   const runRestarted = normalizedRun === 0 && progress.observedRunSeconds > 0;
   const announced = new Set<CompanionFocusRecordId>(runRestarted ? [] : progress.announcedForRun);
   const bestSeconds = { ...progress.bestSeconds };
-  const events: CompanionPillMilestoneEvent[] = [];
+  const newlyBeaten: Array<{
+    readonly definition: CompanionFocusRecordDefinition;
+    readonly previousBestSeconds: number;
+  }> = [];
 
   for (const definition of COMPANION_FOCUS_RECORDS) {
     const previousBest = bestSeconds[definition.id];
@@ -164,10 +167,23 @@ export function evaluateCompanionFocusRunRecords({
       && normalizedRun > previousBest;
     if (qualifies && !announced.has(definition.id)) {
       announced.add(definition.id);
-      if (announce) events.push(buildFocusRecordEvent(definition, day, normalizedRun, previousBest));
+      newlyBeaten.push({ definition, previousBestSeconds: previousBest });
     }
     bestSeconds[definition.id] = Math.max(previousBest, normalizedRun);
   }
+
+  // One run can beat nested 7/14/30-day windows at once. The longest eligible
+  // window carries the strongest claim; marking the shorter windows consumed
+  // prevents the queue from replaying weaker versions on the next tick.
+  const strongest = newlyBeaten[newlyBeaten.length - 1];
+  const events = announce && strongest
+    ? [buildFocusRecordEvent(
+      strongest.definition,
+      day,
+      normalizedRun,
+      strongest.previousBestSeconds,
+    )]
+    : [];
 
   return {
     progress: {
