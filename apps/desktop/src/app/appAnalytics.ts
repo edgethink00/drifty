@@ -102,6 +102,7 @@ export function captureAiClassificationRun(
     saved_count_bucket: toCountBucket(summary.savedRecords),
     range,
     ...(summary.status === "error" ? { error_kind: toAnalyticsErrorKind(summary.message) } : {}),
+    ...(summary.failureKind ? { failure_kind: summary.failureKind } : {}),
   });
 }
 

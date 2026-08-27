@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BUILD_INFO } from "../../buildInfo";
 import {
   POSTHOG_EVENT_NAMES,
   POSTHOG_EVENT_PROPERTY_ALLOWLIST,
@@ -46,6 +47,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(payload.distinct_id).toBe("launch-session");
     expect(payload.properties).toMatchObject({
       "$process_person_profile": false,
+      "$geoip_disable": true,
       auth_state: "signed_in",
       account_kind: "account",
     });
@@ -90,6 +92,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
       saved_count_bucket: expect.any(Array),
       range: expect.any(Array),
       error_kind: expect.any(Array),
+      failure_kind: expect.any(Array),
     });
     expect(POSTHOG_EVENT_PROPERTY_ALLOWLIST.project_classification_run).toMatchObject({
       trigger: expect.any(Array),
@@ -163,10 +166,12 @@ describe("PostHog desktop analytics privacy boundary", () => {
     const properties = {
       trigger: "manual",
       provider_kind: "cloud",
-      result: "success",
+      result: "error",
       selected_count_bucket: "2_5",
       saved_count_bucket: "1",
       range: "current_day",
+      error_kind: "unknown",
+      failure_kind: "transport",
     } satisfies PostHogEventPropertiesByName["ai_classification_run"];
 
     const payload = createPostHogEventPayload({
@@ -183,21 +188,25 @@ describe("PostHog desktop analytics privacy boundary", () => {
       distinct_id: "launch-session",
       properties: {
         "$process_person_profile": false,
+        "$geoip_disable": true,
         event_source: "mac_app",
         event_surface: "desktop_app",
         app_platform: "macos",
         runtime: "web",
         channel: "development",
         analytics_schema_version: "v2",
-        app_version: "1.8.1",
+        app_version: BUILD_INFO.version,
+        build_commit: BUILD_INFO.commit,
         identity_scope: "install",
         reporting_time_zone: "Asia/Seoul",
         trigger: "manual",
         provider_kind: "cloud",
-        result: "success",
+        result: "error",
         selected_count_bucket: "2_5",
         saved_count_bucket: "1",
         range: "current_day",
+        error_kind: "unknown",
+        failure_kind: "transport",
       },
     });
   });
@@ -230,6 +239,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
   it("forces person profile opt-out and omits sensitive or unsupported caller properties", () => {
     const untrustedProperties: Readonly<Record<string, unknown>> = {
       "$process_person_profile": true,
+      "$geoip_disable": false,
       trigger: "manual",
       provider_kind: "cloud",
       result: "success",
@@ -256,6 +266,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
     });
 
     expect(payload.properties["$process_person_profile"]).toBe(false);
+    expect(payload.properties["$geoip_disable"]).toBe(true);
     expect(payload.properties).toMatchObject({
       trigger: "manual",
       provider_kind: "cloud",

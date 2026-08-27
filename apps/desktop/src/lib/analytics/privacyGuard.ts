@@ -6,6 +6,7 @@ import {
 
 const POSTHOG_BLOCKED_PROPERTY_KEYS = [
   "$process_person_profile",
+  "$geoip_disable",
   "$identify",
   "$anon_distinct_id",
   "$set",
@@ -20,6 +21,7 @@ const POSTHOG_BLOCKED_PROPERTY_KEYS = [
   "channel",
   "analytics_schema_version",
   "app_version",
+  "build_commit",
   "identity_scope",
   "reporting_time_zone",
   "email",

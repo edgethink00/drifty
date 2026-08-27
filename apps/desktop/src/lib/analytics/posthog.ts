@@ -40,12 +40,14 @@ type PostHogDefaultProperties = {
   readonly channel: string;
   readonly analytics_schema_version: "v2";
   readonly app_version: string;
+  readonly build_commit: string;
   readonly identity_scope: PostHogIdentityScope;
   readonly reporting_time_zone: "Asia/Seoul";
 };
 
 type PostHogPayloadProperties = PostHogDefaultProperties &
   SanitizedPostHogProperties & {
+    readonly "$geoip_disable": true;
     readonly "$process_person_profile": false;
   };
 
@@ -221,6 +223,7 @@ function getDefaultProperties(identityScope: PostHogIdentityScope): PostHogDefau
     channel: posthogChannel,
     analytics_schema_version: "v2",
     app_version: BUILD_INFO.version,
+    build_commit: BUILD_INFO.commit,
     identity_scope: identityScope,
     reporting_time_zone: POSTHOG_REPORTING_TIME_ZONE,
   };
@@ -242,6 +245,7 @@ export function createPostHogEventPayload<Event extends PostHogEventName>({
     properties: {
       ...getDefaultProperties(identityScope),
       ...sanitizedProperties,
+      "$geoip_disable": true,
       "$process_person_profile": false,
     },
   };

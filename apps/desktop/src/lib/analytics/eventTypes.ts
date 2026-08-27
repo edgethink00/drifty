@@ -9,6 +9,7 @@ import type {
   BILLING_ACTIONS,
   BILLING_INTERVALS,
   CLASSIFICATION_RANGES,
+  CLASSIFICATION_FAILURE_KINDS,
   CLASSIFICATION_TRIGGERS,
   CLOUD_AUTH_ACTIONS,
   CLOUD_AUTH_METHODS,
@@ -128,6 +129,7 @@ export type PostHogEventPropertiesByName = {
     readonly saved_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly range?: (typeof CLASSIFICATION_RANGES)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
+    readonly failure_kind?: (typeof CLASSIFICATION_FAILURE_KINDS)[number];
   };
   readonly project_classification_run: {
     readonly trigger: (typeof PROJECT_CLASSIFICATION_TRIGGERS)[number];

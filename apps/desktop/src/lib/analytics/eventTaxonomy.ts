@@ -79,6 +79,7 @@ export const FIRST_DAY_PREPARATION_QUOTA_WINDOWS = ["minute", "hour", "day", "un
 export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "90_180s", "180_300s", "300s_plus"] as const;
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
 export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "live", "drift_alarm"] as const;
+export const CLASSIFICATION_FAILURE_KINDS = ["transport", "quota", "content"] as const;
 export const PROJECT_CLASSIFICATION_TRIGGERS = ["schedule", "open", "eod"] as const;
 export const PROJECT_CLASSIFICATION_SKIP_REASONS = ["analysis_disconnected", "no_work"] as const;
 export const CLASSIFICATION_RANGES = ["current_day", "recent", "unknown"] as const;
@@ -201,6 +202,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     saved_count_bucket: COUNT_BUCKETS,
     range: CLASSIFICATION_RANGES,
     error_kind: ERROR_KINDS,
+    failure_kind: CLASSIFICATION_FAILURE_KINDS,
   },
   project_classification_run: {
     trigger: PROJECT_CLASSIFICATION_TRIGGERS,
