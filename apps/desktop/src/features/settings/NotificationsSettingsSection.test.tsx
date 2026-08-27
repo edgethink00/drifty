@@ -42,13 +42,16 @@ function renderSettings(
 describe("NotificationsSettingsSection", () => {
   afterEach(cleanup);
 
-  it("shows the menu-bar Companion controls without a placement selector", () => {
+  it("combines Companion visibility into one row with two direct actions", () => {
     const props = renderSettings();
 
     expect(screen.queryByRole("radiogroup", { name: "Companion placement" })).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: "Menu bar display" })).toBeNull();
+    const visibilityActions = screen.getByRole("group", { name: "Companion visibility" });
+    expect(visibilityActions.querySelectorAll("button")).toHaveLength(2);
+
     fireEvent.click(screen.getByRole("button", { name: "Hide for 1 hour" }));
-    fireEvent.click(screen.getByRole("button", { name: "Off" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn off" }));
 
     expect(props.onHideCompanionForOneHour).toHaveBeenCalledTimes(1);
     expect(props.onCompanionSurfacePolicyChange).toHaveBeenCalledWith("off");
@@ -57,7 +60,7 @@ describe("NotificationsSettingsSection", () => {
   it("offers an immediate recovery action while temporarily hidden", () => {
     const props = renderSettings({ companionHiddenUntil: Date.now() + 60 * 60 * 1000 });
 
-    expect(screen.getByText(/Hidden until .* Alerts continue normally\./)).toBeTruthy();
+    expect(screen.getByText(/Hidden until .* Alerts and celebrations continue\./)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Show now" }));
 
     expect(props.onShowCompanionNow).toHaveBeenCalledTimes(1);
@@ -65,11 +68,21 @@ describe("NotificationsSettingsSection", () => {
 
   it("offers a menu-bar recovery action while Companion is permanently off", () => {
     const props = renderSettings({ companionSurfacePolicy: "off" });
-    expect(screen.queryByRole("button", { name: "Hide for 1 hour" })).toBeNull();
-    expect(screen.getByText("Companion is off")).toBeTruthy();
+    expect(screen.getByText("Off. Alerts and celebrations continue.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Hide for 1 hour" }).hasAttribute("disabled")).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Show in menu bar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
     expect(props.onCompanionSurfacePolicyChange).toHaveBeenCalledWith("menuBar");
+  });
+
+  it("does not offer a temporary hide while Companion is off", () => {
+    const props = renderSettings({ companionSurfacePolicy: "off" });
+    const hideButton = screen.getByRole("button", { name: "Hide for 1 hour" });
+
+    expect(hideButton.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(hideButton);
+    expect(props.onCompanionSurfacePolicyChange).not.toHaveBeenCalled();
+    expect(props.onHideCompanionForOneHour).not.toHaveBeenCalled();
   });
 
 
@@ -84,6 +97,9 @@ describe("NotificationsSettingsSection", () => {
   it("localizes the production pet settings in Korean", () => {
     renderSettings({ showPetNewBadge: true }, "ko");
 
+    expect(screen.getByRole("group", { name: "컴패니언 표시" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "1시간 숨기기" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "끄기" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "데스크톱 펫" })).toBeTruthy();
     expect(screen.getByText("New")).toBeTruthy();
     expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(2);

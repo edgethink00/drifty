@@ -63,6 +63,12 @@ export function NotificationsSettingsSection({
       minute: "2-digit",
     }).format(new Date(companionHiddenUntil))
     : null;
+  const companionOff = companionSurfacePolicy === "off";
+  const companionVisibilityDescription = companionOff
+    ? t("settings.companion.offDescription")
+    : hiddenUntilLabel
+      ? t("settings.companion.hiddenUntil", { time: hiddenUntilLabel })
+      : t("settings.companion.visibleDescription");
   const driftAlertDelayOptions = DRIFT_ALERT_DELAY_OPTIONS.map((option) => ({
     ...option,
     label: localizedDriftAlertDelayLabel(option.value, t),
@@ -71,60 +77,37 @@ export function NotificationsSettingsSection({
     <div className="settings-section">
       <div className="settings-block">
         <h3>{t("settings.section.notifications")}</h3>
-        {companionSurfacePolicy === "off" ? (
-          <div className="settings-row">
-            <div>
-              <div className="lbl">{t("settings.companion.offTitle")}</div>
-              <div className="desc">{t("settings.companion.offDescription")}</div>
-            </div>
-            <div className="ctrl">
-              <button
-                type="button"
-                className="settings-btn"
-                onClick={() => onCompanionSurfacePolicyChange("menuBar")}
-              >
-                {t("settings.companion.showInMenuBar")}
-              </button>
-            </div>
-          </div>
-        ) : <>
-          <div className="settings-row">
+        <div className="settings-row settings-row--companion-visibility">
           <div>
-            <div className="lbl">{t("settings.companion.temporaryHide")}</div>
-            <div className="desc">
-              {hiddenUntilLabel
-                ? t("settings.companion.hiddenUntil", { time: hiddenUntilLabel })
-                : t("settings.companion.temporaryHideDescription")}
-            </div>
+            <div className="lbl">{t("settings.companion.visibility")}</div>
+            <div className="desc">{companionVisibilityDescription}</div>
           </div>
-          <div className="ctrl">
+          <div
+            className="ctrl settings-row__actions companion-visibility-actions"
+            role="group"
+            aria-label={t("settings.companion.visibility")}
+          >
             <button
               type="button"
-              className="settings-btn"
+              className="settings-btn companion-visibility-actions__temporary"
+              disabled={companionOff}
               onClick={companionTemporarilyHidden ? onShowCompanionNow : onHideCompanionForOneHour}
             >
               {companionTemporarilyHidden
                 ? t("settings.companion.showNow")
                 : t("settings.companion.hideOneHour")}
             </button>
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.companion.turnOff")}</div>
-            <div className="desc">{t("settings.companion.offDescription")}</div>
-          </div>
-          <div className="ctrl">
             <button
               type="button"
-              className="settings-btn"
-              onClick={() => onCompanionSurfacePolicyChange("off")}
+              className="settings-btn companion-visibility-actions__power"
+              onClick={() => onCompanionSurfacePolicyChange(companionOff ? "menuBar" : "off")}
             >
-              {t("common.off")}
+              {companionOff
+                ? t("settings.companion.turnOn")
+                : t("settings.companion.turnOff")}
             </button>
           </div>
         </div>
-        </>}
       </div>
 
       <div className="settings-block">
