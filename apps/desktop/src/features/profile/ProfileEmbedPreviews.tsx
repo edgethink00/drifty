@@ -52,7 +52,7 @@ export function FocusCardEmbedPreview({
   theme?: BadgeThemeOption;
   dailyFocus?: readonly number[] | null;
 }) {
-  const name = displayName.trim() || "drifty";
+  const name = displayName.trim() || "member";
   const isLive = focusSeconds > 0;
   const dark = theme === "dark";
   const palette = dark

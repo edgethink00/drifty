@@ -153,6 +153,26 @@ describe("LeaderboardView", () => {
     }
   });
 
+  it("does not infer the current user from a duplicate display name", () => {
+    renderView({
+      isOptedIn: true,
+      ownRank: null,
+      ownFocusSeconds: null,
+      profileDisplayName: "Alex",
+      leaderboard: [makeLeaderboardRow({
+        rank: 4,
+        display_name: "Alex",
+        focus_seconds: 7200,
+      })],
+      publicProfile: makePublicProfile({ focusSeconds7d: 0 }),
+    });
+
+    const participation = screen.getByLabelText(/your leaderboard participation/i);
+    expect(within(participation).queryByText("#4")).toBeNull();
+    expect(within(participation).queryByText("2h")).toBeNull();
+    expect(within(participation).getByText("On the board")).toBeTruthy();
+  });
+
   it("keeps the existing participation hero and board as sibling blocks", () => {
     renderView({
       leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],

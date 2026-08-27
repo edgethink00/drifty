@@ -168,9 +168,14 @@ type LeaderboardOptInConfirmation = {
   readonly entries: readonly OwnLeaderboardEntry[];
 };
 
-function profileDraftFromProfile(profile: UserProfile | null, email: string | null | undefined, authMetadataAvatarUrl: string): ProfileDraft {
+function profileDraftFromProfile(
+  profile: UserProfile | null,
+  authenticatedUser: AuthState["user"] | null | undefined,
+  authMetadataAvatarUrl: string,
+): ProfileDraft {
   return {
-    displayName: profile?.display_name ?? fallbackDisplayName(email),
+    displayName: profile?.display_name
+      ?? fallbackDisplayName(authenticatedUser?.email, authenticatedUser?.id, authenticatedUser?.user_metadata),
     bio: profile?.bio ?? "",
     avatarUrl: profile?.avatar_url || authMetadataAvatarUrl,
     websiteUrl: profile?.website_url ?? "",
@@ -181,9 +186,16 @@ function profileDraftFromProfile(profile: UserProfile | null, email: string | nu
   };
 }
 
-function emptyProfileDraft(email: string | null | undefined, authMetadataAvatarUrl: string): ProfileDraft {
+function emptyProfileDraft(
+  authenticatedUser: AuthState["user"] | null | undefined,
+  authMetadataAvatarUrl: string,
+): ProfileDraft {
   return {
-    displayName: fallbackDisplayName(email),
+    // Stay empty before auth resolves. The profile writer can then derive a
+    // real account fallback instead of persisting a branded placeholder.
+    displayName: authenticatedUser
+      ? fallbackDisplayName(authenticatedUser.email, authenticatedUser.id, authenticatedUser.user_metadata)
+      : "",
     bio: "",
     avatarUrl: authMetadataAvatarUrl,
     websiteUrl: "",
@@ -376,7 +388,11 @@ export function useLeaderboardProfileController({
       : 0,
     [leaderboardClassificationOptions, leaderboardLocalMetricsScopeKey, leaderboardLocalMetricsStatus, leaderboardWindowEndDay, leaderboardWindowStartDay, publishableLeaderboardSegments, startOfDayMinutes],
   );
-  const leaderboardProfileDisplayName = useMemo(() => profile?.display_name || fallbackDisplayName(user?.email), [profile?.display_name, user?.email]);
+  const leaderboardProfileDisplayName = useMemo(
+    () => profile?.display_name
+      || fallbackDisplayName(user?.email, user?.id, user?.user_metadata),
+    [profile?.display_name, user?.email, user?.id, user?.user_metadata],
+  );
   const leaderboardUsesPreviewProfile = shouldUsePreviewData();
   const leaderboardProfileBio = profile?.bio || profileDraft.bio || (leaderboardUsesPreviewProfile ? "Building quiet tools for deeper work." : "");
   const leaderboardProfileWebsiteUrl = profile?.website_url || profileDraft.websiteUrl || (leaderboardUsesPreviewProfile ? "drifty.so/drifty" : "");
@@ -590,7 +606,7 @@ export function useLeaderboardProfileController({
   useEffect(() => {
     if (!isSupabaseConfigured || !user || (isEffectiveAuthRequired && !hasRequiredAccountAuth)) {
       setProfile(null);
-      setProfileDraft(emptyProfileDraft(user?.email, authMetadataAvatarUrl));
+      setProfileDraft(emptyProfileDraft(user, authMetadataAvatarUrl));
       setProfileLoading(false);
       setProfileReadyUserId(user?.id ?? null);
       setProfileError(null);
@@ -606,12 +622,12 @@ export function useLeaderboardProfileController({
       if (cancelled) return;
       if (!result.success) {
         setProfile(null);
-        setProfileDraft(emptyProfileDraft(user.email, authMetadataAvatarUrl));
+        setProfileDraft(emptyProfileDraft(user, authMetadataAvatarUrl));
         setProfileError(result.error ?? "Unable to load profile");
       } else {
         const nextProfile = result.data ?? null;
         setProfile(nextProfile);
-        setProfileDraft(profileDraftFromProfile(nextProfile, user.email, authMetadataAvatarUrl));
+        setProfileDraft(profileDraftFromProfile(nextProfile, user, authMetadataAvatarUrl));
       }
     }).finally(() => {
       if (!cancelled) {
@@ -975,15 +991,42 @@ export function useLeaderboardProfileController({
         authenticatedUser = anonymousResult.user;
       }
 
+      if (!authenticatedUser) {
+        setLeaderboardActionError("Sign in before joining the beta leaderboard.");
+        onAuthRequired();
+        return;
+      }
+
+      // A fast Join click can beat the profile-loading effect. Re-read only in
+      // that unresolved/error state; otherwise reuse the already loaded server
+      // profile. The initial React draft must never become canonical identity.
+      let joinProfile = profile;
+      if (profileReadyUserId !== authenticatedUser.id || profileLoading || profileError) {
+        const currentProfileResult = await fetchOwnProfile();
+        if (!currentProfileResult.success) {
+          setLeaderboardActionError(currentProfileResult.error ?? "Unable to load your public profile");
+          if (currentProfileResult.error === "Not authenticated") onAuthRequired();
+          capturePostHogEvent("leaderboard_action", {
+            action: "publish",
+            result: "error",
+            period: activeLeaderboardPeriod,
+            error_kind: toAnalyticsErrorKind(currentProfileResult.error),
+          });
+          return;
+        }
+        joinProfile = currentProfileResult.data ?? null;
+      }
+
+      const joinDraft = profileDraftFromProfile(joinProfile, authenticatedUser, authMetadataAvatarUrl);
       const profileResult = await saveOwnProfile({
-        display_name: profileDraft.displayName,
-        bio: profileDraft.bio,
-        avatar_url: profileDraft.avatarUrl,
-        website_url: profileDraft.websiteUrl,
-        github_url: profileDraft.githubUrl,
-        linkedin_url: profileDraft.linkedinUrl,
+        display_name: joinDraft.displayName,
+        bio: joinDraft.bio,
+        avatar_url: joinDraft.avatarUrl,
+        website_url: joinDraft.websiteUrl,
+        github_url: joinDraft.githubUrl,
+        linkedin_url: joinDraft.linkedinUrl,
         timezone: leaderboardTimezone,
-        is_public: profileDraft.isPublic,
+        is_public: joinDraft.isPublic,
       });
 
       if (!profileResult.success || !profileResult.data) {
@@ -1000,7 +1043,7 @@ export function useLeaderboardProfileController({
 
       const nextProfile = profileResult.data;
       setProfile(nextProfile);
-      setProfileDraft(profileDraftFromProfile(nextProfile, authenticatedUser?.email, authMetadataAvatarUrl));
+      setProfileDraft(profileDraftFromProfile(nextProfile, authenticatedUser, authMetadataAvatarUrl));
 
       const result = await publishLeaderboardPeriods({
         mode: "join",
@@ -1052,7 +1095,7 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profileDraft, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
+  }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
   const handleLeaderboardOptOut = useCallback(async () => {
     setLeaderboardActionLoading(true);
@@ -1121,7 +1164,7 @@ export function useLeaderboardProfileController({
       }
 
       setProfile(result.data);
-      setProfileDraft(profileDraftFromProfile(result.data, user?.email, authMetadataAvatarUrl));
+      setProfileDraft(profileDraftFromProfile(result.data, user, authMetadataAvatarUrl));
       setProfileMessage("Profile saved.");
       if (activeTab === "leaderboard") void refreshLeaderboardData();
       return true;
@@ -1131,7 +1174,7 @@ export function useLeaderboardProfileController({
     } finally {
       setProfileSaving(false);
     }
-  }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, onAuthRequired, refreshLeaderboardData, user?.email]);
+  }, [activeTab, authMetadataAvatarUrl, leaderboardTimezone, onAuthRequired, refreshLeaderboardData, user]);
 
   const handleSaveProfile = useCallback(async () => saveProfileDraft(profileDraft), [profileDraft, saveProfileDraft]);
 

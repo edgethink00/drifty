@@ -151,11 +151,11 @@ function resolveClient(client?: LeaderboardClient | null): LeaderboardClient | n
   return supabase as unknown as LeaderboardClient;
 }
 
-function toDisplayName(user: { email?: string | null } | null, profileDisplayName?: string | null) {
+function toDisplayName(user: { id?: string | null; email?: string | null } | null, profileDisplayName?: string | null) {
   const trimmedFallback = profileDisplayName?.trim();
   if (trimmedFallback) return trimmedFallback;
 
-  return fallbackDisplayName(user?.email);
+  return fallbackDisplayName(user?.email, user?.id);
 }
 
 function nowIso() {

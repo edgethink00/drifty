@@ -87,8 +87,10 @@ export function LeaderboardView({
   const [searchQuery, setSearchQuery] = useState("");
   const [rankEmbedOpen, setRankEmbedOpen] = useState(false);
   const previewName = resolvePublicNamePreview(profileDisplayName, email);
+  // Display names are intentionally non-unique. Only the authenticated own-entry
+  // RPC rank may associate a public row with this account.
   const matchedOwnRow = ownRank === null
-    ? leaderboard.find((row) => row.display_name === previewName)
+    ? undefined
     : leaderboard.find((row) => row.rank === ownRank);
   const currentUserRank = isOptedIn ? ownRank ?? matchedOwnRow?.rank ?? null : null;
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
@@ -373,7 +375,7 @@ function resolvePublicNamePreview(profileDisplayName?: string | null, email?: st
   const trimmedName = profileDisplayName?.trim();
   if (trimmedName) return trimmedName;
   const emailPrefix = email?.split("@")[0]?.trim();
-  return emailPrefix || "drifty";
+  return emailPrefix || "member";
 }
 
 function resolveProfileHandle(email?: string | null): string | null {

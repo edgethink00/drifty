@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { shiftIsoDate, todayIsoDate, type ActivitySegment } from "@drifty/domain";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,7 +77,18 @@ vi.mock("./features/profile/profileService", () => ({
   fetchOwnProfile,
   saveOwnProfile,
   fetchPublicProfile,
-  fallbackDisplayName: (email?: string | null) => email?.split("@")[0]?.trim() || "drifty",
+  fallbackDisplayName: (email?: string | null, userId?: string | null) => {
+    const emailHandle = email?.split("@")[0]?.trim();
+    if (emailHandle) return emailHandle;
+    if (!userId) return "member";
+
+    let hash = 2_166_136_261;
+    for (let index = 0; index < userId.length; index += 1) {
+      hash ^= userId.charCodeAt(index);
+      hash = Math.imul(hash, 16_777_619);
+    }
+    return `member-${(hash >>> 0).toString(36).padStart(6, "0").slice(-6)}`;
+  },
 }));
 
 vi.mock("./lib/api/trackerClient", () => ({
@@ -344,14 +355,19 @@ describe("App leaderboard participation", () => {
     const today = todayIsoDate();
     const windowStartDay = shiftIsoDate(today, -6);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const anonymousUser = {
+      id: "123e4567-e89b-12d3-a456-426614174000",
+      email: null,
+      is_anonymous: true,
+    };
 
     authState.user = null;
     authState.status = "unauthenticated";
     authState.hasRequiredAccountAuth = false;
     authState.signInAnonymously.mockImplementation(() => {
-      authState.user = { email: null };
+      authState.user = anonymousUser;
       authState.status = "authenticated";
-      return Promise.resolve({ error: null, user: { email: null } });
+      return Promise.resolve({ error: null, user: anonymousUser });
     });
     getTimeline.mockResolvedValue([
       {
@@ -369,6 +385,22 @@ describe("App leaderboard participation", () => {
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
     fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+    saveOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "member-lqwovz",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
 
     render(<App />);
 
@@ -378,7 +410,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).toHaveBeenCalledTimes(1);
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "drifty",
+        display_name: "member-lqwovz",
         bio: "",
         avatar_url: "",
         website_url: "",
@@ -389,7 +421,7 @@ describe("App leaderboard participation", () => {
       });
       expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
       expect(publishOwnFocusTotal).toHaveBeenCalledWith({
-        profileDisplayName: "alex",
+        profileDisplayName: "member-lqwovz",
         period: "daily",
         focus_seconds: 3600,
         focus_seconds_7d: 3600,
@@ -398,7 +430,7 @@ describe("App leaderboard participation", () => {
         timezone,
       });
       expect(publishOwnFocusTotal).toHaveBeenCalledWith({
-        profileDisplayName: "alex",
+        profileDisplayName: "member-lqwovz",
         period: "weekly",
         focus_seconds: 3600,
         focus_seconds_7d: 3600,
@@ -407,7 +439,7 @@ describe("App leaderboard participation", () => {
         timezone,
       });
       expect(publishOwnFocusTotal).toHaveBeenCalledWith({
-        profileDisplayName: "alex",
+        profileDisplayName: "member-lqwovz",
         period: "monthly",
         focus_seconds: 3600,
         focus_seconds_7d: 3600,
@@ -417,6 +449,135 @@ describe("App leaderboard participation", () => {
       });
     });
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
+  });
+
+  it("derives the email handle when Join beats the initial profile load", async () => {
+    const userId = "123e4567-e89b-12d3-a456-426614174000";
+    const initialProfileLoad = createDeferred<{
+      success: boolean;
+      error: string | null;
+      data: null;
+    }>();
+    authState.user = {
+      id: userId,
+      email: "email-handle@example.com",
+    };
+    markOnboardingCompleted(userId);
+    fetchOwnProfile
+      .mockReset()
+      .mockReturnValueOnce(initialProfileLoad.promise)
+      .mockResolvedValue({ success: true, error: null, data: null });
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
+
+    render(<App />);
+
+    await openSocialLeaderboard();
+    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+
+    await waitFor(() => {
+      expect(fetchOwnProfile).toHaveBeenCalledTimes(2);
+      expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({
+        display_name: "email-handle",
+      }));
+      expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
+    });
+
+    await act(async () => {
+      initialProfileLoad.resolve({ success: true, error: null, data: null });
+      await initialProfileLoad.promise;
+    });
+  });
+
+  it("preserves the server profile when Join beats the initial profile load", async () => {
+    const userId = "123e4567-e89b-12d3-a456-426614174000";
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+    const savedProfile = {
+      public_id: "profile-1",
+      display_name: "Saved Name",
+      bio: "Saved bio",
+      avatar_url: "https://example.com/saved-avatar.png",
+      website_url: "https://example.com",
+      github_url: "https://github.com/saved",
+      linkedin_url: "https://linkedin.com/in/saved",
+      timezone,
+      is_public: false,
+      updated_at: new Date().toISOString(),
+    };
+    const initialProfileLoad = createDeferred<{
+      success: boolean;
+      error: string | null;
+      data: typeof savedProfile | null;
+    }>();
+    authState.user = { id: userId, email: "email-handle@example.com" };
+    markOnboardingCompleted(userId);
+    fetchOwnProfile
+      .mockReset()
+      .mockReturnValueOnce(initialProfileLoad.promise)
+      .mockResolvedValue({ success: true, error: null, data: savedProfile });
+    saveOwnProfile.mockResolvedValue({ success: true, error: null, data: savedProfile });
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
+
+    render(<App />);
+
+    await openSocialLeaderboard();
+    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+
+    await waitFor(() => {
+      expect(fetchOwnProfile).toHaveBeenCalledTimes(2);
+      expect(saveOwnProfile).toHaveBeenCalledWith({
+        display_name: "Saved Name",
+        bio: "Saved bio",
+        avatar_url: "https://example.com/saved-avatar.png",
+        website_url: "https://example.com",
+        github_url: "https://github.com/saved",
+        linkedin_url: "https://linkedin.com/in/saved",
+        timezone,
+        is_public: false,
+      });
+      expect(publishOwnFocusTotal).toHaveBeenCalledTimes(3);
+    });
+
+    await act(async () => {
+      initialProfileLoad.resolve({ success: true, error: null, data: savedProfile });
+      await initialProfileLoad.promise;
+    });
+  });
+
+  it("fails closed when the Join-time profile refresh fails", async () => {
+    const userId = "123e4567-e89b-12d3-a456-426614174000";
+    const initialProfileLoad = createDeferred<{
+      success: boolean;
+      error: string | null;
+      data: null;
+    }>();
+    authState.user = { id: userId, email: "email-handle@example.com" };
+    markOnboardingCompleted(userId);
+    fetchOwnProfile
+      .mockReset()
+      .mockReturnValueOnce(initialProfileLoad.promise)
+      .mockResolvedValue({ success: false, error: "Profile network unavailable", data: null });
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
+    fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
+
+    render(<App />);
+
+    await openSocialLeaderboard();
+    fireEvent.click(await screen.findByRole("button", { name: /join leaderboard/i }));
+
+    expect(await screen.findByText("Profile network unavailable")).toBeTruthy();
+    expect(fetchOwnProfile).toHaveBeenCalledTimes(2);
+    expect(saveOwnProfile).not.toHaveBeenCalled();
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+
+    await act(async () => {
+      initialProfileLoad.resolve({ success: false, error: "Profile network unavailable", data: null });
+      await initialProfileLoad.promise;
+    });
   });
 
   it("automatically republishes opted-in signed-in users after the daily publish cadence passes", async () => {
@@ -915,6 +1076,22 @@ describe("App leaderboard participation", () => {
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
     fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
     publishOwnFocusTotal.mockResolvedValue({ success: true, error: null });
+    saveOwnProfile.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        public_id: "profile-1",
+        display_name: "member-uya26d",
+        bio: "",
+        avatar_url: "",
+        website_url: "",
+        github_url: "",
+        linkedin_url: "",
+        timezone,
+        is_public: true,
+        updated_at: new Date().toISOString(),
+      },
+    });
 
     render(<App />);
 
@@ -924,7 +1101,7 @@ describe("App leaderboard participation", () => {
     await waitFor(() => {
       expect(authState.signInAnonymously).not.toHaveBeenCalled();
       expect(saveOwnProfile).toHaveBeenCalledWith({
-        display_name: "drifty",
+        display_name: "member-uya26d",
         bio: "",
         avatar_url: "",
         website_url: "",

@@ -48,7 +48,13 @@ export interface ProfileResult<T = undefined> {
 type ProfileClient = {
   auth: {
     getUser: () => Promise<{
-      data: { user: { id: string; email?: string | null } | null };
+      data: {
+        user: {
+          id: string;
+          email?: string | null;
+          user_metadata?: Record<string, unknown>;
+        } | null;
+      };
       error: unknown;
     }>;
   };
@@ -91,15 +97,50 @@ function resolveClient(client?: ProfileClient | null): ProfileClient | null {
   return supabase as unknown as ProfileClient;
 }
 
-export function fallbackDisplayName(email?: string | null) {
-  const name = email?.split("@")[0]?.trim();
-  return name || "drifty";
+const PROFILE_DISPLAY_NAME_MAX_LENGTH = 64;
+
+function boundedDisplayName(value: string) {
+  return Array.from(value.trim()).slice(0, PROFILE_DISPLAY_NAME_MAX_LENGTH).join("");
 }
 
-function normalizeProfile(row: ProfileRow, email?: string | null): UserProfile {
+function stableMemberSuffix(userId?: string | null) {
+  const normalizedUserId = userId?.trim();
+  if (!normalizedUserId) return "";
+
+  let hash = 2_166_136_261;
+  for (let index = 0; index < normalizedUserId.length; index += 1) {
+    hash ^= normalizedUserId.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36).padStart(6, "0").slice(-6);
+}
+
+export function fallbackDisplayName(
+  email?: string | null,
+  userId?: string | null,
+  metadata?: Record<string, unknown>,
+): string {
+  // `displayName` is explicitly written by the drifty.so account editor. Do
+  // not publish implicit OAuth `full_name`/`name` metadata as a fallback.
+  const explicitMetadataName = typeof metadata?.displayName === "string"
+    ? boundedDisplayName(metadata.displayName)
+    : "";
+  if (explicitMetadataName) return explicitMetadataName;
+
+  const name = boundedDisplayName(email?.split("@")[0] ?? "");
+  if (name) return name;
+
+  const stableSuffix = stableMemberSuffix(userId);
+  return stableSuffix ? `member-${stableSuffix}` : "member";
+}
+
+function normalizeProfile(
+  row: ProfileRow,
+  user?: { id: string; email?: string | null; user_metadata?: Record<string, unknown> } | null,
+): UserProfile {
   return {
     public_id: row.public_id ?? "",
-    display_name: row.display_name?.trim() || fallbackDisplayName(email),
+    display_name: row.display_name?.trim() || fallbackDisplayName(user?.email, user?.id, user?.user_metadata),
     bio: row.bio ?? "",
     avatar_url: row.avatar_url ?? "",
     website_url: row.website_url ?? "",
@@ -115,7 +156,7 @@ function normalizeProfile(row: ProfileRow, email?: string | null): UserProfile {
 function normalizePublicProfile(row: PublicProfileRpcRow): PublicProfile {
   return {
     public_id: row.public_id ?? "",
-    display_name: row.display_name ?? "drifty",
+    display_name: row.display_name?.trim() || "member",
     bio: row.bio ?? "",
     avatar_url: row.avatar_url ?? "",
     website_url: row.website_url ?? "",
@@ -148,7 +189,7 @@ export async function fetchOwnProfile(client?: ProfileClient | null): Promise<Pr
 
     if (error) return { success: false, error: error.message };
     if (!data) return { success: true, error: null, data: null };
-    return { success: true, error: null, data: normalizeProfile(data, user.email) };
+    return { success: true, error: null, data: normalizeProfile(data, user) };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -161,7 +202,8 @@ export async function saveOwnProfile(input: ProfileInput, client?: ProfileClient
   const { user } = await getCurrentUser(resolvedClient);
   if (!user) return { success: false, error: "Not authenticated" };
 
-  const displayName = input.display_name.trim() || fallbackDisplayName(user.email);
+  const displayName = input.display_name.trim()
+    || fallbackDisplayName(user.email, user.id, user.user_metadata);
   const timezone = input.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
   try {
@@ -187,7 +229,7 @@ export async function saveOwnProfile(input: ProfileInput, client?: ProfileClient
       .single();
 
     if (error || !data) return { success: false, error: error?.message ?? "Unable to save profile" };
-    return { success: true, error: null, data: normalizeProfile(data, user.email) };
+    return { success: true, error: null, data: normalizeProfile(data, user) };
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }

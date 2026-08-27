@@ -218,6 +218,34 @@ describe("leaderboardService", () => {
     expect(payload.display_name).toBe("no-name");
   });
 
+  it("uses a stable member alias instead of a shared brand name for email-less users", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "123e4567-e89b-12d3-a456-426614174000",
+          email: null,
+        } satisfies AuthUser,
+      },
+      error: null,
+    });
+    client.__mocks.upsert.mockResolvedValue({ error: null });
+
+    await publishOwnFocusTotal(
+      {
+        profileDisplayName: "",
+        focus_seconds_7d: 1200,
+        window_start_date: "2026-04-01",
+        window_end_date: "2026-04-07",
+        timezone: "Asia/Seoul",
+      },
+      client,
+    );
+
+    const [payload] = client.__mocks.upsert.mock.calls[1] as [UpsertPayload, { onConflict: string }];
+    expect(payload.display_name).toBe("member-lqwovz");
+  });
+
   it("can publish an aggregate without touching the public profile", async () => {
     const client = createClient();
     client.auth.getUser.mockResolvedValue({
