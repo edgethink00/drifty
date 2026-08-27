@@ -133,11 +133,27 @@ describe("NotificationsSettingsSection", () => {
   it("keeps Automatic close available while the pet is off", () => {
     renderSettings({ petModeEnabled: false, driftAlertsEnabled: true, extremeNudgeEnabled: true });
 
-    expect(screen.getByText(/Closes the distracting tab or app without the pet animation/i)).toBeTruthy();
+    expect(screen.getByText(
+      "Closes supported distracting tabs and apps without the pet animation. Communication activity stays open. Shared with Drift alerts.",
+    )).toBeTruthy();
+    expect(screen.getAllByText(
+      "Closes supported distracting tabs and apps. Communication activity stays open. Shared with Desktop pet.",
+    )).toHaveLength(1);
     const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
     expect(toggles).toHaveLength(2);
     expect(toggles.every((toggle) => toggle.getAttribute("aria-checked") === "true")).toBe(true);
     expect(toggles.every((toggle) => toggle.hasAttribute("disabled") === false)).toBe(true);
+  });
+
+  it("states the Automatic close communication exception in Korean", () => {
+    renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true }, "ko");
+
+    expect(screen.getAllByText(
+      "지원되는 딴짓 탭과 앱을 닫습니다. 커뮤니케이션 활동은 닫지 않습니다. 데스크톱 펫과 같은 설정입니다.",
+    )).toHaveLength(1);
+    expect(screen.getByText(
+      "펫 애니메이션 없이 지원되는 딴짓 탭과 앱을 닫습니다. 커뮤니케이션 활동은 닫지 않습니다. 딴짓 알림과 같은 설정입니다.",
+    )).toBeTruthy();
   });
 
   it("connects each Automatic close switch to its row copy", () => {

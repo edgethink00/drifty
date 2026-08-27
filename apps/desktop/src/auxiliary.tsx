@@ -90,7 +90,7 @@ async function loadAuxiliaryComponent(surface: AuxiliarySurface): Promise<Auxili
   if (surface === "companion") {
     return (await import("./features/companion/CompanionWindowApp")).CompanionWindowApp;
   }
-  return (await import("./features/companion/DriftAlarmWindowApp")).DriftAlarmWindowApp;
+  throw new Error(`Unknown auxiliary surface: ${String(surface)}`);
 }
 
 const surface = resolveAuxiliarySurface(window.location.search);

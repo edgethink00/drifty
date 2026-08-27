@@ -164,13 +164,13 @@ import {
   type EndOfDayReviewEvent,
 } from "./features/companion/EndOfDayReview";
 import {
-  DriftAlarm,
   buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
   type DriftAlarmAction,
   type DriftAlarmEvent,
   type DriftAlarmFocusTarget,
-} from "./features/companion/DriftAlarm";
+} from "./features/companion/driftAlarmEvent";
+import { CompanionDriftAlarmCard } from "./features/companion/CompanionDriftAlarmCard";
 import {
   hideNativeWatcherPeek,
   isTauriRuntime,
@@ -192,11 +192,10 @@ import {
 } from "./features/companion/watcherBridge";
 import {
   applyNativeExtremeNudge,
-  hideNativeDriftAlarm,
   listenToNativeDriftAlarmAction,
   listenToNativeDriftAlarmDismissed,
-  showNativeDriftAlarm,
 } from "./features/companion/driftAlarmBridge";
+import { getExtremeNudgeFailure } from "./features/companion/extremeNudgeFailure";
 import { evaluateYouTubeDriftAlarmGate } from "./features/companion/youtubeDriftAlarmGate";
 import {
   buildDriftAlarmManualCorrectionRecord,
@@ -359,7 +358,7 @@ import { captureCorrectionEvidence } from "./features/classification/correctionE
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
 import { compactHistoryRangeContains, compactHistoryRangeKey, findFreshCompactHistoryLoad, pruneStaleCompactHistoryLoads, type CompactHistoryLoad, type CompactHistoryRange } from "./features/dashboard/compactHistoryCache";
-import { extremeNudgeErrorDiagnostic, getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
+import { getDriftAlarmPollTimelineRange, mergeDriftAlarmSegments, pruneExpiredDriftAlarmAiRetries, rememberDriftAlarmSourceSegment, type DriftAlarmEvaluationInput, type DriftAlarmEvaluator, type DriftAlarmTrayPublishOptions } from "./features/companion/driftAlarmEvaluation";
 import { EMPTY_ACTIVITY_SEGMENTS, latestActivitySegmentCursor, mergeActivitySegments } from "./lib/activitySegments";
 import { scheduleIdleWork } from "./lib/scheduleIdleWork";
 
@@ -601,7 +600,7 @@ export default function App() {
     companionTemporarilyHidden,
   );
   const companionPillVisible = effectiveCompanionSurfacePolicy === "floating";
-  const companionUsesMomentSurface = effectiveCompanionSurfacePolicy !== "off";
+  const companionResidentMomentsEnabled = effectiveCompanionSurfacePolicy !== "momentsOnly";
 
   const handleCompanionSurfacePolicyChange = useCallback((policy: CompanionResidentPreference) => {
     setCompanionSurfacePolicy((currentPolicy) => {
@@ -2377,10 +2376,7 @@ export default function App() {
       alertKey: event.id,
       delivery,
     });
-    const showNativeSurface = companionUsesMomentSurface
-      ? showNativeCompanionDriftAlarm
-      : showNativeDriftAlarm;
-    void showNativeSurface(event).then(() => {
+    void showNativeCompanionDriftAlarm(event).then(() => {
       recordDriftAlarmDebugEvent({
         kind: "native_show_succeeded",
         alertKey: event.id,
@@ -2400,7 +2396,7 @@ export default function App() {
       pendingDriftAlarmEventRef.current = null;
       if (pendingEvent) showDriftAlarm(pendingEvent);
     });
-  }, [clearDriftAlarmEvent, companionUsesMomentSurface]);
+  }, [clearDriftAlarmEvent]);
 
   const previewCompanionMilestone = useCallback((previewId: CompanionMilestonePreviewId) => {
     void showNativeCompanionMilestone(buildCompanionMilestonePreview(previewId))
@@ -2416,25 +2412,21 @@ export default function App() {
       ? showNativeCompanionReentry(buildCompanionReentryPreview())
       : previewId === "extreme-nudge"
         ? showNativeExtremeNudgeToast(buildCompanionExtremeNudgePreview())
-        : companionUsesMomentSurface
-          ? showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId))
-          : showNativeDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
+        : showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
     void sent.catch((error: unknown) => {
       console.warn("Failed to preview companion moment", toErrorMessage(error));
     });
-  }, [companionUsesMomentSurface]);
+  }, []);
 
   /* The caught-cat card differs from the ordinary drift card only in its copy,
      so it needs its own preview to be reviewable at all. */
   const previewPetInterceptCard = useCallback(() => {
     const alarm = buildCompanionDriftAlarmPreview("drift-alarm", Date.now(), true);
-    const sent = companionUsesMomentSurface
-      ? showNativeCompanionDriftAlarm(alarm)
-      : showNativeDriftAlarm(alarm);
+    const sent = showNativeCompanionDriftAlarm(alarm);
     void sent.catch((error: unknown) => {
       console.warn("Failed to preview pet intercept card", toErrorMessage(error));
     });
-  }, [companionUsesMomentSurface]);
+  }, []);
 
   const handleWatcherResponse = useCallback((response: WatcherPeekResponse) => {
     const currentEvent = watcherEventRef.current;
@@ -2448,7 +2440,6 @@ export default function App() {
 
   const dismissDriftAlarm = useCallback(() => {
     clearDriftAlarmEvent();
-    void hideNativeDriftAlarm();
   }, [clearDriftAlarmEvent]);
 
   const recordCurrentDriftAlarmDismiss = useCallback(() => {
@@ -4466,7 +4457,7 @@ export default function App() {
       const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
       const sourceAppName = segment.appName.trim() || "Unknown app";
       const sourceIconKey = segment.bundleId?.trim() ?? sourceAppName;
-      // Resolve the site icon here: the alarm window has no site-icon context.
+      // Resolve the site icon here: the Companion alert surface has no site-icon lookup context.
       const sourceIconSrc = (sourceSiteDomain ? siteIconsRef.current[sourceSiteDomain.toLowerCase()] : null)
         ?? appIconsRef.current[sourceIconKey]
         ?? appIconsRef.current[sourceAppName]
@@ -4609,17 +4600,19 @@ export default function App() {
           }, 120);
         }
       }).catch((error) => {
-        console.warn("Failed to apply extreme nudge", error);
-        const message = toErrorMessage(error);
+        const failure = getExtremeNudgeFailure(error);
+        console.warn("Failed to apply extreme nudge", failure.code);
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_error",
           alertKey,
-          reason: extremeNudgeErrorDiagnostic(error),
-          message,
+          reason: failure.code,
+          message: failure.diagnostic,
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           evaluation,
         });
-        if (lastDriftAlertSegmentRef.current === alertKey) showFallbackDriftAlarm(notifyOnFallback);
+        if (lastDriftAlertSegmentRef.current === alertKey) {
+          showFallbackDriftAlarm(notifyOnFallback);
+        }
       });
     };
 
@@ -5589,7 +5582,7 @@ export default function App() {
 
   useCompanionReentryMoment({
     ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
-    announcementsEnabled: companionUsesMomentSurface && status?.running === true,
+    announcementsEnabled: companionResidentMomentsEnabled && status?.running === true,
     activitySignal: status?.lastEventAt ?? currentSnapshot?.observedAt ?? null,
     locale: localization.effectiveLanguage === "ko" ? "ko-KR" : "en-US",
   });
@@ -8320,11 +8313,13 @@ export default function App() {
             />
           ) : null}
           {driftAlarmEvent ? (
-            <div className="drift-alarm-browser-surface" aria-label="Drifty drift alarm browser overlay">
-              <div className="drift-alarm-browser-backdrop" aria-hidden="true" />
-              <div className="drift-alarm-browser-overlay">
-                <DriftAlarm event={driftAlarmEvent} onAction={handleDriftAlarmAction} onCancel={cancelDriftAlarm} />
-              </div>
+            <div className="companion-drift-alarm-browser-surface">
+              <CompanionDriftAlarmCard
+                event={driftAlarmEvent}
+                onAction={handleDriftAlarmAction}
+                onDismiss={cancelDriftAlarm}
+                onOpenDashboard={() => returnToFocusTarget(null)}
+              />
             </div>
           ) : null}
         </>

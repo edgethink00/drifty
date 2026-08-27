@@ -101,6 +101,28 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .pill[data-state="nudge"] {
   width: 352px;
 }
+
+/* Browser QA and the copy editor show the exact card without the native
+   window's transparent shadow gutter. They remain non-blocking and never add a
+   full-screen backdrop. */
+.companion-drift-alarm-card {
+  --pill-gutter-x: 0px;
+  --pill-gutter-y: 0px;
+  height: 130px;
+  position: relative;
+  width: 352px;
+}
+.companion-drift-alarm-card .pill {
+  height: 100%;
+  right: 0;
+  top: 0;
+}
+.companion-drift-alarm-card--preview .pill {
+  cursor: default;
+}
+.companion-drift-alarm-card--preview .pill button {
+  pointer-events: none;
+}
 .companion-pill-surface .pill[data-state="eod"] {
   width: 331px;
 }
@@ -966,6 +988,22 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .card__copy { display: flex; flex-direction: column; gap: 3px; }
 .companion-pill-surface .card__sub { font-size: 11px; color: var(--text-soft); }
 .companion-pill-surface .card__sub b { color: var(--text-muted); font-weight: 600; }
+/* User-authored alarm titles share a fixed 130px decision card. Keep two
+   readable lines, then clip before copy can displace the action row. */
+.companion-pill-surface :is(.view--drift, .view--nudge) .card__title {
+  display: -webkit-box;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.companion-pill-surface :is(.view--drift, .view--nudge) .card__sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .companion-pill-surface .card__actions { display: flex; gap: 6px; margin-top: auto; }
 /* misclassification escape hatch: sits in the action row but stays an icon,
    so it is reachable in one glance without competing with the real choices */

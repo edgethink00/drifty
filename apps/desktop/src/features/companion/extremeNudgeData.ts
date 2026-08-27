@@ -1,5 +1,5 @@
 import type { ActivitySegment } from "@drifty/domain";
-import type { DriftAlarmFocusTarget } from "./DriftAlarm";
+import type { DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { ExtremeNudgeTarget } from "./driftAlarmBridge";
 import { buildDefaultDriftAlarmCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";

@@ -1,5 +1,5 @@
 import type { ActivityCategory } from "@drifty/domain";
-import type { DriftAlarmEvent } from "./DriftAlarm";
+import type { DriftAlarmEvent } from "./driftAlarmEvent";
 
 export const DRIFT_ALARM_INTERACTION_STORAGE_KEY = "drifty.companion.driftAlarmInteractions.v1";
 export const BREAK_ASSESSMENT_WINDOW_MS = 10 * 60 * 1000;

@@ -9,7 +9,7 @@ export const COMPANION_DAY_REVIEW_LAYOUT_STORAGE_KEY = "drifty.dev.companion.day
 /** Stored user preference for the production resident Companion. */
 export type CompanionResidentPreference = "menuBar" | "off";
 /** Effective native surface after temporary and Dev-only overrides. */
-export type CompanionSurfacePolicy = "floating" | CompanionResidentPreference;
+export type CompanionSurfacePolicy = "floating" | "menuBar" | "momentsOnly";
 
 export const COMPANION_SURFACE_POLICY_DEFAULT: CompanionResidentPreference = "menuBar";
 export const COMPANION_DAY_REVIEW_LAYOUT_DEFAULT: CompanionDayReviewLayout = "minimal";
@@ -58,17 +58,19 @@ export function persistCompanionPillEnabled(enabled: boolean): boolean {
 }
 
 /**
- * The public policy records only whether Companion is enabled. A Dev-only
- * Floating preview temporarily overrides the production menu-bar surface.
+ * The public preference controls only the resident Companion. Drift decisions,
+ * alerts, and celebrations still use the compact Companion card when the
+ * resident surface is hidden, so disabling it never revives the retired
+ * full-screen alarm.
  */
 export function resolveEffectiveCompanionSurfacePolicy(
   preference: CompanionResidentPreference,
   floatingDevActive: boolean,
   temporarilyHidden: boolean,
 ): CompanionSurfacePolicy {
-  if (temporarilyHidden) return "off";
+  if (temporarilyHidden) return "momentsOnly";
   if (floatingDevActive) return "floating";
-  return preference;
+  return preference === "off" ? "momentsOnly" : "menuBar";
 }
 
 export function resolveInitialCompanionDayReviewLayout(): CompanionDayReviewLayout {

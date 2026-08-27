@@ -84,9 +84,25 @@ fn parses_all_companion_surface_policies() {
     );
     assert_eq!(
         CompanionSurfacePolicy::parse("off").unwrap(),
-        CompanionSurfacePolicy::Off,
+        CompanionSurfacePolicy::MomentsOnly,
+    );
+    assert_eq!(
+        CompanionSurfacePolicy::parse("momentsOnly").unwrap(),
+        CompanionSurfacePolicy::MomentsOnly,
     );
     assert!(CompanionSurfacePolicy::parse("legacy").is_err());
+}
+
+#[test]
+fn disabling_the_resident_companion_keeps_alert_moments_available() {
+    assert_eq!(
+        companion_surface_policy_for_enabled(false),
+        CompanionSurfacePolicy::MomentsOnly,
+    );
+    assert_eq!(
+        companion_surface_policy_for_enabled(true),
+        CompanionSurfacePolicy::Floating,
+    );
 }
 
 #[test]

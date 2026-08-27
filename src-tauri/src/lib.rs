@@ -28,49 +28,46 @@ use commands::{
     developer_check_pre_release_update, developer_install_pre_release_update,
     developer_tools_get_status, developer_tools_install_cli, developer_tools_install_codex_skill,
     developer_tools_install_skill, developer_tools_uninstall_cli,
-    developer_tools_uninstall_codex_skill, developer_tools_uninstall_skill, drift_alarm_action,
-    drift_alarm_current, drift_alarm_dismiss, drift_alarm_hide, drift_alarm_show,
-    extreme_nudge_apply, focus_target_activate_browser_tab, focus_target_browser_tab_exists,
-    focus_target_open_app, living_soul_read, living_soul_write, managed_ai_catalog,
-    managed_ai_delete, managed_ai_install, managed_ai_start, managed_ai_status,
-    managed_ai_stop_runtime_for_app_exit, pet_mode_align_contact, pet_mode_begin_drag,
-    pet_mode_cancel_motion, pet_mode_carry_cursor, pet_mode_cursor_inside, pet_mode_cursor_sample,
-    pet_mode_exit_screen, pet_mode_input_bounds,
+    developer_tools_uninstall_codex_skill, developer_tools_uninstall_skill, extreme_nudge_apply,
+    focus_target_activate_browser_tab, focus_target_browser_tab_exists, focus_target_open_app,
+    living_soul_read, living_soul_write, managed_ai_catalog, managed_ai_delete, managed_ai_install,
+    managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
+    pet_mode_align_contact, pet_mode_begin_drag, pet_mode_cancel_motion, pet_mode_carry_cursor,
+    pet_mode_cursor_inside, pet_mode_cursor_sample, pet_mode_exit_screen, pet_mode_input_bounds,
     pet_mode_intervene, pet_mode_lab_apply_target, pet_mode_lab_place_center,
     pet_mode_move_to_target, pet_mode_preview_action, pet_mode_preview_intervention,
     pet_mode_remember_position, pet_mode_report_contact, pet_mode_report_drag_error,
     pet_mode_report_pointer, pet_mode_resolve_drop, pet_mode_return_from_outing,
     pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
     pet_mode_set_presence, pet_mode_set_size, pet_mode_stalk_cursor, pet_mode_update,
-    pet_mode_update_hit_region, pet_mode_visibility_action,
-    sentry_capture_native_smoke, setup_companion_pill_window, setup_drift_alarm_window,
-    setup_pet_mode_window, setup_watcher_window, share_card_save_png,
+    pet_mode_update_hit_region, pet_mode_visibility_action, sentry_capture_native_smoke,
+    setup_companion_pill_window, setup_pet_mode_window, setup_watcher_window, share_card_save_png,
     startup_get_open_at_login_status, startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_apply_synced_deletions,
-    tracker_apply_synced_segments, tracker_delete_activity_segments,
+    tracker_apply_synced_segments, tracker_clear_icon_caches, tracker_delete_activity_segments,
     tracker_delete_classification_rule, tracker_delete_history_range, tracker_delete_project,
     tracker_delete_project_anchor, tracker_get_ai_review_events, tracker_get_app_icons,
-    tracker_clear_icon_caches, tracker_get_site_icons,
     tracker_get_browser_history_environment, tracker_get_classification_metrics,
     tracker_get_classification_rules, tracker_get_current_snapshot,
     tracker_get_dashboard_week_timeline, tracker_get_dev_repos, tracker_get_dev_signals,
-    tracker_get_hourly_summary, tracker_get_live_tail,
-    tracker_get_pending_sync_deletions, tracker_get_project_assignments,
-    tracker_get_project_pass_runs, tracker_get_project_trend_timeline,
-    tracker_get_project_window_assignments, tracker_get_projects, tracker_get_raw_events,
-    tracker_get_reusable_ai_classifications, tracker_get_status, tracker_get_sync_outbox,
-    tracker_get_sync_state, tracker_get_team_project_assignments, tracker_get_team_projects,
-    tracker_get_timeline, tracker_get_timeline_page, tracker_get_top_sites, tracker_sync_dev_signals,
-    tracker_get_unclassified_segments, tracker_import_browser_history,
-    tracker_mark_sync_deletions_pushed, tracker_preview_browser_history_import,
-    tracker_purge_remote_segments, tracker_record_project_pass,
-    tracker_refresh_non_ai_classifications, tracker_revert_ai_review_event,
-    tracker_save_ai_review_events, tracker_save_classification_rule, tracker_save_classifications,
-    tracker_save_project, tracker_save_project_anchors, tracker_save_project_assignments,
+    tracker_get_hourly_summary, tracker_get_live_tail, tracker_get_pending_sync_deletions,
+    tracker_get_project_assignments, tracker_get_project_pass_runs,
+    tracker_get_project_trend_timeline, tracker_get_project_window_assignments,
+    tracker_get_projects, tracker_get_raw_events, tracker_get_reusable_ai_classifications,
+    tracker_get_site_icons, tracker_get_status, tracker_get_sync_outbox, tracker_get_sync_state,
+    tracker_get_team_project_assignments, tracker_get_team_projects, tracker_get_timeline,
+    tracker_get_timeline_page, tracker_get_top_sites, tracker_get_unclassified_segments,
+    tracker_import_browser_history, tracker_mark_sync_deletions_pushed,
+    tracker_preview_browser_history_import, tracker_purge_remote_segments,
+    tracker_record_project_pass, tracker_refresh_non_ai_classifications,
+    tracker_revert_ai_review_event, tracker_save_ai_review_events,
+    tracker_save_classification_rule, tracker_save_classifications, tracker_save_project,
+    tracker_save_project_anchors, tracker_save_project_assignments,
     tracker_save_project_window_assignments, tracker_save_team_project_assignments,
     tracker_search_classification_rule_candidates, tracker_search_timeline,
     tracker_set_developer_diagnostics, tracker_set_sync_state, tracker_start, tracker_stop,
-    tracker_upsert_team_projects, update_prompt_show_native, update_status_show_native, watcher_companion_clamp_to_screen,
+    tracker_sync_dev_signals, tracker_upsert_team_projects, update_prompt_show_native,
+    update_status_show_native, watcher_companion_clamp_to_screen,
     watcher_companion_cursor_over_capsule, watcher_companion_dismiss_moment,
     watcher_companion_present_prepared, watcher_companion_set_click_through,
     watcher_companion_set_enabled, watcher_companion_set_state,
@@ -79,7 +76,7 @@ use commands::{
     watcher_peek_end_of_day_review_action, watcher_peek_end_of_day_review_displayed,
     watcher_peek_extreme_nudge_action, watcher_peek_hide, watcher_peek_respond,
     watcher_peek_set_interactive, watcher_peek_show, window_set_native_shell_blur,
-    window_set_onboarding_presentation, window_set_theme_appearance, DriftAlarmState,
+    window_set_onboarding_presentation, window_set_theme_appearance,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tracker::{TrackerController, TrackerStartupState};
@@ -431,7 +428,6 @@ pub fn run() {
         .manage(TrayRefreshWorker::default())
         .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
-        .manage(DriftAlarmState::default())
         .manage(AppExitCoordinator::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
@@ -507,7 +503,6 @@ pub fn run() {
             setup_app_menu(app.handle())?;
             setup_watcher_window(app)?;
             setup_companion_pill_window(app)?;
-            setup_drift_alarm_window(app)?;
             setup_pet_mode_window(app)?;
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
@@ -715,11 +710,6 @@ pub fn run() {
             watcher_companion_update,
             watcher_companion_dismiss_moment,
             watcher_companion_visibility_action,
-            drift_alarm_current,
-            drift_alarm_show,
-            drift_alarm_hide,
-            drift_alarm_dismiss,
-            drift_alarm_action,
             extreme_nudge_apply,
             correction_evidence_append,
             living_soul_read,

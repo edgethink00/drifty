@@ -1,17 +1,22 @@
 #[cfg(target_os = "macos")]
-use std::{thread, time::Duration};
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 
 #[cfg(target_os = "macos")]
 use objc2::rc::autoreleasepool;
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSRunningApplication;
 #[cfg(target_os = "macos")]
-use objc2_foundation::NSString;
+use objc2_foundation::{NSObjectProtocol, NSString};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime;
 use thiserror::Error;
 
 mod browser_tabs;
+#[cfg(test)]
+mod qa_tests;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -19,7 +24,9 @@ const DRIFTY_BUNDLE_ID: &str = "so.drifty.mac";
 #[cfg(target_os = "macos")]
 const GRACEFUL_TERMINATE_WAIT: Duration = Duration::from_millis(800);
 #[cfg(target_os = "macos")]
-const FORCE_TERMINATE_WAIT: Duration = Duration::from_millis(250);
+const FORCE_TERMINATE_WAIT: Duration = Duration::from_millis(800);
+#[cfg(target_os = "macos")]
+const TERMINATE_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,6 +54,37 @@ pub enum ExtremeNudgeOutcomeKind {
     TerminatedApp,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtremeNudgeFailureCode {
+    BrowserTargetMissing,
+    ProtectedTarget,
+    AppTargetMissing,
+    AppNotRunning,
+    AppCloseFailed,
+    PermissionDenied,
+    AutomationTimedOut,
+    BrowserTabNotFound,
+    AutomationFailed,
+    InternalError,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExtremeNudgeFailure {
+    pub code: ExtremeNudgeFailureCode,
+    pub diagnostic: Option<String>,
+}
+
+impl ExtremeNudgeFailure {
+    fn new(code: ExtremeNudgeFailureCode, diagnostic: Option<&str>) -> Self {
+        Self {
+            code,
+            diagnostic: diagnostic.and_then(safe_failure_diagnostic),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 enum ExtremeNudgeError {
     #[error("Browser tab closing requires a captured page URL or domain")]
@@ -54,28 +92,103 @@ enum ExtremeNudgeError {
     #[cfg(target_os = "windows")]
     #[error("Browser tab closing requires the captured browser executable identity")]
     MissingBrowserIdentity,
-    #[error("Refusing to terminate protected app bundle {0}")]
+    #[error("Refusing to terminate a protected app")]
     ProtectedBundle(String),
-    #[error("App bundle id is required for {0}")]
+    #[error("App identity is required")]
     MissingBundleId(String),
-    #[error("No running app found for bundle {0}")]
+    #[error("No running app found for the captured identity")]
     AppNotRunning(String),
-    #[error("Unable to terminate app bundle {0}")]
+    #[error("Unable to terminate the captured app")]
     AppTerminateFailed(String),
-    #[error("osascript failed: {0}")]
+    #[error("Browser automation failed")]
     AppleScriptFailed(String),
-    #[error("Browser tab was not found for {target}: {diagnostic}")]
-    BrowserTabNotFound { target: String, diagnostic: String },
+    #[error("Browser tab was not found")]
+    BrowserTabNotFound { diagnostic: String },
+}
+
+impl From<ExtremeNudgeError> for ExtremeNudgeFailure {
+    fn from(error: ExtremeNudgeError) -> Self {
+        match error {
+            ExtremeNudgeError::MissingBrowserTarget => {
+                Self::new(ExtremeNudgeFailureCode::BrowserTargetMissing, None)
+            }
+            #[cfg(target_os = "windows")]
+            ExtremeNudgeError::MissingBrowserIdentity => {
+                Self::new(ExtremeNudgeFailureCode::BrowserTargetMissing, None)
+            }
+            ExtremeNudgeError::ProtectedBundle(_) => {
+                Self::new(ExtremeNudgeFailureCode::ProtectedTarget, None)
+            }
+            ExtremeNudgeError::MissingBundleId(_) => {
+                Self::new(ExtremeNudgeFailureCode::AppTargetMissing, None)
+            }
+            ExtremeNudgeError::AppNotRunning(_) => {
+                Self::new(ExtremeNudgeFailureCode::AppNotRunning, None)
+            }
+            ExtremeNudgeError::AppTerminateFailed(_) => {
+                Self::new(ExtremeNudgeFailureCode::AppCloseFailed, None)
+            }
+            ExtremeNudgeError::AppleScriptFailed(message) => {
+                let normalized = message.to_ascii_lowercase();
+                if normalized.contains("timed out") {
+                    Self::new(
+                        ExtremeNudgeFailureCode::AutomationTimedOut,
+                        Some("osascript_timeout"),
+                    )
+                } else if normalized.contains("-1743")
+                    || normalized.contains("not authorized to send apple events")
+                    || normalized.contains("not allowed assistive access")
+                {
+                    Self::new(
+                        ExtremeNudgeFailureCode::PermissionDenied,
+                        Some("macos_automation_denied"),
+                    )
+                } else {
+                    Self::new(
+                        ExtremeNudgeFailureCode::AutomationFailed,
+                        Some("osascript_failed"),
+                    )
+                }
+            }
+            ExtremeNudgeError::BrowserTabNotFound { diagnostic } => {
+                let code = browser_tab_failure_code(&diagnostic);
+                Self::new(code, Some(&diagnostic))
+            }
+        }
+    }
+}
+
+fn browser_tab_failure_code(diagnostic: &str) -> ExtremeNudgeFailureCode {
+    if diagnostic.ends_with("_timeout") {
+        return ExtremeNudgeFailureCode::AutomationTimedOut;
+    }
+    if diagnostic.contains("permission_denied") || diagnostic.contains("access_denied") {
+        return ExtremeNudgeFailureCode::PermissionDenied;
+    }
+    if matches!(
+        diagnostic,
+        "windows_uia_system_root_unavailable"
+            | "windows_uia_system_root_not_absolute"
+            | "windows_uia_trusted_powershell_unavailable"
+            | "windows_uia_script_create_failed"
+            | "windows_uia_spawn_failed"
+            | "windows_uia_wait_failed"
+            | "windows_uia_invalid_response"
+            | "windows_uia_exception"
+    ) {
+        return ExtremeNudgeFailureCode::AutomationFailed;
+    }
+    ExtremeNudgeFailureCode::BrowserTabNotFound
 }
 
 #[tauri::command]
 pub async fn extreme_nudge_apply(
     target: ExtremeNudgeTarget,
-) -> Result<ExtremeNudgeOutcome, String> {
+) -> Result<ExtremeNudgeOutcome, ExtremeNudgeFailure> {
     async_runtime::spawn_blocking(move || apply_extreme_nudge(&target))
         .await
-        .map_err(|error| error.to_string())?
-        .map_err(|error| error.to_string())
+        .map_err(|_| ExtremeNudgeFailure::new(ExtremeNudgeFailureCode::InternalError, None))?
+        .map_err(ExtremeNudgeFailure::from)
 }
 
 fn apply_extreme_nudge(
@@ -125,6 +238,19 @@ fn normalized_optional_text(value: Option<&str>) -> Option<String> {
         .map(str::to_string)
 }
 
+fn safe_failure_diagnostic(value: &str) -> Option<String> {
+    let normalized = value.trim();
+    if normalized.is_empty() || normalized.len() > 96 {
+        return None;
+    }
+    normalized
+        .chars()
+        .all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
+        .then(|| normalized.to_string())
+}
+
 fn normalized_bundle_id(value: Option<&str>, app_name: &str) -> Result<String, ExtremeNudgeError> {
     let bundle_id = normalized_optional_text(value)
         .ok_or_else(|| ExtremeNudgeError::MissingBundleId(app_name.trim().to_string()))?;
@@ -165,21 +291,20 @@ fn terminate_app_by_bundle_id(bundle_id: &str) -> Result<(), ExtremeNudgeError> 
             let application = applications.objectAtIndex(index);
             application.terminate();
         }
-        thread::sleep(GRACEFUL_TERMINATE_WAIT);
-        if all_applications_terminated(&applications) {
+        if wait_for_applications_terminated(bundle_id, &applications, GRACEFUL_TERMINATE_WAIT) {
             return Ok(());
         }
 
-        let mut requested_force_terminate = false;
         for index in 0..applications.count() {
             let application = applications.objectAtIndex(index);
-            if !application.isTerminated() {
-                requested_force_terminate =
-                    application.forceTerminate() || requested_force_terminate;
-            }
+            application.forceTerminate();
         }
-        thread::sleep(FORCE_TERMINATE_WAIT);
-        if requested_force_terminate || all_applications_terminated(&applications) {
+        /* NSRunningApplication returns whether the request was sent, not whether
+        the process exited, and a retained instance can keep a stale
+        isTerminated value after exit. Only a fresh LaunchServices lookup may
+        report success; a sent-but-ignored request must reach the renderer as
+        app_close_failed. */
+        if wait_for_applications_terminated(bundle_id, &applications, FORCE_TERMINATE_WAIT) {
             return Ok(());
         }
 
@@ -189,15 +314,38 @@ fn terminate_app_by_bundle_id(bundle_id: &str) -> Result<(), ExtremeNudgeError> 
 
 #[cfg(target_os = "macos")]
 fn all_applications_terminated(
+    bundle_id: &str,
     applications: &objc2_foundation::NSArray<NSRunningApplication>,
 ) -> bool {
+    let bundle_identifier = NSString::from_str(bundle_id);
+    let current_applications =
+        NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_identifier);
     for index in 0..applications.count() {
         let application = applications.objectAtIndex(index);
-        if !application.isTerminated() {
-            return false;
+        for current_index in 0..current_applications.count() {
+            let current_application = current_applications.objectAtIndex(current_index);
+            if application.isEqual(Some(&current_application)) {
+                return false;
+            }
         }
     }
     true
+}
+
+#[cfg(target_os = "macos")]
+fn wait_for_applications_terminated(
+    bundle_id: &str,
+    applications: &objc2_foundation::NSArray<NSRunningApplication>,
+    timeout: Duration,
+) -> bool {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if all_applications_terminated(bundle_id, applications) {
+            return true;
+        }
+        thread::sleep(TERMINATE_POLL_INTERVAL);
+    }
+    all_applications_terminated(bundle_id, applications)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -250,5 +398,112 @@ mod tests {
             normalized_bundle_id(Some(r"C:\Program Files\Drifty\drifty.exe"), "Drifty"),
             Err(ExtremeNudgeError::ProtectedBundle(_)),
         ));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_missing_native_app_is_reported_without_attempting_another_target() {
+        assert!(matches!(
+            terminate_app_by_bundle_id("so.drifty.native-qa.definitely-not-running"),
+            Err(ExtremeNudgeError::AppNotRunning(_)),
+        ));
+    }
+
+    #[test]
+    fn browser_tab_failures_serialize_without_the_captured_target() {
+        let failure = ExtremeNudgeFailure::from(ExtremeNudgeError::BrowserTabNotFound {
+            diagnostic: "chromium_ax_close_failed".to_string(),
+        });
+
+        assert_eq!(failure.code, ExtremeNudgeFailureCode::BrowserTabNotFound);
+        assert_eq!(
+            failure.diagnostic.as_deref(),
+            Some("chromium_ax_close_failed")
+        );
+        let serialized = serde_json::to_string(&failure).expect("serialize failure");
+        assert!(!serialized.contains("https://"));
+        assert!(!serialized.contains("target"));
+    }
+
+    #[test]
+    fn unsafe_native_diagnostics_are_dropped() {
+        assert_eq!(
+            safe_failure_diagnostic("https://example.com/reset?token=secret"),
+            None,
+        );
+        assert_eq!(
+            safe_failure_diagnostic("windows_uia_target_not_found").as_deref(),
+            Some("windows_uia_target_not_found"),
+        );
+    }
+
+    #[test]
+    fn failure_codes_keep_the_stable_renderer_wire_values() {
+        let codes = [
+            ExtremeNudgeFailureCode::BrowserTargetMissing,
+            ExtremeNudgeFailureCode::ProtectedTarget,
+            ExtremeNudgeFailureCode::AppTargetMissing,
+            ExtremeNudgeFailureCode::AppNotRunning,
+            ExtremeNudgeFailureCode::AppCloseFailed,
+            ExtremeNudgeFailureCode::PermissionDenied,
+            ExtremeNudgeFailureCode::AutomationTimedOut,
+            ExtremeNudgeFailureCode::BrowserTabNotFound,
+            ExtremeNudgeFailureCode::AutomationFailed,
+            ExtremeNudgeFailureCode::InternalError,
+        ];
+
+        assert_eq!(
+            serde_json::to_value(codes).expect("serialize failure codes"),
+            serde_json::json!([
+                "browser_target_missing",
+                "protected_target",
+                "app_target_missing",
+                "app_not_running",
+                "app_close_failed",
+                "permission_denied",
+                "automation_timed_out",
+                "browser_tab_not_found",
+                "automation_failed",
+                "internal_error",
+            ]),
+        );
+    }
+
+    #[test]
+    fn automation_failures_expose_only_stable_permission_and_timeout_codes() {
+        let denied = ExtremeNudgeFailure::from(ExtremeNudgeError::AppleScriptFailed(
+            "Not authorized to send Apple events to Google Chrome. (-1743)".to_string(),
+        ));
+        assert_eq!(denied.code, ExtremeNudgeFailureCode::PermissionDenied);
+        assert_eq!(
+            denied.diagnostic.as_deref(),
+            Some("macos_automation_denied")
+        );
+
+        let timed_out = ExtremeNudgeFailure::from(ExtremeNudgeError::AppleScriptFailed(
+            "osascript timed out after 5 seconds".to_string(),
+        ));
+        assert_eq!(timed_out.code, ExtremeNudgeFailureCode::AutomationTimedOut);
+        assert_eq!(timed_out.diagnostic.as_deref(), Some("osascript_timeout"));
+    }
+
+    #[test]
+    fn browser_failure_taxonomy_separates_target_lookup_from_automation_failures() {
+        assert_eq!(
+            browser_tab_failure_code("windows_uia_target_not_found"),
+            ExtremeNudgeFailureCode::BrowserTabNotFound,
+        );
+        assert_eq!(
+            browser_tab_failure_code("windows_uia_timeout"),
+            ExtremeNudgeFailureCode::AutomationTimedOut,
+        );
+        assert_eq!(
+            browser_tab_failure_code("windows_uia_access_denied"),
+            ExtremeNudgeFailureCode::PermissionDenied,
+        );
+        assert_eq!(
+            browser_tab_failure_code("windows_uia_spawn_failed"),
+            ExtremeNudgeFailureCode::AutomationFailed,
+        );
     }
 }

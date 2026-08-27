@@ -6,7 +6,7 @@ import type {
   SystemTransientActivity,
 } from "@drifty/domain";
 import type { LiveAiClassificationResult } from "../classification/aiClassificationService";
-import type { DriftAlarmEvent } from "./DriftAlarm";
+import type { DriftAlarmEvent } from "./driftAlarmEvent";
 import { DRIFT_ALARM_CANDIDATE_PROBE_REASONS, type DriftAlarmCandidateProbeReason, type DriftAlarmCandidateProbeSummary } from "./driftAlarmCandidateProbeTypes";
 import type { DriftAlarmCandidate } from "./driftAlarmData";
 import type { DriftAlarmTrayResult } from "./driftAlarmTrayStatus";
@@ -17,6 +17,9 @@ export const DRIFT_ALARM_DEBUG_LOG_RETENTION_MS = 5 * 60 * 1000;
 
 const DRIFT_ALARM_DEBUG_LOG_LIMIT = 200;
 const DIAGNOSTIC_TEXT_LIMIT = 240;
+const DIAGNOSTIC_URL_PATTERN = /\b[a-z][a-z0-9+.-]{1,31}:\/\/[^\s<>"']+/gi;
+const DIAGNOSTIC_ENCODED_URL_PATTERN = /\b[a-z][a-z0-9+.-]{1,31}(?:%(?:25)?3a|:)(?:%(?:25)?2f|\/){2}[^\s<>"']+/gi;
+const REDACTED_DIAGNOSTIC_URL = "[redacted-url]";
 
 const DRIFT_ALARM_DEBUG_EVENT_KINDS = [
   "evaluation_skipped",
@@ -471,7 +474,10 @@ function normalizeText(value: string | null | undefined): string | null {
 }
 
 function normalizeDiagnosticText(value: string | null | undefined): string | null {
-  const normalized = normalizeText(value);
+  const redacted = value
+    ?.replace(DIAGNOSTIC_URL_PATTERN, REDACTED_DIAGNOSTIC_URL)
+    .replace(DIAGNOSTIC_ENCODED_URL_PATTERN, REDACTED_DIAGNOSTIC_URL);
+  const normalized = normalizeText(redacted);
   if (!normalized) return null;
   return normalized.length > DIAGNOSTIC_TEXT_LIMIT
     ? `${normalized.slice(0, DIAGNOSTIC_TEXT_LIMIT - 3)}...`

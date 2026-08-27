@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DriftAlarmFocusTarget } from "./DriftAlarm";
+import type { DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import { isTauriRuntime } from "./watcherBridge";
 
 export function filterDefinitelyAvailableFocusTargets(

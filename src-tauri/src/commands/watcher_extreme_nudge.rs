@@ -1,8 +1,28 @@
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager};
 
-use super::drift_alarm::{DriftAlarmAction, DriftAlarmActionPayload};
 use super::watcher::watcher_peek_hide;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum DriftAlarmAction {
+    ReturnToFocus {
+        #[serde(rename = "targetId")]
+        target_id: String,
+    },
+    StartBreak {
+        minutes: i64,
+    },
+    ManualCorrection,
+    Settings,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriftAlarmActionPayload {
+    action: DriftAlarmAction,
+}
 
 const EXTREME_NUDGE_TOAST_WIDTH: f64 = 440.0;
 const EXTREME_NUDGE_TOAST_HEIGHT: f64 = 212.0;

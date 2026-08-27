@@ -20,11 +20,11 @@
 
         window.__DRIFTY_RESOLVE_BOOT_SURFACE__ = () => {
           const datasetSurface = document.documentElement.dataset.surface;
-          if (datasetSurface === "watcher" || datasetSurface === "companion" || datasetSurface === "drift-alarm" || datasetSurface === "pet-mode") return datasetSurface;
+          if (datasetSurface === "watcher" || datasetSurface === "companion" || datasetSurface === "pet-mode") return datasetSurface;
 
           try {
             const querySurface = new URLSearchParams(window.location.search).get("driftySurface");
-            if (querySurface === "watcher" || querySurface === "companion" || querySurface === "drift-alarm" || querySurface === "pet-mode") return querySurface;
+            if (querySurface === "watcher" || querySurface === "companion" || querySurface === "pet-mode") return querySurface;
           } catch (_error) {}
 
           return "app";
@@ -34,7 +34,7 @@
         const theme = window.__DRIFTY_RESOLVE_BOOT_THEME__();
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
-        if (surface === "watcher" || surface === "companion" || surface === "drift-alarm" || surface === "pet-mode") {
+        if (surface === "watcher" || surface === "companion" || surface === "pet-mode") {
           document.documentElement.dataset.surface = surface;
         } else {
           document.documentElement.dataset.bootActive = "true";
@@ -71,8 +71,6 @@
       html[data-surface="watcher"] body,
       html[data-surface="companion"],
       html[data-surface="companion"] body,
-      html[data-surface="drift-alarm"],
-      html[data-surface="drift-alarm"] body,
       html[data-surface="pet-mode"],
       html[data-surface="pet-mode"] body {
         background: transparent;
@@ -86,11 +84,6 @@
         --drifty-boot-debug-edge: 0.25rem;
         --drifty-boot-debug-width: 18rem;
         --drifty-boot-debug-max-height: 6rem;
-      }
-      html[data-surface="drift-alarm"] {
-        --drifty-boot-debug-edge: 1rem;
-        --drifty-boot-debug-width: 22rem;
-        --drifty-boot-debug-max-height: 8.75rem;
       }
       html[data-surface="pet-mode"] {
         --drifty-boot-debug-edge: 0.5rem;
@@ -125,8 +118,7 @@
       }
       html[data-surface="watcher"] #boot-shell,
       html[data-surface="companion"] #boot-shell,
-      html[data-surface="pet-mode"] #boot-shell,
-      html[data-surface="drift-alarm"] #boot-shell {
+      html[data-surface="pet-mode"] #boot-shell {
         display: none;
       }
       .boot-loading__content {
@@ -212,8 +204,7 @@
       }
       html[data-surface="watcher"] .boot-error,
       html[data-surface="companion"] .boot-error,
-      html[data-surface="pet-mode"] .boot-error,
-      html[data-surface="drift-alarm"] .boot-error {
+      html[data-surface="pet-mode"] .boot-error {
         left: var(--drifty-boot-debug-edge);
         right: auto;
         top: auto;
@@ -239,7 +230,7 @@
       });
       window.addEventListener("unhandledrejection", (event) => {
         const surface = window.__DRIFTY_RESOLVE_BOOT_SURFACE__?.() ?? "app";
-        if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "companion" || surface === "drift-alarm" || surface === "pet-mode")) {
+        if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "companion" || surface === "pet-mode")) {
           event.preventDefault();
           document.getElementById("boot-error")?.remove();
           return;

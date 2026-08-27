@@ -97,10 +97,9 @@ pub(super) const COMPANION_PILL_MIN_REACHABLE_Y: f64 = 24.0;
 /// burst (see COMPANION_PILL_CONFETTI_SPREAD in CompanionPillMoment.tsx).
 pub(super) const COMPANION_PILL_GUTTER_X: f64 = 88.0;
 pub(super) const COMPANION_PILL_GUTTER_Y: f64 = 64.0;
-/// When the resident Companion is disabled, celebrations use the legacy watcher
-/// window but keep the exact capsule and confetti canvas. The outer window may
-/// extend into the screen edge; only the visible capsule is anchored in the
-/// work area, matching the resident panel.
+/// Standalone informational moments keep the exact capsule and confetti canvas.
+/// The outer window may extend into the screen edge; only the visible capsule
+/// is anchored in the work area, matching the resident panel.
 const STANDALONE_MILESTONE_WINDOW_WIDTH: f64 =
     COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0;
 const STANDALONE_MILESTONE_WINDOW_HEIGHT: f64 =
@@ -112,6 +111,7 @@ enum CompanionSurfacePolicy {
     Off = 0,
     Floating = 1,
     MenuBar = 2,
+    MomentsOnly = 3,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -135,21 +135,30 @@ impl CompanionSurfacePolicy {
         match value {
             1 => Self::Floating,
             2 => Self::MenuBar,
+            3 => Self::MomentsOnly,
             _ => Self::Off,
         }
     }
 
     fn parse(value: &str) -> Result<Self, String> {
         match value {
-            "off" => Ok(Self::Off),
+            /* Compatibility with older renderers: "off" now means that only
+            the resident surface is off. Alert moments must not fall back to
+            the watcher window after the full-screen alarm was retired. */
+            "off" => Ok(Self::MomentsOnly),
             "floating" => Ok(Self::Floating),
             "menuBar" => Ok(Self::MenuBar),
+            "momentsOnly" => Ok(Self::MomentsOnly),
             _ => Err(format!("unknown companion surface policy: {value}")),
         }
     }
 }
 
-static COMPANION_SURFACE_POLICY: AtomicU8 = AtomicU8::new(CompanionSurfacePolicy::Off as u8);
+/* The renderer replaces this during startup. Until then, keep the resident UI
+hidden but route any early alert/celebration through the compact Companion
+window instead of the legacy watcher fallback. */
+static COMPANION_SURFACE_POLICY: AtomicU8 =
+    AtomicU8::new(CompanionSurfacePolicy::MomentsOnly as u8);
 /// Invalidates a delayed menu-bar hide whenever a newer moment arrives. A
 /// dismissal and the next preview can otherwise cross on the main thread: the
 /// stale timer sees the old resting state and hides the newly prepared card.
@@ -393,14 +402,15 @@ pub fn watcher_peek_hide(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn watcher_companion_set_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
-    set_companion_surface_policy(
-        &app,
-        if enabled {
-            CompanionSurfacePolicy::Floating
-        } else {
-            CompanionSurfacePolicy::Off
-        },
-    )
+    set_companion_surface_policy(&app, companion_surface_policy_for_enabled(enabled))
+}
+
+fn companion_surface_policy_for_enabled(enabled: bool) -> CompanionSurfacePolicy {
+    if enabled {
+        CompanionSurfacePolicy::Floating
+    } else {
+        CompanionSurfacePolicy::MomentsOnly
+    }
 }
 
 #[tauri::command]
@@ -459,8 +469,8 @@ fn set_companion_surface_policy(
             }
             Ok(())
         }
-        CompanionSurfacePolicy::MenuBar => {
-            if previous != CompanionSurfacePolicy::MenuBar {
+        CompanionSurfacePolicy::MenuBar | CompanionSurfacePolicy::MomentsOnly => {
+            if previous != policy {
                 set_companion_pill_state("collapsed");
                 resize_companion_pill_window(&window, "collapsed")?;
                 position_companion_pill_under_menu_bar(app, &window, "collapsed")?;
@@ -898,7 +908,10 @@ fn companion_pill_enabled() -> bool {
 }
 
 fn companion_menu_bar_mode() -> bool {
-    companion_surface_policy() == CompanionSurfacePolicy::MenuBar
+    matches!(
+        companion_surface_policy(),
+        CompanionSurfacePolicy::MenuBar | CompanionSurfacePolicy::MomentsOnly
+    )
 }
 
 fn companion_surface_policy() -> CompanionSurfacePolicy {

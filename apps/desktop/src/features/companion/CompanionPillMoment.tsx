@@ -186,6 +186,7 @@ export function buildMilestoneSparks(tier: 1 | 2 | 3, seed: string): CSSProperti
 export function CompanionPillMoment({
   event,
   isActive = true,
+  autoDismissEnabled = true,
   isPointerInside = false,
   isDragging = false,
   onDismiss,
@@ -196,6 +197,7 @@ export function CompanionPillMoment({
 }: {
   event: CompanionPillMomentEvent;
   isActive?: boolean;
+  autoDismissEnabled?: boolean;
   isPointerInside?: boolean;
   isDragging?: boolean;
   onDismiss: (reason: CompanionPillDismissReason) => void;
@@ -218,7 +220,7 @@ export function CompanionPillMoment({
      still be "fresh" at the next lid-open hours later. Stale moments are
      consumed silently; producers rebuild them on the next evaluation. */
   useEffect(() => {
-    if (!isActive) return undefined;
+    if (!isActive || !autoDismissEnabled) return undefined;
     if (isCompanionMomentStale(event)) {
       onDismiss("auto");
       return undefined;
@@ -227,10 +229,10 @@ export function CompanionPillMoment({
       if (isCompanionMomentStale(event)) onDismiss("auto");
     }, 5_000);
     return () => window.clearInterval(interval);
-  }, [event, isActive, onDismiss]);
+  }, [autoDismissEnabled, event, isActive, onDismiss]);
 
   useEffect(() => {
-    if (!isActive || isPaused) return undefined;
+    if (!isActive || !autoDismissEnabled || isPaused) return undefined;
     /* Wall-clock time can move backwards when macOS corrects its clock or
        resumes from sleep. A negative elapsed duration used to add time back to
        the card exactly when hover paused it. performance.now() is monotonic,
@@ -247,13 +249,13 @@ export function CompanionPillMoment({
         startedAtRef.current = null;
       }
     };
-  }, [isActive, isPaused, onDismiss]);
+  }, [autoDismissEnabled, isActive, isPaused, onDismiss]);
 
   const holdHandlers = {
     onPointerEnter: () => setIsLocallyHovered(true),
     onPointerLeave: () => setIsLocallyHovered(false),
   };
-  const autoDismissState = isActive ? (isPaused ? "paused" : "running") : undefined;
+  const autoDismissState = isActive && autoDismissEnabled ? (isPaused ? "paused" : "running") : undefined;
   const autoDismissStyle = {
     "--auto-duration": `${budgetMs}ms`,
     "--auto-start-scale": 1,

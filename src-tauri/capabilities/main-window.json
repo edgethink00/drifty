@@ -147,8 +147,6 @@
     "allow-watcher-companion-set-enabled",
     "allow-watcher-companion-set-surface-policy",
     "allow-watcher-companion-update",
-    "allow-drift-alarm-show",
-    "allow-drift-alarm-hide",
     "core:event:allow-listen",
     "allow-pet-mode-resolve-drop"
   ]

@@ -11,6 +11,7 @@ import {
   type CompanionEngagementMetricKey,
 } from "./companionEngagementMetrics";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
+import { toCompanionDriftAlarmMoment } from "./CompanionDriftAlarmCard";
 import type { WatcherPeekEvent } from "./WatcherPeek";
 import {
   COMPANION_PILL_SIZES,
@@ -19,7 +20,11 @@ import {
   type CompanionPillState,
 } from "./companionPillLayout";
 import { openNativeCompanionPillMenu } from "./companionPillNativeMenu";
-import { buildCompanionDayReviewPreview, buildCompanionReentryPreview } from "./companionPillPreview";
+import {
+  buildCompanionDayReviewPreview,
+  buildCompanionDriftAlarmPreview,
+  buildCompanionReentryPreview,
+} from "./companionPillPreview";
 import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
 import {
@@ -549,22 +554,7 @@ function toCompanionPillMoment(event: CompanionPillWindowEvent): CompanionPillMo
   if ("kind" in event && event.kind === "milestone") return event;
   if ("kind" in event && event.kind === "reentry") return event;
   if (isCompanionDriftAlarmEvent(event)) {
-    const alarm = event.alarm;
-    const target = alarm.focusTargets[0] ?? null;
-    return {
-      kind: "driftAlarm",
-      mode: alarm.mode,
-      id: alarm.id,
-      title: alarm.copy?.title ?? `${alarm.driftDurationLabel} off track.`,
-      summary: alarm.copy?.summary ?? `${alarm.contextLabel} is outside your focus flow.`,
-      returnLabel: target
-        ? alarm.copy?.returnToFocusLabel ?? `Back to ${target.label}`
-        : alarm.copy?.backToDashboardLabel ?? "Open dashboard",
-      returnTargetId: target?.targetId ?? null,
-      breakLabel: alarm.copy?.breakChoiceLabel ?? "Take a break",
-      correctionLabel: alarm.copy?.manualCorrectionLabel ?? "Not a drift",
-      generatedAt: alarm.generatedAt,
-    };
+    return toCompanionDriftAlarmMoment(event.alarm);
   }
   return null;
 }
@@ -611,6 +601,12 @@ function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   const language = new URLSearchParams(window.location.search).get("driftyCompanionLanguage") === "ko"
     ? "ko"
     : "en";
+  if (preview === "drift-alarm") {
+    return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("drift-alarm"));
+  }
+  if (preview === "break-return") {
+    return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("break-return"));
+  }
   if (preview === "reentry") return buildCompanionReentryPreview(Date.now(), language);
   if (preview === "dayReview") return buildCompanionDayReviewPreview();
   return null;

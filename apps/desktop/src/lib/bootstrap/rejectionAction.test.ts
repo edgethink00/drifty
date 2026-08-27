@@ -35,7 +35,7 @@ describe("resolveRejectionPhase", () => {
 
 describe("resolveRejectionAction", () => {
   describe("startup phase (not bootstrapped) — every surface is fatal", () => {
-    (["app", "watcher", "companion", "drift-alarm", "privacy-review-concepts"] as const).forEach((surface) => {
+    (["app", "watcher", "companion", "privacy-review-concepts"] as const).forEach((surface) => {
       it(`treats a ${surface} rejection as startup-error`, () => {
         expect(resolveRejectionAction({ bootstrapped: false, surface })).toBe("startup-error");
       });
@@ -59,9 +59,6 @@ describe("resolveRejectionAction", () => {
       expect(resolveRejectionAction({ bootstrapped: true, surface: "companion" })).toBe("late-diagnostic");
     });
 
-    it("routes drift-alarm to the late diagnostic", () => {
-      expect(resolveRejectionAction({ bootstrapped: true, surface: "drift-alarm" })).toBe("late-diagnostic");
-    });
   });
 });
 

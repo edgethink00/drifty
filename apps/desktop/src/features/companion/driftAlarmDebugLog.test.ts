@@ -104,6 +104,29 @@ describe("drift alarm debug log", () => {
     expect(JSON.stringify(summary)).not.toContain("https://");
   });
 
+  it("redacts raw and encoded URLs from diagnostic text before storage", () => {
+    const storage = new MemoryStorage();
+    const now = new Date("2026-06-13T15:06:00.000Z");
+
+    recordDriftAlarmDebugEvent({
+      kind: "extreme_nudge_error",
+      reason: "browser_tab_not_found",
+      message: "Failed https://example.com/reset?token=secret, https%3A%2F%2Fexample.com%2Fprivate%3Fkey%3Dhidden, file%3A%2F%2FUsers%2Fprivate%2Fsecret.txt, https:%2F%2Fexample.com%2Fmixed%3Fsecret%3Dyes, drifty://private/path, and https%253A%252F%252Fexample.com%252Fdouble%253Fsecret%253Dyes",
+    }, storage, now);
+
+    const serialized = storage.getItem(DRIFT_ALARM_DEBUG_LOG_STORAGE_KEY) ?? "";
+    expect(serialized).toContain("browser_tab_not_found");
+    expect(serialized).toContain("[redacted-url]");
+    expect(serialized).not.toContain("token=secret");
+    expect(serialized).not.toContain("key%3Dhidden");
+    expect(serialized).not.toContain("secret.txt");
+    expect(serialized).not.toContain("secret%3Dyes");
+    expect(serialized).not.toContain("private/path");
+    expect(serialized).not.toContain("double%253Fsecret");
+    expect(serialized).not.toContain("https://");
+    expect(serialized.toLowerCase()).not.toContain("https%3a%2f%2f");
+  });
+
   it("keeps only the recent five minute alarm diagnostics", () => {
     const storage = new MemoryStorage();
     const oldDate = new Date("2026-06-13T15:00:00.000Z");

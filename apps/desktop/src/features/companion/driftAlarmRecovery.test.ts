@@ -2,7 +2,7 @@
 
 import type { ActivitySegment } from "@drifty/domain";
 import { afterEach, describe, expect, it } from "vitest";
-import type { DriftAlarmEvent } from "./DriftAlarm";
+import type { DriftAlarmEvent } from "./driftAlarmEvent";
 import {
   DRIFT_ALARM_INTERACTION_STORAGE_KEY,
   buildBreakRecoveryAttempt,

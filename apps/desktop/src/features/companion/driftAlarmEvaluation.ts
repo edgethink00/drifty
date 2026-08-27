@@ -1,6 +1,6 @@
 import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 import { mergeActivitySegments } from "../../lib/activitySegments";
-import { formatLocalDateTime, getLogicalDayRange, toErrorMessage } from "../../lib/formatting";
+import { formatLocalDateTime, getLogicalDayRange } from "../../lib/formatting";
 
 export const DRIFT_ALARM_TIMELINE_LOOKBACK_MS = 30 * 60 * 1000;
 export const DRIFT_ALARM_SOURCE_SEGMENT_CACHE_LIMIT = 20;
@@ -29,15 +29,6 @@ export function pruneExpiredDriftAlarmAiRetries(retryAfterByKey: Map<string, num
   for (const [key, retryAfterMs] of retryAfterByKey) {
     if (retryAfterMs <= nowMs) retryAfterByKey.delete(key);
   }
-}
-
-export function extremeNudgeErrorDiagnostic(error: unknown): string | null {
-  const message = toErrorMessage(error);
-  const separatorIndex = message.lastIndexOf(": ");
-  if (separatorIndex < 0) return null;
-
-  const diagnostic = message.slice(separatorIndex + 2).trim();
-  return /^[a-z0-9_]+$/.test(diagnostic) ? diagnostic : null;
 }
 
 export function getDriftAlarmPollTimelineRange(day: string, startOfDayMinutes: number): { start: string; end: string } {

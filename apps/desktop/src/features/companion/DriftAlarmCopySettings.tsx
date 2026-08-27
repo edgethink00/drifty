@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import {
-  DriftAlarm,
   buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
   type DriftAlarmEvent,
   type DriftAlarmFocusTarget,
-} from "./DriftAlarm";
+} from "./driftAlarmEvent";
+import { CompanionDriftAlarmCard } from "./CompanionDriftAlarmCard";
 import { DriftAlarmSourceIcon } from "./DriftAlarmSourceIcon";
 import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
@@ -160,7 +160,13 @@ export function DriftAlarmCopySettings({
               <aside className="drift-copy-preview" role="complementary" aria-label={t("settings.alarmCopy.previewAria")}>
                 {previewEvent ? (
                   <div className="drift-copy-preview__alarm">
-                    <DriftAlarm event={previewEvent} onAction={ignorePreviewAction} isPreview />
+                    <CompanionDriftAlarmCard
+                      event={previewEvent}
+                      isPreview
+                      onAction={ignorePreviewAction}
+                      onDismiss={ignorePreviewAction}
+                      onOpenDashboard={ignorePreviewAction}
+                    />
                   </div>
                 ) : null}
                 {activeSectionKey === "notification" ? (

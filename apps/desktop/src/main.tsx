@@ -106,14 +106,6 @@ function BootstrapLoader() {
           return;
         }
 
-        if (nextSurface === "drift-alarm") {
-          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing drift alarm module…");
-          const mod = await import("./features/companion/DriftAlarmWindowApp");
-          window.__DRIFTY_SET_BOOT_STATUS__?.("Drift alarm module imported");
-          setLoadedApp(() => mod.DriftAlarmWindowApp);
-          return;
-        }
-
         if (nextSurface === "pet-mode") {
           window.__DRIFTY_SET_BOOT_STATUS__?.("Importing Pet Mode module…");
           const mod = await import("./features/pet-mode/PetModeWindowApp");
@@ -187,13 +179,11 @@ function resolveLocationSurface(location: Pick<Location, "pathname" | "search">)
   if (
     requestedSurface === "watcher"
     || requestedSurface === "companion"
-    || requestedSurface === "drift-alarm"
     || requestedSurface === "pet-mode"
   ) return requestedSurface;
   if (import.meta.env.DEV && requestedSurface === "privacy-review-concepts") return requestedSurface;
   if (location.pathname === "/watcher") return "watcher";
   if (location.pathname === "/companion") return "companion";
-  if (location.pathname === "/drift-alarm") return "drift-alarm";
   if (location.pathname === "/pet-mode") return "pet-mode";
   return "app";
 }
@@ -208,7 +198,6 @@ async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
     const label = getCurrentWindow().label;
     if (label === "watcher-peek") return "watcher";
     if (label === "companion-pill") return "companion";
-    if (label === "drift-alarm") return "drift-alarm";
     if (label === "pet-mode") return "pet-mode";
     return "app";
   } catch {
@@ -221,7 +210,6 @@ function resolveCurrentSurface(): ResolvedBootstrapSurface {
   if (
     documentSurface === "watcher"
     || documentSurface === "companion"
-    || documentSurface === "drift-alarm"
     || documentSurface === "pet-mode"
   ) {
     return documentSurface;

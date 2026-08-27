@@ -31,8 +31,8 @@ describe("DriftAlarmCopySettings", () => {
     expect(driftPreview.textContent).not.toContain("(now drifting)");
     expect(driftPreview.textContent).not.toContain("Latest focus");
     expect(driftPreview.textContent).not.toContain("Now youtube.com");
-    expect(driftPreview.querySelector(".da__drift-copy")).toBeTruthy();
-    expect(driftPreview.querySelector(".da__context")).toBeNull();
+    expect(driftPreview.querySelector(".companion-drift-alarm-card .view--drift")).toBeTruthy();
+    expect(driftPreview.querySelector(".drift-alarm-backdrop")).toBeNull();
 
     fireEvent.click(within(dialog).getByRole("tab", { name: "Break return" }));
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();

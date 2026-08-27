@@ -50,7 +50,6 @@ describe("boot shell markup", () => {
 
     expect(bootShellRule).toContain('html[data-surface="watcher"] #boot-shell');
     expect(bootShellRule).toContain('html[data-surface="companion"] #boot-shell');
-    expect(bootShellRule).toContain('html[data-surface="drift-alarm"] #boot-shell');
     expect(bootShellRule).toContain('html[data-surface="pet-mode"] #boot-shell');
     expect(bootShellRule).toMatch(/\{\s*display:\s*none;/);
   });

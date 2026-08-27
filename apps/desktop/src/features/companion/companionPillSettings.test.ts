@@ -44,9 +44,9 @@ describe("Companion visibility settings", () => {
   it("uses the stored production preference unless Dev Floating or temporary hide overrides it", () => {
     expect(resolveEffectiveCompanionSurfacePolicy("menuBar", false, false)).toBe("menuBar");
     expect(resolveEffectiveCompanionSurfacePolicy("menuBar", true, false)).toBe("floating");
-    expect(resolveEffectiveCompanionSurfacePolicy("menuBar", true, true)).toBe("off");
+    expect(resolveEffectiveCompanionSurfacePolicy("menuBar", true, true)).toBe("momentsOnly");
     expect(resolveEffectiveCompanionSurfacePolicy("off", true, false)).toBe("floating");
-    expect(resolveEffectiveCompanionSurfacePolicy("off", false, false)).toBe("off");
+    expect(resolveEffectiveCompanionSurfacePolicy("off", false, false)).toBe("momentsOnly");
   });
 
   it("migrates a stored Floating choice to the production menu bar", () => {

@@ -76,24 +76,17 @@ pub(super) fn close_browser_tab(
 
     let process_name = browser_process_name(browser_name).ok_or_else(|| {
         ExtremeNudgeError::BrowserTabNotFound {
-            target: browser_name.to_string(),
             diagnostic: "windows_uia_unsupported_browser".to_string(),
         }
     })?;
     let browser_identity =
         normalized_browser_identity(browser_identity, browser_name, process_name)?;
-    let target = site_url.or(site_domain).unwrap_or("unknown target");
-    let powershell =
-        trusted_powershell_path().map_err(|diagnostic| ExtremeNudgeError::BrowserTabNotFound {
-            target: target.to_string(),
-            diagnostic,
+    let powershell = trusted_powershell_path()
+        .map_err(|diagnostic| ExtremeNudgeError::BrowserTabNotFound { diagnostic })?;
+    let script =
+        TemporaryPowerShellScript::create().map_err(|_| ExtremeNudgeError::BrowserTabNotFound {
+            diagnostic: "windows_uia_script_create_failed".to_string(),
         })?;
-    let script = TemporaryPowerShellScript::create().map_err(|error| {
-        ExtremeNudgeError::BrowserTabNotFound {
-            target: target.to_string(),
-            diagnostic: format!("windows_uia_script_create_failed:{error}"),
-        }
-    })?;
     let mut command = Command::new(powershell);
     command
         .args([
@@ -114,9 +107,8 @@ pub(super) fn close_browser_tab(
         .creation_flags(CREATE_NO_WINDOW);
     let mut child = command
         .spawn()
-        .map_err(|error| ExtremeNudgeError::BrowserTabNotFound {
-            target: target.to_string(),
-            diagnostic: format!("windows_uia_spawn_failed:{error}"),
+        .map_err(|_| ExtremeNudgeError::BrowserTabNotFound {
+            diagnostic: "windows_uia_spawn_failed".to_string(),
         })?;
     let deadline = Instant::now() + SCRIPT_TIMEOUT;
     loop {
@@ -127,16 +119,14 @@ pub(super) fn close_browser_tab(
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(ExtremeNudgeError::BrowserTabNotFound {
-                    target: target.to_string(),
                     diagnostic: "windows_uia_timeout".to_string(),
                 });
             }
-            Err(error) => {
+            Err(_) => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(ExtremeNudgeError::BrowserTabNotFound {
-                    target: target.to_string(),
-                    diagnostic: format!("windows_uia_wait_failed:{error}"),
+                    diagnostic: "windows_uia_wait_failed".to_string(),
                 });
             }
         }
@@ -148,7 +138,6 @@ pub(super) fn close_browser_tab(
     }
     let parsed = serde_json::from_slice::<WindowsTabCloseResult>(&stdout).map_err(|_| {
         ExtremeNudgeError::BrowserTabNotFound {
-            target: target.to_string(),
             diagnostic: "windows_uia_invalid_response".to_string(),
         }
     })?;
@@ -158,7 +147,6 @@ pub(super) fn close_browser_tab(
             .unwrap_or_else(|| "windows_uia_closed_tab".to_string()));
     }
     Err(ExtremeNudgeError::BrowserTabNotFound {
-        target: target.to_string(),
         diagnostic: failure_diagnostic(parsed),
     })
 }
@@ -241,7 +229,6 @@ fn normalized_browser_identity(
     };
     if !path.is_absolute() || !matches_process || !browser_identity_matches {
         return Err(ExtremeNudgeError::BrowserTabNotFound {
-            target: identity.to_string(),
             diagnostic: "windows_uia_invalid_browser_identity".to_string(),
         });
     }

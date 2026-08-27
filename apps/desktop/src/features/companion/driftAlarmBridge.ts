@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { DriftAlarmAction, DriftAlarmBreakReturnDetails, DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
+import type { DriftAlarmAction, DriftAlarmBreakReturnDetails, DriftAlarmEvent, DriftAlarmFocusTarget } from "./driftAlarmEvent";
+import { ExtremeNudgeApplyError, normalizeExtremeNudgeDiagnostic, normalizeExtremeNudgeFailure } from "./extremeNudgeFailure";
 import { isTauriRuntime } from "./watcherBridge";
 
 type UnlistenFn = () => void;
@@ -19,30 +20,14 @@ export type ExtremeNudgeApplyResult = {
   readonly diagnostic: string | null;
 };
 
+type NativeExtremeNudgeOutcome = {
+  readonly kind: "closed_browser_tab" | "terminated_app";
+  readonly diagnostic?: unknown;
+};
+
 type DriftAlarmActionEvent = {
   action: unknown;
 };
-
-export async function showNativeDriftAlarm(event: DriftAlarmEvent): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
-  await invoke("drift_alarm_show", { payload: event });
-  return true;
-}
-
-export async function hideNativeDriftAlarm(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("drift_alarm_hide");
-}
-
-export async function dismissNativeDriftAlarm(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("drift_alarm_dismiss");
-}
-
-export async function triggerNativeDriftAlarmAction(action: DriftAlarmAction): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("drift_alarm_action", { action });
-}
 
 export async function applyNativeExtremeNudge(target: ExtremeNudgeTarget): Promise<ExtremeNudgeApplyResult> {
   if (!isTauriRuntime()) {
@@ -51,36 +36,25 @@ export async function applyNativeExtremeNudge(target: ExtremeNudgeTarget): Promi
       diagnostic: "not_tauri_runtime",
     };
   }
-  const outcome = await invoke<unknown>("extreme_nudge_apply", { target });
+  try {
+    const outcome = await invoke<unknown>("extreme_nudge_apply", { target });
+    const result = normalizeNativeExtremeNudgeOutcome(outcome);
+    if (result) return result;
+    throw new ExtremeNudgeApplyError({ code: "internal_error", diagnostic: null });
+  } catch (error: unknown) {
+    if (error instanceof ExtremeNudgeApplyError) throw error;
+    throw new ExtremeNudgeApplyError(normalizeExtremeNudgeFailure(error));
+  }
+}
+
+export function normalizeNativeExtremeNudgeOutcome(value: unknown): ExtremeNudgeApplyResult | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<NativeExtremeNudgeOutcome>;
+  if (candidate.kind !== "closed_browser_tab" && candidate.kind !== "terminated_app") return null;
   return {
     applied: true,
-    diagnostic: nativeExtremeNudgeDiagnostic(outcome),
+    diagnostic: normalizeExtremeNudgeDiagnostic(candidate.diagnostic),
   };
-}
-
-function nativeExtremeNudgeDiagnostic(value: unknown): string | null {
-  if (!value || typeof value !== "object") return null;
-  const diagnostic = Reflect.get(value, "diagnostic");
-  if (typeof diagnostic !== "string") return null;
-  return normalizeExtremeNudgeDiagnostic(diagnostic);
-}
-
-function normalizeExtremeNudgeDiagnostic(value: string): string | null {
-  const normalized = value.trim();
-  return normalized ? normalized : null;
-}
-
-export async function getNativeDriftAlarmCurrent(): Promise<DriftAlarmEvent | null> {
-  if (!isTauriRuntime()) return null;
-  const payload = await invoke<unknown>("drift_alarm_current");
-  return isDriftAlarmEvent(payload) ? payload : null;
-}
-
-export async function listenToNativeDriftAlarmShow(onShow: (event: DriftAlarmEvent) => void): Promise<UnlistenFn | null> {
-  if (!isTauriRuntime()) return null;
-  return listen<DriftAlarmEvent>("drift-alarm-show", ({ payload }) => {
-    if (isDriftAlarmEvent(payload)) onShow(payload);
-  });
 }
 
 export async function listenToNativeDriftAlarmAction(onAction: (action: DriftAlarmAction) => void): Promise<UnlistenFn | null> {

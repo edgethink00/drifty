@@ -2099,7 +2099,6 @@ fn pet_excluded_window_ids(app: &AppHandle) -> Vec<i64> {
         PET_MODE_WINDOW_LABEL,
         "watcher-peek",
         "companion-pill",
-        "drift-alarm",
     ]
     .into_iter()
     .filter_map(|label| app.get_webview_window(label))

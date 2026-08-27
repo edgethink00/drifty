@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isDriftAlarmEvent } from "./driftAlarmBridge";
-import type { DriftAlarmEvent } from "./DriftAlarm";
+import { isDriftAlarmEvent, normalizeNativeExtremeNudgeOutcome } from "./driftAlarmBridge";
+import type { DriftAlarmEvent } from "./driftAlarmEvent";
 
 const focusTarget = {
   targetId: "app:com.microsoft.VSCode",
@@ -31,6 +31,18 @@ const driftEvent = {
 } satisfies DriftAlarmEvent;
 
 describe("driftAlarmBridge validation", () => {
+  it("accepts only verified native automatic-close outcomes", () => {
+    expect(normalizeNativeExtremeNudgeOutcome({
+      kind: "closed_browser_tab",
+      diagnostic: "chromium_exact_url",
+    })).toEqual({ applied: true, diagnostic: "chromium_exact_url" });
+    expect(normalizeNativeExtremeNudgeOutcome({ kind: "terminated_app", diagnostic: null }))
+      .toEqual({ applied: true, diagnostic: null });
+    expect(normalizeNativeExtremeNudgeOutcome(null)).toBeNull();
+    expect(normalizeNativeExtremeNudgeOutcome({ diagnostic: "closed_browser_tab" })).toBeNull();
+    expect(normalizeNativeExtremeNudgeOutcome({ kind: "unexpected", diagnostic: "closed_browser_tab" })).toBeNull();
+  });
+
   it("accepts drift and break-return native payloads", () => {
     const breakReturnEvent = {
       ...driftEvent,

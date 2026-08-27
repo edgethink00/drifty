@@ -1,6 +1,6 @@
 import { classifyActivity } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions } from "@drifty/domain";
-import type { DriftAlarmAction, DriftAlarmEvent } from "./DriftAlarm";
+import type { DriftAlarmAction, DriftAlarmEvent } from "./driftAlarmEvent";
 import type { DriftAlarmCandidate } from "./driftAlarmData";
 import { BREAK_ASSESSMENT_WINDOW_MS } from "./driftAlarmRecoveryTypes";
 import type { BreakRecoveryOutcome, DriftAlarmBreakAttempt, DriftAlarmBreakSnooze, DriftAlarmRecoverySource } from "./driftAlarmRecoveryTypes";

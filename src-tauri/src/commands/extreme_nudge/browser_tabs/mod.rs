@@ -54,7 +54,6 @@ pub(super) fn close_browser_tab(
     site_domain: Option<&str>,
     force_chromium_ax_tab_close: bool,
 ) -> Result<String, ExtremeNudgeError> {
-    let target_label = site_url.or(site_domain).unwrap_or("unknown target");
     let script = tab_close_script(
         browser_name,
         site_url.unwrap_or(""),
@@ -62,7 +61,6 @@ pub(super) fn close_browser_tab(
         force_chromium_ax_tab_close,
     )
     .ok_or_else(|| ExtremeNudgeError::BrowserTabNotFound {
-        target: target_label.to_string(),
         diagnostic: "unsupported_browser".to_string(),
     })?;
     let output = run_osascript(&script)?;
@@ -80,7 +78,6 @@ pub(super) fn close_browser_tab(
     }
 
     Err(ExtremeNudgeError::BrowserTabNotFound {
-        target: target_label.to_string(),
         diagnostic: result.diagnostic().to_string(),
     })
 }

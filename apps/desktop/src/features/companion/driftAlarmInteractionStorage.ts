@@ -1,6 +1,6 @@
 import { DRIFT_ALARM_INTERACTION_STORAGE_KEY, INTERACTION_LOG_LIMIT } from "./driftAlarmRecoveryTypes";
 import type { BreakRecoveryOutcome, DriftAlarmActionName, DriftAlarmBreakOutcomeInteraction, DriftAlarmInteraction } from "./driftAlarmRecoveryTypes";
-import type { DriftAlarmEvent } from "./DriftAlarm";
+import type { DriftAlarmEvent } from "./driftAlarmEvent";
 
 export function recordDriftAlarmInteraction(entry: DriftAlarmInteraction, storage = browserStorage()): DriftAlarmInteraction[] {
   if (!storage) return [];

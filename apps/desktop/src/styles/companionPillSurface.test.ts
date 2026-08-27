@@ -137,6 +137,16 @@ describe("companion pill surface", () => {
     expect(pillStyles).toContain("--drift-actions-delay: .14s;");
   });
 
+  it("bounds user-authored decision copy before it can displace the action row", () => {
+    const title = cssRule('.companion-pill-surface :is(.view--drift, .view--nudge) .card__title');
+    const summary = cssRule('.companion-pill-surface :is(.view--drift, .view--nudge) .card__sub');
+
+    expect(title).toContain("overflow: hidden;");
+    expect(title).toContain("-webkit-line-clamp: 2;");
+    expect(summary).toContain("text-overflow: ellipsis;");
+    expect(summary).toContain("white-space: nowrap;");
+  });
+
   it("reveals the day review in reading order and exits it in reverse", () => {
     expect(pillStyles).toContain("@keyframes companionEodLayerIn");
     expect(pillStyles).toContain("@keyframes companionEodLayerOut");

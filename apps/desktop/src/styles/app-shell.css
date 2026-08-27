@@ -9,8 +9,7 @@
   /* Desktop blur comes from the native window effect configured in
      tauri.conf.json (app.windows[].windowEffects). A CSS backdrop-filter on a
      transparent macOS webview intermittently loses its sampled backdrop during
-     window compositing and read as sidebar flicker; see the drift-alarm
-     precedent in src-tauri/src/commands/drift_alarm.rs. Keep only the tint
+     window compositing and read as sidebar flicker. Keep only the tint
      here so the material and the tint never both apply frost. */
   isolation: isolate;
   transition: grid-template-columns var(--sidebar-duration) var(--sidebar-ease);
@@ -34,7 +33,7 @@
 /* Browser-only fallback: outside the native shell there is no window material,
    so without this the sidebar would render as a flat tint. The compositing bug
    this change works around is specific to the transparent native webview, so
-   the CSS blur is safe here (same split as the drift-alarm browser backdrop). */
+   the CSS blur is safe here because the native shell is absent. */
 :root[data-runtime="browser"] .app-shell {
   --shell-glass-bg: rgba(237, 239, 236, 0.78);
   backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);

@@ -1,4 +1,4 @@
-import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./DriftAlarm";
+import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import { isTauriRuntime } from "./watcherBridge";
 import { classifyActivity, classifyActivityDetailed } from "@drifty/domain";
 import type { ActivityCategory, ActivityClassificationDetail, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
