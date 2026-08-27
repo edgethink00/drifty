@@ -439,7 +439,7 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText("alex@example.com")).toBeNull();
   });
 
-  it("renders join and leave participation controls in the same persistent hero action slot", () => {
+  it("renders join and leave participation controls in the same compact hero action slot", () => {
     const { rerender } = renderView({
       isOptedIn: false,
       profileDisplayName: "Alex",
@@ -450,9 +450,14 @@ describe("LeaderboardView", () => {
     const optedOutHero = screen.getByLabelText(/your leaderboard participation/i);
     const joinButton = within(optedOutHero).getByRole("button", { name: /join leaderboard/i });
     const joinActions = joinButton.closest(".leaderboard-hero__participation-slot");
+    const joinActionRow = joinActions?.closest(".leaderboard-hero__action-row") as HTMLElement | null;
 
     expect(joinActions).not.toBeNull();
     expect(joinActions?.contains(joinButton)).toBe(true);
+    expect(joinActionRow).not.toBeNull();
+    expect(optedOutHero.style.gap).toBe("var(--space-2)");
+    expect(joinActionRow?.style.paddingTop).toBe("");
+    expect(joinActionRow?.style.borderTop).toBe("");
 
     rerender(
       <LeaderboardView
@@ -475,10 +480,15 @@ describe("LeaderboardView", () => {
     const optedInHero = screen.getByLabelText(/your leaderboard participation/i);
     const leaveButton = within(optedInHero).getByRole("button", { name: /leave leaderboard/i });
     const leaveActions = leaveButton.closest(".leaderboard-hero__participation-slot");
+    const leaveActionRow = leaveActions?.closest(".leaderboard-hero__action-row") as HTMLElement | null;
 
     expect(leaveActions).not.toBeNull();
     expect(leaveActions?.contains(leaveButton)).toBe(true);
     expect(joinActions?.className).toBe(leaveActions?.className);
+    expect(joinActionRow?.className).toBe(leaveActionRow?.className);
+    expect(optedInHero.style.gap).toBe("var(--space-2)");
+    expect(leaveActionRow?.style.paddingTop).toBe("");
+    expect(leaveActionRow?.style.borderTop).toBe("");
   });
 
   it("falls back to the email prefix in the opted-out preview when no profile name is provided", () => {

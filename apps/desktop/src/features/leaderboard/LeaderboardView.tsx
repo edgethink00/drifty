@@ -136,7 +136,7 @@ export function LeaderboardView({
           <section
             className="leaderboard-hero"
             aria-label="Your leaderboard participation"
-            style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
+            style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", alignItems: "stretch" }}
           >
             <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
               <div
@@ -220,7 +220,8 @@ export function LeaderboardView({
             </div>
 
             <div
-              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", paddingTop: "var(--space-3)", borderTop: "1px solid color-mix(in srgb, var(--line) 76%, transparent)" }}
+              className="leaderboard-hero__action-row"
+              style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}
             >
               <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
                 {!isParticipationResolved ? (
