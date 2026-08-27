@@ -209,5 +209,44 @@ describe("sidebar motion styles", () => {
     expect(settingsBackBlock).toContain("padding: 0.5rem var(--sidebar-row-inline-padding);");
     expect(settingsHeadingBlock).toContain("padding: 0.38rem var(--sidebar-row-inline-padding) 0.62rem;");
     expect(settingsNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
+    expect(settingsNavItemBlock).not.toContain("overflow: hidden;");
+    expect(settingsNavItemBlock).not.toContain("text-overflow: ellipsis;");
+    expect(settingsNavItemBlock).not.toContain("white-space: nowrap;");
+  });
+
+  it("centers settings nav glyphs in a square slot and ellipsizes the label", () => {
+    const styles = readStyles();
+    const settingsNavItemBlock = cssBlock(styles, ".settings-nav-item");
+    const iconBlock = cssBlock(styles, ".settings-nav-item__icon");
+    const iconSvgBlock = cssBlock(styles, ".settings-nav-item__icon svg");
+    const labelBlock = cssBlock(styles, ".settings-nav-item__label");
+    const settingsRowBlock = cssBlock(styles, ".sidebar--settings .settings-nav-item");
+
+    expect(settingsNavItemBlock).toContain("display: flex;");
+    expect(settingsNavItemBlock).toContain("align-items: center;");
+    expect(iconBlock).toContain("display: inline-flex;");
+    expect(iconBlock).toContain("width: 16px;");
+    expect(iconBlock).toContain("height: 16px;");
+    expect(iconBlock).toContain("flex: 0 0 16px;");
+    expect(iconBlock).toContain("align-items: center;");
+    expect(iconBlock).toContain("justify-content: center;");
+    expect(iconBlock).toContain("line-height: 0;");
+    expect(iconBlock).toContain("overflow: visible;");
+    expect(iconSvgBlock).toContain("width: 15px;");
+    expect(iconSvgBlock).toContain("height: 15px;");
+    expect(iconSvgBlock).toContain("display: block;");
+    expect(iconSvgBlock).toContain("overflow: visible;");
+    expect(iconSvgBlock).toContain("transform: translateY(0.5px);");
+    expect(labelBlock).toContain("min-width: 0;");
+    expect(labelBlock).toContain("display: flex;");
+    expect(labelBlock).toContain("align-items: center;");
+    expect(labelBlock).toContain("height: 16px;");
+    expect(labelBlock).toContain("overflow: hidden;");
+    expect(labelBlock).toContain("text-overflow: ellipsis;");
+    expect(labelBlock).toContain("white-space: nowrap;");
+    expect(labelBlock).toContain("line-height: 1;");
+    expect(settingsRowBlock).not.toContain("overflow: hidden;");
+    expect(settingsRowBlock).not.toContain("text-overflow: ellipsis;");
+    expect(settingsRowBlock).not.toContain("white-space: nowrap;");
   });
 });

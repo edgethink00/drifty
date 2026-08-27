@@ -82,4 +82,28 @@ describe("SettingsSidebar", () => {
     expect(hoverLabel?.textContent).toBe("General");
     expect(hoverLabel?.getAttribute("aria-hidden")).toBe("true");
   });
+
+  it("gives every settings nav item a dedicated icon slot and label", () => {
+    render(<SettingsSidebar activeSection="appearance" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    const navItems = within(settingsNav).getAllByRole("button");
+
+    expect(navItems.length).toBeGreaterThan(0);
+    for (const item of navItems) {
+      expect(item.querySelector(".settings-nav-item__icon")).toBeTruthy();
+      expect(item.querySelector(".settings-nav-item__label")).toBeTruthy();
+    }
+  });
+
+  it("uses the Lucide palette glyph for Appearance", () => {
+    render(<SettingsSidebar activeSection="appearance" isCollapsed={false} showDevSection={false} onBack={vi.fn()} onSectionChange={vi.fn()} />);
+
+    const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
+    const appearanceButton = within(settingsNav).getByRole("button", { name: /^Appearance$/ });
+    const appearanceIcon = appearanceButton.querySelector(".settings-nav-item__icon svg");
+
+    expect(appearanceIcon?.innerHTML).toContain('d="M12 22a1 1 0 0 1 0-20');
+    expect(appearanceIcon?.innerHTML).not.toContain("M12 3.5a8.5 8.5 0 0 1 0 17z");
+  });
 });

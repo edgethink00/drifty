@@ -82,9 +82,6 @@
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1.1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .settings-nav {
@@ -116,9 +113,13 @@
 
 .settings-nav-item__icon {
   display: inline-flex;
-  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
   align-items: center;
   justify-content: center;
+  line-height: 0;
+  overflow: visible;
   color: color-mix(in srgb, var(--text) 55%, transparent);
   transition: color .15s;
 }
@@ -126,6 +127,21 @@
 .settings-nav-item__icon svg {
   width: 15px;
   height: 15px;
+  display: block;
+  overflow: visible;
+  /* Lucide 24-viewBox strokes sit slightly high in a 15px slot; nudge ink onto the label cap-height. */
+  transform: translateY(0.5px);
+}
+
+.settings-nav-item__label {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .settings-nav-item:hover {
