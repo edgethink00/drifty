@@ -15,6 +15,7 @@ import {
   type AiPrivacyRequestSettings,
 } from "./aiPrivacyRequestSettings";
 import { resolveInitialEnhancedContextSettings } from "./settingsStorage";
+import "./AiSetupPrivacyReview.css";
 
 type VisibleField = {
   readonly detailKey: TranslationKey;

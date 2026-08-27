@@ -18,7 +18,6 @@ function readAiSetupStyles(): string {
     "src/features/settings/AiSetupProviderDetails.css",
     "src/features/settings/AiSetupSupportSections.css",
     "src/features/settings/AiSetupWorkProfileSection.css",
-    "src/features/settings/AiSetupPrivacyReview.css",
     "src/features/settings/AiSetupPanelResponsive.css",
   ].map((path) => readFileSync(path, "utf8")).join("\n");
 }
@@ -325,13 +324,14 @@ describe("Settings content styles", () => {
     expect(privacySource).toContain('<h3>{t("settings.privacy.localData")}</h3>');
   });
 
-  it("shares one privacy review component between AI setup and Privacy settings", () => {
+  it("keeps the privacy review component in Privacy settings only", () => {
     const aiSetupSource = readFileSync("src/features/settings/AiSetupSupportSections.tsx", "utf8");
     const privacySource = readFileSync("src/features/settings/PrivacySettingsSection.tsx", "utf8");
 
-    expect(aiSetupSource).toContain("<AiPrivacyReview />");
+    expect(aiSetupSource).not.toContain("<AiPrivacyReview />");
     expect(privacySource).toContain("<AiPrivacyReview />");
   });
+
   it("keeps dark selected work-profile chips and the description field readable", () => {
     const aiSetupStyles = readAiSetupStyles();
     const selectedRule = cssRule(aiSetupStyles, ".ai-setup-work-choice--selected");

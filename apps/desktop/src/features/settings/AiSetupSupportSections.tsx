@@ -1,13 +1,12 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import { AiPrivacyReview } from "./AiPrivacyReview";
 import { AiSetupWorkProfileSection } from "./AiSetupWorkProfileSection";
 import { CollapsiblePanel } from "./CollapsiblePanel";
 import type { WorkProfileSettings } from "../onboarding/onboardingState";
 import { useLocalization } from "../localization/LocalizationContext";
 
-type AiSetupSupportSectionId = "workProfile" | "privacyReview";
+type AiSetupSupportSectionId = "workProfile";
 
 type AiSetupSupportSectionsProps = {
   readonly workProfileDraft: WorkProfileSettings;
@@ -41,16 +40,6 @@ export function AiSetupSupportSections({
           onSaveWorkProfile={onSaveWorkProfile}
           onWorkProfileDraftChange={onWorkProfileDraftChange}
         />
-      </AiSetupSupportSection>
-
-      <AiSetupSupportSection
-        id="privacyReview"
-        expanded={expandedSection === "privacyReview"}
-        subtitle={t("settings.aiPrivacy.intro")}
-        title={t("settings.ai.privacyReview")}
-        onToggle={setExpandedSection}
-      >
-        <AiPrivacyReview />
       </AiSetupSupportSection>
     </div>
   );
