@@ -426,6 +426,17 @@
   column-gap: calc(var(--space-1) * 1.5);
 }
 
+.dashboard-page-head__primary {
+  align-items: center;
+  display: flex;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.dashboard-page-head__primary > .app-btn {
+  flex-shrink: 0;
+}
+
 /* Focus-only concepts intentionally use one readable sentence-sized line.
    They do not add a second metric row, chart, or comparison treatment. */
 .dashboard-page-head__summary {

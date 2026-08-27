@@ -135,7 +135,10 @@ describe("DashboardPage demo replay empty data", () => {
       totalSeconds: 3_600,
     });
 
-    expect(screen.getByRole("button", { name: "Share" })).toBeTruthy();
+    const shareButton = screen.getByRole("button", { name: "Share" });
+    expect(shareButton).toBeTruthy();
+    expect(document.querySelector(".dashboard-page-head__primary")?.contains(shareButton)).toBe(true);
+    expect(document.querySelector(".dashboard-page-head__side")?.contains(shareButton)).toBe(false);
   });
 });
 
