@@ -1345,6 +1345,244 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
+  it("keeps a focused sitting cat continuous through pickup and release", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 34, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("drag");
+    expect(cat.getAttribute("data-region-id")).toBe("drag:sit");
+    expect(cat.querySelector(".pet-mode-cat__drag-pending-rest .pet-mode-cat__sit-pose")).toBeTruthy();
+    expect(cat.querySelector('.pet-mode-cat__drag-pending-rest img[src="/pet-mode/paw/f001.png"]')).toBeNull();
+
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    expect(cat.getAttribute("data-region-id")).toBe("release:sit");
+    expect(cat.querySelector(".pet-mode-cat__release-rest .pet-mode-cat__sit-pose")).toBeTruthy();
+    expect(cat.querySelector('.pet-mode-cat__release-rest img[src="/pet-mode/paw/f001.png"]')).toBeNull();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
+  });
+
+  it("retargets an in-flight release when focus starts without interrupting the drop", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 35, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
+    const cancellationCount = bridge.cancelNativePetMotion.mock.calls.length;
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    expect(cat.getAttribute("data-region-id")).toBe("release:sit");
+    expect(cat.querySelector(".pet-mode-cat__release-rest .pet-mode-cat__sit-pose")).toBeTruthy();
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(cancellationCount);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+  });
+
+  it("retargets an in-flight focused release when focus ends without interrupting the drop", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 36, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    expect(cat.getAttribute("data-region-id")).toBe("release:sit");
+    const cancellationCount = bridge.cancelNativePetMotion.mock.calls.length;
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "neutral", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
+    expect(cat.querySelector('.pet-mode-cat__release-rest img[src="/pet-mode/paw/f001.png"]')).toBeTruthy();
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(cancellationCount);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("uses an immediate held-to-sit handoff for focused reduced-motion drags", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 37, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(18, 18, 0);
+    expect(cat.getAttribute("data-region-id")).toBe("drag:sit");
+
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(bridge.resolveNativePetDrop).not.toHaveBeenCalled();
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets focus take over after an explicit stop cancels an in-flight release", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 38, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "stop" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+  });
+
   it("lets a drag take over from native movement without clicking through to the dashboard", async () => {
     vi.useFakeTimers();
     let phaseAtNativeCommandStart: string | null = null;

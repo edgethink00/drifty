@@ -301,23 +301,27 @@
   opacity: 0;
   pointer-events: none;
 }
-.pet-mode-cat__drag-pending-idle,
+.pet-mode-cat__drag-pending-rest,
 .pet-mode-cat__drag-pending-held { will-change: transform, opacity; }
-.pet-mode-cat__drag-pending-idle {
-  animation: pet-mode-drag-idle-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
+.pet-mode-cat__drag-pending-rest {
+  position: absolute;
+  inset: 0;
+  animation: pet-mode-drag-rest-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
 }
 .pet-mode-cat__drag-pending-held {
   animation: pet-mode-drag-held-handoff var(--pet-drag-pickup-duration) steps(1, end) both;
 }
 .pet-mode-cat__release-held,
-.pet-mode-cat__release-idle { will-change: transform, opacity; }
+.pet-mode-cat__release-rest { will-change: transform, opacity; }
 .pet-mode-cat__release-held {
   z-index: 1;
-  animation: pet-mode-release-held var(--pet-drag-release-duration) linear both;
+  animation: pet-mode-release-held var(--pet-drag-release-duration) steps(1, end) both;
 }
-.pet-mode-cat__release-idle {
+.pet-mode-cat__release-rest {
+  position: absolute;
+  inset: 0;
   z-index: 0;
-  animation: pet-mode-release-idle var(--pet-drag-release-duration) linear both;
+  animation: pet-mode-release-rest var(--pet-drag-release-duration) steps(1, end) both;
 }
 /* Exact F12 extraction geometry from the approved HTML prototype. `contain`
    normalised the wide source crop, which made the paw reach look shortened. */
@@ -568,35 +572,44 @@
   50% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1.025); }
 }
 
+/* Release layering contract: like the pickup, this is a discrete
+   reviewed-frame swap (steps(1, end)), not a crossfade. The held sprite
+   (z-index 1) descends at full opacity, the rest pose (z-index 0) turns fully
+   opaque underneath it at the 55.13% boundary, and the held sprite cuts out
+   at that same boundary. The held contour is wider than the rest pose, so any
+   translucent held frame composites its overhang directly against the desktop
+   behind the transparent native window; the previous .72/.55 fade read as a
+   dark grey flicker on every drop. */
 @keyframes pet-mode-release-held {
   0% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
-  10.26% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: .99; }
-  20.51% { transform: translateX(-1px) translateY(-2px) scale(1.29); opacity: .97; }
-  32.05% { transform: translateX(-1px) translateY(-1px) scale(1.29); opacity: .72; }
-  43.59%, 100% { transform: translateX(-1px) translateY(0) scale(1.29); opacity: 0; }
+  10.26% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: 1; }
+  20.51% { transform: translateX(-1px) translateY(-2px) scale(1.29); opacity: 1; }
+  32.05% { transform: translateX(-1px) translateY(-1px) scale(1.29); opacity: 1; }
+  43.59% { transform: translateX(-1px) translateY(0) scale(1.29); opacity: 1; }
+  55.13%, 100% { transform: translateX(-1px) translateY(0) scale(1.29); opacity: 0; }
 }
 
-@keyframes pet-mode-drag-idle-handoff {
+/* Pickup layering contract mirrors the release one: the discrete steps(1)
+   swap hands the silhouette from the rest pose to the held sprite with both
+   sides at full opacity, because a translucent committed frame over the
+   transparent native window reads as a brightness dip, not a softening. */
+@keyframes pet-mode-drag-rest-handoff {
   0% { transform: translateY(0); opacity: 1; }
-  0.01%, 12.16% { transform: translateY(-1px); opacity: .99; }
-  12.17%, 24.31% { transform: translateY(-2px); opacity: .97; }
+  0.01%, 12.16% { transform: translateY(-1px); opacity: 1; }
+  12.17%, 24.31% { transform: translateY(-2px); opacity: 1; }
   24.32%, 100% { transform: translateY(-2px); opacity: 0; }
 }
 
 @keyframes pet-mode-drag-held-handoff {
   0%, 24.31% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: 0; }
-  24.32%, 35.13% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: .92; }
-  35.14%, 47.29% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: .95; }
-  47.30%, 59.45% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: .98; }
-  59.46%, 100% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
+  24.32%, 35.13% { transform: translateX(-1px) translateY(-3px) scale(1.29); opacity: 1; }
+  35.14%, 47.29% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
+  47.30%, 100% { transform: translateX(-1px) translateY(-4px) scale(1.29); opacity: 1; }
 }
 
-@keyframes pet-mode-release-idle {
-  0%, 32.05% { transform: translateY(0); opacity: 0; }
-  43.59% { transform: translateY(0); opacity: .55; }
-  55.13% { transform: translateY(0); opacity: .82; }
-  67.95% { transform: translateY(0); opacity: .96; }
-  82.05%, 100% { transform: translateY(0); opacity: 1; }
+@keyframes pet-mode-release-rest {
+  0%, 43.59% { transform: translateY(0); opacity: 0; }
+  55.13%, 100% { transform: translateY(0); opacity: 1; }
 }
 
 @keyframes pet-mode-release-shadow {
@@ -640,10 +653,10 @@
   .pet-mode-cat__eyes,
   .pet-mode-cat__vector-eye--gaze,
   .pet-mode-cat__toy,
-  .pet-mode-cat__drag-pending-idle,
+  .pet-mode-cat__drag-pending-rest,
   .pet-mode-cat__drag-pending-held,
   .pet-mode-cat__release-held,
-  .pet-mode-cat__release-idle,
+  .pet-mode-cat__release-rest,
   .pet-mode-cat__sit-eye-open,
   .pet-mode-cat__sit-eye-closed,
   .pet-mode-cat__walk-mouth {
@@ -658,6 +671,10 @@
   }
   .pet-mode-cat--blink .pet-mode-cat__blink-eye { opacity: 0; transform: scaleY(.08); }
   .pet-mode-cat--blink .pet-mode-cat__blink-lid { opacity: 1; }
+  .pet-mode-cat__drag-pending-rest,
+  .pet-mode-cat__release-held { opacity: 0; }
+  .pet-mode-cat__drag-pending-held,
+  .pet-mode-cat__release-rest { opacity: 1; }
 }
 
 

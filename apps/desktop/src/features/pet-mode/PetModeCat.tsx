@@ -34,6 +34,8 @@ type PetModeCatPhase =
   | "drag"
   | "release";
 
+type PetModeRestPose = "idle" | "sit";
+
 type WalkFramesFile = {
   readonly frames: readonly string[];
   readonly cycleSeconds: number;
@@ -63,6 +65,8 @@ export function PetModeCat({
   publishHitRegion = true,
   decorative = false,
   playfulPaw = false,
+  dragPickupPose = "idle",
+  dragReleasePose = "idle",
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -79,6 +83,8 @@ export function PetModeCat({
   readonly publishHitRegion?: boolean;
   readonly decorative?: boolean;
   readonly playfulPaw?: boolean;
+  readonly dragPickupPose?: PetModeRestPose;
+  readonly dragReleasePose?: PetModeRestPose;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -332,9 +338,13 @@ export function PetModeCat({
         ? `${phase}:${renderedLifeMotionFrame}`
         : phase === "happy"
           ? "happy"
-          : phase === "sit" || phase === "sleep" || phase === "drag" || phase === "release"
-          ? phase
-          : "idle";
+          : phase === "drag"
+            ? `drag:${dragPickupPose}`
+            : phase === "release"
+              ? `release:${dragReleasePose}`
+              : phase === "sit" || phase === "sleep"
+                ? phase
+                : "idle";
 
   useLayoutEffect(() => {
     if (decorative || !publishHitRegion) return;
@@ -490,12 +500,9 @@ export function PetModeCat({
           />
         ) : phase === "drag" ? (
           <>
-            <img
-              className="pet-mode-cat__raster pet-mode-cat__drag-pending-idle"
-              src="/pet-mode/paw/f001.png"
-              alt=""
-              draggable={false}
-            />
+            <span className="pet-mode-cat__drag-pending-rest">
+              <PetModeRestPoseArtwork pose={dragPickupPose} gazeOffset={gazeOffset} />
+            </span>
             <img
               className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__drag-pending-held"
               src={DRAG_SCRUFF_ASSET}
@@ -511,12 +518,9 @@ export function PetModeCat({
               alt=""
               draggable={false}
             />
-            <img
-              className="pet-mode-cat__raster pet-mode-cat__release-idle"
-              src="/pet-mode/paw/f001.png"
-              alt=""
-              draggable={false}
-            />
+            <span className="pet-mode-cat__release-rest">
+              <PetModeRestPoseArtwork pose={dragReleasePose} gazeOffset={gazeOffset} />
+            </span>
           </>
         ) : lifeMotionAsset ? (
           <img
@@ -574,6 +578,24 @@ export function PetModeCat({
       <span className="pet-mode-cat__zzz" aria-hidden="true">z</span>
       <span className="pet-mode-cat__alert" aria-hidden="true">!</span>
     </div>
+  );
+}
+
+function PetModeRestPoseArtwork({
+  pose,
+  gazeOffset,
+}: {
+  readonly pose: PetModeRestPose;
+  readonly gazeOffset: PetModeGazeOffset;
+}) {
+  if (pose === "sit") return <PetModeSitPose gazeOffset={gazeOffset} />;
+  return (
+    <img
+      className="pet-mode-cat__raster"
+      src="/pet-mode/paw/f001.png"
+      alt=""
+      draggable={false}
+    />
   );
 }
 
@@ -684,4 +706,4 @@ function PetModeSleepPose() {
   );
 }
 
-export type { PetModeCatPhase };
+export type { PetModeCatPhase, PetModeRestPose };

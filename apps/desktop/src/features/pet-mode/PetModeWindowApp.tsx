@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { triggerNativeEndOfDayReviewAction } from "../companion/watcherBridge";
-import { PetModeCat, type PetModeCatPhase } from "./PetModeCat";
+import { PetModeCat, type PetModeCatPhase, type PetModeRestPose } from "./PetModeCat";
 import {
   alignNativePetContact,
   beginNativePetDrag,
@@ -114,6 +114,8 @@ export function PetModeWindowApp() {
   });
   const initialPhase: PetModeCatPhase = initialAppearance.phase;
   const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
+  const [dragPickupPose, setDragPickupPose] = useState<PetModeRestPose>("idle");
+  const [dragReleasePose, setDragReleasePose] = useState<PetModeRestPose>("idle");
   const [facing, setFacing] = useState<"left" | "right">(initialAppearance.facing);
   const [entrySequence, setEntrySequence] = useState(0);
   const [entryTravelDistance, setEntryTravelDistance] = useState<number | undefined>(undefined);
@@ -167,6 +169,8 @@ export function PetModeWindowApp() {
   // `null` means the pet has not completed an autonomous action yet.
   const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
   const manualDragRef = useRef(false);
+  const manualReleaseTokenRef = useRef<number | null>(null);
+  const dragReleasePoseRef = useRef<PetModeRestPose>("idle");
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
   const gazeEngagedRef = useRef(false);
@@ -274,6 +278,11 @@ export function PetModeWindowApp() {
     setAutonomousCycle(nextCycle);
   }, []);
 
+  const updateDragReleasePose = useCallback((nextPose: PetModeRestPose) => {
+    dragReleasePoseRef.current = nextPose;
+    setDragReleasePose(nextPose);
+  }, []);
+
   const finishManualDrag = useCallback((rememberPosition = true) => {
     if (
       !manualDragRef.current
@@ -282,31 +291,47 @@ export function PetModeWindowApp() {
     manualDragRef.current = false;
     setDragProbe(null);
     const releaseToken = ++actionTokenRef.current;
+    manualReleaseTokenRef.current = releaseToken;
+    const releasePose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
+    dragReleasePoseRef.current = releasePose;
 
     void (async () => {
-      if (!prefersReducedMotion()) {
-        flushSync(() => commitPhase("release"));
-        const plan = await resolveNativePetDrop().catch(() => null);
-        if (releaseToken !== actionTokenRef.current) return;
-        if (plan?.kind !== "catch") {
-          await delay(PET_MODE_DRAG_SETTLE_MS);
+      try {
+        if (!prefersReducedMotion()) {
+          flushSync(() => {
+            updateDragReleasePose(releasePose);
+            commitPhase("release");
+          });
+          // Native may settle immediately (hop) or animate to a nearby ledge
+          // (catch). Keep the visual handoff alive for at least its authored
+          // duration, while never holding its last frame after native is done.
+          await Promise.all([
+            resolveNativePetDrop().catch(() => null),
+            delay(PET_MODE_DRAG_SETTLE_MS),
+          ]);
           if (releaseToken !== actionTokenRef.current) return;
         }
-      }
 
-      if (releaseToken === actionTokenRef.current) {
-        commitPhase(focusRestingRef.current ? "sit" : "idle");
-      }
-      if (rememberPosition) {
-        // Position persistence is bookkeeping, not part of the visual handoff.
-        // Never strand the cat in the held/release silhouette while a native
-        // monitor query or mutex is delayed.
-        void rememberNativePetPosition().catch((error) => {
-          void reportNativePetDragError(error).catch(() => undefined);
-        });
+        if (releaseToken === actionTokenRef.current) {
+          const finalPose = dragReleasePoseRef.current;
+          focusRestAppliedRef.current = finalPose === "sit";
+          commitPhase(finalPose);
+        }
+        if (rememberPosition) {
+          // Position persistence is bookkeeping, not part of the visual handoff.
+          // Never strand the cat in the held/release silhouette while a native
+          // monitor query or mutex is delayed.
+          void rememberNativePetPosition().catch((error) => {
+            void reportNativePetDragError(error).catch(() => undefined);
+          });
+        }
+      } finally {
+        if (manualReleaseTokenRef.current === releaseToken) {
+          manualReleaseTokenRef.current = null;
+        }
       }
     })();
-  }, [commitPhase]);
+  }, [commitPhase, updateDragReleasePose]);
 
   useEffect(() => {
     let disposed = false;
@@ -333,7 +358,11 @@ export function PetModeWindowApp() {
     void listenToNativePetDragStart(() => {
       if (!manualDragRef.current || phaseRef.current === "drag") return;
       sleepTouchRef.current = 0;
-      flushSync(() => commitPhase("drag"));
+      const pickupPose: PetModeRestPose = phaseRef.current === "sit" ? "sit" : "idle";
+      flushSync(() => {
+        setDragPickupPose(pickupPose);
+        commitPhase("drag");
+      });
     }).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
@@ -869,6 +898,19 @@ export function PetModeWindowApp() {
       focusRestAppliedRef.current = false;
       return;
     }
+    if (manualReleaseTokenRef.current !== null && phaseRef.current === "release") {
+      // A focus boundary can arrive during the native drop. Retarget the
+      // already-running crossfade, but keep direct manipulation authoritative
+      // until both the native and visual settle have completed.
+      updateDragReleasePose(resting ? "sit" : "idle");
+      focusRestAppliedRef.current = resting;
+      if (resting || wasResting) restartAutonomousCycle();
+      if (resting) {
+        gazeEngagedRef.current = false;
+        setGazeOffset({ x: 0, y: 0 });
+      }
+      return;
+    }
     if (resting) {
       if (focusRestAppliedRef.current) return;
       restartAutonomousCycle();
@@ -900,7 +942,7 @@ export function PetModeWindowApp() {
         commitPhase("idle");
       }
     }
-  }, [commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, snapshot?.productivity]);
+  }, [commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, snapshot?.productivity, updateDragReleasePose]);
 
   useEffect(() => {
     const next = advancePetModeDriftHunt(
@@ -1339,6 +1381,8 @@ export function PetModeWindowApp() {
               && hitRegionTransitionCount === 0}
             hitRegionCommitRevision={hitRegionCommitRevision}
             gazeOffset={gazeOffset}
+            dragPickupPose={dragPickupPose}
+            dragReleasePose={dragReleasePose}
           />
           <span
             ref={contactAnchorRef}

@@ -87,26 +87,38 @@ export type PetModeDragTransitionFrame = {
 // Approved V10.1 drag hand-off. These are deliberately discrete reviewed
 // frames rather than a CSS morph: the generated held pose must retain its
 // contour while the native window changes ownership to and from AppKit.
+// Opacity stays pinned at 1 on the visible layer for the same reason as the
+// release timeline below: the pet renders inside a transparent native window,
+// so any translucent committed frame lets the desktop bleed through the body
+// and reads as a brightness flicker instead of a softening.
 export const PET_MODE_DRAG_PICKUP_TIMELINE: readonly PetModeDragTransitionFrame[] = [
   { pose: "idle", y: 0, opacity: 1, durationMs: 0 },
-  { pose: "idle", y: -1, opacity: .99, durationMs: 18 },
-  { pose: "idle", y: -2, opacity: .97, durationMs: 18 },
-  { pose: "held", y: -3, opacity: .92, durationMs: 16 },
-  { pose: "held", y: -4, opacity: .95, durationMs: 18 },
-  { pose: "held", y: -4, opacity: .98, durationMs: 18 },
+  { pose: "idle", y: -1, opacity: 1, durationMs: 18 },
+  { pose: "idle", y: -2, opacity: 1, durationMs: 18 },
+  { pose: "held", y: -3, opacity: 1, durationMs: 16 },
+  { pose: "held", y: -4, opacity: 1, durationMs: 18 },
+  { pose: "held", y: -4, opacity: 1, durationMs: 18 },
   { pose: "held", y: -4, opacity: 1, durationMs: 18 },
   { pose: "held", y: -4, opacity: 1, durationMs: 20 },
   { pose: "held", y: -4, opacity: 1, durationMs: 22 },
 ] as const;
 
+// The release is rendered as two stacked layers (held above, rest below), so
+// `opacity` here is the composite silhouette floor, not a per-layer ramp. The
+// earlier per-layer ramp (.72 → .55) let both layers be translucent at the
+// same time; over a transparent native window the desktop showed through and
+// the cat visibly darkened for ~40ms ("release brightness valley"). The rest
+// layer now reaches full opacity beneath the still-opaque held layer before
+// the held layer starts fading, so the overlapped silhouette never drops
+// below 1 at any point of the drop.
 export const PET_MODE_DRAG_RELEASE_TIMELINE: readonly PetModeDragTransitionFrame[] = [
   { pose: "held", y: -4, opacity: 1, durationMs: 0 },
-  { pose: "held", y: -3, opacity: .99, durationMs: 16 },
-  { pose: "held", y: -2, opacity: .97, durationMs: 16 },
-  { pose: "held", y: -1, opacity: .72, durationMs: 18 },
-  { pose: "idle", y: 0, opacity: .55, durationMs: 18 },
-  { pose: "idle", y: 0, opacity: .82, durationMs: 18 },
-  { pose: "idle", y: 0, opacity: .96, durationMs: 20 },
+  { pose: "held", y: -3, opacity: 1, durationMs: 16 },
+  { pose: "held", y: -2, opacity: 1, durationMs: 16 },
+  { pose: "held", y: -1, opacity: 1, durationMs: 18 },
+  { pose: "held", y: 0, opacity: 1, durationMs: 18 },
+  { pose: "idle", y: 0, opacity: 1, durationMs: 18 },
+  { pose: "idle", y: 0, opacity: 1, durationMs: 20 },
   { pose: "idle", y: 0, opacity: 1, durationMs: 22 },
   { pose: "idle", y: 0, opacity: 1, durationMs: 28 },
 ] as const;

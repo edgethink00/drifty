@@ -12,15 +12,26 @@ const capability = JSON.parse(readFileSync("../../src-tauri/capabilities/pet-mod
 const registration = readFileSync("../../src-tauri/src/lib.rs", "utf8");
 const artifact = JSON.parse(readFileSync("public/pet-mode/hit-regions-v1.json", "utf8")) as {
   readonly version: number;
+  readonly width: number;
+  readonly height: number;
   readonly regions: Readonly<Record<string, readonly number[]>>;
 };
 
 describe("pet mode hit target", () => {
   it("uses a versioned pose/frame artifact instead of one hand-maintained idle polygon", () => {
     expect(artifact.version).toBe(1);
-    expect(Object.keys(artifact.regions)).toHaveLength(127);
-    for (const region of ["idle", "happy", "sit", "sleep", "drag", "release", "gait:29", "paw:16", "stretch:36", "tail:36"]) {
+    expect(Object.keys(artifact.regions)).toHaveLength(129);
+    for (const region of ["idle", "happy", "sit", "sleep", "drag:idle", "drag:sit", "release:idle", "release:sit", "gait:29", "paw:16", "stretch:36", "tail:36"]) {
       expect(artifact.regions[region]?.length, `${region} region`).toBeGreaterThan(0);
+    }
+    for (const [regionId, spans] of Object.entries(artifact.regions)) {
+      const acceptedPixels = Array.from({ length: spans.length / 3 }, (_, index) => (
+        spans[index * 3 + 2] - spans[index * 3 + 1]
+      )).reduce((sum, width) => sum + width, 0);
+      expect(acceptedPixels, `${regionId} accepted pixels`).toBeGreaterThan(0);
+      expect(acceptedPixels, `${regionId} must preserve click-through space`).toBeLessThan(
+        artifact.width * artifact.height,
+      );
     }
     expect(css).not.toContain("clip-path: polygon(");
   });
@@ -40,6 +51,12 @@ describe("pet mode hit target", () => {
   it("keeps the WebView button aligned with native ownership", () => {
     expect(css).toContain(".pet-mode-hit-target { pointer-events: auto; }");
     expect(app).not.toContain("pet-mode-hit-shape");
+  });
+
+  it("keeps reduced-motion drag and release states single-layered", () => {
+    const reducedMotion = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reducedMotion).toMatch(/\.pet-mode-cat__drag-pending-rest,\s*\.pet-mode-cat__release-held \{ opacity: 0; \}/);
+    expect(reducedMotion).toMatch(/\.pet-mode-cat__drag-pending-held,\s*\.pet-mode-cat__release-rest \{ opacity: 1; \}/);
   });
 
   it("samples nearby cursor gaze without expanding the native hit region", () => {

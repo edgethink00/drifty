@@ -70,7 +70,7 @@ describe("petModeData", () => {
     expect(PET_MODE_BLINK_INTERVAL_MAX_MS).toBe(7_280);
   });
 
-  it("keeps the approved nine-frame pickup and monotonic release", () => {
+  it("keeps the approved nine-frame pickup and a composite-opaque release", () => {
     expect(PET_MODE_DRAG_PICKUP_TIMELINE).toHaveLength(9);
     expect(PET_MODE_DRAG_RELEASE_TIMELINE).toHaveLength(9);
     expect(PET_MODE_DRAG_PICKUP_MS).toBe(148);
@@ -78,8 +78,14 @@ describe("petModeData", () => {
     expect(PET_MODE_DRAG_PICKUP_TIMELINE.map((frame) => frame.y)).toEqual([0, -1, -2, -3, -4, -4, -4, -4, -4]);
     expect(PET_MODE_DRAG_RELEASE_TIMELINE.map((frame) => frame.y)).toEqual([-4, -3, -2, -1, 0, 0, 0, 0, 0]);
     expect(PET_MODE_DRAG_RELEASE_TIMELINE.map((frame) => frame.pose)).toEqual([
-      "held", "held", "held", "held", "idle", "idle", "idle", "idle", "idle",
+      "held", "held", "held", "held", "held", "idle", "idle", "idle", "idle",
     ]);
+    // The release renders as two stacked layers over a transparent native
+    // window. Any frame whose committed opacity drops below 1 reintroduces
+    // the drop-flicker where the desktop shows through the cat.
+    for (const frame of PET_MODE_DRAG_RELEASE_TIMELINE) {
+      expect(frame.opacity, `release frame at y=${frame.y}`).toBe(1);
+    }
     expect(PET_MODE_DRAG_RELEASE_TIMELINE[PET_MODE_DRAG_RELEASE_TIMELINE.length - 1]).toMatchObject({
       pose: "idle",
       y: 0,
