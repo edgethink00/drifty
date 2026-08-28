@@ -13,12 +13,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import type { DevRepoRecord, DevSignalsDayPayload } from "@drifty/domain";
+import { shiftIsoDate, type DevRepoRecord, type DevSignalsDayPayload } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import type { AgentsDaySource, CommitTuple, SpanTuple, TurnTuple } from "./agentsPageModel";
 import { AGENTS_WEEK_FIXTURE } from "./agentsWeekFixture";
 
-const WEEK_DAYS = 7;
+const DEFAULT_BACKFILL_DAYS = 30;
+/** Ceiling on one ingest request. Navigating years back must not ask the
+ *  tracker to rescan an unbounded session corpus on every arrow press. */
+const MAX_BACKFILL_DAYS = 400;
 
 function isoDayString(date: Date): string {
   const year = date.getFullYear();
@@ -27,14 +30,56 @@ function isoDayString(date: Date): string {
   return `${year}-${month}-${dayOfMonth}`;
 }
 
-function lastNDays(count: number): string[] {
+export function buildAgentsRangeDays(startDay: string, endDay: string): string[] {
+  if (startDay > endDay) return [];
   const days: string[] = [];
-  const now = new Date();
-  for (let offset = count - 1; offset >= 0; offset -= 1) {
-    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offset);
-    days.push(isoDayString(date));
+  let day = startDay;
+  // Your Agents currently supports Day and Week. The bound keeps malformed
+  // input from turning a date loop into unbounded work.
+  while (day <= endDay && days.length < 7) {
+    days.push(day);
+    day = shiftIsoDate(day, 1);
   }
   return days;
+}
+
+export function agentsBackfillDays(startDay: string, today = isoDayString(new Date())): number {
+  // Count whole calendar days in UTC. A local-clock subtraction gains or loses
+  // an hour across a DST boundary, which `Math.ceil` then turns into a whole
+  // extra day; the dates here are calendar days, so they carry no local time.
+  const start = Date.parse(`${startDay}T00:00:00Z`);
+  const end = Date.parse(`${today}T00:00:00Z`);
+  const elapsedDays = Number.isNaN(start) || Number.isNaN(end)
+    ? 0
+    : Math.max(0, Math.round((end - start) / 86_400_000));
+  return Math.min(MAX_BACKFILL_DAYS, Math.max(DEFAULT_BACKFILL_DAYS, elapsedDays + 1));
+}
+
+/**
+ * Whether the range's ingest pass must finish before the range is drawn.
+ *
+ * Ingestion re-scans every registered repository with `git log --since`, and
+ * commit collection has no watermark, so its cost scales with the window:
+ * measured on 37 repositories, 30 days took 10s and 400 days took 46s.
+ *
+ * Only the current range needs freshly ingested data — that is where today's
+ * still-running sessions and just-made commits live. A past range is already
+ * settled in the database, so waiting on a full rescan before drawing it buys
+ * nothing and blocks the view for as long as the scan runs. Past ranges read
+ * what is stored and let the refresh land on a later visit.
+ */
+export function shouldAwaitBackfill(endDay: string, today = isoDayString(new Date())): boolean {
+  return endDay >= today;
+}
+
+function sampleDaysFor(days: readonly string[]): readonly AgentsDaySource[] {
+  const fallback = AGENTS_WEEK_FIXTURE[AGENTS_WEEK_FIXTURE.length - 1];
+  if (!fallback) return days.map((day) => ({ day, attention: [], turns: [], commits: [] }));
+  const fixtureStart = Math.max(0, AGENTS_WEEK_FIXTURE.length - days.length);
+  return days.map((day, index) => ({
+    ...(AGENTS_WEEK_FIXTURE[fixtureStart + index] ?? fallback),
+    day,
+  }));
 }
 
 /** Minutes since local midnight of `day`, clamped to the day. */
@@ -114,18 +159,24 @@ export type AgentsDataState = {
   readonly live: boolean;
 };
 
-export function useAgentsData(): AgentsDataState {
-  const [state, setState] = useState<AgentsDataState>({ days: AGENTS_WEEK_FIXTURE, loading: true, live: false });
-  const days = useMemo(() => lastNDays(WEEK_DAYS), []);
+export function useAgentsData(startDay: string, endDay: string): AgentsDataState {
+  const days = useMemo(() => buildAgentsRangeDays(startDay, endDay), [endDay, startDay]);
+  const [state, setState] = useState<AgentsDataState>(() => ({ days: sampleDaysFor(days), loading: true, live: false }));
 
   useEffect(() => {
     let cancelled = false;
+    setState({ days: sampleDaysFor(days), loading: true, live: false });
 
     async function load() {
       try {
-        // Refresh ingestion first so today's turns and commits are included.
-        // Fail-soft: a sync error must not block reading what is already there.
-        await trackerClient.syncDevSignals().catch(() => null);
+        // Refresh ingestion so today's turns and commits are included. For a
+        // past range the scan is started but not awaited: those days are
+        // already stored, and blocking on a wide rescan would leave the user
+        // staring at the previous range for the length of the scan.
+        // Fail-soft either way: a sync error must not block reading what is
+        // already in the tracker database.
+        const sync = trackerClient.syncDevSignals(agentsBackfillDays(startDay)).catch(() => null);
+        if (shouldAwaitBackfill(endDay)) await sync;
 
         const repos: DevRepoRecord[] = await trackerClient.getDevRepos().catch(() => []);
         const reposByKey = new Map(repos.map((repo) => [repo.repo_key, repo.repo_path]));
@@ -141,9 +192,10 @@ export function useAgentsData(): AgentsDataState {
         if (cancelled) return;
 
         // No tracker bridge (browser dev server) answers null for every day;
-        // keep the fixture so the surface stays reviewable.
+        // date-shift the fixture so navigation remains reviewable and honest
+        // about the selected range (the header marks it as sample data).
         if (payloads.every((entry) => entry.signals === null)) {
-          setState({ days: AGENTS_WEEK_FIXTURE, loading: false, live: false });
+          setState({ days: sampleDaysFor(days), loading: false, live: false });
           return;
         }
 
@@ -155,7 +207,7 @@ export function useAgentsData(): AgentsDataState {
         ));
         setState({ days: sources, loading: false, live: true });
       } catch {
-        if (!cancelled) setState({ days: AGENTS_WEEK_FIXTURE, loading: false, live: false });
+        if (!cancelled) setState({ days: sampleDaysFor(days), loading: false, live: false });
       }
     }
 
@@ -163,7 +215,7 @@ export function useAgentsData(): AgentsDataState {
     return () => {
       cancelled = true;
     };
-  }, [days]);
+  }, [days, endDay, startDay]);
 
   return state;
 }

@@ -7900,7 +7900,16 @@ export default function App() {
         {/* Your Agents: agent time and commit output, sibling of the dashboard
             views. Dev-mode beta preview, so the surface is gated too — not just
             its sidebar entry. */}
-        {activeTab === "agents" && canOpenAgentsBeta ? <LazyAgentsPage /> : null}
+        {activeTab === "agents" && canOpenAgentsBeta ? (
+          <LazyAgentsPage
+            flowIntervalMinutes={flowIntervalMinutes}
+            onFlowIntervalChange={handleFlowIntervalChange}
+            onSelectDay={selectDay}
+            selectedDay={selectedDay}
+            startOfWeek={startOfWeek}
+            todayDay={todayDay}
+          />
+        ) : null}
 
         {/* Classification */}
         {activeTab === "classification" ? (

@@ -22,12 +22,15 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { FLOW_INTERVAL_OPTIONS, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
+import { DateNavigator } from "../../components/DateNavigator";
 import { MetricTile } from "../../components/MetricTile";
-import { clockHourForLogicalHour } from "../../lib/formatting";
+import { clockHourForLogicalHour, formatDateRangeLabel } from "../../lib/formatting";
 import { BreakdownSidePanel } from "../dashboard/BreakdownSidePanelChrome";
-import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen } from "../settings/settingsStorage";
+import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, shiftDashboardPeriodDay } from "../dashboard/dashboardPeriods";
+import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type StartOfWeek } from "../settings/settingsStorage";
+import { FlowDetailSelect } from "../flow-chart/FlowDetailSelect";
 import { FlowChartGrid } from "../flow-chart/FlowChartGrid";
 import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
@@ -124,18 +127,6 @@ function intensityColor(level: number): string {
 
 type ShareStyle = CSSProperties & { "--app-usage-share": string };
 
-function formatDayLabel(day: string): string {
-  const [year, month, dayOfMonth] = day.split("-").map(Number);
-  if (!year || !month || !dayOfMonth) return day;
-  return new Date(year, month - 1, dayOfMonth).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-}
-
-function formatShortDate(day: string): string {
-  const [year, month, dayOfMonth] = day.split("-").map(Number);
-  if (!year || !month || !dayOfMonth) return day;
-  return new Date(year, month - 1, dayOfMonth).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
 function formatChurn(insertions: number, deletions: number): string {
   return `+${insertions.toLocaleString()} −${deletions.toLocaleString()}`;
 }
@@ -146,8 +137,8 @@ function shareOfCommits(repo: AgentsRepoRow, totalCommits: number): number {
 }
 
 /**
- * The flow chart's own head: the same seg controls (flow-color-mode-control /
- * flow-interval-control) and the same project-legend chips, fed with agent
+ * The flow chart's own head: the shared detail selector, the same color-mode
+ * segmented control, and the same project-legend chips, fed with agent
  * vocabulary. Nothing here introduces a control style the day view lacks.
  */
 function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColorModeChange, onIntervalChange }: {
@@ -161,31 +152,21 @@ function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColor
   return (
     <div className="flow-chart-head">
       <div className="flow-chart-head__actions">
-        <div className="seg flow-color-mode-control" aria-label="Agents color mode">
-          {([["intensity", "Intensity"], ["repo", "Project"]] as const).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={colorMode === id ? "on" : undefined}
-              aria-pressed={colorMode === id}
-              onClick={() => onColorModeChange(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <div className="seg flow-interval-control" aria-label="Timeline interval">
-          {FLOW_INTERVAL_OPTIONS.map((option) => (
-            <button
-              key={option}
-              type="button"
-              className={option === intervalMinutes ? "on" : undefined}
-              aria-pressed={option === intervalMinutes}
-              onClick={() => onIntervalChange(option)}
-            >
-              {option}m
-            </button>
-          ))}
+        <div className="flow-chart-head__controls">
+          <FlowDetailSelect intervalMinutes={intervalMinutes} onIntervalChange={onIntervalChange} />
+          <div className="seg flow-color-mode-control" aria-label="Agents color mode">
+            {([["intensity", "Intensity"], ["repo", "Project"]] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                className={colorMode === id ? "on" : undefined}
+                aria-pressed={colorMode === id}
+                onClick={() => onColorModeChange(id)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         <FlowChartLegend
           blocks={[]}
@@ -203,9 +184,13 @@ function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColor
  * The 24-hour timeline as a flow-chart-card: same axis row, same gutter token,
  * same card chrome (top border, spacing) the day view's chart uses.
  */
-function AgentsDayTimeline({ model, source }: { readonly model: AgentsDayModel; readonly source: AgentsDaySource }) {
+function AgentsDayTimeline({ model, source, intervalMinutes, onIntervalChange }: {
+  readonly model: AgentsDayModel;
+  readonly source: AgentsDaySource;
+  readonly intervalMinutes: FlowIntervalMinutes;
+  readonly onIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
+}) {
   const [colorMode, setColorMode] = useState<AgentsGridColorMode>("intensity");
-  const [intervalMinutes, setIntervalMinutes] = useState<FlowIntervalMinutes>(3);
   const gridCells = useMemo(() => buildAgentsGridCells(source, intervalMinutes), [source, intervalMinutes]);
   const repoLegend = useMemo(() => gridRepoLegend(gridCells), [gridCells]);
   // Ranked by grid dominance, coloured from the shared series palette so the
@@ -276,7 +261,7 @@ function AgentsDayTimeline({ model, source }: { readonly model: AgentsDayModel; 
             intervalMinutes={intervalMinutes}
             legendEntries={legendEntries}
             onColorModeChange={setColorMode}
-            onIntervalChange={setIntervalMinutes}
+            onIntervalChange={onIntervalChange}
           />
           <FlowChartGrid
             blockByCell={gridBlocks}
@@ -726,7 +711,21 @@ function AgentsModelsPanel({ sources }: { readonly sources: readonly AgentsDaySo
   );
 }
 
-export function AgentsPage() {
+export function AgentsPage({
+  flowIntervalMinutes,
+  onFlowIntervalChange,
+  onSelectDay,
+  selectedDay,
+  startOfWeek,
+  todayDay,
+}: {
+  readonly flowIntervalMinutes: FlowIntervalMinutes;
+  readonly onFlowIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
+  readonly onSelectDay: (day: string) => void;
+  readonly selectedDay: string;
+  readonly startOfWeek: StartOfWeek;
+  readonly todayDay: string;
+}) {
   const [period, setPeriod] = useState<AgentsPeriod>("Today");
   // Same persisted preference as the dashboard: the Breakdown panel is one
   // surface across Day, Week, and Agents.
@@ -737,7 +736,11 @@ export function AgentsPage() {
       return !open;
     });
   };
-  const { days, live } = useAgentsData();
+  const range = useMemo(
+    () => getDashboardPeriodRange(selectedDay, period, 0, startOfWeek),
+    [period, selectedDay, startOfWeek],
+  );
+  const { days, live } = useAgentsData(range.startDay, range.endDay);
   const models = useMemo(() => days.map(buildAgentsDayModel), [days]);
   const dayModel = models[models.length - 1] ?? null;
   const daySource = days[days.length - 1] ?? null;
@@ -745,9 +748,7 @@ export function AgentsPage() {
   const headlineMinutes = period === "Today"
     ? dayModel?.agentMinutes ?? 0
     : models.reduce((sum, model) => sum + model.agentMinutes, 0);
-  const dateLabel = period === "Today"
-    ? (dayModel ? formatDayLabel(dayModel.day) : "")
-    : `${formatShortDate(models[0]?.day ?? "")} – ${formatShortDate(models[models.length - 1]?.day ?? "")}`;
+  const dateLabel = formatDateRangeLabel(range.startDay, range.endDay);
   const totalCommits = period === "Today"
     ? dayModel?.commitCount ?? 0
     : models.reduce((sum, model) => sum + model.commitCount, 0);
@@ -756,6 +757,14 @@ export function AgentsPage() {
     : buildAgentsWeekModel(models).repos;
   const scopedSources = period === "Today" ? (daySource ? [daySource] : []) : days;
   const repoProviders = useMemo(() => repoDominantProviders(scopedSources), [scopedSources]);
+  const isCurrentPeriod = range.startDay <= todayDay && todayDay <= range.endDay;
+  const nextSelectedDay = shiftDashboardPeriodDay(selectedDay, period, 1);
+  const nextRange = getDashboardPeriodRange(nextSelectedDay, period, 0, startOfWeek);
+  const canShiftForward = period === "Week" ? nextRange.startDay <= todayDay : nextSelectedDay <= todayDay;
+  const shiftPeriod = (direction: -1 | 1) => {
+    if (direction === 1 && !canShiftForward) return;
+    onSelectDay(shiftDashboardPeriodDay(selectedDay, period, direction));
+  };
 
   const pageHead = (
     <div className="pg-head dashboard-page-head dashboard-page-head--focus-summary dashboard-page-head--today">
@@ -784,9 +793,18 @@ export function AgentsPage() {
               </button>
             ))}
           </div>
-          <div className="day-nav" aria-label="Agents period">
-            <div className="day-nav__current"><strong>{dateLabel}{live ? "" : " · sample"}</strong></div>
-          </div>
+          <DateNavigator
+            ariaLabel={`Agents ${period.toLowerCase()} selector`}
+            label={`${dateLabel}${live ? "" : " · sample"}`}
+            todayLabel={getDashboardCurrentPeriodLabel(period)}
+            isTodayDisabled={isCurrentPeriod}
+            isNextDisabled={!canShiftForward}
+            onPrevious={() => shiftPeriod(-1)}
+            onNext={() => shiftPeriod(1)}
+            onToday={() => onSelectDay(todayDay)}
+            previousLabel={period === "Week" ? "Show previous agents week" : "Show previous agents day"}
+            nextLabel={period === "Week" ? "Show next agents week" : "Show next agents day"}
+          />
         </div>
       </div>
     </div>
@@ -798,7 +816,12 @@ export function AgentsPage() {
         <div className="day-split__main">
           {pageHead}
           {period === "Today" && dayModel && daySource ? (
-            <AgentsDayTimeline model={dayModel} source={daySource} />
+            <AgentsDayTimeline
+              model={dayModel}
+              source={daySource}
+              intervalMinutes={flowIntervalMinutes}
+              onIntervalChange={onFlowIntervalChange}
+            />
           ) : (
             <AgentsWeekCalendar models={models} sources={scopedSources} />
           )}

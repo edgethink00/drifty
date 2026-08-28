@@ -2,6 +2,13 @@ import { FLOW_INTERVAL_OPTIONS, type FlowIntervalMinutes } from "@drifty/domain"
 
 export type DashboardFlowIntervalMinutes = FlowIntervalMinutes;
 
+/** Timeline density, shared by every surface drawn on the Flow grid (Your Day
+ *  and Your Agents today). The value is one thing — how many minutes one grid
+ *  cell covers — and both surfaces derive cell height from it with the same
+ *  constants, so a per-surface preference would make the same control mean the
+ *  same thing while remembering two answers. The key keeps its `dashboard`
+ *  name so an existing user's saved choice survives; renaming it would silently
+ *  reset everyone back to the default. */
 export const DASHBOARD_FLOW_INTERVAL_STORAGE_KEY = "drifty.dashboard.flowIntervalMinutes.v1";
 export const DEFAULT_DASHBOARD_FLOW_INTERVAL_MINUTES: DashboardFlowIntervalMinutes = 4;
 /** Fixed aggregation detail for Share rhythm and Breakdown identity rows. */
