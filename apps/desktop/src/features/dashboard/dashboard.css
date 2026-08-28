@@ -42,6 +42,16 @@
   align-items: stretch;
 }
 
+/* The panel owns the width the split answers to. The window media query below
+   only fires at 860px, but this panel is already too narrow for two columns
+   well before that, which left a band where the ranked list folded its rows
+   while the split stayed side by side — and the feature card then stretched to
+   match that folded list. */
+.app-usage-panel.editorial-panel {
+  container-type: inline-size;
+  container-name: app-usage-panel;
+}
+
 .app-usage-list {
   display: grid;
   align-content: start;
@@ -58,11 +68,22 @@
 
 .app-usage-feature {
   display: grid;
+  /* Keep the original three equal-growing rows. The meter block and the stat
+     footer end-align inside their own row, so the visible breathing room under
+     the Share bar comes from those rows being taller than their content — not
+     from the row gap. Pinning the rows to their content height (`auto` plus
+     `align-content: start`) therefore closed that space to ~1px, and
+     `space-between` moved it into the gaps instead, which stretched the
+     loading skeleton. Stretching the rows reproduces the original spacing. */
   grid-template-rows: auto auto auto;
   align-content: stretch;
   align-self: stretch;
+  /* `min-height: 100%` used to hold the card open on a quiet day (few ranked
+     rows). It also resolved against a track the list had stretched, which is
+     what let a stale folded height survive a width change, so the floor is
+     restated here as a fixed value instead of a percentage of the sibling. */
+  min-height: 12rem;
   gap: var(--space-2);
-  min-height: 100%;
   padding: var(--space-3);
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
   border-radius: var(--radius-md);
@@ -1214,5 +1235,19 @@ span.flow-hover-card__identity-pill {
     gap: 0.42rem;
     justify-content: flex-start;
     text-align: left;
+  }
+}
+
+/* Fold the split to one column just before the ranked list would stack its own
+   rows, so the feature card and the list change shape together. Declared last
+   because `.app-usage-content` is redefined further up the file; at equal
+   specificity the later rule has to win.
+
+   Measured on this panel: the list folds at 17rem, which it reaches while the
+   panel is ~30rem wide. Folding the split at 32rem keeps the card and list in
+   step without touching any width that already renders correctly. */
+@container app-usage-panel (max-width: 32rem) {
+  .app-usage-content {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
