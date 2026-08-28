@@ -3,7 +3,7 @@ use tauri::AppHandle;
 use tauri_plugin_updater::{Update, Updater, UpdaterExt};
 use url::Url;
 
-const PRE_RELEASE_UPDATER_ENDPOINT: &str = "https://github.com/edgethink00/drifty_releases/releases/download/pre-release-channel/latest-prerelease.json";
+const PRE_RELEASE_UPDATER_ENDPOINT: &str = "https://raw.githubusercontent.com/edgethink00/drifty_releases/main/latest-prerelease.json";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
