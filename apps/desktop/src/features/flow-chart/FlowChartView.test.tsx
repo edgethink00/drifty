@@ -134,7 +134,7 @@ describe("FlowChartView", () => {
     expect(detailControlRule).toContain("min-width: 1.7rem;");
     expect(detailTriggerRule).toContain("border-color: transparent;");
     expect(detailTriggerRule).toContain("background: transparent;");
-    expect(detailMenuRule).toContain("width: 14.75rem;");
+    expect(detailMenuRule).toContain("width: 4.75rem;");
     expect(colorModeControlRule).toContain("padding: 1.78px;");
     expect(colorModeButtonRule).toContain("min-height: 1.08rem;");
     expect(colorModeButtonRule).toContain("padding: 0.1rem 0.38rem;");
@@ -142,7 +142,7 @@ describe("FlowChartView", () => {
     expect(colorModeButtonRule).toContain("letter-spacing: 0.05em;");
   });
 
-  it("moves 3m through 6m chart density behind a number-first detail menu", () => {
+  it("moves 3m through 6m chart density behind a compact duration-only menu", () => {
     const onIntervalChange = vi.fn();
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
 
@@ -151,17 +151,17 @@ describe("FlowChartView", () => {
     expect(screen.queryByRole("button", { name: "5m" })).toBeNull();
     expect(screen.queryByRole("button", { name: "6m" })).toBeNull();
 
-    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4 min · Balanced" });
-    expect(detailTrigger.getAttribute("title")).toBe("Flow detail: 4 min · Balanced");
+    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4m" });
+    expect(detailTrigger.getAttribute("title")).toBe("Flow detail: 4m");
     fireEvent.click(detailTrigger);
 
     expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "3 min · More detail" }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("option", { name: "4 min · Balanced" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("option", { name: "5 min · Less detail" }).getAttribute("aria-selected")).toBe("false");
-    expect(screen.getByRole("option", { name: "6 min · Least detail" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("option", { name: "3m" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("option", { name: "4m" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("option", { name: "5m" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("option", { name: "6m" }).getAttribute("aria-selected")).toBe("false");
 
-    fireEvent.click(screen.getByRole("option", { name: "6 min · Least detail" }));
+    fireEvent.click(screen.getByRole("option", { name: "6m" }));
 
     expect(onIntervalChange).toHaveBeenCalledWith(6);
     expect(screen.queryByRole("listbox", { name: "Flow detail" })).toBeNull();
@@ -186,7 +186,7 @@ describe("FlowChartView", () => {
   it("uses the actionless SettingsSelect row treatment", () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={() => undefined} />);
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Flow detail: 4 min · Balanced" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Flow detail: 4m" }));
 
     const options = screen.getAllByRole("option");
     expect(options).toHaveLength(4);
@@ -196,7 +196,7 @@ describe("FlowChartView", () => {
       expect(optionRow?.classList.contains("has-action")).toBe(false);
     }
 
-    const selectedOption = screen.getByRole("option", { name: "4 min · Balanced" });
+    const selectedOption = screen.getByRole("option", { name: "4m" });
     expect(selectedOption.classList.contains("is-selected")).toBe(true);
     expect(selectedOption.querySelector(".settings-select-control__check")).toBeTruthy();
   });
@@ -205,7 +205,7 @@ describe("FlowChartView", () => {
     const onIntervalChange = vi.fn();
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={4} onIntervalChange={onIntervalChange} />);
 
-    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4 min · Balanced" });
+    const detailTrigger = screen.getByRole("combobox", { name: "Flow detail: 4m" });
     fireEvent.keyDown(detailTrigger, { key: "ArrowDown" });
     expect(screen.getByRole("listbox", { name: "Flow detail" })).toBeTruthy();
 

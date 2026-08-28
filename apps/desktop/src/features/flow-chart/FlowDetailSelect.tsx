@@ -1,26 +1,23 @@
 import { FLOW_INTERVAL_OPTIONS, type FlowIntervalMinutes } from "@drifty/domain";
 import { SettingsSelect } from "../settings/SettingsSelect";
 
-const FLOW_DETAIL_COPY_BY_INTERVAL = {
-  3: { value: "3", description: "More detail" },
-  4: { value: "4", description: "Balanced" },
-  5: { value: "5", description: "Less detail" },
-  6: { value: "6", description: "Least detail" },
-} as const satisfies Readonly<Record<FlowIntervalMinutes, { readonly value: string; readonly description: string }>>;
+const FLOW_DETAIL_VALUE_BY_INTERVAL = {
+  3: "3",
+  4: "4",
+  5: "5",
+  6: "6",
+} as const satisfies Readonly<Record<FlowIntervalMinutes, string>>;
 
-type FlowDetailValue = (typeof FLOW_DETAIL_COPY_BY_INTERVAL)[FlowIntervalMinutes]["value"];
+type FlowDetailValue = (typeof FLOW_DETAIL_VALUE_BY_INTERVAL)[FlowIntervalMinutes];
 
-const FLOW_DETAIL_OPTIONS = FLOW_INTERVAL_OPTIONS.map((intervalMinutes) => {
-  const copy = FLOW_DETAIL_COPY_BY_INTERVAL[intervalMinutes];
-  return {
-    value: copy.value,
-    label: `${intervalMinutes} min · ${copy.description}`,
-  };
-});
+const FLOW_DETAIL_OPTIONS = FLOW_INTERVAL_OPTIONS.map((intervalMinutes) => ({
+  value: FLOW_DETAIL_VALUE_BY_INTERVAL[intervalMinutes],
+  label: `${intervalMinutes}m`,
+}));
 
 function flowIntervalFromDetailValue(value: FlowDetailValue): FlowIntervalMinutes {
   const intervalMinutes = FLOW_INTERVAL_OPTIONS.find(
-    (option) => FLOW_DETAIL_COPY_BY_INTERVAL[option].value === value,
+    (option) => FLOW_DETAIL_VALUE_BY_INTERVAL[option] === value,
   );
   if (intervalMinutes === undefined) throw new Error(`Unsupported Flow detail value: ${value}`);
   return intervalMinutes;
@@ -38,7 +35,7 @@ export function FlowDetailSelect({
     <SettingsSelect
       ariaLabel="Flow detail"
       className="flow-detail-select"
-      value={FLOW_DETAIL_COPY_BY_INTERVAL[intervalMinutes].value}
+      value={FLOW_DETAIL_VALUE_BY_INTERVAL[intervalMinutes]}
       options={FLOW_DETAIL_OPTIONS}
       onChange={(value) => onIntervalChange(flowIntervalFromDetailValue(value))}
       triggerVisual={<FlowDetailIcon />}

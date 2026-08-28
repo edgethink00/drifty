@@ -65,8 +65,8 @@ describe("AgentsPage shared dashboard controls", () => {
     renderAgentsPage({ flowIntervalMinutes: 3, onFlowIntervalChange });
 
     expect(screen.queryByRole("button", { name: "3m" })).toBeNull();
-    fireEvent.click(screen.getByRole("combobox", { name: "Flow detail: 3 min · More detail" }));
-    fireEvent.click(screen.getByRole("option", { name: "6 min · Least detail" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Flow detail: 3m" }));
+    fireEvent.click(screen.getByRole("option", { name: "6m" }));
 
     expect(onFlowIntervalChange).toHaveBeenCalledWith(6);
   });
