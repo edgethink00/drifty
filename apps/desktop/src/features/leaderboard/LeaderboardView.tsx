@@ -223,45 +223,53 @@ export function LeaderboardView({
               className="leaderboard-hero__action-row"
               style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)" }}
             >
-              <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
-                {!isParticipationResolved ? (
-                  // Participation is still unknown, so the slot holds its footprint
-                  // rather than naming an action that may be the wrong one.
-                  <span
-                    className="leaderboard-hero__participation-placeholder"
-                    role="status"
-                    aria-label="Checking your leaderboard participation"
-                  />
-                ) : isLoading ? (
-                  <button
-                    type="button"
-                    className={isOptedIn
-                      ? "app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
-                      : "app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"}
-                    disabled
-                  >
-                    {isOptedIn ? "Leave leaderboard" : "Join leaderboard"}
-                  </button>
-                ) : isOptedIn ? (
-                  <button
-                    type="button"
-                    className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
-                    onClick={() => onOptOut?.()}
-                    disabled={isActionLoading || !onOptOut}
-                  >
-                    {isActionLoading ? "Leaving…" : "Leave leaderboard"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
-                    title="Publishes rank totals. Profile visibility is separate."
-                    onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
-                    disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
-                  >
-                    {isActionLoading ? "Joining…" : "Join leaderboard"}
-                  </button>
-                )}
+              <div className="leaderboard-hero__participation-group">
+                <div className="leaderboard-hero__participation-slot" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 0 }}>
+                  {!isParticipationResolved ? (
+                    // Participation is still unknown, so the slot holds its footprint
+                    // rather than naming an action that may be the wrong one.
+                    <span
+                      className="leaderboard-hero__participation-placeholder"
+                      role="status"
+                      aria-label="Checking your leaderboard participation"
+                    />
+                  ) : isLoading ? (
+                    <button
+                      type="button"
+                      className={isOptedIn
+                        ? "app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                        : "app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"}
+                      aria-describedby="leaderboard-participation-privacy"
+                      disabled
+                    >
+                      {isOptedIn ? "Leave leaderboard" : "Join leaderboard"}
+                    </button>
+                  ) : isOptedIn ? (
+                    <button
+                      type="button"
+                      className="app-btn app-btn--danger leaderboard-hero__participation leaderboard-hero__participation--danger profile-btn hero-action-btn"
+                      aria-describedby="leaderboard-participation-privacy"
+                      onClick={() => onOptOut?.()}
+                      disabled={isActionLoading || !onOptOut}
+                    >
+                      {isActionLoading ? "Leaving…" : "Leave leaderboard"}
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
+                      aria-describedby="leaderboard-participation-privacy"
+                      title="Publishes rank totals. Profile visibility is separate."
+                      onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
+                      disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
+                    >
+                      {isActionLoading ? "Joining…" : "Join leaderboard"}
+                    </button>
+                  )}
+                </div>
+                <p id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
+                  Only your total focus time and public profile details are shared. Activity details stay private.
+                </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
                 {isLoading ? (

@@ -109,7 +109,10 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText(/nothing is published until you join/i)).toBeNull();
     const hero = screen.getByLabelText(/your leaderboard participation/i);
     const heroJoin = within(hero).getByRole("button", { name: /join leaderboard/i });
+    const privacyNote = within(hero).getByText(/only your total focus time and public profile details are shared/i);
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
+    expect(privacyNote.textContent).toMatch(/activity details stay private/i);
+    expect(heroJoin.getAttribute("aria-describedby")).toBe(privacyNote.id);
 
     fireEvent.click(heroJoin);
 

@@ -164,7 +164,7 @@ function formatDayLabel(day: string) {
 async function openSocialLeaderboard() {
   const nav = await screen.findByRole("navigation", { name: /social navigation/i });
   fireEvent.click(within(nav).getByRole("button", { name: /^leaderboard$/i }));
-  await screen.findByRole("heading", { name: /global focus ranking/i });
+  await screen.findByRole("heading", { name: /^leaderboard$/i });
   await screen.findByRole("region", { name: /^leaderboard$/i });
 }
 
