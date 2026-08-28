@@ -7053,6 +7053,24 @@ export default function App() {
   const shellStatusNotice =
     (latestBuildStatusNotice && !latestBuildStatusRenderedInSettings ? latestBuildStatusNotice : null)
     ?? (manualUpdateStatusNotice && !manualUpdateStatusRenderedInSettings ? manualUpdateStatusNotice : null);
+  // Keep developer update recovery available even when onboarding or account policy owns the app shell.
+  const latestBuildPrompt = latestBuildPromptUpdate?.version ? (
+    <AvailableUpdateDialog
+      autoInstallFutureUpdates={developerPreReleaseUpdateController.autoInstallFutureUpdates}
+      policy={fallbackUpdatePolicy(latestBuildPromptUpdate.version)}
+      update={{
+        body: latestBuildPromptUpdate.body,
+        date: latestBuildPromptUpdate.date,
+        version: latestBuildPromptUpdate.version,
+      }}
+      updaterChecking={developerPreReleaseUpdateController.status === "checking"}
+      updaterError={developerPreReleaseUpdateController.error}
+      updaterInstalling={developerPreReleaseUpdateController.status === "installing"}
+      onAutoInstallFutureUpdatesChange={developerPreReleaseUpdateController.setAutoInstallFutureUpdates}
+      onDismiss={developerPreReleaseUpdateController.dismissPrompt}
+      onInstall={() => void developerPreReleaseUpdateController.installLatestBuild()}
+    />
+  ) : null;
 
   const dashboardDateNavigator = (
     <DateNavigator
@@ -7117,12 +7135,18 @@ export default function App() {
       <>
         {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
         <AuthConfigurationGate />
+        {latestBuildPrompt}
       </>
     );
   }
 
   if (isEffectiveAuthRequired && authStatus === "loading" && !onboardingOpen) {
-    return <AuthLoadingGate />;
+    return (
+      <>
+        <AuthLoadingGate />
+        {latestBuildPrompt}
+      </>
+    );
   }
 
   if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {
@@ -7131,6 +7155,7 @@ export default function App() {
         {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
         <AuthRequiredGate onSignIn={openDefaultAuthModal} />
         {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+        {latestBuildPrompt}
       </>
     );
   }
@@ -7232,6 +7257,7 @@ export default function App() {
               onDelete={handleDeleteAccount}
             />
           ) : null}
+          {latestBuildPrompt}
         </>
       </LocalizationProvider>
       </SiteIconProvider>
@@ -7252,6 +7278,7 @@ export default function App() {
             progress={firstDayPreparationProgress}
             workActivityLabel={firstDayWorkLabel}
           />
+          {latestBuildPrompt}
         </>
       </LocalizationProvider>
       </SiteIconProvider>
@@ -8420,23 +8447,7 @@ export default function App() {
         />
       ) : null}
 
-      {latestBuildPromptUpdate?.version ? (
-        <AvailableUpdateDialog
-          autoInstallFutureUpdates={developerPreReleaseUpdateController.autoInstallFutureUpdates}
-          policy={fallbackUpdatePolicy(latestBuildPromptUpdate.version)}
-          update={{
-            body: latestBuildPromptUpdate.body,
-            date: latestBuildPromptUpdate.date,
-            version: latestBuildPromptUpdate.version,
-          }}
-          updaterChecking={developerPreReleaseUpdateController.status === "checking"}
-          updaterError={developerPreReleaseUpdateController.error}
-          updaterInstalling={developerPreReleaseUpdateController.status === "installing"}
-          onAutoInstallFutureUpdatesChange={developerPreReleaseUpdateController.setAutoInstallFutureUpdates}
-          onDismiss={developerPreReleaseUpdateController.dismissPrompt}
-          onInstall={() => void developerPreReleaseUpdateController.installLatestBuild()}
-        />
-      ) : null}
+      {latestBuildPrompt}
 
     </div>
     </LocalizationProvider>
