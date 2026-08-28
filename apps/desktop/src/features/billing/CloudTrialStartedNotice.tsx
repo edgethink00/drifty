@@ -7,7 +7,9 @@ const CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS = 5_000;
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 export type CloudTrialStartedNoticeModel = {
+  readonly accessSource: "standard_trial" | "promotion";
   readonly trialEndsAt: string | null;
+  readonly headline: string;
   readonly detail: string;
 };
 
@@ -17,8 +19,13 @@ type CloudTrialStartedNoticeProps = {
   readonly onOpenAiSetup?: () => void;
 };
 
-export function getCloudTrialStartedNoticeStorageKey(userId: string): string {
-  return `${CLOUD_TRIAL_STARTED_NOTICE_STORAGE_PREFIX}:${userId}`;
+export function getCloudTrialStartedNoticeStorageKey(
+  userId: string,
+  accessSource: CloudTrialStartedNoticeModel["accessSource"] = "standard_trial",
+): string {
+  return accessSource === "promotion"
+    ? `${CLOUD_TRIAL_STARTED_NOTICE_STORAGE_PREFIX}:promotion:${userId}`
+    : `${CLOUD_TRIAL_STARTED_NOTICE_STORAGE_PREFIX}:${userId}`;
 }
 
 export function buildCloudTrialStartedNotice(
@@ -26,9 +33,13 @@ export function buildCloudTrialStartedNotice(
 ): CloudTrialStartedNoticeModel | null {
   if (entitlement?.status !== "trialing" || !entitlement.canUseApp) return null;
 
+  const accessSource = entitlement.accessSource === "promotion" ? "promotion" : "standard_trial";
+
   return {
+    accessSource,
     trialEndsAt: entitlement.trialEndsAt,
-    detail: formatCloudTrialStartedDetail(entitlement.trialEndsAt),
+    headline: accessSource === "promotion" ? "Your Pro pass is ready" : "1-week free trial has started",
+    detail: formatCloudTrialStartedDetail(entitlement.trialEndsAt, accessSource),
   };
 }
 
@@ -39,7 +50,7 @@ export function claimCloudTrialStartedNotice(
   const notice = buildCloudTrialStartedNotice(entitlement);
   if (!notice) return null;
 
-  const storageKey = getCloudTrialStartedNoticeStorageKey(userId);
+  const storageKey = getCloudTrialStartedNoticeStorageKey(userId, notice.accessSource);
   if (hasStoredTrialNotice(storageKey)) return null;
   storeTrialNotice(storageKey);
   return notice;
@@ -86,7 +97,7 @@ export function CloudTrialStartedNotice({
     <section
       className={isTimerPaused ? "cloud-trial-started-notice is-paused" : "cloud-trial-started-notice"}
       role="status"
-      aria-label="Drifty Cloud trial started"
+      aria-label={notice.accessSource === "promotion" ? "Drifty Cloud Pro pass ready" : "Drifty Cloud trial started"}
       onMouseEnter={pauseDismissTimer}
       onMouseLeave={resumeDismissTimer}
     >
@@ -95,7 +106,7 @@ export function CloudTrialStartedNotice({
       </span>
       <span className="cloud-trial-started-notice__copy">
         <span className="cloud-trial-started-notice__eyebrow">Drifty Cloud</span>
-        <strong>1-week free trial has started</strong>
+        <strong>{notice.headline}</strong>
         <span>{notice.detail}</span>
       </span>
       {onOpenAiSetup ? (
@@ -126,14 +137,18 @@ export function CloudTrialStartedNotice({
   );
 }
 
-export function formatCloudTrialStartedDetail(trialEndsAt: string | null): string {
-  if (!trialEndsAt) return "Hosted Cloud AI is available while your trial is active.";
+export function formatCloudTrialStartedDetail(
+  trialEndsAt: string | null,
+  accessSource: CloudTrialStartedNoticeModel["accessSource"] = "standard_trial",
+): string {
+  const subject = accessSource === "promotion" ? "Your Pro access" : "Hosted Cloud AI";
+  if (!trialEndsAt) return `${subject} is available while this access period is active.`;
 
   const endDate = new Date(trialEndsAt);
-  if (Number.isNaN(endDate.getTime())) return "Hosted Cloud AI is available while your trial is active.";
+  if (Number.isNaN(endDate.getTime())) return `${subject} is available while this access period is active.`;
 
   const month = MONTH_LABELS[endDate.getMonth()] ?? "soon";
-  return `Hosted Cloud AI is available until ${month} ${endDate.getDate()}.`;
+  return `${subject} is available until ${month} ${endDate.getDate()}.`;
 }
 
 function hasStoredTrialNotice(storageKey: string): boolean {

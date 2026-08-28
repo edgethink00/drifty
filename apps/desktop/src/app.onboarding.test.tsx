@@ -470,6 +470,12 @@ describe("App onboarding", () => {
     authState.signInWithGoogle.mockResolvedValue({ error: null });
     authState.signInWithEmail.mockResolvedValue({ error: null });
     authState.signUpWithEmail.mockResolvedValue({ error: null, needsEmailConfirmation: false });
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
+    });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: true, data: { url: "https://checkout.example.test" } });
+    billingMocks.createBillingPortalSession.mockResolvedValue({ success: true, data: { url: "https://portal.example.test" } });
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     window.localStorage.clear();
     trackerGetStatus.mockResolvedValue(makeTrackerStatus({
@@ -665,6 +671,7 @@ describe("App onboarding", () => {
     expect(screen.queryByRole("button", { name: /^continue$/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /drifty cloud/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /local ai/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /sign in on drifty\.so/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /byok \(bring your own key\)/i })).toBeNull();
   });
 
@@ -822,6 +829,7 @@ describe("App onboarding", () => {
     expect(await screen.findByRole("dialog", { name: "Drifty에 오신 것을 환영합니다" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "계속" }));
     expect(await screen.findByRole("dialog", { name: "계정을 연결하세요" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /drifty\.so에서 로그인/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "이메일로 계속" }));
 
     const authDialog = await screen.findByRole("dialog", { name: "Drifty에 로그인" });
@@ -878,6 +886,99 @@ describe("App onboarding", () => {
     expect(authState.signInWithGoogle).toHaveBeenCalledTimes(1);
     expect(authState.signInWithWebsite).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+  });
+
+  it("finds a promotional pass after a standard onboarding sign-in before advancing", async () => {
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.hasRequiredAccountAuth = false;
+    const entitlementResult = createDeferred<{
+      success: true;
+      data: {
+        plan: "individual";
+        status: "trialing";
+        canUseApp: true;
+        trialEndsAt: string;
+        currentPeriodEnd: null;
+        accessSource: "promotion";
+      };
+    }>();
+    billingMocks.fetchBillingEntitlement.mockReturnValue(entitlementResult.promise);
+
+    const view = render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
+    expect(await screen.findByRole("dialog", { name: /connect your account/i })).toBeTruthy();
+
+    await act(async () => {
+      authState.user = { id: "promo-user", email: "promo@example.com" };
+      authState.status = "authenticated";
+      authState.hasRequiredAccountAuth = true;
+      view.rerender(<App />);
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByRole("heading", { name: /connect your account/i, level: 2 })).toBeTruthy();
+    expect(within(screen.getByRole("status")).getByText(/^account connected$/i)).toBeTruthy();
+    expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("false");
+    expect(screen.queryByText(/checking pro access/i)).toBeNull();
+    expect(screen.queryByRole("dialog", { name: /what kind of work do you do/i })).toBeNull();
+
+    await act(async () => {
+      entitlementResult.resolve({
+        success: true,
+        data: {
+          plan: "individual",
+          status: "trialing",
+          canUseApp: true,
+          trialEndsAt: "2026-10-26T00:00:00.000Z",
+          currentPeriodEnd: null,
+          accessSource: "promotion",
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByRole("heading", { name: /connect your account/i, level: 2 })).toBeTruthy();
+    expect(within(screen.getByRole("status")).getByText(/pro access through oct 26, 2026/i)).toBeTruthy();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
+  });
+
+  it("continues setup after promo verification is deferred and retries when the network returns", async () => {
+    window.localStorage.setItem("drifty:billing:promo-handoff:v1", JSON.stringify({ receivedAt: Date.now() }));
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: false,
+      error: "Network connection failed.",
+    });
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await clickEnabledNext();
+
+    const accountDialog = await screen.findByRole("dialog", { name: /connect your account/i });
+    const deferredStatus = await within(accountDialog).findByText(/check pro access again later/i, undefined, { timeout: 4_000 });
+    expect(deferredStatus).toBeTruthy();
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(2);
+    expect(window.localStorage.getItem("drifty:billing:promo-handoff:v1")).not.toBeNull();
+    expect(await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 })).toBeTruthy();
+
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: {
+        plan: "individual",
+        status: "trialing",
+        canUseApp: true,
+        trialEndsAt: "2026-10-26T00:00:00.000Z",
+        currentPeriodEnd: null,
+        accessSource: "promotion",
+      },
+    });
+    fireEvent(window, new Event("online"));
+
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(window.localStorage.getItem("drifty:billing:promo-handoff:v1")).toBeNull());
   });
 
   it("lets an already authenticated account continue without starting sign-in again", async () => {
@@ -1188,6 +1289,47 @@ describe("App onboarding", () => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
     expect(screen.queryByRole("status", { name: /drifty cloud trial started/i })).toBeNull();
+  });
+
+  it("skips the connected account step and carries a promotional pass through onboarding", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: {
+        plan: "individual",
+        status: "trialing",
+        canUseApp: true,
+        trialEndsAt: "2026-10-26T00:00:00.000Z",
+        currentPeriodEnd: null,
+        accessSource: "promotion",
+      },
+    });
+
+    render(<App />);
+
+    const welcomeDialog = await screen.findByRole("dialog", { name: /welcome to drifty/i }, { timeout: 6_000 });
+    expect(await within(welcomeDialog).findByText(/your pro pass is active/i)).toBeTruthy();
+    expect(within(welcomeDialog).getByText(/finish a few quick setup steps/i)).toBeTruthy();
+    expect(within(welcomeDialog).getByText(/available through oct 26, 2026.*no card required.*no automatic renewal/i)).toBeTruthy();
+    await clickEnabledNext();
+
+    await screen.findByRole("dialog", { name: /what kind of work do you do/i }, { timeout: 6_000 });
+    expect(screen.queryByRole("dialog", { name: /connect your account/i })).toBeNull();
+    selectMainActivity("Coding");
+    await clickEnabledAction(/^continue$/i);
+
+    const setupDialog = await screen.findByRole("dialog", { name: /choose your setup/i }, { timeout: 6_000 });
+    expect(within(setupDialog).getByText("Included")).toBeTruthy();
+    expect(within(setupDialog).getByText(/pro pass through oct 26, 2026/i)).toBeTruthy();
+    expect(within(setupDialog).queryByText(/7-day free trial/i)).toBeNull();
+    fireEvent.click(within(setupDialog).getByRole("button", { name: /drifty cloud/i }));
+    await clickEnabledAction(/^continue$/i);
+    await screen.findByRole("dialog", { name: /set up permissions/i }, { timeout: 6_000 });
+    await clickEnabledNext();
+    await screen.findByRole("dialog", { name: NUDGES_DIALOG_NAME }, { timeout: 6_000 });
+    await clickEnabledAction(/^continue$/i);
+
+    const readyDialog = await screen.findByRole("dialog", { name: /you're ready to go/i }, { timeout: 6_000 });
+    expect(within(readyDialog).getByText(/pro pass is active through oct 26, 2026/i)).toBeTruthy();
   });
 
   it("stores selected drift alert, automatic close, and desktop cat preferences from onboarding", async () => {

@@ -2,10 +2,11 @@ import { BrowserHistoryBootstrapPreference } from "../BrowserHistoryBootstrapPre
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { ToggleButton } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
+import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
-  const { t } = useLocalization();
-  const summaryItems = summaryItemsForFlow(flow, t);
+  const { effectiveLanguage, t } = useLocalization();
+  const summaryItems = summaryItemsForFlow(flow, t, effectiveLanguage);
 
   return (
     <>
@@ -45,7 +46,11 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   );
 }
 
-function summaryItemsForFlow(flow: OnboardingFlow, t: LocalizationController["t"]): ReadonlyArray<{ readonly label: string; readonly sub?: string }> {
+function summaryItemsForFlow(
+  flow: OnboardingFlow,
+  t: LocalizationController["t"],
+  language: LocalizationController["effectiveLanguage"],
+): ReadonlyArray<{ readonly label: string; readonly sub?: string }> {
   const accountSummary = flow.accountSkippedForDev
     ? t("onboarding.ready.accountSkippedForDev")
     : t("onboarding.ready.accountConnected");
@@ -64,9 +69,14 @@ function summaryItemsForFlow(flow: OnboardingFlow, t: LocalizationController["t"
   return [
     {
       label: t("onboarding.ready.cloudSelected"),
-      sub: flow.cloudTrialStartedNotice
-        ? t("onboarding.ready.cloudTrialActive")
-        : t("onboarding.ready.cloudAccountReady"),
+      sub: flow.promotionActive
+        ? t("onboarding.ready.promoAccessUntil", {
+          date: formatBillingAccessEndDate(flow.promotionEndsAt, language)
+            ?? t("onboarding.promo.activePeriod"),
+        })
+        : flow.cloudTrialStartedNotice
+          ? t("onboarding.ready.cloudTrialActive")
+          : t("onboarding.ready.cloudAccountReady"),
     },
     { label: accountSummary },
     { label: t("onboarding.ready.trackingReady") },

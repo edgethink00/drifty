@@ -38,6 +38,7 @@ import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { dispatchTeamInviteDeepLink } from "../team/teamInviteDeepLinks";
+import { readBillingSuccessDeepLink, storePendingPromoHandoff } from "../billing/promoHandoff";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -202,18 +203,6 @@ function getOAuthSessionCallbackErrorMessage(error: string) {
 }
 
 type TauriInvoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
-
-function isBillingSuccessDeepLink(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "drifty:" && url.hostname === "billing" && ["/success", "/success/"].includes(url.pathname);
-  } catch (error) {
-    if (error instanceof TypeError) {
-      return false;
-    }
-    throw error;
-  }
-}
 
 export function useAuth(): AuthState {
   const context = useContext(AuthContext);
@@ -790,8 +779,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (dispatchTeamInviteDeepLink(url)) {
           continue;
         }
-        if (isBillingSuccessDeepLink(url)) {
-          window.dispatchEvent(new CustomEvent("drifty:billing-success"));
+        const billingSuccess = readBillingSuccessDeepLink(url);
+        if (billingSuccess) {
+          if (billingSuccess.source === "promo") storePendingPromoHandoff();
+          window.dispatchEvent(new CustomEvent("drifty:billing-success", { detail: billingSuccess }));
           continue;
         }
         await handleAuthCallbackUrl(url, "tauri");

@@ -1670,10 +1670,14 @@ describe("AuthContext", () => {
     });
 
     await act(async () => {
-      tauriMocks.emitOpenUrl(["drifty://billing/success"]);
+      tauriMocks.emitOpenUrl(["drifty://billing/success?source=promo"]);
     });
 
     expect(billingSuccessListener).toHaveBeenCalledTimes(1);
+    expect(billingSuccessListener.mock.calls[0]?.[0]).toMatchObject({
+      detail: { source: "promo" },
+    });
+    expect(window.localStorage.getItem("drifty:billing:promo-handoff:v1")).not.toBeNull();
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
     window.removeEventListener("drifty:billing-success", billingSuccessListener);
   });

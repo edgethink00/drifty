@@ -184,6 +184,11 @@ describe("App auth modal", () => {
     authState.signInWithGoogle.mockResolvedValue({ error: null });
     authState.signInWithEmail.mockResolvedValue({ error: null });
     authState.signUpWithEmail.mockResolvedValue({ error: null, needsEmailConfirmation: false });
+    authState.signOut.mockResolvedValue(undefined);
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
+    });
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
     fetchOwnLeaderboardEntry.mockResolvedValue({ success: true, error: null, data: null });
     fetchOwnProfile.mockResolvedValue({ success: true, error: null, data: null });
@@ -200,6 +205,103 @@ describe("App auth modal", () => {
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^unknown$/i })).toBeTruthy();
+  });
+
+  it("opens a same-account sign-in prompt for a promotional billing handoff", async () => {
+    render(<App />);
+    await screen.findByRole("navigation", { name: /primary navigation/i });
+
+    fireEvent(window, new CustomEvent("drifty:billing-success", { detail: { source: "promo" } }));
+
+    const dialog = await screen.findByRole("dialog", { name: /connect your pro pass/i });
+    expect(within(dialog).getByText(/same account that claimed the pass/i)).toBeTruthy();
+    expect(window.localStorage.getItem("drifty:billing:promo-handoff:v1")).not.toBeNull();
+  });
+
+  it("reuses the existing account screen for a first-run promotional handoff", async () => {
+    window.localStorage.removeItem(getUserOnboardingStorageKey("local"));
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    fireEvent(window, new CustomEvent("drifty:billing-success", { detail: { source: "promo" } }));
+
+    const dialog = await screen.findByRole("dialog", { name: /connect your pro pass/i });
+    expect(dialog.getAttribute("data-auth-presentation")).toBe("onboarding");
+    expect(document.querySelector(".auth-modal__overlay")).toBeNull();
+    expect(within(dialog).getByText(/same account that claimed the pass/i)).toBeTruthy();
+    const buttons = within(dialog).getAllByRole("button");
+    expect(buttons.slice(0, 3).map((button) => button.textContent)).toEqual([
+      expect.stringMatching(/continue with my drifty\.so account/i),
+      expect.stringMatching(/continue with google/i),
+      expect.stringMatching(/continue with email/i),
+    ]);
+    await waitFor(() => expect(document.activeElement).toBe(
+      within(dialog).getByRole("button", { name: /continue with my drifty\.so account/i }),
+    ));
+    expect(within(dialog).queryByLabelText(/^email$/i)).toBeNull();
+    expect(within(dialog).getByRole("button", { name: /continue with google/i })).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue with my drifty\.so account/i }));
+    await waitFor(() => expect(authState.signInWithWebsite).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /continue with email/i }));
+    expect(within(dialog).getByLabelText(/^email$/i)).toBeTruthy();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /back to welcome/i }));
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+  });
+
+  it("offers account switching only after a non-promotional entitlement is confirmed", async () => {
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: {
+        plan: "individual",
+        status: "trialing",
+        canUseApp: true,
+        trialEndsAt: "2026-09-03T00:00:00.000Z",
+        currentPeriodEnd: null,
+        accessSource: "standard_trial",
+      },
+    });
+    window.localStorage.setItem("drifty:billing:promo-handoff:v1", JSON.stringify({ receivedAt: Date.now() }));
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: /this account does not have the pass/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /switch account/i }));
+    await waitFor(() => expect(authState.signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("keeps the account decision open when switching accounts cannot sign out", async () => {
+    authState.user = { id: "user-1", email: "alex@example.com" };
+    authState.status = "authenticated";
+    authState.hasRequiredAccountAuth = true;
+    authState.signOut.mockRejectedValueOnce(new Error("Secure session storage is unavailable"));
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({
+      success: true,
+      data: {
+        plan: "individual",
+        status: "trialing",
+        canUseApp: true,
+        trialEndsAt: "2026-09-03T00:00:00.000Z",
+        currentPeriodEnd: null,
+        accessSource: "standard_trial",
+      },
+    });
+    window.localStorage.setItem("drifty:billing:promo-handoff:v1", JSON.stringify({ receivedAt: Date.now() }));
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: /this account does not have the pass/i });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^switch account$/i }));
+
+    expect((await within(dialog).findByRole("alert")).textContent).toMatch(/couldn't sign out/i);
+    expect(authState.signOut).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("dialog", { name: /this account does not have the pass/i })).toBeTruthy();
+    expect(window.localStorage.getItem("drifty:billing:promo-handoff:v1")).not.toBeNull();
   });
 
   it("keeps optional auth in the local workspace while cloud session restore is unresolved", async () => {

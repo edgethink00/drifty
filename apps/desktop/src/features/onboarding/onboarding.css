@@ -16,6 +16,7 @@
 @import "./styles/onboarding-privacy.css";
 @import "./styles/onboarding-setup-choice.css";
 @import "./styles/onboarding-account.css";
+@import "./styles/onboarding-promo-auth.css";
 @import "./styles/onboarding-data-managed.css";
 @import "./styles/onboarding-permissions-nudges.css";
 @import "./styles/onboarding-confirm-dialog.css";

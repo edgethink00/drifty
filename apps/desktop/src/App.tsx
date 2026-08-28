@@ -94,6 +94,13 @@ import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
+import { PromoHandoffAccountDialog } from "./features/billing/PromoHandoffAccountDialog";
+import {
+  clearPendingPromoHandoff,
+  hasPendingPromoHandoff,
+  storePendingPromoHandoff,
+  type BillingSuccessSource,
+} from "./features/billing/promoHandoff";
 import { AccountDeletionModal } from "./features/auth/AccountDeletionModal";
 import { deleteDriftyAccount, type AccountDeletionResult } from "./features/auth/accountDeletionService";
 import { hideBootShell } from "./features/loading/bootShell";
@@ -1106,6 +1113,9 @@ export default function App() {
   }, [navigateToTab, openCompanionNotificationSettings, openEndOfDayReviewDashboard, openEndOfDayReviewSettings, startOfDayMinutes]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalShowsGoogle, setAuthModalShowsGoogle] = useState(true);
+  const [authModalIntent, setAuthModalIntent] = useState<"default" | "promo">("default");
+  const [promoHandoffPending, setPromoHandoffPending] = useState(hasPendingPromoHandoff);
+  const [promoHandoffMismatch, setPromoHandoffMismatch] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [upgradePlanModalOpen, setUpgradePlanModalOpen] = useState(false);
   const [resumeUpgradePlanAfterAuth, setResumeUpgradePlanAfterAuth] = useState(false);
@@ -1159,10 +1169,17 @@ export default function App() {
   const [compactHistoryCacheRevision, setCompactHistoryCacheRevision] = useState(0);
   const [weekDashboardCacheRevision, setWeekDashboardCacheRevision] = useState(0);
   const openDefaultAuthModal = useCallback(() => {
+    setAuthModalIntent("default");
+    setAuthModalShowsGoogle(true);
+    setAuthModalOpen(true);
+  }, []);
+  const openPromoAuthModal = useCallback(() => {
+    setAuthModalIntent("promo");
     setAuthModalShowsGoogle(true);
     setAuthModalOpen(true);
   }, []);
   const openOnboardingEmailAuthModal = useCallback(() => {
+    setAuthModalIntent("default");
     setAuthModalShowsGoogle(false);
     setAuthModalOpen(true);
   }, []);
@@ -1241,6 +1258,7 @@ export default function App() {
     cloudConnectionStatus: reportedCloudConnectionStatus,
     callbackStatus,
     signInWithGoogle,
+    signInWithWebsite,
     signInAnonymously,
     signOut,
     isEnabled: isSupabaseConfigured,
@@ -1297,6 +1315,75 @@ export default function App() {
     onAuthRequired: requestCloudBillingAuth,
     onOpenAiSetup: openAiSetupSettings,
   });
+  useEffect(() => {
+    function handlePromoBillingSuccess(event: Event) {
+      const source = event instanceof CustomEvent
+        ? (event.detail as { readonly source?: BillingSuccessSource } | null)?.source
+        : null;
+      if (source !== "promo") return;
+      storePendingPromoHandoff();
+      setPromoHandoffPending(true);
+      setPromoHandoffMismatch(false);
+      if (!hasRequiredAccountAuth) openPromoAuthModal();
+    }
+
+    window.addEventListener("drifty:billing-success", handlePromoBillingSuccess);
+    return () => window.removeEventListener("drifty:billing-success", handlePromoBillingSuccess);
+  }, [hasRequiredAccountAuth, openPromoAuthModal]);
+
+  useEffect(() => {
+    if (!promoHandoffPending || authStatus === "loading") return;
+    if (!hasRequiredAccountAuth) {
+      setPromoHandoffMismatch(false);
+      openPromoAuthModal();
+      return;
+    }
+    if (!shouldCheckBillingEntitlement || billingEntitlementLoading || billingEntitlementError || !billingEntitlement) return;
+    if (billingEntitlement.accessSource === "promotion") {
+      clearPendingPromoHandoff();
+      setPromoHandoffPending(false);
+      setPromoHandoffMismatch(false);
+      return;
+    }
+    if (billingEntitlement.accessSource) setPromoHandoffMismatch(true);
+  }, [
+    authStatus,
+    billingEntitlement,
+    billingEntitlementError,
+    billingEntitlementLoading,
+    hasRequiredAccountAuth,
+    openPromoAuthModal,
+    promoHandoffPending,
+    shouldCheckBillingEntitlement,
+  ]);
+
+  useEffect(() => {
+    if (!promoHandoffPending || !billingEntitlementError || !shouldCheckBillingEntitlement) return;
+
+    function retryPendingPromoHandoff() {
+      void refreshBillingEntitlement();
+    }
+
+    window.addEventListener("online", retryPendingPromoHandoff);
+    return () => window.removeEventListener("online", retryPendingPromoHandoff);
+  }, [
+    billingEntitlementError,
+    promoHandoffPending,
+    refreshBillingEntitlement,
+    shouldCheckBillingEntitlement,
+  ]);
+
+  const keepCurrentPromoHandoffAccount = useCallback(() => {
+    clearPendingPromoHandoff();
+    setPromoHandoffPending(false);
+    setPromoHandoffMismatch(false);
+  }, []);
+
+  const switchPromoHandoffAccount = useCallback(async () => {
+    await signOut();
+    setPromoHandoffMismatch(false);
+    openPromoAuthModal();
+  }, [openPromoAuthModal, signOut]);
   const canUseCloudAiClassification = isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
   // Paid device sync: same entitlement gate as cloud AI, plus the per-device
   // explicit opt-in toggle (raw activity leaves the device only when both hold).
@@ -6433,6 +6520,7 @@ export default function App() {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
       setAuthModalOpen(false);
       setAuthModalShowsGoogle(true);
+      setAuthModalIntent("default");
       setResumeOnboardingAfterAuthModal(false);
     }
   }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired]);
@@ -6495,6 +6583,7 @@ export default function App() {
   const handleCloseAuthModal = useCallback(() => {
     setAuthModalOpen(false);
     setAuthModalShowsGoogle(true);
+    setAuthModalIntent("default");
     if (resumeOnboardingAfterAuthModal && !hasRequiredAccountAuth) {
       setOnboardingOpen(true);
     }
@@ -7154,7 +7243,7 @@ export default function App() {
       <>
         {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
         <AuthRequiredGate onSignIn={openDefaultAuthModal} />
-        {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+        {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
         {latestBuildPrompt}
       </>
     );
@@ -7225,14 +7314,25 @@ export default function App() {
       localAiSetup={localAiSetup}
       onLocalAiSetupChange={setLocalAiSetup}
       cloudTrialStartedNotice={cloudTrialStartedNotice}
+      billingEntitlement={billingEntitlement}
+      billingEntitlementError={billingEntitlementError}
+      billingEntitlementLoading={billingEntitlementLoading}
+      expectsPromotion={promoHandoffPending}
       authCallbackStatus={callbackStatus}
       onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
       onStartCloudTrialWithEmail={openOnboardingEmailAuthModal}
+      onStartCloudTrialWithWebsite={promoHandoffPending ? () => void signInWithWebsite() : undefined}
       onDeleteAnonymousAccount={user?.is_anonymous === true
         ? () => setAccountDeletionModalOpen(true)
         : undefined}
       onAcknowledgeCloudTrialStartedNotice={dismissCloudTrialStartedNotice}
       onComplete={handleOnboardingComplete}
+    />
+  ) : null;
+  const promoHandoffAccountDialog = promoHandoffMismatch ? (
+    <PromoHandoffAccountDialog
+      onKeepAccount={keepCurrentPromoHandoffAccount}
+      onSwitchAccount={switchPromoHandoffAccount}
     />
   ) : null;
   const shellClassName = [
@@ -7242,13 +7342,24 @@ export default function App() {
   ].filter(Boolean).join(" ");
 
   if (onboardingOpen) {
+    const promoAuthOnboardingOpen = authModalOpen && authModalIntent === "promo";
     return (
       <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
         <>
           {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
-          {onboardingModal}
-          {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+          {promoAuthOnboardingOpen ? (
+            <AuthModal
+              intent="promo"
+              onClose={handleCloseAuthModal}
+              presentation="onboarding"
+              showGoogleSignIn={authModalShowsGoogle}
+            />
+          ) : onboardingModal}
+          {authModalOpen && !promoAuthOnboardingOpen ? (
+            <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} />
+          ) : null}
+          {promoHandoffAccountDialog}
           {accountDeletionModalOpen ? (
             <AccountDeletionModal
               accountEmail={user?.email ?? null}
@@ -7278,6 +7389,7 @@ export default function App() {
             progress={firstDayPreparationProgress}
             workActivityLabel={firstDayWorkLabel}
           />
+          {promoHandoffAccountDialog}
           {latestBuildPrompt}
         </>
       </LocalizationProvider>
@@ -8361,7 +8473,8 @@ export default function App() {
         />
       ) : null}
 
-      {authModalOpen ? <AuthModal onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+      {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+      {promoHandoffAccountDialog}
 
       {shouldRenderUpgradePlanModal ? (
         <UpgradePlanModal

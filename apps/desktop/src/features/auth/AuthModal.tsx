@@ -1,9 +1,10 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { GoogleMark } from "../onboarding/components/GoogleMark";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type AuthMode = "sign-in" | "sign-up";
@@ -11,9 +12,13 @@ type AuthMode = "sign-in" | "sign-up";
 export function AuthModal({
   onClose,
   showGoogleSignIn = true,
+  intent = "default",
+  presentation = "modal",
 }: {
   onClose?: () => void;
   showGoogleSignIn?: boolean;
+  intent?: "default" | "promo";
+  presentation?: "modal" | "onboarding";
 }) {
   const { t } = useLocalization();
   const {
@@ -23,6 +28,7 @@ export function AuthModal({
     signInWithEmail,
     signUpWithEmail,
     signInWithGoogle,
+    signInWithWebsite,
     isEnabled,
   } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
@@ -32,7 +38,11 @@ export function AuthModal({
   const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
-  useModalDismiss(() => onClose?.(), { disabled: !onClose || isSubmitting || isGoogleSubmitting });
+  const [isWebsiteSubmitting, setIsWebsiteSubmitting] = useState(false);
+  const [promoEmailOpen, setPromoEmailOpen] = useState(false);
+  const promoOnboardingDialogRef = useRef<HTMLElement>(null);
+  useModalDismiss(() => onClose?.(), { disabled: !onClose || isSubmitting || isGoogleSubmitting || isWebsiteSubmitting });
+  useModalFocusTrap(promoOnboardingDialogRef, { initialFocusSelector: ".dc-onb-account__google" });
 
   if (!isEnabled) {
     return (
@@ -110,9 +120,25 @@ export function AuthModal({
     }
   }
 
+  async function handleWebsiteSignIn() {
+    setError(null);
+    setNotice(null);
+    setIsWebsiteSubmitting(true);
+    try {
+      const { error } = await signInWithWebsite();
+      if (error) {
+        setError(error.message);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("auth.modal.unexpectedError"));
+    } finally {
+      setIsWebsiteSubmitting(false);
+    }
+  }
+
   const isSignUp = authMode === "sign-up";
   const submitLabel = isSignUp ? t("auth.modal.createAccount") : t("auth.modal.signIn");
-  const isBusy = isSubmitting || isGoogleSubmitting || status === "loading";
+  const isBusy = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || status === "loading";
   const isGoogleCallbackBusy = callbackStatus?.googleAction === "opening"
     || callbackStatus?.phase === "received"
     || callbackStatus?.phase === "exchanging"
@@ -122,6 +148,187 @@ export function AuthModal({
     : callbackStatus?.googleAction === "retry"
       ? t("auth.modal.retryGoogle")
       : t("auth.modal.continueGoogle");
+  const title = intent === "promo"
+    ? t("auth.modal.promoTitle")
+    : isSignUp ? t("auth.modal.signUpTitle") : t("auth.modal.signInTitle");
+  const description = intent === "promo"
+    ? t("auth.modal.promoDescription")
+    : isSignUp ? t("auth.modal.signUpDescription") : t("auth.modal.signInDescription");
+
+  const errorNotice = error ? (
+    <div className="auth-modal__error" role="alert">{error}</div>
+  ) : null;
+  const successNotice = notice ? (
+    <div className="auth-modal__success" role="status">{notice}</div>
+  ) : null;
+  const callbackNotice = callbackStatus ? (
+    callbackStatus.phase === "failed" ? (
+      <div className="auth-modal__callback-notice" role="status">
+        <span>{callbackStatus.message}</span>
+        <button
+          type="button"
+          className="auth-modal__callback-dismiss"
+          onClick={clearCallbackStatus}
+          aria-label={t("auth.modal.dismissCallback")}
+        >
+          {t("auth.modal.dismiss")}
+        </button>
+      </div>
+    ) : (
+      <div className="auth-modal__success" role="status">
+        {callbackStatus.message}
+      </div>
+    )
+  ) : null;
+  const emailAuthForm = (
+    <>
+      <form className="auth-modal__form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
+        <label className="auth-modal__field" htmlFor="auth-email">
+          <span>{t("auth.modal.email")}</span>
+          <input
+            id="auth-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.currentTarget.value)}
+            disabled={isBusy}
+            required
+          />
+        </label>
+        <label className="auth-modal__field" htmlFor="auth-password">
+          <span>{t("auth.modal.password")}</span>
+          <input
+            id="auth-password"
+            type="password"
+            autoComplete={isSignUp ? "new-password" : "current-password"}
+            minLength={isSignUp ? AUTH_PASSWORD_POLICY.minLength : undefined}
+            value={password}
+            onChange={(event) => setPassword(event.currentTarget.value)}
+            disabled={isBusy}
+            required
+          />
+        </label>
+        <button
+          type="submit"
+          className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
+          disabled={isBusy}
+        >
+          {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
+        </button>
+      </form>
+
+      <p className="auth-modal__mode-switch">
+        <span>{isSignUp ? t("auth.modal.haveAccount") : t("auth.modal.needAccount")}</span>
+        <button
+          type="button"
+          onClick={() => {
+            setAuthMode(isSignUp ? "sign-in" : "sign-up");
+            setError(null);
+            setNotice(null);
+          }}
+          disabled={isBusy}
+        >
+          {isSignUp ? t("auth.modal.signIn") : t("auth.modal.createAccount")}
+        </button>
+      </p>
+    </>
+  );
+  const legal = (
+    <span>
+      {t("auth.modal.byContinuing")}
+      {" "}<a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("auth.modal.terms")}</a>
+      {" & "}
+      <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("auth.modal.privacy")}</a>.
+    </span>
+  );
+  if (presentation === "onboarding" && intent === "promo") {
+    return (
+      <section
+        ref={promoOnboardingDialogRef}
+        className="onboarding-screen dc-onboarding-screen promo-auth-screen"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="promo-auth-title"
+        data-auth-presentation="onboarding"
+        tabIndex={-1}
+      >
+        <div className="onboarding-window-drag-strip" data-tauri-drag-region aria-hidden="true" />
+        <div className="onboarding-content-area">
+          <div className="onboarding-card dc-onb-card">
+            <div className="dc-onb-scroll">
+              <div className="dc-onb-content dc-onb-content--account">
+                <div className="dc-onb-account promo-auth-screen__account">
+                  <h1 className="dc-onb-account__title" id="promo-auth-title">{title}</h1>
+                  <p className="dc-onb-account__copy">{description}</p>
+
+                  {errorNotice}
+                  {successNotice}
+                  {callbackNotice}
+
+                  <div className="dc-onb-account__buttons">
+                    <button
+                      type="button"
+                      className="dc-onb-account__google"
+                      onClick={() => void handleWebsiteSignIn()}
+                      disabled={isBusy || isGoogleCallbackBusy}
+                    >
+                      {isWebsiteSubmitting ? t("auth.modal.opening") : t("auth.modal.promoContinueBrowser")}
+                    </button>
+                    <p className="promo-auth-screen__browser-hint">{t("auth.modal.promoContinueBrowserHint")}</p>
+
+                    <div className="dc-onb-divider" aria-hidden="true">
+                      <span />{t("onboarding.account.or")}<span />
+                    </div>
+
+                    {showGoogleSignIn ? (
+                      <button
+                        type="button"
+                        className="dc-onb-account__email promo-auth-screen__provider"
+                        onClick={() => void handleGoogleSignIn()}
+                        disabled={isBusy || isGoogleCallbackBusy}
+                      >
+                        <GoogleMark />
+                        {isGoogleSubmitting ? t("auth.modal.opening") : googleButtonLabel}
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      className="dc-onb-account__email"
+                      aria-expanded={promoEmailOpen}
+                      aria-controls="promo-auth-email-form"
+                      onClick={() => setPromoEmailOpen((open) => !open)}
+                      disabled={isBusy}
+                    >
+                      {t("onboarding.account.email")}
+                    </button>
+                  </div>
+
+                  {promoEmailOpen ? (
+                    <div className="promo-auth-screen__email-form" id="promo-auth-email-form">
+                      {emailAuthForm}
+                    </div>
+                  ) : null}
+
+                  {onClose ? (
+                    <button className="promo-auth-screen__later" type="button" onClick={onClose} disabled={isBusy}>
+                      {t("auth.modal.promoLater")}
+                    </button>
+                  ) : null}
+                  <p className="dc-onb-account__helper">{t("onboarding.account.helper")}</p>
+                  <p className="dc-onb-account__legal">
+                    {t("onboarding.account.legalPrefix")}{" "}
+                    <a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("onboarding.account.terms")}</a>{" "}
+                    &amp; <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("onboarding.account.privacy")}</a>.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <div className="auth-modal__overlay">
@@ -129,88 +336,33 @@ export function AuthModal({
         {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={onClose} /> : null}
         <div className="modal-head">
           <div className="modal-head__copy">
-            <h2 id="auth-modal-title">{isSignUp ? t("auth.modal.signUpTitle") : t("auth.modal.signInTitle")}</h2>
-            <p>{isSignUp ? t("auth.modal.signUpDescription") : t("auth.modal.signInDescription")}</p>
+            <h2 id="auth-modal-title">{title}</h2>
+            <p>{description}</p>
           </div>
         </div>
 
-        {error ? (
-          <div className="auth-modal__error" role="alert">{error}</div>
+        {errorNotice}
+        {successNotice}
+        {callbackNotice}
+
+        {intent === "promo" ? (
+          <>
+            <button
+              type="button"
+              className="modal-btn modal-btn--primary modal-btn--block"
+              onClick={() => void handleWebsiteSignIn()}
+              disabled={isBusy || isGoogleCallbackBusy}
+            >
+              {isWebsiteSubmitting ? t("auth.modal.opening") : t("auth.modal.promoContinueBrowser")}
+            </button>
+            <p className="auth-modal__mode-switch auth-modal__promo-browser-hint">
+              <span>{t("auth.modal.promoContinueBrowserHint")}</span>
+            </p>
+            <div className="auth-modal__separator"><span>{t("auth.modal.or")}</span></div>
+          </>
         ) : null}
 
-        {notice ? (
-          <div className="auth-modal__success" role="status">{notice}</div>
-        ) : null}
-
-        {callbackStatus ? (
-          callbackStatus.phase === "failed" ? (
-            <div className="auth-modal__callback-notice" role="status">
-              <span>{callbackStatus.message}</span>
-              <button
-                type="button"
-                className="auth-modal__callback-dismiss"
-                onClick={clearCallbackStatus}
-                aria-label={t("auth.modal.dismissCallback")}
-              >
-                {t("auth.modal.dismiss")}
-              </button>
-            </div>
-          ) : (
-            <div className="auth-modal__success" role="status">
-              {callbackStatus.message}
-            </div>
-          )
-        ) : null}
-
-        <form className="auth-modal__form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
-          <label className="auth-modal__field" htmlFor="auth-email">
-            <span>{t("auth.modal.email")}</span>
-            <input
-              id="auth-email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.currentTarget.value)}
-              disabled={isBusy}
-              required
-            />
-          </label>
-          <label className="auth-modal__field" htmlFor="auth-password">
-            <span>{t("auth.modal.password")}</span>
-            <input
-              id="auth-password"
-              type="password"
-              autoComplete={isSignUp ? "new-password" : "current-password"}
-              minLength={isSignUp ? AUTH_PASSWORD_POLICY.minLength : undefined}
-              value={password}
-              onChange={(event) => setPassword(event.currentTarget.value)}
-              disabled={isBusy}
-              required
-            />
-          </label>
-          <button
-            type="submit"
-            className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
-            disabled={isBusy}
-          >
-            {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
-          </button>
-        </form>
-
-        <p className="auth-modal__mode-switch">
-          <span>{isSignUp ? t("auth.modal.haveAccount") : t("auth.modal.needAccount")}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setAuthMode(isSignUp ? "sign-in" : "sign-up");
-              setError(null);
-              setNotice(null);
-            }}
-            disabled={isBusy}
-          >
-            {isSignUp ? t("auth.modal.signIn") : t("auth.modal.createAccount")}
-          </button>
-        </p>
+        {emailAuthForm}
 
         {showGoogleSignIn ? (
           <>
@@ -228,14 +380,7 @@ export function AuthModal({
           </>
         ) : null}
 
-        <div className="auth-modal__footer auth-modal__footer--centered">
-          <span>
-            {t("auth.modal.byContinuing")}
-            {" "}<a href="https://drifty.so/terms/" target="_blank" rel="noreferrer">{t("auth.modal.terms")}</a>
-            {" & "}
-            <a href="https://drifty.so/privacy/" target="_blank" rel="noreferrer">{t("auth.modal.privacy")}</a>.
-          </span>
-        </div>
+        <div className="auth-modal__footer auth-modal__footer--centered">{legal}</div>
 
       </div>
     </div>

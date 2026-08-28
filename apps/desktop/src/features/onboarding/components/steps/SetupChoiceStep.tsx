@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { TRIAL_DAYS } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
+import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
 
 type SetupCardProps = {
   readonly badge?: string;
@@ -21,12 +22,16 @@ export function SetupChoiceStep({
   readonly flow: OnboardingFlow;
   readonly onToggleAdvanced: () => void;
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
+  const promotionEndLabel = formatBillingAccessEndDate(flow.promotionEndsAt, effectiveLanguage)
+    ?? t("onboarding.promo.activePeriod");
   return (
     <div className="dc-onb-setup">
       <SetupCard
-        badge={t("common.recommended")}
-        description={t("onboarding.setup.cloudDescription", { days: TRIAL_DAYS })}
+        badge={flow.promotionActive ? t("onboarding.setup.included") : t("common.recommended")}
+        description={flow.promotionActive
+          ? t("onboarding.setup.promoCloudDescription", { date: promotionEndLabel })
+          : t("onboarding.setup.cloudDescription", { days: TRIAL_DAYS })}
         icon={<CloudIcon />}
         label={t("onboarding.setup.cloud")}
         selected={flow.setupChoice === "simple"}

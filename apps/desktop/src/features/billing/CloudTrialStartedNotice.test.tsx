@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CloudTrialStartedNotice } from "./CloudTrialStartedNotice";
 
 const notice = {
+  accessSource: "standard_trial" as const,
   trialEndsAt: "2026-06-20T00:00:00.000Z",
+  headline: "1-week free trial has started",
   detail: "Hosted Cloud AI is available until Jun 20.",
 };
 
@@ -64,5 +66,21 @@ describe("CloudTrialStartedNotice", () => {
       vi.advanceTimersByTime(1);
     });
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("labels a promotional pass without calling it a one-week trial", () => {
+    render(<CloudTrialStartedNotice
+      notice={{
+        accessSource: "promotion",
+        trialEndsAt: "2026-10-26T00:00:00.000Z",
+        headline: "Your Pro pass is ready",
+        detail: "Your Pro access is available until Oct 26.",
+      }}
+      onDismiss={vi.fn()}
+    />);
+
+    expect(screen.getByRole("status", { name: /pro pass ready/i })).toBeTruthy();
+    expect(screen.getByText("Your Pro pass is ready")).toBeTruthy();
+    expect(screen.queryByText(/1-week free trial/i)).toBeNull();
   });
 });

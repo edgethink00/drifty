@@ -266,6 +266,12 @@
   flex: none;
 }
 
+.dc-onb-account__connected--neutral {
+  border-color: var(--dc-onb-line);
+  background: var(--dc-onb-inset);
+  color: var(--dc-onb-muted);
+}
+
 .dc-onb-account__google,
 .dc-onb-account__email {
   width: 100%;

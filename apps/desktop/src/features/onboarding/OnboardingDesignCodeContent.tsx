@@ -20,6 +20,7 @@ type OnboardingDesignCodeContentProps = {
   readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
+  readonly onStartCloudTrialWithWebsite?: () => void;
   readonly onDeleteAnonymousAccount?: () => void;
 };
 
@@ -28,6 +29,7 @@ export function OnboardingDesignCodeContent({
   authCallbackStatus,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
+  onStartCloudTrialWithWebsite,
   onDeleteAnonymousAccount,
 }: OnboardingDesignCodeContentProps) {
   const { t } = useLocalization();
@@ -107,15 +109,22 @@ export function OnboardingDesignCodeContent({
             ) : null}
 
             <div className="onboarding-step dc-onb-step" key={flow.step} ref={flow.stepBodyRef}>
-              {flow.step === "welcome" ? <WelcomeStep /> : null}
+              {flow.step === "welcome" ? (
+                <WelcomeStep promotionActive={flow.promotionActive} promotionEndsAt={flow.promotionEndsAt} />
+              ) : null}
               {flow.step === "account" ? (
                 <AccountStep
                   accountConnected={flow.accountConnected}
+                  accountAccessState={flow.accountAccessState}
+                  expectsPromotion={flow.expectsPromotion}
+                  promotionActive={flow.promotionActive}
+                  promotionEndsAt={flow.promotionEndsAt}
                   authCallbackStatus={authCallbackStatus}
                   devAuthSkipEnabled={DEV_ONBOARDING_AUTH_SKIP_ENABLED}
                   onSkipAuthForDev={flow.skipAccountForDev}
                   onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
                   onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+                  onStartCloudTrialWithWebsite={onStartCloudTrialWithWebsite}
                   onDeleteAnonymousAccount={onDeleteAnonymousAccount}
                 />
               ) : null}

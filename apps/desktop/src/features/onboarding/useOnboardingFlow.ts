@@ -11,6 +11,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED, DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
+import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
 import { getOnboardingSteps, type OnboardingStep } from "./onboardingFlow";
@@ -33,6 +34,7 @@ import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
 import { useOnboardingPermissions } from "./useOnboardingPermissions";
 import { useSafariHistoryPermission } from "./useSafariHistoryPermission";
 import { useLocalization } from "../localization/LocalizationContext";
+import { resolveOnboardingAccountAccessState } from "./accountAccessState";
 
 // Long enough for the "Account connected" success state to register before moving on.
 const ACCOUNT_CONNECTED_ADVANCE_MS = 1200;
@@ -52,6 +54,10 @@ type UseOnboardingFlowOptions = {
   readonly localAiSetup: LocalAiSetupState;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
+  readonly billingEntitlement: BillingEntitlement | null;
+  readonly billingEntitlementError: string | null;
+  readonly billingEntitlementLoading: boolean;
+  readonly expectsPromotion: boolean;
   readonly onAcknowledgeCloudTrialStartedNotice: () => void;
   readonly onComplete: (state: UserOnboardingState) => void;
   readonly devInitialStep?: OnboardingStep;
@@ -72,11 +78,31 @@ export function useOnboardingFlow({
   localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
+  billingEntitlement,
+  billingEntitlementError,
+  billingEntitlementLoading,
+  expectsPromotion,
   onAcknowledgeCloudTrialStartedNotice,
   onComplete,
   devInitialStep,
 }: UseOnboardingFlowOptions) {
   const { t } = useLocalization();
+  const promotionActive = billingEntitlement?.accessSource === "promotion"
+    && billingEntitlement.status === "trialing"
+    && billingEntitlement.canUseApp;
+  const accountAccessState = resolveOnboardingAccountAccessState({
+    accountConnected,
+    billingAccessSource: billingEntitlement?.accessSource,
+    billingEntitlementError,
+    billingEntitlementLoading,
+    entitlementResolved: billingEntitlement !== null,
+    expectsPromotion,
+    promotionActive,
+  });
+  const waitingForAccountAccess = accountAccessState === "checking"
+    || accountAccessState === "promotion-mismatch"
+    || (!expectsPromotion && accountConnected && billingEntitlementLoading);
+  const skipAccountStep = DEV_ONBOARDING_AUTH_BYPASS_ENABLED || (promotionActive && accountConnected);
   const progressEnabled = devInitialStep === undefined;
   const restoredProgress = useMemo(() => {
     if (!progressEnabled) return null;
@@ -84,9 +110,9 @@ export function useOnboardingFlow({
     if (!savedProgress) return null;
     return clampOnboardingProgressStep(savedProgress, {
       accountConnected,
-      skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
+      skipAccountStep,
     });
-  }, [accountConnected, progressEnabled, userId]);
+  }, [accountConnected, progressEnabled, skipAccountStep, userId]);
   const [displayName] = useState(initialDisplayName.trim());
   const { addMainActivity, mainActivities, mainActivityOther, setMainActivityOther, toggleMainActivity } = useMainActivities({
     mainActivities: restoredProgress?.mainActivities,
@@ -133,8 +159,8 @@ export function useOnboardingFlow({
   const safariHistoryPermission = useSafariHistoryPermission(step);
 
   const steps = useMemo(() => getOnboardingSteps(connection.setupChoice, {
-    skipAccountStep: DEV_ONBOARDING_AUTH_BYPASS_ENABLED,
-  }), [connection.setupChoice]);
+    skipAccountStep,
+  }), [connection.setupChoice, skipAccountStep]);
   const stepIndex = steps.findIndex((item) => item.id === step);
   const permissionSummaryLabel = permissions.accessibilityRequired && permissions.accessibilityGranted
     ? "Accessibility verified"
@@ -199,16 +225,17 @@ export function useOnboardingFlow({
     capturePostHogEvent("onboarding_step_viewed", { step });
   }, [step]);
 
-  // Once the account is connected, hold on the visible success state briefly,
-  // then advance on its own — the account step renders no Continue button.
+  // Hold for active verification and a confirmed account mismatch. A transport
+  // failure is deferred so setup can continue while Pro access remains gated.
   useEffect(() => {
     if (step !== "account" || !accountConnected) return;
+    if (waitingForAccountAccess) return;
     const timeoutId = window.setTimeout(() => {
-      const nextStep = steps[stepIndex + 1]?.id;
+      const nextStep = skipAccountStep ? "job" : steps[stepIndex + 1]?.id;
       if (nextStep) setStep(nextStep);
     }, ACCOUNT_CONNECTED_ADVANCE_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [accountConnected, step, stepIndex, steps]);
+  }, [accountConnected, skipAccountStep, step, stepIndex, steps, waitingForAccountAccess]);
 
   useEffect(() => {
     if (!progressEnabled) return;
@@ -339,12 +366,16 @@ export function useOnboardingFlow({
     ...permissions,
     safariHistoryPermission,
     accountConnected,
+    accountAccessState,
     accountSkippedForDev,
     addMainActivity,
     browserHistoryBootstrapEnabled,
     blockedHint,
     canAdvance,
     cloudTrialStartedNotice,
+    promotionActive,
+    promotionEndsAt: promotionActive ? billingEntitlement?.trialEndsAt ?? null : null,
+    expectsPromotion,
     driftAlarmEnabled,
     extremeNudgeEnabled,
     petModeEnabled,

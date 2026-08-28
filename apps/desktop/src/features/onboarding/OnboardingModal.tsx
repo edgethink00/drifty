@@ -3,6 +3,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
+import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { OnboardingDesignCodeContent } from "./OnboardingDesignCodeContent";
 import { useOnboardingFlow } from "./useOnboardingFlow";
@@ -34,9 +35,14 @@ export function OnboardingModal({
   localAiSetup,
   onLocalAiSetupChange,
   cloudTrialStartedNotice,
+  billingEntitlement,
+  billingEntitlementError,
+  billingEntitlementLoading,
+  expectsPromotion,
   authCallbackStatus,
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithEmail,
+  onStartCloudTrialWithWebsite,
   onDeleteAnonymousAccount,
   onAcknowledgeCloudTrialStartedNotice,
   onComplete,
@@ -56,9 +62,14 @@ export function OnboardingModal({
   localAiSetup: LocalAiSetupState;
   onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   cloudTrialStartedNotice: CloudTrialStartedNoticeModel | null;
+  billingEntitlement: BillingEntitlement | null;
+  billingEntitlementError: string | null;
+  billingEntitlementLoading: boolean;
+  expectsPromotion: boolean;
   authCallbackStatus: OAuthCallbackStatus | null;
   onStartCloudTrialWithGoogle: () => void;
   onStartCloudTrialWithEmail: () => void;
+  onStartCloudTrialWithWebsite?: () => void;
   onDeleteAnonymousAccount?: () => void;
   onAcknowledgeCloudTrialStartedNotice: () => void;
   onComplete: Parameters<typeof useOnboardingFlow>[0]["onComplete"];
@@ -86,6 +97,10 @@ export function OnboardingModal({
     localAiSetup,
     onLocalAiSetupChange,
     cloudTrialStartedNotice,
+    billingEntitlement,
+    billingEntitlementError,
+    billingEntitlementLoading,
+    expectsPromotion,
     onAcknowledgeCloudTrialStartedNotice,
     onComplete,
     devInitialStep: __devInitialStep,
@@ -106,6 +121,7 @@ export function OnboardingModal({
           authCallbackStatus={authCallbackStatus}
           onStartCloudTrialWithEmail={onStartCloudTrialWithEmail}
           onStartCloudTrialWithGoogle={onStartCloudTrialWithGoogle}
+          onStartCloudTrialWithWebsite={onStartCloudTrialWithWebsite}
           onDeleteAnonymousAccount={onDeleteAnonymousAccount}
         />
       </div>

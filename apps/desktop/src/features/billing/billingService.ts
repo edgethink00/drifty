@@ -8,6 +8,7 @@ export type BillingEntitlement = {
   canUseApp: boolean;
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
+  accessSource?: "standard_trial" | "promotion" | "subscription";
   lockedReason?: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached";
   deviceAccess?: CloudDeviceAccess;
   cloudDevices?: readonly CloudDeviceRecord[];
@@ -308,6 +309,10 @@ function isBillingEntitlement(value: unknown): value is BillingEntitlement {
   const entitlement = value as Partial<BillingEntitlement>;
   return entitlement.plan === "individual"
     && (entitlement.status === "trialing" || entitlement.status === "active" || entitlement.status === "locked")
+    && (entitlement.accessSource === undefined
+      || entitlement.accessSource === "standard_trial"
+      || entitlement.accessSource === "promotion"
+      || entitlement.accessSource === "subscription")
     && typeof entitlement.canUseApp === "boolean";
 }
 

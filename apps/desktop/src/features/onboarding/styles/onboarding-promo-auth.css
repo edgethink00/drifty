@@ -1,0 +1,106 @@
+.promo-auth-screen__account {
+  width: 100%;
+}
+
+.promo-auth-screen__browser-hint {
+  margin: -3px 4px 1px;
+  color: var(--dc-onb-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.promo-auth-screen__provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.promo-auth-screen__provider .onb-google-mark {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+}
+
+.promo-auth-screen__provider .onb-google-mark svg {
+  width: 18px;
+  height: 18px;
+}
+
+.promo-auth-screen .auth-modal__error,
+.promo-auth-screen .auth-modal__success,
+.promo-auth-screen .auth-modal__callback-notice {
+  margin: 0 0 14px;
+  text-align: left;
+}
+
+.promo-auth-screen__email-form {
+  margin-top: 14px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dc-onb-line);
+  text-align: left;
+}
+
+.promo-auth-screen__email-form .auth-modal__form {
+  gap: 10px;
+}
+
+.promo-auth-screen__email-form .auth-modal__field > span {
+  color: var(--dc-onb-soft);
+  font-size: 12px;
+}
+
+.promo-auth-screen__email-form .auth-modal__field input {
+  min-height: 42px;
+  border-color: rgba(28, 28, 25, 0.18);
+  background: #fff;
+  color: var(--dc-onb-text);
+}
+
+.promo-auth-screen__email-form .auth-modal__submit {
+  min-height: 42px;
+}
+
+.promo-auth-screen__email-form .auth-modal__mode-switch {
+  margin-bottom: 0;
+  text-align: center;
+}
+
+.promo-auth-screen__later {
+  appearance: none;
+  width: 100%;
+  margin: 20px 0 0;
+  padding: 22px 8px 4px;
+  border: 0;
+  border-top: 1px solid var(--dc-onb-line);
+  background: transparent;
+  color: var(--dc-onb-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.promo-auth-screen__later:hover:not(:disabled) {
+  color: var(--dc-onb-text);
+}
+
+.promo-auth-screen__later:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--dc-onb-accent) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.promo-auth-screen .dc-onb-account__legal {
+  margin-top: 9px;
+}
+
+@media (max-height: 500px) {
+  .promo-auth-screen .dc-onb-card {
+    padding-block: 30px;
+  }
+
+  .promo-auth-screen__browser-hint {
+    display: none;
+  }
+}

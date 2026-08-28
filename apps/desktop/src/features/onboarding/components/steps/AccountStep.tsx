@@ -1,26 +1,39 @@
 import type { OAuthCallbackStatus } from "../../../auth/AuthContext";
 import { GoogleMark } from "../GoogleMark";
-import { SuccessIcon } from "./shared";
+import { SpinnerIcon, SuccessIcon } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
+import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
+import type { OnboardingAccountAccessState } from "../../accountAccessState";
 
 export function AccountStep({
   accountConnected,
+  accountAccessState,
+  expectsPromotion,
+  promotionActive,
+  promotionEndsAt,
   authCallbackStatus,
   devAuthSkipEnabled,
   onSkipAuthForDev,
   onStartCloudTrialWithEmail,
   onStartCloudTrialWithGoogle,
+  onStartCloudTrialWithWebsite,
   onDeleteAnonymousAccount,
 }: {
   readonly accountConnected: boolean;
+  readonly accountAccessState: OnboardingAccountAccessState;
+  readonly expectsPromotion: boolean;
+  readonly promotionActive: boolean;
+  readonly promotionEndsAt: string | null;
   readonly authCallbackStatus: OAuthCallbackStatus | null;
   readonly devAuthSkipEnabled: boolean;
   readonly onSkipAuthForDev: () => void;
   readonly onStartCloudTrialWithEmail: () => void;
   readonly onStartCloudTrialWithGoogle: () => void;
+  readonly onStartCloudTrialWithWebsite?: () => void;
   readonly onDeleteAnonymousAccount?: () => void;
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
+  const promotionEndLabel = formatBillingAccessEndDate(promotionEndsAt, effectiveLanguage);
   const isGoogleHandoffBusy = authCallbackStatus?.googleAction === "opening"
     || authCallbackStatus?.phase === "received"
     || authCallbackStatus?.phase === "exchanging"
@@ -35,32 +48,79 @@ export function AccountStep({
     "dc-onb-account__callback",
     authCallbackStatus?.phase === "failed" ? "dc-onb-account__callback--failed" : "",
   ].filter(Boolean).join(" ");
-
+  const showPromoEntry = expectsPromotion && !accountConnected && onStartCloudTrialWithWebsite !== undefined;
+  const showCheckingState = accountAccessState === "checking";
+  const showDeferredState = accountAccessState === "verification-deferred";
   return (
     <div className="dc-onb-account">
-      <h2 className="dc-onb-account__title">{t("onboarding.title.account")}</h2>
-      <p className="dc-onb-account__copy">{t("onboarding.account.copy")}</p>
+      <h2 className="dc-onb-account__title">
+        {showPromoEntry ? t("auth.modal.promoTitle") : t("onboarding.title.account")}
+      </h2>
+      <p className="dc-onb-account__copy">
+        {showPromoEntry ? t("auth.modal.promoDescription") : t("onboarding.account.copy")}
+      </p>
       {accountConnected ? (
-        <div className="dc-onb-account__connected" role="status">
-          <SuccessIcon />
-          <span>{t("onboarding.ready.accountConnected")}</span>
+        <div
+          className={`dc-onb-account__connected${showCheckingState || showDeferredState ? " dc-onb-account__connected--neutral" : ""}`}
+          role="status"
+          aria-live="polite"
+          aria-busy={showCheckingState}
+        >
+          {showCheckingState ? <SpinnerIcon /> : showDeferredState ? null : <SuccessIcon />}
+          <span>
+            {showCheckingState
+              ? t("onboarding.account.checkingAccess")
+              : showDeferredState
+                ? t("onboarding.account.verificationDeferred")
+                : promotionActive
+                  ? promotionEndLabel
+                    ? t("onboarding.account.promoConnectedUntil", { date: promotionEndLabel })
+                    : t("onboarding.account.promoConnectedStatus")
+                  : t("onboarding.ready.accountConnected")}
+          </span>
         </div>
       ) : (
         <div className="dc-onb-account__buttons">
-          <button
-            type="button"
-            className="dc-onb-account__google"
-            onClick={onStartCloudTrialWithGoogle}
-            disabled={isGoogleHandoffBusy}
-          >
-            <GoogleMark />
-            <span>{googleButtonLabel}</span>
-          </button>
+          {showPromoEntry ? (
+            <>
+              <button
+                type="button"
+                className="dc-onb-account__google"
+                onClick={onStartCloudTrialWithWebsite}
+              >
+                {t("auth.modal.promoContinueBrowser")}
+              </button>
+              <p className="promo-auth-screen__browser-hint">
+                {t("auth.modal.promoContinueBrowserHint")}
+              </p>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="dc-onb-account__google"
+              onClick={onStartCloudTrialWithGoogle}
+              disabled={isGoogleHandoffBusy}
+            >
+              <GoogleMark />
+              <span>{googleButtonLabel}</span>
+            </button>
+          )}
           <div className="dc-onb-divider" aria-hidden="true">
             <span />
             {t("onboarding.account.or")}
             <span />
           </div>
+          {showPromoEntry ? (
+            <button
+              type="button"
+              className="dc-onb-account__email promo-auth-screen__provider"
+              onClick={onStartCloudTrialWithGoogle}
+              disabled={isGoogleHandoffBusy}
+            >
+              <GoogleMark />
+              <span>{googleButtonLabel}</span>
+            </button>
+          ) : null}
           <button
             type="button"
             className="dc-onb-account__email"
