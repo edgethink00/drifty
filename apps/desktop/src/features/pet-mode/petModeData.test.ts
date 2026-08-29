@@ -23,6 +23,7 @@ import {
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
+  PET_MODE_MUSIC_NOTE_CHANCE,
   PET_MODE_PRESENCE_RATIO,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_TIMELINE,
@@ -48,6 +49,7 @@ import {
   persistPetModeHiddenUntil,
   resolveInitialPetModeHiddenUntil,
   resolvePetModePresent,
+  shouldShowPetModeMusicNote,
 } from "./petModeData";
 
 describe("petModeData", () => {
@@ -68,6 +70,18 @@ describe("petModeData", () => {
     expect(PET_MODE_BLINK_DURATION_MS).toBe(228);
     expect(PET_MODE_BLINK_INTERVAL_MIN_MS).toBe(4_420);
     expect(PET_MODE_BLINK_INTERVAL_MAX_MS).toBe(7_280);
+  });
+
+  it("reserves the five percent music note roll for relaxed life motions", () => {
+    expect(PET_MODE_MUSIC_NOTE_CHANCE).toBe(0.05);
+    expect(shouldShowPetModeMusicNote("stretch", 0, true)).toBe(true);
+    expect(shouldShowPetModeMusicNote("tail_flick", 0.049999, true)).toBe(true);
+    expect(shouldShowPetModeMusicNote("stretch", 0.05, true)).toBe(false);
+    expect(shouldShowPetModeMusicNote("pet", 0, true)).toBe(false);
+    expect(shouldShowPetModeMusicNote("blink", 0, true)).toBe(false);
+    expect(shouldShowPetModeMusicNote("music_note", 0, true)).toBe(false);
+    expect(shouldShowPetModeMusicNote("stretch", 0, false)).toBe(false);
+    expect(shouldShowPetModeMusicNote("tail_flick", 0, false)).toBe(false);
   });
 
   it("keeps the approved nine-frame pickup and a composite-opaque release", () => {

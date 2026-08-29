@@ -46,6 +46,9 @@ import {
   getPetModeWindowSize,
   resolvePetModeEntryDurationMs,
   PET_MODE_LIFE_MOTION_DURATION_MS,
+  PET_MODE_MUSIC_NOTE_DURATION_MS,
+  PET_MODE_PET_STREAK_TO_SLEEP,
+  PET_MODE_PET_STREAK_WINDOW_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
   PET_MODE_PAW_TIMELINE,
@@ -58,12 +61,15 @@ import {
   PET_MODE_SIT_MIN_MS,
   PET_MODE_SLEEP_MAX_MS,
   PET_MODE_SLEEP_MIN_MS,
+  PET_MODE_SLEEP_WAKE_ANGER_CHANCE,
+  PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeNextActionInterval,
   pickPetModeLifeAction,
   resolveInitialPetModeCoat,
   resolveInitialPetModeSize,
   resolvePetModePresent,
+  shouldShowPetModeMusicNote,
   type PetModeInterventionTarget,
   type PetModeLabAction,
   type PetModeLifeAction,
@@ -132,6 +138,10 @@ export function PetModeWindowApp() {
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
+  // Only the return from a successful Drifty-window close wears the proud
+  // lids; every approach and every other walk keeps the shipped neutral face.
+  const [proudWalk, setProudWalk] = useState(false);
+  const [musicNoteVisible, setMusicNoteVisible] = useState(false);
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const [dragProbe, setDragProbe] = useState<PetDropPlan | null>(null);
@@ -149,6 +159,7 @@ export function PetModeWindowApp() {
     }
   });
   const actionTokenRef = useRef(0);
+  const musicNoteTimerRef = useRef<number | null>(null);
   const phaseRef = useRef<PetModeCatPhase>(initialPhase);
   const renderedPhaseRef = useRef<PetModeCatPhase>(initialPhase);
   const facingRef = useRef<"left" | "right">(initialAppearance.facing);
@@ -168,6 +179,9 @@ export function PetModeWindowApp() {
   // enablement has its own ref so Lab previews can still reveal the panel.
   const visibleRef = useRef(true);
   const sleepTouchRef = useRef(0);
+  // Consecutive pets and when the last one landed, for the settle-to-sleep run.
+  const petStreakRef = useRef(0);
+  const lastPetAtRef = useRef(0);
   // The previous autonomous action is the scheduler's short-term context.
   // `null` means the pet has not completed an autonomous action yet.
   const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
@@ -184,6 +198,31 @@ export function PetModeWindowApp() {
 
   useEffect(() => () => {
     if (huntAlertTimerRef.current !== null) window.clearTimeout(huntAlertTimerRef.current);
+  }, []);
+
+  const playMusicNote = useCallback(() => {
+    if (musicNoteTimerRef.current !== null) {
+      window.clearTimeout(musicNoteTimerRef.current);
+    }
+    setMusicNoteVisible(true);
+    musicNoteTimerRef.current = window.setTimeout(() => {
+      musicNoteTimerRef.current = null;
+      setMusicNoteVisible(false);
+    }, PET_MODE_MUSIC_NOTE_DURATION_MS);
+  }, []);
+
+  const stopMusicNote = useCallback(() => {
+    if (musicNoteTimerRef.current !== null) {
+      window.clearTimeout(musicNoteTimerRef.current);
+      musicNoteTimerRef.current = null;
+    }
+    setMusicNoteVisible(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (musicNoteTimerRef.current !== null) {
+      window.clearTimeout(musicNoteTimerRef.current);
+    }
   }, []);
 
   const reportLabState = useCallback((nextPhase = phaseRef.current) => {
@@ -412,6 +451,7 @@ export function PetModeWindowApp() {
       setPetModeEnabled(enabled);
       if (!enabled) {
         setPreserveEntryLanding(false);
+        setProudWalk(false);
         commitPhase("idle");
       }
     };
@@ -470,6 +510,10 @@ export function PetModeWindowApp() {
         && event.key !== PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY
         && event.key !== DEV_MODE_STORAGE_KEY
       ) return;
+      if (
+        event.key === DEV_MODE_STORAGE_KEY
+        && window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1"
+      ) stopMusicNote();
       if (resolvePetModeDriftHuntSettings().enabled) return;
       actionTokenRef.current += 1;
       void cancelNativePetMotion().catch(() => undefined);
@@ -478,7 +522,7 @@ export function PetModeWindowApp() {
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, [commitPhase, setActiveLabAction]);
+  }, [commitPhase, setActiveLabAction, stopMusicNote]);
 
   useEffect(() => {
     let disposed = false;
@@ -599,8 +643,18 @@ export function PetModeWindowApp() {
       }
       if (token !== actionTokenRef.current) return;
       if (movedToTarget) {
+        // The proud E04 face belongs to one product beat only: after the paw
+        // successfully closes Drifty's own window, while the cat walks home.
+        // It never appears on the approach, failed contacts, browser-tab
+        // interventions, previews, or the Show Pet toggle.
+        const proudReturn = contacted && target.labTarget === "drifty_window_x";
+        setProudWalk(proudReturn);
         commitPhase("walk");
-        await returnNativePetHome();
+        try {
+          await returnNativePetHome();
+        } finally {
+          setProudWalk(false);
+        }
       }
       if (token === actionTokenRef.current) {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
@@ -634,6 +688,7 @@ export function PetModeWindowApp() {
     if (action === "stop") {
       actionTokenRef.current += 1;
       sleepTouchRef.current = 0;
+      stopMusicNote();
       setLifeLoopEnabled(false);
       commitVisibility(true);
       commitPhase(focusRestingRef.current ? "sit" : "idle");
@@ -645,6 +700,14 @@ export function PetModeWindowApp() {
     }
     if (action === "outing") {
       await playOuting(preview ? 2_600 : PET_MODE_AWAY_MS);
+      return;
+    }
+    if (action === "music_note") {
+      // This is an additive accent, so a Dev preview must not cancel or replace
+      // the pose currently underneath it (including focused sitting).
+      if (window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1") return;
+      playMusicNote();
+      await delay(PET_MODE_MUSIC_NOTE_DURATION_MS);
       return;
     }
 
@@ -669,7 +732,7 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       await roamNativePet();
     } else {
-      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop">, PetModeCatPhase> = {
+      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note">, PetModeCatPhase> = {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
@@ -682,13 +745,38 @@ export function PetModeWindowApp() {
         pet: 1_200,
       };
       commitPhase(phaseByAction[action]);
+      const musicNoteDevEnabled = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+      if (
+        musicNoteDevEnabled
+        && (action === "stretch" || action === "tail_flick")
+        && shouldShowPetModeMusicNote(action, Math.random(), musicNoteDevEnabled)
+      ) playMusicNote();
       await delay(prefersReducedMotion() ? 40 : durationByAction[action]);
     }
 
     if (token === actionTokenRef.current) {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     }
-  }, [commitPhase, commitVisibility, playOuting, revealForAction, setLifeLoopEnabled]);
+  }, [commitPhase, commitVisibility, playMusicNote, playOuting, revealForAction, setLifeLoopEnabled, stopMusicNote]);
+
+  const wakeSleepingPet = useCallback(async () => {
+    const token = ++actionTokenRef.current;
+    sleepTouchRef.current = 0;
+    const annoyed = Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE;
+    if (!annoyed) {
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+      return;
+    }
+
+    // Anger is a wake-up reaction, not a general click reaction. The sleeping
+    // branch is the only caller, so an awake happy tap can never roll this
+    // effect even when Math.random would otherwise qualify.
+    commitPhase("anger");
+    await delay(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
+    if (token === actionTokenRef.current) {
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+    }
+  }, [commitPhase]);
 
   const playCursorHunt = useCallback(async (
     huntSettings: PetModeDriftHuntSettings,
@@ -825,6 +913,7 @@ export function PetModeWindowApp() {
         if (
           phaseRef.current !== "idle"
           && !(isCursorHuntPreview && phaseRef.current === "sit")
+          && previewAction !== "music_note"
           && previewAction !== "wake"
           && previewAction !== "stop"
         ) {
@@ -1357,7 +1446,7 @@ export function PetModeWindowApp() {
         sleepTouchRef.current = 1;
         return;
       }
-      void playLifeAction("wake");
+      void wakeSleepingPet();
       return;
     }
     // Sitting is a multi-minute hold, so it has to stay pettable or the pet
@@ -1369,6 +1458,21 @@ export function PetModeWindowApp() {
       && phaseRef.current !== "tail"
       && phaseRef.current !== "sit"
     ) return;
+
+    // Repeated petting is a relationship, not a series of unrelated taps. Each
+    // pet inside the streak window adds to a run; a long enough run settles the
+    // cat instead of replaying the same happy beat forever. The streak decays
+    // on its own so attention has to be renewed rather than banked.
+    const now = Date.now();
+    const continuing = now - lastPetAtRef.current <= PET_MODE_PET_STREAK_WINDOW_MS;
+    petStreakRef.current = continuing ? petStreakRef.current + 1 : 1;
+    lastPetAtRef.current = now;
+
+    if (petStreakRef.current >= PET_MODE_PET_STREAK_TO_SLEEP) {
+      petStreakRef.current = 0;
+      void playLifeAction("sleep", false);
+      return;
+    }
     void playLifeAction("pet");
   };
 
@@ -1411,6 +1515,8 @@ export function PetModeWindowApp() {
             huntAlertDurationMs={huntAlertDurationMs}
             dragPickupPose={dragPickupPose}
             dragReleasePose={dragReleasePose}
+            proudWalk={proudWalk}
+            musicNoteVisible={musicNoteVisible}
           />
           <span
             ref={contactAnchorRef}

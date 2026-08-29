@@ -115,6 +115,8 @@ describe("DevSettingsSection", () => {
     expect(enabledProps.onPreviewPetModeIntervention).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Stretch Flow Stretch C/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("stretch");
+    fireEvent.click(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }));
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("music_note");
     fireEvent.click(screen.getByRole("button", { name: /Sit G pose QA/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sit");
     fireEvent.click(screen.getByRole("button", { name: /Browser tab X/ }));
@@ -162,7 +164,13 @@ describe("DevSettingsSection", () => {
 
     expect(screen.getByRole("button", { name: /단발 사냥 재생/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /8초 추격 재생/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "sit", activeAction: "music_note", lifeLoopEnabled: false });
+    });
+    expect(screen.getByText("Music note", { selector: ".pet-mode-lab__status" })).toBeTruthy();
   });
 
   it("persists a bounded cursor chase policy from the Pet Mode Lab", () => {

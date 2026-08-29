@@ -13,7 +13,9 @@ import {
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_LIFE_MOTION_DURATION_MS,
+  PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_PRESENT_MS,
+  PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
@@ -177,6 +179,7 @@ describe("PetModeWindowApp", () => {
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
+    if (vi.isMockFunction(Math.random)) vi.mocked(Math.random).mockRestore();
     vi.clearAllMocks();
     bridge.stagePetModeHitRegionTransition.mockReset().mockResolvedValue(undefined);
     bridge.dragEndHandler = null;
@@ -1015,6 +1018,8 @@ describe("PetModeWindowApp", () => {
 
   it("runs detailed Pet Mode Lab actions through the real pet state machine", async () => {
     vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -1046,6 +1051,115 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "music_note" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("has-music-note")).toBe(true);
+    expect(bridge.reportNativePetModeLabState).toHaveBeenCalledWith(expect.objectContaining({
+      phase: "idle",
+      activeAction: "music_note",
+    }));
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stop" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("has-music-note")).toBe(false);
+
+    // A cleared timer must not resurrect the accent after Stop.
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_MUSIC_NOTE_DURATION_MS); });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("has-music-note")).toBe(false);
+  });
+
+  it("shows the music note for only the first 760 ms of a qualifying relaxed motion", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.spyOn(Math, "random").mockReturnValue(0.01);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("stretch");
+    expect(cat.classList.contains("has-music-note")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_MUSIC_NOTE_DURATION_MS); });
+    expect(cat.classList.contains("has-music-note")).toBe(false);
+    expect(cat.getAttribute("data-phase")).toBe("stretch");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_MOTION_DURATION_MS - PET_MODE_MUSIC_NOTE_DURATION_MS);
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("keeps relaxed motions unchanged when Dev mode is off", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.01);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    const callsBeforeAction = random.mock.calls.length;
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("stretch");
+    expect(cat.classList.contains("has-music-note")).toBe(false);
+    expect(random.mock.calls).toHaveLength(callsBeforeAction);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "music_note" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.classList.contains("has-music-note")).toBe(false);
+  });
+
+  it("removes a visible music note as soon as Dev mode turns off", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "music_note" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.classList.contains("has-music-note")).toBe(true);
+
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: DEV_MODE_STORAGE_KEY,
+        newValue: "0",
+      }));
+    });
+    expect(cat.classList.contains("has-music-note")).toBe(false);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_MUSIC_NOTE_DURATION_MS); });
+    expect(cat.classList.contains("has-music-note")).toBe(false);
   });
 
   it("uses the selected full Tail V2-B asset for the complete tail action", async () => {
@@ -1346,6 +1460,7 @@ describe("PetModeWindowApp", () => {
   });
 
   it("preserves the sleeping cat's two-tap wake behavior", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -1367,6 +1482,56 @@ describe("PetModeWindowApp", () => {
     dispatchPointer(pet, "pointerup", { pointerId: 33, clientX: 12, clientY: 12 });
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("can show a brief anger mark only when the second sleep touch wakes the cat", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 34, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 34, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sleep");
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 35, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 35, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("anger");
+    expect(document.querySelector(".pet-mode-cat__anger")).not.toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("never shows the anger mark for awake petting even when the random roll qualifies", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 36, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 36, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("happy");
+    expect(document.querySelector(".pet-mode-cat--anger")).toBeNull();
   });
 
   it("keeps a focused sitting cat continuous through pickup and release", async () => {

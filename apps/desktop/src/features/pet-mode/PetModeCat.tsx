@@ -32,6 +32,7 @@ type PetModeCatPhase =
   | "bite"
   | "return"
   | "notice"
+  | "anger"
   | "paw"
   | "happy"
   | "blink"
@@ -77,6 +78,8 @@ export function PetModeCat({
   huntAlertDurationMs = 480,
   dragPickupPose = "idle",
   dragReleasePose = "idle",
+  proudWalk = false,
+  musicNoteVisible = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -97,6 +100,10 @@ export function PetModeCat({
   readonly huntAlertDurationMs?: number;
   readonly dragPickupPose?: PetModeRestPose;
   readonly dragReleasePose?: PetModeRestPose;
+  /** Wears the E04 lids while walking home after closing Drifty's window. */
+  readonly proudWalk?: boolean;
+  /** Shows the reviewed one-shot good-mood note without replacing the body pose. */
+  readonly musicNoteVisible?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -317,7 +324,7 @@ export function PetModeCat({
     && preserveEntryLanding
     && walkFrames.length > 0
     && renderedEntrySequenceRef.current === entrySequence;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy";
   const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")
@@ -382,6 +389,7 @@ export function PetModeCat({
           <PetModeWalkFace
             biting={phase === "bite" || phase === "return"}
             gazing={gazeOffset.x !== 0 || gazeOffset.y !== 0}
+            proud={proudWalk}
           />
         </g>
       </g>
@@ -634,6 +642,19 @@ export function PetModeCat({
       <span className="pet-mode-cat__heart" aria-hidden="true">♥</span>
       <span className="pet-mode-cat__zzz" aria-hidden="true">z</span>
       <span className="pet-mode-cat__alert" aria-hidden="true">!</span>
+      {/* V06 Music note: traced from the approved review-board vector. It is
+          independent of phase so the original stretch/tail artwork stays
+          untouched underneath the rare accent. */}
+      <svg className="pet-mode-cat__music-note" viewBox="0 0 797 581" aria-hidden="true">
+        <ellipse cx="732" cy="159" rx="17" ry="14" transform="rotate(-18 732 159)" />
+        <path d="M747 154 V111 L777 120" />
+      </svg>
+      {/* The anger mark is a traced comic vein cluster, not a glyph, so it
+          cannot ride the text-based marks above. It shares their placement and
+          dark halo but needs its own drawn geometry. */}
+      <svg className="pet-mode-cat__anger" viewBox="0 0 797 581" aria-hidden="true">
+        <path d="M736.8 103.4 L737.2 103.6 L741.4 111.5 L743.8 115.1 L746.1 117.5 L749.5 119.8 L751.2 120.4 L754.7 120.4 L758.3 119.2 L763.1 116.6 L770.2 110.8 L775.5 116.8 L775.5 117.2 L767.8 123.4 L764.8 125.3 L760.4 127.3 L754.7 128.7 L751.2 128.7 L746.4 127.5 L743.3 125.8 L740.8 123.9 L736.8 119.6 L733.6 114.7 L729.7 107.2 L736.8 103.4 Z M716.3 113.2 L722.3 120.6 L726.1 127.2 L727.4 131.1 L728.0 134.4 L727.6 139.6 L725.7 144.5 L724.0 147.0 L721.0 150.2 L715.3 154.3 L706.5 159.0 L702.7 151.6 L710.2 147.7 L714.2 145.1 L717.8 141.5 L719.1 139.2 L719.7 137.3 L719.5 133.4 L717.5 128.3 L713.9 123.0 L710.1 118.7 L711.0 117.5 L716.3 113.2 Z M781.4 130.6 L781.7 130.6 L785.3 138.0 L778.3 141.5 L773.8 144.5 L770.8 147.3 L769.5 149.2 L768.5 151.5 L768.3 154.9 L769.8 159.8 L773.2 165.2 L777.9 170.9 L777.0 172.1 L771.7 176.4 L765.5 168.6 L761.7 161.9 L760.6 158.3 L760.0 154.5 L760.6 149.2 L761.4 147.0 L763.3 143.5 L767.2 139.2 L773.2 134.9 L781.4 130.6 Z M732.7 160.9 L737.4 160.9 L740.6 161.7 L743.3 162.8 L746.8 165.2 L749.9 168.3 L752.3 171.5 L758.3 182.2 L751.0 186.2 L747.6 179.6 L743.6 173.8 L740.6 170.9 L737.0 169.2 L733.0 169.2 L728.7 170.7 L724.4 173.3 L717.8 178.8 L712.5 172.6 L716.6 168.8 L722.9 164.5 L727.6 162.3 L732.7 160.9 Z" />
+      </svg>
     </div>
   );
 }
@@ -701,21 +722,37 @@ function PetModeWalkFace({
   animatedBlink = false,
   gazing = false,
   biting = false,
+  proud = false,
 }: {
   readonly transform?: string;
   readonly animatedBlink?: boolean;
   readonly gazing?: boolean;
   readonly biting?: boolean;
+  readonly proud?: boolean;
 }) {
   return (
     <g className="pet-mode-cat__face" transform={transform}>
       {/* Keep one canonical copy of the shipped walk face. The sitting pose
           translates this entire group without redrawing or rescaling it. */}
+      {proud ? (
+        /* E04: the lids curve down over the eyes. Quiet satisfaction reads as
+           the opposite arc of an excited smile, which is why the walk-away at
+           the end of a session uses this instead of the happy face. */
+        <path
+          className="pet-mode-cat__walk-eyes--proud"
+          d="M117.8 45.0 Q120.4 48.8 123.0 45.0 M137.7 45.0 Q140.3 48.8 142.9 45.0"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.9"
+          strokeLinecap="round"
+        />
+      ) : (
       <g className={gazing ? "pet-mode-cat__vector-eyes--gaze" : undefined}>
         <circle className={`${animatedBlink ? "pet-mode-cat__sit-eye-open" : ""}${gazing ? " pet-mode-cat__vector-eye--gaze" : ""}`.trim() || undefined} cx="120.4" cy="46.2" r="2.2" fill="currentColor" />
         <circle className={`${animatedBlink ? "pet-mode-cat__sit-eye-open" : ""}${gazing ? " pet-mode-cat__vector-eye--gaze" : ""}`.trim() || undefined} cx="140.3" cy="46.2" r="2.2" fill="currentColor" />
       </g>
-      {animatedBlink ? (
+      )}
+      {animatedBlink && !proud ? (
         <path
           className="pet-mode-cat__sit-eye-closed"
           d="M117.8 46.2 Q120.4 48.6 123 46.2 M137.7 46.2 Q140.3 48.6 142.9 46.2"

@@ -170,6 +170,7 @@ pub enum PetModePreviewAction {
     Blink,
     Stretch,
     TailFlick,
+    MusicNote,
     Sleep,
     Sit,
     Wake,
@@ -4067,9 +4068,10 @@ mod tests {
     }
 
     #[test]
-    fn preview_actions_accept_active_life_loop_tail_sit_and_cursor_hunt_wire_values() {
+    fn preview_actions_accept_active_life_loop_tail_note_sit_and_cursor_hunt_wire_values() {
         let life_loop: PetModePreviewAction = serde_json::from_str("\"life_loop\"").unwrap();
         let tail: PetModePreviewAction = serde_json::from_str("\"tail_flick\"").unwrap();
+        let note: PetModePreviewAction = serde_json::from_str("\"music_note\"").unwrap();
         let sit: PetModePreviewAction = serde_json::from_str("\"sit\"").unwrap();
         let hunt_single: PetModePreviewAction =
             serde_json::from_str("\"cursor_hunt_single\"").unwrap();
@@ -4077,6 +4079,7 @@ mod tests {
             serde_json::from_str("\"cursor_hunt_chase\"").unwrap();
         assert!(matches!(life_loop, PetModePreviewAction::LifeLoop));
         assert!(matches!(tail, PetModePreviewAction::TailFlick));
+        assert!(matches!(note, PetModePreviewAction::MusicNote));
         assert!(matches!(sit, PetModePreviewAction::Sit));
         assert!(matches!(
             hunt_single,

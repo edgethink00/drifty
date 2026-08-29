@@ -24,6 +24,21 @@ export const PET_MODE_SIT_MIN_MS = 2.5 * 60 * 1000;
 export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
 export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
 export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
+// Petting in a streak reads as sustained attention rather than repeated taps.
+// Four pets inside the window settle the cat; the window is short enough that
+// coming back an hour later starts a new streak instead of resuming the old one.
+export const PET_MODE_PET_STREAK_WINDOW_MS = 6 * 1000;
+export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
+// Waking a sleeping cat can earn a brief annoyed beat. The roll happens only
+// on the second sleep touch, never on ordinary petting or the touch that merely
+// checks whether the cat wants to stay asleep.
+export const PET_MODE_SLEEP_WAKE_ANGER_CHANCE = 0.25;
+export const PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS = 1_200;
+// A music note is a rare good-mood accent, not another default idle effect.
+// It can accompany the two relaxed life motions and uses the same reviewed
+// one-shot timing as the existing heart.
+export const PET_MODE_MUSIC_NOTE_CHANCE = 0.05;
+export const PET_MODE_MUSIC_NOTE_DURATION_MS = 760;
 // The pet's approved geometry is 144x99 with the cat drawn at 121.2x92.4
 // inside it. Size is expressed as a percentage of that reviewed layout so the
 // cat, its hit target, and the native panel all scale by one factor instead of
@@ -161,6 +176,7 @@ export type PetModePreviewAction =
   | "blink"
   | "stretch"
   | "tail_flick"
+  | "music_note"
   | "sleep"
   | "sit"
   | "wake"
@@ -168,6 +184,17 @@ export type PetModePreviewAction =
   | "outing"
   | "cursor_hunt_single"
   | "cursor_hunt_chase";
+
+export function shouldShowPetModeMusicNote(
+  action: PetModePreviewAction,
+  roll: number,
+  devModeEnabled: boolean,
+): boolean {
+  return devModeEnabled
+    && (action === "stretch" || action === "tail_flick")
+    && roll >= 0
+    && roll < PET_MODE_MUSIC_NOTE_CHANCE;
+}
 
 export type PetModeLabAction = PetModePreviewAction | "intervention";
 

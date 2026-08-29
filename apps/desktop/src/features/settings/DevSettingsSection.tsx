@@ -201,6 +201,10 @@ export function DevSettingsSection({
     if (action === "stop") return false;
     if (action === "wake") return petModeLabState?.phase !== "sleep";
     if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
+    if (action === "music_note") {
+      return petModeLabState !== null
+        && petModeLabState.activeAction !== null;
+    }
     if (action === "cursor_hunt_single" || action === "cursor_hunt_chase") {
       return petModeLabState !== null
         && (petModeLabState.activeAction !== null
@@ -211,11 +215,13 @@ export function DevSettingsSection({
   };
   const petModeLabStatus = !petModeEnabled
     ? "Off"
-    : petModeLabState?.phase !== undefined && petModeLabState.phase !== "idle"
-      ? formatPetModeLabPhase(petModeLabState.phase)
-      : petModeLabState?.lifeLoopEnabled
-        ? "Loop on"
-        : "Ready";
+    : petModeLabState?.activeAction === "music_note"
+      ? "Music note"
+      : petModeLabState?.phase !== undefined && petModeLabState.phase !== "idle"
+        ? formatPetModeLabPhase(petModeLabState.phase)
+        : petModeLabState?.lifeLoopEnabled
+          ? "Loop on"
+          : "Ready";
 
   return (
     <div className="settings-section">
@@ -282,6 +288,7 @@ export function DevSettingsSection({
               <PetModeLabAction label="Blink" detail="228 ms" action="blink" active={petModeLabState?.activeAction === "blink"} disabled={isPetModeLabActionDisabled("blink")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Tail flick" detail="Flow Tail B · 3.1 s" action="tail_flick" active={petModeLabState?.activeAction === "tail_flick"} disabled={isPetModeLabActionDisabled("tail_flick")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Stretch" detail="Flow Stretch C · 3.1 s" action="stretch" active={petModeLabState?.activeAction === "stretch"} disabled={isPetModeLabActionDisabled("stretch")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Music note" detail="Manual 760 ms preview" action="music_note" active={petModeLabState?.activeAction === "music_note"} disabled={isPetModeLabActionDisabled("music_note")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Sit" detail="G pose QA" action="sit" active={petModeLabState?.activeAction === "sit"} disabled={isPetModeLabActionDisabled("sit")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
