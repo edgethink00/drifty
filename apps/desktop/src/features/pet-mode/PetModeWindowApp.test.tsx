@@ -322,6 +322,96 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
+  it("lets explicit Lab X targets interrupt focus sitting while automatic interventions stay blocked", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "automatic-while-focused",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.moveNativePetToTarget).not.toHaveBeenCalled();
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "lab-browser-x-while-focused",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+          labTarget: "browser_tab_x",
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+  });
+
+  it("keeps the newer Lab intervention active when an interrupted tail preview finishes", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "tail_flick" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("tail");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "lab-browser-x-during-tail",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+          labTarget: "browser_tab_x",
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(40); });
+
+    const labStateCalls = bridge.reportNativePetModeLabState.mock.calls;
+    const latestLabState = labStateCalls[labStateCalls.length - 1]?.[0];
+    expect(latestLabState?.activeAction).toBe("intervention");
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+  });
+
   it("notices a drift episode once, then bites and returns with a stationary cursor once", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");

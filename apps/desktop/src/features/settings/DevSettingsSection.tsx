@@ -237,6 +237,12 @@ export function DevSettingsSection({
     return petModeLabState !== null
       && (petModeLabState.activeAction !== null || petModeLabState.phase !== "idle");
   };
+  const petModeLabTargetBusy = !petModeEnabled
+    || (petModeLabState !== null
+      && (petModeLabState.activeAction === "intervention"
+        || petModeLabState.phase === "entry"
+        || petModeLabState.phase === "drag"
+        || petModeLabState.phase === "release"));
   const petModeLabStatus = !petModeEnabled
     ? "Off"
     : petModeLabState?.activeAction === "music_note"
@@ -386,9 +392,9 @@ export function DevSettingsSection({
             <div className="pet-mode-lab__controls" aria-label="Pet placement and target tests">
               <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement, then use Walk to verify resident Y" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
-              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
+              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
               <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
-              <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
+              <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
               <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact, drop calibration guides, and the live drop preview badge" title="Toggle feet contact line (93pt), calibration guides, and the live drop preview badge on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
             </div>
           </div>

@@ -180,6 +180,8 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("button", { name: /Tail flick/ }).classList.contains("is-active")).toBe(true);
     expect(screen.getByRole("button", { name: /Tail flick/ }).getAttribute("disabled")).toBe("");
     expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
+    expect(screen.getByRole("button", { name: /Browser tab X/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /Drifty window X/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Stop/ }).getAttribute("disabled")).toBeNull();
 
     act(() => {
@@ -188,6 +190,17 @@ describe("DevSettingsSection", () => {
 
     expect(screen.getByText("Sitting", { selector: ".pet-mode-lab__status" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Sit G pose QA/ }).classList.contains("is-active")).toBe(true);
+    expect(screen.getByRole("button", { name: /Browser tab X/ }).getAttribute("disabled")).toBeNull();
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "sleep", activeAction: "sleep", lifeLoopEnabled: false });
+    });
+    expect(screen.getByRole("button", { name: /Browser tab X/ }).getAttribute("disabled")).toBeNull();
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "run", activeAction: "intervention", lifeLoopEnabled: false });
+    });
+    expect(screen.getByRole("button", { name: /Browser tab X/ }).getAttribute("disabled")).toBe("");
   });
 
   it("previews left and right facing only while the pet is resting", async () => {

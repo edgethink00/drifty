@@ -179,6 +179,7 @@ export function PetModeWindowApp() {
   const poseTransitionRef = useRef(0);
   const facingTransitionRef = useRef(0);
   const activeLabActionRef = useRef<PetModeLabAction | null>(null);
+  const activeLabActionRevisionRef = useRef(0);
   // `intervention` is also used by product-triggered nudges. This separate bit
   // lets focus preserve deliberate Lab previews without allowing an automatic
   // nudge to retain motion ownership.
@@ -337,7 +338,16 @@ export function PetModeWindowApp() {
   }, [phase]);
 
   const setActiveLabAction = useCallback((action: PetModeLabAction | null) => {
+    const revision = ++activeLabActionRevisionRef.current;
     activeLabActionRef.current = action;
+    reportLabState();
+    return revision;
+  }, [reportLabState]);
+
+  const clearActiveLabAction = useCallback((revision: number) => {
+    if (activeLabActionRevisionRef.current !== revision) return;
+    activeLabActionRevisionRef.current += 1;
+    activeLabActionRef.current = null;
     reportLabState();
   }, [reportLabState]);
 
@@ -612,6 +622,14 @@ export function PetModeWindowApp() {
     let contacted = false;
 
     try {
+      if (target.labTarget === "browser_tab_x" || target.labTarget === "drifty_window_x") {
+        // A direct Lab target owns the pet immediately. Stop any native walk
+        // before AX target discovery so the old action cannot keep travelling
+        // while its X target is being resolved.
+        stopMusicNote();
+        await cancelNativePetMotion().catch(() => undefined);
+        if (token !== actionTokenRef.current) return;
+      }
       await revealForAction();
       if (token !== actionTokenRef.current) return;
       commitPhase("run");
@@ -693,7 +711,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
-  }, [commitFacing, commitPhase, revealForAction]);
+  }, [commitFacing, commitPhase, revealForAction, stopMusicNote]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     const token = ++actionTokenRef.current;
@@ -1019,33 +1037,37 @@ export function PetModeWindowApp() {
             return;
           }
           void (async () => {
-            setActiveLabAction(previewAction);
+            const actionRevision = setActiveLabAction(previewAction);
             try {
               await playCursorHunt({
                 ...huntSettings,
                 mode: previewAction === "cursor_hunt_chase" ? "chase" : "single",
               }, { allowWhileResting: true });
             } finally {
-              setActiveLabAction(null);
+              clearActiveLabAction(actionRevision);
             }
           })();
           return;
         }
         void (async () => {
-          setActiveLabAction(previewAction);
+          const actionRevision = setActiveLabAction(previewAction);
           try {
             await playLifeAction(previewAction);
           } catch {
             commitPhase("idle");
           } finally {
-            setActiveLabAction(null);
+            clearActiveLabAction(actionRevision);
           }
         })();
         return;
       }
+      const isLabTarget = event.target.labTarget === "browser_tab_x"
+        || event.target.labTarget === "drifty_window_x";
       if (
-        focusRestingRef.current
+        activeLabActionRef.current === "intervention"
+        || (!isLabTarget && focusRestingRef.current)
         || manualDragRef.current
+        || (isLabTarget && phaseRef.current === "entry")
         || phaseRef.current === "drag"
         || phaseRef.current === "release"
       ) {
@@ -1053,8 +1075,8 @@ export function PetModeWindowApp() {
         return;
       }
       void (async () => {
-        automaticInterventionRef.current = !event.target.preview;
-        setActiveLabAction("intervention");
+        automaticInterventionRef.current = !isLabTarget && !event.target.preview;
+        const actionRevision = setActiveLabAction("intervention");
         try {
           await playIntervention(event.target);
         } catch {
@@ -1062,7 +1084,7 @@ export function PetModeWindowApp() {
           void returnNativePetHome().catch(() => undefined);
         } finally {
           automaticInterventionRef.current = false;
-          setActiveLabAction(null);
+          clearActiveLabAction(actionRevision);
           // Focus may have ended while a cancelled native move was still
           // resolving. The focus-exit effect deliberately waits for action
           // ownership to clear, so finish that deferred sit -> idle handoff
@@ -1085,7 +1107,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
+  }, [clearActiveLabAction, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
 
   useEffect(() => {
     const resting = snapshot?.productivity === "focus";
