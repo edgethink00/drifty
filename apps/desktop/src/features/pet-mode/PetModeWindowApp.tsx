@@ -47,6 +47,7 @@ import {
   resolvePetModeEntryDurationMs,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
+  PET_MODE_EXPERIMENTS_STORAGE_KEY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
   PET_MODE_PAW_CONTACT_FRAME,
@@ -63,7 +64,7 @@ import {
   PET_MODE_SLEEP_MIN_MS,
   PET_MODE_SLEEP_WAKE_ANGER_CHANCE,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
-  PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY,
+  PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeNextActionInterval,
   pickPetModeLifeAction,
@@ -102,6 +103,16 @@ import "./petMode.css";
 
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
 type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase">;
+
+function expressiveInteractionsEnabled(): boolean {
+  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
+    && window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY) === "1";
+}
+
+function guaranteedOutcomesEnabled(): boolean {
+  return expressiveInteractionsEnabled()
+    && window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1";
+}
 
 export function PetModeWindowApp() {
   // The native window is created hidden and normally has time to mount before
@@ -219,6 +230,23 @@ export function PetModeWindowApp() {
     }
     setMusicNoteVisible(false);
   }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key !== null
+        && event.key !== DEV_MODE_STORAGE_KEY
+        && event.key !== PET_MODE_EXPERIMENTS_STORAGE_KEY
+      ) return;
+      if (expressiveInteractionsEnabled()) return;
+      petStreakRef.current = 0;
+      lastPetAtRef.current = 0;
+      setProudWalk(false);
+      stopMusicNote();
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [stopMusicNote]);
 
   useEffect(() => () => {
     if (musicNoteTimerRef.current !== null) {
@@ -644,11 +672,12 @@ export function PetModeWindowApp() {
       }
       if (token !== actionTokenRef.current) return;
       if (movedToTarget) {
-        // The proud E04 face belongs to one product beat only: after the paw
-        // successfully closes Drifty's own window, while the cat walks home.
-        // It never appears on the approach, failed contacts, browser-tab
-        // interventions, previews, or the Show Pet toggle.
-        const proudReturn = contacted && target.labTarget === "drifty_window_x";
+        // With the expressive-interactions experiment enabled, every real
+        // successful close earns the E04 face for the walk home. Approaches,
+        // failed contacts, generic previews, and Show Pet stay neutral.
+        const proudReturn = expressiveInteractionsEnabled()
+          && contacted
+          && !target.preview;
         setProudWalk(proudReturn);
         commitPhase("walk");
         try {
@@ -706,9 +735,43 @@ export function PetModeWindowApp() {
     if (action === "music_note") {
       // This is an additive accent, so a Dev preview must not cancel or replace
       // the pose currently underneath it (including focused sitting).
-      if (window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1") return;
+      if (!expressiveInteractionsEnabled()) return;
       playMusicNote();
       await delay(PET_MODE_MUSIC_NOTE_DURATION_MS);
+      return;
+    }
+    if (action === "stretch_with_note" || action === "tail_flick_with_note") {
+      if (!expressiveInteractionsEnabled()) return;
+      const token = ++actionTokenRef.current;
+      await revealForAction();
+      if (token !== actionTokenRef.current) return;
+      const baseAction = action === "stretch_with_note" ? "stretch" : "tail_flick";
+      commitPhase(baseAction === "stretch" ? "stretch" : "tail");
+      playMusicNote();
+      await delay(prefersReducedMotion()
+        ? 40
+        : baseAction === "stretch"
+          ? PET_MODE_LIFE_MOTION_DURATION_MS
+          : PET_MODE_TAIL_FLICK_DURATION_MS);
+      if (token === actionTokenRef.current) {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
+      return;
+    }
+    if (action === "sleep_angry_wake") {
+      if (!expressiveInteractionsEnabled()) return;
+      const token = ++actionTokenRef.current;
+      await revealForAction();
+      if (token !== actionTokenRef.current) return;
+      sleepTouchRef.current = 0;
+      commitPhase("sleep");
+      await delay(prefersReducedMotion() ? 40 : 600);
+      if (token !== actionTokenRef.current) return;
+      commitPhase("anger");
+      await delay(prefersReducedMotion() ? 40 : PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
+      if (token === actionTokenRef.current) {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
       return;
     }
 
@@ -733,7 +796,7 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       await roamNativePet();
     } else {
-      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note">, PetModeCatPhase> = {
+      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note" | "stretch_with_note" | "tail_flick_with_note" | "sleep_angry_wake">, PetModeCatPhase> = {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
@@ -746,11 +809,13 @@ export function PetModeWindowApp() {
         pet: 1_200,
       };
       commitPhase(phaseByAction[action]);
-      const musicNoteDevEnabled = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+      const musicNoteDevEnabled = expressiveInteractionsEnabled();
+      const guaranteedOutcomes = guaranteedOutcomesEnabled();
       if (
         musicNoteDevEnabled
         && (action === "stretch" || action === "tail_flick")
-        && shouldShowPetModeMusicNote(action, Math.random(), musicNoteDevEnabled)
+        && (guaranteedOutcomes
+          || shouldShowPetModeMusicNote(action, Math.random(), musicNoteDevEnabled))
       ) playMusicNote();
       await delay(prefersReducedMotion() ? 40 : durationByAction[action]);
     }
@@ -763,9 +828,13 @@ export function PetModeWindowApp() {
   const wakeSleepingPet = useCallback(async () => {
     const token = ++actionTokenRef.current;
     sleepTouchRef.current = 0;
-    const alwaysAngryWake = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
-      && window.localStorage.getItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY) === "1";
-    const annoyed = alwaysAngryWake || Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE;
+    const experimentsEnabled = expressiveInteractionsEnabled();
+    if (!experimentsEnabled) {
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+      return;
+    }
+    const guaranteedOutcomes = guaranteedOutcomesEnabled();
+    const annoyed = guaranteedOutcomes || Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE;
     if (!annoyed) {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
@@ -1461,6 +1530,15 @@ export function PetModeWindowApp() {
       && phaseRef.current !== "tail"
       && phaseRef.current !== "sit"
     ) return;
+
+    // OFF preserves the shipped interaction: every awake touch simply plays
+    // the happy response. ON adds the experimental relationship streak.
+    if (!expressiveInteractionsEnabled()) {
+      petStreakRef.current = 0;
+      lastPetAtRef.current = 0;
+      void playLifeAction("pet");
+      return;
+    }
 
     // Repeated petting is a relationship, not a series of unrelated taps. Each
     // pet inside the streak window adds to a run; a long enough run settles the

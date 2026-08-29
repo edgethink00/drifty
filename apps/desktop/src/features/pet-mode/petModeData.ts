@@ -29,10 +29,16 @@ export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
 // coming back an hour later starts a new streak instead of resuming the old one.
 export const PET_MODE_PET_STREAK_WINDOW_MS = 6 * 1000;
 export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
-// Dev-only override for repeatedly QAing the sleep wake-up reaction. The pet
-// renderer also checks Dev mode itself, so a persisted toggle cannot change
-// production behavior after Dev mode is turned off.
-export const PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY = "drifty.dev.petModeAlwaysAngryWake.v1";
+// The expressive interaction pack is intentionally Dev-gated while its
+// product rules are being calibrated. A second key (rather than Dev mode by
+// itself) lets reviewers compare the shipped cat and the experiment without
+// leaving the diagnostics surface.
+export const PET_MODE_EXPERIMENTS_STORAGE_KEY = "drifty.dev.petModeExperiments.v1";
+// Dev-only override for repeatedly QAing the pack's visible probability
+// outcomes. It affects only angry wake and music-note rolls, not life-action
+// selection or timing. The renderer also checks Dev mode itself, so a
+// persisted toggle cannot change production behavior after Dev mode is off.
+export const PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY = "drifty.dev.petModeGuaranteedOutcomes.v1";
 // Waking a sleeping cat can earn a brief annoyed beat. The roll happens only
 // on the second sleep touch, never on ordinary petting or the touch that merely
 // checks whether the cat wants to stay asleep.
@@ -181,6 +187,9 @@ export type PetModePreviewAction =
   | "stretch"
   | "tail_flick"
   | "music_note"
+  | "stretch_with_note"
+  | "tail_flick_with_note"
+  | "sleep_angry_wake"
   | "sleep"
   | "sit"
   | "wake"
@@ -192,9 +201,9 @@ export type PetModePreviewAction =
 export function shouldShowPetModeMusicNote(
   action: PetModePreviewAction,
   roll: number,
-  devModeEnabled: boolean,
+  expressiveInteractionsEnabled: boolean,
 ): boolean {
-  return devModeEnabled
+  return expressiveInteractionsEnabled
     && (action === "stretch" || action === "tail_flick")
     && roll >= 0
     && roll < PET_MODE_MUSIC_NOTE_CHANCE;

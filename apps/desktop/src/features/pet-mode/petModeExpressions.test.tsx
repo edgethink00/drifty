@@ -2,7 +2,9 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PetModeWindowApp } from "./PetModeWindowApp";
+import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
+  PET_MODE_EXPERIMENTS_STORAGE_KEY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
   PET_MODE_STORAGE_KEY,
@@ -72,6 +74,8 @@ describe("pet expressions", () => {
   beforeEach(() => {
     // The window reads its enabled state from storage on mount.
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     // The walk vector only renders once its frames resolve, and the proud lids
     // live inside that vector.
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
@@ -104,7 +108,7 @@ describe("pet expressions", () => {
     vi.unstubAllGlobals();
   });
 
-  it("wears the proud lids only while returning from a successful Drifty-window close", async () => {
+  it("wears the proud lids while returning from every successful real close", async () => {
     vi.useFakeTimers();
     let finishReturn!: () => void;
     bridge.returnNativePetHome.mockImplementationOnce(() => new Promise<void>((resolve) => {
@@ -117,11 +121,11 @@ describe("pet expressions", () => {
       bridge.eventHandler?.({
         kind: "intervention",
         target: {
-          id: "drifty-window-close",
-          appName: "Drifty",
+          id: "production-close",
+          appName: "Distracting app",
           browserName: null,
           preview: false,
-          labTarget: "drifty_window_x",
+          labTarget: null,
         },
       });
     });
@@ -178,6 +182,39 @@ describe("pet expressions", () => {
     expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
   });
 
+  it("keeps a successful close return neutral when the experiment is off", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "0");
+    let finishReturn!: () => void;
+    bridge.returnNativePetHome.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishReturn = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "existing-close",
+          appName: "Distracting app",
+          browserName: null,
+          preview: false,
+          labTarget: null,
+        },
+      });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(240); });
+
+    expect(phase()).toBe("walk");
+    expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
+
+    await act(async () => {
+      finishReturn();
+      await Promise.resolve();
+    });
+  });
+
   it("settles the cat into sleep after a run of pets", async () => {
     vi.useFakeTimers();
     render(<PetModeWindowApp />);
@@ -189,6 +226,19 @@ describe("pet expressions", () => {
     }
 
     expect(phase()).toBe("sleep");
+  });
+
+  it("keeps repeated petting on the existing happy response when the experiment is off", async () => {
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "0");
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    for (let i = 0; i < PET_MODE_PET_STREAK_TO_SLEEP + 1; i += 1) {
+      petOnce();
+      await act(async () => { await Promise.resolve(); });
+    }
+
+    expect(phase()).toBe("happy");
   });
 
   it("does not settle when the pets are spaced beyond the streak window", async () => {

@@ -171,6 +171,9 @@ pub enum PetModePreviewAction {
     Stretch,
     TailFlick,
     MusicNote,
+    StretchWithNote,
+    TailFlickWithNote,
+    SleepAngryWake,
     Sleep,
     Sit,
     Wake,
@@ -4072,6 +4075,12 @@ mod tests {
         let life_loop: PetModePreviewAction = serde_json::from_str("\"life_loop\"").unwrap();
         let tail: PetModePreviewAction = serde_json::from_str("\"tail_flick\"").unwrap();
         let note: PetModePreviewAction = serde_json::from_str("\"music_note\"").unwrap();
+        let stretch_note: PetModePreviewAction =
+            serde_json::from_str("\"stretch_with_note\"").unwrap();
+        let tail_note: PetModePreviewAction =
+            serde_json::from_str("\"tail_flick_with_note\"").unwrap();
+        let angry_wake: PetModePreviewAction =
+            serde_json::from_str("\"sleep_angry_wake\"").unwrap();
         let sit: PetModePreviewAction = serde_json::from_str("\"sit\"").unwrap();
         let hunt_single: PetModePreviewAction =
             serde_json::from_str("\"cursor_hunt_single\"").unwrap();
@@ -4080,6 +4089,12 @@ mod tests {
         assert!(matches!(life_loop, PetModePreviewAction::LifeLoop));
         assert!(matches!(tail, PetModePreviewAction::TailFlick));
         assert!(matches!(note, PetModePreviewAction::MusicNote));
+        assert!(matches!(
+            stretch_note,
+            PetModePreviewAction::StretchWithNote
+        ));
+        assert!(matches!(tail_note, PetModePreviewAction::TailFlickWithNote));
+        assert!(matches!(angry_wake, PetModePreviewAction::SleepAngryWake));
         assert!(matches!(sit, PetModePreviewAction::Sit));
         assert!(matches!(
             hunt_single,

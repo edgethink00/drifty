@@ -14,8 +14,9 @@ import {
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
+  PET_MODE_EXPERIMENTS_STORAGE_KEY,
+  PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_PRESENT_MS,
-  PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
@@ -1020,6 +1021,7 @@ describe("PetModeWindowApp", () => {
   it("runs detailed Pet Mode Lab actions through the real pet state machine", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     vi.spyOn(Math, "random").mockReturnValue(0.99);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -1074,9 +1076,104 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").classList.contains("has-music-note")).toBe(false);
   });
 
+  it("runs deterministic expressive scenarios without changing the probability override", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stretch_with_note" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("stretch");
+    expect(cat.classList.contains("has-music-note")).toBe(true);
+    expect(bridge.reportNativePetModeLabState).toHaveBeenCalledWith(expect.objectContaining({
+      phase: "stretch",
+      activeAction: "stretch_with_note",
+    }));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_MOTION_DURATION_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("has-music-note")).toBe(false);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "tail_flick_with_note" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("tail");
+    expect(cat.classList.contains("has-music-note")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_TAIL_FLICK_DURATION_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sleep_angry_wake" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    expect(cat.getAttribute("data-phase")).toBe("anger");
+    expect(document.querySelector(".pet-mode-cat__anger")).not.toBeNull();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("keeps deterministic expressive scenarios disabled when the master pack is off", async () => {
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stretch_with_note" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("has-music-note")).toBe(false);
+  });
+
+  it("forces music notes for relaxed motions only when guaranteed outcomes is enabled", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY, "1");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("stretch");
+    expect(cat.classList.contains("has-music-note")).toBe(true);
+  });
+
   it("shows the music note for only the first 760 ms of a qualifying relaxed motion", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     vi.spyOn(Math, "random").mockReturnValue(0.01);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -1136,6 +1233,7 @@ describe("PetModeWindowApp", () => {
   it("removes a visible music note as soon as Dev mode turns off", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
       return vi.fn();
@@ -1487,6 +1585,8 @@ describe("PetModeWindowApp", () => {
 
   it("can show a brief anger mark only when the second sleep touch wakes the cat", async () => {
     vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     vi.spyOn(Math, "random").mockReturnValue(0);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -1517,10 +1617,11 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
-  it("guarantees the angry wake reaction when its Dev toggle is enabled", async () => {
+  it("guarantees the angry wake reaction when guaranteed outcomes is enabled", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY, "1");
     vi.spyOn(Math, "random").mockReturnValue(0.99);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -1545,9 +1646,10 @@ describe("PetModeWindowApp", () => {
     expect(document.querySelector(".pet-mode-cat__anger")).not.toBeNull();
   });
 
-  it("ignores the persisted angry wake override when Dev mode is off", async () => {
+  it("ignores persisted guaranteed outcomes when Dev mode is off", async () => {
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
-    window.localStorage.setItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY, "1");
     vi.spyOn(Math, "random").mockReturnValue(0.99);
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;

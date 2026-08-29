@@ -1584,7 +1584,8 @@
   justify-content: flex-end;
 }
 
-.pet-mode-lab__wake-policy {
+.pet-mode-lab__outcome-policy,
+.pet-mode-lab__experiment-policy {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1598,19 +1599,34 @@
   justify-self: end;
 }
 
-.pet-mode-lab__wake-policy > span {
+.pet-mode-lab__experiment-policy {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.pet-mode-lab__experiment-policy[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface));
+}
+
+.pet-mode-lab__outcome-policy > span,
+.pet-mode-lab__experiment-policy > span {
   display: grid;
+  min-width: 0;
   gap: .16rem;
 }
 
-.pet-mode-lab__wake-policy strong {
+.pet-mode-lab__outcome-policy strong,
+.pet-mode-lab__experiment-policy strong {
   color: var(--text);
   font-size: var(--type-caption-size);
 }
 
-.pet-mode-lab__wake-policy small {
+.pet-mode-lab__outcome-policy small,
+.pet-mode-lab__experiment-policy small {
   color: var(--muted);
   font-size: .6875rem;
+  line-height: 1.35;
 }
 
 .pet-mode-lab__row--hunt {

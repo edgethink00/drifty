@@ -18,7 +18,10 @@ import {
   resolveInitialEnhancedContextSettings,
 } from "./settingsStorage";
 import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
-import { PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY } from "../pet-mode/petModeData";
+import {
+  PET_MODE_EXPERIMENTS_STORAGE_KEY,
+  PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
+} from "../pet-mode/petModeData";
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
@@ -116,14 +119,38 @@ describe("DevSettingsSection", () => {
     expect(enabledProps.onPreviewPetModeIntervention).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Stretch Flow Stretch C/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("stretch");
-    fireEvent.click(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }));
+    const musicNoteButton = screen.getByRole("button", { name: /Music note Manual 760 ms preview/ });
+    const stretchWithNoteButton = screen.getByRole("button", { name: /Stretch \+ note Guaranteed combination/ });
+    const tailWithNoteButton = screen.getByRole("button", { name: /Tail \+ note Guaranteed combination/ });
+    const sleepAngryButton = screen.getByRole("button", { name: /Sleep → angry Guaranteed wake reaction/ });
+    expect(musicNoteButton.getAttribute("disabled")).toBe("");
+    expect(stretchWithNoteButton.getAttribute("disabled")).toBe("");
+    expect(tailWithNoteButton.getAttribute("disabled")).toBe("");
+    expect(sleepAngryButton.getAttribute("disabled")).toBe("");
+    expect(screen.getByText("Existing behavior")).toBeTruthy();
+    const disabledGuaranteedToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
+    expect(disabledGuaranteedToggle.getAttribute("disabled")).toBe("");
+    expect(disabledGuaranteedToggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle expressive pet interactions" }));
+    expect(screen.getByText("Enabled for QA")).toBeTruthy();
+    expect(window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY)).toBe("1");
+    expect(musicNoteButton.getAttribute("disabled")).toBeNull();
+    expect(stretchWithNoteButton.getAttribute("disabled")).toBeNull();
+    expect(tailWithNoteButton.getAttribute("disabled")).toBeNull();
+    expect(sleepAngryButton.getAttribute("disabled")).toBeNull();
+    fireEvent.click(musicNoteButton);
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("music_note");
-    expect(screen.queryByRole("button", { name: /Angry wake/ })).toBeNull();
-    const angryWakeToggle = screen.getByRole("switch", { name: "Toggle guaranteed angry wake" });
-    expect(screen.getByText("25% chance")).toBeTruthy();
-    fireEvent.click(angryWakeToggle);
-    expect(screen.getByText("Always angry")).toBeTruthy();
-    expect(window.localStorage.getItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY)).toBe("1");
+    fireEvent.click(stretchWithNoteButton);
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("stretch_with_note");
+    fireEvent.click(tailWithNoteButton);
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("tail_flick_with_note");
+    fireEvent.click(sleepAngryButton);
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sleep_angry_wake");
+    const guaranteedOutcomesToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
+    expect(screen.getByText("Natural odds")).toBeTruthy();
+    fireEvent.click(guaranteedOutcomesToggle);
+    expect(screen.getByText("Always trigger")).toBeTruthy();
+    expect(window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY)).toBe("1");
     fireEvent.click(screen.getByRole("button", { name: /Sit G pose QA/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sit");
     fireEvent.click(screen.getByRole("button", { name: /Browser tab X/ }));
@@ -162,6 +189,7 @@ describe("DevSettingsSection", () => {
 
   it("keeps explicit cursor hunt previews available while the focused cat is sitting", async () => {
     window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     renderProductionDevSettings({ petModeEnabled: true });
     await act(async () => undefined);
 
