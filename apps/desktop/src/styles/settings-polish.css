@@ -2121,12 +2121,15 @@ button.individual-plan-card:focus-visible {
 }
 
 .individual-plan-card--featured {
-  /* The paid plan is the decision this surface exists for, so it carries a
-     tinted edge instead of matching the Free card exactly. */
-  border-color: color-mix(in srgb, var(--accent) 26%, var(--line));
+  /* Prism Echo keeps the opaque functional surface neutral while the paid
+     plan receives one quiet, multi-hue selection boundary. */
+  background:
+    linear-gradient(var(--surface), var(--surface)) padding-box,
+    var(--plan-card-pro-border-gradient) border-box;
+  border-color: transparent;
 }
 
-.individual-plan-card--current {
+.individual-plan-card--current:not(.individual-plan-card--featured) {
   border-color: var(--line);
 }
 
@@ -2148,11 +2151,11 @@ button.individual-plan-card:focus-visible {
   white-space: nowrap;
 }
 
-/* The paid card's badge is the one signal worth tinting; Free stays neutral. */
+/* The badge echoes one violet stop instead of repeating the label gradient. */
 .individual-plan-card--featured .individual-plan-card__badge {
-  background: var(--accent-soft);
-  border-color: transparent;
-  color: var(--accent);
+  background: var(--plan-card-pro-badge-bg);
+  border-color: var(--plan-card-pro-badge-border);
+  color: var(--plan-card-pro-badge-text);
 }
 
 .individual-plan-card__top {
@@ -2173,12 +2176,22 @@ button.individual-plan-card:focus-visible {
 }
 
 .individual-plan-card__topline span {
+  color: var(--plan-card-label-text);
   font-family: var(--font-display);
-  font-size: 1.1875rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-  line-height: 1.04;
+  font-size: 0.75rem;
+  font-weight: 760;
+  letter-spacing: 0.055em;
+  line-height: 1;
   min-width: 0;
+  text-transform: uppercase;
+}
+
+.individual-plan-card--featured .individual-plan-card__topline > span {
+  background-image: var(--plan-card-pro-label-gradient);
+  background-clip: text;
+  color: transparent;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .individual-plan-card__price-row {
@@ -2342,6 +2355,29 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 .individual-plan-card__cta--manage:disabled {
   cursor: progress;
   opacity: 0.7;
+}
+
+@media (forced-colors: active) {
+  .individual-plan-card__topline > span {
+    color: CanvasText;
+  }
+
+  .individual-plan-card--featured {
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  .individual-plan-card--featured .individual-plan-card__badge {
+    background: Canvas;
+    border-color: CanvasText;
+    color: CanvasText;
+  }
+
+  .individual-plan-card--featured .individual-plan-card__topline > span {
+    background-image: none;
+    color: CanvasText;
+    -webkit-text-fill-color: currentColor;
+  }
 }
 
 @media (max-width: 1080px) {

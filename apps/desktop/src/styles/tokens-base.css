@@ -195,6 +195,20 @@ html {
   --gold-wash: #c49e5c;
   --purple: #6b4fa8;
   --purple-soft: #e6e0f4;
+  /* Prism Echo: Pro gets one expressive label and a quiet spectral edge.
+     The badge samples a single violet stop so functional chrome stays flat. */
+  --plan-card-label-text: color-mix(in srgb, var(--text) 76%, var(--text-soft));
+  --plan-card-pro-label-gradient: linear-gradient(96deg, #bd4568 0%, #7559b3 42%, #2d7696 72%, #527443 100%);
+  --plan-card-pro-border-gradient: linear-gradient(
+    136deg,
+    color-mix(in srgb, #bd4568 34%, var(--line)) 0%,
+    color-mix(in srgb, #7559b3 32%, var(--line)) 34%,
+    color-mix(in srgb, #2d7696 30%, var(--line)) 67%,
+    color-mix(in srgb, #527443 48%, var(--line)) 100%
+  );
+  --plan-card-pro-badge-bg: color-mix(in srgb, #7559b3 9%, var(--surface));
+  --plan-card-pro-badge-border: color-mix(in srgb, #7559b3 18%, var(--line));
+  --plan-card-pro-badge-text: color-mix(in srgb, #7559b3 62%, var(--text));
   --gray-seg: #ccc9c0;
   --flow-tone-focus: var(--productivity-focus);
   --flow-tone-neutral: var(--productivity-neutral);
@@ -258,6 +272,18 @@ html {
   --gold-wash: #d3a35c;
   --purple: #8a72c0;
   --purple-soft: #1e1a2e;
+  --plan-card-label-text: color-mix(in srgb, var(--text) 86%, var(--text-soft));
+  --plan-card-pro-label-gradient: linear-gradient(96deg, #ef7d9a 0%, #b195ec 42%, #6fc1df 73%, #85bd98 100%);
+  --plan-card-pro-border-gradient: linear-gradient(
+    136deg,
+    color-mix(in srgb, #ef7d9a 24%, var(--line-strong)) 0%,
+    color-mix(in srgb, #b195ec 23%, var(--line-strong)) 34%,
+    color-mix(in srgb, #6fc1df 22%, var(--line-strong)) 67%,
+    color-mix(in srgb, #85bd98 31%, var(--line-strong)) 100%
+  );
+  --plan-card-pro-badge-bg: color-mix(in srgb, #b195ec 10%, var(--surface));
+  --plan-card-pro-badge-border: color-mix(in srgb, #b195ec 20%, var(--line));
+  --plan-card-pro-badge-text: color-mix(in srgb, #b195ec 76%, var(--text));
   --gray-seg: #4a4840;
   --flow-tone-focus: var(--productivity-focus);
   --flow-tone-neutral: var(--productivity-neutral);

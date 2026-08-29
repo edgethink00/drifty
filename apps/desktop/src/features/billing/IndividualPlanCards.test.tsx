@@ -68,11 +68,15 @@ describe("IndividualPlanCards", () => {
     expect(styles).toMatch(/\.individual-plan-cards\s*\{[\s\S]*align-items:\s*stretch;/);
   });
 
-  it("gives the paid card the only accent so the pair is not visually identical", () => {
+  it("uses the shared Prism Echo tokens for the paid plan without tinting the card body", () => {
     const styles = readAppStyles();
 
-    expect(styles).toMatch(/\.individual-plan-card--featured\s*\{[\s\S]*border-color:\s*color-mix\(in srgb, var\(--accent\)/);
-    expect(styles).toMatch(/\.individual-plan-card--featured \.individual-plan-card__badge\s*\{[\s\S]*background:\s*var\(--accent-soft\);/);
+    expect(styles).toMatch(/--plan-card-pro-label-gradient:\s*linear-gradient\(96deg/);
+    expect(styles).toMatch(/--plan-card-pro-border-gradient:\s*linear-gradient\(/);
+    expect(styles).toMatch(/\.individual-plan-card--featured\s*\{[\s\S]*var\(--plan-card-pro-border-gradient\) border-box;[\s\S]*border-color:\s*transparent;/);
+    expect(styles).toMatch(/\.individual-plan-card--featured \.individual-plan-card__badge\s*\{[\s\S]*background:\s*var\(--plan-card-pro-badge-bg\);/);
+    expect(styles).toMatch(/\.individual-plan-card--featured \.individual-plan-card__topline > span\s*\{[\s\S]*background-image:\s*var\(--plan-card-pro-label-gradient\);/);
+    expect(styles).toMatch(/@media \(forced-colors: active\)\s*\{[\s\S]*\.individual-plan-card--featured\s*\{[\s\S]*background:\s*Canvas;[\s\S]*border-color:\s*CanvasText;/);
   });
 
   it("marks Pro as current during an active trial", () => {
