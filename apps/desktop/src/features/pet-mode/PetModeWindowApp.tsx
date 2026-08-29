@@ -79,9 +79,10 @@ import {
   resolvePetModeGazeOffset,
   type PetModeGazeOffset,
 } from "./petModeGaze";
+import { isPetModeChaseMotionKind } from "./petModeChaseMotion";
 import {
   EMPTY_PET_MODE_DRIFT_HUNT_STATE,
-  PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS,
+  PET_MODE_DRIFT_HUNT_ALERT_MS,
   PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
   PET_MODE_DRIFT_NOTICE_MS,
   PET_MODE_DRIFT_STALK_SETTLE_MS,
@@ -138,6 +139,8 @@ export function PetModeWindowApp() {
   // has to stand still for as long as the menu is up.
   const [menuHolding, setMenuHolding] = useState(false);
   const [gazeOffset, setGazeOffset] = useState<PetModeGazeOffset>({ x: 0, y: 0 });
+  const [huntAlertVisible, setHuntAlertVisible] = useState(false);
+  const [huntAlertDurationMs, setHuntAlertDurationMs] = useState(PET_MODE_DRIFT_HUNT_ALERT_MS);
   const [guidesEnabled, setGuidesEnabled] = useState(() => {
     try {
       return window.localStorage.getItem(PET_MODE_GUIDES_STORAGE_KEY) === "1";
@@ -177,6 +180,11 @@ export function PetModeWindowApp() {
   const focusRestingRef = useRef(false);
   const focusRestAppliedRef = useRef(false);
   const driftHuntRef = useRef<PetModeDriftHuntState>(EMPTY_PET_MODE_DRIFT_HUNT_STATE);
+  const huntAlertTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (huntAlertTimerRef.current !== null) window.clearTimeout(huntAlertTimerRef.current);
+  }, []);
 
   const reportLabState = useCallback((nextPhase = phaseRef.current) => {
     void reportNativePetModeLabState({
@@ -694,6 +702,15 @@ export function PetModeWindowApp() {
     await revealForAction().catch(() => undefined);
     if (token !== actionTokenRef.current || focusBlocksHunt()) return;
     setPreserveEntryLanding(false);
+    if (huntAlertTimerRef.current !== null) window.clearTimeout(huntAlertTimerRef.current);
+    setHuntAlertVisible(huntSettings.showAlertCue);
+    setHuntAlertDurationMs(huntSettings.alertDurationMs);
+    huntAlertTimerRef.current = huntSettings.showAlertCue
+      ? window.setTimeout(() => {
+        huntAlertTimerRef.current = null;
+        setHuntAlertVisible(false);
+      }, huntSettings.alertDurationMs)
+      : null;
     commitPhase("stalk");
 
     const stalk = await stalkNativePetCursor(huntSettings).catch(() => null);
@@ -711,17 +728,18 @@ export function PetModeWindowApp() {
       // approach path. Native emits the one intentional facing change together
       // with the return gait so React never servo-flips mid-walk.
       commitPhase("bite");
-      await delay(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS);
+      await delay(huntSettings.biteHoldMs);
       if (token !== actionTokenRef.current || focusBlocksHunt()) return;
       await returnWithNativePetCursor({
         targetX: stalk.cursorX,
         targetY: stalk.cursorY,
         approachFacing: stalk.facing,
         cursorMovementDistance: stalk.cursorMovementDistance,
+        settings: huntSettings,
       }).catch(() => null);
       if (token !== actionTokenRef.current || focusBlocksHunt()) return;
       commitPhase("bite");
-      await delay(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS);
+      await delay(huntSettings.biteHoldMs);
     }
     if (token !== actionTokenRef.current || focusBlocksHunt()) return;
     commitPhase("sit");
@@ -825,7 +843,6 @@ export function PetModeWindowApp() {
               await playCursorHunt({
                 ...huntSettings,
                 mode: previewAction === "cursor_hunt_chase" ? "chase" : "single",
-                chaseDurationMs: previewAction === "cursor_hunt_chase" ? 8_000 : huntSettings.chaseDurationMs,
               }, { allowWhileResting: true });
             } finally {
               setActiveLabAction(null);
@@ -1177,11 +1194,15 @@ export function PetModeWindowApp() {
     // assistant waiting for input rather than a cat with its own attention.
     // Neutral time still keeps the small proximity response for users who
     // deliberately approach the resting pet.
+    //
+    // The cursor hunt is the one exception inside drift. It is the drift state,
+    // but the cat is deliberately going after the pointer, so refusing to look
+    // at it there produced the opposite of self-contained: a cat sprinting at
+    // the cursor while staring straight past it.
     if (
       !petModeEnabled
       || !petVisible
       || snapshot?.productivity === "focus"
-      || snapshot?.productivity === "drift"
     ) {
       gazeEngagedRef.current = false;
       setGazeOffset({ x: 0, y: 0 });
@@ -1193,7 +1214,12 @@ export function PetModeWindowApp() {
       if (disposed) return;
       const pose = petModeGazePoseForPhase(phaseRef.current);
       const reducedMotion = prefersReducedMotion();
-      if (!pose || reducedMotion || manualDragRef.current) {
+      // Drift is checked here rather than in the effect condition because the
+      // exception depends on the live phase, and phase lives in a ref that
+      // cannot retrigger this effect.
+      const driftBlocksGaze = snapshot?.productivity === "drift"
+        && !isPetModeChaseMotionKind(phaseRef.current);
+      if (!pose || reducedMotion || driftBlocksGaze || manualDragRef.current) {
         gazeEngagedRef.current = false;
         setGazeOffset((current) => current.x === 0 && current.y === 0 ? current : { x: 0, y: 0 });
       } else {
@@ -1381,6 +1407,8 @@ export function PetModeWindowApp() {
               && hitRegionTransitionCount === 0}
             hitRegionCommitRevision={hitRegionCommitRevision}
             gazeOffset={gazeOffset}
+            huntAlertVisible={huntAlertVisible}
+            huntAlertDurationMs={huntAlertDurationMs}
             dragPickupPose={dragPickupPose}
             dragReleasePose={dragReleasePose}
           />

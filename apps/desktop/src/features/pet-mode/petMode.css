@@ -206,6 +206,85 @@
 .pet-mode-cat--release .pet-mode-cat__motion,
 .pet-mode-cat--tail .pet-mode-cat__motion,
 .pet-mode-cat--stretch .pet-mode-cat__motion { animation: none; }
+
+/* Travel secondary motion.
+
+   The traced gait is a treadmill: measured over all 30 frames the muzzle tip
+   moves 0.00 viewBox units horizontally and the skull top 1.60, while the rear
+   leg span moves 17.90. Legs cycle, body does not. Native then slides the
+   window at up to 300 px/s, so without this the cat reads as a drawing being
+   dragged across the desktop rather than an animal moving under its own power.
+
+   These are rigid transforms of the approved silhouette, never a redraw, so
+   AP-01's ban on interpolating the approved contours still holds.
+
+   Amplitudes and the cycle duration arrive as custom properties from
+   petModeChaseMotion.ts. Keeping them as real CSS animations is what lets the
+   hit-region generator sweep them with document.getAnimations() and bake the
+   union, so the grabbable area follows the motion instead of drifting off it. */
+.pet-mode-cat--walk .pet-mode-cat__body-motion,
+.pet-mode-cat--run .pet-mode-cat__body-motion,
+.pet-mode-cat--stalk .pet-mode-cat__body-motion,
+.pet-mode-cat--return .pet-mode-cat__body-motion {
+  animation: pet-mode-chase-body var(--pet-chase-cycle, 0ms) linear infinite;
+}
+
+/* Contact is a held pose rather than a cycle, so the body settles into the
+   lean and stays there instead of bouncing on a stationary cat. */
+.pet-mode-cat--bite .pet-mode-cat__body-motion {
+  transform: rotate(var(--pet-chase-lean, 0deg));
+}
+
+.pet-mode-cat__body-motion {
+  /* The lean pivots low and central so the cat tips over its feet instead of
+     swinging about its middle, which would lift the paws off the ground line.
+     Both layers are SVG groups, so the origin is stated in viewBox units and
+     transform-box is pinned: the default fill-box would resolve against each
+     group's own bounding box, which changes shape every gait frame and would
+     make the pivot wander. */
+  transform-box: view-box;
+  transform-origin: 75px 96px;
+  will-change: transform;
+}
+
+/* The head is not seamed off the body. A scanline sweep found no waist to cut
+   on: thickness falls monotonically from 94 units at x=100 to 17 at the muzzle,
+   with no local minimum anywhere along the neck. So the head layer is clipped
+   with deliberate overlap deep into the shoulder and drawn over a complete,
+   unclipped body. Body pixels always cover the join, whichever way the head
+   turns, and both layers are the same flat fur colour so the overlap is
+   invisible. This is why the approach AP-06 rejected for a limb works here:
+   nothing is added or redrawn, one copy is simply rotated behind another. */
+.pet-mode-cat__head-motion {
+  transform-box: view-box;
+  transform-origin: 104px 52px;
+  will-change: transform;
+}
+
+.pet-mode-cat--walk .pet-mode-cat__head-motion,
+.pet-mode-cat--run .pet-mode-cat__head-motion,
+.pet-mode-cat--stalk .pet-mode-cat__head-motion,
+.pet-mode-cat--return .pet-mode-cat__head-motion {
+  animation: pet-mode-chase-head var(--pet-chase-cycle, 0ms) linear infinite;
+}
+
+/* A head that peaks on the same beat as the body reads as one rigid object
+   being carried. The quarter-cycle delay is the entire effect: the skull keeps
+   travelling while the shoulders have already started to drop. */
+@keyframes pet-mode-chase-head {
+  0%, 100% { transform: rotate(calc(var(--pet-chase-head-swing, 0deg) * -1)) translate(0, 0); }
+  25% { transform: rotate(0deg) translate(var(--pet-chase-head-lead, 0px), calc(var(--pet-chase-head-lead, 0px) * 0.45)); }
+  50% { transform: rotate(var(--pet-chase-head-swing, 0deg)) translate(0, 0); }
+  75% { transform: rotate(0deg) translate(calc(var(--pet-chase-head-lead, 0px) * -1), calc(var(--pet-chase-head-lead, 0px) * -0.45)); }
+}
+
+/* Two contacts per gait cycle, so the body drops twice: once per diagonal
+   pair landing. The lean is constant within a phase and rides along here so
+   the two never fight over the same transform property. */
+@keyframes pet-mode-chase-body {
+  0%, 50%, 100% { transform: rotate(var(--pet-chase-lean, 0deg)) translateY(var(--pet-chase-bounce, 0px)); }
+  25%, 75% { transform: rotate(var(--pet-chase-lean, 0deg)) translateY(calc(var(--pet-chase-bounce, 0px) * -1)); }
+}
 .pet-mode-cat--drag .pet-mode-cat__motion { transform: none; }
 .pet-mode-cat--release .pet-mode-cat__motion { transform: none; }
 .pet-mode-cat--happy .pet-mode-cat__motion,
@@ -240,12 +319,22 @@
 
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
-.pet-mode-cat__walk-mouth {
-  transform-box: fill-box;
-  transform-origin: center;
-  transition: transform 90ms cubic-bezier(.2, .8, .2, 1);
-}
-.pet-mode-cat__walk-mouth--bite { transform: translateY(.45px) scaleY(.48); }
+/* Contact no longer squashes the mouth.
+
+   The bite pose used to compress the mouth to 48% height. In the shipped hunt
+   that lasts 120ms and reads as a quick snap, but the compression is strong
+   enough that any longer look - a slowed review, or a cursor parked inside the
+   capture radius - turns it into a grimace the rest of the face does not
+   support. Product call 2026-08-29: keep the mouth on-model and let the pose,
+   the pounce, and the settle carry the contact instead.
+
+   The modifier class stays so the bite pose keeps a named hook: the gait
+   continuity tests assert on it, and it is the natural place for a future
+   contact expression that does not distort the approved face.
+
+   The transform-box, origin, and 90ms transition that used to sit here went
+   with it: the squash was the only transform they ever applied to, so leaving
+   them would be styling for an effect that no longer exists. */
 /* Measured in the fixed 121.2×92.4 cat box: the last 150×120 walk-frames-v2
    vector sits 3.76px above and 6.383px right of the 797×581 paw/f001.png idle
    raster. Register the visible silhouette rather than the unequal source
@@ -538,11 +627,22 @@
   animation: pet-mode-alert 620ms ease-in-out infinite;
 }
 .pet-mode-cat--notice .pet-mode-cat__alert { color: #ff9f0a; }
+.pet-mode-cat--stalk.has-hunt-alert .pet-mode-cat__alert {
+  color: #ff9f0a;
+  animation: pet-mode-hunt-alert var(--pet-hunt-alert-duration, 480ms) cubic-bezier(.22, 1, .36, 1) both;
+}
 .pet-mode-cat.is-playful-paw .pet-mode-cat__alert { opacity: 0; animation: none; }
 
 @keyframes pet-mode-alert {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-2.5px) scale(1.12); }
+}
+
+@keyframes pet-mode-hunt-alert {
+  0% { opacity: 0; transform: translateY(4px) scale(.58); }
+  24% { opacity: 1; transform: translateY(-3px) scale(1.22); }
+  68% { opacity: 1; transform: translateY(-1px) scale(1); }
+  100% { opacity: 0; transform: translateY(-6px) scale(.92); }
 }
 
 @keyframes pet-mode-idle-breathe {
@@ -643,6 +743,8 @@
 @media (prefers-reduced-motion: reduce) {
   .pet-mode-cat,
   .pet-mode-cat__motion,
+  .pet-mode-cat__body-motion,
+  .pet-mode-cat__head-motion,
   .pet-mode-cat__heart,
   .pet-mode-cat__zzz,
   .pet-mode-cat__alert,
@@ -658,8 +760,7 @@
   .pet-mode-cat__release-held,
   .pet-mode-cat__release-rest,
   .pet-mode-cat__sit-eye-open,
-  .pet-mode-cat__sit-eye-closed,
-  .pet-mode-cat__walk-mouth {
+  .pet-mode-cat__sit-eye-closed {
     animation: none !important;
     transition: none !important;
   }
@@ -675,6 +776,7 @@
   .pet-mode-cat__release-held { opacity: 0; }
   .pet-mode-cat__drag-pending-held,
   .pet-mode-cat__release-rest { opacity: 1; }
+  .pet-mode-cat--stalk.has-hunt-alert .pet-mode-cat__alert { opacity: 1; }
 }
 
 

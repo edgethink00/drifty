@@ -1,5 +1,12 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// Assert against the shipped tiers rather than copies of their values: this
+// test exists to prove the bridge forwards the resolved duration, not to pin
+// the timings, which are a product decision that lives in one place.
+import {
+  DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
+  resolvePetModeDriftCursorReturnDuration,
+} from "./petModeDriftHunt";
 
 const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
 
@@ -97,7 +104,7 @@ describe("pet mode enabled bridge", () => {
     tauri.invoke.mockResolvedValue(null);
     const { stalkNativePetCursor } = await import("./petModeBridge");
 
-    await stalkNativePetCursor({ enabled: true, mode: "single", chaseDurationMs: 8_000, softTurns: true });
+    await stalkNativePetCursor({ ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS, enabled: true, mode: "single" });
     expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_stalk_cursor", {
       request: {
         durationMs: 3_200,
@@ -109,12 +116,17 @@ describe("pet mode enabled bridge", () => {
       },
     });
 
-    await stalkNativePetCursor({ enabled: true, mode: "chase", chaseDurationMs: 8_000, softTurns: true });
+    await stalkNativePetCursor({
+      ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
+      enabled: true,
+      mode: "chase",
+      stalkSpeed: 280,
+    });
     expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_stalk_cursor", {
       request: {
         durationMs: 8_000,
         biteGap: 0,
-        speed: 220,
+        speed: 280,
         retargetCursor: true,
         turnHysteresis: 48,
         turnCooldownMs: 500,
@@ -125,7 +137,17 @@ describe("pet mode enabled bridge", () => {
   it("carries calm, alert, and evasive cursors on three bounded durations", async () => {
     tauri.invoke.mockResolvedValue(null);
     const { returnWithNativePetCursor } = await import("./petModeBridge");
-    const base = { targetX: 640, targetY: 320, approachFacing: "right" as const };
+    const settings = {
+      ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
+      carryDistance: 96,
+      carryStillDurationMs: 5_000,
+      captureRadius: 24,
+      cursorLagMs: 160,
+      cursorSlack: 10,
+      cursorYankDistance: 44,
+      cursorGripMs: 760,
+    };
+    const base = { targetX: 640, targetY: 320, approachFacing: "right" as const, settings };
 
     await returnWithNativePetCursor({ ...base, cursorMovementDistance: 7 });
     expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_carry_cursor", {
@@ -133,9 +155,13 @@ describe("pet mode enabled bridge", () => {
         targetX: 640,
         targetY: 320,
         approachFacing: "right",
-        distance: 128,
-        durationMs: 8_000,
-        captureRadius: 18,
+        distance: 96,
+        durationMs: resolvePetModeDriftCursorReturnDuration(7, settings),
+        captureRadius: 24,
+        cursorLagMs: 160,
+        gripTolerance: 10,
+        yankDistance: 44,
+        maxGripMs: 760,
       },
     });
 
@@ -145,9 +171,13 @@ describe("pet mode enabled bridge", () => {
         targetX: 640,
         targetY: 320,
         approachFacing: "right",
-        distance: 128,
-        durationMs: 5_000,
-        captureRadius: 18,
+        distance: 96,
+        durationMs: resolvePetModeDriftCursorReturnDuration(12, settings),
+        captureRadius: 24,
+        cursorLagMs: 160,
+        gripTolerance: 10,
+        yankDistance: 44,
+        maxGripMs: 760,
       },
     });
 
@@ -157,9 +187,13 @@ describe("pet mode enabled bridge", () => {
         targetX: 640,
         targetY: 320,
         approachFacing: "right",
-        distance: 128,
-        durationMs: 2_500,
-        captureRadius: 18,
+        distance: 96,
+        durationMs: resolvePetModeDriftCursorReturnDuration(18, settings),
+        captureRadius: 24,
+        cursorLagMs: 160,
+        gripTolerance: 10,
+        yankDistance: 44,
+        maxGripMs: 760,
       },
     });
   });

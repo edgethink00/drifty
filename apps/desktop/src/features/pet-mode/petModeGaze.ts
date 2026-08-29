@@ -1,4 +1,9 @@
-export type PetModeGazePose = "idle" | "sit";
+import {
+  PET_MODE_GAIT_BASELINE_SHIFT_PX,
+  PET_MODE_GAIT_CENTER_SHIFT_PX,
+} from "./petModeData";
+
+export type PetModeGazePose = "idle" | "sit" | "walk";
 
 export type PetModeGazeSample = {
   readonly cursorX: number;
@@ -26,6 +31,13 @@ export const PET_MODE_GAZE_DAMP_MS = 180;
 
 const IDLE_HEAD = { x: 581.294 / 797, y: 254.445 / 581 };
 const SIT_HEAD = { x: (120.4 - 12.84) / 150, y: (46.2 - 0.3) / 120 };
+// Midpoint of the two walk-face eyes, in walk-frames viewBox units. The travel
+// phases draw that vector rather than the idle raster, so aiming at the idle
+// head would put the pivot roughly a third of a body behind the actual eyes.
+const WALK_HEAD = {
+  x: ((120.4 + 140.3) / 2 + PET_MODE_GAIT_CENTER_SHIFT_PX) / 150,
+  y: (46.2 + PET_MODE_GAIT_BASELINE_SHIFT_PX) / 120,
+};
 const PET_PANEL = { width: 144, height: 99 };
 const PET_CAT = { left: 11.4, top: 4.2, width: 121.2, height: 92.4 };
 
@@ -36,9 +48,16 @@ function petModeGazeHead(sample: PetModeGazeSample): { readonly x: number; reado
   const catTop = sample.windowY + PET_CAT.top * scaleY;
   const catWidth = PET_CAT.width * scaleX;
   const catHeight = PET_CAT.height * scaleY;
-  const head = sample.pose === "sit" ? SIT_HEAD : IDLE_HEAD;
+  const head = sample.pose === "sit"
+    ? SIT_HEAD
+    : sample.pose === "walk"
+      ? WALK_HEAD
+      : IDLE_HEAD;
+  // The sit and walk poses both draw a 150x120 vector into the cat box, so they
+  // letterbox on the same axis; only the idle raster uses the 797x581 canvas.
+  const vectorPose = sample.pose === "sit" || sample.pose === "walk";
   const localX = sample.facing === "left" ? 1 - head.x : head.x;
-  if (sample.pose === "sit") {
+  if (vectorPose) {
     const displayedWidth = catHeight * 150 / 120;
     const letterboxX = (catWidth - displayedWidth) / 2;
     return {
@@ -60,6 +79,13 @@ export function petModeGazePoseForPhase(phase: string): PetModeGazePose | null {
   }
   if (phase === "sit") {
     return "sit";
+  }
+  // Chasing with dead-ahead eyes was the oddest part of the hunt: the cat
+  // sprints at the cursor while looking straight past it. These phases draw
+  // the walk vector, whose eyes are a separate SVG group, so they can track
+  // the target the whole way in.
+  if (phase === "stalk" || phase === "run" || phase === "bite" || phase === "return") {
+    return "walk";
   }
   return null;
 }

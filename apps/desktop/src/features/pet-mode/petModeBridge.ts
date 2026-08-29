@@ -11,8 +11,6 @@ import type {
   PetModeWindowEvent,
 } from "./petModeData";
 import {
-  PET_MODE_DRIFT_CURSOR_CAPTURE_RADIUS,
-  PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE,
   PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS,
   PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS,
   resolvePetModeDriftCursorReturnDuration,
@@ -167,7 +165,7 @@ export async function stalkNativePetCursor(settings: PetModeDriftHuntSettings): 
     request: {
       durationMs: chase ? settings.chaseDurationMs : 3_200,
       biteGap: 0,
-      speed: 220,
+      speed: settings.stalkSpeed,
       retargetCursor: chase,
       turnHysteresis: chase && settings.softTurns ? PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS : 0,
       turnCooldownMs: chase && settings.softTurns ? PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS : 0,
@@ -180,11 +178,13 @@ export async function returnWithNativePetCursor({
   targetY,
   approachFacing,
   cursorMovementDistance,
+  settings,
 }: {
   readonly targetX: number;
   readonly targetY: number;
   readonly approachFacing: "left" | "right";
   readonly cursorMovementDistance: number;
+  readonly settings: PetModeDriftHuntSettings;
 }): Promise<PetModeCursorReturnResult | null> {
   if (!isTauriRuntime()) return null;
   return invoke<PetModeCursorReturnResult>("pet_mode_carry_cursor", {
@@ -192,9 +192,13 @@ export async function returnWithNativePetCursor({
       targetX,
       targetY,
       approachFacing,
-      distance: PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE,
-      durationMs: resolvePetModeDriftCursorReturnDuration(cursorMovementDistance),
-      captureRadius: PET_MODE_DRIFT_CURSOR_CAPTURE_RADIUS,
+      distance: settings.carryDistance,
+      durationMs: resolvePetModeDriftCursorReturnDuration(cursorMovementDistance, settings),
+      captureRadius: settings.captureRadius,
+      cursorLagMs: settings.cursorLagMs,
+      gripTolerance: settings.cursorSlack,
+      yankDistance: settings.cursorYankDistance,
+      maxGripMs: settings.cursorGripMs,
     },
   });
 }

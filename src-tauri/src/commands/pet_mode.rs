@@ -62,8 +62,28 @@ const PET_MODE_CARRY_MIN_DISTANCE: f64 = 48.0;
 const PET_MODE_CARRY_MAX_DISTANCE: f64 = 128.0;
 const PET_MODE_CARRY_MIN_CAPTURE_RADIUS: f64 = 8.0;
 const PET_MODE_CARRY_MAX_CAPTURE_RADIUS: f64 = 32.0;
+const PET_MODE_CARRY_MAX_CURSOR_LAG_MS: u64 = 240;
+const PET_MODE_CARRY_MIN_ESCAPE_TOLERANCE: f64 = 2.0;
+const PET_MODE_CARRY_MAX_ESCAPE_TOLERANCE: f64 = 16.0;
+const PET_MODE_CARRY_MIN_YANK_DISTANCE: f64 = 20.0;
+const PET_MODE_CARRY_MAX_YANK_DISTANCE: f64 = 64.0;
+const PET_MODE_CARRY_MIN_GRIP_MS: u64 = 80;
+const PET_MODE_CARRY_MAX_GRIP_LIMIT_MS: u64 = 1_500;
+const PET_MODE_CARRY_DEFAULT_CURSOR_LAG_MS: u64 = 0;
+// How far the pointer may stray from what the carry last commanded before the
+// cat starts losing its grip, in logical points.
+//
+// This is not a hard cutoff. Past it the grip decays with how hard the pointer
+// is actually being pulled, so a nudge is resisted for a moment and a real yank
+// is released almost at once. A single threshold made every one of those feel
+// identical: any twitch past 7pt ended the carry in the same frame.
 const PET_MODE_CARRY_ESCAPE_TOLERANCE: f64 = 7.0;
-const PET_MODE_CURSOR_BITE_CONTACT_RADIUS: f64 = 6.0;
+// Beyond this the pointer is being pulled away outright and the grip is dropped
+// on the spot, with no grace at all.
+const PET_MODE_CARRY_YANK_DISTANCE: f64 = 34.0;
+// Longest the cat will hold on while the pointer resists just past tolerance.
+// Short enough that fighting the cat always wins quickly.
+const PET_MODE_CARRY_MAX_GRIP_MS: f64 = 420.0;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
 // Native translation duration only. The hidden pre-paint hold and renderer
@@ -276,6 +296,30 @@ pub struct PetModeCursorCarryRequest {
     distance: f64,
     duration_ms: u64,
     capture_radius: f64,
+    #[serde(default = "pet_mode_carry_default_cursor_lag_ms")]
+    cursor_lag_ms: u64,
+    #[serde(default = "pet_mode_carry_default_grip_tolerance")]
+    grip_tolerance: f64,
+    #[serde(default = "pet_mode_carry_default_yank_distance")]
+    yank_distance: f64,
+    #[serde(default = "pet_mode_carry_default_max_grip_ms")]
+    max_grip_ms: u64,
+}
+
+fn pet_mode_carry_default_cursor_lag_ms() -> u64 {
+    PET_MODE_CARRY_DEFAULT_CURSOR_LAG_MS
+}
+
+fn pet_mode_carry_default_grip_tolerance() -> f64 {
+    PET_MODE_CARRY_ESCAPE_TOLERANCE
+}
+
+fn pet_mode_carry_default_yank_distance() -> f64 {
+    PET_MODE_CARRY_YANK_DISTANCE
+}
+
+fn pet_mode_carry_default_max_grip_ms() -> u64 {
+    PET_MODE_CARRY_MAX_GRIP_MS as u64
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -2383,12 +2427,50 @@ fn validate_pet_mode_cursor_carry_request(
     {
         return Err("Pet Mode cursor capture radius is outside the safe range".to_string());
     }
+    if request.cursor_lag_ms > PET_MODE_CARRY_MAX_CURSOR_LAG_MS {
+        return Err("Pet Mode cursor lag is outside the safe range".to_string());
+    }
+    if !request.grip_tolerance.is_finite()
+        || !(PET_MODE_CARRY_MIN_ESCAPE_TOLERANCE..=PET_MODE_CARRY_MAX_ESCAPE_TOLERANCE)
+            .contains(&request.grip_tolerance)
+    {
+        return Err("Pet Mode cursor grip tolerance is outside the safe range".to_string());
+    }
+    if !request.yank_distance.is_finite()
+        || !(PET_MODE_CARRY_MIN_YANK_DISTANCE..=PET_MODE_CARRY_MAX_YANK_DISTANCE)
+            .contains(&request.yank_distance)
+        || request.yank_distance <= request.grip_tolerance
+    {
+        return Err("Pet Mode cursor yank distance is outside the safe range".to_string());
+    }
+    if !(PET_MODE_CARRY_MIN_GRIP_MS..=PET_MODE_CARRY_MAX_GRIP_LIMIT_MS)
+        .contains(&request.max_grip_ms)
+    {
+        return Err("Pet Mode cursor grip duration is outside the safe range".to_string());
+    }
     Ok(())
 }
 
 fn pet_mode_cursor_carry_progress(elapsed: Duration, duration: Duration) -> f64 {
     let timeline = (elapsed.as_secs_f64() / duration.as_secs_f64()).clamp(0.0, 1.0);
     timeline * timeline * (3.0 - 2.0 * timeline)
+}
+
+fn pet_mode_lagged_cursor_step(
+    last: (f64, f64),
+    desired: (f64, f64),
+    frame_elapsed: Duration,
+    cursor_lag: Duration,
+    finished: bool,
+) -> (f64, f64) {
+    if cursor_lag.is_zero() || finished {
+        return desired;
+    }
+    let alpha = 1.0 - (-frame_elapsed.as_secs_f64() / cursor_lag.as_secs_f64()).exp();
+    (
+        last.0 + (desired.0 - last.0) * alpha,
+        last.1 + (desired.1 - last.1) * alpha,
+    )
 }
 
 fn pet_mode_cursor_return_delta(
@@ -2418,6 +2500,47 @@ fn pet_mode_cursor_return_delta(
     }
 }
 
+/// How long the cat may keep its grip while the pointer strains against it.
+///
+/// Returns milliseconds of grace, in logical points of strain:
+///   - at or under the tolerance the carry is unaffected
+///   - just past it the cat holds on briefly, so a small nudge does not read as
+///     the cursor being dropped the instant it moves
+///   - at or beyond a real yank the grip is gone immediately
+///
+/// A single hard threshold made a twitch and a shove feel identical, which is
+/// what made letting go read as arbitrary rather than as the cat responding to
+/// how hard it was being fought.
+fn pet_mode_carry_grip_budget_ms(
+    strain: f64,
+    tolerance: f64,
+    yank_distance: f64,
+    max_grip_ms: f64,
+) -> f64 {
+    if !strain.is_finite()
+        || !tolerance.is_finite()
+        || !yank_distance.is_finite()
+        || !max_grip_ms.is_finite()
+        || tolerance < 0.0
+        || yank_distance <= tolerance
+        || max_grip_ms < 0.0
+    {
+        return 0.0;
+    }
+    if strain <= tolerance {
+        return max_grip_ms;
+    }
+    if strain >= yank_distance {
+        return 0.0;
+    }
+    let span = yank_distance - tolerance;
+    let past = (strain - tolerance) / span;
+    // Quadratic falloff: the first few points of resistance barely shorten the
+    // grip, while the last stretch collapses it. A linear ramp let a fairly
+    // firm pull still hold for half the budget.
+    max_grip_ms * (1.0 - past) * (1.0 - past)
+}
+
 fn pet_mode_cursor_within_capture(
     cursor: (f64, f64),
     captured: (f64, f64),
@@ -2440,6 +2563,15 @@ fn pet_mode_cursor_mouth_offset(panel_size: (f64, f64), facing: &str) -> (f64, f
         panel_size.0 * mouth_x / PET_MODE_WIDTH,
         panel_size.1 * PET_MODE_CURSOR_MOUTH_Y / PET_MODE_HEIGHT,
     )
+}
+
+fn pet_mode_window_with_mouth_at_cursor(
+    cursor: (f64, f64),
+    panel_size: (f64, f64),
+    facing: &str,
+) -> (f64, f64) {
+    let mouth = pet_mode_cursor_mouth_offset(panel_size, facing);
+    (cursor.0 - mouth.0, cursor.1 - mouth.1)
 }
 
 fn pet_mode_stalk_target(
@@ -2514,15 +2646,22 @@ fn pet_mode_chase_facing(
     }
 }
 
-fn pet_mode_stalk_step(current: (f64, f64), target: (f64, f64), max_step: f64) -> (f64, f64) {
+fn pet_mode_stalk_step(
+    current: (f64, f64),
+    target: (f64, f64),
+    max_step: f64,
+) -> ((f64, f64), bool) {
     let delta = (target.0 - current.0, target.1 - current.1);
     let distance = delta.0.hypot(delta.1);
     if distance <= max_step || distance < 0.001 {
-        return target;
+        return (target, true);
     }
     (
-        current.0 + delta.0 / distance * max_step,
-        current.1 + delta.1 / distance * max_step,
+        (
+            current.0 + delta.0 / distance * max_step,
+            current.1 + delta.1 / distance * max_step,
+        ),
+        false,
     )
 }
 
@@ -2688,13 +2827,10 @@ fn stalk_pet_toward_cursor(
                 work_area,
             );
         }
-        if (current.0 - target.0).hypot(current.1 - target.1) <= 0.75 {
-            break PetModeStalkOutcome::Completed;
-        }
         if started_at.elapsed() >= duration {
             // A fixed target that cannot be reached within its budget is a
-            // miss, not mouth contact. Only the proximity check above may
-            // produce `Completed` and unlock the bite/carry sequence.
+            // miss, not mouth contact. Only an actual final stalk step below
+            // may produce `Completed` and unlock the bite/carry sequence.
             break PetModeStalkOutcome::TimedOut;
         }
         let elapsed = last_frame_at
@@ -2702,13 +2838,21 @@ fn stalk_pet_toward_cursor(
             .as_secs_f64()
             .clamp(1.0 / 240.0, 0.05);
         last_frame_at = Instant::now();
-        let next = pet_mode_stalk_step(current, target, request.speed * scale_factor * elapsed);
+        let (next, reached_target) =
+            pet_mode_stalk_step(current, target, request.speed * scale_factor * elapsed);
+        // Commit contact on the same frame that reaches the target. Waiting for
+        // the next outer_position sample made completion depend on AppKit's
+        // rounded/stale panel position, so a parked pointer could leave the cat
+        // stepping in place until the user nudged it.
         window
             .set_position(PhysicalPosition::new(
                 next.0.round() as i32,
                 next.1.round() as i32,
             ))
             .map_err(|error| error.to_string())?;
+        if reached_target {
+            break PetModeStalkOutcome::Completed;
+        }
         thread::sleep(Duration::from_micros(16_667));
     };
 
@@ -2809,7 +2953,7 @@ fn carry_pet_mode_cursor(
     if !pet_mode_cursor_within_capture(
         initial,
         mouth_position,
-        PET_MODE_CURSOR_BITE_CONTACT_RADIUS * scale_factor,
+        request.capture_radius * scale_factor,
     ) {
         return Ok(PetModeCursorCarryResult {
             outcome: PetModeCursorCarryOutcome::CursorEscaped,
@@ -2822,14 +2966,11 @@ fn carry_pet_mode_cursor(
     } else {
         "right"
     };
-    let return_mouth = pet_mode_cursor_mouth_offset(panel_size, return_facing);
-    // Repositioning the transparent panel by the difference between the two
-    // mouth anchors while mirroring the cat keeps the cursor fixed at its
-    // teeth. Visually the body pivots around the bite instead of teleporting.
-    let return_window = (
-        initial_window.0 + approach_mouth.0 - return_mouth.0,
-        initial_window.1 + approach_mouth.1 - return_mouth.1,
-    );
+    // Once stalk has reached the capture radius, the bite is committed. Place
+    // the mirrored mouth on the cursor itself instead of preserving any small
+    // approach/rounding error. The cursor now stays welded to the teeth through
+    // the pivot and the first carry frame.
+    let return_window = pet_mode_window_with_mouth_at_cursor(initial, panel_size, return_facing);
     if return_window.0 < work_area.x
         || return_window.0 + panel_size.0 > work_area.x + work_area.width
         || return_window.1 < work_area.y
@@ -2867,6 +3008,8 @@ fn carry_pet_mode_cursor(
     let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
     let started_at = Instant::now();
     let mut last_commanded = initial;
+    let mut straining_for = Duration::ZERO;
+    let mut last_frame_at = Instant::now();
     let outcome = loop {
         if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
             break PetModeCursorCarryOutcome::Cancelled;
@@ -2886,16 +3029,45 @@ fn carry_pet_mode_cursor(
         if !screen_frame.contains(cursor) {
             break PetModeCursorCarryOutcome::DifferentDisplay;
         }
-        if (cursor.0 - last_commanded.0).hypot(cursor.1 - last_commanded.1)
-            > PET_MODE_CARRY_ESCAPE_TOLERANCE * scale_factor
-        {
+        let frame_elapsed = last_frame_at.elapsed();
+        let strain =
+            (cursor.0 - last_commanded.0).hypot(cursor.1 - last_commanded.1) / scale_factor;
+        let grip_budget_ms = pet_mode_carry_grip_budget_ms(
+            strain,
+            request.grip_tolerance,
+            request.yank_distance,
+            request.max_grip_ms as f64,
+        );
+        if grip_budget_ms <= 0.0 {
             break PetModeCursorCarryOutcome::CursorEscaped;
         }
+        if strain > request.grip_tolerance {
+            straining_for += frame_elapsed;
+            if straining_for.as_secs_f64() * 1000.0 >= grip_budget_ms {
+                break PetModeCursorCarryOutcome::CursorEscaped;
+            }
+        } else {
+            // Let go of the accumulated strain once the pointer settles, so a
+            // long calm carry is not ended by unrelated twitches minutes apart.
+            straining_for = Duration::ZERO;
+        }
+        last_frame_at = Instant::now();
 
         let elapsed = started_at.elapsed();
         let progress = pet_mode_cursor_carry_progress(elapsed.min(duration), duration);
         let next_window_x = return_window.0 + carry_delta * progress;
-        let next = (initial.0 + carry_delta * progress, initial.1);
+        let desired_cursor = (initial.0 + carry_delta * progress, initial.1);
+        // Optional Dev tuning: the cat may lead the pointer by a short, elastic
+        // delay. This is exponential smoothing rather than a fixed offset, so
+        // the gap grows naturally during acceleration and closes as the gait
+        // eases out. The final frame always welds the cursor back to the mouth.
+        let next = pet_mode_lagged_cursor_step(
+            last_commanded,
+            desired_cursor,
+            frame_elapsed,
+            Duration::from_millis(request.cursor_lag_ms),
+            elapsed >= duration,
+        );
         window
             .set_position(PhysicalPosition::new(
                 next_window_x.round() as i32,
@@ -3318,6 +3490,22 @@ mod tests {
     }
 
     #[test]
+    fn pivot_window_welds_the_cursor_to_the_mirrored_mouth() {
+        let cursor = (600.0, 300.0);
+        for (panel, facing) in [
+            ((144.0, 99.0), "left"),
+            ((144.0, 99.0), "right"),
+            ((288.0, 198.0), "left"),
+            ((288.0, 198.0), "right"),
+        ] {
+            let window = pet_mode_window_with_mouth_at_cursor(cursor, panel, facing);
+            let mouth = pet_mode_cursor_mouth_offset(panel, facing);
+            assert!((window.0 + mouth.0 - cursor.0).abs() < f64::EPSILON);
+            assert!((window.1 + mouth.1 - cursor.1).abs() < f64::EPSILON);
+        }
+    }
+
+    #[test]
     fn stalk_intent_captures_one_pointer_target_and_facing() {
         let bounds = PetModePhysicalRect {
             x: 0.0,
@@ -3347,8 +3535,14 @@ mod tests {
 
     #[test]
     fn stalk_step_never_overshoots_the_captured_cursor_target() {
-        assert_eq!(pet_mode_stalk_step((0.0, 0.0), (3.0, 4.0), 2.0), (1.2, 1.6));
-        assert_eq!(pet_mode_stalk_step((0.0, 0.0), (3.0, 4.0), 8.0), (3.0, 4.0));
+        assert_eq!(
+            pet_mode_stalk_step((0.0, 0.0), (3.0, 4.0), 2.0),
+            ((1.2, 1.6), false)
+        );
+        assert_eq!(
+            pet_mode_stalk_step((0.0, 0.0), (3.0, 4.0), 8.0),
+            ((3.0, 4.0), true)
+        );
     }
 
     #[test]
@@ -3444,6 +3638,24 @@ mod tests {
             0.0
         );
         assert_eq!(pet_mode_cursor_carry_progress(duration, duration), 1.0);
+        let lagged = pet_mode_lagged_cursor_step(
+            (0.0, 0.0),
+            (100.0, 0.0),
+            Duration::from_millis(16),
+            Duration::from_millis(160),
+            false,
+        );
+        assert!(lagged.0 > 0.0 && lagged.0 < 100.0);
+        assert_eq!(
+            pet_mode_lagged_cursor_step(
+                lagged,
+                (100.0, 0.0),
+                Duration::from_millis(16),
+                Duration::from_millis(160),
+                true,
+            ),
+            (100.0, 0.0),
+        );
         assert!(
             (pet_mode_cursor_carry_progress(Duration::from_millis(460), duration) - 0.5).abs()
                 < f64::EPSILON
@@ -3463,6 +3675,80 @@ mod tests {
             7.0,
         );
 
+        // Letting go scales with how hard the pointer is pulled, rather than
+        // ending the carry on the first twitch past the tolerance.
+        assert_eq!(
+            pet_mode_carry_grip_budget_ms(
+                0.0,
+                PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                PET_MODE_CARRY_YANK_DISTANCE,
+                PET_MODE_CARRY_MAX_GRIP_MS,
+            ),
+            PET_MODE_CARRY_MAX_GRIP_MS,
+        );
+        assert_eq!(
+            pet_mode_carry_grip_budget_ms(
+                PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                PET_MODE_CARRY_YANK_DISTANCE,
+                PET_MODE_CARRY_MAX_GRIP_MS,
+            ),
+            PET_MODE_CARRY_MAX_GRIP_MS,
+        );
+        assert_eq!(
+            pet_mode_carry_grip_budget_ms(
+                PET_MODE_CARRY_YANK_DISTANCE,
+                PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                PET_MODE_CARRY_YANK_DISTANCE,
+                PET_MODE_CARRY_MAX_GRIP_MS,
+            ),
+            0.0
+        );
+        assert_eq!(
+            pet_mode_carry_grip_budget_ms(
+                f64::INFINITY,
+                PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                PET_MODE_CARRY_YANK_DISTANCE,
+                PET_MODE_CARRY_MAX_GRIP_MS,
+            ),
+            0.0,
+        );
+        assert_eq!(
+            pet_mode_carry_grip_budget_ms(
+                f64::NAN,
+                PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                PET_MODE_CARRY_YANK_DISTANCE,
+                PET_MODE_CARRY_MAX_GRIP_MS,
+            ),
+            0.0,
+        );
+
+        // Monotonic: pulling harder never buys a longer grip.
+        let nudge = pet_mode_carry_grip_budget_ms(
+            9.0,
+            PET_MODE_CARRY_ESCAPE_TOLERANCE,
+            PET_MODE_CARRY_YANK_DISTANCE,
+            PET_MODE_CARRY_MAX_GRIP_MS,
+        );
+        let shove = pet_mode_carry_grip_budget_ms(
+            20.0,
+            PET_MODE_CARRY_ESCAPE_TOLERANCE,
+            PET_MODE_CARRY_YANK_DISTANCE,
+            PET_MODE_CARRY_MAX_GRIP_MS,
+        );
+        let yank = pet_mode_carry_grip_budget_ms(
+            30.0,
+            PET_MODE_CARRY_ESCAPE_TOLERANCE,
+            PET_MODE_CARRY_YANK_DISTANCE,
+            PET_MODE_CARRY_MAX_GRIP_MS,
+        );
+        assert!(nudge > shove, "nudge {nudge} shove {shove}");
+        assert!(shove > yank, "shove {shove} yank {yank}");
+        assert!(yank > 0.0);
+        // A gentle nudge still keeps most of the grip; a firm pull keeps little.
+        assert!(nudge > PET_MODE_CARRY_MAX_GRIP_MS * 0.7);
+        assert!(shove < PET_MODE_CARRY_MAX_GRIP_MS * 0.35);
+
         // Tauri reports physical pixels while CoreGraphics warps in native
         // logical points. Preserve the current native origin and convert only
         // the carry delta so Retina and mixed-display origins cannot clamp the
@@ -3479,6 +3765,25 @@ mod tests {
     }
 
     #[test]
+    fn cursor_carry_request_defaults_new_tuning_for_older_webviews() {
+        let request: PetModeCursorCarryRequest = serde_json::from_value(json!({
+            "targetX": 600.0,
+            "targetY": 300.0,
+            "approachFacing": "right",
+            "distance": 96.0,
+            "durationMs": 920,
+            "captureRadius": 18.0
+        }))
+        .expect("legacy cursor carry payload should remain readable");
+
+        assert_eq!(request.cursor_lag_ms, PET_MODE_CARRY_DEFAULT_CURSOR_LAG_MS);
+        assert_eq!(request.grip_tolerance, PET_MODE_CARRY_ESCAPE_TOLERANCE);
+        assert_eq!(request.yank_distance, PET_MODE_CARRY_YANK_DISTANCE);
+        assert_eq!(request.max_grip_ms, PET_MODE_CARRY_MAX_GRIP_MS as u64);
+        assert!(validate_pet_mode_cursor_carry_request(&request).is_ok());
+    }
+
+    #[test]
     fn cursor_carry_request_rejects_unbounded_pointer_mutation() {
         let valid = PetModeCursorCarryRequest {
             target_x: 600.0,
@@ -3487,6 +3792,10 @@ mod tests {
             distance: 96.0,
             duration_ms: 920,
             capture_radius: 18.0,
+            cursor_lag_ms: 0,
+            grip_tolerance: PET_MODE_CARRY_ESCAPE_TOLERANCE,
+            yank_distance: PET_MODE_CARRY_YANK_DISTANCE,
+            max_grip_ms: PET_MODE_CARRY_MAX_GRIP_MS as u64,
         };
         assert!(validate_pet_mode_cursor_carry_request(&valid).is_ok());
         assert!(
@@ -3506,6 +3815,34 @@ mod tests {
         assert!(
             validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
                 distance: 240.0,
+                ..valid.clone()
+            })
+            .is_err()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                cursor_lag_ms: PET_MODE_CARRY_MAX_CURSOR_LAG_MS + 1,
+                ..valid.clone()
+            })
+            .is_err()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                grip_tolerance: PET_MODE_CARRY_MAX_ESCAPE_TOLERANCE + 1.0,
+                ..valid.clone()
+            })
+            .is_err()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                yank_distance: PET_MODE_CARRY_ESCAPE_TOLERANCE,
+                ..valid.clone()
+            })
+            .is_err()
+        );
+        assert!(
+            validate_pet_mode_cursor_carry_request(&PetModeCursorCarryRequest {
+                max_grip_ms: PET_MODE_CARRY_MAX_GRIP_LIMIT_MS + 1,
                 ..valid.clone()
             })
             .is_err()

@@ -171,25 +171,40 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("radio", { name: "몇 초간 추격" })).toBeNull();
     expect(screen.queryByRole("button", { name: /단발 사냥 재생/ })).toBeNull();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle drift cursor hunt" }));
-    expect(screen.getByText("≤7pt")).toBeTruthy();
-    expect(screen.getByText("8초 물고 이동")).toBeTruthy();
-    expect(screen.getByText("≤12pt")).toBeTruthy();
-    expect(screen.getByText("5초 물고 이동")).toBeTruthy();
-    expect(screen.getByText("≤18pt")).toBeTruthy();
-    expect(screen.getByText("2.5초 물고 이동")).toBeTruthy();
+    expect(screen.getByText("무저항")).toBeTruthy();
+    expect(screen.getByText("6초 물고 이동")).toBeTruthy();
+    expect(screen.getByText("약한 저항")).toBeTruthy();
+    expect(screen.getByText("3초 물고 이동")).toBeTruthy();
+    expect(screen.getByText("강한 저항")).toBeTruthy();
+    expect(screen.getByText("2초 물고 이동")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /단발 사냥 재생/ }));
     expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_single");
     fireEvent.click(screen.getByRole("button", { name: /8초 추격 재생/ }));
     expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_chase");
     fireEvent.click(screen.getByRole("radio", { name: "몇 초간 추격" }));
-    fireEvent.click(screen.getByText("추격 세부 설정"));
-    fireEvent.click(screen.getByRole("radio", { name: "8초" }));
+    fireEvent.click(screen.getByText("추격 세부 설정 · 자유 조정"));
+    fireEvent.change(screen.getByRole("slider", { name: "Cursor chase duration" }), { target: { value: "6500" } });
+    expect(screen.getByRole("button", { name: /6.5초 추격 재생/ })).toBeTruthy();
+    fireEvent.change(screen.getByRole("slider", { name: "Cursor stalk speed" }), { target: { value: "280" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Cursor carry distance" }), { target: { value: "96" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Still cursor carry duration" }), { target: { value: "5000" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Cursor carry lag" }), { target: { value: "160" } });
     fireEvent.click(screen.getByRole("switch", { name: "Toggle soft cursor chase turns" }));
+    expect(screen.getByText("추격 시작 때 주황색 ! 1회")).toBeTruthy();
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle cursor hunt alert cue" }));
 
     expect(window.localStorage.getItem("drifty.pet.driftHuntEnabled.v1")).toBe("true");
     expect(window.localStorage.getItem("drifty.pet.driftHuntMode.v1")).toBe("chase");
-    expect(window.localStorage.getItem("drifty.pet.driftHuntChaseDuration.v1")).toBe("8000");
+    expect(window.localStorage.getItem("drifty.pet.driftHuntChaseDuration.v1")).toBe("6500");
     expect(window.localStorage.getItem("drifty.pet.driftHuntSoftTurns.v1")).toBe("false");
+    expect(window.localStorage.getItem("drifty.pet.driftHuntAlertCue.v1")).toBe("false");
+    expect(JSON.parse(window.localStorage.getItem("drifty.pet.driftHuntTuning.v1") ?? "{}")).toMatchObject({
+      chaseDurationMs: 6500,
+      stalkSpeed: 280,
+      carryDistance: 96,
+      carryStillDurationMs: 5000,
+      cursorLagMs: 160,
+    });
   });
 
   it("keeps the floating Companion behind an explicit Dev toggle", () => {

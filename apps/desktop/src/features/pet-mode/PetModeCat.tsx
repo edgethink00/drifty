@@ -8,12 +8,20 @@ import {
   PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
+  PET_MODE_GAIT_FRAME_COUNT,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
   PET_MODE_PAW_CONTACT_FRAME,
+  getPetModeGaitFramesPerSecond,
 } from "./petModeData";
 import { publishPetModeHitRegion, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 import { PET_MODE_GAZE_BODY_MAX_PX, type PetModeGazeOffset } from "./petModeGaze";
+import {
+  PET_MODE_HEAD_CLIP_X,
+  isPetModeChaseMotionKind,
+  petModeChaseCycleMs,
+  petModeChaseMotionStyle,
+} from "./petModeChaseMotion";
 
 type PetModeCatPhase =
   | "idle"
@@ -65,6 +73,8 @@ export function PetModeCat({
   publishHitRegion = true,
   decorative = false,
   playfulPaw = false,
+  huntAlertVisible = false,
+  huntAlertDurationMs = 480,
   dragPickupPose = "idle",
   dragReleasePose = "idle",
 }: {
@@ -83,6 +93,8 @@ export function PetModeCat({
   readonly publishHitRegion?: boolean;
   readonly decorative?: boolean;
   readonly playfulPaw?: boolean;
+  readonly huntAlertVisible?: boolean;
+  readonly huntAlertDurationMs?: number;
   readonly dragPickupPose?: PetModeRestPose;
   readonly dragReleasePose?: PetModeRestPose;
 }) {
@@ -289,6 +301,12 @@ export function PetModeCat({
   }, [facing, hitRegionInteractive, phase]);
 
   const mirrored = facing === "left";
+  // The stylesheet already stops these animations under reduced motion. Zeroing
+  // the amplitudes as well means the hit-region bake and any non-media-query
+  // consumer see a genuinely static pose rather than a stopped-mid-swing one.
+  const reducedMotion = typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const registerWalkVector = useCallback((node: SVGSVGElement | null) => {
     if (node && phase === "entry") renderedEntrySequenceRef.current = entrySequence;
   }, [entrySequence, phase]);
@@ -299,7 +317,7 @@ export function PetModeCat({
     && preserveEntryLanding
     && walkFrames.length > 0
     && renderedEntrySequenceRef.current === entrySequence;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy";
   const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")
@@ -312,22 +330,61 @@ export function PetModeCat({
     "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
     "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
     "--pet-entry-duration": `${entryDurationMs ?? PET_MODE_ENTRY_DURATION_MS}ms`,
+    "--pet-hunt-alert-duration": `${huntAlertDurationMs}ms`,
     "--pet-gait-baseline-shift": `${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`,
     "--pet-gait-center-shift": `${PET_MODE_GAIT_CENTER_SHIFT_PX}px`,
     "--pet-gaze-x": `${gazeOffset.x.toFixed(2)}px`,
     "--pet-gaze-y": `${gazeOffset.y.toFixed(2)}px`,
     "--pet-gaze-body-x": `${(gazeOffset.x * (PET_MODE_GAZE_BODY_MAX_PX / 1.52)).toFixed(2)}px`,
     "--pet-gaze-body-y": `${(gazeOffset.y * ((PET_MODE_GAZE_BODY_MAX_PX * 0.35) / (1.52 * 0.78))).toFixed(2)}px`,
+    ...petModeChaseMotionStyle(
+      isPetModeChaseMotionKind(phase) ? phase : null,
+      {
+        // Share the leg cycle's duration so the body drops on the frames where
+        // a diagonal pair actually lands. A free-running body clock drifts
+        // against the legs and the cat ends up bouncing while airborne.
+        cycleMs: isPetModeChaseMotionKind(phase) && phase !== "bite"
+          ? petModeChaseCycleMs(
+            getPetModeGaitFramesPerSecond(phase),
+            PET_MODE_GAIT_FRAME_COUNT,
+          )
+          : 0,
+        // The return leg carries the cursor back the way the cat came, so it
+        // travels against its facing and has to lean the other way.
+        direction: phase === "return" ? -1 : 1,
+        reducedMotion,
+      },
+    ),
   } as CSSProperties;
   const renderedWalkFrame = frameOverride ?? walkFrame;
   const renderedLifeMotionFrame = frameOverride ?? lifeMotionFrame;
+  const walkFramePath = walkFrames[renderedWalkFrame];
+  // The head is drawn a second time on top of the complete body rather than
+  // cut out of it. The silhouette has no waist to seam on - a scanline sweep
+  // falls monotonically from 94 units at x=100 to 17 at the muzzle - so the
+  // overlap itself is the seam. Both layers are the same flat fur colour and
+  // the clip starts deep inside the shoulder, so body pixels cover the join
+  // whichever way the head turns and no gap can open. That is what makes this
+  // safe where AP-06's rotated limb was not: nothing is added or redrawn.
   const walkVectorBody = (
     <>
-      <path d={walkFrames[renderedWalkFrame]} fill="currentColor" />
-      <PetModeWalkFace
-        biting={phase === "bite" || phase === "return"}
-        gazing={holdsRenderedEntryVector && (gazeOffset.x !== 0 || gazeOffset.y !== 0)}
-      />
+      <defs>
+        {/* Clipped in viewBox units, well behind the neck pivot at x=104, so
+            the rotated copy always carries a wide band of shoulder with it. */}
+        <clipPath id="pet-mode-head-clip">
+          <rect x={PET_MODE_HEAD_CLIP_X} y="0" width={150 - PET_MODE_HEAD_CLIP_X} height="120" />
+        </clipPath>
+      </defs>
+      <g className="pet-mode-cat__body-motion">
+        <path d={walkFramePath} fill="currentColor" />
+        <g className="pet-mode-cat__head-motion" clipPath="url(#pet-mode-head-clip)">
+          <path d={walkFramePath} fill="currentColor" />
+          <PetModeWalkFace
+            biting={phase === "bite" || phase === "return"}
+            gazing={gazeOffset.x !== 0 || gazeOffset.y !== 0}
+          />
+        </g>
+      </g>
     </>
   );
   const regionId = holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"

@@ -20,7 +20,10 @@ import {
   type PetModeWindowEvent,
 } from "./petModeData";
 import {
+  DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
+  PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY,
   PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS,
+  PET_MODE_DRIFT_HUNT_ALERT_MS,
   PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
   PET_MODE_DRIFT_NOTICE_MS,
   PET_MODE_DRIFT_NOTICE_SECONDS,
@@ -366,11 +369,18 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("stalk");
     expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
     expect(bridge.stalkNativePetCursor).toHaveBeenCalledWith({
+      ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
       enabled: true,
       mode: "single",
       chaseDurationMs: 8_000,
       softTurns: true,
+      showAlertCue: true,
     });
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_HUNT_ALERT_MS - 1); });
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
 
     act(() => {
       bridge.eventHandler?.({
@@ -389,6 +399,7 @@ describe("PetModeWindowApp", () => {
       targetY: 320,
       approachFacing: "right",
       cursorMovementDistance: 0,
+      settings: { ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS, enabled: true },
     });
     await act(async () => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
@@ -434,6 +445,8 @@ describe("PetModeWindowApp", () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
     window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
+    window.localStorage.setItem("drifty.pet.driftHuntAlertCue.v1", "false");
+    window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, "4500");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -456,18 +469,29 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(bridge.stalkNativePetCursor).toHaveBeenCalledWith({
+      ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
       enabled: true,
       mode: "chase",
-      chaseDurationMs: 8_000,
+      chaseDurationMs: 4_500,
       softTurns: true,
+      showAlertCue: false,
     });
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("bite");
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("bite");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS); });
     expect(bridge.returnWithNativePetCursor).toHaveBeenCalledWith({
       targetX: 640,
       targetY: 320,
       approachFacing: "right",
       cursorMovementDistance: 0,
+      settings: {
+        ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
+        enabled: true,
+        mode: "chase",
+        chaseDurationMs: 4_500,
+        showAlertCue: false,
+      },
     });
   });
 

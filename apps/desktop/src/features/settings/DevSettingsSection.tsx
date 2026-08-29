@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
@@ -23,9 +23,10 @@ import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import type { PetModeLabAction, PetModeLabState, PetModePreviewAction } from "../pet-mode/petModeData";
 import {
-  PET_MODE_DRIFT_CHASE_DURATION_OPTIONS,
-  PET_MODE_DRIFT_CURSOR_RETURN_TIERS,
+  DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
+  PET_MODE_DRIFT_HUNT_TUNING_RANGES,
   persistPetModeDriftHuntSettings,
+  resolvePetModeDriftCursorReturnTiers,
   resolvePetModeDriftHuntSettings,
   type PetModeDriftHuntSettings,
 } from "../pet-mode/petModeDriftHunt";
@@ -176,6 +177,7 @@ export function DevSettingsSection({
     setDriftHuntSettings(next);
     persistPetModeDriftHuntSettings(next);
   };
+  const driftHuntCarryTiers = resolvePetModeDriftCursorReturnTiers(driftHuntSettings);
 
   useEffect(() => {
     let disposed = false;
@@ -315,27 +317,45 @@ export function DevSettingsSection({
                     <button type="button" className={`settings-mode-option${driftHuntSettings.mode === "chase" ? " is-active" : ""}`} role="radio" aria-checked={driftHuntSettings.mode === "chase"} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, mode: "chase" })}><span>몇 초간 추격</span></button>
                   </div>
                   <div className="pet-mode-lab__carry-tiers" aria-label="Cursor carry duration tiers">
-                    {PET_MODE_DRIFT_CURSOR_RETURN_TIERS.map(({ maxMovementDistance, durationMs }) => (
-                      <span key={maxMovementDistance}><strong>≤{maxMovementDistance}pt</strong><small>{durationMs / 1_000}초 물고 이동</small></span>
+                    {driftHuntCarryTiers.map(({ label, maxMovementDistance, durationMs }) => (
+                      <span key={maxMovementDistance}><strong>{label}</strong><small>{durationMs / 1_000}초 물고 이동</small></span>
                     ))}
                   </div>
                   <div className="pet-mode-lab__hunt-preview" aria-label="Cursor hunt native previews">
                     <PetModeLabAction label="단발 사냥 재생" detail="현재 커서를 한 번 노리는 실제 native 경로" action="cursor_hunt_single" active={petModeLabState?.activeAction === "cursor_hunt_single"} disabled={isPetModeLabActionDisabled("cursor_hunt_single")} onAction={onPreviewPetModeAction} />
-                    <PetModeLabAction label="8초 추격 재생" detail="현재 커서를 최대 8초 추격하는 실제 native 경로" action="cursor_hunt_chase" active={petModeLabState?.activeAction === "cursor_hunt_chase"} disabled={isPetModeLabActionDisabled("cursor_hunt_chase")} onAction={onPreviewPetModeAction} />
+                    <PetModeLabAction label={`${driftHuntSettings.chaseDurationMs / 1_000}초 추격 재생`} detail="현재 설정 시간 동안 커서를 추격하는 실제 native 경로" action="cursor_hunt_chase" active={petModeLabState?.activeAction === "cursor_hunt_chase"} disabled={isPetModeLabActionDisabled("cursor_hunt_chase")} onAction={onPreviewPetModeAction} />
                   </div>
                   <details className="pet-mode-lab__hunt-details">
-                    <summary>추격 세부 설정</summary>
+                    <summary>추격 세부 설정 · 자유 조정</summary>
+                    <div className="pet-mode-lab__tuning-heading"><span>다가가기</span><small>발견부터 입으로 잡을 때까지</small></div>
+                    <PetModeHuntRange label="추격 지속" detail="몇 초간 추격 모드의 제한 시간" value={driftHuntSettings.chaseDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.chaseDurationMs} valueLabel={`${(driftHuntSettings.chaseDurationMs / 1_000).toFixed(1)}초`} ariaLabel="Cursor chase duration" onChange={(chaseDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, chaseDurationMs })} />
+                    <PetModeHuntRange label="쫓아가는 속도" detail="고양이가 커서를 따라가는 이동 속도" value={driftHuntSettings.stalkSpeed} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.stalkSpeed} valueLabel={`${driftHuntSettings.stalkSpeed}pt/s`} ariaLabel="Cursor stalk speed" onChange={(stalkSpeed) => updateDriftHuntSettings({ ...driftHuntSettings, stalkSpeed })} />
+                    <PetModeHuntRange label="잡는 범위" detail="입이 이 거리 안에 오면 물었다고 판정" value={driftHuntSettings.captureRadius} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.captureRadius} valueLabel={`${driftHuntSettings.captureRadius}pt`} ariaLabel="Cursor capture radius" onChange={(captureRadius) => updateDriftHuntSettings({ ...driftHuntSettings, captureRadius })} />
+                    <PetModeHuntRange label="문 직후 멈춤" detail="잡은 순간을 읽을 수 있게 잠깐 정지" value={driftHuntSettings.biteHoldMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.biteHoldMs} valueLabel={`${driftHuntSettings.biteHoldMs}ms`} ariaLabel="Cursor bite hold" onChange={(biteHoldMs) => updateDriftHuntSettings({ ...driftHuntSettings, biteHoldMs })} />
                     <div className="pet-mode-lab__hunt-detail-row">
-                      <span>지속 시간</span>
-                      <div className="pet-mode-lab__duration-options" role="radiogroup" aria-label="Cursor chase duration">
-                        {PET_MODE_DRIFT_CHASE_DURATION_OPTIONS.map((duration) => (
-                          <button key={duration} type="button" className={driftHuntSettings.chaseDurationMs === duration ? "is-active" : ""} role="radio" aria-checked={driftHuntSettings.chaseDurationMs === duration} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, chaseDurationMs: duration })}>{duration / 1_000}초</button>
-                        ))}
-                      </div>
+                      <span className="pet-mode-lab__hunt-detail-label"><strong>급한 방향 전환 줄이기</strong><small>커서가 몸을 가로지를 때 잦은 반전 방지</small></span>
+                      <Toggle checked={driftHuntSettings.softTurns} onChange={(softTurns) => updateDriftHuntSettings({ ...driftHuntSettings, softTurns })} ariaLabel="Toggle soft cursor chase turns" />
                     </div>
                     <div className="pet-mode-lab__hunt-detail-row">
-                      <span>급한 방향 전환 줄이기</span>
-                      <Toggle checked={driftHuntSettings.softTurns} onChange={(softTurns) => updateDriftHuntSettings({ ...driftHuntSettings, softTurns })} ariaLabel="Toggle soft cursor chase turns" />
+                      <span className="pet-mode-lab__hunt-detail-label"><strong>발견 느낌표</strong><small>추격 시작 때 주황색 ! 1회</small></span>
+                      <Toggle checked={driftHuntSettings.showAlertCue} onChange={(showAlertCue) => updateDriftHuntSettings({ ...driftHuntSettings, showAlertCue })} ariaLabel="Toggle cursor hunt alert cue" />
+                    </div>
+                    {driftHuntSettings.showAlertCue ? <PetModeHuntRange label="느낌표 길이" detail="팝업이 나타났다 사라지는 시간" value={driftHuntSettings.alertDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.alertDurationMs} valueLabel={`${driftHuntSettings.alertDurationMs}ms`} ariaLabel="Cursor hunt alert duration" onChange={(alertDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, alertDurationMs })} /> : null}
+
+                    <div className="pet-mode-lab__tuning-heading"><span>물고 걷기</span><small>뒤돌아서 커서를 데려가는 구간</small></div>
+                    <PetModeHuntRange label="걷는 거리" detail="한 번 물었을 때 데려가는 총 거리" value={driftHuntSettings.carryDistance} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.carryDistance} valueLabel={`${driftHuntSettings.carryDistance}pt`} ariaLabel="Cursor carry distance" onChange={(carryDistance) => updateDriftHuntSettings({ ...driftHuntSettings, carryDistance })} />
+                    <PetModeHuntRange label="무저항 시간" detail="마우스를 가만히 뒀을 때 걷는 시간" value={driftHuntSettings.carryStillDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.carryStillDurationMs} valueLabel={`${(driftHuntSettings.carryStillDurationMs / 1_000).toFixed(2)}초`} ariaLabel="Still cursor carry duration" onChange={(carryStillDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, carryStillDurationMs })} />
+                    <PetModeHuntRange label="약한 저항 시간" detail="다가갈 때 조금 움직인 커서의 걷는 시간" value={driftHuntSettings.carryNudgeDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.carryNudgeDurationMs} valueLabel={`${(driftHuntSettings.carryNudgeDurationMs / 1_000).toFixed(1)}초`} ariaLabel="Nudged cursor carry duration" onChange={(carryNudgeDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, carryNudgeDurationMs })} />
+                    <PetModeHuntRange label="강한 저항 시간" detail="다가갈 때 많이 움직인 커서의 걷는 시간" value={driftHuntSettings.carryYankDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.carryYankDurationMs} valueLabel={`${(driftHuntSettings.carryYankDurationMs / 1_000).toFixed(1)}초`} ariaLabel="Resistant cursor carry duration" onChange={(carryYankDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, carryYankDurationMs })} />
+                    <PetModeHuntRange label="마우스 늘어짐" detail="고양이 입보다 커서가 탄성 있게 늦게 따라옴" value={driftHuntSettings.cursorLagMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.cursorLagMs} valueLabel={driftHuntSettings.cursorLagMs === 0 ? "붙음" : `${driftHuntSettings.cursorLagMs}ms`} ariaLabel="Cursor carry lag" onChange={(cursorLagMs) => updateDriftHuntSettings({ ...driftHuntSettings, cursorLagMs })} />
+
+                    <div className="pet-mode-lab__tuning-heading"><span>물고 버티기</span><small>사용자가 반대로 당길 때 놓는 감각</small></div>
+                    <PetModeHuntRange label="저항 여유" detail="이 거리까지는 마우스 떨림으로 보고 유지" value={driftHuntSettings.cursorSlack} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.cursorSlack} valueLabel={`${driftHuntSettings.cursorSlack}pt`} ariaLabel="Cursor grip slack" onChange={(cursorSlack) => updateDriftHuntSettings({ ...driftHuntSettings, cursorSlack })} />
+                    <PetModeHuntRange label="강제 놓기 거리" detail="이만큼 당기면 바로 놓는 거리" value={driftHuntSettings.cursorYankDistance} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.cursorYankDistance} valueLabel={`${driftHuntSettings.cursorYankDistance}pt`} ariaLabel="Cursor yank release distance" onChange={(cursorYankDistance) => updateDriftHuntSettings({ ...driftHuntSettings, cursorYankDistance })} />
+                    <PetModeHuntRange label="최대 버티기" detail="약한 저항에 버틸 수 있는 가장 긴 시간" value={driftHuntSettings.cursorGripMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.cursorGripMs} valueLabel={`${driftHuntSettings.cursorGripMs}ms`} ariaLabel="Cursor maximum grip duration" onChange={(cursorGripMs) => updateDriftHuntSettings({ ...driftHuntSettings, cursorGripMs })} />
+                    <div className="pet-mode-lab__tuning-footer">
+                      <small>슬라이더 변경은 다음 사냥부터 바로 적용됩니다.</small>
+                      <button type="button" className="settings-btn" onClick={() => updateDriftHuntSettings({ ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS, enabled: driftHuntSettings.enabled, mode: driftHuntSettings.mode })}>기본값 복원</button>
                     </div>
                   </details>
                 </>
@@ -513,6 +533,47 @@ export function DevSettingsSection({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function PetModeHuntRange({
+  label,
+  detail,
+  value,
+  range,
+  valueLabel,
+  ariaLabel,
+  onChange,
+}: {
+  readonly label: string;
+  readonly detail: string;
+  readonly value: number;
+  readonly range: { readonly min: number; readonly max: number; readonly step: number };
+  readonly valueLabel: string;
+  readonly ariaLabel: string;
+  readonly onChange: (value: number) => void;
+}) {
+  const fill = ((value - range.min) / (range.max - range.min)) * 100;
+  return (
+    <label className="pet-mode-lab__hunt-range">
+      <span className="pet-mode-lab__hunt-range-copy">
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </span>
+      <span className="pet-mode-lab__hunt-range-control">
+        <input
+          type="range"
+          min={range.min}
+          max={range.max}
+          step={range.step}
+          value={value}
+          aria-label={ariaLabel}
+          style={{ "--pet-hunt-range-fill": `${fill}%` } as CSSProperties}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+        <output>{valueLabel}</output>
+      </span>
+    </label>
   );
 }
 
