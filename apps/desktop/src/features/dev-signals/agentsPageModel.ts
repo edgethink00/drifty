@@ -209,6 +209,181 @@ export type AgentsGridCell = {
   readonly attended: boolean;
 };
 
+export type AgentsIntensityBand = {
+  readonly id: "x1" | "x2-4" | "x5-9" | "x10-19" | "x20-49" | "x50+";
+  readonly label: string;
+  readonly min: number;
+  readonly max: number | null;
+  /** Percentage of the focus tone used by the chart cell. */
+  readonly tonePercent: number;
+};
+
+/**
+ * Stable concurrency bands for both Day and Week.
+ *
+ * These are deliberately absolute rather than period-relative: the same tone
+ * always means the same load, so a quiet week and a 50-concurrent-turn week remain
+ * comparable. The logarithmic widening keeps large peaks readable without
+ * turning the legend into dozens of near-identical entries.
+ */
+export const AGENTS_INTENSITY_BANDS: readonly AgentsIntensityBand[] = [
+  { id: "x1", label: "×1", min: 1, max: 1, tonePercent: 30 },
+  { id: "x2-4", label: "×2–4", min: 2, max: 4, tonePercent: 44 },
+  { id: "x5-9", label: "×5–9", min: 5, max: 9, tonePercent: 58 },
+  { id: "x10-19", label: "×10–19", min: 10, max: 19, tonePercent: 70 },
+  { id: "x20-49", label: "×20–49", min: 20, max: 49, tonePercent: 82 },
+  { id: "x50+", label: "×50+", min: 50, max: null, tonePercent: 94 },
+];
+
+export function agentsIntensityBandFor(concurrency: number): AgentsIntensityBand {
+  const safeConcurrency = Math.max(1, Math.floor(concurrency));
+  return AGENTS_INTENSITY_BANDS.find((band) => band.max === null || safeConcurrency <= band.max)
+    ?? AGENTS_INTENSITY_BANDS[AGENTS_INTENSITY_BANDS.length - 1]!;
+}
+
+export function visibleAgentsIntensityBands(peakConcurrency: number): readonly AgentsIntensityBand[] {
+  if (peakConcurrency <= 0) return [];
+  const peakBand = agentsIntensityBandFor(peakConcurrency);
+  return AGENTS_INTENSITY_BANDS.slice(0, AGENTS_INTENSITY_BANDS.indexOf(peakBand) + 1);
+}
+
+export type AgentsTimelineColorMode = "intensity" | "repo";
+
+export const AGENTS_WEEK_BUCKET_MINUTES = 5;
+
+export type AgentsTimelineSegment = {
+  readonly start: number;
+  readonly end: number;
+  readonly peakConcurrency: number;
+  readonly topRepo: string | null;
+  readonly providers: readonly string[];
+  readonly intensityBand: AgentsIntensityBand;
+};
+
+type TimelineTurn = {
+  readonly start: number;
+  readonly end: number;
+  readonly provider: string;
+  readonly repo: string;
+};
+
+type MutableTimelineSegment = {
+  start: number;
+  end: number;
+  peakConcurrency: number;
+  providers: Set<string>;
+  repoMinutes: Map<string, number>;
+  intensityBand: AgentsIntensityBand;
+  visualKey: string;
+};
+
+function rankedRepo(
+  repoMinutes: ReadonlyMap<string, number>,
+  repoPriority: ReadonlyMap<string, number>,
+): string | null {
+  const winner = [...repoMinutes.entries()]
+    .sort((left, right) => (
+      right[1] - left[1]
+      || (repoPriority.get(left[0]) ?? Number.MAX_SAFE_INTEGER) - (repoPriority.get(right[0]) ?? Number.MAX_SAFE_INTEGER)
+      || left[0].localeCompare(right[0])
+    ))[0]?.[0];
+  return winner?.trim() ? winner : null;
+}
+
+/**
+ * Build Week calendar stretches from bounded five-minute buckets.
+ *
+ * Raw agent logs can contain thousands of sub-minute turn boundaries. Drawing
+ * each one creates an unreadable barcode and an unnecessarily large DOM. Each
+ * bucket therefore records its real peak concurrency and turn-minute-weighted
+ * repository, then adjacent buckets coalesce only when their visible state is
+ * unchanged: intensity band in Intensity mode, dominant repo in Project mode.
+ */
+export function buildAgentsTimelineSegments(
+  source: AgentsDaySource,
+  colorMode: AgentsTimelineColorMode,
+  repoOrder: readonly string[] = [],
+  bucketMinutes = AGENTS_WEEK_BUCKET_MINUTES,
+): AgentsTimelineSegment[] {
+  const turns: TimelineTurn[] = source.turns
+    .map((turn) => {
+      const [rawStart, rawEnd, provider, repo] = turn as readonly [number, number, string, string?];
+      return {
+        start: Math.max(0, Math.min(24 * 60, rawStart)),
+        end: Math.max(0, Math.min(24 * 60, rawEnd)),
+        provider,
+        repo: (repo ?? "").trim(),
+      };
+    })
+    .filter((turn) => turn.end > turn.start);
+  if (turns.length === 0) return [];
+
+  const safeBucketMinutes = Number.isFinite(bucketMinutes)
+    ? Math.max(1, Math.min(60, Math.floor(bucketMinutes)))
+    : AGENTS_WEEK_BUCKET_MINUTES;
+  const repoPriority = new Map(repoOrder.map((repo, index) => [repo, index]));
+  const segments: AgentsTimelineSegment[] = [];
+  let current: MutableTimelineSegment | null = null;
+
+  const finishCurrent = () => {
+    if (!current) return;
+    segments.push({
+      start: current.start,
+      end: current.end,
+      peakConcurrency: current.peakConcurrency,
+      topRepo: rankedRepo(current.repoMinutes, repoPriority),
+      providers: [...current.providers].sort(),
+      intensityBand: current.intensityBand,
+    });
+    current = null;
+  };
+
+  for (let start = 0; start < 24 * 60; start += safeBucketMinutes) {
+    const end = Math.min(24 * 60, start + safeBucketMinutes);
+    const activeTurns = turns.filter((turn) => turn.start < end && turn.end > start);
+    if (activeTurns.length === 0) {
+      finishCurrent();
+      continue;
+    }
+
+    const atomRepoMinutes = new Map<string, number>();
+    for (const turn of activeTurns) {
+      const overlap = Math.max(0, Math.min(turn.end, end) - Math.max(turn.start, start));
+      if (overlap > 0) atomRepoMinutes.set(turn.repo, (atomRepoMinutes.get(turn.repo) ?? 0) + overlap);
+    }
+    const atomTopRepo = rankedRepo(atomRepoMinutes, repoPriority);
+    const atomPeakConcurrency = peakConcurrency(activeTurns.map((turn) => ({
+      start: Math.max(turn.start, start),
+      end: Math.min(turn.end, end),
+    })));
+    const intensityBand = agentsIntensityBandFor(atomPeakConcurrency);
+    const visualKey = colorMode === "repo" ? `repo:${atomTopRepo ?? "__unknown__"}` : `intensity:${intensityBand.id}`;
+
+    if (!current || current.end !== start || current.visualKey !== visualKey) {
+      finishCurrent();
+      current = {
+        start,
+        end,
+        peakConcurrency: atomPeakConcurrency,
+        providers: new Set(activeTurns.map((turn) => turn.provider)),
+        repoMinutes: atomRepoMinutes,
+        intensityBand,
+        visualKey,
+      };
+      continue;
+    }
+
+    current.end = end;
+    current.peakConcurrency = Math.max(current.peakConcurrency, atomPeakConcurrency);
+    activeTurns.forEach((turn) => current?.providers.add(turn.provider));
+    for (const [repo, minutes] of atomRepoMinutes) {
+      current.repoMinutes.set(repo, (current.repoMinutes.get(repo) ?? 0) + minutes);
+    }
+  }
+  finishCurrent();
+  return segments;
+}
+
 /**
  * Bucket a day's turns into flow-grid cells of `intervalMinutes`.
  *
@@ -217,7 +392,11 @@ export type AgentsGridCell = {
  * project colour mode shows). Cells with no agent time are omitted — the
  * grid draws its own empty cells, exactly like the flow chart.
  */
-export function buildAgentsGridCells(source: AgentsDaySource, intervalMinutes: number): Map<number, AgentsGridCell> {
+export function buildAgentsGridCells(
+  source: AgentsDaySource,
+  intervalMinutes: number,
+  repoOrder: readonly string[] = [],
+): Map<number, AgentsGridCell> {
   const cells = new Map<number, {
     concurrency: number;
     repoMinutes: Map<string, number>;
@@ -225,6 +404,7 @@ export function buildAgentsGridCells(source: AgentsDaySource, intervalMinutes: n
     attended: boolean;
   }>();
   const cellCount = Math.ceil((24 * 60) / intervalMinutes);
+  const repoPriority = new Map(repoOrder.map((repo, index) => [repo, index]));
   const cellIndexFor = (minute: number) => Math.floor(minute / intervalMinutes);
   const ensure = (index: number) => {
     let cell = cells.get(index);
@@ -252,10 +432,8 @@ export function buildAgentsGridCells(source: AgentsDaySource, intervalMinutes: n
       const overlapEnd = Math.min(end, cellEnd);
       if (overlapEnd <= overlapStart) continue;
       const cell = ensure(index);
-      const repoName = repo && repo.length > 0 ? repo : null;
-      if (repoName) {
-        cell.repoMinutes.set(repoName, (cell.repoMinutes.get(repoName) ?? 0) + (overlapEnd - overlapStart));
-      }
+      const normalizedRepo = repo?.trim() ?? "";
+      cell.repoMinutes.set(normalizedRepo, (cell.repoMinutes.get(normalizedRepo) ?? 0) + (overlapEnd - overlapStart));
       let boundaries = eventsByCell.get(index);
       if (!boundaries) {
         boundaries = [];
@@ -292,15 +470,10 @@ export function buildAgentsGridCells(source: AgentsDaySource, intervalMinutes: n
 
   const result = new Map<number, AgentsGridCell>();
   for (const [index, cell] of cells) {
-    if (cell.concurrency === 0 && cell.commitCount === 0) continue;
-    let topRepo: string | null = null;
-    let topMinutes = 0;
-    for (const [repo, minutes] of cell.repoMinutes) {
-      if (minutes > topMinutes) {
-        topRepo = repo;
-        topMinutes = minutes;
-      }
-    }
+    // Commits remain a Breakdown signal. A commit without overlapping agent
+    // time must not paint a fake ×1 activity cell in the Day timeline.
+    if (cell.concurrency === 0) continue;
+    const topRepo = rankedRepo(cell.repoMinutes, repoPriority);
     result.set(index * intervalMinutes, {
       minuteOfDay: index * intervalMinutes,
       concurrency: cell.concurrency,

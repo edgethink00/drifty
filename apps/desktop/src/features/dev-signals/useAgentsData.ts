@@ -82,6 +82,10 @@ function sampleDaysFor(days: readonly string[]): readonly AgentsDaySource[] {
   }));
 }
 
+export function buildAgentsLoadingDays(days: readonly string[]): readonly AgentsDaySource[] {
+  return days.map((day) => ({ day, attention: [], turns: [], commits: [] }));
+}
+
 /** Minutes since local midnight of `day`, clamped to the day. */
 function minuteOfDay(iso: string, day: string): number | null {
   const stamp = new Date(iso);
@@ -153,19 +157,32 @@ function toDaySource(
 
 export type AgentsDataState = {
   readonly days: readonly AgentsDaySource[];
-  /** True while the first tracker read is in flight. */
+  /** True while the requested range's tracker read is in flight. */
   readonly loading: boolean;
   /** True when the tracker answered; false means the fixture is on screen. */
   readonly live: boolean;
 };
 
+type StoredAgentsDataState = AgentsDataState & {
+  /** Range that produced this state; prevents a prior range leaking into a new render. */
+  readonly rangeKey: string;
+};
+
 export function useAgentsData(startDay: string, endDay: string): AgentsDataState {
   const days = useMemo(() => buildAgentsRangeDays(startDay, endDay), [endDay, startDay]);
-  const [state, setState] = useState<AgentsDataState>(() => ({ days: sampleDaysFor(days), loading: true, live: false }));
+  const rangeKey = `${startDay}:${endDay}`;
+  const [state, setState] = useState<StoredAgentsDataState>(() => ({
+    days: buildAgentsLoadingDays(days),
+    loading: true,
+    live: false,
+    rangeKey,
+  }));
 
   useEffect(() => {
     let cancelled = false;
-    setState({ days: sampleDaysFor(days), loading: true, live: false });
+    // Loading is its own state. Rendering the browser fixture here makes real
+    // data briefly appear as `sample` every time the tab or range changes.
+    setState({ days: buildAgentsLoadingDays(days), loading: true, live: false, rangeKey });
 
     async function load() {
       try {
@@ -195,7 +212,7 @@ export function useAgentsData(startDay: string, endDay: string): AgentsDataState
         // date-shift the fixture so navigation remains reviewable and honest
         // about the selected range (the header marks it as sample data).
         if (payloads.every((entry) => entry.signals === null)) {
-          setState({ days: sampleDaysFor(days), loading: false, live: false });
+          setState({ days: sampleDaysFor(days), loading: false, live: false, rangeKey });
           return;
         }
 
@@ -205,9 +222,9 @@ export function useAgentsData(startDay: string, endDay: string): AgentsDataState
           attention,
           reposByKey,
         ));
-        setState({ days: sources, loading: false, live: true });
+        setState({ days: sources, loading: false, live: true, rangeKey });
       } catch {
-        if (!cancelled) setState({ days: sampleDaysFor(days), loading: false, live: false });
+        if (!cancelled) setState({ days: sampleDaysFor(days), loading: false, live: false, rangeKey });
       }
     }
 
@@ -215,7 +232,10 @@ export function useAgentsData(startDay: string, endDay: string): AgentsDataState
     return () => {
       cancelled = true;
     };
-  }, [days, endDay, startDay]);
+  }, [days, endDay, rangeKey, startDay]);
 
-  return state;
+  if (state.rangeKey !== rangeKey) {
+    return { days: buildAgentsLoadingDays(days), loading: true, live: false };
+  }
+  return { days: state.days, loading: state.loading, live: state.live };
 }

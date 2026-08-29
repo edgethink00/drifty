@@ -108,12 +108,14 @@ export function FlowHoverCard({
   cardRef,
   deviceLabelById,
   projectsById,
+  showClassificationSource = true,
 }: {
   readonly hover: FlowHoverState;
   readonly appIcons: Record<string, string | null>;
   readonly cardRef?: Ref<HTMLDivElement>;
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly projectsById?: ReadonlyMap<string, ProjectLegendEntry>;
+  readonly showClassificationSource?: boolean;
 }) {
   const { block } = hover.group;
   const iconSrc = appIcons[block.bundleId ?? block.appName] ?? null;
@@ -136,7 +138,7 @@ export function FlowHoverCard({
         <FlowIdentityPill color={PRODUCTIVITY_COLORS[block.productivity]} label={productivityLabel(block.productivity)} />
         {project ? <FlowIdentityPill color={block.projectColor ?? project.color} label={project.name} /> : null}
         {deviceLabel ? <span className="flow-hover-card__device-pill">{deviceLabel}</span> : null}
-        <ClassificationSourceBadge source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} />
+        {showClassificationSource ? <ClassificationSourceBadge source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} /> : null}
       </div>
       {detailLabel ? <p className="flow-hover-card__detail">{detailLabel}</p> : null}
     </div>

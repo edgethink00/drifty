@@ -19,8 +19,8 @@
  * attention.
  */
 
-import { useMemo, useState } from "react";
-import type { CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
@@ -29,38 +29,49 @@ import { MetricTile } from "../../components/MetricTile";
 import { clockHourForLogicalHour, formatDateRangeLabel } from "../../lib/formatting";
 import { BreakdownSidePanel } from "../dashboard/BreakdownSidePanelChrome";
 import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, shiftDashboardPeriodDay } from "../dashboard/dashboardPeriods";
+import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "../dashboard/weekDashboardAxisScale";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type StartOfWeek } from "../settings/settingsStorage";
 import { FlowDetailSelect } from "../flow-chart/FlowDetailSelect";
 import { FlowChartGrid } from "../flow-chart/FlowChartGrid";
 import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
+import { FlowHoverLayer } from "../flow-chart/FlowHoverLayer";
+import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { formatHourLabel } from "../flow-chart/flowChartFormat";
 import { FOCUS_DRIFT_GRID_PATH } from "../dashboard/focusDriftChart";
 import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath } from "../dashboard/focusDriftGeometry";
 import {
   buildAgentsDayModel,
-  buildAgentsWeekModel,
   buildAgentsGridCells,
+  buildAgentsTimelineSegments,
+  buildAgentsWeekModel,
+  AGENTS_WEEK_BUCKET_MINUTES,
+  agentMinutesByRepo,
+  agentsIntensityBandFor,
   gridRepoLegend,
   repoDominantProviders,
   agentModelRows,
   agentsHourHistogram,
   agentsInsightNumbers,
   formatTokens,
+  visibleAgentsIntensityBands,
   type AgentsDayModel,
+  type AgentsIntensityBand,
   type AgentsRepoRow,
+  type AgentsTimelineColorMode,
 } from "./agentsPageModel";
 import type { AgentsDaySource } from "./agentsPageModel";
-import { formatClock, formatHours, mergeForDisplay } from "./devSignalsModel";
+import { formatClock, formatHours } from "./devSignalsModel";
 import { useAgentsData } from "./useAgentsData";
 import { AGENTS_UNKNOWN_COLOR, agentsSeriesColors } from "./agentsPalette";
 import {
   AgentsBreakdownComposed,
 } from "./AgentsBreakdown";
+import { AgentsWeekHoverLayer } from "./AgentsWeekHoverLayer";
 import "./agents-page.css";
 
 export type AgentsPeriod = "Today" | "Week";
-export type AgentsGridColorMode = "intensity" | "repo";
+export type AgentsGridColorMode = AgentsTimelineColorMode;
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
@@ -80,6 +91,7 @@ const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
 const AGENT_TOOLS: Record<string, { name: string; color: string }> = {
   codex: { name: "Codex", color: "#10a37f" },
   claude: { name: "Claude Code", color: "#d97757" },
+  claude_code: { name: "Claude Code", color: "#d97757" },
   opencode: { name: "OpenCode", color: "#5b8def" },
   gemini: { name: "Gemini CLI", color: "#4285f4" },
 };
@@ -117,12 +129,52 @@ function AgentToolGlyph({ provider, fallbackName, size }: { readonly provider: s
   );
 }
 
-/* Concurrency → tone, expressed with the chart's own tokens so both themes
-   follow. ×1 is pale, ×5 saturates to the flow chart's focus green. */
+/* Concurrency → stable logarithmic tone. The absolute bands keep a color's
+   meaning comparable across quiet days and 50-agent peaks. */
 function intensityColor(level: number): string {
-  const mix = [0, 30, 50, 68, 84, 100][Math.min(5, Math.max(1, level))] ?? 100;
-  if (mix >= 100) return "var(--productivity-focus)";
-  return `color-mix(in srgb, var(--productivity-focus) ${mix}%, var(--flow-chart-plot-surface))`;
+  return intensityBandColor(agentsIntensityBandFor(level));
+}
+
+function intensityBandColor(band: AgentsIntensityBand): string {
+  return `color-mix(in srgb, var(--productivity-focus) ${band.tonePercent}%, var(--flow-chart-plot-surface))`;
+}
+
+function rankedAgentRepos(sources: readonly AgentsDaySource[]): string[] {
+  return [...agentMinutesByRepo(sources).entries()]
+    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .map(([repo]) => repo);
+}
+
+function hasUnlabelledAgentTime(sources: readonly AgentsDaySource[]): boolean {
+  return sources.some((source) => source.turns.some((turn) => !(turn[3]?.trim())));
+}
+
+function repoLegendEntries(
+  repoOrder: readonly string[],
+  repoColors: ReadonlyMap<string, string>,
+  hasUnlabelled: boolean,
+): ProjectLegendEntry[] {
+  const repoLimit = hasUnlabelled ? 4 : 5;
+  const entries: ProjectLegendEntry[] = repoOrder.slice(0, repoLimit).map((repo) => ({
+    projectId: repo,
+    name: repo,
+    color: repoColors.get(repo) ?? AGENTS_UNKNOWN_COLOR,
+  }));
+  if (hasUnlabelled) entries.push({ projectId: null, name: "No repo", color: AGENTS_UNKNOWN_COLOR });
+  return entries;
+}
+
+function readableForeground(background: string): string {
+  // Week project tones come from the fixed #RRGGBB agent series palette.
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(background);
+  if (!match) return "var(--text)";
+  const channels = match.slice(1).map((channel) => Number.parseInt(channel, 16) / 255);
+  const luminance = channels
+    .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+    .reduce((sum, channel, index) => sum + channel * ([0.2126, 0.7152, 0.0722][index] ?? 0), 0);
+  const darkContrast = (luminance + 0.05) / 0.055;
+  const lightContrast = 1.05 / (luminance + 0.05);
+  return darkContrast >= lightContrast ? "#10100e" : "#ffffff";
 }
 
 type ShareStyle = CSSProperties & { "--app-usage-share": string };
@@ -141,6 +193,40 @@ function shareOfCommits(repo: AgentsRepoRow, totalCommits: number): number {
  * segmented control, and the same project-legend chips, fed with agent
  * vocabulary. Nothing here introduces a control style the day view lacks.
  */
+function AgentsColorModeControl({ colorMode, onColorModeChange }: {
+  readonly colorMode: AgentsGridColorMode;
+  readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
+}) {
+  return (
+    <div className="seg flow-color-mode-control" role="group" aria-label="Agents color mode">
+      {([["intensity", "Intensity"], ["repo", "Project"]] as const).map(([id, label]) => (
+        <button
+          key={id}
+          type="button"
+          className={colorMode === id ? "on" : undefined}
+          aria-pressed={colorMode === id}
+          onClick={() => onColorModeChange(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentsTimelineLegend({ entries }: { readonly entries: readonly ProjectLegendEntry[] }) {
+  const hoveredLegendCardRef = { current: null };
+  return (
+    <FlowChartLegend
+      blocks={[]}
+      colorMode="project"
+      hoveredLegendCardRef={hoveredLegendCardRef}
+      setHoveredLegend={() => undefined}
+      projectLegend={entries}
+    />
+  );
+}
+
 function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColorModeChange, onIntervalChange }: {
   readonly colorMode: AgentsGridColorMode;
   readonly intervalMinutes: FlowIntervalMinutes;
@@ -148,33 +234,14 @@ function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColor
   readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
   readonly onIntervalChange: (interval: FlowIntervalMinutes) => void;
 }) {
-  const hoveredLegendCardRef = { current: null };
   return (
     <div className="flow-chart-head">
       <div className="flow-chart-head__actions">
         <div className="flow-chart-head__controls">
           <FlowDetailSelect intervalMinutes={intervalMinutes} onIntervalChange={onIntervalChange} />
-          <div className="seg flow-color-mode-control" aria-label="Agents color mode">
-            {([["intensity", "Intensity"], ["repo", "Project"]] as const).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                className={colorMode === id ? "on" : undefined}
-                aria-pressed={colorMode === id}
-                onClick={() => onColorModeChange(id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <AgentsColorModeControl colorMode={colorMode} onColorModeChange={onColorModeChange} />
         </div>
-        <FlowChartLegend
-          blocks={[]}
-          colorMode="project"
-          hoveredLegendCardRef={hoveredLegendCardRef}
-          setHoveredLegend={() => undefined}
-          projectLegend={legendEntries}
-        />
+        <AgentsTimelineLegend entries={legendEntries} />
       </div>
     </div>
   );
@@ -184,18 +251,25 @@ function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColor
  * The 24-hour timeline as a flow-chart-card: same axis row, same gutter token,
  * same card chrome (top border, spacing) the day view's chart uses.
  */
-function AgentsDayTimeline({ model, source, intervalMinutes, onIntervalChange }: {
+function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, onColorModeChange, onIntervalChange }: {
   readonly model: AgentsDayModel;
   readonly source: AgentsDaySource;
+  readonly colorMode: AgentsGridColorMode;
   readonly intervalMinutes: FlowIntervalMinutes;
+  readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
   readonly onIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
 }) {
-  const [colorMode, setColorMode] = useState<AgentsGridColorMode>("intensity");
-  const gridCells = useMemo(() => buildAgentsGridCells(source, intervalMinutes), [source, intervalMinutes]);
-  const repoLegend = useMemo(() => gridRepoLegend(gridCells), [gridCells]);
-  // Ranked by grid dominance, coloured from the shared series palette so the
-  // same repo carries the same colour into the Breakdown charts.
-  const repoColors = useMemo(() => agentsSeriesColors(repoLegend), [repoLegend]);
+  const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
+  const repoOrder = useMemo(() => rankedAgentRepos([source]), [source]);
+  const gridCells = useMemo(() => buildAgentsGridCells(source, intervalMinutes, repoOrder), [source, intervalMinutes, repoOrder]);
+  const gridRepos = useMemo(() => gridRepoLegend(gridCells), [gridCells]);
+  const repoLegend = useMemo(() => {
+    const visibleRepos = new Set(gridRepos);
+    return [...repoOrder.filter((repo) => visibleRepos.has(repo)), ...gridRepos.filter((repo) => !repoOrder.includes(repo))];
+  }, [gridRepos, repoOrder]);
+  // Ranked by cumulative agent time, matching the Breakdown chart so a repo
+  // keeps one color throughout the page.
+  const repoColors = useMemo(() => agentsSeriesColors(repoOrder), [repoOrder]);
 
   // The grid is the real FlowChartGrid: agent cells become FlowBlocks whose
   // projectColor carries the tone (concurrency tone in intensity mode, repo
@@ -214,26 +288,34 @@ function AgentsDayTimeline({ model, source, intervalMinutes, onIntervalChange }:
         quarter: 0,
         minuteOfDay: cell.minuteOfDay,
         appName: cell.topRepo ?? "Agents",
+        windowTitle: `Peak ×${cell.concurrency}`,
         category: "workspace",
         productivity: "focus",
         durationSeconds: intervalMinutes * 60,
         projectId: cell.topRepo,
         projectColor: color,
+        colorKey: cell.topRepo ?? "agents",
       } as FlowBlock);
     }
     return byCell;
   }, [gridCells, colorMode, repoColors, model.day, intervalMinutes]);
+  const gridBlockList = useMemo(() => Array.from(gridBlocks.values()), [gridBlocks]);
+  const hoverGroupsByCell = useMemo(
+    () => buildFlowBlockHoverGroups(gridBlockList, intervalMinutes, 0),
+    [gridBlockList, intervalMinutes],
+  );
 
   const legendEntries = useMemo<ProjectLegendEntry[]>(() => {
     if (colorMode === "repo") {
-      return repoLegend.slice(0, 5).map((repo) => ({ projectId: repo, name: repo, color: repoColors.get(repo) ?? AGENTS_UNKNOWN_COLOR }));
+      return repoLegendEntries(repoLegend, repoColors, Array.from(gridCells.values()).some((cell) => cell.topRepo === null));
     }
-    return [1, 2, 3, 5].map((level) => ({
-      projectId: `x${level}`,
-      name: `×${level}${level === 5 ? "+" : ""}`,
-      color: intensityColor(level),
+    const peakConcurrency = Math.max(0, ...Array.from(gridCells.values(), (cell) => cell.concurrency));
+    return visibleAgentsIntensityBands(peakConcurrency).map((band) => ({
+      projectId: band.id,
+      name: band.label,
+      color: intensityBandColor(band),
     }));
-  }, [colorMode, repoLegend, repoColors]);
+  }, [colorMode, gridCells, repoLegend, repoColors]);
 
   return (
     /* Same bordered chart box the day view wraps its flow chart in — without
@@ -260,7 +342,7 @@ function AgentsDayTimeline({ model, source, intervalMinutes, onIntervalChange }:
             colorMode={colorMode}
             intervalMinutes={intervalMinutes}
             legendEntries={legendEntries}
-            onColorModeChange={setColorMode}
+            onColorModeChange={onColorModeChange}
             onIntervalChange={onIntervalChange}
           />
           <FlowChartGrid
@@ -269,9 +351,17 @@ function AgentsDayTimeline({ model, source, intervalMinutes, onIntervalChange }:
             colorMode="project"
             currentHourIndex={null}
             currentMinuteOffset={null}
-            hoverGroupsByCell={new Map()}
+            hoverGroupsByCell={hoverGroupsByCell}
             intervalMinutes={intervalMinutes}
-            setFlowGridElement={() => undefined}
+            setFlowGridElement={setFlowGridElement}
+          />
+          <FlowHoverLayer
+            gridElement={flowGridElement}
+            hoverGroupsByCell={hoverGroupsByCell}
+            intervalMinutes={intervalMinutes}
+            boundaryMinutes={0}
+            appIcons={{}}
+            showClassificationSource={false}
           />
         </section>
       </div>
@@ -389,110 +479,274 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
 /**
  * The Week view follows the existing week system: the week-v2 calendar's
  * bordered panel, sticky day head, hour rail, and event blocks — with agent
- * stretches as the events (focus tone) and commit counts in the day head.
+ * stretches as the events (focus tone). Commit output stays in Breakdown so
+ * the calendar remains the single signal in the main Week surface.
  * Geometry classes come from week-dashboard.css untouched; the hour range is
  * fixed 0–24 because agent work does not respect working hours.
  */
-const AGENTS_WEEK_HOUR_HEIGHT = 30;
+const AGENTS_WEEK_HOUR_HEIGHT = weekDashboardAxisScalePercentToHourHeight(WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT);
 
-function AgentsWeekCalendar({ models, sources }: {
-  readonly models: readonly AgentsDayModel[];
-  readonly sources: readonly AgentsDaySource[];
-}) {
-  const week = useMemo(() => buildAgentsWeekModel(models), [models]);
-  const spansByDay = useMemo(() => {
-    const map = new Map<string, { start: number; end: number }[]>();
-    for (const source of sources) {
-      const merged = mergeForDisplay(mergeSpansForDay(source), 10);
-      map.set(source.day, merged);
-    }
-    return map;
-  }, [sources]);
-
-  return (
-    <section className="week-v2-calendar editorial-panel editorial-panel--soft agents-week-calendar" aria-label="Agent week calendar">
-      <div className="week-v2-calendar__legend" aria-label="Agents week legend">
-        <div className="flow-chart-head__actions">
-          <div className="flow-chart-legend flow-chart-legend--project">
-            <span className="flow-chart-legend__group flow-chart-legend__group--project">
-              <span className="flow-chart-legend__parent flow-chart-legend__parent--tone">
-                <span className="flow-chart-legend__tone-dot" style={{ "--flow-legend-tone": "var(--productivity-focus)" } as CSSProperties} />
-                Agent time
-              </span>
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="week-v2-calendar__scroller agents-week-calendar__scroller">
-        <div className="week-v2-calendar__day-head" aria-hidden="true">
-          <span />
-          {week.days.map((day) => {
-            const [, , dayOfMonth] = day.day.split("-").map(Number);
-            const isWeekend = day.weekdayLabel === "Sun" || day.weekdayLabel === "Sat";
-            return (
-              <span className={isWeekend ? "is-weekend" : undefined} key={day.day}>
-                <strong>{day.weekdayLabel}</strong>
-                <small>{dayOfMonth}</small>
-              </span>
-            );
-          })}
-        </div>
-        <div className="week-v2-calendar__body" style={{ height: `${24 * AGENTS_WEEK_HOUR_HEIGHT}px` }}>
-          <div className="week-v2-calendar__time-rail">
-            {Array.from({ length: 24 }, (_, hour) => (
-              <span key={hour} style={{ top: `${hour * AGENTS_WEEK_HOUR_HEIGHT}px` }}>{formatHourLabel(clockHourForLogicalHour(hour, 0))}</span>
-            ))}
-          </div>
-          {week.days.map((day) => {
-            const spans = spansByDay.get(day.day) ?? [];
-            return (
-              <div className="week-v2-calendar__day-column" key={day.day}>
-                {Array.from({ length: 24 }, (_, hour) => (
-                  <span className="week-v2-calendar__line" key={`${day.day}-${hour}`} style={{ top: `${hour * AGENTS_WEEK_HOUR_HEIGHT}px` }} />
-                ))}
-                {spans.map((span, index) => {
-                  const heightPx = Math.max(4, ((span.end - span.start) / 60) * AGENTS_WEEK_HOUR_HEIGHT);
-                  const isShort = heightPx < 18;
-                  return (
-                    <article
-                      key={index}
-                      className={`week-v2-calendar__event week-v2-calendar__event--focus${isShort ? " week-v2-calendar__event--short week-v2-calendar__event--tiny" : ""}`}
-                      style={{
-                        top: `${(span.start / 60) * AGENTS_WEEK_HOUR_HEIGHT}px`,
-                        height: `${heightPx}px`,
-                        left: "4px",
-                        width: "calc(100% - 8px)",
-                        "--event-tone": "var(--productivity-focus)",
-                      } as CSSProperties}
-                      title={`${formatClock(span.start)}–${formatClock(span.end)} · ${formatHours(span.end - span.start)} agents`}
-                    >
-                      {!isShort ? <strong>{formatHours(span.end - span.start)}</strong> : null}
-                    </article>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <div className="agents-week-calendar__foot" aria-label="Daily agent totals">
-        <span />
-        {week.days.map((day) => (
-          <span key={day.day} className="agents-week-calendar__foot-cell">
-            <strong>{formatHours(day.agentMinutes)}</strong>
-            <small>{day.commitCount > 0 ? `${day.commitCount}c` : ""}</small>
-          </span>
-        ))}
-      </div>
-    </section>
-  );
+function minuteOfDayNow(): number {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
 }
 
-/** Merged agent spans for one day, minutes since midnight. */
-function mergeSpansForDay(source: AgentsDaySource): { start: number; end: number }[] {
-  return source.turns
-    .map((turn) => ({ start: turn[0], end: turn[1] }))
-    .filter((span) => span.end > span.start);
+function useLiveMinuteOfDay(): number {
+  const [minute, setMinute] = useState(minuteOfDayNow);
+
+  useEffect(() => {
+    const update = () => setMinute(minuteOfDayNow());
+    const interval = window.setInterval(update, 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return minute;
+}
+
+type AgentsWeekNowMarkerStyle = CSSProperties & {
+  "--week-calendar-now-offset": string;
+  "--week-calendar-now-line-end": string;
+};
+
+function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeChange, sources, todayDay }: {
+  readonly colorMode: AgentsGridColorMode;
+  readonly header: ReactNode;
+  readonly loading: boolean;
+  readonly models: readonly AgentsDayModel[];
+  readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
+  readonly sources: readonly AgentsDaySource[];
+  readonly todayDay: string;
+}) {
+  const [calendarBodyElement, setCalendarBodyElement] = useState<HTMLDivElement | null>(null);
+  const [activeKeyboardEventId, setActiveKeyboardEventId] = useState<string | null>(null);
+  const calendarScrollerRef = useRef<HTMLDivElement>(null);
+  const eventElementsRef = useRef(new Map<string, HTMLElement>());
+  const autoScrolledRangeRef = useRef<string | null>(null);
+  const week = useMemo(() => buildAgentsWeekModel(models), [models]);
+  const repoOrder = useMemo(() => rankedAgentRepos(sources), [sources]);
+  const repoColors = useMemo(() => agentsSeriesColors(repoOrder), [repoOrder]);
+  const hasUnlabelled = useMemo(() => hasUnlabelledAgentTime(sources), [sources]);
+  const legendEntries = useMemo<ProjectLegendEntry[]>(() => {
+    if (colorMode === "repo") {
+      return repoLegendEntries(repoOrder, repoColors, hasUnlabelled);
+    }
+    const peakConcurrency = Math.max(0, ...models.map((model) => model.concurrencyPeak));
+    return visibleAgentsIntensityBands(peakConcurrency).map((band) => ({
+      projectId: band.id,
+      name: band.label,
+      color: intensityBandColor(band),
+    }));
+  }, [colorMode, hasUnlabelled, models, repoColors, repoOrder]);
+  const { eventsByDay, hoverGroupsById } = useMemo(() => {
+    const nextEventsByDay = new Map<string, {
+      id: string;
+      start: number;
+      end: number;
+      label: string;
+      peakConcurrency: number;
+      providerLabel: string;
+      intensityBandId: AgentsIntensityBand["id"];
+      tone: string;
+      foreground?: string;
+    }[]>();
+    const nextGroupsById = new Map<string, FlowBlockHoverGroup>();
+    for (const source of sources) {
+      const segments = buildAgentsTimelineSegments(source, colorMode, repoOrder);
+      const events = segments.map((segment) => {
+        // Start bucket is the segment's durable identity. Live refreshes may
+        // extend the end or change its dominant tone without replacing the
+        // focused DOM node and resetting roving keyboard navigation.
+        const id = `${source.day}:${colorMode}:${segment.start}`;
+        const providerLabels = segment.providers.map(agentToolName);
+        const providerLabel = providerLabels.join(" + ");
+        const label = segment.topRepo ?? (providerLabels.length === 1 ? providerLabels[0]! : "Agents");
+        const hoverStartMinute = Math.round(segment.start);
+        const hoverEndMinute = Math.round(segment.end);
+        const tone = colorMode === "repo"
+          ? (segment.topRepo ? repoColors.get(segment.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
+          : intensityBandColor(segment.intensityBand);
+        const detail = [
+          `Peak ×${segment.peakConcurrency}`,
+          providerLabel,
+          `${AGENTS_WEEK_BUCKET_MINUTES}m resolution`,
+        ].filter(Boolean).join(" · ");
+        const block: FlowBlock = {
+          id: `agent-week-${id}`,
+          day: source.day,
+          hour: Math.floor(hoverStartMinute / 60),
+          quarter: 0,
+          minuteOfDay: hoverStartMinute,
+          appName: label,
+          windowTitle: detail,
+          category: "workspace",
+          productivity: "focus",
+          projectId: segment.topRepo,
+          projectColor: tone,
+          colorKey: segment.topRepo ?? "agents",
+          durationSeconds: Math.round((segment.end - segment.start) * 60),
+        };
+        nextGroupsById.set(id, {
+          block,
+          blocks: [block],
+          startMinuteOfDay: hoverStartMinute,
+          endMinuteOfDay: hoverEndMinute,
+          durationSeconds: block.durationSeconds,
+        });
+        return {
+          id,
+          start: segment.start,
+          end: segment.end,
+          label,
+          peakConcurrency: segment.peakConcurrency,
+          providerLabel,
+          intensityBandId: segment.intensityBand.id,
+          tone,
+          ...(colorMode === "repo" ? { foreground: readableForeground(tone) } : {}),
+        };
+      });
+      nextEventsByDay.set(source.day, events);
+    }
+    return { eventsByDay: nextEventsByDay, hoverGroupsById: nextGroupsById };
+  }, [colorMode, repoColors, repoOrder, sources]);
+  const orderedEventIds = useMemo(
+    () => week.days.flatMap((day) => (eventsByDay.get(day.day) ?? []).map((event) => event.id)),
+    [eventsByDay, week.days],
+  );
+  const keyboardTabStopId = activeKeyboardEventId && hoverGroupsById.has(activeKeyboardEventId)
+    ? activeKeyboardEventId
+    : (orderedEventIds[0] ?? null);
+  const todayIndex = week.days.findIndex((day) => day.day === todayDay);
+  const isCurrentWeek = todayIndex >= 0;
+  const currentMinute = useLiveMinuteOfDay();
+  const currentCalendarOffset = isCurrentWeek ? (currentMinute / 60) * AGENTS_WEEK_HOUR_HEIGHT : null;
+  const currentMarkerStyle: AgentsWeekNowMarkerStyle | null = currentCalendarOffset === null
+    ? null
+    : {
+        "--week-calendar-now-offset": formatWeekDashboardAxisPixelValue(currentCalendarOffset),
+        "--week-calendar-now-line-end": String(todayIndex + 3),
+      };
+  const autoScrollTargetMinute = useMemo(() => {
+    if (isCurrentWeek) return currentMinute;
+    let earliest: number | null = null;
+    for (const events of eventsByDay.values()) {
+      for (const event of events) earliest = earliest === null ? event.start : Math.min(earliest, event.start);
+    }
+    return earliest ?? 0;
+  }, [currentMinute, eventsByDay, isCurrentWeek]);
+  const autoScrollRangeKey = `${week.days[0]?.day ?? ""}:${week.days[week.days.length - 1]?.day ?? ""}`;
+
+  useLayoutEffect(() => {
+    if (loading) return;
+    if (autoScrolledRangeRef.current === autoScrollRangeKey) return;
+    const scroller = calendarScrollerRef.current;
+    const body = calendarBodyElement;
+    if (!scroller || !body) return;
+    const bodyTop = body.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const targetOffset = (autoScrollTargetMinute / 60) * AGENTS_WEEK_HOUR_HEIGHT;
+    const viewportAnchor = Math.max(96, scroller.clientHeight * 0.58);
+    const maxScrollTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+    scroller.scrollTop = Math.min(maxScrollTop, Math.max(0, bodyTop + targetOffset - viewportAnchor));
+    autoScrolledRangeRef.current = autoScrollRangeKey;
+  }, [autoScrollRangeKey, autoScrollTargetMinute, calendarBodyElement, loading]);
+
+  return (
+    <>
+      <section className="week-v2-calendar editorial-panel editorial-panel--soft agents-week-calendar" aria-label="Agent week calendar">
+        {header}
+        <div className="week-v2-calendar__legend" aria-label="Agents week legend">
+          <div className="flow-chart-head__actions">
+            <div className="flow-chart-head__controls">
+              <AgentsColorModeControl colorMode={colorMode} onColorModeChange={onColorModeChange} />
+            </div>
+            <AgentsTimelineLegend entries={legendEntries} />
+          </div>
+        </div>
+        <div className="week-v2-calendar__scroller" ref={calendarScrollerRef}>
+          <div className="week-v2-calendar__day-head" aria-hidden="true">
+            <span />
+            {week.days.map((day) => {
+              const [, , dayOfMonth] = day.day.split("-").map(Number);
+              const isWeekend = day.weekdayLabel === "Sun" || day.weekdayLabel === "Sat";
+              return (
+                <span className={`${isWeekend ? "is-weekend" : ""}${day.day === todayDay ? " is-today" : ""}`.trim() || undefined} key={day.day}>
+                  <strong>{day.weekdayLabel}</strong>
+                  <small>{dayOfMonth}</small>
+                </span>
+              );
+            })}
+          </div>
+          <div className="week-v2-calendar__body" ref={setCalendarBodyElement} style={{ height: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
+            <div className="week-v2-calendar__time-rail">
+              {Array.from({ length: 24 }, (_, hour) => (
+                <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue(hour * AGENTS_WEEK_HOUR_HEIGHT) }}>{formatHourLabel(clockHourForLogicalHour(hour, 0))}</span>
+              ))}
+              <span className="week-v2-calendar__time-rail-endpoint" style={{ top: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
+                {formatHourLabel(clockHourForLogicalHour(24, 0))}
+              </span>
+            </div>
+            {currentMarkerStyle ? (
+              <div className="week-v2-calendar__now-marker week-v2-calendar__now-marker--line" style={currentMarkerStyle} aria-hidden="true">
+                <span className="week-v2-calendar__now-line" />
+                <span className="week-v2-calendar__now-cap" aria-hidden="true" />
+              </div>
+            ) : null}
+            {week.days.map((day) => {
+              const events = eventsByDay.get(day.day) ?? [];
+              return (
+                <div className={`week-v2-calendar__day-column${day.day === todayDay ? " is-today" : ""}`} key={day.day}>
+                  {Array.from({ length: 24 }, (_, hour) => (
+                    <span className="week-v2-calendar__line" key={`${day.day}-${hour}`} style={{ top: formatWeekDashboardAxisPixelValue(hour * AGENTS_WEEK_HOUR_HEIGHT) }} />
+                  ))}
+                  {events.map((event) => {
+                    const heightPx = Math.max(4, ((event.end - event.start) / 60) * AGENTS_WEEK_HOUR_HEIGHT);
+                    const isShort = heightPx < 18;
+                    return (
+                      <article
+                        key={event.id}
+                        ref={(element) => {
+                          if (element) eventElementsRef.current.set(event.id, element);
+                          else eventElementsRef.current.delete(event.id);
+                        }}
+                        className={`week-v2-calendar__event week-v2-calendar__event--focus agents-week-calendar__event${isShort ? " week-v2-calendar__event--short week-v2-calendar__event--tiny" : ""}`}
+                        style={{
+                          top: formatWeekDashboardAxisPixelValue((event.start / 60) * AGENTS_WEEK_HOUR_HEIGHT),
+                          height: formatWeekDashboardAxisPixelValue(heightPx),
+                          left: "4px",
+                          width: "calc(100% - 8px)",
+                          "--event-tone": event.tone,
+                          ...(event.foreground ? { "--agent-event-foreground": event.foreground } : {}),
+                        } as CSSProperties}
+                        data-agent-hover-id={event.id}
+                        data-agent-intensity-band={event.intensityBandId}
+                        tabIndex={keyboardTabStopId === event.id ? 0 : -1}
+                        onFocus={() => setActiveKeyboardEventId(event.id)}
+                        onKeyDown={(keyEvent) => {
+                          const currentIndex = orderedEventIds.indexOf(event.id);
+                          let nextIndex = currentIndex;
+                          if (keyEvent.key === "ArrowDown" || keyEvent.key === "ArrowRight") nextIndex += 1;
+                          else if (keyEvent.key === "ArrowUp" || keyEvent.key === "ArrowLeft") nextIndex -= 1;
+                          else if (keyEvent.key === "Home") nextIndex = 0;
+                          else if (keyEvent.key === "End") nextIndex = orderedEventIds.length - 1;
+                          else return;
+                          keyEvent.preventDefault();
+                          const nextId = orderedEventIds[Math.max(0, Math.min(orderedEventIds.length - 1, nextIndex))];
+                          if (nextId) eventElementsRef.current.get(nextId)?.focus();
+                        }}
+                        aria-label={`Agent run on ${day.weekdayLabel}, ${day.day}, ${event.label}, ${event.providerLabel || "unknown provider"}, peak ×${event.peakConcurrency}, ${formatClock(event.start)}–${formatClock(event.end)}, approximately ${formatHours(event.end - event.start)} at ${AGENTS_WEEK_BUCKET_MINUTES}-minute resolution`}
+                      >
+                        {!isShort ? <strong>≈{formatHours(event.end - event.start)}</strong> : null}
+                      </article>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+      <AgentsWeekHoverLayer bodyElement={calendarBodyElement} groupsById={hoverGroupsById} />
+    </>
+  );
 }
 
 /** Summary tiles for the Breakdown side panel, like the day breakdown tiles. */
@@ -727,6 +981,7 @@ export function AgentsPage({
   readonly todayDay: string;
 }) {
   const [period, setPeriod] = useState<AgentsPeriod>("Today");
+  const [colorMode, setColorMode] = useState<AgentsGridColorMode>("intensity");
   // Same persisted preference as the dashboard: the Breakdown panel is one
   // surface across Day, Week, and Agents.
   const [breakdownOpen, setBreakdownOpen] = useState(resolveInitialDashboardBreakdownOpen);
@@ -740,7 +995,7 @@ export function AgentsPage({
     () => getDashboardPeriodRange(selectedDay, period, 0, startOfWeek),
     [period, selectedDay, startOfWeek],
   );
-  const { days, live } = useAgentsData(range.startDay, range.endDay);
+  const { days, loading, live } = useAgentsData(range.startDay, range.endDay);
   const models = useMemo(() => days.map(buildAgentsDayModel), [days]);
   const dayModel = models[models.length - 1] ?? null;
   const daySource = days[days.length - 1] ?? null;
@@ -770,8 +1025,10 @@ export function AgentsPage({
     <div className="pg-head dashboard-page-head dashboard-page-head--focus-summary dashboard-page-head--today">
       <div className="dashboard-page-head__row">
         <div className="dashboard-page-head__summary">
-          <h1 aria-label={`Agents ran for ${formatHours(headlineMinutes)}`} className="dashboard-page-head__title">
-            {headlineMinutes > 0 ? (
+          <h1 aria-label={loading ? "Loading agent activity" : `Agents ran for ${formatHours(headlineMinutes)}`} className="dashboard-page-head__title">
+            {loading ? (
+              <span className="dashboard-page-head__focus-word">Loading agent activity</span>
+            ) : headlineMinutes > 0 ? (
               <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="dashboard-page-head__focus-value">{formatHours(headlineMinutes)}</span></>
             ) : (
               <span className="dashboard-page-head__focus-word">No agent activity</span>
@@ -795,7 +1052,7 @@ export function AgentsPage({
           </div>
           <DateNavigator
             ariaLabel={`Agents ${period.toLowerCase()} selector`}
-            label={`${dateLabel}${live ? "" : " · sample"}`}
+            label={`${dateLabel}${!loading && !live ? " · sample" : ""}`}
             todayLabel={getDashboardCurrentPeriodLabel(period)}
             isTodayDisabled={isCurrentPeriod}
             isNextDisabled={!canShiftForward}
@@ -810,48 +1067,72 @@ export function AgentsPage({
     </div>
   );
 
+  const breakdownPanel = (
+    <BreakdownSidePanel
+      open={breakdownOpen}
+      onToggle={toggleBreakdown}
+      ariaLabel="Agents breakdown"
+      toggleSubject="agents breakdown"
+    >
+      {/* The time sentence leads, then the charts (models donut, repo
+          share bar) in the day view's compact-chart vocabulary, then the
+          reference tiles. */}
+      <AgentsBreakdownComposed sources={scopedSources} dayModel={dayModel} models={models} period={period} />
+      <AgentsStatList entries={period === "Today" && dayModel && daySource
+        ? agentsDayStatEntries(daySource, dayModel)
+        : agentsWeekStatEntries(scopedSources, models)}
+      />
+    </BreakdownSidePanel>
+  );
+
+  if (period === "Week") {
+    return (
+      <div className="page page--agents page--week-dashboard" aria-busy={loading}>
+        <section className="week-v2" aria-label="Your agents week overview">
+          <div className={`week-v2-grid week-v2-grid--calendar${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
+            <AgentsWeekCalendar
+              colorMode={colorMode}
+              header={pageHead}
+              loading={loading}
+              models={models}
+              onColorModeChange={setColorMode}
+              sources={scopedSources}
+              todayDay={todayDay}
+            />
+            {breakdownPanel}
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
-    <div className="page page--agents">
+    <div className="page page--agents" aria-busy={loading}>
       <div className={`week-v2-grid week-v2-grid--calendar week-v2-grid--day${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
         <div className="day-split__main">
           {pageHead}
-          {period === "Today" && dayModel && daySource ? (
+          {dayModel && daySource ? (
             <AgentsDayTimeline
+              colorMode={colorMode}
               model={dayModel}
               source={daySource}
               intervalMinutes={flowIntervalMinutes}
+              onColorModeChange={setColorMode}
               onIntervalChange={onFlowIntervalChange}
             />
-          ) : (
-            <AgentsWeekCalendar models={models} sources={scopedSources} />
-          )}
+          ) : null}
           <div className="dashboard-insight-stack">
             <AgentsRhythmPanel sources={scopedSources} />
           </div>
           <RepoUsagePanel
             repos={repos}
             totalCommits={totalCommits}
-            showActive={period === "Today"}
-            periodLabel={period === "Today" ? "today" : "this week"}
+            showActive
+            periodLabel="today"
             repoProviders={repoProviders}
           />
         </div>
-
-        <BreakdownSidePanel
-          open={breakdownOpen}
-          onToggle={toggleBreakdown}
-          ariaLabel="Agents breakdown"
-          toggleSubject="agents breakdown"
-        >
-          {/* The time sentence leads, then the charts (models donut, repo
-              share bar) in the day view's compact-chart vocabulary, then the
-              reference tiles. */}
-          <AgentsBreakdownComposed sources={scopedSources} dayModel={dayModel} models={models} period={period} />
-          <AgentsStatList entries={period === "Today" && dayModel && daySource
-            ? agentsDayStatEntries(daySource, dayModel)
-            : agentsWeekStatEntries(scopedSources, models)}
-          />
-        </BreakdownSidePanel>
+        {breakdownPanel}
       </div>
     </div>
   );

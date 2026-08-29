@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   buildAgentsDayModel,
   buildAgentsGridCells,
+  buildAgentsTimelineSegments,
   buildAgentsWeekModel,
   agentMinutesByRepo,
+  agentsIntensityBandFor,
   gridRepoLegend,
+  visibleAgentsIntensityBands,
   weekdayLabelFor,
   type AgentsDaySource,
 } from "./agentsPageModel";
@@ -133,13 +136,153 @@ describe("buildAgentsGridCells", () => {
     expect(cells.get(615)?.attended).toBe(false);
   });
 
+  it("keeps Project mode unlabelled when unlabelled time dominates a cell", () => {
+    const cells = buildAgentsGridCells({
+      ...gridSource,
+      turns: [
+        [600, 615, "codex", "   "],
+        [600, 601, "claude", "drifty_mac"],
+      ],
+    }, 15);
+    expect(cells.get(600)?.topRepo).toBeNull();
+  });
+
+  it("uses the shared repo ranking to break equal Project-mode durations", () => {
+    const cells = buildAgentsGridCells({
+      ...gridSource,
+      turns: [
+        [600, 615, "codex", "alpha"],
+        [600, 615, "claude", "beta"],
+      ],
+    }, 15, ["beta", "alpha"]);
+    expect(cells.get(600)?.topRepo).toBe("beta");
+  });
+
   it("omits cells without agent activity or commits", () => {
     const cells = buildAgentsGridCells(gridSource, 15);
     expect(cells.has(645)).toBe(false);
   });
 
+  it("does not turn a commit-only bucket into fake agent activity", () => {
+    const cells = buildAgentsGridCells({
+      ...gridSource,
+      turns: [],
+      commits: [[612, 10, 2, 1, "aaa111", "drifty_mac"]],
+    }, 15);
+    expect(cells.size).toBe(0);
+  });
+
   it("orders the repo legend by cell dominance", () => {
     const cells = buildAgentsGridCells(gridSource, 15);
     expect(gridRepoLegend(cells)[0]).toBe("drifty_mac");
+  });
+});
+
+describe("agent intensity bands", () => {
+  it("keeps stable logarithmic meaning through 50+ concurrent turns", () => {
+    expect([1, 4, 5, 19, 49, 50].map((value) => agentsIntensityBandFor(value).label)).toEqual([
+      "×1",
+      "×2–4",
+      "×5–9",
+      "×10–19",
+      "×20–49",
+      "×50+",
+    ]);
+  });
+
+  it("expands the legend only as far as the observed peak", () => {
+    expect(visibleAgentsIntensityBands(0)).toEqual([]);
+    expect(visibleAgentsIntensityBands(11).map((band) => band.label)).toEqual([
+      "×1",
+      "×2–4",
+      "×5–9",
+      "×10–19",
+    ]);
+    const highPeakBands = visibleAgentsIntensityBands(50);
+    expect(highPeakBands[highPeakBands.length - 1]?.label).toBe("×50+");
+  });
+});
+
+describe("buildAgentsTimelineSegments", () => {
+  const segmentedSource: AgentsDaySource = {
+    day: "2026-08-22",
+    attention: [],
+    turns: [
+      [60, 120, "codex", "alpha"],
+      [70, 100, "claude", "alpha"],
+      [90, 110, "gemini", "beta"],
+      [90, 110, "opencode", "beta"],
+      [130, 140, "codex", "alpha"],
+    ],
+    commits: [],
+  };
+
+  it("coalesces adjacent concurrency atoms only while their intensity band matches", () => {
+    const segments = buildAgentsTimelineSegments(segmentedSource, "intensity", ["beta", "alpha"]);
+    expect(segments.map(({ start, end, peakConcurrency, intensityBand }) => ({
+      start,
+      end,
+      peakConcurrency,
+      band: intensityBand.label,
+    }))).toEqual([
+      { start: 60, end: 70, peakConcurrency: 1, band: "×1" },
+      { start: 70, end: 110, peakConcurrency: 4, band: "×2–4" },
+      { start: 110, end: 120, peakConcurrency: 1, band: "×1" },
+      { start: 130, end: 140, peakConcurrency: 1, band: "×1" },
+    ]);
+    expect(segments[1]?.providers).toEqual(["claude", "codex", "gemini", "opencode"]);
+  });
+
+  it("splits Project mode whenever the dominant repository changes and preserves gaps", () => {
+    const segments = buildAgentsTimelineSegments(segmentedSource, "repo", ["beta", "alpha"]);
+    expect(segments.map(({ start, end, topRepo }) => ({ start, end, topRepo }))).toEqual([
+      { start: 60, end: 90, topRepo: "alpha" },
+      { start: 90, end: 110, topRepo: "beta" },
+      { start: 110, end: 120, topRepo: "alpha" },
+      { start: 130, end: 140, topRepo: "alpha" },
+    ]);
+  });
+
+  it("retains an exact peak across 50 concurrent turns for hover details", () => {
+    const highConcurrencySource: AgentsDaySource = {
+      day: "2026-08-22",
+      attention: [],
+      turns: Array.from({ length: 50 }, (_, index) => [200, 210, `agent-${index}`, "alpha"] as const),
+      commits: [],
+    };
+    expect(buildAgentsTimelineSegments(highConcurrencySource, "intensity")).toMatchObject([
+      { start: 200, end: 210, peakConcurrency: 50, intensityBand: { label: "×50+" } },
+    ]);
+  });
+
+  it("does not mistake serial turns inside one bucket for concurrent turns", () => {
+    const serialSource: AgentsDaySource = {
+      day: "2026-08-22",
+      attention: [],
+      turns: [
+        [200, 202, "codex", "alpha"],
+        [203, 205, "claude", "alpha"],
+      ],
+      commits: [],
+    };
+    expect(buildAgentsTimelineSegments(serialSource, "intensity")).toMatchObject([
+      { start: 200, end: 205, peakConcurrency: 1, intensityBand: { label: "×1" } },
+    ]);
+  });
+
+  it("normalizes whitespace-only repos and lets unlabelled time dominate Project mode", () => {
+    const mostlyUnlabelledSource: AgentsDaySource = {
+      day: "2026-08-22",
+      attention: [],
+      turns: [
+        [200, 205, "codex", "   "],
+        [200, 201, "claude", "alpha"],
+      ],
+      commits: [],
+    };
+
+    expect(buildAgentsTimelineSegments(mostlyUnlabelledSource, "repo", ["alpha"])).toMatchObject([
+      { start: 200, end: 205, topRepo: null },
+    ]);
   });
 });

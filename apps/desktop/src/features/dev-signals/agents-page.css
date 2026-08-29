@@ -3,8 +3,8 @@
    The page is composed from the day view's own pieces (dashboard-page-head,
    flow-chart-card + FlowChartGrid, editorial-panel, app-usage-panel,
    week-v2-grid--day, BreakdownSidePanel), so those carry their existing
-   styles. This file styles only what has no existing equivalent: the week
-   columns, the rhythm histogram, and the models list. Colour comes from
+   styles. This file styles only what has no existing equivalent: the agent
+   rhythm and models details. Colour comes from
    existing tokens; no dark-mode rules needed. */
 
 /* ── period toggle (ported from studyhall's dashboard-period-toggle) ──────── */
@@ -58,59 +58,48 @@
   font-weight: 600;
 }
 
-/* ── week calendar (week-v2 system) ────────────────────────────────────── */
-
-/* The calendar itself is week-dashboard.css untouched; the deltas are a
-   bounded scroller (24h at 30px/h) and a totals foot row aligned to the same
-   rail+7 columns grid. */
-/* Explicit rows: some week-dashboard rules grid-place the scroller by row
-   number, which floated the foot above it under this page's class. */
-.agents-week-calendar {
-  margin-bottom: var(--block-gap);
-  grid-template-rows: auto minmax(0, 1fr) auto;
-}
-
-.agents-week-calendar > .week-v2-calendar__legend { grid-row: 1; }
-.agents-week-calendar > .week-v2-calendar__scroller { grid-row: 2; }
-.agents-week-calendar > .agents-week-calendar__foot { grid-row: 3; }
-
-.agents-week-calendar__scroller { max-height: 26rem; }
-
-.agents-week-calendar__foot {
-  display: grid;
-  grid-template-columns: 2.5rem repeat(7, minmax(6.25rem, 1fr));
-  border-top: 1px solid var(--line);
-}
-
-.agents-week-calendar__foot-cell {
-  display: grid;
-  justify-items: center;
-  gap: 1px;
-  padding: 0.4rem 0 0.45rem;
-  border-left: 1px solid var(--line);
-}
-
-.agents-week-calendar__foot-cell strong {
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  font-weight: 650;
-}
-
-.agents-week-calendar__foot-cell small {
-  font-family: var(--font-mono);
-  font-size: var(--type-overline-size);
-  color: var(--text-soft);
-  min-height: 0.62rem;
-}
-
 /* The agents page reuses the dashboard's single-panel treatment. */
-.content--agents:has(.day-split__main) {
+.content--agents:has(.day-split__main),
+.content--agents:has(.page--agents.page--week-dashboard) {
   background: var(--surface);
   box-shadow: var(--shadow);
   border-radius: var(--content-panel-radius);
 }
 
 /* ── breakdown panel ───────────────────────────────────────────────────── */
+
+/* Agent events reuse Week geometry but carry either concurrency tones or the
+   shared repo palette. Their text foreground follows the encoded tone rather
+   than assuming every event color is dark. */
+.agents-week-calendar__event {
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.agents-week-calendar__event strong,
+.agents-week-calendar__event small,
+.agents-week-calendar__event em {
+  color: var(--agent-event-foreground, var(--text));
+}
+
+.agents-week-calendar__event:focus-visible {
+  border-color: var(--accent);
+  box-shadow:
+    0 8px 16px color-mix(in srgb, var(--canvas) 48%, transparent),
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--accent);
+}
+
+:root[data-theme="light"] .agents-week-calendar__event[data-agent-intensity-band="x50+"] {
+  --agent-event-foreground: #ffffff;
+}
+
+:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x5-9"],
+:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x10-19"],
+:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x20-49"],
+:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x50+"] {
+  --agent-event-foreground: var(--canvas);
+}
 
 /* Sentence blocks: a labelled statement with its own supporting detail.
    As the panel's lead block it needs no rule above it — the charts that
