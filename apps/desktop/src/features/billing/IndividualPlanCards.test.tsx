@@ -24,6 +24,7 @@ describe("IndividualPlanCards", () => {
 
     expect(within(freePlan).getByText("$0")).toBeTruthy();
     expect(within(freePlan).getByText("forever")).toBeTruthy();
+    expect(within(freePlan).getByText("On-device AI you control")).toBeTruthy();
     expect(within(freePlan).getAllByText("Current plan").length).toBeGreaterThan(0);
     expect(within(freePlan).getByText(/Local classification and predefined rules/)).toBeTruthy();
     expect(within(freePlan).getAllByText(/API key/).length).toBeGreaterThan(0);
@@ -34,7 +35,7 @@ describe("IndividualPlanCards", () => {
     expect(within(proPlan).getByText("$5")).toBeTruthy();
     expect(within(proPlan).getByText("/ month")).toBeTruthy();
     expect(within(proPlan).getByText("Recommended")).toBeTruthy();
-    expect(within(proPlan).getByText(/A stronger model, hosted by us/i)).toBeTruthy();
+    expect(within(proPlan).getByText("More accurate AI, ready to use")).toBeTruthy();
     expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
     expect(within(proPlan).getByText(/More accurate on ambiguous work/)).toBeTruthy();
     expect(within(proPlan).getByText(/No downloads, API keys, or models to manage/)).toBeTruthy();
@@ -66,6 +67,13 @@ describe("IndividualPlanCards", () => {
     // now equalizes the pair from real content.
     expect(styles).not.toMatch(/\.individual-plan-card\s*\{[\s\S]*min-height:\s*24\.75rem;/);
     expect(styles).toMatch(/\.individual-plan-cards\s*\{[\s\S]*align-items:\s*stretch;/);
+  });
+
+  it("gives each plan a concise value headline without promoting checkout status text", () => {
+    const styles = readAppStyles();
+
+    expect(styles).toMatch(/\.individual-plan-card__value\s*\{[\s\S]*font-size:\s*1\.25rem;/);
+    expect(styles).toMatch(/\.individual-plan-card__value--status\s*\{[\s\S]*font-size:\s*0\.78rem;/);
   });
 
   it("uses the shared Prism Echo tokens for the paid plan without tinting the card body", () => {

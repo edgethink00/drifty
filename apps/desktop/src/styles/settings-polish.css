@@ -2162,9 +2162,9 @@ button.individual-plan-card:focus-visible {
   align-content: start;
   display: grid;
   gap: 0.5rem;
-  /* Name, description, and price share one row track across both cards so the
-     price baselines line up without forcing a tall fixed card height. */
-  grid-template-rows: auto minmax(3.1rem, auto) auto;
+  /* Name, value headline, and price share one row track across both cards so
+     the price baselines line up without forcing a tall fixed card height. */
+  grid-template-rows: auto minmax(2.4rem, auto) auto;
 }
 
 .individual-plan-card__topline {
@@ -2239,8 +2239,25 @@ button.individual-plan-card:focus-visible {
   white-space: normal;
 }
 
-.individual-plan-card__cadence,
-.individual-plan-card__note {
+.individual-plan-card__value {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 540;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.individual-plan-card__value--status {
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.45;
+}
+
+.individual-plan-card__cadence {
   color: var(--text-soft);
   font-size: 0.78rem;
   letter-spacing: 0;

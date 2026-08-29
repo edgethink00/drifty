@@ -102,7 +102,7 @@ export function IndividualPlanCards({
           <span>{t("billing.plan.pro")}</span>
           <small className="individual-plan-card__badge">{individualBadgeLabel}</small>
         </span>
-        <span className="individual-plan-card__note">
+        <span className={`individual-plan-card__value${loadingInterval === selectedInterval ? " individual-plan-card__value--status" : ""}`}>
           {loadingInterval === selectedInterval ? t("billing.plan.openingCheckout") : t("billing.plan.proNote")}
         </span>
         <span className="individual-plan-card__price-row">
@@ -181,7 +181,7 @@ export function IndividualPlanCards({
             <span className="individual-plan-card__topline">
               <span>{t("billing.plan.free")}</span>
             </span>
-            <span className="individual-plan-card__note">{t("billing.plan.freeNote")}</span>
+            <span className="individual-plan-card__value">{t("billing.plan.freeNote")}</span>
             <span className="individual-plan-card__price-row">
               <span className="individual-plan-card__price-stack">
                 <span className="individual-plan-card__price-line">

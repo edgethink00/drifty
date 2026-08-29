@@ -50,6 +50,7 @@ describe("Korean translations", () => {
   it("uses consistent Korean labels for localized beta terms", () => {
     expect(KOREAN_TRANSLATIONS["common.beta"]).toBe("베타");
     expect(KOREAN_TRANSLATIONS["common.new"]).toBe("신규");
+    expect(KOREAN_TRANSLATIONS["billing.plan.proNote"]).toBe("최고 성능의 AI");
     expect(Object.values(KOREAN_TRANSLATIONS).filter((value) => value.includes("Local AI"))).toEqual([]);
   });
 
