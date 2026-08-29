@@ -472,6 +472,7 @@ export function CompanionPill({
             key={companionMomentKey(renderedMomentEvent)}
             event={renderedMomentEvent}
             isActive={isMomentActive}
+            autoDismissEnabled={!presentsMomentImmediately || directEntryAnimationReady}
             isPointerInside={isPointerInside}
             isDragging={isDragging}
             onDismiss={handleDismissMoment}

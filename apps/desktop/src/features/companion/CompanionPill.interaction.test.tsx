@@ -101,7 +101,7 @@ describe("CompanionPill native interactions", () => {
 
     expect(resolveCompanionPillAutoDismissMs(passingMilestone)).toBe(4_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionMilestonePreview("weekly-final-rank-1", 1))).toBe(6_000);
-    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "drift" })).toBe(16_000);
+    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "drift" })).toBe(9_000);
     expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "break_return" })).toBe(14_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "full" })).toBe(12_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "compact" })).toBe(10_000);
@@ -241,11 +241,53 @@ describe("CompanionPill native interactions", () => {
     expect(onDismiss).not.toHaveBeenCalled();
 
     fireEvent.pointerLeave(view!);
-    act(() => vi.advanceTimersByTime(11_999));
+    act(() => vi.advanceTimersByTime(4_999));
     expect(onDismiss).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
     expect(onDismiss).toHaveBeenCalledOnce();
     performanceNowSpy.mockRestore();
+  });
+
+  it("holds auto-dismiss while keyboard focus remains inside the card", () => {
+    vi.useFakeTimers();
+    const onDismiss = vi.fn();
+    const { container } = render(
+      <CompanionPillMoment
+        event={driftMoment}
+        onDismiss={onDismiss}
+        onOpenDashboard={vi.fn()}
+      />,
+    );
+    const view = container.querySelector<HTMLElement>(".view--drift");
+    const primaryAction = container.querySelector<HTMLButtonElement>(".act--primary");
+
+    fireEvent.focus(primaryAction!);
+    expect(view?.dataset.auto).toBe("paused");
+    act(() => vi.advanceTimersByTime(20_000));
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    fireEvent.blur(primaryAction!, { relatedTarget: null });
+    expect(view?.dataset.auto).toBe("running");
+    act(() => vi.advanceTimersByTime(8_999));
+    expect(onDismiss).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
+  it("does not turn pointer-origin focus into a sticky timer hold", () => {
+    const { container } = render(
+      <CompanionPillMoment
+        event={driftMoment}
+        onDismiss={vi.fn()}
+        onOpenDashboard={vi.fn()}
+      />,
+    );
+    const view = container.querySelector<HTMLElement>(".view--drift");
+    const primaryAction = container.querySelector<HTMLButtonElement>(".act--primary");
+
+    fireEvent.pointerDown(primaryAction!);
+    fireEvent.focus(primaryAction!);
+    expect(view?.dataset.auto).toBe("running");
   });
 
   /* v2 prints the measured figure beside the headline; v1 states the threshold
@@ -680,6 +722,33 @@ describe("CompanionPill native interactions", () => {
     expect(onDismissMoment).toHaveBeenCalledWith("explicit");
   });
 
+  it("starts the full auto-dismiss budget only after a direct menu-bar alert is visible", () => {
+    vi.useFakeTimers();
+    const onDismissMoment = vi.fn();
+    const props = {
+      peekEvent: null,
+      momentEvent: driftMoment,
+      presentsMomentImmediately: true,
+      onDismissMoment,
+      onOpenDashboard: vi.fn(),
+      onOpenSettings: vi.fn(),
+    };
+    const { rerender } = render(
+      <CompanionPill {...props} directEntryAnimationReady={false} />,
+    );
+
+    act(() => vi.advanceTimersByTime(20_000));
+    expect(onDismissMoment).not.toHaveBeenCalled();
+
+    rerender(<CompanionPill {...props} directEntryAnimationReady />);
+    act(() => vi.advanceTimersByTime(8_999));
+    expect(onDismissMoment).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(1));
+    expect(onDismissMoment).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(340));
+    expect(onDismissMoment).toHaveBeenCalledWith("auto");
+  });
+
   it("stages resident controls around the native panel resize", () => {
     vi.useFakeTimers();
     const onStateChange = vi.fn();
@@ -762,7 +831,7 @@ describe("CompanionPill native interactions", () => {
 
     rerender(<CompanionPill {...props} isPointerInside={false} />);
     expect(driftView?.dataset.auto).toBe("running");
-    act(() => vi.advanceTimersByTime(15_999));
+    act(() => vi.advanceTimersByTime(8_999));
     expect(onDismissMoment).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));
     expect(onDismissMoment).not.toHaveBeenCalled();

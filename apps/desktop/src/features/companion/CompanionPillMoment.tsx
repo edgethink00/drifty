@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type KeyboardEvent,
+} from "react";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { CompanionReentryEvent } from "./companionReentry";
@@ -69,11 +76,11 @@ export type CompanionPillDismissReason = "auto" | "explicit";
 
 const COMPANION_BREAK_OPTIONS = [5, 15, 30, 60] as const;
 
-/** Informational cards stay short; decision cards stay long enough to act. */
+/** Informational cards stay short; decision cards leave enough time to act without lingering. */
 export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
   milestone: 4_000,
   reentry: 8_000,
-  driftAlarm: 16_000,
+  driftAlarm: 9_000,
   extremeNudgeToast: EXTREME_NUDGE_TOAST_VISIBLE_MS,
   endOfDayReview: 12_000,
 };
@@ -82,7 +89,9 @@ export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
 export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEvent): number {
   if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
   if (event.kind === "reentry") return 8_000;
-  if (event.kind === "driftAlarm") return event.mode === "break_return" ? 14_000 : 16_000;
+  if (event.kind === "driftAlarm") {
+    return event.mode === "break_return" ? 14_000 : COMPANION_PILL_AUTO_DISMISS_MS.driftAlarm;
+  }
   if (event.kind === "endOfDayReview") {
     if (event.layout === "full") return 12_000;
     return event.layout === "compact" ? 10_000 : 8_000;
@@ -207,11 +216,13 @@ export function CompanionPillMoment({
   onAction?: (action: DriftAlarmAction) => void;
 }) {
   const [isLocallyHovered, setIsLocallyHovered] = useState(false);
+  const [isKeyboardFocusWithin, setIsKeyboardFocusWithin] = useState(false);
+  const isPointerOriginFocusRef = useRef(false);
   const budgetMs = resolveCompanionPillAutoDismissMs(event);
   /* Dragging holds the countdown too. AppKit takes the mouse for the whole
      gesture, so hover alone would stop reporting and the card could expire out
      from under the cursor while it was being moved. */
-  const isPaused = isLocallyHovered || isPointerInside || isDragging;
+  const isPaused = isLocallyHovered || isKeyboardFocusWithin || isPointerInside || isDragging;
   const remainingMsRef = useRef(budgetMs);
   const startedAtRef = useRef<number | null>(null);
 
@@ -254,6 +265,24 @@ export function CompanionPillMoment({
   const holdHandlers = {
     onPointerEnter: () => setIsLocallyHovered(true),
     onPointerLeave: () => setIsLocallyHovered(false),
+    onMouseDownCapture: () => {
+      isPointerOriginFocusRef.current = true;
+    },
+    onPointerDownCapture: () => {
+      isPointerOriginFocusRef.current = true;
+    },
+    onFocusCapture: () => {
+      if (!isPointerOriginFocusRef.current) setIsKeyboardFocusWithin(true);
+    },
+    onBlurCapture: (focusEvent: FocusEvent<HTMLElement>) => {
+      const nextTarget = focusEvent.relatedTarget;
+      if (nextTarget instanceof Node && focusEvent.currentTarget.contains(nextTarget)) return;
+      isPointerOriginFocusRef.current = false;
+      setIsKeyboardFocusWithin(false);
+    },
+    onKeyDownCapture: (keyboardEvent: KeyboardEvent<HTMLElement>) => {
+      if (keyboardEvent.key === "Tab") isPointerOriginFocusRef.current = false;
+    },
   };
   const autoDismissState = isActive && autoDismissEnabled ? (isPaused ? "paused" : "running") : undefined;
   const autoDismissStyle = {
@@ -424,7 +453,15 @@ function MilestoneView({
   autoDismissStyle: CSSProperties;
   onDismiss: (reason: CompanionPillDismissReason) => void;
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
-  holdHandlers: { onPointerEnter: () => void; onPointerLeave: () => void };
+  holdHandlers: {
+    onPointerEnter: () => void;
+    onPointerLeave: () => void;
+    onMouseDownCapture: () => void;
+    onPointerDownCapture: () => void;
+    onFocusCapture: () => void;
+    onBlurCapture: (event: FocusEvent<HTMLElement>) => void;
+    onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
+  };
 }) {
   const stat = resolveMilestoneStat(event);
   const destination = event.destination;
