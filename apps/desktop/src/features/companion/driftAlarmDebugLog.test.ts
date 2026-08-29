@@ -155,6 +155,8 @@ describe("drift alarm debug log", () => {
   it("summarizes drift candidates without raw titles or URLs", () => {
     const candidate: DriftAlarmCandidate = {
       alertKey: "segment-1:2026-06-13T15:05:00.000Z",
+      episodeKey: "drift-episode:segment-0",
+      driftDurationSeconds: 95,
       category: "entertainment",
       classification: {
         category: "entertainment",
@@ -192,6 +194,10 @@ describe("drift alarm debug log", () => {
       siteDomain: "youtube.com",
       youtubeVideoId: "sensitive-video",
       hasBrowserAutomationError: true,
+    });
+    expect(summary).toMatchObject({
+      episodeKey: "drift-episode:segment-0",
+      driftDurationSeconds: 95,
     });
     expect(serialized).not.toContain("Sensitive video title");
     expect(serialized).not.toContain("Sensitive window title");

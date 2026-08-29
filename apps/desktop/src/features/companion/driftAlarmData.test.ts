@@ -44,7 +44,9 @@ describe("buildDriftAlarmCandidates", () => {
 
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
-      alertKey: "active:seg-1",
+      alertKey: "drift-episode:seg-1",
+      episodeKey: "drift-episode:seg-1",
+      driftDurationSeconds: 600,
       category: "entertainment",
       sourceSegmentId: "seg-1",
       classification: expect.objectContaining({
@@ -68,7 +70,9 @@ describe("buildDriftAlarmCandidates", () => {
 
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({
-      alertKey: "active:seg-1",
+      alertKey: "drift-episode:seg-1",
+      episodeKey: "drift-episode:seg-1",
+      driftDurationSeconds: 630,
       sourceSegmentId: "seg-1",
       segment: expect.objectContaining({
         id: "seg-1",
@@ -76,6 +80,177 @@ describe("buildDriftAlarmCandidates", () => {
         durationSeconds: 630,
       }),
     });
+  });
+
+  it("uses a continuous same-site drift episode for the alert delay", () => {
+    const firstReel: ActivitySegment = {
+      ...driftSegment,
+      id: "reel-a",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:00:25.000Z",
+      durationSeconds: 25,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Instagram Reel A",
+      siteDomain: "instagram.com",
+      siteTitle: "Instagram Reel A",
+      siteUrl: "https://www.instagram.com/reel/AAA/",
+    };
+    const currentReel: ActivitySegment = {
+      ...firstReel,
+      id: "reel-b",
+      startedAt: "2026-06-11T09:00:30.000Z",
+      endedAt: "2026-06-11T09:00:55.000Z",
+      windowTitle: "Instagram Reel B",
+      siteTitle: "Instagram Reel B",
+      siteUrl: "https://www.instagram.com/reel/BBB/",
+    };
+    const reelSnapshot: CurrentActivitySnapshot = {
+      ...currentSnapshot,
+      observedAt: "2026-06-11T09:01:05.000Z",
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Instagram Reel B",
+      siteDomain: "instagram.com",
+      siteTitle: "Instagram Reel B",
+      siteUrl: "https://www.instagram.com/reel/BBB/",
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [firstReel, currentReel],
+      currentSnapshot: reelSnapshot,
+      classificationOptions: {},
+      minimumDurationSeconds: 60,
+    });
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        alertKey: "drift-episode:reel-a",
+        episodeKey: "drift-episode:reel-a",
+        driftDurationSeconds: 60,
+        sourceSegmentId: "reel-b",
+        segment: expect.objectContaining({
+          id: "reel-b",
+          durationSeconds: 35,
+          siteUrl: "https://www.instagram.com/reel/BBB/",
+        }),
+      }),
+    ]);
+  });
+
+  it("accumulates consecutive YouTube Shorts with different video ids", () => {
+    const firstShort: ActivitySegment = {
+      ...driftSegment,
+      id: "short-a",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:00:25.000Z",
+      durationSeconds: 25,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "YouTube Short A",
+      siteDomain: "youtube.com",
+      siteTitle: "YouTube Short A",
+      siteUrl: "https://www.youtube.com/shorts/AAAAAAAAAAA",
+      youtubeVideoId: "AAAAAAAAAAA",
+      youtubeIsShorts: true,
+    };
+    const currentShort: ActivitySegment = {
+      ...firstShort,
+      id: "short-b",
+      startedAt: "2026-06-11T09:00:30.000Z",
+      endedAt: "2026-06-11T09:00:55.000Z",
+      windowTitle: "YouTube Short B",
+      siteTitle: "YouTube Short B",
+      siteUrl: "https://www.youtube.com/shorts/BBBBBBBBBBB",
+      youtubeVideoId: "BBBBBBBBBBB",
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [firstShort, currentShort],
+      currentSnapshot: {
+        ...currentSnapshot,
+        observedAt: "2026-06-11T09:01:05.000Z",
+        appName: "Google Chrome",
+        bundleId: "com.google.Chrome",
+        browserName: "Google Chrome",
+        windowTitle: "YouTube Short B",
+        siteDomain: "youtube.com",
+        siteTitle: "YouTube Short B",
+        siteUrl: "https://www.youtube.com/shorts/BBBBBBBBBBB",
+        youtubeVideoId: "BBBBBBBBBBB",
+        youtubeIsShorts: true,
+      },
+      classificationOptions: {},
+      minimumDurationSeconds: 60,
+    });
+
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        episodeKey: "drift-episode:short-a",
+        driftDurationSeconds: 60,
+        sourceSegmentId: "short-b",
+        segment: expect.objectContaining({
+          id: "short-b",
+          youtubeVideoId: "BBBBBBBBBBB",
+        }),
+      }),
+    ]);
+  });
+
+  it("does not carry same-site drift across a focus segment", () => {
+    const firstReel: ActivitySegment = {
+      ...driftSegment,
+      id: "reel-before-focus",
+      startedAt: "2026-06-11T09:00:00.000Z",
+      endedAt: "2026-06-11T09:00:25.000Z",
+      durationSeconds: 25,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      windowTitle: "Instagram Reel",
+      siteDomain: "instagram.com",
+      siteTitle: "Instagram Reel",
+      siteUrl: "https://www.instagram.com/reel/AAA/",
+    };
+    const focusResearch: ActivitySegment = {
+      ...firstReel,
+      id: "instagram-focus-research",
+      startedAt: "2026-06-11T09:00:30.000Z",
+      endedAt: "2026-06-11T09:00:40.000Z",
+      durationSeconds: 10,
+      siteUrl: "https://www.instagram.com/reel/research/",
+      classification: storedClassification("workspace", "focus", 0.96),
+    };
+    const currentReel: ActivitySegment = {
+      ...firstReel,
+      id: "reel-after-focus",
+      startedAt: "2026-06-11T09:00:45.000Z",
+      endedAt: "2026-06-11T09:01:10.000Z",
+      durationSeconds: 25,
+      siteUrl: "https://www.instagram.com/reel/BBB/",
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [firstReel, focusResearch, currentReel],
+      currentSnapshot: {
+        ...currentSnapshot,
+        observedAt: currentReel.endedAt,
+        appName: currentReel.appName,
+        bundleId: currentReel.bundleId,
+        browserName: currentReel.browserName,
+        windowTitle: currentReel.windowTitle,
+        siteDomain: currentReel.siteDomain,
+        siteTitle: currentReel.siteTitle,
+        siteUrl: currentReel.siteUrl,
+      },
+      classificationOptions: {},
+      minimumDurationSeconds: 30,
+    });
+
+    expect(candidates).toEqual([]);
   });
 
   it("does not flag a stored drift segment after the current snapshot moves elsewhere", () => {
@@ -325,7 +500,8 @@ describe("buildDriftAlarmCandidates", () => {
 
     expect(candidates).toEqual([
       expect.objectContaining({
-        alertKey: "active:history-expired-segment",
+        alertKey: "drift-episode:history-expired-segment",
+        episodeKey: "drift-episode:history-expired-segment",
         category: "entertainment",
         sourceSegmentId: "history-expired-segment",
       }),
@@ -370,7 +546,9 @@ describe("buildDriftAlarmCandidates", () => {
 
     expect(candidates).toEqual([
       expect.objectContaining({
-        alertKey: "active:youtube-feed-segment",
+        alertKey: "drift-episode:youtube-feed-segment",
+        episodeKey: "drift-episode:youtube-feed-segment",
+        driftDurationSeconds: 30,
         category: "entertainment",
         sourceSegmentId: "youtube-feed-segment",
         segment: expect.objectContaining({

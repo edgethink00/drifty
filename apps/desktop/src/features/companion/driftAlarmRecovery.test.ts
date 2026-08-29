@@ -108,6 +108,8 @@ describe("drift alarm break recovery", () => {
         attempt,
         driftCandidate: {
           alertKey: "active:youtube",
+          episodeKey: "drift-episode:youtube",
+          driftDurationSeconds: 60,
           category: "entertainment",
           classification: { category: "entertainment", productivity: "drift", confidence: 1, source: "manual", surface: "browser", reason: "test" },
           segment: baseDriftSegment,
@@ -121,6 +123,8 @@ describe("drift alarm break recovery", () => {
         attempt,
         driftCandidate: {
           alertKey: "active:amazon",
+          episodeKey: "drift-episode:amazon",
+          driftDurationSeconds: 60,
           category: "shopping",
           classification: { category: "shopping", productivity: "drift", confidence: 1, source: "manual", surface: "browser", reason: "test" },
           segment: laterShoppingSegment,

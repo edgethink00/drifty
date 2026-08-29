@@ -35,19 +35,22 @@ function extendSegmentToCurrentSnapshot(segment: ActivitySegment, current: Curre
   const elapsedSeconds = Number.isFinite(observedAtMs) && Number.isFinite(endedAtMs) && observedAtMs > endedAtMs
     ? Math.round((observedAtMs - endedAtMs) / 1000)
     : 0;
+  const siteUrl = isYouTubeActivity(current, segment)
+    ? segment.siteUrl ?? current.siteUrl ?? null
+    : current.siteUrl ?? segment.siteUrl ?? null;
 
   return {
     ...segment,
     endedAt: elapsedSeconds > 0 ? current.observedAt : segment.endedAt,
     durationSeconds: segment.durationSeconds + elapsedSeconds,
-    browserName: segment.browserName ?? current.browserName ?? null,
-    siteDomain: segment.siteDomain ?? current.siteDomain ?? null,
-    siteTitle: segment.siteTitle ?? current.siteTitle ?? null,
-    siteUrl: segment.siteUrl ?? current.siteUrl ?? null,
-    windowTitle: segment.windowTitle ?? current.windowTitle ?? null,
-    youtubeVideoId: segment.youtubeVideoId ?? current.youtubeVideoId ?? null,
-    youtubePlaylistId: segment.youtubePlaylistId ?? current.youtubePlaylistId ?? null,
-    youtubeIsShorts: segment.youtubeIsShorts ?? current.youtubeIsShorts ?? null,
+    browserName: current.browserName ?? segment.browserName ?? null,
+    siteDomain: current.siteDomain ?? segment.siteDomain ?? null,
+    siteTitle: current.siteTitle ?? segment.siteTitle ?? null,
+    siteUrl,
+    windowTitle: current.windowTitle ?? segment.windowTitle ?? null,
+    youtubeVideoId: current.youtubeVideoId ?? segment.youtubeVideoId ?? null,
+    youtubePlaylistId: current.youtubePlaylistId ?? segment.youtubePlaylistId ?? null,
+    youtubeIsShorts: current.youtubeIsShorts ?? segment.youtubeIsShorts ?? null,
   };
 }
 

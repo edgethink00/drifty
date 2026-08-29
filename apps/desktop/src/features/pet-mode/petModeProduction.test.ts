@@ -225,20 +225,24 @@ describe("catching the cat cancels the close", () => {
     // a system banner on top of the companion is pure noise.
     expect(app).toContain('const intercepted = result.diagnostic === "pet_intercepted"');
     expect(app).toContain("showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted)");
+    const interceptedBranch = app.slice(app.indexOf("if (intercepted) {"));
+    expect(interceptedBranch.slice(0, interceptedBranch.indexOf("showFallbackDriftAlarm")))
+      .toContain("lastDriftAlertSegmentRef.current = null");
   });
 
-  it("keys the one-round reprieve to the segment, not the rotating alert key", () => {
-    // The alert key embeds `endedAt` and rotates on every poll while the same
-    // drift continues. Keying the reprieve on it would grant a fresh pass every
-    // 15 seconds and turn interception into a permanent bypass.
-    expect(app).toContain("petInterceptedSegmentRef.current = latestDrift.sourceSegmentId ?? segment.id");
-    expect(app).toContain("if (petInterceptedSegmentRef.current === (latestDrift.sourceSegmentId ?? segment.id))");
+  it("keys the one-round reprieve to the current delivery segment", () => {
+    // The drift episode alert key is stable across fast tab transitions, while
+    // the delivery source identifies the current target the cat approached.
+    expect(app).toContain("petInterceptedSegmentRef.current = deliverySourceSegmentId ?? segment.id");
+    expect(app).toContain("if (petInterceptedSegmentRef.current === (deliverySourceSegmentId ?? segment.id))");
     expect(app).toContain("pet_intercept_reprieve");
   });
 
   it("spends the reprieve so a continued drift is nudged again", () => {
-    const gate = app.slice(app.indexOf("if (petInterceptedSegmentRef.current === (latestDrift.sourceSegmentId"));
-    expect(gate.slice(0, gate.indexOf("recordDriftAlarmDebugEvent"))).toContain("petInterceptedSegmentRef.current = null");
+    const gate = app.slice(app.indexOf("if (petInterceptedSegmentRef.current === (deliverySourceSegmentId"));
+    const spentReprieve = gate.slice(0, gate.indexOf("recordDriftAlarmDebugEvent"));
+    expect(spentReprieve).toContain("petInterceptedSegmentRef.current = null");
+    expect(spentReprieve).toContain("lastDriftAlertSegmentRef.current = null");
   });
 
   it("reports a missed contact immediately instead of waiting out the timeout", () => {

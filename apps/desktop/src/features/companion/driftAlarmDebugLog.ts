@@ -119,6 +119,8 @@ export type DriftAlarmDebugSnapshotSummary = {
 
 export type DriftAlarmDebugCandidateSummary = {
   readonly alertKey: string;
+  readonly episodeKey: string;
+  readonly driftDurationSeconds: number;
   readonly category: ActivityCategory;
   readonly sourceSegmentId: string | null;
   readonly segment: DriftAlarmDebugSegmentSummary;
@@ -224,6 +226,8 @@ export function readRecentDriftAlarmDebugEvents(
 export function summarizeDriftAlarmCandidate(candidate: DriftAlarmCandidate): DriftAlarmDebugCandidateSummary {
   return {
     alertKey: candidate.alertKey,
+    episodeKey: candidate.episodeKey,
+    driftDurationSeconds: candidate.driftDurationSeconds,
     category: candidate.category,
     sourceSegmentId: normalizeText(candidate.sourceSegmentId),
     segment: summarizeDriftAlarmSegment(candidate.segment, candidate.sourceSegmentId),
@@ -600,6 +604,8 @@ function isNullableCandidateSummary(value: unknown): value is DriftAlarmDebugCan
   if (value === null) return true;
   if (!isRecord(value)) return false;
   return typeof value.alertKey === "string"
+    && typeof value.episodeKey === "string"
+    && typeof value.driftDurationSeconds === "number"
     && typeof value.category === "string"
     && isNullableString(value.sourceSegmentId)
     && isNullableSegmentSummary(value.segment)

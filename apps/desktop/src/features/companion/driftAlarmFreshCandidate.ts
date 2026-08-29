@@ -20,11 +20,7 @@ export function resolveFreshDriftAlarmCandidate(input: FreshDriftAlarmCandidateI
   })[0] ?? null;
   if (!freshCandidate) return null;
 
-  return driftAlarmCandidateSourceKey(freshCandidate) === driftAlarmCandidateSourceKey(input.candidate)
+  return freshCandidate.episodeKey === input.candidate.episodeKey
     ? freshCandidate
     : null;
-}
-
-function driftAlarmCandidateSourceKey(candidate: DriftAlarmCandidate): string {
-  return candidate.sourceSegmentId ?? candidate.segment.id;
 }

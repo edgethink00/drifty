@@ -9,6 +9,7 @@ import { EXTREME_NUDGE_STORAGE_KEY } from "./extremeNudgeData";
 import { segmentForLiveDriftAlarmClassification } from "./liveDriftAlarmClassification";
 import { calibrateAppLlmClassificationWithHistory } from "./driftAlarmClassificationCalibration";
 import { isBrowserHistoryContextPendingForDriftAlarm } from "./driftAlarmHistoryPending";
+import { buildContinuousDriftAlarmEpisode, type DriftAlarmEpisode } from "./driftAlarmEpisode";
 export { EXTREME_NUDGE_STORAGE_KEY, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export type DriftAlarmBreakSnooze = {
@@ -94,6 +95,8 @@ export function hasDriftAlarmFocusTargetUpdate(currentEvent: DriftAlarmEvent, ne
 
 export type DriftAlarmCandidate = {
   alertKey: string;
+  episodeKey: string;
+  driftDurationSeconds: number;
   category: ActivityCategory;
   classification: ActivityClassificationDetail;
   segment: ActivitySegment;
@@ -119,7 +122,7 @@ export function buildDriftAlarmCandidates({
     const currentDriftAlarmSegment = getActiveDriftAlarmSegment(currentSnapshot, segments);
     if (!currentDriftAlarmSegment) return [];
 
-    const { alertKey, segment: currentSegment, sourceSegmentId } = currentDriftAlarmSegment;
+    const { segment: currentSegment, sourceSegmentId } = currentDriftAlarmSegment;
     if (isBrowserHistoryContextPendingForDriftAlarm(currentSnapshot, currentSegment)) return [];
 
     const currentClassificationOptions = {
@@ -132,12 +135,20 @@ export function buildDriftAlarmCandidates({
       segments,
       classificationOptions: currentClassificationOptions,
     });
+    const currentEpisode = buildDriftAlarmEpisode({
+      candidate: currentSegment,
+      candidateClassification: currentClassification,
+      segments,
+      classificationOptions: currentClassificationOptions,
+    });
 
     if (
       currentClassification.productivity === "drift"
       && classificationConfidenceAllowsDriftAlarm(currentClassification)
+      && currentEpisode
       && driftAlarmDurationMeetsThreshold({
         candidate: currentSegment,
+        driftDurationSeconds: currentEpisode.durationSeconds,
         category: currentClassification.category,
         segments,
         classificationOptions: currentClassificationOptions,
@@ -145,7 +156,9 @@ export function buildDriftAlarmCandidates({
       })
     ) {
       return [{
-        alertKey,
+        alertKey: currentEpisode.episodeKey,
+        episodeKey: currentEpisode.episodeKey,
+        driftDurationSeconds: currentEpisode.durationSeconds,
         category: currentClassification.category,
         classification: currentClassification,
         segment: currentSegment,
@@ -165,11 +178,19 @@ export function buildDriftAlarmCandidates({
     segments,
     classificationOptions,
   });
+  const latestEpisode = buildDriftAlarmEpisode({
+    candidate: latestSegment,
+    candidateClassification: latestClassification,
+    segments,
+    classificationOptions,
+  });
   if (
     latestClassification.productivity !== "drift"
     || !classificationConfidenceAllowsDriftAlarm(latestClassification)
+    || !latestEpisode
     || !driftAlarmDurationMeetsThreshold({
       candidate: latestSegment,
+      driftDurationSeconds: latestEpisode.durationSeconds,
       category: latestClassification.category,
       segments,
       classificationOptions,
@@ -178,7 +199,9 @@ export function buildDriftAlarmCandidates({
   ) return [];
 
   return [{
-    alertKey: `${latestSegment.id}:${latestSegment.endedAt}`,
+    alertKey: latestEpisode.episodeKey,
+    episodeKey: latestEpisode.episodeKey,
+    driftDurationSeconds: latestEpisode.durationSeconds,
     category: latestClassification.category,
     classification: latestClassification,
     segment: latestSegment,
@@ -212,20 +235,51 @@ function classifyDriftAlarmSegmentWithHistory({
   }).classification;
 }
 
+function buildDriftAlarmEpisode({
+  candidate,
+  candidateClassification,
+  segments,
+  classificationOptions,
+}: {
+  candidate: ActivitySegment;
+  candidateClassification: ActivityClassificationDetail;
+  segments: ActivitySegment[];
+  classificationOptions: ClassificationOptions;
+}): DriftAlarmEpisode | null {
+  return buildContinuousDriftAlarmEpisode({
+    currentSegment: candidate,
+    segments,
+    isEligibleDrift: (segment) => {
+      const classification = segment.id === candidate.id
+        ? candidateClassification
+        : classifyDriftAlarmSegmentWithHistory({
+          segment,
+          sourceSegmentId: segment.id,
+          segments,
+          classificationOptions,
+        });
+      return classification.productivity === "drift"
+        && classificationConfidenceAllowsDriftAlarm(classification);
+    },
+  });
+}
+
 function driftAlarmDurationMeetsThreshold({
   candidate,
+  driftDurationSeconds,
   category,
   segments,
   classificationOptions,
   minimumDurationSeconds,
 }: {
   candidate: ActivitySegment;
+  driftDurationSeconds: number;
   category: ActivityCategory;
   segments: ActivitySegment[];
   classificationOptions: ClassificationOptions;
   minimumDurationSeconds: number;
 }): boolean {
-  if (category !== "shopping") return candidate.durationSeconds >= minimumDurationSeconds;
+  if (category !== "shopping") return driftDurationSeconds >= minimumDurationSeconds;
 
   const shoppingMinimumSeconds = Math.max(minimumDurationSeconds, SHOPPING_DRIFT_ALARM_MINIMUM_SECONDS);
   if (candidate.durationSeconds >= shoppingMinimumSeconds) return true;

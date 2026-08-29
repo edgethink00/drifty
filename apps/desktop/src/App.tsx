@@ -4445,11 +4445,15 @@ export default function App() {
       return;
     }
 
-    const { alertKey, category, segment } = latestDrift;
+    const { alertKey } = latestDrift;
+    let deliveryCandidate = latestDrift;
+    let { category, segment } = deliveryCandidate;
+    let deliveryDriftDurationSeconds = deliveryCandidate.driftDurationSeconds;
+    let deliverySourceSegmentId = deliveryCandidate.sourceSegmentId;
     let confirmedDecisionClassification = latestDrift.classification;
     const candidateDetail = buildDriftAlarmTrayCandidateDetail(
       getWatcherContextLabel(segment, category),
-      segment.durationSeconds,
+      latestDrift.driftDurationSeconds,
     );
     const sessionProtectionReason = driftAlarmSessionSuppressionReason(
       driftAlarmSessionProtectionRef.current,
@@ -4548,13 +4552,13 @@ export default function App() {
         ?? appIconsRef.current[sourceIconKey]
         ?? appIconsRef.current[sourceAppName]
         ?? null;
-      const sourceSegmentId = latestDrift.sourceSegmentId ?? segment.id;
+      const sourceSegmentId = deliverySourceSegmentId ?? segment.id;
       rememberDriftAlarmSourceSegment(driftAlarmSourceSegmentsRef.current, sourceSegmentId, segment);
 
       return buildDriftAlarmEvent({
         id: alertKey,
         contextLabel,
-        driftDurationSeconds: segment.durationSeconds,
+        driftDurationSeconds: deliveryDriftDurationSeconds,
         preservedFocusStrikeSeconds: 0,
         generatedAt: new Date().toISOString(),
         focusTargets,
@@ -4605,8 +4609,12 @@ export default function App() {
       // One caught cat per drift stretch keeps the reprieve meaningful without
       // letting it become permanent: this round stays quiet, and the next poll
       // sends the cat again if the drift is still going.
-      if (petInterceptedSegmentRef.current === (latestDrift.sourceSegmentId ?? segment.id)) {
+      if (petInterceptedSegmentRef.current === (deliverySourceSegmentId ?? segment.id)) {
         petInterceptedSegmentRef.current = null;
+        // The alert key now stays stable for the whole continuous episode.
+        // Re-open the gate after spending this one-poll reprieve so catching
+        // the cat cannot silence an episode forever.
+        lastDriftAlertSegmentRef.current = null;
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
@@ -4655,7 +4663,9 @@ export default function App() {
           if (lastDriftAlertSegmentRef.current === alertKey) {
             const intercepted = result.diagnostic === "pet_intercepted";
             if (intercepted) {
-              petInterceptedSegmentRef.current = latestDrift.sourceSegmentId ?? segment.id;
+              petInterceptedSegmentRef.current = deliverySourceSegmentId ?? segment.id;
+              // Let the next poll consume the promised one-round reprieve.
+              lastDriftAlertSegmentRef.current = null;
             }
             // A caught cat is a deliberate user signal, not a delivery failure.
             // Reuse the same alarm surface, but never fire an OS notification
@@ -4749,7 +4759,13 @@ export default function App() {
         classificationOptions: driftAlarmClassificationOptions,
         minimumDurationSeconds: driftAlertDelaySeconds,
       });
-      if (freshCandidate) confirmedDecisionClassification = freshCandidate.classification;
+      if (freshCandidate) {
+        deliveryCandidate = freshCandidate;
+        ({ category, segment } = deliveryCandidate);
+        deliveryDriftDurationSeconds = deliveryCandidate.driftDurationSeconds;
+        deliverySourceSegmentId = deliveryCandidate.sourceSegmentId;
+        confirmedDecisionClassification = deliveryCandidate.classification;
+      }
       const result = freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
       recordDriftAlarmDebugEvent({
         kind: "fresh_candidate_result",
@@ -4773,7 +4789,7 @@ export default function App() {
       if (pendingBreakReturnAlarm) {
         const outcome = resolveBreakRecoveryOutcome({
           attempt: pendingBreakReturnAlarm,
-          driftCandidate: latestDrift,
+          driftCandidate: deliveryCandidate,
           nowMs: Date.now(),
         });
         if (outcome) completeBreakRecoveryAssessment(pendingBreakReturnAlarm, outcome);
@@ -4792,7 +4808,7 @@ export default function App() {
         showDriftAlarm(buildBreakReturnAlarmEvent({
           id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
           contextLabel: breakReturnContextLabel,
-          driftDurationSeconds: segment.durationSeconds,
+          driftDurationSeconds: deliveryDriftDurationSeconds,
           preservedFocusStrikeSeconds: 0,
           generatedAt: new Date().toISOString(),
           focusTargets,
@@ -4800,7 +4816,7 @@ export default function App() {
           sourceAppName: breakReturnAppName,
           sourceIconSrc: breakReturnIconSrc,
           copySettings: driftAlarmCopy,
-          sourceSegmentId: latestDrift.sourceSegmentId ?? segment.id,
+          sourceSegmentId: deliverySourceSegmentId ?? segment.id,
           decisionClassification: confirmedDecisionClassification,
           breakDurationMinutes: pendingBreakReturnAlarm.minutes,
           pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
@@ -4816,7 +4832,7 @@ export default function App() {
       if (activeAssessment) {
         const outcome = resolveBreakRecoveryOutcome({
           attempt: activeAssessment,
-          driftCandidate: latestDrift,
+          driftCandidate: deliveryCandidate,
           nowMs: Date.now(),
         });
         if (outcome) completeBreakRecoveryAssessment(activeAssessment, outcome);
