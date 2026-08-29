@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { commandBarTabs, type TabId } from "../../app/navigation";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export interface CommandBarProps {
   readonly includeProjects: boolean;
@@ -9,6 +10,7 @@ export interface CommandBarProps {
 }
 
 export function CommandBar({ includeProjects, onDismiss, onNavigate }: CommandBarProps) {
+  const { t } = useLocalization();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-command-search]" });
 
@@ -16,7 +18,7 @@ export function CommandBar({ includeProjects, onDismiss, onNavigate }: CommandBa
     <div className="cmd-overlay" onClick={onDismiss}>
       <div
         ref={dialogRef}
-        aria-label="Command palette"
+        aria-label={t("command.palette")}
         aria-modal="true"
         className="cmd-box modal-shell"
         data-modal-variant="utility"
@@ -29,14 +31,14 @@ export function CommandBar({ includeProjects, onDismiss, onNavigate }: CommandBa
             <circle cx="11" cy="11" r="7" />
             <path d="m20 20-3.5-3.5" />
           </svg>
-          <input aria-label="Search commands" data-command-search placeholder="Type a command or search…" />
+          <input aria-label={t("command.search")} data-command-search placeholder={t("command.searchPlaceholder")} />
           <span className="esc-key">esc</span>
         </div>
-        <div className="cmd-section-label">Navigate</div>
+        <div className="cmd-section-label">{t("command.navigate")}</div>
         {commandBarTabs.filter((item) => includeProjects || item.id !== "projects").map((item) => (
           <button key={item.id} className="cmd-item" onClick={() => onNavigate(item.id)}>
-            <span className="cmd-label">{item.label}</span>
-            <span className="cmd-sub">{item.sub}</span>
+            <span className="cmd-label">{t(item.labelKey)}</span>
+            <span className="cmd-sub">{t(item.subKey)}</span>
           </button>
         ))}
       </div>

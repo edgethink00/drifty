@@ -4,8 +4,7 @@ import type { TrackerStatus } from "@drifty/domain";
 import { StrictMode, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
-import { DISPLAY_LANGUAGE_STORAGE_KEY, KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY } from "./features/localization/LocalizationContext";
-import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
+import { DISPLAY_LANGUAGE_STORAGE_KEY } from "./features/localization/LocalizationContext";
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 
 const NUDGES_DIALOG_NAME = /what should drifty do when you drift/i;
@@ -820,8 +819,6 @@ describe("App onboarding", () => {
     authState.status = "unauthenticated";
     authState.isEnabled = true;
     authState.hasRequiredAccountAuth = false;
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
 
     render(<App />);

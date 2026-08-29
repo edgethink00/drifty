@@ -58,22 +58,23 @@ export function formatTimeLabel(value: string | Date): string {
   return uiTimeFormatter.format(typeof value === "string" ? new Date(value) : value);
 }
 
-export function formatRelativeTime(value: string): string {
+export function formatRelativeTime(value: string, locale = "en-US"): string {
   const parsed = new Date(value).getTime();
-  if (Number.isNaN(parsed)) return "unknown";
+  const isKorean = locale.toLowerCase().startsWith("ko");
+  if (Number.isNaN(parsed)) return isKorean ? "알 수 없음" : "unknown";
 
   const diffSeconds = Math.max(0, Math.round((Date.now() - parsed) / 1000));
-  if (diffSeconds < 10) return "just now";
-  if (diffSeconds < 60) return `${diffSeconds}s ago`;
+  if (diffSeconds < 10) return isKorean ? "방금" : "just now";
+  if (diffSeconds < 60) return isKorean ? `${diffSeconds}초 전` : `${diffSeconds}s ago`;
 
   const diffMinutes = Math.round(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffMinutes < 60) return isKorean ? `${diffMinutes}분 전` : `${diffMinutes}m ago`;
 
   const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffHours < 24) return isKorean ? `${diffHours}시간 전` : `${diffHours}h ago`;
 
   const diffDays = Math.round(diffHours / 24);
-  return `${diffDays}d ago`;
+  return isKorean ? `${diffDays}일 전` : `${diffDays}d ago`;
 }
 
 export function formatQuarterHourLabel(minuteOfDay: number): string {

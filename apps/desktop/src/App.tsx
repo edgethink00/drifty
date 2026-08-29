@@ -3749,7 +3749,6 @@ export default function App() {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
-    if (localization.koreanPreviewEnabled) localization.setKoreanPreviewEnabled(false);
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
@@ -3763,7 +3762,7 @@ export default function App() {
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
@@ -5764,11 +5763,13 @@ export default function App() {
     () => buildFocusRatePercent(classificationProductivityTotals),
     [classificationProductivityTotals],
   );
-  const lastCaptureDistanceLabel = status?.lastEventAt ? formatRelativeTime(status.lastEventAt) : "No captures yet";
+  const lastCaptureDistanceLabel = status?.lastEventAt
+    ? formatRelativeTime(status.lastEventAt, localization.effectiveLanguage === "ko" ? "ko-KR" : "en-US")
+    : localization.t("tracker.noCapturesYet");
   const uniqueAppsCount = useMemo(() => new Set(effectiveDashboardSegments.map((s) => s.bundleId ?? s.appName)).size, [effectiveDashboardSegments]);
   const averageSessionMinutes = effectiveDashboardSegments.length > 0 ? Math.round(totalSeconds / 60 / effectiveDashboardSegments.length) : 0;
   const topApp = dashboardTopApps[0];
-  const topAppLabel = topApp?.appName ?? "No activity";
+  const topAppLabel = topApp?.appName ?? localization.t("tracker.noActivity");
   const liveAppLabel = status?.running && currentSnapshot?.appName ? currentSnapshot.appName : topAppLabel;
   const liveSiteLabel = status?.running ? (currentSnapshot?.siteDomain || currentSnapshot?.siteTitle || null) : null;
   const hasTimelineData = effectiveSelectedDaySegments.length > 0;
@@ -5778,16 +5779,30 @@ export default function App() {
   const isTrackerDegraded = trackerModeLabel === "degraded";
   const isDemoMode = trackerModeLabel === "demo" || status?.databasePath === "/tmp/drifty-demo.sqlite3";
   const isTrackerIdle = status?.running === true && trackerModeLabel === "idle";
-  const trackerStateLabel = isBootstrappingTracker ? "Loading" : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : status.running ? (isTrackerIdle ? "Idle now" : isDemoMode ? "Preview active" : "Tracking now") : (isDemoMode ? "Preview paused" : "Tracking paused");
-  const liveTrackerActionLabel = trackerPausePending
-    ? "Pausing…"
+  const trackerStateLabel = isBootstrappingTracker
+    ? localization.t("tracker.loading")
     : isTrackerUnavailable
-      ? "Tracker unavailable"
+      ? localization.t("tracker.unavailable")
       : isTrackerDegraded
-        ? "Retry tracker"
+        ? localization.t("tracker.needsAttention")
         : status.running
-          ? "Pause tracking"
-          : "Resume tracking";
+          ? isTrackerIdle
+            ? localization.t("tracker.idleNow")
+            : isDemoMode
+              ? localization.t("tracker.previewActive")
+              : localization.t("tracker.trackingNow")
+          : isDemoMode
+            ? localization.t("tracker.previewPaused")
+            : localization.t("tracker.trackingPaused");
+  const liveTrackerActionLabel = trackerPausePending
+    ? localization.t("tracker.pausing")
+    : isTrackerUnavailable
+      ? localization.t("tracker.unavailable")
+      : isTrackerDegraded
+        ? localization.t("tracker.retry")
+        : status.running
+          ? localization.t("tracker.pause")
+          : localization.t("tracker.resume");
   const replaySidebarTrackerCard = useMemo(() => buildDashboardDemoReplaySidebarCard({
     currentDay: effectiveTodayDayForWeekModel,
     currentMinuteOfDay: effectiveCurrentMinuteOfDay,
@@ -5803,12 +5818,12 @@ export default function App() {
   ]);
   const sidebarTrackerControlState = replaySidebarTrackerCard?.controlState ?? (isTrackerUnavailable ? "unavailable" : status?.running ? "pause" : "resume");
   const sidebarTrackerIndicatorClassName = replaySidebarTrackerCard?.indicatorClassName ?? (status?.running ? (isTrackerIdle ? "idle" : "tracking") : isTrackerUnavailable || isTrackerDegraded ? "unavailable" : "idle");
-  const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? "Idle now" : "Now tracking") : isTrackerUnavailable ? "Tracker unavailable" : isTrackerDegraded ? "Tracker needs attention" : "Tracker paused");
-  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? "Tracker setup needed" : isTrackerDegraded ? (status?.message ?? "Tracker could not start") : trackerStateLabel);
+  const sidebarTrackerCollapsedLabel = replaySidebarTrackerCard?.collapsedLabel ?? (status?.running ? (isTrackerIdle ? localization.t("tracker.idleNow") : localization.t("tracker.nowTracking")) : isTrackerUnavailable ? localization.t("tracker.unavailable") : isTrackerDegraded ? localization.t("tracker.needsAttention") : localization.t("tracker.paused"));
+  const sidebarTrackerStatusLabel = replaySidebarTrackerCard?.statusLabel ?? (isTrackerUnavailable ? localization.t("tracker.setupNeeded") : isTrackerDegraded ? (status?.message ?? localization.t("tracker.couldNotStart")) : trackerStateLabel);
   const sidebarTrackerDurationLabel = replaySidebarTrackerCard?.durationLabel ?? (isTrackerUnavailable || isTrackerDegraded ? null : formatDuration(dayTotalSeconds));
-  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? "Start tracker to collect activity" : isTrackerDegraded ? "Retry activity tracking" : liveAppLabel);
+  const sidebarTrackerAppLabel = replaySidebarTrackerCard?.appLabel ?? (isTrackerUnavailable ? localization.t("tracker.startToCollect") : isTrackerDegraded ? localization.t("tracker.retryActivity") : liveAppLabel);
   const sidebarTrackerSiteLabel = replaySidebarTrackerCard?.siteLabel ?? liveSiteLabel;
-  const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? `Last capture: ${lastCaptureDistanceLabel}`;
+  const sidebarTrackerMetaLabel = replaySidebarTrackerCard?.metaLabel ?? localization.t("tracker.lastCapture", { time: lastCaptureDistanceLabel });
   const sidebarTrackerActionLabel = replaySidebarTrackerCard?.actionLabel ?? liveTrackerActionLabel;
   const isSidebarTrackerActionDisabled = replaySidebarTrackerCard === null && (isTrackerUnavailable || trackerPausePending);
 
@@ -7402,13 +7417,13 @@ export default function App() {
       <LocalizationProvider controller={localization}>
     <div className={shellClassName}>
       <div className="window-chrome">
-        <div className="window-nav-controls" aria-label="Window navigation">
+        <div className="window-nav-controls" aria-label={localization.t("shell.windowNavigation")}>
           {!isSettingsTab ? (
             <button
               type="button"
               className="window-sidebar-toggle"
               onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
-              aria-label={isSidebarVisuallyCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={localization.t(isSidebarVisuallyCollapsed ? "shell.expandSidebar" : "shell.collapseSidebar")}
               aria-pressed={isSidebarVisuallyCollapsed}
             >
               <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -7417,10 +7432,10 @@ export default function App() {
               </svg>
             </button>
           ) : null}
-          <button type="button" className="window-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label="Go back">
+          <button type="button" className="window-nav-button" onClick={navigateBack} disabled={!canNavigateBack} aria-label={localization.t("shell.goBack")}>
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9.8 3.8 5.6 8l4.2 4.2" /></svg>
           </button>
-          <button type="button" className="window-nav-button" onClick={navigateForward} disabled={!canNavigateForward} aria-label="Go forward">
+          <button type="button" className="window-nav-button" onClick={navigateForward} disabled={!canNavigateForward} aria-label={localization.t("shell.goForward")}>
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6.2 3.8 10.4 8l-4.2 4.2" /></svg>
           </button>
           <WindowThemeToggle theme={theme} onToggle={toggleTheme} />
@@ -7476,9 +7491,11 @@ export default function App() {
         </div>
 
         <div className="sidebar-scroll">
-        <div className="nav-label">Dashboard</div>
-        <nav className="sidebar-nav sidebar-nav--periods" aria-label="Dashboard views">
-          {dashboardPeriodOptions.map((item) => (
+        <div className="nav-label">{localization.t("nav.group.dashboard")}</div>
+        <nav className="sidebar-nav sidebar-nav--periods" aria-label={localization.t("nav.dashboardViews")}>
+          {dashboardPeriodOptions.map((item) => {
+            const itemLabel = localization.t(item.period === "Week" ? "nav.yourWeek" : "nav.yourDay");
+            return (
             <button
               key={item.period}
               type="button"
@@ -7487,10 +7504,11 @@ export default function App() {
               onClick={() => navigateToTab("dashboard", item.period)}
             >
               <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
-              <span>{item.label}</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
+              <span>{itemLabel}</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
             </button>
-          ))}
+            );
+          })}
           {canOpenAgentsBeta ? (
             <button
               type="button"
@@ -7499,24 +7517,27 @@ export default function App() {
               onClick={() => navigateToTab("agents")}
             >
               <NavIcon type="agents" />
-              <span>Your Agents</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Your Agents</span> : null}
+              <span>{localization.t("nav.yourAgents")}</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.yourAgents")}</span> : null}
             </button>
           ) : null}
         </nav>
 
-        <div className="nav-label">Activity</div>
-        <nav className="sidebar-nav" aria-label="Primary navigation">
-          {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => (
+        <div className="nav-label">{localization.t("nav.group.activity")}</div>
+        <nav className="sidebar-nav" aria-label={localization.t("nav.primaryNavigation")}>
+          {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => {
+            const itemLabel = localization.t(item.labelKey);
+            return (
             <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} aria-current={activeTab === item.id ? "page" : undefined} onClick={() => navigateToTab(item.id)}>
-              <NavIcon type={item.icon} /><span>{item.label}</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{item.label}</span> : null}
+              <NavIcon type={item.icon} /><span>{itemLabel}</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
             </button>
-          ))}
+            );
+          })}
         </nav>
 
-        <div className="nav-label">Social</div>
-        <nav className="sidebar-nav sidebar-nav--social" aria-label="Social navigation">
+        <div className="nav-label">{localization.t("nav.group.social")}</div>
+        <nav className="sidebar-nav sidebar-nav--social" aria-label={localization.t("nav.socialNavigation")}>
           {canOpenProfileBeta ? (
             <button
               type="button"
@@ -7524,8 +7545,8 @@ export default function App() {
               aria-current={activeTab === "leaderboard" && socialSection === "profile" ? "page" : undefined}
               onClick={() => navigateToTab("profile")}
             >
-              <NavIcon type="profile" /><span>Profile</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Profile</span> : null}
+              <NavIcon type="profile" /><span>{localization.t("nav.profile")}</span>
+              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.profile")}</span> : null}
             </button>
           ) : null}
           <button
@@ -7534,8 +7555,8 @@ export default function App() {
             aria-current={activeTab === "leaderboard" && socialSection === "leaderboard" ? "page" : undefined}
             onClick={() => navigateToTab("leaderboard")}
           >
-            <NavIcon type="leaderboard" /><span>Leaderboard</span>
-            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Leaderboard</span> : null}
+            <NavIcon type="leaderboard" /><span>{localization.t("nav.leaderboard")}</span>
+            {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.leaderboard")}</span> : null}
           </button>
         </nav>
 

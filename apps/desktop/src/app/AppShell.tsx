@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from "react";
 import type { ThemeMode } from "../features/settings/settingsStorage";
 import type { NavIconType, TabId } from "./navigation";
+import { useLocalization } from "../features/localization/LocalizationContext";
 
 export function NavIcon({ type }: { type: NavIconType }) {
   const props = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "1.8", strokeLinecap: "round" as const, strokeLinejoin: "round" as const, width: 18, height: 18 };
@@ -36,16 +37,16 @@ export function NavIcon({ type }: { type: NavIconType }) {
 }
 
 export function WindowThemeToggle({ theme, onToggle }: { theme: ThemeMode; onToggle: () => void }) {
-  const nextTheme = theme === "dark" ? "light" : "dark";
+  const { t } = useLocalization();
 
   return (
     <button
       type="button"
       className="window-theme-toggle"
       onClick={onToggle}
-      aria-label="Toggle theme"
+      aria-label={t("shell.toggleTheme")}
       aria-pressed={theme === "dark"}
-      title={`Switch to ${nextTheme} mode`}
+      title={t(theme === "dark" ? "shell.switchToLightMode" : "shell.switchToDarkMode")}
     >
       {theme === "dark" ? (
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -71,14 +72,15 @@ type MainContentShellProps = {
 };
 
 export function MainContentShell({ activeTab, loading, hasLoadedOnce, error, contentRef, children }: MainContentShellProps) {
+  const { t } = useLocalization();
   const isRefreshing = loading && hasLoadedOnce;
 
   return (
     <main ref={contentRef} className={`content content--${activeTab}`}>
       <div className="refresh-indicator" data-active={isRefreshing} aria-live="polite" aria-hidden={!isRefreshing}>
-        Refreshing tracker data&hellip;
+        {t("shell.refreshingTracker")}
       </div>
-      {error ? <div className="notice notice--error" role="alert">Error: {error}</div> : null}
+      {error ? <div className="notice notice--error" role="alert">{t("shell.errorPrefix")} {error}</div> : null}
       {children}
     </main>
   );

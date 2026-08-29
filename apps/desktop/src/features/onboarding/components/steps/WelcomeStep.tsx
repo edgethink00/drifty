@@ -9,7 +9,7 @@ export function WelcomeStep({
   readonly promotionActive: boolean;
   readonly promotionEndsAt: string | null;
 }) {
-  const { effectiveLanguage, t } = useLocalization();
+  const { displayLanguage, effectiveLanguage, setDisplayLanguage, t } = useLocalization();
   const promotionEndLabel = formatBillingAccessEndDate(promotionEndsAt, effectiveLanguage);
   return (
     <div className="dc-onb-welcome">
@@ -28,6 +28,26 @@ export function WelcomeStep({
           {t("onboarding.promo.activeThrough", { date: promotionEndLabel })}
         </span>
       ) : null}
+      <div className="dc-onb-welcome__language" role="radiogroup" aria-label={t("onboarding.welcome.languageLabel")}>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={displayLanguage === "en"}
+          className={displayLanguage === "en" ? "is-active" : ""}
+          onClick={() => setDisplayLanguage("en")}
+        >
+          English
+        </button>
+        <button
+          type="button"
+          role="radio"
+          aria-checked={displayLanguage === "ko"}
+          className={displayLanguage === "ko" ? "is-active" : ""}
+          onClick={() => setDisplayLanguage("ko")}
+        >
+          한국어 <span>{t("common.beta")}</span>
+        </button>
+      </div>
     </div>
   );
 }

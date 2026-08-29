@@ -168,7 +168,7 @@ export function DevSettingsSection({
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
 }: DevSettingsSectionProps) {
-  const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
+  const { t } = useLocalization();
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
 
@@ -342,19 +342,6 @@ export function DevSettingsSection({
               ) : <div className="pet-mode-lab__hunt-off">앉아 있기만 함 · 커서 접근 없음</div>}
             </div>
           </div>
-          </div>
-        </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.dev.koreanPreviewLabel")}</div>
-            <div className="desc">{t("settings.dev.koreanPreviewDescription")}</div>
-          </div>
-          <div className="ctrl">
-            <Toggle
-              checked={koreanPreviewEnabled}
-              onChange={setKoreanPreviewEnabled}
-              ariaLabel={t("settings.dev.koreanPreviewToggle")}
-            />
           </div>
         </div>
         <DevSettingsDeviceSyncBlock

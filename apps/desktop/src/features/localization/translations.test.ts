@@ -43,7 +43,14 @@ describe("Korean translations", () => {
   });
 
   it("avoids placeholder Korean particles in user-facing copy", () => {
-    expect(Object.values(KOREAN_TRANSLATIONS).filter((value) => value.includes("을(를)"))).toEqual([]);
+    const placeholderParticles = ["을(를)", "이(가)", "은(는)", "와(과)", "으로(로)"];
+    expect(Object.values(KOREAN_TRANSLATIONS).filter((value) => placeholderParticles.some((particle) => value.includes(particle)))).toEqual([]);
+  });
+
+  it("uses consistent Korean labels for localized beta terms", () => {
+    expect(KOREAN_TRANSLATIONS["common.beta"]).toBe("베타");
+    expect(KOREAN_TRANSLATIONS["common.new"]).toBe("신규");
+    expect(Object.values(KOREAN_TRANSLATIONS).filter((value) => value.includes("Local AI"))).toEqual([]);
   });
 
   it("keeps interpolation parameters aligned with the English source", () => {

@@ -1,3 +1,5 @@
+import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
+
 const ONBOARDING_STORAGE_VERSION = 2;
 
 export type OnboardingPurpose =
@@ -49,15 +51,7 @@ function isOnboardingPurpose(value: unknown): value is OnboardingPurpose {
 }
 
 function resolvePersistedWorkDescriptionLanguage(): "en" | "ko" {
-  if (typeof window === "undefined") return "en";
-  try {
-    const koreanPreviewEnabled = window.localStorage.getItem("drifty.dev.koreanLocalizationPreview") === "1"
-      && window.localStorage.getItem("drifty.dev.mode") === "1";
-    const displayLanguage = window.localStorage.getItem("drifty.displayLanguage") === "en" ? "en" : "ko";
-    return koreanPreviewEnabled && displayLanguage === "ko" ? "ko" : "en";
-  } catch {
-    return "en";
-  }
+  return resolveInitialDisplayLanguage();
 }
 
 export function getUserOnboardingStorageKey(userId: string): string {

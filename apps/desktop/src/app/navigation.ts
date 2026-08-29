@@ -1,4 +1,5 @@
 import type { DashboardPeriod, DashboardPeriodOption } from "../features/dashboard/dashboardPeriods";
+import type { TranslationKey } from "../features/localization/translations";
 
 export type TabId = "dashboard" | "agents" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "profile" | "team" | "settings";
 
@@ -13,20 +14,20 @@ export type NavigationHistoryState = {
 };
 
 export const commandBarTabs = [
-  { id: "dashboard", label: "Dashboard", sub: "Today at a glance" },
-  { id: "classification", label: "Classification", sub: "Activity breakdown" },
-  { id: "projects", label: "Projects", sub: "Time grouped by project" },
-  { id: "trends", label: "Trends", sub: "Patterns and trends" },
-  { id: "history", label: "History", sub: "Local records" },
-  { id: "leaderboard", label: "Social", sub: "Global focus leaderboard" },
-  { id: "settings", label: "Settings", sub: "App preferences" },
-] satisfies ReadonlyArray<{ id: TabId; label: string; sub: string }>;
+  { id: "dashboard", labelKey: "nav.group.dashboard", subKey: "command.dashboardSub" },
+  { id: "classification", labelKey: "nav.classification", subKey: "command.classificationSub" },
+  { id: "projects", labelKey: "nav.projects", subKey: "command.projectsSub" },
+  { id: "trends", labelKey: "nav.trends", subKey: "command.trendsSub" },
+  { id: "history", labelKey: "nav.history", subKey: "command.historySub" },
+  { id: "leaderboard", labelKey: "nav.group.social", subKey: "command.socialSub" },
+  { id: "settings", labelKey: "common.settings", subKey: "command.settingsSub" },
+] satisfies ReadonlyArray<{ id: TabId; labelKey: TranslationKey; subKey: TranslationKey }>;
 
 export type NavIconType = "home" | "calendar" | "agents" | "classification" | "projects" | "history" | "trends" | "leaderboard" | "profile" | "social" | "team" | "settings";
 
 export type NavItem = {
   id: TabId;
-  label: string;
+  labelKey: TranslationKey;
   icon: NavIconType;
 };
 
@@ -36,8 +37,8 @@ export const dashboardPeriodOptions: DashboardPeriodOption[] = [
 ];
 
 export const activityNav: NavItem[] = [
-  { id: "classification", label: "Classification", icon: "classification" },
-  { id: "projects", label: "Projects", icon: "projects" },
-  { id: "trends", label: "Trends", icon: "trends" },
-  { id: "history", label: "History", icon: "history" },
+  { id: "classification", labelKey: "nav.classification", icon: "classification" },
+  { id: "projects", labelKey: "nav.projects", icon: "projects" },
+  { id: "trends", labelKey: "nav.trends", icon: "trends" },
+  { id: "history", labelKey: "nav.history", icon: "history" },
 ];

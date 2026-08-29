@@ -4,14 +4,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
-  KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
+  LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY,
+  LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
   LocalizationProvider,
   LocalizationTestProvider,
   useLocalization,
   useLocalizationController,
 } from "./LocalizationContext";
 import { GeneralSettingsSection } from "../settings/GeneralSettingsSection";
-import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -31,33 +31,28 @@ function ControllerHarness() {
 }
 
 function ControllerState() {
-  const { effectiveLanguage, koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
+  const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
   return (
     <div>
       <span>{effectiveLanguage}</span>
       <span>{t("common.settings")}</span>
-      <button type="button" onClick={() => setKoreanPreviewEnabled(!koreanPreviewEnabled)}>Toggle preview</button>
+      <button type="button" onClick={() => setDisplayLanguage(effectiveLanguage === "ko" ? "en" : "ko")}>Toggle language</button>
     </div>
   );
 }
 
-describe("Korean localization preview", () => {
-  it("keeps Korean users in English when the preview or Dev mode is off", () => {
-    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
-    window.localStorage.setItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
-
+describe("display language", () => {
+  it("defaults new users to English without guessing from their locale", () => {
     render(<ControllerHarness />);
 
     expect(screen.getByText("en")).toBeTruthy();
     expect(screen.getByText("Settings")).toBeTruthy();
     expect(document.documentElement.lang).toBe("en");
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("en");
   });
 
-  it("activates Korean only when both Dev mode and the preview are enabled", () => {
+  it("activates Korean from the public language preference without Dev mode", () => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
-    window.localStorage.setItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
 
     render(<ControllerHarness />);
 
@@ -65,12 +60,34 @@ describe("Korean localization preview", () => {
     expect(screen.getByText("설정")).toBeTruthy();
     expect(document.documentElement.lang).toBe("ko");
 
-    fireEvent.click(screen.getByRole("button", { name: "Toggle preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Toggle language" }));
+
     expect(screen.getByText("en")).toBeTruthy();
     expect(screen.getByText("Settings")).toBeTruthy();
   });
 
-  it("shows the display-language control inside General only for the preview", () => {
+  it("migrates users who explicitly opted into the legacy Korean preview", () => {
+    window.localStorage.setItem(LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    window.localStorage.setItem(LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
+
+    render(<ControllerHarness />);
+
+    expect(screen.getByText("ko")).toBeTruthy();
+    expect(screen.getByText("설정")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
+  });
+
+  it("does not treat the old Korean default value as an explicit opt-in", () => {
+    window.localStorage.setItem(LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+
+    render(<ControllerHarness />);
+
+    expect(screen.getByText("en")).toBeTruthy();
+    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("en");
+  });
+
+  it("always shows the display-language control in General settings", () => {
     render(
       <LocalizationTestProvider language="ko">
         <GeneralSettingsSection
@@ -95,6 +112,6 @@ describe("Korean localization preview", () => {
     expect(screen.getByText("커뮤니티 및 지원")).toBeTruthy();
     expect(screen.getByText("Drifty 커뮤니티")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "피드백 보내기" })).toHaveLength(1);
-    expect(screen.getByText("한국어 미리보기는 베타이며 현재 온보딩, 주요 설정, 요금제 화면에만 적용됩니다. 여기서 영어를 선택하거나 개발자 설정에서 한국어 미리보기를 끄면 영어로 돌아갑니다.")).toBeTruthy();
+    expect(screen.getByText("한국어 베타는 온보딩, 앱 메뉴, 설정 및 요금제 화면에 우선 적용됩니다. 일부 활동 및 분석 화면은 아직 영어로 표시됩니다.")).toBeTruthy();
   });
 });

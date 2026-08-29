@@ -1,29 +1,32 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS, type TranslationKey } from "./translations";
-import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
+import {
+  DISPLAY_LANGUAGE_STORAGE_KEY,
+  resolveInitialDisplayLanguage,
+  type DisplayLanguage,
+} from "./languagePreference";
 
-export type DisplayLanguage = "en" | "ko";
-
-export const KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY = "drifty.dev.koreanLocalizationPreview";
-export const DISPLAY_LANGUAGE_STORAGE_KEY = "drifty.displayLanguage";
+export {
+  DISPLAY_LANGUAGE_STORAGE_KEY,
+  LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY,
+  LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
+  resolveInitialDisplayLanguage,
+  type DisplayLanguage,
+} from "./languagePreference";
 
 type TranslationParams = Readonly<Record<string, string | number>>;
 
 export type LocalizationController = {
   readonly displayLanguage: DisplayLanguage;
   readonly effectiveLanguage: DisplayLanguage;
-  readonly koreanPreviewEnabled: boolean;
   readonly setDisplayLanguage: (language: DisplayLanguage) => void;
-  readonly setKoreanPreviewEnabled: (enabled: boolean) => void;
   readonly t: (key: TranslationKey, params?: TranslationParams) => string;
 };
 
 const englishController: LocalizationController = {
   displayLanguage: "en",
   effectiveLanguage: "en",
-  koreanPreviewEnabled: false,
   setDisplayLanguage: () => undefined,
-  setKoreanPreviewEnabled: () => undefined,
   t: (key, params) => interpolate(ENGLISH_TRANSLATIONS[key], params),
 };
 
@@ -34,13 +37,8 @@ export function useLocalization(): LocalizationController {
 }
 
 export function useLocalizationController(): LocalizationController {
-  const [koreanPreviewEnabled, setKoreanPreviewEnabled] = useState(resolveInitialKoreanPreviewEnabled);
   const [displayLanguage, setDisplayLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
-  const effectiveLanguage: DisplayLanguage = koreanPreviewEnabled && displayLanguage === "ko" ? "ko" : "en";
-
-  useEffect(() => {
-    window.localStorage.setItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, koreanPreviewEnabled ? "1" : "0");
-  }, [koreanPreviewEnabled]);
+  const effectiveLanguage = displayLanguage;
 
   useEffect(() => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, displayLanguage);
@@ -54,14 +52,12 @@ export function useLocalizationController(): LocalizationController {
   return useMemo(() => ({
     displayLanguage,
     effectiveLanguage,
-    koreanPreviewEnabled,
     setDisplayLanguage,
-    setKoreanPreviewEnabled,
     t: (key: TranslationKey, params?: TranslationParams) => interpolate(
       effectiveLanguage === "ko" ? KOREAN_TRANSLATIONS[key] : ENGLISH_TRANSLATIONS[key],
       params,
     ),
-  }), [displayLanguage, effectiveLanguage, koreanPreviewEnabled]);
+  }), [displayLanguage, effectiveLanguage]);
 }
 
 export function LocalizationProvider({ children, controller }: { readonly children: ReactNode; readonly controller: LocalizationController }) {
@@ -72,31 +68,10 @@ export function LocalizationTestProvider({ children, language = "ko" }: { readon
   const controller = useMemo<LocalizationController>(() => ({
     displayLanguage: language,
     effectiveLanguage: language,
-    koreanPreviewEnabled: language === "ko",
     setDisplayLanguage: () => undefined,
-    setKoreanPreviewEnabled: () => undefined,
     t: (key, params) => interpolate(language === "ko" ? KOREAN_TRANSLATIONS[key] : ENGLISH_TRANSLATIONS[key], params),
   }), [language]);
   return <LocalizationContext.Provider value={controller}>{children}</LocalizationContext.Provider>;
-}
-
-export function resolveInitialKoreanPreviewEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.localStorage.getItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY) === "1"
-      && window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-export function resolveInitialDisplayLanguage(): DisplayLanguage {
-  if (typeof window === "undefined") return "ko";
-  try {
-    return window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY) === "en" ? "en" : "ko";
-  } catch {
-    return "ko";
-  }
 }
 
 function interpolate(template: string, params?: TranslationParams): string {

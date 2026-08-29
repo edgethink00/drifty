@@ -119,9 +119,6 @@ export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
-const SIGNED_OUT_TRIGGER_LABEL = "Unknown";
-const SIGNED_OUT_TRIGGER_ARIA_LABEL = "Unknown";
-
 type AccountMenuProps = {
   readonly isOpen: boolean;
   readonly isSidebarCollapsed: boolean;
@@ -169,8 +166,8 @@ export function AccountMenu({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
   const isSignedIn = Boolean(userEmail);
-  const displayName = isSignedIn ? getAccountDisplayName(userEmail) : SIGNED_OUT_TRIGGER_LABEL;
-  const triggerLabel = isSignedIn ? displayName : SIGNED_OUT_TRIGGER_ARIA_LABEL;
+  const displayName = isSignedIn ? getAccountDisplayName(userEmail) : t("account.guest");
+  const triggerLabel = displayName;
   const trimmedUserAvatarUrl = userAvatarUrl?.trim();
   const shouldShowUserAvatar = isSignedIn && Boolean(trimmedUserAvatarUrl);
 
@@ -243,23 +240,23 @@ export function AccountMenu({
       className={isSidebarCollapsed ? "account-popover account-popover--collapsed" : "account-popover"}
       style={popoverStyle}
       role="menu"
-      aria-label="Account menu"
+      aria-label={t("account.menu")}
     >
       <div className="account-popover__account">
         {isSignedIn ? (
           <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
         ) : (
-          <div className="account-popover__name">Not signed in</div>
+          <div className="account-popover__name">{t("account.notSignedIn")}</div>
         )}
       </div>
       <div className="account-menu-separator account-menu-separator--account" role="separator" />
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon account-menu-icon--settings"><SettingsIcon /></span>
-        <span>Settings</span>
+        <span>{t("common.settings")}</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onAiSetting} role="menuitem">
         <span className="account-menu-icon"><AiIcon /></span>
-        <span>AI Setting</span>
+        <span>{t("account.aiSettings")}</span>
       </button>
       <button
         type="button"
@@ -269,7 +266,7 @@ export function AccountMenu({
         aria-checked={isDarkMode}
       >
         <span className="account-menu-icon">{isDarkMode ? <MoonIcon /> : <SunIcon />}</span>
-        <span>Dark mode</span>
+        <span>{t("account.darkMode")}</span>
         <span className="account-menu-toggle" data-on={isDarkMode} aria-hidden="true">
           <span className="account-menu-toggle__knob" />
         </span>
@@ -296,23 +293,23 @@ export function AccountMenu({
       {showProfile ? (
         <button type="button" className="account-menu-item" onClick={onProfile} role="menuitem">
           <span className="account-menu-icon"><ProfileIcon /></span>
-          <span>My profile</span>
+          <span>{t("account.myProfile")}</span>
         </button>
       ) : null}
       <button type="button" className="account-menu-item" onClick={onCheckForUpdates} role="menuitem">
         <span className="account-menu-icon"><UpdateIcon /></span>
-        <span>Check for updates</span>
+        <span>{t("account.checkForUpdates")}</span>
       </button>
       <button type="button" className="account-menu-item" onClick={onFeedback} role="menuitem">
         <span className="account-menu-icon"><FeedbackIcon /></span>
-        <span>Send feedback</span>
+        <span>{t("account.sendFeedback")}</span>
       </button>
       {isSignedIn ? (
         <>
           <div className="account-menu-separator" role="separator" />
           <button type="button" className="account-menu-item account-menu-item--danger" onClick={onSignOut} role="menuitem">
             <span className="account-menu-icon"><LogoutIcon /></span>
-            <span>Log out</span>
+            <span>{t("account.logOut")}</span>
           </button>
         </>
       ) : (
@@ -320,7 +317,7 @@ export function AccountMenu({
           <div className="account-menu-separator" role="separator" />
           <button type="button" className="account-menu-item" onClick={onSignIn} role="menuitem">
             <span className="account-menu-icon"><SignInIcon /></span>
-            <span>Sign in</span>
+            <span>{t("account.signIn")}</span>
           </button>
         </>
       )}

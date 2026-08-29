@@ -101,10 +101,10 @@ describe("NotificationsSettingsSection", () => {
     expect(screen.getByRole("button", { name: "1시간 숨기기" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "끄기" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "데스크톱 펫" })).toBeTruthy();
-    expect(screen.getByText("New")).toBeTruthy();
-    expect(screen.getAllByText("Beta").length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByText("신규")).toBeNull();
-    expect(screen.queryByText("베타")).toBeNull();
+    expect(screen.getByText("신규")).toBeTruthy();
+    expect(screen.getAllByText("베타").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("New")).toBeNull();
+    expect(screen.queryByText("Beta")).toBeNull();
     expect(screen.getByText("펫 표시")).toBeTruthy();
     expect(screen.getByRole("radiogroup", { name: "펫 크기" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "아이보리" })).toBeTruthy();

@@ -3,13 +3,15 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ACCOUNT_POPOVER_EXPANDED_GAP_PX, AccountMenu } from "./AccountMenu";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
 type RenderAccountMenuOptions = {
   readonly userAvatarUrl?: string | null;
   readonly userEmail?: string | null;
+  readonly language?: DisplayLanguage;
 };
 
-function renderAccountMenu({ userAvatarUrl = null, userEmail = null }: RenderAccountMenuOptions = {}) {
+function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = "en" }: RenderAccountMenuOptions = {}) {
   const handlers = {
     onProfile: vi.fn(),
     onAiSetting: vi.fn(),
@@ -24,17 +26,19 @@ function renderAccountMenu({ userAvatarUrl = null, userEmail = null }: RenderAcc
   function Harness() {
     const [isOpen, setIsOpen] = useState(false);
     return (
-      <AccountMenu
-        isOpen={isOpen}
-        isSidebarCollapsed={false}
-        userAvatarUrl={userAvatarUrl}
-        userEmail={userEmail}
-        isDarkMode={false}
-        isPetVisible={false}
-        onTogglePet={() => {}}
-        onToggle={() => setIsOpen((open) => !open)}
-        {...handlers}
-      />
+      <LocalizationTestProvider language={language}>
+        <AccountMenu
+          isOpen={isOpen}
+          isSidebarCollapsed={false}
+          userAvatarUrl={userAvatarUrl}
+          userEmail={userEmail}
+          isDarkMode={false}
+          isPetVisible={false}
+          onTogglePet={() => {}}
+          onToggle={() => setIsOpen((open) => !open)}
+          {...handlers}
+        />
+      </LocalizationTestProvider>
     );
   }
 
@@ -70,7 +74,7 @@ describe("AccountMenu", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelectorAll(".account-trigger__chevron-mark")).toHaveLength(2);
     expect(screen.getByRole("menu", { name: /account menu/i })).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /^AI Setting$/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^AI settings$/ })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /^Settings$/ })).toBeTruthy();
     expect(screen.queryByRole("menuitem", { name: /^Drifty Cloud$/ })).toBeNull();
   });
@@ -103,8 +107,8 @@ describe("AccountMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /^unknown$/i }));
     const menuItems = screen.getAllByRole("menuitem").map((item) => item.textContent);
 
-    expect(menuItems.slice(0, 2)).toEqual(["Settings", "AI Setting"]);
-    fireEvent.click(screen.getByRole("menuitem", { name: /^AI Setting$/ }));
+    expect(menuItems.slice(0, 2)).toEqual(["Settings", "AI settings"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: /^AI settings$/ }));
     expect(handlers.onAiSetting).toHaveBeenCalledTimes(1);
   });
 
@@ -151,5 +155,17 @@ describe("AccountMenu", () => {
 
     fireEvent.pointerDown(document.body);
     expect(screen.queryByRole("menu", { name: /account menu/i })).toBeNull();
+  });
+
+  it("localizes the signed-out account menu in Korean", () => {
+    renderAccountMenu({ language: "ko" });
+    fireEvent.click(screen.getByRole("button", { name: "게스트" }));
+
+    expect(screen.getByRole("menu", { name: "계정 메뉴" })).toBeTruthy();
+    expect(screen.getByText("로그인하지 않음")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "설정" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "AI 설정" })).toBeTruthy();
+    expect(screen.getByRole("menuitemcheckbox", { name: "다크 모드" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "로그인" })).toBeTruthy();
   });
 });
