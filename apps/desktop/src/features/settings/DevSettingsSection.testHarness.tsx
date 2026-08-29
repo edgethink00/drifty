@@ -61,6 +61,8 @@ export function renderProductionDevSettings(
     onPreviewPetModeIntervention: vi.fn(),
     onRehearsePetModeIntercept: vi.fn(),
     onPreviewPetModeBrowserTabClose: vi.fn(),
+    petModeBrowserXShortcutEnabled: false,
+    onPetModeBrowserXShortcutEnabledChange: vi.fn(),
     onPreviewPetModeDriftyWindowClose: vi.fn(),
     onPlacePetModeCenter: vi.fn(),
     onPreviewPetModeAction: vi.fn(),

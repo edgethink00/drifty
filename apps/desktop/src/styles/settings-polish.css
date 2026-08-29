@@ -1584,6 +1584,15 @@
   justify-content: flex-end;
 }
 
+.pet-mode-lab__target-stack {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.pet-mode-lab__shortcut-policy {
+  justify-self: end;
+}
+
 .pet-mode-lab__outcome-policy,
 .pet-mode-lab__experiment-policy {
   display: flex;
@@ -1947,6 +1956,10 @@
 
   .pet-mode-lab__controls {
     justify-content: flex-start;
+  }
+
+  .pet-mode-lab__shortcut-policy {
+    justify-self: start;
   }
 }
 

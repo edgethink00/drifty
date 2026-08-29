@@ -175,6 +175,11 @@ describe("DevSettingsSection", () => {
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sit");
     fireEvent.click(screen.getByRole("button", { name: /Browser tab X/ }));
     expect(enabledProps.onPreviewPetModeBrowserTabClose).toHaveBeenCalledTimes(1);
+    const browserXShortcut = screen.getByRole("switch", { name: "Toggle Browser X session shortcut" });
+    expect(screen.getByText("Browser X shortcut off")).toBeTruthy();
+    expect(screen.getByText("⌃⌥X · exact observed tab only · resets on app quit")).toBeTruthy();
+    fireEvent.click(browserXShortcut);
+    expect(enabledProps.onPetModeBrowserXShortcutEnabledChange).toHaveBeenCalledWith(true);
     fireEvent.click(screen.getByRole("button", { name: /Drifty window X/ }));
     expect(enabledProps.onPreviewPetModeDriftyWindowClose).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Life loop/ }));

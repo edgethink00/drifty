@@ -42,6 +42,7 @@ import type {
   CompanionMilestonePreviewId,
   CompanionMomentPreviewId,
 } from "../companion/companionPillPreview";
+import { PET_MODE_BROWSER_X_SHORTCUT_LABEL } from "../pet-mode/usePetModeBrowserXShortcut";
 
 type DevSettingsSectionProps = {
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
@@ -90,6 +91,8 @@ type DevSettingsSectionProps = {
   readonly onPreviewPetModeIntervention: () => void;
   readonly onRehearsePetModeIntercept: () => void;
   readonly onPreviewPetModeBrowserTabClose: () => void;
+  readonly petModeBrowserXShortcutEnabled: boolean;
+  readonly onPetModeBrowserXShortcutEnabledChange: (enabled: boolean) => void;
   readonly onPreviewPetModeDriftyWindowClose: () => void;
   readonly onPlacePetModeCenter: () => void;
   readonly petModeGuidesEnabled?: boolean;
@@ -157,6 +160,8 @@ export function DevSettingsSection({
   onPreviewPetModeIntervention,
   onRehearsePetModeIntercept,
   onPreviewPetModeBrowserTabClose,
+  petModeBrowserXShortcutEnabled,
+  onPetModeBrowserXShortcutEnabledChange,
   onPreviewPetModeDriftyWindowClose,
   onPlacePetModeCenter,
   petModeGuidesEnabled,
@@ -365,7 +370,7 @@ export function DevSettingsSection({
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Behavior</div>
             </div>
-            <div>
+            <div className="pet-mode-lab__target-stack">
               <div className="pet-mode-lab__experiment-policy" data-active={petModeLabState?.facing === "right"}>
                 <span>
                   <strong>{petModeLabState?.facing === "right" ? "Facing right" : petModeLabState?.facing === "left" ? "Facing left" : "Facing unavailable"}</strong>
@@ -423,13 +428,27 @@ export function DevSettingsSection({
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Placement</div>
             </div>
-            <div className="pet-mode-lab__controls" aria-label="Pet placement and target tests">
-              <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
-              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement, then use Walk to verify resident Y" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
-              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
-              <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
-              <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
-              <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact, drop calibration guides, and the live drop preview badge" title="Toggle feet contact line (93pt), calibration guides, and the live drop preview badge on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
+            <div>
+              <div className="pet-mode-lab__controls" aria-label="Pet placement and target tests">
+                <PetModeLabAction label="Outing" detail="Exit · pause · return" action="outing" active={petModeLabState?.activeAction === "outing"} disabled={isPetModeLabActionDisabled("outing")} onAction={onPreviewPetModeAction} />
+                <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement, then use Walk to verify resident Y" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
+                <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
+                <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
+                <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
+                <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact, drop calibration guides, and the live drop preview badge" title="Toggle feet contact line (93pt), calibration guides, and the live drop preview badge on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
+              </div>
+              <div className="pet-mode-lab__experiment-policy pet-mode-lab__shortcut-policy" data-active={petModeBrowserXShortcutEnabled}>
+                <span>
+                  <strong>{petModeBrowserXShortcutEnabled ? "Shortcut armed this session" : "Browser X shortcut off"}</strong>
+                  <small>{PET_MODE_BROWSER_X_SHORTCUT_LABEL} · exact observed tab only · resets on app quit</small>
+                </span>
+                <Toggle
+                  checked={petModeEnabled && petModeBrowserXShortcutEnabled}
+                  disabled={!petModeEnabled}
+                  onChange={onPetModeBrowserXShortcutEnabledChange}
+                  ariaLabel="Toggle Browser X session shortcut"
+                />
+              </div>
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--hunt">

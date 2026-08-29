@@ -287,6 +287,10 @@ import {
   type PetVisibilityAction,
 } from "./features/pet-mode/petModeBridge";
 import { usePetModeVisibilityRequests } from "./features/pet-mode/usePetModeVisibilityRequests";
+import {
+  canTriggerPetModeBrowserXShortcut,
+  usePetModeBrowserXShortcut,
+} from "./features/pet-mode/usePetModeBrowserXShortcut";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
 import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
@@ -783,6 +787,9 @@ export default function App() {
 
   const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
   const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
+  // Intentionally session-only: a destructive global shortcut must be armed
+  // again after every app launch instead of silently surviving into normal use.
+  const [petModeBrowserXShortcutEnabled, setPetModeBrowserXShortcutEnabled] = useState(false);
   const [petModeGuidesEnabled, setPetModeGuidesEnabled] = useState(() => {
     try {
       return window.localStorage.getItem(PET_MODE_GUIDES_STORAGE_KEY) === "1";
@@ -2232,6 +2239,7 @@ export default function App() {
   }, [driftAlertsEnabled, isDevModeActive, publishNativeDriftAlarmTrayStatus, status?.running]);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
+  const petModeBrowserXRuntimeRef = useRef({ busy: false, lastTriggeredAt: 0 });
   const liveDriftAlarmSegmentsRef = useRef<ActivitySegment[]>([]);
   const driftAlarmDayRef = useRef(logicalTodayIsoDate(startOfDayMinutes));
   const driftAlarmBaseSegmentsRef = useRef<ActivitySegment[]>([]);
@@ -2242,6 +2250,48 @@ export default function App() {
   const selectedDayRef = useRef(selectedDay);
   const lastRendererInteractionAtRef = useRef(Date.now());
   const aiClassificationInFlightRef = useRef(false);
+
+  const runPetModeLabBrowserTabClose = useCallback(async () => {
+    const runtime = petModeBrowserXRuntimeRef.current;
+    const now = Date.now();
+    if (!canTriggerPetModeBrowserXShortcut(runtime.busy, runtime.lastTriggeredAt, now)) return;
+
+    const target = buildPetModeLabBrowserTabTarget(segmentsRef.current);
+    if (!target) {
+      setPetModeLabPointerStatus("Exact browser tab X unavailable · no close performed");
+      return;
+    }
+
+    runtime.busy = true;
+    runtime.lastTriggeredAt = now;
+    setPetModeLabPointerStatus("Browser X shortcut · approaching exact observed tab");
+    try {
+      const contacted = await playNativePetModeIntervention(target);
+      if (!contacted) {
+        setPetModeLabPointerStatus("Exact browser tab X unavailable · no close performed");
+        return;
+      }
+      await applyNativePetModeLabTarget(target);
+    } catch {
+      setPetModeLabPointerStatus("Browser tab X failed · no close confirmed");
+    } finally {
+      runtime.busy = false;
+    }
+  }, []);
+
+  usePetModeBrowserXShortcut({
+    enabled: isDevModeActive && petModeEnabled && petModeBrowserXShortcutEnabled,
+    onTrigger: () => { void runPetModeLabBrowserTabClose(); },
+    onRegistrationError: () => {
+      setPetModeBrowserXShortcutEnabled(false);
+      setPetModeLabPointerStatus("Browser X shortcut unavailable · key already in use or permission denied");
+    },
+  });
+
+  useEffect(() => {
+    if (isDevModeActive && petModeEnabled) return;
+    setPetModeBrowserXShortcutEnabled(false);
+  }, [isDevModeActive, petModeEnabled]);
 
   useEffect(() => () => {
     if (pendingDriftAlarmTransientRefreshRef.current) {
@@ -8498,14 +8548,10 @@ export default function App() {
                       previewPetInterceptCard();
                     }}
                     onPreviewPetModeBrowserTabClose={() => {
-                      const target = buildPetModeLabBrowserTabTarget(segments);
-                      if (!target) return;
-                      void playNativePetModeIntervention(target).then((contacted) => {
-                        if (contacted) return applyNativePetModeLabTarget(target);
-                        setPetModeLabPointerStatus("Exact browser tab X unavailable · no close performed");
-                        return undefined;
-                      }).catch(() => undefined);
+                      void runPetModeLabBrowserTabClose();
                     }}
+                    petModeBrowserXShortcutEnabled={petModeBrowserXShortcutEnabled}
+                    onPetModeBrowserXShortcutEnabledChange={setPetModeBrowserXShortcutEnabled}
                     onPreviewPetModeDriftyWindowClose={() => {
                       const target = buildPetModeLabDriftyWindowTarget();
                       void playNativePetModeIntervention(target).then((contacted) => {
