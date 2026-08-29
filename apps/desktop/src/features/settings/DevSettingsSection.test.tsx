@@ -19,6 +19,7 @@ import {
 } from "./settingsStorage";
 import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
 import {
+  PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
 } from "../pet-mode/petModeData";
@@ -131,6 +132,22 @@ describe("DevSettingsSection", () => {
     expect(tailWithNoteButton.getAttribute("disabled")).toBe("");
     expect(sleepAngryButton.getAttribute("disabled")).toBe("");
     expect(screen.getByText("Existing behavior")).toBeTruthy();
+    const dropLifePreviewToggle = screen.getByRole("switch", { name: "Toggle drop and life rhythm preview" });
+    expect(dropLifePreviewToggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("Shipped behavior")).toBeTruthy();
+    expect(screen.getByText("No post-drop reaction · 12m standing base")).toBeTruthy();
+    fireEvent.click(dropLifePreviewToggle);
+    expect(dropLifePreviewToggle.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Preview enabled")).toBeTruthy();
+    expect(screen.getByText("60/30/10 drop reactions · 4m standing base")).toBeTruthy();
+    expect(window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY)).toBe("1");
+    window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, "0");
+    fireEvent(window, new StorageEvent("storage", {
+      key: PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
+      newValue: "0",
+    }));
+    expect(dropLifePreviewToggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("Shipped behavior")).toBeTruthy();
     const disabledGuaranteedToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
     expect(disabledGuaranteedToggle.getAttribute("disabled")).toBe("");
     expect(disabledGuaranteedToggle.getAttribute("aria-checked")).toBe("false");

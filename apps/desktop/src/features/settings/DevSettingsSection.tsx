@@ -22,6 +22,7 @@ import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import {
+  PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
   type PetModeLabAction,
@@ -181,6 +182,9 @@ export function DevSettingsSection({
   const [petModeExperimentsEnabled, setPetModeExperimentsEnabled] = useState(
     () => window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY) === "1",
   );
+  const [petModeDropLifePreviewEnabled, setPetModeDropLifePreviewEnabled] = useState(
+    () => window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) === "1",
+  );
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
     () => window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1",
   );
@@ -192,6 +196,10 @@ export function DevSettingsSection({
   const updatePetModeExperiments = (enabled: boolean) => {
     setPetModeExperimentsEnabled(enabled);
     window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, enabled ? "1" : "0");
+  };
+  const updatePetModeDropLifePreview = (enabled: boolean) => {
+    setPetModeDropLifePreviewEnabled(enabled);
+    window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, enabled ? "1" : "0");
   };
   const updateGuaranteedOutcomes = (enabled: boolean) => {
     setGuaranteedOutcomes(enabled);
@@ -214,6 +222,17 @@ export function DevSettingsSection({
       disposed = true;
       cleanupTauriEventListener(unlisten);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) return;
+      setPetModeDropLifePreviewEnabled(
+        window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) === "1",
+      );
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   const isPetModeLabActionDisabled = (action: PetModeLabAction) => {
@@ -315,6 +334,21 @@ export function DevSettingsSection({
                   : "No experimental expressions or interaction rules"}</small>
               </span>
               <Toggle checked={petModeExperimentsEnabled} onChange={updatePetModeExperiments} ariaLabel="Toggle expressive pet interactions" />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--experiments">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Drop &amp; life rhythm preview</div>
+              <div className="desc">Dev-only comparison for the new release reactions and shorter autonomous cadence.</div>
+            </div>
+            <div className="pet-mode-lab__experiment-policy" data-active={petModeDropLifePreviewEnabled}>
+              <span>
+                <strong>{petModeDropLifePreviewEnabled ? "Preview enabled" : "Shipped behavior"}</strong>
+                <small>{petModeDropLifePreviewEnabled
+                  ? "60/30/10 drop reactions · 4m standing base"
+                  : "No post-drop reaction · 12m standing base"}</small>
+              </span>
+              <Toggle checked={petModeDropLifePreviewEnabled} onChange={updatePetModeDropLifePreview} ariaLabel="Toggle drop and life rhythm preview" />
             </div>
           </div>
           <div className="pet-mode-lab__row">

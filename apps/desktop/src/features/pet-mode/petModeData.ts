@@ -16,6 +16,11 @@ export const PET_MODE_PRESENCE_RATIO = 0.6;
 export const PET_MODE_PRESENT_MS = 9 * 60 * 1000;
 export const PET_MODE_AWAY_MS = 6 * 60 * 1000;
 export const PET_MODE_LIFE_ACTION_INTERVAL_MS = 12 * 60 * 1000;
+// The shorter rhythm stays behind the same Dev preview as the new drop
+// reactions. This keeps the shipped cadence unchanged until the combined
+// behavior has been reviewed in the real desktop app. The scheduler's existing
+// 0.72-1.28 jitter places preview actions roughly every 2m53s-5m07s.
+export const PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS = 4 * 60 * 1000;
 // Sitting and sleeping are long holds, so the scheduler cannot keep using one
 // flat interval: after a settled pose the pet should consider its next move
 // sooner than it would after standing around.
@@ -34,6 +39,10 @@ export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
 // itself) lets reviewers compare the shipped cat and the experiment without
 // leaving the diagnostics surface.
 export const PET_MODE_EXPERIMENTS_STORAGE_KEY = "drifty.dev.petModeExperiments.v1";
+// Dev-only gate for the manual-drop reaction variants and their shorter life
+// cadence. Dev mode is checked again by the pet webview so a persisted value
+// cannot alter production behavior after the diagnostics surface is disabled.
+export const PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY = "drifty.dev.petModeDropLifePreview.v1";
 // Dev-only override for repeatedly QAing the pack's visible probability
 // outcomes. It affects only angry wake and music-note rolls, not life-action
 // selection or timing. The renderer also checks Dev mode itself, so a
@@ -163,6 +172,9 @@ export const PET_MODE_LIFE_MOTION_FPS = 12;
 export const PET_MODE_LIFE_MOTION_FRAME_COUNT = 37;
 export const PET_MODE_LIFE_MOTION_DURATION_MS = PET_MODE_LIFE_MOTION_FRAME_COUNT * 1000 / PET_MODE_LIFE_MOTION_FPS;
 export const PET_MODE_TAIL_FLICK_DURATION_MS = PET_MODE_LIFE_MOTION_DURATION_MS;
+// A manual drop is direct attention from the user, so the rare acknowledgement
+// can answer quickly before the longer authored tail motion takes over.
+export const PET_MODE_POST_DROP_LOOK_DURATION_MS = 840;
 // Locked to the approved prototype's F12 v1.6 action. The cat reaches on
 // source frames 0…14, contacts on 14, then returns over the same clean arc.
 // Keep this as data rather than a CSS tween so every rendered pose remains a
@@ -402,10 +414,16 @@ export function getPetModeGaitFrameIndex(
   return rawFrame % frameCount;
 }
 
-export function getPetModeLifeActionInterval(productivity: ProductivityLabel | null): number {
+export function getPetModeLifeActionInterval(
+  productivity: ProductivityLabel | null,
+  dropLifePreviewEnabled = false,
+): number {
   // B3 stays intentionally subtle: focused work only makes autonomous actions
   // rarer. It never changes the pet's mood or creates a reward/punishment loop.
-  return adjustPetModeIntervalForFocus(PET_MODE_LIFE_ACTION_INTERVAL_MS, productivity);
+  const base = dropLifePreviewEnabled
+    ? PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS
+    : PET_MODE_LIFE_ACTION_INTERVAL_MS;
+  return adjustPetModeIntervalForFocus(base, productivity);
 }
 
 /**
@@ -418,10 +436,14 @@ export function getPetModeLifeActionInterval(productivity: ProductivityLabel | n
 export function getPetModeNextActionInterval(
   productivity: ProductivityLabel | null,
   previousAction: PetModeLifeAction | null,
+  dropLifePreviewEnabled = false,
 ): number {
+  const standingInterval = dropLifePreviewEnabled
+    ? PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS
+    : PET_MODE_LIFE_ACTION_INTERVAL_MS;
   const base = previousAction === "sit" || previousAction === "sleep"
     ? PET_MODE_SETTLED_ACTION_INTERVAL_MS
-    : PET_MODE_LIFE_ACTION_INTERVAL_MS;
+    : standingInterval;
   return adjustPetModeIntervalForFocus(base, productivity);
 }
 
@@ -433,6 +455,31 @@ function adjustPetModeIntervalForFocus(
 }
 
 export type PetModeLifeAction = "walk" | "stretch" | "sit" | "sleep";
+
+export type PetModePostDropReaction = "stay" | "walk" | "look_tail";
+
+/**
+ * Pick the small response that follows a completed manual drop.
+ *
+ * The drop itself is never probabilistic: the native drag owns the released
+ * position, and when motion is allowed its drop settle finishes before one of
+ * these beats begins. Repeating either large response immediately is folded
+ * back into the quiet branch so the cat does not look like it has one canned
+ * trick.
+ */
+export function pickPetModePostDropReaction(
+  random: number,
+  previous: PetModePostDropReaction | null,
+): PetModePostDropReaction {
+  const roll = Math.min(Math.max(random, 0), 0.999_999);
+  const candidate: PetModePostDropReaction = roll < 0.6
+    ? "stay"
+    : roll < 0.9
+      ? "walk"
+      : "look_tail";
+  if (candidate !== "stay" && candidate === previous) return "stay";
+  return candidate;
+}
 
 /**
  * Autonomous action weights, conditioned on the pose the pet is already in.

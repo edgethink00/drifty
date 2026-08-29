@@ -48,6 +48,10 @@ const PET_MODE_HOME_EDGE_INSET: f64 = 24.0;
 const PET_MODE_RESIDENT_BAND_RATIO: f64 = 0.32;
 const PET_MODE_RUN_SPEED: f64 = 300.0;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
+// Manual drops get one compact, same-level walk. At the approved walk speed
+// this is just over four seconds, long enough to read without becoming roam.
+const PET_MODE_POST_DROP_WALK_DISTANCE: f64 = 84.0;
+const PET_MODE_POST_DROP_WALK_MAX_SECONDS: f64 = 5.0;
 const PET_MODE_STALK_MIN_DURATION_MS: u64 = 600;
 const PET_MODE_STALK_MAX_DURATION_MS: u64 = 8_000;
 const PET_MODE_STALK_MIN_SPEED: f64 = 80.0;
@@ -1346,7 +1350,7 @@ pub fn pet_mode_lab_place_center(app: AppHandle) -> Result<PetModeInputBounds, S
 }
 
 #[tauri::command]
-pub async fn pet_mode_roam(app: AppHandle) -> Result<(), String> {
+pub async fn pet_mode_roam(app: AppHandle, post_drop: Option<bool>) -> Result<(), String> {
     async_runtime::spawn_blocking(move || {
         if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
             return Ok(());
@@ -1354,16 +1358,56 @@ pub async fn pet_mode_roam(app: AppHandle) -> Result<(), String> {
         let window = app
             .get_webview_window(PET_MODE_WINDOW_LABEL)
             .ok_or_else(|| "Pet Mode window is not available".to_string())?;
-        let monitor = resolve_pet_home_monitor(&app)
-            .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
-        let target = calculate_pet_roam_position_with_nudge(Some(&app), &monitor);
-        animate_pet_window_toward(
-            &window,
-            target,
-            PET_MODE_WALK_SPEED,
-            PET_MODE_WALK_MAX_SECONDS,
-            "walk",
-        )
+        if post_drop.unwrap_or(false) {
+            let monitor = window
+                .current_monitor()
+                .map_err(|error| error.to_string())?
+                .or_else(|| resolve_pet_home_monitor(&app))
+                .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+            let scale_factor = monitor.scale_factor();
+            let work_area = monitor.work_area();
+            let work_position = work_area.position.to_logical::<f64>(scale_factor);
+            let work_size = work_area.size.to_logical::<f64>(scale_factor);
+            let start = current_pet_logical_position(&window)?;
+            // The pointer has just released the cat. Walking away from that
+            // side reads as a response to the user; at a screen edge, choose
+            // the side with enough room instead of shortening the animation.
+            let prefer_right = app
+                .cursor_position()
+                .ok()
+                .map(|cursor| {
+                    cursor.to_logical::<f64>(scale_factor).x < start.x + pet_width() / 2.0
+                })
+                .unwrap_or_else(|| PET_MODE_ROAM_RIGHT.fetch_xor(true, Ordering::Relaxed));
+            let (target, facing) = calculate_pet_post_drop_walk_position(
+                start,
+                work_position,
+                work_size.width,
+                work_size.height,
+                prefer_right,
+                pet_width(),
+                pet_height(),
+            );
+            animate_pet_window_with_facing(
+                &window,
+                target,
+                facing,
+                PET_MODE_WALK_SPEED,
+                PET_MODE_POST_DROP_WALK_MAX_SECONDS,
+                "walk",
+            )
+        } else {
+            let monitor = resolve_pet_home_monitor(&app)
+                .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+            let target = calculate_pet_roam_position_with_nudge(Some(&app), &monitor);
+            animate_pet_window_toward(
+                &window,
+                target,
+                PET_MODE_WALK_SPEED,
+                PET_MODE_WALK_MAX_SECONDS,
+                "walk",
+            )
+        }
     })
     .await
     .map_err(|error| error.to_string())?
@@ -2271,6 +2315,50 @@ fn calculate_pet_roam_position_with_nudge(
         Some(app) => nudge_resident_seat(app, raw, position, size.width, size.height),
         None => raw,
     }
+}
+
+fn calculate_pet_post_drop_walk_position(
+    start: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_width: f64,
+    work_height: f64,
+    prefer_right: bool,
+    pet_width: f64,
+    pet_height: f64,
+) -> (LogicalPosition<f64>, &'static str) {
+    let min_x = work_position.x;
+    let max_x = work_position.x + (work_width - pet_width).max(0.0);
+    let left_space = (start.x - min_x).max(0.0);
+    let right_space = (max_x - start.x).max(0.0);
+    let preferred_space = if prefer_right {
+        right_space
+    } else {
+        left_space
+    };
+    let alternate_space = if prefer_right {
+        left_space
+    } else {
+        right_space
+    };
+    let use_preferred = preferred_space >= PET_MODE_POST_DROP_WALK_DISTANCE * 0.55
+        || preferred_space >= alternate_space;
+    let move_right = if use_preferred {
+        prefer_right
+    } else {
+        !prefer_right
+    };
+    let available = if move_right { right_space } else { left_space };
+    let travel = available.min(PET_MODE_POST_DROP_WALK_DISTANCE);
+    let raw = LogicalPosition::new(start.x + if move_right { travel } else { -travel }, start.y);
+    let target = clamp_pet_position_for_size(
+        raw,
+        work_position,
+        work_width,
+        work_height,
+        pet_width,
+        pet_height,
+    );
+    (target, if move_right { "right" } else { "left" })
 }
 
 fn calculate_pet_exit_position(
@@ -4003,6 +4091,52 @@ mod tests {
                 clamped.y + height - work_height
             );
         }
+    }
+
+    #[test]
+    fn post_drop_walk_stays_on_the_drop_level_and_uses_the_reviewed_distance() {
+        let start = LogicalPosition::new(600.0, 420.0);
+        let (right, facing) = calculate_pet_post_drop_walk_position(
+            start,
+            LogicalPosition::new(0.0, 25.0),
+            1440.0,
+            775.0,
+            true,
+            144.0,
+            99.0,
+        );
+        assert_eq!(facing, "right");
+        assert!((right.x - 684.0).abs() < f64::EPSILON);
+        assert!((right.y - start.y).abs() < f64::EPSILON);
+
+        let (left, facing) = calculate_pet_post_drop_walk_position(
+            start,
+            LogicalPosition::new(0.0, 25.0),
+            1440.0,
+            775.0,
+            false,
+            144.0,
+            99.0,
+        );
+        assert_eq!(facing, "left");
+        assert!((left.x - 516.0).abs() < f64::EPSILON);
+        assert!((left.y - start.y).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn post_drop_walk_turns_inward_when_the_release_is_at_an_edge() {
+        let (target, facing) = calculate_pet_post_drop_walk_position(
+            LogicalPosition::new(1.0, 300.0),
+            LogicalPosition::new(0.0, 25.0),
+            1440.0,
+            775.0,
+            false,
+            144.0,
+            99.0,
+        );
+        assert_eq!(facing, "right");
+        assert!((target.x - 85.0).abs() < f64::EPSILON);
+        assert!((target.y - 300.0).abs() < f64::EPSILON);
     }
 
     #[test]

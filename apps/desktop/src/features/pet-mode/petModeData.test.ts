@@ -10,6 +10,7 @@ import {
   PET_MODE_DRAG_PICKUP_TIMELINE,
   PET_MODE_DRAG_RELEASE_TIMELINE,
   PET_MODE_DRAG_SETTLE_MS,
+  PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS,
   PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   PET_MODE_ENTRY_HIDDEN_SAFETY_PX,
@@ -23,6 +24,7 @@ import {
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
+  PET_MODE_LIFE_ACTION_INTERVAL_MS,
   PET_MODE_MUSIC_NOTE_CHANCE,
   PET_MODE_PRESENCE_RATIO,
   PET_MODE_PAW_CONTACT_FRAME,
@@ -40,6 +42,7 @@ import {
   getPetModeEntryProgress,
   getPetModeLifeActionInterval,
   getPetModeNextActionInterval,
+  pickPetModePostDropReaction,
   buildPetModeInterventionTarget,
   buildPetModeLabBrowserTabTarget,
   buildPetModeLabDriftyWindowTarget,
@@ -176,12 +179,34 @@ describe("petModeData", () => {
   });
 
   it("only quiets autonomous life actions during focused work", () => {
+    expect(PET_MODE_LIFE_ACTION_INTERVAL_MS).toBe(12 * 60 * 1000);
+    expect(PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS).toBe(4 * 60 * 1000);
     expect(getPetModeLifeActionInterval("neutral")).toBe(12 * 60 * 1000);
     expect(getPetModeLifeActionInterval("focus")).toBe(19.8 * 60 * 1000);
+    expect(getPetModeLifeActionInterval("neutral", true)).toBe(4 * 60 * 1000);
+    expect(getPetModeLifeActionInterval("focus", true)).toBe(6.6 * 60 * 1000);
     expect(getPetModeNextActionInterval("neutral", null)).toBe(12 * 60 * 1000);
     expect(getPetModeNextActionInterval("focus", "walk")).toBe(19.8 * 60 * 1000);
+    expect(getPetModeNextActionInterval("neutral", null, true)).toBe(4 * 60 * 1000);
+    expect(getPetModeNextActionInterval("focus", "walk", true)).toBe(6.6 * 60 * 1000);
     expect(getPetModeNextActionInterval("neutral", "sit")).toBe(PET_MODE_SETTLED_ACTION_INTERVAL_MS);
     expect(getPetModeNextActionInterval("focus", "sleep")).toBe(PET_MODE_SETTLED_ACTION_INTERVAL_MS * 1.65);
+  });
+
+  it("keeps manual landing certain and varies only the 60/30/10 reaction", () => {
+    expect(pickPetModePostDropReaction(0, null)).toBe("stay");
+    expect(pickPetModePostDropReaction(0.599_999, null)).toBe("stay");
+    expect(pickPetModePostDropReaction(0.6, null)).toBe("walk");
+    expect(pickPetModePostDropReaction(0.899_999, null)).toBe("walk");
+    expect(pickPetModePostDropReaction(0.9, null)).toBe("look_tail");
+    expect(pickPetModePostDropReaction(1, null)).toBe("look_tail");
+  });
+
+  it("does not repeat a large manual-drop reaction back to back", () => {
+    expect(pickPetModePostDropReaction(0.72, "walk")).toBe("stay");
+    expect(pickPetModePostDropReaction(0.96, "look_tail")).toBe("stay");
+    expect(pickPetModePostDropReaction(0.72, "stay")).toBe("walk");
+    expect(pickPetModePostDropReaction(0.96, "stay")).toBe("look_tail");
   });
 
   it("minimizes the tracker snapshot sent to the pet surface", () => {

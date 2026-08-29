@@ -41,6 +41,7 @@ import {
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
+  PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   getPetModeDefaultEntryTravelDistance,
   getPetModeWindowSize,
@@ -50,6 +51,7 @@ import {
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
+  PET_MODE_POST_DROP_LOOK_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
   PET_MODE_PAW_TIMELINE,
@@ -68,6 +70,7 @@ import {
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeNextActionInterval,
   pickPetModeLifeAction,
+  pickPetModePostDropReaction,
   resolveInitialPetModeCoat,
   resolveInitialPetModeSize,
   resolvePetModePresent,
@@ -75,6 +78,7 @@ import {
   type PetModeInterventionTarget,
   type PetModeLabAction,
   type PetModeLifeAction,
+  type PetModePostDropReaction,
   type PetModePreviewAction,
   type PetModeSnapshot,
   type PetModeCoat,
@@ -107,6 +111,11 @@ type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_h
 function expressiveInteractionsEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
     && window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY) === "1";
+}
+
+function dropLifePreviewEnabled(): boolean {
+  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
+    && window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) === "1";
 }
 
 function guaranteedOutcomesEnabled(): boolean {
@@ -149,6 +158,7 @@ export function PetModeWindowApp() {
   const [hitRegionTransitionCount, setHitRegionTransitionCount] = useState(0);
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
+  const [dropLifePreviewRevision, setDropLifePreviewRevision] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
   // Only the return from a successful Drifty-window close wears the proud
   // lids; every approach and every other walk keeps the shipped neutral face.
@@ -161,6 +171,7 @@ export function PetModeWindowApp() {
   // has to stand still for as long as the menu is up.
   const [menuHolding, setMenuHolding] = useState(false);
   const [gazeOffset, setGazeOffset] = useState<PetModeGazeOffset>({ x: 0, y: 0 });
+  const [manualGazeActive, setManualGazeActive] = useState(false);
   const [huntAlertVisible, setHuntAlertVisible] = useState(false);
   const [huntAlertDurationMs, setHuntAlertDurationMs] = useState(PET_MODE_DRIFT_HUNT_ALERT_MS);
   const [guidesEnabled, setGuidesEnabled] = useState(() => {
@@ -200,6 +211,8 @@ export function PetModeWindowApp() {
   const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
   const manualDragRef = useRef(false);
   const manualReleaseTokenRef = useRef<number | null>(null);
+  const manualDropReactionRef = useRef<PetModePostDropReaction | null>(null);
+  const previousPostDropReactionRef = useRef<PetModePostDropReaction | null>(null);
   const dragReleasePoseRef = useRef<PetModeRestPose>("idle");
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
@@ -381,12 +394,23 @@ export function PetModeWindowApp() {
     setDragProbe(null);
     const releaseToken = ++actionTokenRef.current;
     manualReleaseTokenRef.current = releaseToken;
-    const releasePose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
+    const previewEnabled = dropLifePreviewEnabled();
+    const reducedMotion = prefersReducedMotion();
+    const reaction = previewEnabled && !reducedMotion
+      ? pickPetModePostDropReaction(Math.random(), previousPostDropReactionRef.current)
+      : "stay";
+    manualDropReactionRef.current = previewEnabled ? reaction : null;
+    // Shipped focus drops keep the current held-to-sit handoff. In the preview,
+    // the two expressive branches land on four paws first, play once, then use
+    // the focus-derived resting pose again.
+    const releasePose: PetModeRestPose = focusRestingRef.current && reaction === "stay"
+      ? "sit"
+      : "idle";
     dragReleasePoseRef.current = releasePose;
 
     void (async () => {
       try {
-        if (!prefersReducedMotion()) {
+        if (!reducedMotion) {
           flushSync(() => {
             updateDragReleasePose(releasePose);
             commitPhase("release");
@@ -401,26 +425,95 @@ export function PetModeWindowApp() {
           if (releaseToken !== actionTokenRef.current) return;
         }
 
-        if (releaseToken === actionTokenRef.current) {
+        if (releaseToken !== actionTokenRef.current) return;
+        if (!previewEnabled) {
+          // The preview-off branch deliberately mirrors the shipped release
+          // path: settle into the focus-derived rest pose, save placement in
+          // the background, and do not re-arm unrelated autonomous clocks.
           const finalPose = dragReleasePoseRef.current;
           focusRestAppliedRef.current = finalPose === "sit";
           commitPhase(finalPose);
+          if (rememberPosition) {
+            void rememberNativePetPosition().catch((error) => {
+              void reportNativePetDragError(error).catch(() => undefined);
+            });
+          }
+          return;
         }
+        commitPhase(dragReleasePoseRef.current);
         if (rememberPosition) {
-          // Position persistence is bookkeeping, not part of the visual handoff.
-          // Never strand the cat in the held/release silhouette while a native
-          // monitor query or mutex is delayed.
-          void rememberNativePetPosition().catch((error) => {
+          // Capture the user's chosen home before a reaction walk changes the
+          // native panel position. The rest pose is already painted, so waiting
+          // for this bookkeeping cannot strand the held/release silhouette.
+          await rememberNativePetPosition().catch((error) => {
             void reportNativePetDragError(error).catch(() => undefined);
           });
         }
+        if (releaseToken !== actionTokenRef.current) return;
+        // Only a reaction that reached its settled starting pose participates
+        // in the next-drop repeat guard. A cancelled fall was never seen.
+        previousPostDropReactionRef.current = reaction;
+
+        if (reaction === "walk") {
+          focusRestAppliedRef.current = false;
+          commitPhase("walk");
+          await roamNativePet(true);
+        } else if (reaction === "look_tail") {
+          focusRestAppliedRef.current = false;
+          const sample = await sampleNativePetCursor();
+          if (releaseToken !== actionTokenRef.current) return;
+          if (sample?.visible) {
+            commitFacing(sample.cursorX < sample.windowX + sample.windowWidth / 2 ? "left" : "right");
+          }
+          setManualGazeActive(true);
+          commitPhase("notice");
+          await delay(PET_MODE_POST_DROP_LOOK_DURATION_MS);
+          if (releaseToken !== actionTokenRef.current) return;
+          setManualGazeActive(false);
+          commitPhase("tail");
+          await delay(PET_MODE_TAIL_FLICK_DURATION_MS);
+        }
+
+        if (releaseToken !== actionTokenRef.current) return;
+        setManualGazeActive(false);
+        const finalPose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
+        focusRestAppliedRef.current = finalPose === "sit";
+        commitPhase(finalPose);
+        // A direct-manipulation reaction is a complete life beat. Re-arm both
+        // autonomous clocks here so another large action cannot stack at once.
+        restartAutonomousCycle();
+      } catch (error) {
+        void reportNativePetDragError(error).catch(() => undefined);
+        if (releaseToken === actionTokenRef.current) {
+          setManualGazeActive(false);
+          const finalPose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
+          focusRestAppliedRef.current = finalPose === "sit";
+          commitPhase(finalPose);
+          restartAutonomousCycle();
+        }
       } finally {
         if (manualReleaseTokenRef.current === releaseToken) {
+          setManualGazeActive(false);
           manualReleaseTokenRef.current = null;
+          manualDropReactionRef.current = null;
         }
       }
     })();
-  }, [commitPhase, updateDragReleasePose]);
+  }, [commitFacing, commitPhase, restartAutonomousCycle, updateDragReleasePose]);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        event.key !== null
+        && event.key !== DEV_MODE_STORAGE_KEY
+        && event.key !== PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY
+      ) return;
+      if (!dropLifePreviewEnabled()) previousPostDropReactionRef.current = null;
+      setDropLifePreviewRevision((revision) => revision + 1);
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -1118,14 +1211,20 @@ export function PetModeWindowApp() {
       focusRestAppliedRef.current = false;
       return;
     }
-    if (manualReleaseTokenRef.current !== null && phaseRef.current === "release") {
-      // A focus boundary can arrive during the native drop. Retarget the
-      // already-running crossfade, but keep direct manipulation authoritative
-      // until both the native and visual settle have completed.
-      updateDragReleasePose(resting ? "sit" : "idle");
-      focusRestAppliedRef.current = resting;
+    if (
+      manualReleaseTokenRef.current !== null
+      && manualReleaseTokenRef.current === actionTokenRef.current
+    ) {
+      // A focus boundary can arrive anywhere in the landing reaction. Retarget
+      // only the quiet release; a user-triggered walk/look keeps ownership and
+      // will settle into the newly correct final pose when it finishes.
+      const reaction = manualDropReactionRef.current ?? "stay";
+      if (phaseRef.current === "release") {
+        updateDragReleasePose(resting && reaction === "stay" ? "sit" : "idle");
+      }
+      focusRestAppliedRef.current = resting && reaction === "stay";
       if (resting || wasResting) restartAutonomousCycle();
-      if (resting) {
+      if (resting && reaction !== "look_tail") {
         gazeEngagedRef.current = false;
         setGazeOffset({ x: 0, y: 0 });
       }
@@ -1320,6 +1419,7 @@ export function PetModeWindowApp() {
       const interval = getPetModeNextActionInterval(
         snapshot?.productivity ?? null,
         previousAutonomousActionRef.current,
+        dropLifePreviewEnabled(),
       );
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
@@ -1335,7 +1435,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, petModeEnabled, playLifeAction, snapshot?.productivity]);
+  }, [autonomousCycle, dropLifePreviewRevision, petModeEnabled, playLifeAction, snapshot?.productivity]);
 
   useEffect(() => {
     if (snapshot?.productivity === "focus") return undefined;
@@ -1401,11 +1501,12 @@ export function PetModeWindowApp() {
     // The cursor hunt is the one exception inside drift. It is the drift state,
     // but the cat is deliberately going after the pointer, so refusing to look
     // at it there produced the opposite of self-contained: a cat sprinting at
-    // the cursor while staring straight past it.
+    // the cursor while staring straight past it. A manual drop acknowledgement
+    // is the other narrow exception: the user just addressed the cat directly.
     if (
       !petModeEnabled
       || !petVisible
-      || snapshot?.productivity === "focus"
+      || (snapshot?.productivity === "focus" && !manualGazeActive)
     ) {
       gazeEngagedRef.current = false;
       setGazeOffset({ x: 0, y: 0 });
@@ -1465,7 +1566,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [petModeEnabled, petVisible, snapshot?.productivity]);
+  }, [manualGazeActive, petModeEnabled, petVisible, snapshot?.productivity]);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     // The overlay is a separate, non-focusable window. It must still consume

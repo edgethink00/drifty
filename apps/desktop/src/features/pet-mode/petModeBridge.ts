@@ -382,8 +382,8 @@ export async function placeNativePetModeAtCenterForLab(): Promise<PetModeInputBo
   return invoke<PetModeInputBounds>("pet_mode_lab_place_center");
 }
 
-export async function roamNativePet(): Promise<void> {
-  await invoke("pet_mode_roam");
+export async function roamNativePet(postDrop = false): Promise<void> {
+  await invoke("pet_mode_roam", { postDrop });
 }
 
 export async function exitNativePetScreen(): Promise<"left" | "right"> {
