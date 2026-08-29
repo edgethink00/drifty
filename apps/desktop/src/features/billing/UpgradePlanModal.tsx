@@ -4,6 +4,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { IndividualPlanCards } from "./IndividualPlanCards";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { BillingInterval } from "./billingService";
 
 export function UpgradePlanModal({
@@ -19,6 +20,7 @@ export function UpgradePlanModal({
   readonly onClose: () => void;
   readonly onSelectBillingPlan: (interval: BillingInterval) => void;
 }) {
+  const { t } = useLocalization();
   const id = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const [checkoutRequested, setCheckoutRequested] = useState(false);
@@ -40,10 +42,10 @@ export function UpgradePlanModal({
         role="dialog"
         tabIndex={-1}
       >
-        <ModalCloseButton disabled={checkoutOpening} label="Dismiss plan selection" onClick={onClose} />
+        <ModalCloseButton disabled={checkoutOpening} label={t("billing.upgradeModal.dismiss")} onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">
-          <h2 id={titleId}>Upgrade to Pro</h2>
-          <p id={descriptionId}>Compare Free and Pro, then choose monthly or yearly before opening checkout.</p>
+          <h2 id={titleId}>{t("billing.upgradeModal.title")}</h2>
+          <p id={descriptionId}>{t("billing.upgradeModal.description")}</p>
         </div>
         <div
           aria-busy={checkoutOpening}

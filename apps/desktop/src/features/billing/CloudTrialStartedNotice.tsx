@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BillingEntitlement } from "./billingService";
+import { useLocalization } from "../localization/LocalizationContext";
+import type { LocalizationController } from "../localization/LocalizationContext";
 import "./CloudTrialStartedNotice.css";
 
 const CLOUD_TRIAL_STARTED_NOTICE_STORAGE_PREFIX = "drifty:billing:trial-started-notice:v1";
 const CLOUD_TRIAL_STARTED_NOTICE_AUTO_DISMISS_MS = 5_000;
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 export type CloudTrialStartedNoticeModel = {
   readonly accessSource: "standard_trial" | "promotion";
   readonly trialEndsAt: string | null;
-  readonly headline: string;
-  readonly detail: string;
 };
 
 type CloudTrialStartedNoticeProps = {
@@ -38,8 +37,6 @@ export function buildCloudTrialStartedNotice(
   return {
     accessSource,
     trialEndsAt: entitlement.trialEndsAt,
-    headline: accessSource === "promotion" ? "Your Pro pass is ready" : "1-week free trial has started",
-    detail: formatCloudTrialStartedDetail(entitlement.trialEndsAt, accessSource),
   };
 }
 
@@ -61,6 +58,7 @@ export function CloudTrialStartedNotice({
   onDismiss,
   onOpenAiSetup,
 }: CloudTrialStartedNoticeProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [isTimerPaused, setIsTimerPaused] = useState(false);
   const timeoutIdRef = useRef<number | null>(null);
   const timerStartedAtRef = useRef(Date.now());
@@ -93,11 +91,15 @@ export function CloudTrialStartedNotice({
     return clearDismissTimer;
   }, [clearDismissTimer, isTimerPaused, onDismiss]);
 
+  const isPromotion = notice.accessSource === "promotion";
+  const headline = t(isPromotion ? "billing.trialNotice.promoHeadline" : "billing.trialNotice.trialHeadline");
+  const detail = formatCloudTrialStartedDetail(notice.trialEndsAt, notice.accessSource, effectiveLanguage, t);
+
   return (
     <section
       className={isTimerPaused ? "cloud-trial-started-notice is-paused" : "cloud-trial-started-notice"}
       role="status"
-      aria-label={notice.accessSource === "promotion" ? "Drifty Cloud Pro pass ready" : "Drifty Cloud trial started"}
+      aria-label={t(isPromotion ? "billing.trialNotice.promoAria" : "billing.trialNotice.trialAria")}
       onMouseEnter={pauseDismissTimer}
       onMouseLeave={resumeDismissTimer}
     >
@@ -105,9 +107,9 @@ export function CloudTrialStartedNotice({
         <span className="cloud-trial-started-notice__signal-dot" />
       </span>
       <span className="cloud-trial-started-notice__copy">
-        <span className="cloud-trial-started-notice__eyebrow">Drifty Cloud</span>
-        <strong>{notice.headline}</strong>
-        <span>{notice.detail}</span>
+        <span className="cloud-trial-started-notice__eyebrow">{t("billing.trialNotice.eyebrow")}</span>
+        <strong>{headline}</strong>
+        <span>{detail}</span>
       </span>
       {onOpenAiSetup ? (
         <button
@@ -115,13 +117,13 @@ export function CloudTrialStartedNotice({
           className="app-btn app-btn--primary cloud-trial-started-notice__action"
           onClick={onOpenAiSetup}
         >
-          AI setup
+          {t("billing.trialNotice.action")}
         </button>
       ) : null}
       <button
         type="button"
         className="cloud-trial-started-notice__dismiss"
-        aria-label="Dismiss trial notice"
+        aria-label={t("billing.trialNotice.dismiss")}
         onClick={onDismiss}
       >
         <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -131,7 +133,7 @@ export function CloudTrialStartedNotice({
       <span
         className="cloud-trial-started-notice__timer"
         role="timer"
-        aria-label="Trial notice closes in 5 seconds"
+        aria-label={t("billing.trialNotice.timerAria")}
       />
     </section>
   );
@@ -139,16 +141,24 @@ export function CloudTrialStartedNotice({
 
 export function formatCloudTrialStartedDetail(
   trialEndsAt: string | null,
-  accessSource: CloudTrialStartedNoticeModel["accessSource"] = "standard_trial",
+  accessSource: CloudTrialStartedNoticeModel["accessSource"],
+  language: "en" | "ko",
+  t: LocalizationController["t"],
 ): string {
-  const subject = accessSource === "promotion" ? "Your Pro access" : "Hosted Cloud AI";
-  if (!trialEndsAt) return `${subject} is available while this access period is active.`;
+  // Each variant owns a whole sentence rather than a subject slot: Korean
+  // particles ("를"/"을") depend on the final consonant of the noun, so
+  // interpolating a subject into one shared template produces wrong grammar.
+  const isPromotion = accessSource === "promotion";
+  const endDate = trialEndsAt ? new Date(trialEndsAt) : null;
+  if (!endDate || Number.isNaN(endDate.getTime())) {
+    return t(isPromotion ? "billing.trialNotice.promoWhileActive" : "billing.trialNotice.trialWhileActive");
+  }
 
-  const endDate = new Date(trialEndsAt);
-  if (Number.isNaN(endDate.getTime())) return `${subject} is available while this access period is active.`;
-
-  const month = MONTH_LABELS[endDate.getMonth()] ?? "soon";
-  return `${subject} is available until ${month} ${endDate.getDate()}.`;
+  const date = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+    month: language === "ko" ? "long" : "short",
+    day: "numeric",
+  }).format(endDate);
+  return t(isPromotion ? "billing.trialNotice.promoUntil" : "billing.trialNotice.trialUntil", { date });
 }
 
 function hasStoredTrialNotice(storageKey: string): boolean {

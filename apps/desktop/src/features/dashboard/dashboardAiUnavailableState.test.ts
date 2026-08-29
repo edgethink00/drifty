@@ -23,7 +23,7 @@ describe("resolveDashboardAiUnavailableState", () => {
       hasRequiredAccountAuth: true,
       isSupabaseConfigured: true,
       localAiReady: false,
-    })).toMatchObject({ variant: "trial-ended", title: "Free trial ended" });
+    })).toMatchObject({ variant: "trial-ended", titleKey: "dashboard.aiRecovery.trialEndedTitle" });
   });
 
   it("keeps plan, billing, and device recovery reasons distinct", () => {
@@ -37,8 +37,8 @@ describe("resolveDashboardAiUnavailableState", () => {
       localAiReady: false,
     });
 
-    expect(resolveLocked("payment_required")).toMatchObject({ variant: "cloud-billing", ctaLabel: "Fix billing" });
-    expect(resolveLocked("billing_missing")).toMatchObject({ variant: "cloud-plan", ctaLabel: "Choose a plan" });
+    expect(resolveLocked("payment_required")).toMatchObject({ variant: "cloud-billing", ctaLabelKey: "dashboard.aiRecovery.fixBilling" });
+    expect(resolveLocked("billing_missing")).toMatchObject({ variant: "cloud-plan", ctaLabelKey: "billing.plan.proCta" });
     expect(resolveLocked("device_limit_reached")?.variant).toBe("device-limit");
   });
 

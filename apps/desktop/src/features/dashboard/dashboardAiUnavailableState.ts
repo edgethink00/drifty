@@ -1,12 +1,13 @@
 import type { BillingEntitlement } from "../billing/billingService";
+import type { TranslationKey } from "../localization/translations";
 
 export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-plan" | "cloud-billing" | "device-limit" | "connect-ai";
 
 export type DashboardAiUnavailableState = {
   readonly variant: DashboardAiUnavailableVariant;
-  readonly title: string;
-  readonly body: string;
-  readonly ctaLabel: string;
+  readonly titleKey: TranslationKey;
+  readonly bodyKey: TranslationKey;
+  readonly ctaLabelKey: TranslationKey;
 };
 
 export type DashboardAiUnavailableInput = {
@@ -21,37 +22,37 @@ export type DashboardAiUnavailableInput = {
 
 const TRIAL_ENDED_STATE = {
   variant: "trial-ended",
-  title: "Free trial ended",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Choose a plan to resume richer Drifty Cloud AI analysis.",
-  ctaLabel: "Choose a plan",
+  titleKey: "dashboard.aiRecovery.trialEndedTitle",
+  bodyKey: "dashboard.aiRecovery.trialEndedBody",
+  ctaLabelKey: "billing.plan.proCta",
 } satisfies DashboardAiUnavailableState;
 
 const CLOUD_BILLING_STATE = {
   variant: "cloud-billing",
-  title: "Drifty Cloud billing needs attention",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Update the payment on this subscription to resume richer Cloud AI analysis.",
-  ctaLabel: "Fix billing",
+  titleKey: "dashboard.aiRecovery.billingTitle",
+  bodyKey: "dashboard.aiRecovery.billingBody",
+  ctaLabelKey: "dashboard.aiRecovery.fixBilling",
 } satisfies DashboardAiUnavailableState;
 
 const CLOUD_PLAN_STATE = {
   variant: "cloud-plan",
-  title: "Choose a Drifty Cloud plan",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Choose Pro to resume richer Drifty Cloud AI analysis.",
-  ctaLabel: "Choose a plan",
+  titleKey: "dashboard.aiRecovery.planTitle",
+  bodyKey: "dashboard.aiRecovery.planBody",
+  ctaLabelKey: "billing.plan.proCta",
 } satisfies DashboardAiUnavailableState;
 
 const DEVICE_LIMIT_STATE = {
   variant: "device-limit",
-  title: "Drifty Cloud device limit reached",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Pro includes 2 active desktop devices. Remove an old device to use Cloud AI here.",
-  ctaLabel: "Manage devices",
+  titleKey: "dashboard.aiRecovery.deviceTitle",
+  bodyKey: "dashboard.aiRecovery.deviceBody",
+  ctaLabelKey: "sidebar.cta.device.action",
 } satisfies DashboardAiUnavailableState;
 
 const CONNECT_AI_STATE = {
   variant: "connect-ai",
-  title: "Connect an AI provider",
-  body: "Your local timeline, predefined rules, and local rules are still shown. Richer AI analysis is unavailable until Cloud AI or a local provider is connected.",
-  ctaLabel: "Connect AI",
+  titleKey: "dashboard.aiRecovery.connectTitle",
+  bodyKey: "dashboard.aiRecovery.connectBody",
+  ctaLabelKey: "sidebar.cta.ai.action",
 } satisfies DashboardAiUnavailableState;
 
 export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailableInput): DashboardAiUnavailableState | null {

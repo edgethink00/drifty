@@ -447,7 +447,7 @@ describe("AccountSettingsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i }));
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onStartCloudSetup).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /choose pro plan/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
   });
 
   it("keeps Promo code outside the Account heading block, directly under the plan cards", () => {

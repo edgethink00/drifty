@@ -13,7 +13,7 @@ describe("IndividualPlanCards", () => {
     render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} onSelectPlan={vi.fn()} />);
 
     const freePlan = screen.getByRole("article", { name: /free plan/i });
-    const proPlan = screen.getByRole("button", { name: /choose pro plan/i });
+    const proPlan = screen.getByRole("button", { name: /choose drifty pro plan/i });
 
     expect(screen.getByRole("radio", { name: /monthly/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /yearly/i })).toBeTruthy();
@@ -25,20 +25,21 @@ describe("IndividualPlanCards", () => {
     expect(within(freePlan).getByText("$0")).toBeTruthy();
     expect(within(freePlan).getByText("forever")).toBeTruthy();
     expect(within(freePlan).getAllByText("Current plan").length).toBeGreaterThan(0);
-    expect(within(freePlan).getByText(/Local classification/)).toBeTruthy();
+    expect(within(freePlan).getByText(/Local classification and predefined rules/)).toBeTruthy();
     expect(within(freePlan).getAllByText(/API key/).length).toBeGreaterThan(0);
     expect(within(freePlan).getAllByText(/On-device AI classification/).length).toBeGreaterThan(0);
     expect(within(freePlan).queryByText(/^Local-first$/i)).toBeNull();
 
-    expect(within(proPlan).getByText("Pro")).toBeTruthy();
+    expect(within(proPlan).getByText("Drifty Pro")).toBeTruthy();
     expect(within(proPlan).getByText("$5")).toBeTruthy();
     expect(within(proPlan).getByText("/ month")).toBeTruthy();
     expect(within(proPlan).getByText("Recommended")).toBeTruthy();
     expect(within(proPlan).getByText(/A stronger model, hosted by us/i)).toBeTruthy();
     expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
-    expect(within(proPlan).getByText("No downloads, API keys, or models to manage")).toBeTruthy();
-    expect(within(proPlan).getByText(/Cloud AI classification on up to 2 Macs/)).toBeTruthy();
-    expect(within(proPlan).getByText(/7-day free trial/)).toBeTruthy();
+    expect(within(proPlan).getByText(/More accurate on ambiguous work/)).toBeTruthy();
+    expect(within(proPlan).getByText(/No downloads, API keys, or models to manage/)).toBeTruthy();
+    expect(within(proPlan).getByText(/on up to 2 Macs/)).toBeTruthy();
+    expect(within(proPlan).getAllByText(/7-day free trial/).length).toBeGreaterThan(0);
     // Device management lives in the Account rows below, not as a plan benefit.
     expect(within(proPlan).queryByText(/Manage old devices/i)).toBeNull();
     expect(within(proPlan).getByText("Upgrade to Pro")).toBeTruthy();
@@ -90,7 +91,7 @@ describe("IndividualPlanCards", () => {
 
     render(<IndividualPlanCards billingInterval="monthly" currentPlan="free" loadingInterval={null} mode="display" onSelectPlan={onSelectPlan} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /choose pro plan/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose drifty pro plan/i }));
 
     expect(onSelectPlan).toHaveBeenCalledWith("monthly");
   });

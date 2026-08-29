@@ -8,8 +8,6 @@ import { CloudTrialStartedNotice } from "./CloudTrialStartedNotice";
 const notice = {
   accessSource: "standard_trial" as const,
   trialEndsAt: "2026-06-20T00:00:00.000Z",
-  headline: "1-week free trial has started",
-  detail: "Hosted Cloud AI is available until Jun 20.",
 };
 
 describe("CloudTrialStartedNotice", () => {
@@ -41,7 +39,7 @@ describe("CloudTrialStartedNotice", () => {
     const onDismiss = vi.fn();
 
     render(<CloudTrialStartedNotice notice={notice} onDismiss={onDismiss} />);
-    const trialNotice = screen.getByRole("status", { name: /drifty cloud trial started/i });
+    const trialNotice = screen.getByRole("status", { name: /drifty pro trial started/i });
 
     act(() => {
       vi.advanceTimersByTime(2_000);
@@ -73,14 +71,12 @@ describe("CloudTrialStartedNotice", () => {
       notice={{
         accessSource: "promotion",
         trialEndsAt: "2026-10-26T00:00:00.000Z",
-        headline: "Your Pro pass is ready",
-        detail: "Your Pro access is available until Oct 26.",
       }}
       onDismiss={vi.fn()}
     />);
 
     expect(screen.getByRole("status", { name: /pro pass ready/i })).toBeTruthy();
-    expect(screen.getByText("Your Pro pass is ready")).toBeTruthy();
+    expect(screen.getByText("Your Drifty Pro pass is ready")).toBeTruthy();
     expect(screen.queryByText(/1-week free trial/i)).toBeNull();
   });
 });

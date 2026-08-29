@@ -4,7 +4,12 @@ import { isRetryableManagedModelError } from "./managedLocalAiLabels";
 import type { LocalizationController } from "../localization/LocalizationContext";
 
 export const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
-export const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Pro (Cloud)";
+/**
+ * The model dropdown picks where inference runs, not which plan you own, so the
+ * cloud route keeps its infrastructure name here. "Drifty Pro" is reserved for
+ * the surfaces that actually sell or manage the plan.
+ */
+export const DRIFTY_CLOUD_MODEL_LABEL = "Drifty Cloud";
 
 export type DriftyModelOptionsParams = {
   readonly catalog: readonly ManagedLocalAiModel[];

@@ -1,46 +1,42 @@
 import { useState } from "react";
 
 import type { BillingInterval } from "./billingService";
+import { useLocalization } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
 
 // `individual` remains the billing wire id; Pro is its customer-facing name.
 export type BillingPlanId = "free" | "individual";
 
 type VisibleBillingInterval = Extract<BillingInterval, "monthly" | "yearly">;
 
-type IndividualPrice = {
-  readonly price: string;
-  readonly cadence: string;
-};
-
-const INTERVAL_OPTIONS: readonly { readonly id: VisibleBillingInterval; readonly label: string; readonly savings?: string }[] = [
-  { id: "monthly", label: "Monthly" },
-  { id: "yearly", label: "Yearly", savings: "Save 20%" },
+const INTERVAL_OPTIONS: readonly {
+  readonly id: VisibleBillingInterval;
+  readonly labelKey: TranslationKey;
+  readonly savingsKey?: TranslationKey;
+}[] = [
+  { id: "monthly", labelKey: "billing.plan.intervalMonthly" },
+  { id: "yearly", labelKey: "billing.plan.intervalYearly", savingsKey: "billing.plan.intervalSavings" },
 ];
 
-const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, IndividualPrice> = {
-  monthly: {
-    price: "$5",
-    cadence: "/ month",
-  },
-  yearly: {
-    price: "$4",
-    cadence: "/ month · $48 billed yearly",
-  },
+/** Cadence is localized at render time; only the price literal is fixed. */
+const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, { readonly price: string; readonly cadenceKey: TranslationKey }> = {
+  monthly: { price: "$5", cadenceKey: "billing.plan.cadenceMonthly" },
+  yearly: { price: "$4", cadenceKey: "billing.plan.cadenceYearly" },
 };
 
-const FREE_PLAN_FEATURES = [
-  "Automatic tracking, timeline, and daily review",
-  "On-device AI classification, no account needed",
-  "Local classification and predefined rules you control",
-  "Bring your own API key or endpoint if you prefer",
-] as const;
+const FREE_PLAN_FEATURE_KEYS = [
+  "billing.plan.freeFeature1",
+  "billing.plan.freeFeature2",
+  "billing.plan.freeFeature3",
+  "billing.plan.freeFeature4",
+] as const satisfies readonly TranslationKey[];
 
-const INDIVIDUAL_PLAN_FEATURES = [
-  "Includes all Free plan features",
-  "Stronger than the on-device model, hosted by drifty",
-  "No downloads, API keys, or models to manage",
-  "Cloud AI classification on up to 2 Macs · 7-day free trial",
-] as const;
+const INDIVIDUAL_PLAN_FEATURE_KEYS = [
+  "billing.plan.proFeature1",
+  "billing.plan.proFeature2",
+  "billing.plan.proFeature3",
+  "billing.plan.proFeature4",
+] as const satisfies readonly TranslationKey[];
 
 function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
   return (
@@ -62,7 +58,7 @@ export function IndividualPlanCards({
   onSelectFreePlan,
   onSelectPlan,
   onManageCurrentPlan,
-  manageCurrentPlanLabel = "Manage billing",
+  manageCurrentPlanLabel,
   manageCurrentPlanLoading = false,
 }: {
   readonly billingInterval?: VisibleBillingInterval;
@@ -83,6 +79,7 @@ export function IndividualPlanCards({
   readonly manageCurrentPlanLabel?: string;
   readonly manageCurrentPlanLoading?: boolean;
 }) {
+  const { t } = useLocalization();
   const [internalBillingInterval, setInternalBillingInterval] = useState<VisibleBillingInterval>("monthly");
   const selectedInterval = billingInterval ?? internalBillingInterval;
   const individualPrice = INDIVIDUAL_PRICE_BY_INTERVAL[selectedInterval];
@@ -95,29 +92,29 @@ export function IndividualPlanCards({
   };
 
   const individualBadgeLabel = individualIsCurrent
-    ? "Current plan"
-    : "Recommended";
+    ? t("billing.plan.currentBadge")
+    : t("billing.plan.recommendedBadge");
 
   const individualContent = (
     <>
       <span className="individual-plan-card__top">
         <span className="individual-plan-card__topline">
-          <span>Pro</span>
+          <span>{t("billing.plan.pro")}</span>
           <small className="individual-plan-card__badge">{individualBadgeLabel}</small>
         </span>
         <span className="individual-plan-card__note">
-          {loadingInterval === selectedInterval ? "Opening checkout..." : "A stronger model, hosted by us — sharper focus and drift analysis, nothing to run."}
+          {loadingInterval === selectedInterval ? t("billing.plan.openingCheckout") : t("billing.plan.proNote")}
         </span>
         <span className="individual-plan-card__price-row">
           <span className="individual-plan-card__price-stack">
             <span className="individual-plan-card__price-line">
               <strong>{individualPrice.price}</strong>
             </span>
-            <span className="individual-plan-card__price-cadence">{individualPrice.cadence}</span>
+            <span className="individual-plan-card__price-cadence">{t(individualPrice.cadenceKey)}</span>
           </span>
         </span>
       </span>
-      <PlanFeatureList items={INDIVIDUAL_PLAN_FEATURES} />
+      <PlanFeatureList items={INDIVIDUAL_PLAN_FEATURE_KEYS.map((key) => t(key))} />
       {individualIsCurrent && onManageCurrentPlan ? (
         <button
           type="button"
@@ -125,10 +122,14 @@ export function IndividualPlanCards({
           disabled={disabled || manageCurrentPlanLoading}
           onClick={onManageCurrentPlan}
         >
-          {manageCurrentPlanLoading ? "Opening billing..." : manageCurrentPlanLabel}
+          {manageCurrentPlanLoading
+            ? t("billing.plan.openingBilling")
+            : manageCurrentPlanLabel ?? t("billing.plan.manageBilling")}
         </button>
       ) : (
-        <span className="individual-plan-card__cta">{individualIsCurrent ? "Current plan" : "Upgrade to Pro"}</span>
+        <span className="individual-plan-card__cta">
+          {individualIsCurrent ? t("billing.plan.currentPlan") : t("billing.plan.proCta")}
+        </span>
       )}
     </>
   );
@@ -137,7 +138,7 @@ export function IndividualPlanCards({
     <button
       type="button"
       className="individual-plan-card individual-plan-card--featured"
-      aria-label="Choose Pro plan"
+      aria-label={t("billing.plan.proChooseAria")}
       onClick={() => onSelectPlan?.(selectedInterval)}
       disabled={disabled || loadingInterval !== null}
     >
@@ -146,14 +147,14 @@ export function IndividualPlanCards({
   ) : (
     <article
       className={`individual-plan-card individual-plan-card--featured${individualIsCurrent ? " individual-plan-card--current" : ""}`}
-      aria-label="Pro plan"
+      aria-label={t("billing.plan.proAria")}
     >
       {individualContent}
     </article>
   );
 
   const intervalSwitch = (
-    <div className="individual-plan-intervals" role="radiogroup" aria-label="Billing interval">
+    <div className="individual-plan-intervals" role="radiogroup" aria-label={t("billing.plan.intervalAria")}>
       {INTERVAL_OPTIONS.map((option) => (
         <button
           key={option.id}
@@ -164,39 +165,41 @@ export function IndividualPlanCards({
           disabled={loadingInterval !== null}
           onClick={() => handleIntervalChange(option.id)}
         >
-          <span>{option.label}</span>
-          {option.savings ? <small className="individual-plan-interval__save">{option.savings}</small> : null}
+          <span>{t(option.labelKey)}</span>
+          {option.savingsKey ? <small className="individual-plan-interval__save">{t(option.savingsKey)}</small> : null}
         </button>
       ))}
     </div>
   );
 
   return (
-    <div className={`individual-plan-suite individual-plan-suite--${mode}`} aria-label="Drifty billing plans">
+    <div className={`individual-plan-suite individual-plan-suite--${mode}`} aria-label={t("billing.plan.suiteAria")}>
       {intervalSwitch}
       <div className="individual-plan-cards">
-        <article className={`individual-plan-card${currentPlan === "free" ? " individual-plan-card--current" : ""}`} aria-label="Free plan">
+        <article className={`individual-plan-card${currentPlan === "free" ? " individual-plan-card--current" : ""}`} aria-label={t("billing.plan.freeAria")}>
           <span className="individual-plan-card__top">
             <span className="individual-plan-card__topline">
-              <span>Free</span>
+              <span>{t("billing.plan.free")}</span>
             </span>
-            <span className="individual-plan-card__note">Automatic tracking with AI classification that runs entirely on your Mac.</span>
+            <span className="individual-plan-card__note">{t("billing.plan.freeNote")}</span>
             <span className="individual-plan-card__price-row">
               <span className="individual-plan-card__price-stack">
                 <span className="individual-plan-card__price-line">
                   <strong>$0</strong>
                 </span>
-                <span className="individual-plan-card__price-cadence">forever</span>
+                <span className="individual-plan-card__price-cadence">{t("billing.plan.freeCadence")}</span>
               </span>
             </span>
           </span>
-          <PlanFeatureList items={FREE_PLAN_FEATURES} />
+          <PlanFeatureList items={FREE_PLAN_FEATURE_KEYS.map((key) => t(key))} />
           {onSelectFreePlan ? (
-            <button type="button" className="individual-plan-card__cta" aria-label="Open AI setup" onClick={onSelectFreePlan}>
-              AI setup
+            <button type="button" className="individual-plan-card__cta" aria-label={t("billing.plan.freeCtaAria")} onClick={onSelectFreePlan}>
+              {t("billing.plan.freeCta")}
             </button>
           ) : (
-            <span className="individual-plan-card__cta">{currentPlan === "free" ? "Current plan" : "Included"}</span>
+            <span className="individual-plan-card__cta">
+              {currentPlan === "free" ? t("billing.plan.currentPlan") : t("billing.plan.included")}
+            </span>
           )}
         </article>
         {individualCard}

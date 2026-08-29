@@ -94,7 +94,7 @@ describe("modal system v2 contract", () => {
     const recoveryStyles = read("./features/dashboard/dashboard.css");
     const planStyles = read("./styles/settings-polish.css");
 
-    expect(recovery).toContain('role="dialog" aria-modal="true" aria-label="Restore AI analysis"');
+    expect(recovery).toContain('role="dialog" aria-modal="true" aria-label={t("dashboard.aiRecovery.panelAria")}');
     expect(recovery).toContain('mode="checkout"');
     expect(recoveryStyles).toMatch(/\.dashboard-ai-recovery__panel\s*\{[^}]*width:\s*min\(45rem, 100%\);/);
     expect(recoveryStyles).not.toMatch(/\.dashboard-ai-recovery--trial-ended \.dashboard-ai-recovery__panel,\s*\.dashboard-ai-recovery--cloud-billing/);

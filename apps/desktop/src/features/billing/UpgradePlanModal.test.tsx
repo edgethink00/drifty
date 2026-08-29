@@ -27,14 +27,14 @@ describe("UpgradePlanModal", () => {
 
     const dialog = screen.getByRole("dialog", { name: /^Upgrade to Pro$/i });
     expect(container.querySelector(".dashboard-ai-recovery__plans")?.getAttribute("aria-busy")).toBe("false");
-    expect(within(dialog).queryByText(/^Drifty Pro$/i)).toBeNull();
+    expect(within(dialog).getAllByText(/^Drifty Pro$/).length).toBeGreaterThan(0);
     expect(within(dialog).getByRole("article", { name: /free plan/i }).textContent).toContain("Current plan");
     expect(within(dialog).getByRole("radio", { name: /monthly/i }).getAttribute("aria-checked")).toBe("true");
     expect(onSelectBillingPlan).not.toHaveBeenCalled();
     await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: /dismiss plan selection/i })));
 
     fireEvent.click(within(dialog).getByRole("radio", { name: /yearly/i }));
-    fireEvent.click(within(dialog).getByRole("button", { name: /choose pro plan/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /choose drifty pro plan/i }));
     expect(onSelectBillingPlan).toHaveBeenCalledWith("yearly");
 
     unmount();
@@ -54,7 +54,7 @@ describe("UpgradePlanModal", () => {
     );
 
     expect(screen.queryByRole("alert")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /choose pro plan/i }));
+    fireEvent.click(screen.getByRole("button", { name: /choose drifty pro plan/i }));
     expect(screen.getByRole("alert").textContent).toContain("Checkout could not be opened");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);

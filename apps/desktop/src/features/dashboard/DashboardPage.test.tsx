@@ -289,9 +289,9 @@ describe("DashboardPage share card", () => {
 describe("DashboardPage billing recovery overlay", () => {
   const billingState: DashboardAiUnavailableState = {
     variant: "cloud-billing",
-    title: "Drifty Cloud billing needs attention",
-    body: "Update the payment on this subscription to resume richer Cloud AI analysis.",
-    ctaLabel: "Fix billing",
+    titleKey: "dashboard.aiRecovery.billingTitle",
+    bodyKey: "dashboard.aiRecovery.billingBody",
+    ctaLabelKey: "dashboard.aiRecovery.fixBilling",
   };
 
   it("recovers a blocked payment through billing management instead of plan cards", () => {
@@ -349,6 +349,6 @@ describe("DashboardPage billing recovery overlay", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i }));
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onSelectBillingPlan).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /choose pro plan/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
   });
 });

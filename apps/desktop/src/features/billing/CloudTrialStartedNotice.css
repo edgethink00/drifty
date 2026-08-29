@@ -74,7 +74,6 @@
 
 .cloud-trial-started-notice__copy span:last-child {
   color: var(--text-soft);
-  font-family: var(--font-mono);
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
   overflow-wrap: anywhere;

@@ -2056,6 +2056,13 @@ button.individual-plan-card:focus-visible {
   list-style: none;
   margin: 0;
   padding: 0;
+  /* The two cards rarely hold the same number of feature lines, so the shorter
+     list absorbs the difference and both actions land on one baseline. Growing
+     the list instead of pushing the button down with `margin-top: auto` keeps
+     its own rows top-aligned, so the leftover space collects below the last
+     feature rather than as a gap above the action. */
+  align-content: start;
+  flex: 1 1 auto;
 }
 
 .individual-plan-card__feature-list li {
@@ -2091,8 +2098,8 @@ button.individual-plan-card:focus-visible {
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 660;
-  /* Sits directly under the feature list rather than being pushed to the card
-     floor, so the shorter Free card does not open a gap above its action. */
+  /* Both cards' actions share one baseline: the feature list above absorbs the
+     height difference, so this keeps only its own breathing room. */
   margin-top: 0.35rem;
   justify-self: center;
   justify-content: center;
