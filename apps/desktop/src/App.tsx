@@ -286,6 +286,7 @@ import {
   updateNativePetMode,
   type PetVisibilityAction,
 } from "./features/pet-mode/petModeBridge";
+import { usePetModeVisibilityRequests } from "./features/pet-mode/usePetModeVisibilityRequests";
 import { useCompanionDailyFocusMilestones } from "./features/companion/useCompanionDailyFocusMilestones";
 import { canEvaluateCompanionDailyFocus } from "./features/companion/companionDailyFocusMilestones";
 import { useCompanionFocusRunMilestones } from "./features/companion/useCompanionFocusRunMilestones";
@@ -715,9 +716,37 @@ export default function App() {
   // No Dev gate: the pet ships as a production surface and is controlled from
   // the account menu and Companion settings.
   const [petModeHiddenUntil, setPetModeHiddenUntil] = useState(resolveInitialPetModeHiddenUntil);
+  const clearPetModeTemporaryHide = useCallback(() => {
+    setPetModeHiddenUntil((hiddenUntil) => (
+      hiddenUntil === null ? hiddenUntil : persistPetModeHiddenUntil(null)
+    ));
+  }, []);
+  const {
+    petModeRevealRevision,
+    requestPetModeEnabled,
+    togglePetModeEnabled,
+  } = usePetModeVisibilityRequests(
+    petModeEnabled,
+    setPetModeEnabled,
+    clearPetModeTemporaryHide,
+  );
   // A temporary hide suppresses the pet without touching its on/off preference,
   // so the one-hour timer below can restore exactly what the user had.
   const petModeActive = petModeEnabled && petModeHiddenUntil === null;
+  const handledPetModeRevealRevisionRef = useRef(0);
+  const pendingPetModeRevealRevisionsRef = useRef(new Set<number>());
+  const petModeRevealRetryAttemptsRef = useRef(new Map<number, number>());
+  const latestPetModeRevealRevisionRef = useRef(petModeRevealRevision);
+  const petModeSyncMountedRef = useRef(false);
+  const [petModeSyncRetryNonce, setPetModeSyncRetryNonce] = useState(0);
+  latestPetModeRevealRevisionRef.current = petModeRevealRevision;
+
+  useEffect(() => {
+    petModeSyncMountedRef.current = true;
+    return () => {
+      petModeSyncMountedRef.current = false;
+    };
+  }, []);
 
   const handleHidePetForOneHour = useCallback(() => {
     setPetModeHiddenUntil(persistPetModeHiddenUntil(Date.now() + PET_MODE_HIDE_ONE_HOUR_MS));
@@ -728,8 +757,8 @@ export default function App() {
       handleHidePetForOneHour();
       return;
     }
-    setPetModeEnabled(false);
-  }, [handleHidePetForOneHour, setPetModeEnabled]);
+    requestPetModeEnabled(false);
+  }, [handleHidePetForOneHour, requestPetModeEnabled]);
 
   useEffect(() => {
     if (petModeHiddenUntil === null) return undefined;
@@ -5558,6 +5587,11 @@ export default function App() {
   useEffect(() => {
     if (!isTauriRuntime()) return;
     const snapshot = petModeActive ? buildPetModeSnapshot(watcherSnapshot) : null;
+    const revealRevision = petModeRevealRevision;
+    const forceReveal = petModeActive
+      && revealRevision > handledPetModeRevealRevisionRef.current
+      && !pendingPetModeRevealRevisionsRef.current.has(revealRevision);
+    if (forceReveal) pendingPetModeRevealRevisionsRef.current.add(revealRevision);
     const reducedMotion = typeof window.matchMedia === "function"
       && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { width, height } = getPetModeWindowSize(petModeSize);
@@ -5567,10 +5601,33 @@ export default function App() {
       reducedMotion,
       width,
       height,
-    ).catch((nextError) => {
+      forceReveal,
+    ).then(() => {
+      if (!forceReveal) return;
+      pendingPetModeRevealRevisionsRef.current.delete(revealRevision);
+      petModeRevealRetryAttemptsRef.current.delete(revealRevision);
+      handledPetModeRevealRevisionRef.current = Math.max(
+        handledPetModeRevealRevisionRef.current,
+        revealRevision,
+      );
+    }).catch((nextError) => {
       console.warn("Failed to sync Pet Mode window", nextError);
+      if (!forceReveal) return;
+      pendingPetModeRevealRevisionsRef.current.delete(revealRevision);
+      const retryAttempts = petModeRevealRetryAttemptsRef.current.get(revealRevision) ?? 0;
+      if (
+        petModeSyncMountedRef.current
+        && revealRevision <= latestPetModeRevealRevisionRef.current
+        && revealRevision > handledPetModeRevealRevisionRef.current
+        && retryAttempts < 1
+      ) {
+        // A failed Tauri call must not spend the user's explicit Show request.
+        // Retry once; another click creates a new revision and remains usable.
+        petModeRevealRetryAttemptsRef.current.set(revealRevision, retryAttempts + 1);
+        setPetModeSyncRetryNonce((nonce) => nonce + 1);
+      }
     });
-  }, [petModeActive, petModeSize]);
+  }, [petModeActive, petModeRevealRevision, petModeSize, petModeSyncRetryNonce]);
   useEffect(() => {
     if (!petModeActive || !isTauriRuntime()) return;
     void updateNativePetMode(buildPetModeSnapshot(watcherSnapshot)).catch((nextError) => {
@@ -6684,7 +6741,7 @@ export default function App() {
     }
     setDriftAlertsEnabled(state.driftAlarmEnabled);
     setExtremeNudgeEnabled(state.extremeNudgeEnabled);
-    setPetModeEnabled(state.petModeEnabled);
+    requestPetModeEnabled(state.petModeEnabled);
     setBrowserHistoryBootstrapEnabled(state.browserHistoryBootstrapEnabled);
     resetBrowserHistoryBootstrap();
     selectDay(logicalTodayIsoDate(startOfDayMinutes));
@@ -7839,7 +7896,7 @@ export default function App() {
               toggleTheme();
             }}
             onTogglePet={() => {
-              setPetModeEnabled((enabled) => !enabled);
+              togglePetModeEnabled();
             }}
             onCheckForUpdates={() => {
               handleManualCheckForUpdates();
@@ -8352,7 +8409,7 @@ export default function App() {
                     petModeCoat={petModeCoat}
                     petModeSize={petModeSize}
                     showPetNewBadge={featureNewBadges.showPet}
-                    onPetModeEnabledChange={setPetModeEnabled}
+                    onPetModeEnabledChange={requestPetModeEnabled}
                     onPetModeCoatChange={setPetModeCoat}
                     onPetModeSizeChange={setPetModeSize}
                     companionSurfacePolicy={companionSurfacePolicy}

@@ -72,6 +72,7 @@ import {
   pickPetModeLifeAction,
   pickPetModePostDropReaction,
   resolveInitialPetModeCoat,
+  resolveInitialPetModeHiddenUntil,
   resolveInitialPetModeSize,
   resolvePetModePresent,
   shouldShowPetModeMusicNote,
@@ -575,7 +576,13 @@ export function PetModeWindowApp() {
         && event.key !== PET_MODE_STORAGE_KEY
         && event.key !== PET_MODE_HIDDEN_UNTIL_STORAGE_KEY
       ) return;
-      const enabled = resolvePetModePresent();
+      // Storage events carry the value from the transition that queued them.
+      // Re-reading localStorage here can collapse a queued Off -> On pair into
+      // one final `true`, leaving an old outing token alive long enough to hide
+      // the newly shown cat. Hidden-until changes still use the combined helper.
+      const enabled = event.key === PET_MODE_STORAGE_KEY && event.newValue !== null
+        ? event.newValue === "1" && resolveInitialPetModeHiddenUntil() === null
+        : resolvePetModePresent();
       if (enabled === petModeEnabledRef.current) return;
 
       petModeEnabledRef.current = enabled;
@@ -812,15 +819,15 @@ export function PetModeWindowApp() {
       await revealForAction();
       if (token !== actionTokenRef.current) return;
       commitPhase("walk");
-      const exitSide = await exitNativePetScreen();
+      const outingTicket = await exitNativePetScreen();
       if (token !== actionTokenRef.current) return;
       commitVisibility(false);
-      await setNativePetPresence(false);
+      await setNativePetPresence(false, outingTicket.generation);
       await delay(awayMilliseconds);
       if (token !== actionTokenRef.current) return;
       commitVisibility(true);
       commitPhase("walk");
-      await returnNativePetFromOuting(exitSide);
+      await returnNativePetFromOuting(outingTicket);
     } finally {
       if (token === actionTokenRef.current && visibleRef.current) {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
@@ -1031,6 +1038,24 @@ export function PetModeWindowApp() {
       }
       if (event.kind === "guides") {
         setGuidesEnabled(event.enabled);
+        return;
+      }
+      if (event.kind === "reveal") {
+        // A queued reveal from an older Show request must not resurrect the
+        // renderer after a newer Off request has already won in shared storage.
+        if (!resolvePetModePresent()) return;
+        // An explicit Show Pet request owns the screen immediately. Invalidate
+        // any old outing/return timer so it cannot hide the freshly revealed
+        // cat after native has already replayed the entry motion.
+        actionTokenRef.current += 1;
+        sleepTouchRef.current = 0;
+        restartAutonomousCycle();
+        setPreserveEntryLanding(false);
+        setProudWalk(false);
+        petModeEnabledRef.current = true;
+        commitVisibility(true);
+        setPetModeEnabled(true);
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
         return;
       }
       if (event.kind === "facing") {
@@ -1303,6 +1328,12 @@ export function PetModeWindowApp() {
     // stale gait if cold-start/HMR misses the completion event.
     const timerId = window.setTimeout(() => {
       if (phaseRef.current === "entry") {
+        // A cancelled native entrance can leave the transparent leading edge
+        // parked just outside the display. Settling only the renderer phase
+        // would then report an idle, visible pet that the user still cannot
+        // see. Reassert native presence as part of the fallback so the panel
+        // is moved back to its remembered home before we declare it resident.
+        void setNativePetPresence(true).catch(() => undefined);
         setPreserveEntryLanding(true);
         commitPhase("idle");
         restartAutonomousCycle();

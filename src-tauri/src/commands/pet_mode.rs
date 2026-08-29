@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
@@ -128,6 +128,15 @@ const PET_MODE_AX_SCAN_LIMIT: usize = 360;
 
 static PET_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 static PET_MODE_ENTRY_ACTIVE: AtomicBool = AtomicBool::new(false);
+static PET_MODE_VISIBILITY_TRANSITION: Mutex<()> = Mutex::new(());
+// Every explicit visibility request starts a new ownership generation. Outing
+// commands carry the generation they began under, so a late hide or return
+// from an older residence can never overwrite a newer Off -> On request.
+static PET_MODE_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
+// A generation becomes settled only after its visibility transaction has
+// finished every native window mutation. Stale outing work can then repair the
+// panel against a complete state instead of sampling an in-progress toggle.
+static PET_MODE_SETTLED_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
@@ -149,6 +158,13 @@ pub struct PetModeInterventionTarget {
     pub preview: bool,
     #[serde(default)]
     pub lab_target: Option<PetModeLabTargetKind>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeOutingTicket {
+    side: String,
+    generation: u64,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -396,6 +412,91 @@ fn pet_size() -> (f64, f64) {
         .unwrap_or((PET_MODE_WIDTH, PET_MODE_HEIGHT))
 }
 
+fn advance_pet_visibility_generation() -> u64 {
+    PET_MODE_VISIBILITY_GENERATION.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+struct PetModeVisibilityTransition {
+    _guard: MutexGuard<'static, ()>,
+    generation: u64,
+}
+
+impl Drop for PetModeVisibilityTransition {
+    fn drop(&mut self) {
+        PET_MODE_SETTLED_VISIBILITY_GENERATION.store(self.generation, Ordering::SeqCst);
+    }
+}
+
+fn begin_pet_visibility_transition() -> Result<PetModeVisibilityTransition, String> {
+    let guard = PET_MODE_VISIBILITY_TRANSITION
+        .lock()
+        .map_err(|_| "Pet Mode visibility transition lock is unavailable".to_string())?;
+    Ok(PetModeVisibilityTransition {
+        _guard: guard,
+        generation: advance_pet_visibility_generation(),
+    })
+}
+
+fn pet_outing_generation_matches(expected: u64, current: u64, settled: u64, enabled: bool) -> bool {
+    enabled && expected == current && expected == settled
+}
+
+fn pet_outing_is_current(expected: u64) -> bool {
+    pet_outing_generation_matches(
+        expected,
+        PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst),
+        PET_MODE_SETTLED_VISIBILITY_GENERATION.load(Ordering::SeqCst),
+        PET_MODE_ENABLED.load(Ordering::Relaxed),
+    )
+}
+
+fn should_reconcile_pet_home(enabled: bool, entry_active: bool) -> bool {
+    enabled && !entry_active
+}
+
+fn reconcile_pet_visibility(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
+    for _ in 0..125 {
+        let generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
+        if PET_MODE_SETTLED_VISIBILITY_GENERATION.load(Ordering::SeqCst) != generation {
+            thread::sleep(Duration::from_millis(2));
+            continue;
+        }
+
+        let enabled = PET_MODE_ENABLED.load(Ordering::Relaxed);
+        let entry_active = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed);
+        if enabled {
+            // A current reveal entry owns native X until it lands. Snapping it
+            // home here would let stale outing cleanup fight the new entrance.
+            if should_reconcile_pet_home(enabled, entry_active) {
+                position_pet_home(app, window, false)?;
+            }
+            refresh_pet_hit_region_for_window(window)?;
+            show_pet_panel(app, window)?;
+        } else {
+            reset_pet_hit_region();
+            set_pet_window_interactive(window, false)?;
+            window.hide().map_err(|error| error.to_string())?;
+        }
+
+        if PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst) == generation
+            && PET_MODE_SETTLED_VISIBILITY_GENERATION.load(Ordering::SeqCst) == generation
+        {
+            return Ok(());
+        }
+    }
+
+    // The active visibility transaction remains authoritative and will finish
+    // its own final show/hide mutation. Avoid blocking indefinitely if AppKit
+    // itself is delayed.
+    Ok(())
+}
+
+fn schedule_pet_visibility_reconciliation(app: AppHandle, window: WebviewWindow) {
+    drop(async_runtime::spawn_blocking(move || {
+        let _ = reconcile_pet_visibility(&app, &window);
+    }));
+}
+
 fn pet_width() -> f64 {
     pet_size().0
 }
@@ -479,10 +580,15 @@ pub fn pet_mode_set_enabled(
     reduced_motion: bool,
     width: f64,
     height: f64,
+    force_reveal: bool,
 ) -> Result<(), String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Err("Pet Mode window is not available".to_string());
     };
+    // The JS bridge serializes its own calls, but the command is also exposed
+    // to both WebViews. Keep native visibility transitions transactional even
+    // if two callers arrive concurrently.
+    let _visibility_transition = begin_pet_visibility_transition()?;
 
     if !enabled {
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
@@ -499,7 +605,7 @@ pub fn pet_mode_set_enabled(
     // persisted size here prevents a cold launch from calculating the entry
     // offset at the default panel size and resizing halfway through the step.
     let size_changed = apply_pet_mode_size(&window, width, height)?;
-    let was_enabled = PET_MODE_ENABLED.swap(true, Ordering::Relaxed);
+    let was_enabled = PET_MODE_ENABLED.load(Ordering::Relaxed);
 
     window
         .set_always_on_top(true)
@@ -512,7 +618,7 @@ pub fn pet_mode_set_enabled(
     // React can legitimately re-send the enabled state while the panel is
     // already active (notably under Strict Mode). Reassert presentation without
     // snapping an in-flight entrance back home or replaying the choreography.
-    if was_enabled {
+    if !should_replay_pet_entry(was_enabled, force_reveal) {
         let entry_active = PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed);
         if (reduced_motion && entry_active) || size_changed {
             PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
@@ -558,7 +664,6 @@ pub fn pet_mode_set_enabled(
     emit_pet_event(&window, json!({ "kind": "facing", "facing": entry.facing }))?;
 
     if reduced_motion {
-        PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
         window
             .set_size(LogicalSize::new(final_width, final_height))
             .map_err(|error| error.to_string())?;
@@ -566,9 +671,13 @@ pub fn pet_mode_set_enabled(
             .set_position(home)
             .map_err(|error| error.to_string())?;
         show_pet_panel(&app, &window)?;
+        PET_MODE_ENABLED.store(true, Ordering::Relaxed);
+        PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+        if force_reveal {
+            emit_pet_event(&window, json!({ "kind": "reveal" }))?;
+        }
         emit_pet_event(&window, json!({ "kind": "entry_complete" }))?;
     } else {
-        PET_MODE_ENTRY_ACTIVE.store(true, Ordering::Relaxed);
         window
             .set_size(LogicalSize::new(final_width, final_height))
             .map_err(|error| error.to_string())?;
@@ -576,6 +685,11 @@ pub fn pet_mode_set_enabled(
             .set_position(LogicalPosition::new(entry.start_x, home.y))
             .map_err(|error| error.to_string())?;
         show_pet_panel(&app, &window)?;
+        PET_MODE_ENABLED.store(true, Ordering::Relaxed);
+        PET_MODE_ENTRY_ACTIVE.store(true, Ordering::Relaxed);
+        if force_reveal {
+            emit_pet_event(&window, json!({ "kind": "reveal" }))?;
+        }
     }
 
     if !reduced_motion {
@@ -696,6 +810,10 @@ fn pet_entry_motion_matches(
     expected_revision == current_revision && enabled && entry_active
 }
 
+fn should_replay_pet_entry(was_enabled: bool, force_reveal: bool) -> bool {
+    !was_enabled || force_reveal
+}
+
 #[derive(Clone, Copy, Debug)]
 struct PetEntryGeometry {
     facing: &'static str,
@@ -778,6 +896,7 @@ fn validate_pet_visibility_action(action: &str) -> Result<(), String> {
 #[tauri::command]
 pub fn pet_mode_visibility_action(app: AppHandle, action: String) -> Result<(), String> {
     validate_pet_visibility_action(&action)?;
+    let _visibility_transition = begin_pet_visibility_transition()?;
 
     if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
@@ -867,7 +986,8 @@ pub fn pet_mode_preview_action(app: AppHandle, action: PetModePreviewAction) -> 
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
     if matches!(action, PetModePreviewAction::Stop) {
-        cancel_pet_motion();
+        let entry_was_active = cancel_pet_motion();
+        recover_cancelled_pet_entry(&app, &window, entry_was_active)?;
     }
     emit_pet_event(
         &window,
@@ -876,11 +996,15 @@ pub fn pet_mode_preview_action(app: AppHandle, action: PetModePreviewAction) -> 
 }
 
 #[tauri::command]
-pub fn pet_mode_cancel_motion() {
+pub fn pet_mode_cancel_motion(app: AppHandle) -> Result<(), String> {
     // Manual pickup needs to stop native travel immediately without emitting a
     // `stop` preview event back into the pet renderer. That event intentionally
     // invalidates action tokens and would cancel the delayed pickup handoff.
-    cancel_pet_motion();
+    let entry_was_active = cancel_pet_motion();
+    let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
+        return Ok(());
+    };
+    recover_cancelled_pet_entry(&app, &window, entry_was_active)
 }
 
 #[tauri::command]
@@ -1068,22 +1192,47 @@ pub async fn pet_mode_return_home(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn pet_mode_set_presence(app: AppHandle, visible: bool) -> Result<(), String> {
+pub fn pet_mode_set_presence(
+    app: AppHandle,
+    visible: bool,
+    outing_generation: Option<u64>,
+) -> Result<(), String> {
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
-    if visible && PET_MODE_ENABLED.load(Ordering::Relaxed) {
+    let command_generation = if visible {
+        let generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
+        if !pet_outing_is_current(generation) {
+            return Ok(());
+        }
+        generation
+    } else {
+        let generation = outing_generation.ok_or_else(|| {
+            "Pet Mode outing generation is required when hiding presence".to_string()
+        })?;
+        if !pet_outing_is_current(generation) {
+            return Ok(());
+        }
+        generation
+    };
+
+    if visible {
         position_pet_home(&app, &window, false)?;
         refresh_pet_hit_region_for_window(&window)?;
-        show_pet_panel(&app, &window)
+        show_pet_panel(&app, &window)?;
     } else {
         // Presence changes are a native lifecycle boundary. Clear the region
         // as well as the current AppKit flag so a missed renderer update cannot
         // resurrect a stale pose when the panel is shown again.
         reset_pet_hit_region();
         set_pet_window_interactive(&window, false)?;
-        window.hide().map_err(|error| error.to_string())
+        window.hide().map_err(|error| error.to_string())?;
     }
+
+    if !pet_outing_is_current(command_generation) {
+        schedule_pet_visibility_reconciliation(app, window);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1414,10 +1563,14 @@ pub async fn pet_mode_roam(app: AppHandle, post_drop: Option<bool>) -> Result<()
 }
 
 #[tauri::command]
-pub async fn pet_mode_exit_screen(app: AppHandle) -> Result<String, String> {
+pub async fn pet_mode_exit_screen(app: AppHandle) -> Result<PetModeOutingTicket, String> {
     async_runtime::spawn_blocking(move || {
         if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
             return Err("Pet Mode is disabled".to_string());
+        }
+        let generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
+        if !pet_outing_is_current(generation) {
+            return Err("Pet Mode visibility is changing".to_string());
         }
         let window = app
             .get_webview_window(PET_MODE_WINDOW_LABEL)
@@ -1426,25 +1579,39 @@ pub async fn pet_mode_exit_screen(app: AppHandle) -> Result<String, String> {
             .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
         let start = current_pet_logical_position(&window)?;
         let (side, target) = calculate_pet_exit_position(&monitor, start);
-        animate_pet_window_with_facing(
+        let completed = animate_pet_window_with_facing_guarded(
             &window,
             target,
             if side == "left" { "left" } else { "right" },
             PET_MODE_WALK_SPEED,
             PET_MODE_WALK_MAX_SECONDS,
             "walk",
+            Some(generation),
         )?;
-        Ok(side.to_string())
+        if !completed {
+            reconcile_pet_visibility(&app, &window)?;
+        }
+        Ok(PetModeOutingTicket {
+            side: side.to_string(),
+            generation,
+        })
     })
     .await
     .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
-pub async fn pet_mode_return_from_outing(app: AppHandle, side: String) -> Result<(), String> {
+pub async fn pet_mode_return_from_outing(
+    app: AppHandle,
+    side: String,
+    outing_generation: u64,
+) -> Result<(), String> {
     async_runtime::spawn_blocking(move || {
         if side != "left" && side != "right" {
             return Err("Invalid Pet Mode outing side".to_string());
+        }
+        if !pet_outing_is_current(outing_generation) {
+            return Ok(());
         }
         let window = app
             .get_webview_window(PET_MODE_WINDOW_LABEL)
@@ -1452,19 +1619,35 @@ pub async fn pet_mode_return_from_outing(app: AppHandle, side: String) -> Result
         let monitor = resolve_pet_home_monitor(&app)
             .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
         let start = calculate_pet_outing_return_start(&monitor, &side);
+        if !pet_outing_is_current(outing_generation) {
+            return Ok(());
+        }
         window
             .set_position(start)
             .map_err(|error| error.to_string())?;
+        if !pet_outing_is_current(outing_generation) {
+            reconcile_pet_visibility(&app, &window)?;
+            return Ok(());
+        }
         show_pet_panel(&app, &window)?;
+        if !pet_outing_is_current(outing_generation) {
+            reconcile_pet_visibility(&app, &window)?;
+            return Ok(());
+        }
         let target = calculate_pet_home_position_with_nudge(Some(&app), &monitor);
-        animate_pet_window_with_facing(
+        let completed = animate_pet_window_with_facing_guarded(
             &window,
             target,
             if side == "left" { "right" } else { "left" },
             PET_MODE_WALK_SPEED,
             PET_MODE_WALK_MAX_SECONDS,
             "walk",
-        )
+            Some(outing_generation),
+        )?;
+        if !completed {
+            reconcile_pet_visibility(&app, &window)?;
+        }
+        Ok(())
     })
     .await
     .map_err(|error| error.to_string())?
@@ -3225,12 +3408,43 @@ fn animate_pet_window_with_facing(
     max_duration_seconds: f64,
     motion: &'static str,
 ) -> Result<(), String> {
+    animate_pet_window_with_facing_guarded(
+        window,
+        target,
+        facing,
+        speed,
+        max_duration_seconds,
+        motion,
+        None,
+    )
+    .map(|_| ())
+}
+
+fn animate_pet_window_with_facing_guarded(
+    window: &WebviewWindow,
+    target: LogicalPosition<f64>,
+    facing: &'static str,
+    speed: f64,
+    max_duration_seconds: f64,
+    motion: &'static str,
+    outing_generation: Option<u64>,
+) -> Result<bool, String> {
+    if outing_generation.is_some_and(|generation| !pet_outing_is_current(generation)) {
+        return Ok(false);
+    }
     let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
     emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
     emit_pet_event(window, json!({ "kind": "motion", "motion": motion }))?;
     // Give the webview one paint boundary to flip before the native window moves.
     thread::sleep(Duration::from_millis(34));
-    animate_pet_window(window, target, speed, max_duration_seconds, motion_revision)
+    animate_pet_window(
+        window,
+        target,
+        speed,
+        max_duration_seconds,
+        motion_revision,
+        outing_generation,
+    )
 }
 
 fn animate_pet_window(
@@ -3239,20 +3453,28 @@ fn animate_pet_window(
     speed: f64,
     max_duration_seconds: f64,
     motion_revision: u64,
-) -> Result<(), String> {
+    outing_generation: Option<u64>,
+) -> Result<bool, String> {
     let start = current_pet_logical_position(window)?;
     let distance = ((target.x - start.x).powi(2) + (target.y - start.y).powi(2)).sqrt();
     if distance < 1.0 {
-        return window
+        if !pet_window_motion_is_current(motion_revision, outing_generation) {
+            return Ok(false);
+        }
+        window
             .set_position(target)
-            .map_err(|error| error.to_string());
+            .map_err(|error| error.to_string())?;
+        return Ok(pet_window_motion_is_current(
+            motion_revision,
+            outing_generation,
+        ));
     }
     let duration_seconds = movement_duration_seconds(distance, speed, max_duration_seconds);
     let duration = Duration::from_secs_f64(duration_seconds);
     let started_at = Instant::now();
     loop {
-        if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
-            return Ok(());
+        if !pet_window_motion_is_current(motion_revision, outing_generation) {
+            return Ok(false);
         }
         let progress = (started_at.elapsed().as_secs_f64() / duration_seconds).min(1.0);
         window
@@ -3261,6 +3483,9 @@ fn animate_pet_window(
                 start.y + (target.y - start.y) * progress,
             ))
             .map_err(|error| error.to_string())?;
+        if !pet_window_motion_is_current(motion_revision, outing_generation) {
+            return Ok(false);
+        }
         if progress >= 1.0 {
             break;
         }
@@ -3268,12 +3493,44 @@ fn animate_pet_window(
         let remaining = duration.saturating_sub(elapsed);
         thread::sleep(remaining.min(Duration::from_micros(16_667)));
     }
-    Ok(())
+    Ok(true)
 }
 
-fn cancel_pet_motion() {
-    PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
+fn pet_window_motion_is_current(motion_revision: u64, outing_generation: Option<u64>) -> bool {
+    PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) == motion_revision
+        && outing_generation.map_or(true, pet_outing_is_current)
+}
+
+fn cancel_pet_motion() -> bool {
+    let entry_was_active = PET_MODE_ENTRY_ACTIVE.swap(false, Ordering::Relaxed);
     PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed);
+    entry_was_active
+}
+
+fn recover_cancelled_pet_entry(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    entry_was_active: bool,
+) -> Result<(), String> {
+    if !should_recover_cancelled_pet_entry(
+        entry_was_active,
+        PET_MODE_ENABLED.load(Ordering::Relaxed),
+    ) {
+        return Ok(());
+    }
+
+    // Renderer actions such as a drift notice can legitimately take ownership
+    // just after Show Pet starts an entrance. Cancelling the motion at that
+    // point used to strand the panel at its transparent off-screen start while
+    // the renderer reported it as visible. Finish the cancelled entrance at
+    // home before the new action proceeds.
+    position_pet_home(app, window, false)?;
+    refresh_pet_hit_region_for_window(window)?;
+    show_pet_panel(app, window)
+}
+
+fn should_recover_cancelled_pet_entry(entry_was_active: bool, enabled: bool) -> bool {
+    entry_was_active && enabled
 }
 
 fn movement_duration_seconds(distance: f64, speed: f64, max_duration_seconds: f64) -> f64 {
@@ -3502,6 +3759,36 @@ mod tests {
         assert!(!pet_entry_motion_matches(8, 9, true, true));
         assert!(!pet_entry_motion_matches(8, 8, false, true));
         assert!(!pet_entry_motion_matches(8, 8, true, false));
+    }
+
+    #[test]
+    fn explicit_reveal_replays_entry_for_an_already_enabled_pet() {
+        assert!(should_replay_pet_entry(false, false));
+        assert!(should_replay_pet_entry(false, true));
+        assert!(!should_replay_pet_entry(true, false));
+        assert!(should_replay_pet_entry(true, true));
+    }
+
+    #[test]
+    fn cancelling_an_enabled_entry_requires_native_home_recovery() {
+        assert!(should_recover_cancelled_pet_entry(true, true));
+        assert!(!should_recover_cancelled_pet_entry(false, true));
+        assert!(!should_recover_cancelled_pet_entry(true, false));
+    }
+
+    #[test]
+    fn outing_generation_rejects_stale_or_disabled_lifecycle_commands() {
+        assert!(pet_outing_generation_matches(8, 8, 8, true));
+        assert!(!pet_outing_generation_matches(8, 9, 9, true));
+        assert!(!pet_outing_generation_matches(8, 8, 7, true));
+        assert!(!pet_outing_generation_matches(8, 8, 8, false));
+    }
+
+    #[test]
+    fn stale_cleanup_does_not_move_a_current_entry_home() {
+        assert!(should_reconcile_pet_home(true, false));
+        assert!(!should_reconcile_pet_home(true, true));
+        assert!(!should_reconcile_pet_home(false, false));
     }
 
     #[test]

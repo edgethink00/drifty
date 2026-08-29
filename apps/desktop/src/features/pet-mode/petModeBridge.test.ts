@@ -45,6 +45,7 @@ describe("pet mode enabled bridge", () => {
       reducedMotion: false,
       width: 144,
       height: 99,
+      forceReveal: false,
     });
 
     releaseFirst();
@@ -57,6 +58,7 @@ describe("pet mode enabled bridge", () => {
       reducedMotion: false,
       width: 144,
       height: 99,
+      forceReveal: false,
     });
   });
 
@@ -75,6 +77,23 @@ describe("pet mode enabled bridge", () => {
       reducedMotion: true,
       width: 180,
       height: 124,
+      forceReveal: false,
+    });
+  });
+
+  it("forwards an explicit force-reveal request even when enabled stays true", async () => {
+    tauri.invoke.mockResolvedValueOnce(undefined);
+    const setEnabled = await loadSetEnabled();
+
+    await expect(setEnabled(true, null, false, 144, 99, true)).resolves.toBe(true);
+
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_set_enabled", {
+      enabled: true,
+      snapshot: null,
+      reducedMotion: false,
+      width: 144,
+      height: 99,
+      forceReveal: true,
     });
   });
 
@@ -89,6 +108,32 @@ describe("pet mode enabled bridge", () => {
       facing: "left",
     });
     expect(tauri.invoke).not.toHaveBeenCalled();
+  });
+
+  it("carries one native generation through the complete outing lifecycle", async () => {
+    tauri.invoke
+      .mockResolvedValueOnce({ side: "right", generation: 19 })
+      .mockResolvedValue(undefined);
+    const {
+      exitNativePetScreen,
+      returnNativePetFromOuting,
+      setNativePetPresence,
+    } = await import("./petModeBridge");
+
+    const ticket = await exitNativePetScreen();
+    await setNativePetPresence(false, ticket.generation);
+    await returnNativePetFromOuting(ticket);
+
+    expect(ticket).toEqual({ side: "right", generation: 19 });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "pet_mode_exit_screen");
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "pet_mode_set_presence", {
+      visible: false,
+      outingGeneration: 19,
+    });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(3, "pet_mode_return_from_outing", {
+      side: "right",
+      outingGeneration: 19,
+    });
   });
 
   it("publishes the versioned frame region to the native controller", async () => {

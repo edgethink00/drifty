@@ -24,6 +24,7 @@ import {
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
+  type PetModeOutingTicket,
   type PetModeWindowEvent,
 } from "./petModeData";
 import {
@@ -110,7 +111,7 @@ const bridge = vi.hoisted(() => ({
   reportNativePetModeLabState: vi.fn().mockResolvedValue(undefined),
   reportNativePetPointer: vi.fn().mockResolvedValue(undefined),
   returnNativePetHome: vi.fn().mockResolvedValue(undefined),
-  exitNativePetScreen: vi.fn().mockResolvedValue("left"),
+  exitNativePetScreen: vi.fn().mockResolvedValue({ side: "left", generation: 1 }),
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   sampleNativePetCursor: vi.fn().mockResolvedValue(null),
@@ -1086,6 +1087,129 @@ describe("PetModeWindowApp", () => {
     expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
   });
 
+  it("cancels an in-flight outing from queued Off and On event snapshots", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishExit!: (ticket: PetModeOutingTicket) => void;
+    bridge.exitNativePetScreen.mockImplementationOnce(() => new Promise((resolve) => {
+      finishExit = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "outing" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+
+    // Both events can be queued behind a final persisted `true`. Their payloads,
+    // not a later localStorage read, are the authoritative transition snapshots.
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_STORAGE_KEY,
+        oldValue: "1",
+        newValue: "0",
+      }));
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_STORAGE_KEY,
+        oldValue: "0",
+        newValue: "1",
+      }));
+    });
+    await act(async () => {
+      finishExit({ side: "left", generation: 7 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(bridge.setNativePetPresence.mock.calls.some(([visible]) => visible === false)).toBe(false);
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+  });
+
+  it("uses the same native ticket to hide and return from a normal outing", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "outing" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+    expect(bridge.returnNativePetFromOuting).toHaveBeenCalledWith({
+      side: "left",
+      generation: 1,
+    });
+  });
+
+  it("lets force reveal cancel an in-flight Dev outing return", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "outing" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "reveal" });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+  });
+
+  it("ignores a queued reveal after a newer Off request wins", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "0");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_STORAGE_KEY,
+        oldValue: "1",
+        newValue: "0",
+      }));
+      bridge.eventHandler?.({ kind: "reveal" });
+    });
+
+    await act(async () => undefined);
+    const publishCalls = bridge.publishPetModeHitRegion.mock.calls;
+    const latestPublish = publishCalls[publishCalls.length - 1]?.[0];
+    expect(latestPublish).toMatchObject({ interactive: false });
+  });
+
   it("re-arms the autonomous clock when the Dev preview changes in the settings webview", async () => {
     vi.useFakeTimers();
     // 0.7 keeps the independent tail-flick timer quiet, chooses `sit`, and
@@ -1150,6 +1274,7 @@ describe("PetModeWindowApp", () => {
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
     expect(screen.getByRole("button").classList.contains("is-entering")).toBe(false);
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(true);
   });
 
   it("restarts the fallback deadline when native begins a newer entry", async () => {

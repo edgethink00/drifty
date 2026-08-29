@@ -5,6 +5,7 @@ import type {
   PetModeContactAlignment,
   PetModeInterventionTarget,
   PetModeLabState,
+  PetModeOutingTicket,
   PetModePreviewAction,
   PetModeResolvedTarget,
   PetModeSnapshot,
@@ -82,6 +83,7 @@ export async function setNativePetModeEnabled(
   reducedMotion: boolean,
   width: number,
   height: number,
+  forceReveal = false,
 ): Promise<boolean> {
   if (!isTauriRuntime()) return false;
   const sync = petModeEnabledSync.then(() => invoke("pet_mode_set_enabled", {
@@ -90,6 +92,7 @@ export async function setNativePetModeEnabled(
     reducedMotion,
     width,
     height,
+    forceReveal,
   }));
   // React effects can enqueue off/on transitions faster than Tauri can finish
   // the first command. Preserve call order without allowing one rejected invoke
@@ -289,8 +292,11 @@ export async function returnNativePetHome(): Promise<void> {
   await invoke("pet_mode_return_home");
 }
 
-export async function setNativePetPresence(visible: boolean): Promise<void> {
-  await invoke("pet_mode_set_presence", { visible });
+export async function setNativePetPresence(
+  visible: boolean,
+  outingGeneration?: number,
+): Promise<void> {
+  await invoke("pet_mode_set_presence", { visible, outingGeneration });
 }
 
 export async function setNativePetInteractive(interactive: boolean): Promise<void> {
@@ -386,12 +392,15 @@ export async function roamNativePet(postDrop = false): Promise<void> {
   await invoke("pet_mode_roam", { postDrop });
 }
 
-export async function exitNativePetScreen(): Promise<"left" | "right"> {
-  return invoke<"left" | "right">("pet_mode_exit_screen");
+export async function exitNativePetScreen(): Promise<PetModeOutingTicket> {
+  return invoke<PetModeOutingTicket>("pet_mode_exit_screen");
 }
 
-export async function returnNativePetFromOuting(side: "left" | "right"): Promise<void> {
-  await invoke("pet_mode_return_from_outing", { side });
+export async function returnNativePetFromOuting(ticket: PetModeOutingTicket): Promise<void> {
+  await invoke("pet_mode_return_from_outing", {
+    side: ticket.side,
+    outingGeneration: ticket.generation,
+  });
 }
 
 export async function rememberNativePetPosition(): Promise<void> {

@@ -231,6 +231,11 @@ export type PetModeLabState = {
   readonly facing?: "left" | "right";
 };
 
+export type PetModeOutingTicket = {
+  readonly side: "left" | "right";
+  readonly generation: number;
+};
+
 export type PetModeSnapshot = {
   readonly productivity: ProductivityLabel;
   readonly contextLabel: string;
@@ -247,6 +252,7 @@ export type PetModeInterventionTarget = {
 
 export type PetModeWindowEvent =
   | { readonly kind: "snapshot"; readonly snapshot: PetModeSnapshot }
+  | { readonly kind: "reveal" }
   | { readonly kind: "facing"; readonly facing: "left" | "right" }
   | {
     readonly kind: "motion";

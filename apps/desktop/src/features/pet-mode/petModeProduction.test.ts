@@ -207,7 +207,9 @@ describe("pet size", () => {
   it("resizes the native window whenever size or visibility changes", () => {
     // The window is recreated at its default size each time the pet is shown,
     // so a non-default size has to be re-applied on that transition too.
-    expect(app).toContain("[petModeActive, petModeSize]");
+    expect(app).toContain(
+      "[petModeActive, petModeRevealRevision, petModeSize, petModeSyncRetryNonce]",
+    );
   });
 });
 
