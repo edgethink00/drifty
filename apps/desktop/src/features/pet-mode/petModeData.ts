@@ -29,6 +29,10 @@ export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
 // coming back an hour later starts a new streak instead of resuming the old one.
 export const PET_MODE_PET_STREAK_WINDOW_MS = 6 * 1000;
 export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
+// Dev-only override for repeatedly QAing the sleep wake-up reaction. The pet
+// renderer also checks Dev mode itself, so a persisted toggle cannot change
+// production behavior after Dev mode is turned off.
+export const PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY = "drifty.dev.petModeAlwaysAngryWake.v1";
 // Waking a sleeping cat can earn a brief annoyed beat. The roll happens only
 // on the second sleep touch, never on ordinary petting or the touch that merely
 // checks whether the cat wants to stay asleep.
@@ -180,7 +184,6 @@ export type PetModePreviewAction =
   | "sleep"
   | "sit"
   | "wake"
-  | "angry_wake"
   | "pet"
   | "outing"
   | "cursor_hunt_single"

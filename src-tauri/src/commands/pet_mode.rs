@@ -174,7 +174,6 @@ pub enum PetModePreviewAction {
     Sleep,
     Sit,
     Wake,
-    AngryWake,
     Pet,
     Outing,
     CursorHuntSingle,
@@ -4074,7 +4073,6 @@ mod tests {
         let tail: PetModePreviewAction = serde_json::from_str("\"tail_flick\"").unwrap();
         let note: PetModePreviewAction = serde_json::from_str("\"music_note\"").unwrap();
         let sit: PetModePreviewAction = serde_json::from_str("\"sit\"").unwrap();
-        let angry_wake: PetModePreviewAction = serde_json::from_str("\"angry_wake\"").unwrap();
         let hunt_single: PetModePreviewAction =
             serde_json::from_str("\"cursor_hunt_single\"").unwrap();
         let hunt_chase: PetModePreviewAction =
@@ -4083,7 +4081,6 @@ mod tests {
         assert!(matches!(tail, PetModePreviewAction::TailFlick));
         assert!(matches!(note, PetModePreviewAction::MusicNote));
         assert!(matches!(sit, PetModePreviewAction::Sit));
-        assert!(matches!(angry_wake, PetModePreviewAction::AngryWake));
         assert!(matches!(
             hunt_single,
             PetModePreviewAction::CursorHuntSingle

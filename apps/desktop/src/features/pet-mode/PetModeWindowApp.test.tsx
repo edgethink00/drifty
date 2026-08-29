@@ -15,6 +15,7 @@ import {
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_PRESENT_MS,
+  PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
@@ -1053,15 +1054,6 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
 
     act(() => {
-      bridge.eventHandler?.({ kind: "preview_action", action: "angry_wake" });
-    });
-    await act(async () => { await Promise.resolve(); });
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("anger");
-    expect(document.querySelector(".pet-mode-cat__anger")).not.toBeNull();
-    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS); });
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
-
-    act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "music_note" });
     });
     await act(async () => { await Promise.resolve(); });
@@ -1523,6 +1515,61 @@ describe("PetModeWindowApp", () => {
       await vi.advanceTimersByTimeAsync(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("guarantees the angry wake reaction when its Dev toggle is enabled", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY, "1");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 37, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 37, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    dispatchPointer(pet, "pointerdown", { pointerId: 38, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 38, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("anger");
+    expect(document.querySelector(".pet-mode-cat__anger")).not.toBeNull();
+  });
+
+  it("ignores the persisted angry wake override when Dev mode is off", async () => {
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+    window.localStorage.setItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY, "1");
+    vi.spyOn(Math, "random").mockReturnValue(0.99);
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 39, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 39, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    dispatchPointer(pet, "pointerdown", { pointerId: 40, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 40, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+    expect(document.querySelector(".pet-mode-cat--anger")).toBeNull();
   });
 
   it("never shows the anger mark for awake petting even when the random roll qualifies", async () => {

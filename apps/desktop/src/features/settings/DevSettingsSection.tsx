@@ -21,7 +21,12 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
-import type { PetModeLabAction, PetModeLabState, PetModePreviewAction } from "../pet-mode/petModeData";
+import {
+  PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY,
+  type PetModeLabAction,
+  type PetModeLabState,
+  type PetModePreviewAction,
+} from "../pet-mode/petModeData";
 import {
   DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
   PET_MODE_DRIFT_HUNT_TUNING_RANGES,
@@ -172,10 +177,17 @@ export function DevSettingsSection({
   const { t } = useLocalization();
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
+  const [alwaysAngryWake, setAlwaysAngryWake] = useState(
+    () => window.localStorage.getItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY) === "1",
+  );
 
   const updateDriftHuntSettings = (next: PetModeDriftHuntSettings) => {
     setDriftHuntSettings(next);
     persistPetModeDriftHuntSettings(next);
+  };
+  const updateAlwaysAngryWake = (enabled: boolean) => {
+    setAlwaysAngryWake(enabled);
+    window.localStorage.setItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY, enabled ? "1" : "0");
   };
   const driftHuntCarryTiers = resolvePetModeDriftCursorReturnTiers(driftHuntSettings);
 
@@ -200,9 +212,6 @@ export function DevSettingsSection({
     if (!petModeEnabled) return true;
     if (action === "stop") return false;
     if (action === "wake") return petModeLabState?.phase !== "sleep";
-    if (action === "angry_wake") {
-      return petModeLabState !== null && petModeLabState.activeAction !== null;
-    }
     if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
     if (action === "music_note") {
       return petModeLabState !== null
@@ -295,7 +304,19 @@ export function DevSettingsSection({
               <PetModeLabAction label="Sit" detail="G pose QA" action="sit" active={petModeLabState?.activeAction === "sit"} disabled={isPetModeLabActionDisabled("sit")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Angry wake" detail="Forced 1.2 s QA" action="angry_wake" active={petModeLabState?.activeAction === "angry_wake"} disabled={isPetModeLabActionDisabled("angry_wake")} onAction={onPreviewPetModeAction} />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--wake-policy">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Angry wake</div>
+              <div className="desc">Dev-only wake-up probability override.</div>
+            </div>
+            <div className="pet-mode-lab__wake-policy">
+              <span>
+                <strong>{alwaysAngryWake ? "Always angry" : "25% chance"}</strong>
+                <small>{alwaysAngryWake ? "Sleeping wake-ups always show the 1.2 s mark" : "Uses the production probability"}</small>
+              </span>
+              <Toggle checked={alwaysAngryWake} onChange={updateAlwaysAngryWake} ariaLabel="Toggle guaranteed angry wake" />
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--target">

@@ -63,6 +63,7 @@ import {
   PET_MODE_SLEEP_MIN_MS,
   PET_MODE_SLEEP_WAKE_ANGER_CHANCE,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
+  PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
   getPetModeNextActionInterval,
   pickPetModeLifeAction,
@@ -720,16 +721,6 @@ export function PetModeWindowApp() {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
     }
-    if (action === "angry_wake") {
-      // Deterministic Dev QA for the exact reaction. Production wake-ups keep
-      // their 25% roll; this action exists only behind the Dev lab bridge.
-      commitPhase("anger");
-      await delay(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
-      if (token === actionTokenRef.current) {
-        commitPhase(focusRestingRef.current ? "sit" : "idle");
-      }
-      return;
-    }
     if (action === "sleep") {
       commitPhase("sleep");
       if (preview) return;
@@ -742,7 +733,7 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       await roamNativePet();
     } else {
-      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "angry_wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note">, PetModeCatPhase> = {
+      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note">, PetModeCatPhase> = {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
@@ -772,7 +763,9 @@ export function PetModeWindowApp() {
   const wakeSleepingPet = useCallback(async () => {
     const token = ++actionTokenRef.current;
     sleepTouchRef.current = 0;
-    const annoyed = Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE;
+    const alwaysAngryWake = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
+      && window.localStorage.getItem(PET_MODE_ALWAYS_ANGRY_WAKE_STORAGE_KEY) === "1";
+    const annoyed = alwaysAngryWake || Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE;
     if (!annoyed) {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
@@ -918,15 +911,13 @@ export function PetModeWindowApp() {
         // Lab previews are deliberately single-flight. A walk moves the native
         // overlay independently, so letting another pose start during that trip
         // makes the cat look as if it is stretching or sleeping while walking.
-        // Wake actions are intentional interruptions: normal Wake clears the
-        // persistent sleep pose, while Angry wake deterministically exercises
-        // the reviewed one-shot reaction.
+        // Wake is the intentional interruption that clears the persistent
+        // sleep pose immediately.
         if (
           phaseRef.current !== "idle"
           && !(isCursorHuntPreview && phaseRef.current === "sit")
           && previewAction !== "music_note"
           && previewAction !== "wake"
-          && previewAction !== "angry_wake"
           && previewAction !== "stop"
         ) {
           reportLabState();
