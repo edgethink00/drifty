@@ -200,6 +200,9 @@ export function DevSettingsSection({
     if (!petModeEnabled) return true;
     if (action === "stop") return false;
     if (action === "wake") return petModeLabState?.phase !== "sleep";
+    if (action === "angry_wake") {
+      return petModeLabState !== null && petModeLabState.activeAction !== null;
+    }
     if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
     if (action === "music_note") {
       return petModeLabState !== null
@@ -292,6 +295,7 @@ export function DevSettingsSection({
               <PetModeLabAction label="Sit" detail="G pose QA" action="sit" active={petModeLabState?.activeAction === "sit"} disabled={isPetModeLabActionDisabled("sit")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Angry wake" detail="Forced 1.2 s QA" action="angry_wake" active={petModeLabState?.activeAction === "angry_wake"} disabled={isPetModeLabActionDisabled("angry_wake")} onAction={onPreviewPetModeAction} />
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--target">
@@ -622,6 +626,7 @@ function formatPetModeLabPhase(phase: string): string {
     case "sleep": return "Sleeping";
     case "sit": return "Sitting";
     case "happy": return "Reacting";
+    case "anger": return "Angry wake";
     default: return "Working";
   }
 }

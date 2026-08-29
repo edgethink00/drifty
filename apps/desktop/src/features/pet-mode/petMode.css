@@ -598,11 +598,13 @@
 }
 .pet-mode-cat--happy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
 .pet-mode-cat--sleep .pet-mode-cat__zzz { opacity: .8; animation: pet-mode-zzz 1.8s ease-in-out infinite; }
+.pet-mode-cat.is-mirrored .pet-mode-cat__zzz { transform: scaleX(-1); }
 
 /* The approved V06 note follows the heart's one-shot reward grammar, but it is
    an SVG so the stem stays crisp at every Pet Mode size. The dark halo keeps it
    legible over arbitrary desktop wallpaper without adding a new color token. */
 .pet-mode-cat__music-note {
+  --pet-symbol-direction: 1;
   position: absolute;
   inset: 0;
   width: 100%;
@@ -614,7 +616,9 @@
     drop-shadow(0 1px 2px rgb(0 0 0 / .45));
   opacity: 0;
   pointer-events: none;
+  transform: scaleX(var(--pet-symbol-direction));
 }
+.pet-mode-cat.is-mirrored .pet-mode-cat__music-note { --pet-symbol-direction: -1; }
 .pet-mode-cat__music-note ellipse { fill: currentColor; }
 .pet-mode-cat__music-note path {
   fill: none;
@@ -789,9 +793,9 @@
 }
 
 @keyframes pet-mode-music-note {
-  0% { opacity: 0; transform: translate(0, 6px) scale(.72); }
+  0% { opacity: 0; transform: translate(0, 6px) scale(.72) scaleX(var(--pet-symbol-direction)); }
   25% { opacity: 1; }
-  100% { opacity: 0; transform: translate(3px, -18px) scale(1.05); }
+  100% { opacity: 0; transform: translate(3px, -18px) scale(1.05) scaleX(var(--pet-symbol-direction)); }
 }
 
 @keyframes pet-mode-zzz {

@@ -180,6 +180,7 @@ export type PetModePreviewAction =
   | "sleep"
   | "sit"
   | "wake"
+  | "angry_wake"
   | "pet"
   | "outing"
   | "cursor_hunt_single"

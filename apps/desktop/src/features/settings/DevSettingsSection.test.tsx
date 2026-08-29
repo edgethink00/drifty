@@ -117,6 +117,8 @@ describe("DevSettingsSection", () => {
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("stretch");
     fireEvent.click(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("music_note");
+    fireEvent.click(screen.getByRole("button", { name: /Angry wake Forced 1.2 s QA/ }));
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("angry_wake");
     fireEvent.click(screen.getByRole("button", { name: /Sit G pose QA/ }));
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sit");
     fireEvent.click(screen.getByRole("button", { name: /Browser tab X/ }));

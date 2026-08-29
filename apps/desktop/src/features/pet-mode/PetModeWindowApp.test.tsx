@@ -1053,6 +1053,15 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
 
     act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "angry_wake" });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("anger");
+    expect(document.querySelector(".pet-mode-cat__anger")).not.toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "music_note" });
     });
     await act(async () => { await Promise.resolve(); });

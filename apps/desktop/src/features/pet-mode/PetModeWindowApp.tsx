@@ -720,6 +720,16 @@ export function PetModeWindowApp() {
       commitPhase(focusRestingRef.current ? "sit" : "idle");
       return;
     }
+    if (action === "angry_wake") {
+      // Deterministic Dev QA for the exact reaction. Production wake-ups keep
+      // their 25% roll; this action exists only behind the Dev lab bridge.
+      commitPhase("anger");
+      await delay(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
+      if (token === actionTokenRef.current) {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
+      return;
+    }
     if (action === "sleep") {
       commitPhase("sleep");
       if (preview) return;
@@ -732,7 +742,7 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       await roamNativePet();
     } else {
-      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note">, PetModeCatPhase> = {
+      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "angry_wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note">, PetModeCatPhase> = {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
@@ -908,13 +918,15 @@ export function PetModeWindowApp() {
         // Lab previews are deliberately single-flight. A walk moves the native
         // overlay independently, so letting another pose start during that trip
         // makes the cat look as if it is stretching or sleeping while walking.
-        // Wake is the one intentional interruption: it clears the persistent
-        // sleep pose immediately.
+        // Wake actions are intentional interruptions: normal Wake clears the
+        // persistent sleep pose, while Angry wake deterministically exercises
+        // the reviewed one-shot reaction.
         if (
           phaseRef.current !== "idle"
           && !(isCursorHuntPreview && phaseRef.current === "sit")
           && previewAction !== "music_note"
           && previewAction !== "wake"
+          && previewAction !== "angry_wake"
           && previewAction !== "stop"
         ) {
           reportLabState();

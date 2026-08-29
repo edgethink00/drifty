@@ -157,6 +157,18 @@ describe("pet promoted out of Dev", () => {
   });
 });
 
+describe("pet symbol orientation", () => {
+  it("keeps readable overlays upright when the cat faces left", () => {
+    expect(petModeCssContract).toContain(
+      ".pet-mode-cat.is-mirrored .pet-mode-cat__zzz { transform: scaleX(-1); }",
+    );
+    expect(petModeCssContract).toContain(
+      ".pet-mode-cat.is-mirrored .pet-mode-cat__music-note { --pet-symbol-direction: -1; }",
+    );
+    expect(petModeCssContract).toContain("scaleX(var(--pet-symbol-direction))");
+  });
+});
+
 describe("pet size", () => {
   beforeEach(() => window.localStorage.clear());
 
