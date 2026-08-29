@@ -19,7 +19,7 @@ export function PetSettings({
   size,
   onSizeChange,
   automaticCloseEnabled,
-  automaticCloseDisabled,
+  automaticClosePrerequisiteMissing,
   onAutomaticCloseChange,
 }: {
   readonly enabled: boolean;
@@ -29,7 +29,7 @@ export function PetSettings({
   readonly size: PetModeSize;
   readonly onSizeChange: (size: PetModeSize) => void;
   readonly automaticCloseEnabled: boolean;
-  readonly automaticCloseDisabled: boolean;
+  readonly automaticClosePrerequisiteMissing: boolean;
   readonly onAutomaticCloseChange: (enabled: boolean) => void;
 }) {
   const { t } = useLocalization();
@@ -49,12 +49,12 @@ export function PetSettings({
       </div>
       <AutomaticCloseSettingsRow
         checked={automaticCloseEnabled}
-        disabled={automaticCloseDisabled}
+        prerequisiteMissing={automaticClosePrerequisiteMissing}
         onChange={onAutomaticCloseChange}
-        onDescription={enabled
+        availableDescription={enabled
           ? t("settings.pet.automaticCloseOnDescription")
           : t("settings.pet.automaticClosePetOffDescription")}
-        offDescription={t("settings.pet.automaticCloseOffDescription")}
+        prerequisiteDescription={t("settings.pet.automaticCloseOffDescription")}
         toggleAriaLabel={t("settings.pet.toggleAutomaticClose")}
         className="settings-row--pet-automatic-close"
       />

@@ -56,6 +56,7 @@ export function NotificationsSettingsSection({
   onPetModeSizeChange,
 }: NotificationsSettingsSectionProps) {
   const { effectiveLanguage, t } = useLocalization();
+
   const companionTemporarilyHidden = companionHiddenUntil !== null && companionHiddenUntil > Date.now();
   const hiddenUntilLabel = companionHiddenUntil !== null && companionHiddenUntil > Date.now()
     ? new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", {
@@ -73,6 +74,18 @@ export function NotificationsSettingsSection({
     ...option,
     label: localizedDriftAlertDelayLabel(option.value, t),
   }));
+  const handleAutomaticCloseChange = (enabled: boolean) => {
+    if (enabled && !driftAlertsEnabled) {
+      onDriftAlertsChange(true);
+    }
+    onExtremeNudgeChange(enabled);
+  };
+  const handleDriftAlertsChange = (enabled: boolean) => {
+    onDriftAlertsChange(enabled);
+    if (!enabled && extremeNudgeEnabled) {
+      onExtremeNudgeChange(false);
+    }
+  };
   return (
     <div className="settings-section">
       <div className="settings-block">
@@ -120,20 +133,17 @@ export function NotificationsSettingsSection({
           <div className="ctrl">
             <Toggle
               checked={driftAlertsEnabled}
-              onChange={(enabled) => {
-                onDriftAlertsChange(enabled);
-                if (!enabled) onExtremeNudgeChange(false);
-              }}
+              onChange={handleDriftAlertsChange}
               ariaLabel={t("settings.notifications.toggleDrift")}
             />
           </div>
         </div>
         <AutomaticCloseSettingsRow
           checked={extremeNudgeEnabled}
-          disabled={!driftAlertsEnabled}
-          onChange={onExtremeNudgeChange}
-          onDescription={t("settings.notifications.extremeOnDescription")}
-          offDescription={t("settings.notifications.extremeOffDescription")}
+          prerequisiteMissing={!driftAlertsEnabled}
+          onChange={handleAutomaticCloseChange}
+          availableDescription={t("settings.notifications.extremeOnDescription")}
+          prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
           toggleAriaLabel={t("settings.notifications.toggleExtreme")}
         />
         <div className="settings-row">
@@ -167,8 +177,8 @@ export function NotificationsSettingsSection({
           size={petModeSize}
           onSizeChange={onPetModeSizeChange}
           automaticCloseEnabled={extremeNudgeEnabled}
-          automaticCloseDisabled={!driftAlertsEnabled}
-          onAutomaticCloseChange={onExtremeNudgeChange}
+          automaticClosePrerequisiteMissing={!driftAlertsEnabled}
+          onAutomaticCloseChange={handleAutomaticCloseChange}
         />
       </div>
     </div>

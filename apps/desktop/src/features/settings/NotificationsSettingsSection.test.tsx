@@ -121,13 +121,29 @@ describe("NotificationsSettingsSection", () => {
     expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(true);
   });
 
-  it("disables both Automatic close toggles until Drift alerts are on", () => {
-    renderSettings({ driftAlertsEnabled: false, extremeNudgeEnabled: true });
+  it("lets either Automatic close entry point turn Drift alerts on too", () => {
+    const props = renderSettings({ driftAlertsEnabled: false, extremeNudgeEnabled: false });
 
     const toggles = screen.getAllByRole("switch", { name: /automatic close/i });
     expect(toggles).toHaveLength(2);
-    expect(toggles.every((toggle) => toggle.hasAttribute("disabled"))).toBe(true);
-    expect(screen.getAllByText(/Turn on Drift alerts before enabling Automatic close\./).length).toBe(2);
+    expect(toggles.every((toggle) => toggle.hasAttribute("disabled") === false)).toBe(true);
+    expect(screen.getAllByText(/Turning this on also enables Drift alerts\./).length).toBe(2);
+
+    fireEvent.click(toggles[1]!);
+
+    expect(props.onDriftAlertsChange).toHaveBeenCalledWith(true);
+    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("turns Automatic close off silently when Drift alerts are turned off", () => {
+    const props = renderSettings({ driftAlertsEnabled: true, extremeNudgeEnabled: true });
+
+    fireEvent.click(screen.getByRole("switch", { name: /toggle drift alerts/i }));
+
+    expect(props.onDriftAlertsChange).toHaveBeenCalledWith(false);
+    expect(props.onExtremeNudgeChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("keeps Automatic close available while the pet is off", () => {
