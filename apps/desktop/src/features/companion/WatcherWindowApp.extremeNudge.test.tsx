@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WatcherWindowApp } from "./WatcherWindowApp";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import type { WatcherWindowEvent } from "./watcherBridge";
 
 const bridge = vi.hoisted(() => ({
@@ -75,10 +76,12 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(screen.getByRole("button", { name: "Take a break" })).toBeTruthy();
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
     expect(toast.getAttribute("data-phase")).toBe("visible");
-    expect(toast.style.getPropertyValue("--extreme-toast-visible-duration")).toBe("14000ms");
+    expect(toast.style.getPropertyValue("--extreme-toast-visible-duration")).toBe(
+      `${EXTREME_NUDGE_TOAST_VISIBLE_MS}ms`,
+    );
 
     act(() => {
-      vi.advanceTimersByTime(13_999);
+      vi.advanceTimersByTime(EXTREME_NUDGE_TOAST_VISIBLE_MS - 1);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -111,7 +114,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
 
     fireEvent.pointerLeave(toast);
     act(() => {
-      vi.advanceTimersByTime(9_999);
+      vi.advanceTimersByTime(EXTREME_NUDGE_TOAST_VISIBLE_MS - 4_000 - 1);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -142,7 +145,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     });
 
     act(() => {
-      vi.advanceTimersByTime(9_999);
+      vi.advanceTimersByTime(EXTREME_NUDGE_TOAST_VISIBLE_MS - 4_000 - 1);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -198,7 +201,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(toast.hasAttribute("data-timer-paused")).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(9_999);
+      vi.advanceTimersByTime(EXTREME_NUDGE_TOAST_VISIBLE_MS - 4_000 - 1);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 
@@ -224,7 +227,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     expect(toast.hasAttribute("data-timer-paused")).toBe(false);
 
     act(() => {
-      vi.advanceTimersByTime(11_999);
+      vi.advanceTimersByTime(EXTREME_NUDGE_TOAST_VISIBLE_MS - 2_000 - 1);
     });
     expect(toast.getAttribute("data-phase")).toBe("visible");
 

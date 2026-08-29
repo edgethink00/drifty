@@ -102,11 +102,11 @@ describe("CompanionPill native interactions", () => {
     expect(resolveCompanionPillAutoDismissMs(passingMilestone)).toBe(4_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionMilestonePreview("weekly-final-rank-1", 1))).toBe(6_000);
     expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "drift" })).toBe(9_000);
-    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "break_return" })).toBe(14_000);
+    expect(resolveCompanionPillAutoDismissMs({ ...driftMoment, mode: "break_return" })).toBe(12_500);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "full" })).toBe(12_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "compact" })).toBe(10_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "minimal" })).toBe(8_000);
-    expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(14_000);
+    expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(12_500);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionReentryPreview(1))).toBe(8_000);
   });
 

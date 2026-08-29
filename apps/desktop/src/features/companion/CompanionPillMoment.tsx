@@ -75,6 +75,7 @@ export type CompanionPillMomentEvent =
 export type CompanionPillDismissReason = "auto" | "explicit";
 
 const COMPANION_BREAK_OPTIONS = [5, 15, 30, 60] as const;
+const COMPANION_BREAK_RETURN_AUTO_DISMISS_MS = 12_500;
 
 /** Informational cards stay short; decision cards leave enough time to act without lingering. */
 export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
@@ -90,7 +91,9 @@ export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEven
   if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
   if (event.kind === "reentry") return 8_000;
   if (event.kind === "driftAlarm") {
-    return event.mode === "break_return" ? 14_000 : COMPANION_PILL_AUTO_DISMISS_MS.driftAlarm;
+    return event.mode === "break_return"
+      ? COMPANION_BREAK_RETURN_AUTO_DISMISS_MS
+      : COMPANION_PILL_AUTO_DISMISS_MS.driftAlarm;
   }
   if (event.kind === "endOfDayReview") {
     if (event.layout === "full") return 12_000;
