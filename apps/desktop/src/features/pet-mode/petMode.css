@@ -616,9 +616,16 @@
     drop-shadow(0 1px 2px rgb(0 0 0 / .45));
   opacity: 0;
   pointer-events: none;
-  transform: scaleX(var(--pet-symbol-direction));
 }
 .pet-mode-cat.is-mirrored .pet-mode-cat__music-note { --pet-symbol-direction: -1; }
+.pet-mode-cat__music-note-glyph {
+  /* The cat's root mirror already carries this full-canvas SVG to the head
+     side. Counter-mirror only the compact glyph so its note shape stays
+     upright without sending the whole overlay back toward the tail. */
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleX(var(--pet-symbol-direction));
+}
 .pet-mode-cat__music-note ellipse { fill: currentColor; }
 .pet-mode-cat__music-note path {
   fill: none;
@@ -793,9 +800,9 @@
 }
 
 @keyframes pet-mode-music-note {
-  0% { opacity: 0; transform: translate(0, 6px) scale(.72) scaleX(var(--pet-symbol-direction)); }
+  0% { opacity: 0; transform: translate(0, 6px) scale(.72); }
   25% { opacity: 1; }
-  100% { opacity: 0; transform: translate(3px, -18px) scale(1.05) scaleX(var(--pet-symbol-direction)); }
+  100% { opacity: 0; transform: translate(3px, -18px) scale(1.05); }
 }
 
 @keyframes pet-mode-zzz {

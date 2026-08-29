@@ -646,8 +646,10 @@ export function PetModeCat({
           independent of phase so the original stretch/tail artwork stays
           untouched underneath the rare accent. */}
       <svg className="pet-mode-cat__music-note" viewBox="0 0 797 581" aria-hidden="true">
-        <ellipse cx="732" cy="159" rx="17" ry="14" transform="rotate(-18 732 159)" />
-        <path d="M747 154 V111 L777 120" />
+        <g className="pet-mode-cat__music-note-glyph">
+          <ellipse cx="732" cy="159" rx="17" ry="14" transform="rotate(-18 732 159)" />
+          <path d="M747 154 V111 L777 120" />
+        </g>
       </svg>
       {/* The anger mark is a traced comic vein cluster, not a glyph, so it
           cannot ride the text-based marks above. It shares their placement and

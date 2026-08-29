@@ -165,7 +165,14 @@ describe("pet symbol orientation", () => {
     expect(petModeCssContract).toContain(
       ".pet-mode-cat.is-mirrored .pet-mode-cat__music-note { --pet-symbol-direction: -1; }",
     );
-    expect(petModeCssContract).toContain("scaleX(var(--pet-symbol-direction))");
+    expect(petModeCatContract).toContain('className="pet-mode-cat__music-note-glyph"');
+    expect(petModeCssContract).toContain(
+      ".pet-mode-cat__music-note-glyph {",
+    );
+    expect(petModeCssContract).toContain("transform: scaleX(var(--pet-symbol-direction));");
+    expect(petModeCssContract).not.toContain(
+      "scale(1.05) scaleX(var(--pet-symbol-direction))",
+    );
   });
 });
 
