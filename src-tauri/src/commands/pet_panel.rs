@@ -1,6 +1,105 @@
+use std::collections::VecDeque;
 use tauri::{AppHandle, Emitter, WebviewWindow};
 
 use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan, PET_MODE_WINDOW_LABEL};
+
+const PET_SHAKE_WINDOW_MS: u64 = 1_000;
+const PET_SHAKE_MIN_SAMPLE_DISTANCE_PT: f64 = 2.0;
+const PET_SHAKE_MIN_LEG_PT: f64 = 24.0;
+const PET_SHAKE_MIN_PATH_PT: f64 = 220.0;
+const PET_SHAKE_MIN_REVERSALS: usize = 4;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PetPanelDragOutcome {
+    pub moved: bool,
+    pub shake_detected: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PetShakeSample {
+    at_ms: u64,
+    x: f64,
+    y: f64,
+}
+
+#[derive(Default)]
+struct PetShakeDetector {
+    samples: VecDeque<PetShakeSample>,
+}
+
+impl PetShakeDetector {
+    fn observe(&mut self, at_ms: u64, x: f64, y: f64) {
+        let cutoff = at_ms.saturating_sub(PET_SHAKE_WINDOW_MS);
+        while self
+            .samples
+            .front()
+            .is_some_and(|sample| sample.at_ms < cutoff)
+        {
+            self.samples.pop_front();
+        }
+        if self.samples.back().is_some_and(|sample| {
+            (x - sample.x).hypot(y - sample.y) < PET_SHAKE_MIN_SAMPLE_DISTANCE_PT
+        }) {
+            return;
+        }
+        self.samples.push_back(PetShakeSample { at_ms, x, y });
+    }
+
+    fn detected(&self) -> bool {
+        if self.samples.len() < PET_SHAKE_MIN_REVERSALS + 2 {
+            return false;
+        }
+        let mut path = 0.0;
+        let samples: Vec<_> = self.samples.iter().copied().collect();
+        for pair in samples.windows(2) {
+            path += (pair[1].x - pair[0].x).hypot(pair[1].y - pair[0].y);
+        }
+        if path < PET_SHAKE_MIN_PATH_PT {
+            return false;
+        }
+        meaningful_axis_reversals(&samples, |sample| sample.x) >= PET_SHAKE_MIN_REVERSALS
+            || meaningful_axis_reversals(&samples, |sample| sample.y) >= PET_SHAKE_MIN_REVERSALS
+    }
+}
+
+fn meaningful_axis_reversals(
+    samples: &[PetShakeSample],
+    coordinate: impl Fn(&PetShakeSample) -> f64,
+) -> usize {
+    let Some(first) = samples.first() else {
+        return 0;
+    };
+    let mut extreme = coordinate(first);
+    let mut direction = 0_i8;
+    let mut reversals = 0;
+    for sample in &samples[1..] {
+        let value = coordinate(sample);
+        match direction {
+            0 if value - extreme >= PET_SHAKE_MIN_LEG_PT => {
+                direction = 1;
+                extreme = value;
+            }
+            0 if extreme - value >= PET_SHAKE_MIN_LEG_PT => {
+                direction = -1;
+                extreme = value;
+            }
+            1 if value > extreme => extreme = value,
+            1 if extreme - value >= PET_SHAKE_MIN_LEG_PT => {
+                reversals += 1;
+                direction = -1;
+                extreme = value;
+            }
+            -1 if value < extreme => extreme = value,
+            -1 if value - extreme >= PET_SHAKE_MIN_LEG_PT => {
+                reversals += 1;
+                direction = 1;
+                extreme = value;
+            }
+            _ => {}
+        }
+    }
+    reversals
+}
 
 /// Configure the desktop pet as the same kind of non-activating macOS panel
 /// used by the resident Companion pill. A regular transparent Tauri window can
@@ -209,7 +308,7 @@ pub fn perform_pet_panel_drag(
     _start_client_x: f64,
     _start_client_y: f64,
     pickup_delay_ms: u64,
-) -> Result<bool, String> {
+) -> Result<PetPanelDragOutcome, String> {
     use objc2_app_kit::{NSEvent, NSWindow};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc::sync_channel;
@@ -225,6 +324,14 @@ pub fn perform_pet_panel_drag(
     const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(250);
 
     let start_pointer = app.cursor_position().map_err(|error| error.to_string())?;
+    let scale_factor = window.scale_factor().map_err(|error| error.to_string())?;
+    let gesture_started = Instant::now();
+    let mut shake_detector = PetShakeDetector::default();
+    shake_detector.observe(
+        0,
+        start_pointer.x / scale_factor,
+        start_pointer.y / scale_factor,
+    );
 
     // Capture the drag anchor (window origin + pointer) in Cocoa global
     // points on the main thread so every later apply is a pure delta in one
@@ -306,6 +413,11 @@ pub fn perform_pet_panel_drag(
 
     loop {
         let pointer = app.cursor_position().map_err(|error| error.to_string())?;
+        shake_detector.observe(
+            gesture_started.elapsed().as_millis().min(u64::MAX as u128) as u64,
+            pointer.x / scale_factor,
+            pointer.y / scale_factor,
+        );
         let dx = pointer.x - start_pointer.x;
         let dy = pointer.y - start_pointer.y;
         if !moved && is_pet_drag_delta(dx, dy) {
@@ -327,7 +439,7 @@ pub fn perform_pet_panel_drag(
             if last_probe_at.elapsed() >= Duration::from_millis(40) {
                 last_probe_at = Instant::now();
                 if let Ok(pos) = current_pet_logical_position(window) {
-                    if let Ok(plan) = probe_pet_drop_plan(app, window, pos) {
+                    if let Ok(plan) = probe_pet_drop_plan(app, window, pos, false) {
                         let _ = window.emit("pet-mode-drag-probe", &plan);
                     }
                 }
@@ -357,7 +469,10 @@ pub fn perform_pet_panel_drag(
         std::thread::sleep(Duration::from_millis(4));
     }
 
-    Ok(moved)
+    Ok(PetPanelDragOutcome {
+        moved,
+        shake_detected: moved && shake_detector.detected(),
+    })
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -367,16 +482,25 @@ pub fn perform_pet_panel_drag(
     _start_client_x: f64,
     _start_client_y: f64,
     _pickup_delay_ms: u64,
-) -> Result<bool, String> {
+) -> Result<PetPanelDragOutcome, String> {
     window.start_dragging().map_err(|error| error.to_string())?;
-    Ok(true)
+    Ok(PetPanelDragOutcome {
+        moved: true,
+        shake_detected: false,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     #[cfg(target_os = "macos")]
     use super::pet_panel_needs_main_thread_hop;
-    use super::{is_pet_drag_delta, pet_drag_origin};
+    use super::{is_pet_drag_delta, pet_drag_origin, PetShakeDetector};
+
+    fn observe_path(detector: &mut PetShakeDetector, points: &[(u64, f64, f64)]) {
+        for &(at_ms, x, y) in points {
+            detector.observe(at_ms, x, y);
+        }
+    }
 
     #[test]
     fn native_drag_preserves_the_exact_pointer_delta() {
@@ -396,6 +520,132 @@ mod tests {
     fn drag_starts_only_when_the_physical_threshold_is_crossed() {
         assert!(is_pet_drag_delta(7.0, 0.0));
         assert!(is_pet_drag_delta(5.0, 5.0));
+    }
+
+    #[test]
+    fn straight_or_jittery_drags_do_not_count_as_a_shake() {
+        let mut straight = PetShakeDetector::default();
+        observe_path(
+            &mut straight,
+            &[
+                (0, 0.0, 0.0),
+                (100, 60.0, 0.0),
+                (200, 120.0, 0.0),
+                (300, 240.0, 0.0),
+            ],
+        );
+        assert!(!straight.detected());
+
+        let mut jitter = PetShakeDetector::default();
+        observe_path(
+            &mut jitter,
+            &[
+                (0, 0.0, 0.0),
+                (100, 5.0, 3.0),
+                (200, -4.0, -2.0),
+                (300, 6.0, 1.0),
+                (400, -5.0, 0.0),
+            ],
+        );
+        assert!(!jitter.detected());
+    }
+
+    #[test]
+    fn repeated_recent_horizontal_or_vertical_swings_count_as_a_shake() {
+        let mut horizontal = PetShakeDetector::default();
+        observe_path(
+            &mut horizontal,
+            &[
+                (0, 0.0, 0.0),
+                (120, 50.0, 0.0),
+                (240, 0.0, 0.0),
+                (360, 50.0, 0.0),
+                (480, 0.0, 0.0),
+                (600, 50.0, 0.0),
+            ],
+        );
+        assert!(horizontal.detected());
+
+        let mut vertical = PetShakeDetector::default();
+        observe_path(
+            &mut vertical,
+            &[
+                (0, 0.0, 0.0),
+                (120, 0.0, 50.0),
+                (240, 0.0, 0.0),
+                (360, 0.0, 50.0),
+                (480, 0.0, 0.0),
+                (600, 0.0, 50.0),
+            ],
+        );
+        assert!(vertical.detected());
+    }
+
+    #[test]
+    fn shake_thresholds_are_inclusive_but_do_not_accept_a_near_miss() {
+        let mut exact = PetShakeDetector::default();
+        observe_path(
+            &mut exact,
+            &[
+                (0, 0.0, 0.0),
+                (100, 44.0, 0.0),
+                (200, 0.0, 0.0),
+                (300, 44.0, 0.0),
+                (400, 0.0, 0.0),
+                (500, 44.0, 0.0),
+            ],
+        );
+        assert!(exact.detected());
+
+        let mut short_path = PetShakeDetector::default();
+        observe_path(
+            &mut short_path,
+            &[
+                (0, 0.0, 0.0),
+                (100, 43.9, 0.0),
+                (200, 0.0, 0.0),
+                (300, 43.9, 0.0),
+                (400, 0.0, 0.0),
+                (500, 43.9, 0.0),
+            ],
+        );
+        assert!(!short_path.detected());
+    }
+
+    #[test]
+    fn long_travel_with_only_three_reversals_is_not_a_shake() {
+        let mut detector = PetShakeDetector::default();
+        observe_path(
+            &mut detector,
+            &[
+                (0, 0.0, 0.0),
+                (100, 60.0, 0.0),
+                (200, 0.0, 0.0),
+                (300, 60.0, 0.0),
+                (400, 0.0, 0.0),
+                (500, 10.0, 0.0),
+            ],
+        );
+        assert!(!detector.detected());
+    }
+
+    #[test]
+    fn a_shake_expires_when_the_user_holds_still_before_release() {
+        let mut detector = PetShakeDetector::default();
+        observe_path(
+            &mut detector,
+            &[
+                (0, 0.0, 0.0),
+                (120, 50.0, 0.0),
+                (240, 0.0, 0.0),
+                (360, 50.0, 0.0),
+                (480, 0.0, 0.0),
+                (600, 50.0, 0.0),
+            ],
+        );
+        assert!(detector.detected());
+        detector.observe(1_700, 50.0, 0.0);
+        assert!(!detector.detected());
     }
 
     #[test]

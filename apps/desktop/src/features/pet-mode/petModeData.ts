@@ -43,6 +43,10 @@ export const PET_MODE_EXPERIMENTS_STORAGE_KEY = "drifty.dev.petModeExperiments.v
 // cadence. Dev mode is checked again by the pet webview so a persisted value
 // cannot alter production behavior after the diagnostics surface is disabled.
 export const PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY = "drifty.dev.petModeDropLifePreview.v1";
+// Dev-only direct-manipulation experiment. The pet webview checks Dev mode at
+// release time as well as this persisted preference, so leaving the toggle on
+// can never change shipped drag behavior after Dev mode is disabled.
+export const PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY = "drifty.dev.petModeShakeFloorDrop.v1";
 // Dev-only override for repeatedly QAing the pack's visible probability
 // outcomes. It affects only angry wake and music-note rolls, not life-action
 // selection or timing. The renderer also checks Dev mode itself, so a

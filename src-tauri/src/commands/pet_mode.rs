@@ -22,7 +22,9 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 #[cfg(target_os = "macos")]
 use objc2_foundation::NSPoint;
 
-use super::pet_drop::{plan_pet_drop, PetDropKind, PetDropPlan, PetRect};
+use super::pet_drop::{
+    plan_pet_drop, plan_pet_shake_floor_drop, PetDropKind, PetDropPlan, PetRect,
+};
 use super::pet_drop_windows::{inferred_bottom_dock, list_on_screen_ledges};
 use super::pet_hit_region::{
     install_pet_hit_region_monitor, pet_hit_region_pointer_inside,
@@ -388,6 +390,7 @@ impl PetModePhysicalRect {
 #[serde(rename_all = "camelCase")]
 pub struct PetModeNativeDragResult {
     moved: bool,
+    shake_detected: bool,
     start_x: f64,
     start_y: f64,
     end_x: f64,
@@ -1326,7 +1329,7 @@ pub async fn pet_mode_begin_drag(
     // frames while the native panel follows the cursor.
     let drag_app = app.clone();
     let drag_window = window.clone();
-    let moved = tauri::async_runtime::spawn_blocking(move || {
+    let drag = tauri::async_runtime::spawn_blocking(move || {
         perform_pet_panel_drag(
             &drag_app,
             &drag_window,
@@ -1340,10 +1343,14 @@ pub async fn pet_mode_begin_drag(
     let after = current_pet_logical_position(&window)?;
     #[cfg(debug_assertions)]
     {
-        eprintln!("[pet-mode-drag] end window={after:?} moved={moved}");
+        eprintln!(
+            "[pet-mode-drag] end window={after:?} moved={} shake_detected={}",
+            drag.moved, drag.shake_detected
+        );
     }
     let result = PetModeNativeDragResult {
-        moved,
+        moved: drag.moved,
+        shake_detected: drag.shake_detected,
         start_x: before.x,
         start_y: before.y,
         end_x: after.x,
@@ -1665,6 +1672,7 @@ pub fn probe_pet_drop_plan(
     app: &AppHandle,
     window: &WebviewWindow,
     pos: LogicalPosition<f64>,
+    force_floor: bool,
 ) -> Result<PetDropPlan, String> {
     let monitor = window
         .current_monitor()
@@ -1688,6 +1696,9 @@ pub fn probe_pet_drop_plan(
         width: work_size.width,
         height: work_size.height,
     };
+    if force_floor {
+        return Ok(plan_pet_shake_floor_drop(&pet, &work));
+    }
     let pet_window_number = macos_window_number(window);
     let screen_position = monitor.position().to_logical::<f64>(scale_factor);
     let screen_size = monitor.size().to_logical::<f64>(scale_factor);
@@ -1719,7 +1730,10 @@ pub fn probe_pet_drop_plan(
 }
 
 #[tauri::command]
-pub async fn pet_mode_resolve_drop(app: AppHandle) -> Result<PetDropPlan, String> {
+pub async fn pet_mode_resolve_drop(
+    app: AppHandle,
+    force_floor: bool,
+) -> Result<PetDropPlan, String> {
     if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
         return Err("Pet Mode is disabled".to_string());
     }
@@ -1727,7 +1741,7 @@ pub async fn pet_mode_resolve_drop(app: AppHandle) -> Result<PetDropPlan, String
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
     let start = current_pet_logical_position(&window)?;
-    let plan = probe_pet_drop_plan(&app, &window, start)?;
+    let plan = probe_pet_drop_plan(&app, &window, start, force_floor)?;
 
     let monitor = window
         .current_monitor()

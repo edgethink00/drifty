@@ -23,6 +23,7 @@ import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import {
   PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
+  PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
   type PetModeLabAction,
@@ -190,6 +191,9 @@ export function DevSettingsSection({
   const [petModeDropLifePreviewEnabled, setPetModeDropLifePreviewEnabled] = useState(
     () => window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) === "1",
   );
+  const [petModeShakeFloorDropEnabled, setPetModeShakeFloorDropEnabled] = useState(
+    () => window.localStorage.getItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY) === "1",
+  );
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
     () => window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1",
   );
@@ -205,6 +209,10 @@ export function DevSettingsSection({
   const updatePetModeDropLifePreview = (enabled: boolean) => {
     setPetModeDropLifePreviewEnabled(enabled);
     window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, enabled ? "1" : "0");
+  };
+  const updatePetModeShakeFloorDrop = (enabled: boolean) => {
+    setPetModeShakeFloorDropEnabled(enabled);
+    window.localStorage.setItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY, enabled ? "1" : "0");
   };
   const updateGuaranteedOutcomes = (enabled: boolean) => {
     setGuaranteedOutcomes(enabled);
@@ -227,6 +235,17 @@ export function DevSettingsSection({
       disposed = true;
       cleanupTauriEventListener(unlisten);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY) return;
+      setPetModeShakeFloorDropEnabled(
+        window.localStorage.getItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY) === "1",
+      );
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   useEffect(() => {
@@ -339,6 +358,21 @@ export function DevSettingsSection({
                   : "No experimental expressions or interaction rules"}</small>
               </span>
               <Toggle checked={petModeExperimentsEnabled} onChange={updatePetModeExperiments} ariaLabel="Toggle expressive pet interactions" />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--experiments">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Shake-to-floor drop</div>
+              <div className="desc">Dev-only gesture: shake repeatedly just before release to fall to the current display floor.</div>
+            </div>
+            <div className="pet-mode-lab__experiment-policy" data-active={petModeShakeFloorDropEnabled}>
+              <span>
+                <strong>{petModeShakeFloorDropEnabled ? "Shake drop enabled" : "Existing drag behavior"}</strong>
+                <small>{petModeShakeFloorDropEnabled
+                  ? "4+ reversals in the final second · full floor drop"
+                  : "Far releases keep the shipped 4pt hop"}</small>
+              </span>
+              <Toggle checked={petModeShakeFloorDropEnabled} onChange={updatePetModeShakeFloorDrop} ariaLabel="Toggle shake-to-floor drop" />
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--experiments">

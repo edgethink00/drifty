@@ -242,6 +242,32 @@ pub fn plan_pet_drop(
     }
 }
 
+/// The Dev-only shake gesture deliberately ignores intermediate window ledges:
+/// it is an explicit request to send the cat to the bottom of the current
+/// monitor's usable desktop lane. The native clamp uses the complete panel
+/// bounds, so target the panel bottom rather than the visible-paw inset used by
+/// ordinary ledge catches.
+pub fn plan_pet_shake_floor_drop(pet: &PetRect, work: &PetRect) -> PetDropPlan {
+    let target_y = (work.bottom() - pet.height).max(work.y);
+    let distance = (target_y - pet.y).max(0.0);
+    if distance <= f64::EPSILON {
+        return PetDropPlan {
+            kind: PetDropKind::StayFloor,
+            distance: 0.0,
+            duration_ms: 0,
+            target_y: pet.y,
+            ledge: "floor".into(),
+        };
+    }
+    PetDropPlan {
+        kind: PetDropKind::Catch,
+        distance,
+        duration_ms: gravity_duration_ms(distance),
+        target_y,
+        ledge: "floor".into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,6 +403,35 @@ mod tests {
         assert_eq!(plan.kind, PetDropKind::Hop);
         assert_eq!(plan.distance, PET_DROP_HOP_PT);
         assert!((plan.target_y - 154.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn shake_drop_falls_from_mid_screen_to_the_safe_floor() {
+        let pet = pet_at(560.0, 150.0);
+        let plan = plan_pet_shake_floor_drop(&pet, &work());
+        assert_eq!(plan.kind, PetDropKind::Catch);
+        assert_eq!(plan.ledge, "floor");
+        assert!((plan.target_y - (work().bottom() - pet.height)).abs() < 0.01);
+        assert!((plan.distance - (plan.target_y - pet.y)).abs() < 0.01);
+        assert!(plan.duration_ms > gravity_duration_ms(PET_DROP_HOP_PT));
+    }
+
+    #[test]
+    fn shake_drop_is_a_noop_when_the_panel_is_already_at_the_floor() {
+        let pet = pet_at(560.0, work().bottom() - 99.0);
+        let plan = plan_pet_shake_floor_drop(&pet, &work());
+        assert_eq!(plan.kind, PetDropKind::StayFloor);
+        assert_eq!(plan.distance, 0.0);
+        assert_eq!(plan.target_y, pet.y);
+    }
+
+    #[test]
+    fn shake_drop_ignores_the_normal_top_home_rule() {
+        let pet = pet_at(560.0, work().y + 10.0);
+        let plan = plan_pet_shake_floor_drop(&pet, &work());
+        assert_eq!(plan.kind, PetDropKind::Catch);
+        assert_eq!(plan.ledge, "floor");
+        assert!((plan.target_y - (work().bottom() - pet.height)).abs() < 0.01);
     }
 
     #[test]

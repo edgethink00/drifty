@@ -22,6 +22,7 @@ import {
   PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
+  PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY,
 } from "../pet-mode/petModeData";
 
 const featureSwitches = vi.hoisted(() => ({
@@ -148,6 +149,13 @@ describe("DevSettingsSection", () => {
     }));
     expect(dropLifePreviewToggle.getAttribute("aria-checked")).toBe("false");
     expect(screen.getByText("Shipped behavior")).toBeTruthy();
+    const shakeFloorToggle = screen.getByRole("switch", { name: "Toggle shake-to-floor drop" });
+    expect(shakeFloorToggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText("Existing drag behavior")).toBeTruthy();
+    fireEvent.click(shakeFloorToggle);
+    expect(shakeFloorToggle.getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByText("Shake drop enabled")).toBeTruthy();
+    expect(window.localStorage.getItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY)).toBe("1");
     const disabledGuaranteedToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
     expect(disabledGuaranteedToggle.getAttribute("disabled")).toBe("");
     expect(disabledGuaranteedToggle.getAttribute("aria-checked")).toBe("false");

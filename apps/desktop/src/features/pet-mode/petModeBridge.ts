@@ -319,6 +319,8 @@ export async function updateNativePetHitRegion(update: PetModeHitRegionUpdate): 
 
 export type PetModeNativeDragResult = {
   readonly moved: boolean;
+  /** Optional while an HMR renderer can still be paired with an older native process. */
+  readonly shakeDetected?: boolean;
   readonly startX: number;
   readonly startY: number;
   readonly endX: number;
@@ -417,10 +419,10 @@ export type PetDropPlan = {
   readonly ledge: string;
 };
 
-export async function resolveNativePetDrop(): Promise<PetDropPlan | null> {
+export async function resolveNativePetDrop(forceFloor = false): Promise<PetDropPlan | null> {
   if (!isTauriRuntime()) return null;
   try {
-    return await invoke<PetDropPlan>("pet_mode_resolve_drop");
+    return await invoke<PetDropPlan>("pet_mode_resolve_drop", { forceFloor });
   } catch (error) {
     console.error("[pet-drop] invoke failed:", error);
     return null;

@@ -17,6 +17,7 @@ import {
   rememberNativePetPosition,
   resolveNativePetDrop,
   type PetDropPlan,
+  type PetModeNativeDragResult,
   reportNativePetContact,
   reportNativePetDragError,
   reportNativePetModeLabState,
@@ -42,6 +43,7 @@ import {
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
+  PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   getPetModeDefaultEntryTravelDistance,
   getPetModeWindowSize,
@@ -117,6 +119,11 @@ function expressiveInteractionsEnabled(): boolean {
 function dropLifePreviewEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
     && window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) === "1";
+}
+
+function shakeFloorDropEnabled(): boolean {
+  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
+    && window.localStorage.getItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY) === "1";
 }
 
 function guaranteedOutcomesEnabled(): boolean {
@@ -386,7 +393,7 @@ export function PetModeWindowApp() {
     setDragReleasePose(nextPose);
   }, []);
 
-  const finishManualDrag = useCallback((rememberPosition = true) => {
+  const finishManualDrag = useCallback((result?: PetModeNativeDragResult, rememberPosition = true) => {
     if (
       !manualDragRef.current
       && phaseRef.current !== "drag"
@@ -397,6 +404,9 @@ export function PetModeWindowApp() {
     manualReleaseTokenRef.current = releaseToken;
     const previewEnabled = dropLifePreviewEnabled();
     const reducedMotion = prefersReducedMotion();
+    const forceFloorDrop = !reducedMotion
+      && result?.shakeDetected === true
+      && shakeFloorDropEnabled();
     const reaction = previewEnabled && !reducedMotion
       ? pickPetModePostDropReaction(Math.random(), previousPostDropReactionRef.current)
       : "stay";
@@ -420,7 +430,7 @@ export function PetModeWindowApp() {
           // (catch). Keep the visual handoff alive for at least its authored
           // duration, while never holding its last frame after native is done.
           await Promise.all([
-            resolveNativePetDrop().catch(() => null),
+            resolveNativePetDrop(forceFloorDrop).catch(() => null),
             delay(PET_MODE_DRAG_SETTLE_MS),
           ]);
           if (releaseToken !== actionTokenRef.current) return;
@@ -692,7 +702,7 @@ export function PetModeWindowApp() {
       // the invoke promise can leave WebKit in `drag` after the native loop has
       // already released, especially when the panel crosses app/display
       // boundaries. The event arrives directly from that loop's completion.
-      finishManualDrag();
+      finishManualDrag(result);
     }).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
@@ -1629,7 +1639,7 @@ export function PetModeWindowApp() {
         // loop, but they must never strand manualDragRef at true or suppress the
         // user's release transition.
         if (result.moved) {
-          finishManualDrag();
+          finishManualDrag(result);
           return;
         }
         manualDragRef.current = false;

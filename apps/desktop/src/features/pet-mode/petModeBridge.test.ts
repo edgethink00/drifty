@@ -136,6 +136,36 @@ describe("pet mode enabled bridge", () => {
     });
   });
 
+  it("forwards the explicit floor-drop decision to the native resolver", async () => {
+    tauri.invoke.mockResolvedValueOnce({
+      kind: "catch",
+      distance: 400,
+      durationMs: 300,
+      targetY: 700,
+      ledge: "floor",
+    });
+    const { resolveNativePetDrop } = await import("./petModeBridge");
+
+    await resolveNativePetDrop(true);
+
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_resolve_drop", { forceFloor: true });
+  });
+
+  it("keeps the existing native drop resolver as the default", async () => {
+    tauri.invoke.mockResolvedValueOnce({
+      kind: "hop",
+      distance: 4,
+      durationMs: 16,
+      targetY: 204,
+      ledge: "hop",
+    });
+    const { resolveNativePetDrop } = await import("./petModeBridge");
+
+    await resolveNativePetDrop();
+
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_resolve_drop", { forceFloor: false });
+  });
+
   it("publishes the versioned frame region to the native controller", async () => {
     tauri.invoke.mockResolvedValueOnce(undefined);
     const { updateNativePetHitRegion } = await import("./petModeBridge");
