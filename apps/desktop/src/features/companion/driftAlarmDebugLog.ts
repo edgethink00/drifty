@@ -46,6 +46,7 @@ const DRIFT_ALARM_DEBUG_EVENT_KINDS = [
   "native_notification_requested",
   "native_notification_failed",
   "extreme_nudge_started",
+  "extreme_nudge_pet_skipped",
   "extreme_nudge_result",
   "extreme_nudge_error",
   "manual_correction_failed",

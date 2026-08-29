@@ -1146,11 +1146,16 @@ pub fn pet_mode_report_contact(
     app: AppHandle,
     id: String,
     contacted: Option<bool>,
+    reason: Option<String>,
 ) -> Result<(), String> {
     if let Some(main) = app.get_webview_window("main") {
         main.emit(
             "pet-mode-contact",
-            json!({ "id": id, "contacted": contacted.unwrap_or(true) }),
+            json!({
+                "id": id,
+                "contacted": contacted.unwrap_or(true),
+                "reason": reason,
+            }),
         )
         .map_err(|error| error.to_string())?;
     }

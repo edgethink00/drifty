@@ -2266,8 +2266,8 @@ export default function App() {
     runtime.lastTriggeredAt = now;
     setPetModeLabPointerStatus("Browser X shortcut · approaching exact observed tab");
     try {
-      const contacted = await playNativePetModeIntervention(target);
-      if (!contacted) {
+      const intervention = await playNativePetModeIntervention(target);
+      if (intervention.outcome !== "contacted") {
         setPetModeLabPointerStatus("Exact browser tab X unavailable · no close performed");
         return;
       }
@@ -4712,7 +4712,7 @@ export default function App() {
       });
       const runExtremeNudge = async () => {
         if (petModeActive) {
-          const contacted = await playNativePetModeIntervention(buildPetModeInterventionTarget({
+          const intervention = await playNativePetModeIntervention(buildPetModeInterventionTarget({
             id: alertKey,
             appName: segment.appName,
             browserName: segment.browserName,
@@ -4721,8 +4721,27 @@ export default function App() {
           // user catches the cat before that frame, nothing has pressed the X,
           // so closing anyway would make the whole animation a lie. Hand the
           // moment to the companion instead of destroying a tab or an app.
-          if (!contacted) {
+          //
+          // Only a real catch earns that mercy. A silent renderer rejection,
+          // an over-budget approach, or a hung webview is a technical failure
+          // of the animation, not a user decision: skip the theatre and run
+          // the close the user turned on. (Observed 2026-08-29: an 8-second
+          // contact timeout was misread as a catch and the drift tab
+          // survived with only the companion card showing.)
+          if (intervention.outcome === "user_intercepted") {
             return { applied: false, diagnostic: "pet_intercepted" } as const;
+          }
+          if (intervention.outcome !== "contacted") {
+            recordDriftAlarmDebugEvent({
+              kind: "extreme_nudge_pet_skipped",
+              alertKey,
+              reason: intervention.outcome,
+              message: intervention.reason === null
+                ? `elapsedMs=${intervention.elapsedMs}`
+                : `${intervention.reason} elapsedMs=${intervention.elapsedMs}`,
+              candidate: summarizeDriftAlarmCandidate(latestDrift),
+              evaluation,
+            });
           }
         }
         return applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
@@ -8554,8 +8573,8 @@ export default function App() {
                     onPetModeBrowserXShortcutEnabledChange={setPetModeBrowserXShortcutEnabled}
                     onPreviewPetModeDriftyWindowClose={() => {
                       const target = buildPetModeLabDriftyWindowTarget();
-                      void playNativePetModeIntervention(target).then((contacted) => {
-                        if (contacted) return applyNativePetModeLabTarget(target);
+                      void playNativePetModeIntervention(target).then((intervention) => {
+                        if (intervention.outcome === "contacted") return applyNativePetModeLabTarget(target);
                         return undefined;
                       }).catch(() => undefined);
                     }}

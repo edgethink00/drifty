@@ -747,7 +747,8 @@ export function PetModeWindowApp() {
       if (token !== actionTokenRef.current) return;
       if (resolved.targetKind === "fallback" && !target.preview) {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
-        await reportNativePetContact(target.id, false);
+        // Not a user catch: the AX scan never produced a real X to point at.
+        await reportNativePetContact(target.id, false, "target_unavailable");
         return;
       }
       movedToTarget = true;
@@ -799,7 +800,7 @@ export function PetModeWindowApp() {
       // immediately so the caller resolves now instead of burning the full
       // contact timeout before it can react.
       if (!contacted && !target.preview) {
-        void reportNativePetContact(target.id, false).catch(() => undefined);
+        void reportNativePetContact(target.id, false, "user_intercepted").catch(() => undefined);
       }
       if (token !== actionTokenRef.current) return;
       if (movedToTarget) {
@@ -1191,14 +1192,25 @@ export function PetModeWindowApp() {
       }
       const isLabTarget = event.target.labTarget === "browser_tab_x"
         || event.target.labTarget === "drifty_window_x";
-      if (
-        activeLabActionRef.current === "intervention"
-        || (!isLabTarget && focusRestingRef.current)
-        || manualDragRef.current
-        || (isLabTarget && phaseRef.current === "entry")
-        || phaseRef.current === "drag"
-        || phaseRef.current === "release"
-      ) {
+      const rejectionReason = activeLabActionRef.current === "intervention"
+        ? "renderer_busy_intervention"
+        : !isLabTarget && focusRestingRef.current
+          ? "renderer_focus_resting"
+          : manualDragRef.current
+            ? "renderer_manual_drag"
+            : isLabTarget && phaseRef.current === "entry"
+              ? "renderer_entry_active"
+              : phaseRef.current === "drag" || phaseRef.current === "release"
+                ? "renderer_drag_phase"
+                : null;
+      if (rejectionReason !== null) {
+        // This guard used to drop the event silently, which the main window
+        // could only observe as an 8-second contact timeout — and it then
+        // misread that timeout as the user catching the cat. Reject loudly so
+        // the caller can fall through to the plain close instead.
+        if (!event.target.preview) {
+          void reportNativePetContact(event.target.id, false, rejectionReason).catch(() => undefined);
+        }
         reportLabState();
         return;
       }

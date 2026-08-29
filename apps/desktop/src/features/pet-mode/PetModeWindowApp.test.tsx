@@ -322,7 +322,7 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("automatic-drift-nudge", false);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("automatic-drift-nudge", false, "user_intercepted");
     expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("automatic-drift-nudge");
     expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
@@ -1707,7 +1707,7 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
 
-    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-without-geometry", false);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-without-geometry", false, "target_unavailable");
     expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
   });
 
@@ -1747,7 +1747,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
-    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("browser-x-fallback", false);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("browser-x-fallback", false, "target_unavailable");
   });
 
   it("returns home even when the native contact signal fails", async () => {

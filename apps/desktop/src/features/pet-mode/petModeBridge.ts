@@ -23,6 +23,7 @@ type UnlistenFn = () => void;
 type PetModeContactEvent = {
   readonly id: string;
   readonly contacted?: boolean;
+  readonly reason?: string | null;
 };
 
 type PetModePointerEvent = {
@@ -112,27 +113,67 @@ export async function setNativePetModeSize(width: number, height: number): Promi
   await invoke("pet_mode_set_size", { width, height });
 }
 
+/**
+ * Why the intervention no longer resolves to a bare boolean: every non-contact
+ * outcome used to collapse into `false`, and the caller translated that into
+ * "the user caught the cat". A silent renderer rejection, a slow AX scan, or a
+ * hung webview then cancelled the automatic close as if the user had asked for
+ * mercy. The outcome keeps user interception distinct from technical failure
+ * so only a real catch can spend the reprieve.
+ */
+export type PetModeInterventionOutcome =
+  | "contacted"
+  | "user_intercepted"
+  | "rejected"
+  | "timed_out"
+  | "failed";
+
+export type PetModeInterventionResult = {
+  readonly outcome: PetModeInterventionOutcome;
+  /** Renderer-reported detail (e.g. rejection guard), for diagnostics only. */
+  readonly reason: string | null;
+  /** Milliseconds from invoke to settlement, for drift alarm debug events. */
+  readonly elapsedMs: number;
+};
+
+function classifyPetModeContactEvent(payload: PetModeContactEvent): PetModeInterventionOutcome {
+  if (payload.contacted !== false) return "contacted";
+  // The renderer distinguishes a guard rejection from a user catch. A missing
+  // reason (undefined from a stale renderer, null once Rust serializes an
+  // omitted Option) came only from the interrupted-action paths, so it keeps
+  // the user-interception meaning rather than silently losing the reprieve.
+  if (payload.reason == null || payload.reason === "user_intercepted") {
+    return "user_intercepted";
+  }
+  if (typeof payload.reason !== "string") return "user_intercepted";
+  return "rejected";
+}
+
 export async function playNativePetModeIntervention(
   target: PetModeInterventionTarget,
-): Promise<boolean> {
-  if (!isTauriRuntime()) return false;
+): Promise<PetModeInterventionResult> {
+  const startedAt = Date.now();
+  if (!isTauriRuntime()) {
+    return { outcome: "failed", reason: "not_tauri_runtime", elapsedMs: 0 };
+  }
 
-  return new Promise<boolean>((resolve) => {
+  return new Promise<PetModeInterventionResult>((resolve) => {
     let settled = false;
     let timeoutId = 0;
     let unlisten: UnlistenFn | null = null;
 
-    const finish = (contacted: boolean) => {
+    const finish = (outcome: PetModeInterventionOutcome, reason: string | null) => {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeoutId);
       unlisten?.();
-      resolve(contacted);
+      resolve({ outcome, reason, elapsedMs: Date.now() - startedAt });
     };
 
-    timeoutId = window.setTimeout(() => finish(false), PET_MODE_CONTACT_TIMEOUT_MS);
+    timeoutId = window.setTimeout(() => finish("timed_out", "contact_timeout"), PET_MODE_CONTACT_TIMEOUT_MS);
     void listen<PetModeContactEvent>("pet-mode-contact", ({ payload }) => {
-      if (payload.id === target.id) finish(payload.contacted !== false);
+      if (payload.id !== target.id) return;
+      finish(classifyPetModeContactEvent(payload), payload.reason ?? null);
     }).then((nextUnlisten) => {
       if (settled) {
         nextUnlisten();
@@ -140,7 +181,9 @@ export async function playNativePetModeIntervention(
       }
       unlisten = nextUnlisten;
       return invoke("pet_mode_intervene", { target });
-    }).catch(() => finish(false));
+    }).catch((error: unknown) => {
+      finish("failed", error instanceof Error ? error.message : "invoke_failed");
+    });
   });
 }
 
@@ -266,8 +309,12 @@ export async function alignNativePetContact(request: {
   return invoke<PetModeContactAlignment>("pet_mode_align_contact", { request });
 }
 
-export async function reportNativePetContact(id: string, contacted = true): Promise<void> {
-  await invoke("pet_mode_report_contact", { id, contacted });
+export async function reportNativePetContact(
+  id: string,
+  contacted = true,
+  reason: string | null = null,
+): Promise<void> {
+  await invoke("pet_mode_report_contact", { id, contacted, reason });
 }
 
 export async function reportNativePetPointer(): Promise<void> {

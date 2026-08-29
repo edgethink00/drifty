@@ -11,7 +11,8 @@ import {
 const tauri = vi.hoisted(() => ({ emit: vi.fn(), invoke: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ emit: tauri.emit, listen: vi.fn() }));
+const tauriListen = vi.hoisted(() => ({ listen: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ emit: tauri.emit, listen: tauriListen.listen }));
 vi.mock("../companion/watcherBridge", () => ({ isTauriRuntime: () => true }));
 
 async function loadSetEnabled() {
@@ -285,5 +286,106 @@ describe("pet mode enabled bridge", () => {
         maxGripMs: 760,
       },
     });
+  });
+});
+
+describe("pet mode intervention outcome classification", () => {
+  type ContactHandler = (event: { payload: { id: string; contacted?: boolean; reason?: string } }) => void;
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    tauri.emit.mockReset();
+    tauri.invoke.mockReset();
+    tauriListen.listen.mockReset();
+  });
+
+  async function startIntervention() {
+    let handler: ContactHandler | null = null;
+    const unlisten = vi.fn();
+    tauriListen.listen.mockImplementation(async (_event: string, nextHandler: ContactHandler) => {
+      handler = nextHandler;
+      return unlisten;
+    });
+    tauri.invoke.mockResolvedValue(undefined);
+    const bridge = await import("./petModeBridge");
+    const result = bridge.playNativePetModeIntervention({
+      id: "alert:1",
+      appName: "Aside",
+      browserName: "Aside",
+      preview: false,
+    });
+    // Let the listener registration and the intervene invoke settle.
+    await vi.advanceTimersByTimeAsync(0);
+    return { result, sendContact: (payload: { id: string; contacted?: boolean; reason?: string }) => handler?.({ payload }) };
+  }
+
+  it("classifies a paw contact as contacted", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: true });
+    await expect(result).resolves.toMatchObject({ outcome: "contacted" });
+  });
+
+  it("classifies an explicit user interception as user_intercepted", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false, reason: "user_intercepted" });
+    await expect(result).resolves.toMatchObject({ outcome: "user_intercepted" });
+  });
+
+  it("keeps legacy reason-less failures meaning user interception", async () => {
+    // Older pet renderers report contacted=false with no reason only from the
+    // interrupted-action paths, so the classification must stay conservative.
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false });
+    await expect(result).resolves.toMatchObject({ outcome: "user_intercepted" });
+  });
+
+  it("treats a Rust-serialized null reason as user interception too", async () => {
+    // pet_mode_report_contact serializes an omitted Option<String> as null,
+    // which must not demote a real catch into a rejected/technical outcome.
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false, reason: null as unknown as string });
+    await expect(result).resolves.toMatchObject({ outcome: "user_intercepted" });
+  });
+
+  it("classifies a renderer guard rejection as rejected, not a catch", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false, reason: "renderer_focus_resting" });
+    await expect(result).resolves.toMatchObject({ outcome: "rejected", reason: "renderer_focus_resting" });
+  });
+
+  it("classifies eight seconds of silence as timed_out, never as a catch", async () => {
+    // This is the exact failure observed on 2026-08-29: no contact report
+    // arrived and the old boolean collapse turned the timeout into
+    // pet_intercepted, cancelling the close the user had enabled.
+    const { result } = await startIntervention();
+    await vi.advanceTimersByTimeAsync(8_000);
+    await expect(result).resolves.toMatchObject({ outcome: "timed_out", reason: "contact_timeout" });
+  });
+
+  it("ignores contact reports for other intervention ids", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:other", contacted: false, reason: "user_intercepted" });
+    await vi.advanceTimersByTimeAsync(8_000);
+    await expect(result).resolves.toMatchObject({ outcome: "timed_out" });
+  });
+
+  it("classifies a failed intervene invoke as failed", async () => {
+    let handler: ContactHandler | null = null;
+    tauriListen.listen.mockImplementation(async (_event: string, nextHandler: ContactHandler) => {
+      handler = nextHandler;
+      return vi.fn();
+    });
+    tauri.invoke.mockRejectedValue(new Error("Pet Mode is disabled"));
+    const bridge = await import("./petModeBridge");
+    const result = bridge.playNativePetModeIntervention({
+      id: "alert:2",
+      appName: "Aside",
+      browserName: "Aside",
+      preview: false,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(handler).not.toBeNull();
+    await expect(result).resolves.toMatchObject({ outcome: "failed", reason: "Pet Mode is disabled" });
   });
 });

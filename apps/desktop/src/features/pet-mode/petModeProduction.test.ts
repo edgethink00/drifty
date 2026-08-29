@@ -218,15 +218,21 @@ describe("catching the cat cancels the close", () => {
   const petWindow = readFileSync("src/features/pet-mode/PetModeWindowApp.tsx", "utf8");
   const cat = readFileSync("src/features/pet-mode/PetModeCat.tsx", "utf8");
 
-  it("never closes a tab or app when the paw did not reach its contact frame", () => {
-    // The paw contact frame is the stated cause of the close. Closing without
-    // it turns the whole approach animation into a lie and destroys a tab the
-    // user just reached out to protect.
+  it("cancels the close only for a real user catch, never for a technical failure", () => {
+    // The paw contact frame is the stated cause of the close, so a genuine
+    // catch cancels it. But a renderer rejection, timeout, or hung webview is
+    // not a user decision: those must fall through to the plain close instead
+    // of being misread as mercy (observed 2026-08-29: an 8s contact timeout
+    // was translated into pet_intercepted and the drift tab survived).
     const runner = app.slice(app.indexOf("const runExtremeNudge = async () => {"));
-    const body = runner.slice(0, runner.indexOf("applyNativeExtremeNudge"));
-    expect(body).toContain("const contacted = await playNativePetModeIntervention");
-    expect(body).toContain("if (!contacted)");
+    const body = runner.slice(0, runner.indexOf("return applyNativeExtremeNudge"));
+    expect(body).toContain("const intervention = await playNativePetModeIntervention");
+    expect(body).toContain('if (intervention.outcome === "user_intercepted")');
     expect(body).toContain("pet_intercepted");
+    // Non-catch outcomes are logged for diagnosis but do not return early.
+    expect(body).toContain('if (intervention.outcome !== "contacted")');
+    expect(body).toContain("extreme_nudge_pet_skipped");
+    expect(body).not.toContain("if (!contacted)");
   });
 
   it("hands an intercepted nudge to the companion without an OS notification", () => {
@@ -258,7 +264,20 @@ describe("catching the cat cancels the close", () => {
     // Without this the caller burns the full contact timeout before it can
     // react, leaving a caught cat in the user's hand and a silent screen.
     const finallyBlock = petWindow.slice(petWindow.indexOf("} finally {"));
-    expect(finallyBlock.slice(0, finallyBlock.indexOf("if (movedToTarget)"))).toContain("reportNativePetContact(target.id, false)");
+    expect(finallyBlock.slice(0, finallyBlock.indexOf("if (movedToTarget)")))
+      .toContain('reportNativePetContact(target.id, false, "user_intercepted")');
+  });
+
+  it("rejects a guarded intervention loudly instead of letting it time out", () => {
+    // A busy/focused/drag-guarded renderer used to drop the event with no
+    // reply; the main window could only see an 8-second timeout and misread
+    // it as a catch. The guard must answer immediately with its reason.
+    const guard = petWindow.slice(petWindow.indexOf("const rejectionReason ="));
+    const guardBody = guard.slice(0, guard.indexOf("reportLabState();"));
+    expect(guardBody).toContain("renderer_busy_intervention");
+    expect(guardBody).toContain("renderer_focus_resting");
+    expect(guardBody).toContain("renderer_manual_drag");
+    expect(guardBody).toContain("reportNativePetContact(event.target.id, false, rejectionReason)");
   });
 
   it("warns before the close while the approach can still be interrupted", () => {
