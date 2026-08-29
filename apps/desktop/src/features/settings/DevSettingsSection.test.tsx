@@ -32,7 +32,8 @@ const bootShellActions = vi.hoisted(() => ({
 }));
 
 const petModeLabEvents = vi.hoisted(() => ({
-  listener: null as ((state: { phase: string; activeAction: string | null; lifeLoopEnabled: boolean }) => void) | null,
+  listener: null as ((state: { phase: string; activeAction: string | null; lifeLoopEnabled: boolean; facing?: "left" | "right" }) => void) | null,
+  previewFacing: vi.fn().mockResolvedValue(true),
   request: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -57,6 +58,7 @@ vi.mock("../pet-mode/petModeBridge", () => ({
     return vi.fn();
   }),
   requestNativePetModeLabState: petModeLabEvents.request,
+  previewNativePetModeFacing: petModeLabEvents.previewFacing,
 }));
 
 describe("DevSettingsSection", () => {
@@ -70,6 +72,7 @@ describe("DevSettingsSection", () => {
     featureSwitches.demoDashboardReplayDevToolEnabled = false;
     bootShellActions.showBootShellPreview.mockClear();
     petModeLabEvents.listener = null;
+    petModeLabEvents.previewFacing.mockClear();
     petModeLabEvents.request.mockClear();
   });
 
@@ -185,6 +188,35 @@ describe("DevSettingsSection", () => {
 
     expect(screen.getByText("Sitting", { selector: ".pet-mode-lab__status" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Sit G pose QA/ }).classList.contains("is-active")).toBe(true);
+  });
+
+  it("previews left and right facing only while the pet is resting", async () => {
+    renderProductionDevSettings({ petModeEnabled: true });
+    await act(async () => undefined);
+
+    const facingToggle = screen.getByRole("switch", { name: "Face pet right" });
+    expect(facingToggle.getAttribute("disabled")).toBe("");
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "idle", activeAction: null, lifeLoopEnabled: false, facing: "left" });
+    });
+    expect(screen.getByText("Facing left")).toBeTruthy();
+    expect(facingToggle.getAttribute("disabled")).toBeNull();
+    expect(facingToggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(facingToggle);
+    expect(petModeLabEvents.previewFacing).toHaveBeenLastCalledWith("right");
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "idle", activeAction: null, lifeLoopEnabled: false, facing: "right" });
+    });
+    expect(screen.getByText("Facing right")).toBeTruthy();
+    fireEvent.click(facingToggle);
+    expect(petModeLabEvents.previewFacing).toHaveBeenLastCalledWith("left");
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "walk", activeAction: "walk", lifeLoopEnabled: false, facing: "left" });
+    });
+    expect(facingToggle.getAttribute("disabled")).toBe("");
   });
 
   it("keeps explicit cursor hunt previews available while the focused cat is sitting", async () => {

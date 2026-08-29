@@ -215,6 +215,8 @@ export type PetModeLabState = {
   readonly phase: string;
   readonly activeAction: PetModeLabAction | null;
   readonly lifeLoopEnabled: boolean;
+  /** Optional for compatibility with a pet webview that has not reloaded yet. */
+  readonly facing?: "left" | "right";
 };
 
 export type PetModeSnapshot = {
@@ -242,6 +244,7 @@ export type PetModeWindowEvent =
   }
   | { readonly kind: "entry_complete" }
   | { readonly kind: "preview_action"; readonly action: PetModePreviewAction }
+  | { readonly kind: "preview_facing"; readonly facing: "left" | "right" }
   | { readonly kind: "intervention"; readonly target: PetModeInterventionTarget }
   | { readonly kind: "guides"; readonly enabled: boolean };
 

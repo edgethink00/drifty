@@ -153,6 +153,12 @@ export async function previewNativePetModeAction(action: PetModePreviewAction): 
   return true;
 }
 
+export async function previewNativePetModeFacing(facing: "left" | "right"): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  await emit("pet-mode-event", { kind: "preview_facing", facing } satisfies PetModeWindowEvent);
+  return true;
+}
+
 export async function cancelNativePetMotion(): Promise<void> {
   if (!isTauriRuntime()) return;
   await invoke("pet_mode_cancel_motion");

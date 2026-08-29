@@ -259,6 +259,7 @@ export function PetModeWindowApp() {
       phase: nextPhase,
       activeAction: activeLabActionRef.current,
       lifeLoopEnabled: labLifeLoopEnabledRef.current,
+      facing: facingRef.current,
     }).catch(() => undefined);
   }, []);
 
@@ -307,11 +308,13 @@ export function PetModeWindowApp() {
         renderedFacingRef.current = nextFacing;
         setFacing(nextFacing);
         setHitRegionCommitRevision((revision) => revision + 1);
+        reportLabState();
       }
     };
     const reject = () => {
       if (transition !== facingTransitionRef.current || facingRef.current !== nextFacing) return;
       facingRef.current = renderedFacingRef.current;
+      reportLabState();
     };
     if (!petModeEnabledRef.current || !visibleRef.current) {
       commit();
@@ -322,7 +325,7 @@ export function PetModeWindowApp() {
       regionId: `transition:facing:${nextFacing}`,
       mirrored: nextFacing === "left",
     }).then(commit, reject).finally(finishTransition);
-  }, [beginHitRegionTransition]);
+  }, [beginHitRegionTransition, reportLabState]);
 
   const commitVisibility = useCallback((visible: boolean) => {
     visibleRef.current = visible;
@@ -921,6 +924,23 @@ export function PetModeWindowApp() {
       }
       if (event.kind === "facing") {
         commitFacing(event.facing);
+        return;
+      }
+      if (event.kind === "preview_facing") {
+        const devModeEnabled = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1";
+        const resting = phaseRef.current === "idle" || phaseRef.current === "sit";
+        if (
+          devModeEnabled
+          && petModeEnabledRef.current
+          && visibleRef.current
+          && resting
+          && activeLabActionRef.current === null
+          && !manualDragRef.current
+        ) {
+          commitFacing(event.facing);
+        } else {
+          reportLabState();
+        }
         return;
       }
       if (event.kind === "motion") {

@@ -20,7 +20,7 @@ import type { EnhancedContextSettings, EnhancedContextSourceFamily } from "./set
 import { useLocalization } from "../localization/LocalizationContext";
 import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
-import { listenToNativePetModeLabState, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
+import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import {
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
@@ -246,6 +246,10 @@ export function DevSettingsSection({
         : petModeLabState?.lifeLoopEnabled
           ? "Loop on"
           : "Ready";
+  const petFacingBusy = !petModeEnabled
+    || petModeLabState === null
+    || petModeLabState.activeAction !== null
+    || (petModeLabState.phase !== "idle" && petModeLabState.phase !== "sit");
 
   return (
     <div className="settings-section">
@@ -321,16 +325,30 @@ export function DevSettingsSection({
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Behavior</div>
             </div>
-            <div className="pet-mode-lab__controls" aria-label="Pet behavior actions">
-              <PetModeLabAction label="Walk" detail="20.8 px/s sample · 0.90×" action="walk" active={petModeLabState?.activeAction === "walk"} disabled={isPetModeLabActionDisabled("walk")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Pet reaction" detail="Lean and heart" action="pet" active={petModeLabState?.activeAction === "pet"} disabled={isPetModeLabActionDisabled("pet")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Blink" detail="228 ms" action="blink" active={petModeLabState?.activeAction === "blink"} disabled={isPetModeLabActionDisabled("blink")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Tail flick" detail="Flow Tail B · 3.1 s" action="tail_flick" active={petModeLabState?.activeAction === "tail_flick"} disabled={isPetModeLabActionDisabled("tail_flick")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Stretch" detail="Flow Stretch C · 3.1 s" action="stretch" active={petModeLabState?.activeAction === "stretch"} disabled={isPetModeLabActionDisabled("stretch")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Music note" detail="Manual 760 ms preview" action="music_note" active={petModeLabState?.activeAction === "music_note"} disabled={isPetModeLabActionDisabled("music_note")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Sit" detail="G pose QA" action="sit" active={petModeLabState?.activeAction === "sit"} disabled={isPetModeLabActionDisabled("sit")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
-              <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
+            <div>
+              <div className="pet-mode-lab__experiment-policy" data-active={petModeLabState?.facing === "right"}>
+                <span>
+                  <strong>{petModeLabState?.facing === "right" ? "Facing right" : petModeLabState?.facing === "left" ? "Facing left" : "Facing unavailable"}</strong>
+                  <small>Dev-only preview · the next movement chooses its own direction</small>
+                </span>
+                <Toggle
+                  checked={petModeLabState?.facing === "right"}
+                  disabled={petFacingBusy}
+                  onChange={(faceRight) => { void previewNativePetModeFacing(faceRight ? "right" : "left").catch(() => undefined); }}
+                  ariaLabel="Face pet right"
+                />
+              </div>
+              <div className="pet-mode-lab__controls" aria-label="Pet behavior actions">
+                <PetModeLabAction label="Walk" detail="20.8 px/s sample · 0.90×" action="walk" active={petModeLabState?.activeAction === "walk"} disabled={isPetModeLabActionDisabled("walk")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Pet reaction" detail="Lean and heart" action="pet" active={petModeLabState?.activeAction === "pet"} disabled={isPetModeLabActionDisabled("pet")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Blink" detail="228 ms" action="blink" active={petModeLabState?.activeAction === "blink"} disabled={isPetModeLabActionDisabled("blink")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Tail flick" detail="Flow Tail B · 3.1 s" action="tail_flick" active={petModeLabState?.activeAction === "tail_flick"} disabled={isPetModeLabActionDisabled("tail_flick")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Stretch" detail="Flow Stretch C · 3.1 s" action="stretch" active={petModeLabState?.activeAction === "stretch"} disabled={isPetModeLabActionDisabled("stretch")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Music note" detail="Manual 760 ms preview" action="music_note" active={petModeLabState?.activeAction === "music_note"} disabled={isPetModeLabActionDisabled("music_note")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Sit" detail="G pose QA" action="sit" active={petModeLabState?.activeAction === "sit"} disabled={isPetModeLabActionDisabled("sit")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Sleep" detail="First touch stays asleep" action="sleep" active={petModeLabState?.activeAction === "sleep"} disabled={isPetModeLabActionDisabled("sleep")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="Wake" detail="Return to idle" action="wake" active={petModeLabState?.activeAction === "wake"} disabled={isPetModeLabActionDisabled("wake")} onAction={onPreviewPetModeAction} />
+              </div>
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--scenarios">

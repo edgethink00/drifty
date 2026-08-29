@@ -682,6 +682,39 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
   });
 
+  it("applies the facing preview only from Dev mode while the pet is resting", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    bridge.stagePetModeHitRegionTransition.mockClear();
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_facing", facing: "left" });
+    });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(false);
+    expect(bridge.stagePetModeHitRegionTransition).not.toHaveBeenCalled();
+
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "preview_facing", facing: "left" });
+      await Promise.resolve();
+    });
+
+    expect(bridge.stagePetModeHitRegionTransition).toHaveBeenCalledWith({
+      regionId: "transition:facing:left",
+      mirrored: true,
+    });
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("is-mirrored")).toBe(true);
+    expect(bridge.reportNativePetModeLabState).toHaveBeenCalledWith(expect.objectContaining({
+      facing: "left",
+    }));
+  });
+
   it("does not paint a new facing until native has closed the previous hit region", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: true }));

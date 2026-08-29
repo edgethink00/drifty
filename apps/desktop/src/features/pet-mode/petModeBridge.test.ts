@@ -8,10 +8,10 @@ import {
   resolvePetModeDriftCursorReturnDuration,
 } from "./petModeDriftHunt";
 
-const tauri = vi.hoisted(() => ({ invoke: vi.fn() }));
+const tauri = vi.hoisted(() => ({ emit: vi.fn(), invoke: vi.fn() }));
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: tauri.invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ emit: vi.fn(), listen: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ emit: tauri.emit, listen: vi.fn() }));
 vi.mock("../companion/watcherBridge", () => ({ isTauriRuntime: () => true }));
 
 async function loadSetEnabled() {
@@ -22,6 +22,7 @@ async function loadSetEnabled() {
 describe("pet mode enabled bridge", () => {
   beforeEach(() => {
     vi.resetModules();
+    tauri.emit.mockReset();
     tauri.invoke.mockReset();
   });
 
@@ -75,6 +76,19 @@ describe("pet mode enabled bridge", () => {
       width: 180,
       height: 124,
     });
+  });
+
+  it("publishes a renderer-only facing preview without changing native movement", async () => {
+    tauri.emit.mockResolvedValueOnce(undefined);
+    const { previewNativePetModeFacing } = await import("./petModeBridge");
+
+    await expect(previewNativePetModeFacing("left")).resolves.toBe(true);
+
+    expect(tauri.emit).toHaveBeenCalledWith("pet-mode-event", {
+      kind: "preview_facing",
+      facing: "left",
+    });
+    expect(tauri.invoke).not.toHaveBeenCalled();
   });
 
   it("publishes the versioned frame region to the native controller", async () => {
