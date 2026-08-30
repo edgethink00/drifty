@@ -27,9 +27,9 @@ export const DRIFT_ALERTS_STORAGE_KEY = "drifty.notifications.driftAlerts";
 
 export const DRIFT_ALERT_DELAY_STORAGE_KEY = "drifty.notifications.driftAlertDelaySeconds";
 
-export const DEFAULT_DRIFT_ALERT_DELAY_SECONDS: DriftAlertDelaySeconds = 60;
+export const DEFAULT_DRIFT_ALERT_DELAY_SECONDS: DriftAlertDelaySeconds = 30;
 
-export const DEFAULT_DRIFT_ALERT_DELAY_VALUE: DriftAlertDelayValue = "60";
+export const DEFAULT_DRIFT_ALERT_DELAY_VALUE: DriftAlertDelayValue = "30";
 
 export const DRIFT_ALERT_DELAY_OPTIONS = [
   { value: "0", seconds: 0, label: "Instant", detail: "As soon as drift is detected" },
