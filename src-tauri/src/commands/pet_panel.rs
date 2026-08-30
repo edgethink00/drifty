@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use tauri::{AppHandle, Emitter, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, WebviewWindow};
 
 use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan, PET_MODE_WINDOW_LABEL};
 
@@ -252,6 +252,104 @@ pub fn show_pet_panel(app: &AppHandle, window: &WebviewWindow) -> Result<(), Str
     show_pet_panel_on_main_thread(app, window)
 }
 
+/// Position the hidden pet panel and reveal it as one AppKit transaction.
+///
+/// Tauri's macOS `set_position` queues `setFrameTopLeftPoint` asynchronously.
+/// Calling it immediately before `show_pet_panel` can therefore reveal the
+/// panel at its stale hidden position for one compositor frame. Apply the
+/// native frame change synchronously on AppKit's main thread, then order the
+/// panel in before returning.
+pub fn show_pet_panel_at_position(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    desired: LogicalPosition<f64>,
+) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2::MainThreadMarker;
+
+        if pet_panel_needs_main_thread_hop(MainThreadMarker::new().is_some()) {
+            let app_for_main = app.clone();
+            let window_for_main = window.clone();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            app.run_on_main_thread(move || {
+                let _ = sender.send(show_pet_panel_at_position_on_main_thread(
+                    &app_for_main,
+                    &window_for_main,
+                    desired,
+                ));
+            })
+            .map_err(|error| error.to_string())?;
+
+            return receiver
+                .recv_timeout(PET_PANEL_MAIN_THREAD_TIMEOUT)
+                .map_err(|_| "Pet Mode positioned panel presentation timed out".to_string())?;
+        }
+
+        return show_pet_panel_at_position_on_main_thread(app, window, desired);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        window
+            .set_position(desired)
+            .map_err(|error| error.to_string())?;
+        show_pet_panel(app, window)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn pet_panel_native_origin_after_logical_move(
+    current_native_origin: (f64, f64),
+    current_logical: LogicalPosition<f64>,
+    desired: LogicalPosition<f64>,
+) -> Option<(f64, f64)> {
+    if ![
+        current_native_origin.0,
+        current_native_origin.1,
+        current_logical.x,
+        current_logical.y,
+        desired.x,
+        desired.y,
+    ]
+    .into_iter()
+    .all(f64::is_finite)
+    {
+        return None;
+    }
+    (
+        current_native_origin.0 + (desired.x - current_logical.x),
+        current_native_origin.1 - (desired.y - current_logical.y),
+    )
+        .into()
+}
+
+/// The actual positioned presentation, always reached on the main thread.
+#[cfg(target_os = "macos")]
+fn show_pet_panel_at_position_on_main_thread(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    desired: LogicalPosition<f64>,
+) -> Result<(), String> {
+    use objc2_app_kit::NSWindow;
+    use objc2_foundation::NSPoint;
+
+    let ptr = window.ns_window().map_err(|error| error.to_string())?;
+    // SAFETY: Tauri retains this NSWindow and the caller guarantees that this
+    // function runs on AppKit's main thread.
+    let ns_window: &NSWindow = unsafe { &*ptr.cast::<NSWindow>() };
+    let frame = ns_window.frame();
+    let current = current_pet_logical_position(window)?;
+    let (x, y) = pet_panel_native_origin_after_logical_move(
+        (frame.origin.x, frame.origin.y),
+        current,
+        desired,
+    )
+    .ok_or_else(|| "Pet Mode positioned panel received a non-finite origin".to_string())?;
+    ns_window.setFrameOrigin(NSPoint::new(x, y));
+    show_pet_panel_on_main_thread(app, window)
+}
+
 /// The actual presentation, always reached on the main thread.
 fn show_pet_panel_on_main_thread(app: &AppHandle, window: &WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
@@ -492,9 +590,9 @@ pub fn perform_pet_panel_drag(
 
 #[cfg(test)]
 mod tests {
-    #[cfg(target_os = "macos")]
-    use super::pet_panel_needs_main_thread_hop;
     use super::{is_pet_drag_delta, pet_drag_origin, PetShakeDetector};
+    #[cfg(target_os = "macos")]
+    use super::{pet_panel_native_origin_after_logical_move, pet_panel_needs_main_thread_hop};
 
     fn observe_path(detector: &mut PetShakeDetector, points: &[(u64, f64, f64)]) {
         for &(at_ms, x, y) in points {
@@ -673,5 +771,42 @@ mod tests {
     #[test]
     fn presentation_on_the_main_thread_runs_directly() {
         assert!(!pet_panel_needs_main_thread_hop(true));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn positioned_presentation_converts_logical_y_to_appkit_y() {
+        let origin = pet_panel_native_origin_after_logical_move(
+            (-1884.0, -406.0),
+            tauri::LogicalPosition::new(-1920.0, 120.0),
+            tauri::LogicalPosition::new(-1700.0, 75.0),
+        );
+
+        assert_eq!(origin, Some((-1664.0, -361.0)));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn positioned_presentation_keeps_a_same_y_home_snap_on_an_external_display() {
+        let origin = pet_panel_native_origin_after_logical_move(
+            (-168.0, 44.0),
+            tauri::LogicalPosition::new(-168.0, 44.0),
+            tauri::LogicalPosition::new(-24.0, 44.0),
+        );
+
+        assert_eq!(origin, Some((-24.0, 44.0)));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn positioned_presentation_rejects_non_finite_coordinates() {
+        assert_eq!(
+            pet_panel_native_origin_after_logical_move(
+                (-168.0, 44.0),
+                tauri::LogicalPosition::new(-168.0, 44.0),
+                tauri::LogicalPosition::new(f64::NAN, 44.0),
+            ),
+            None
+        );
     }
 }

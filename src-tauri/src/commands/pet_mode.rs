@@ -23,15 +23,17 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 use objc2_foundation::NSPoint;
 
 use super::pet_drop::{
-    clamp_floor_home_pt, plan_pet_drop_with_floor_home, plan_pet_shake_floor_drop,
-    PetDropKind, PetDropPlan, PetRect, PET_DROP_FLOOR_HOME_PT,
+    clamp_floor_home_pt, plan_pet_drop_with_floor_home, plan_pet_shake_floor_drop, PetDropKind,
+    PetDropPlan, PetRect, PET_DROP_FLOOR_HOME_PT,
 };
 use super::pet_drop_windows::{inferred_bottom_dock, list_on_screen_ledges};
 use super::pet_hit_region::{
     install_pet_hit_region_monitor, pet_hit_region_pointer_inside,
     refresh_pet_hit_region_for_window, reset_pet_hit_region, set_pet_window_interactive,
 };
-use super::pet_panel::{configure_pet_panel, perform_pet_panel_drag, show_pet_panel};
+use super::pet_panel::{
+    configure_pet_panel, perform_pet_panel_drag, show_pet_panel, show_pet_panel_at_position,
+};
 
 #[cfg(target_os = "macos")]
 #[path = "pet_mode_native_ax.rs"]
@@ -672,10 +674,7 @@ pub fn pet_mode_set_enabled(
         window
             .set_size(LogicalSize::new(final_width, final_height))
             .map_err(|error| error.to_string())?;
-        window
-            .set_position(home)
-            .map_err(|error| error.to_string())?;
-        show_pet_panel(&app, &window)?;
+        show_pet_panel_at_position(&app, &window, home)?;
         PET_MODE_ENABLED.store(true, Ordering::Relaxed);
         PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
         if force_reveal {
@@ -686,10 +685,7 @@ pub fn pet_mode_set_enabled(
         window
             .set_size(LogicalSize::new(final_width, final_height))
             .map_err(|error| error.to_string())?;
-        window
-            .set_position(LogicalPosition::new(entry.start_x, home.y))
-            .map_err(|error| error.to_string())?;
-        show_pet_panel(&app, &window)?;
+        show_pet_panel_at_position(&app, &window, LogicalPosition::new(entry.start_x, home.y))?;
         PET_MODE_ENABLED.store(true, Ordering::Relaxed);
         PET_MODE_ENTRY_ACTIVE.store(true, Ordering::Relaxed);
         if force_reveal {
