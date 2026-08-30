@@ -44,6 +44,17 @@ function renderSelect() {
 }
 
 describe("SettingsSelect row actions", () => {
+  it("marks the current value with a selected fill instead of a trailing check", () => {
+    renderSelect();
+    fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
+
+    const selected = screen.getByRole("option", { name: "Current model" });
+    expect(selected.classList.contains("is-selected")).toBe(true);
+    expect(selected.getAttribute("aria-selected")).toBe("true");
+    expect(selected.querySelector(".settings-select-control__check")).toBeNull();
+    expect(screen.getByRole("option", { name: "Local model" }).classList.contains("is-selected")).toBe(false);
+  });
+
   it("keeps the popup open while Tab moves from the combobox into row actions", () => {
     renderSelect();
     const trigger = screen.getByRole("combobox", { name: "AI model" });

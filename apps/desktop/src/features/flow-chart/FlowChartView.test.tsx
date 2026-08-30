@@ -198,7 +198,7 @@ describe("FlowChartView", () => {
 
     const selectedOption = screen.getByRole("option", { name: "4m" });
     expect(selectedOption.classList.contains("is-selected")).toBe(true);
-    expect(selectedOption.querySelector(".settings-select-control__check")).toBeTruthy();
+    expect(selectedOption.querySelector(".settings-select-control__check")).toBeNull();
   });
 
   it("supports keyboard-only Flow detail selection", () => {

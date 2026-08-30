@@ -792,7 +792,7 @@
 }
 
 .settings-select-control__option {
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
   min-height: 1.56rem;
@@ -811,10 +811,9 @@
   padding-right: var(--space-2);
 }
 
-.settings-select-control__option:hover,
-.settings-select-control__option.is-active {
-  background: color-mix(in srgb, var(--surface-strong) 82%, var(--accent-soft));
-  border-color: color-mix(in srgb, var(--accent) 20%, transparent);
+.settings-select-control__option:hover:not(.is-selected),
+.settings-select-control__option.is-active:not(.is-selected) {
+  background: color-mix(in srgb, var(--surface-strong) 90%, var(--accent-soft));
 }
 
 .settings-select-control__option.is-disabled {
@@ -887,32 +886,9 @@
 }
 
 .settings-select-control__option.is-selected {
+  background: color-mix(in srgb, var(--surface-strong) 82%, var(--accent-soft));
   color: var(--text);
   font-weight: 650;
-}
-
-.settings-select-control__check {
-  position: relative;
-  flex: 0 0 0.76rem;
-  width: 0.76rem;
-  height: 0.76rem;
-  opacity: 0;
-}
-
-.settings-select-control__check::after {
-  position: absolute;
-  top: 0.14rem;
-  left: 0.12rem;
-  width: 0.42rem;
-  height: 0.22rem;
-  border-bottom: 1.7px solid currentColor;
-  border-left: 1.7px solid currentColor;
-  content: "";
-  transform: rotate(-45deg);
-}
-
-.settings-select-control__option.is-selected .settings-select-control__check {
-  opacity: 1;
 }
 
 /* Settings 전용의 조밀한 컨트롤 계약. 앱 표면 버튼은 `.app-btn`을 쓴다. */

@@ -266,23 +266,18 @@
   min-width: 0;
 }
 
-.ai-setup-select-control .settings-select-control__option .settings-select-control__check {
-  flex: 0 0 auto;
-  margin-left: auto;
-}
-
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option {
   padding-right: 6.7rem;
 }
 
-/* Icon-action rows (installed local models) are far narrower than a text pill, so
-   reserve only enough room to sit the selected-check right beside the icons. */
+/* Icon-action rows (installed local models) are far narrower than a text pill. */
 .ai-setup-select-control .settings-select-control__option-row--icon-actions.has-action .settings-select-control__option {
   padding-right: 4.6rem;
 }
 
 .ai-setup-select-control .settings-select-control__option.is-selected {
   font-weight: 500;
+  background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 /* Providers that still need API keys / config read as "not ready" but stay clickable
@@ -292,11 +287,11 @@
 }
 
 /* Block-level hover / keyboard-active fill on each option. */
-.ai-setup-select-control .settings-select-control__option:hover,
-.ai-setup-select-control .settings-select-control__option.is-active,
-.ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option,
-.ai-setup-select-control .settings-select-control__option-row:focus-within .settings-select-control__option {
-  background: color-mix(in srgb, var(--text) 9%, transparent);
+.ai-setup-select-control .settings-select-control__option:hover:not(.is-selected),
+.ai-setup-select-control .settings-select-control__option.is-active:not(.is-selected),
+.ai-setup-select-control .settings-select-control__option-row:hover .settings-select-control__option:not(.is-selected),
+.ai-setup-select-control .settings-select-control__option-row:focus-within .settings-select-control__option:not(.is-selected) {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
 }
 
 .ai-setup-select-control .settings-select-control__option.is-disabled:hover,

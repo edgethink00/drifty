@@ -107,6 +107,8 @@ describe("Settings content styles", () => {
     const styles = readAppStyles();
     const optionRowRule = cssRule(styles, ".settings-select-control__option-row");
     const actionRowRule = cssRule(styles, ".settings-select-control__option-row.has-action");
+    const selectedOptionRule = cssRule(styles, ".settings-select-control__option.is-selected");
+    const hoverOptionRule = cssRule(styles, ".settings-select-control__option:hover:not(.is-selected),\n.settings-select-control__option.is-active:not(.is-selected)");
     const aiActionRowRule = cssRule(
       readAiSetupStyles(),
       ".ai-setup-select-control .settings-select-control__option-row.has-action",
@@ -120,6 +122,9 @@ describe("Settings content styles", () => {
       "gap: var(--space-1);",
       "grid-template-columns: minmax(0, 1fr) auto;",
     ]);
+    expect(selectedOptionRule).toContain("background: color-mix(in srgb, var(--surface-strong) 82%, var(--accent-soft));");
+    expect(hoverOptionRule).toContain("background: color-mix(in srgb, var(--surface-strong) 90%, var(--accent-soft));");
+    expect(styles).not.toContain(".settings-select-control__check");
     expectRuleToContain(aiActionRowRule, [
       "gap: 0;",
       "grid-template-columns: minmax(0, 1fr);",
@@ -188,7 +193,6 @@ describe("Settings content styles", () => {
     const selectActionRowRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action");
     const selectOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option");
     const selectSelectedOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option.is-selected");
-    const selectCheckRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option .settings-select-control__check");
     const selectActionOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option");
     const selectActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action");
     const selectActionsContainerRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-actions");
@@ -211,7 +215,8 @@ describe("Settings content styles", () => {
     expect(selectOptionRule).toContain("gap: 0.55rem;");
     expect(selectOptionRule).toContain("min-height: 2.08rem;");
     expect(selectSelectedOptionRule).toContain("font-weight: 500;");
-    expect(selectCheckRule).toContain("margin-left: auto;");
+    expect(selectSelectedOptionRule).toContain("background: color-mix(in srgb, var(--text) 9%, transparent);");
+    expect(aiSetupStyles).not.toContain(".settings-select-control__check");
     expect(selectActionOptionRule).toContain("padding-right: 6.7rem;");
     expectRuleToContain(selectActionRule, ["background: #5b6068;", "border-radius: var(--radius-pill);", "color: #fff;"]);
     // The action buttons live in an absolutely-pinned flex container so a row can carry more than one.

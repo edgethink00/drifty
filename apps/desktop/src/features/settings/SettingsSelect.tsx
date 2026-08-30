@@ -254,7 +254,6 @@ export function SettingsSelect<TValue extends string>({
                 >
                   <OptionIcon option={option} />
                   <span className="settings-select-control__option-label">{option.label}</span>
-                  <span className="settings-select-control__check" aria-hidden="true" />
                 </button>
                 {rowActions.length > 0 ? (
                   <span className="settings-select-control__option-actions">
