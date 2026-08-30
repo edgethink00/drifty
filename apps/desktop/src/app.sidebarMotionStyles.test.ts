@@ -52,6 +52,15 @@ describe("sidebar motion styles", () => {
     expect(periodTextBlock).toContain("line-height: inherit;");
   });
 
+  it("groups dashboard and activity with labels instead of a period divider", () => {
+    const styles = readStyles();
+    expect(styles).not.toMatch(/\.sidebar-nav--periods\s*\{[^}]*border-bottom/);
+    expect(styles).not.toMatch(/\.sidebar-nav--periods\s*\{[^}]*margin-bottom:\s*16px/);
+    expect(styles).not.toMatch(/\.sidebar-nav--periods\s*\{[^}]*padding-bottom:\s*14px/);
+    expect(styles).not.toMatch(/\.sidebar--collapsed \.sidebar-nav--periods\s*\{[^}]*margin-bottom:\s*16px/);
+    expect(styles).not.toMatch(/\.sidebar--collapsed \.sidebar-nav--periods\s*\{[^}]*padding-bottom:\s*14px/);
+  });
+
   it("collapses sidebar text and footer copy with max-size transitions", () => {
     const styles = readStyles();
     const navTextBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)");
