@@ -8,6 +8,9 @@ use super::ExtremeNudgeError;
 
 mod chromium;
 mod firefox;
+#[cfg(target_os = "macos")]
+#[path = "macos_native_ax.rs"]
+mod macos_native_ax;
 mod matching;
 #[cfg(test)]
 mod qa_tests;
@@ -54,6 +57,25 @@ pub(super) fn close_browser_tab(
     site_domain: Option<&str>,
     force_chromium_ax_tab_close: bool,
 ) -> Result<String, ExtremeNudgeError> {
+    #[cfg(target_os = "macos")]
+    if matches!(
+        browser_name.trim(),
+        "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen" | "Whale"
+    ) {
+        let diagnostic_namespace = if browser_name.trim() == "Whale" {
+            "whale_native_ax"
+        } else {
+            "firefox_native_ax"
+        };
+        return macos_native_ax::close_frontmost_tab(
+            browser_name,
+            site_url.unwrap_or(""),
+            site_domain,
+            diagnostic_namespace,
+        )
+        .map_err(|diagnostic| ExtremeNudgeError::BrowserTabNotFound { diagnostic });
+    }
+
     let script = tab_close_script(
         browser_name,
         site_url.unwrap_or(""),
@@ -160,8 +182,13 @@ fn browser_tab_script_kind(app_name: &str) -> Option<BrowserTabScriptKind> {
         | "Arc"
         | "Aside"
         | "Brave Browser"
-        | "Chromium" => Some(BrowserTabScriptKind::Chromium),
-        "Firefox" => Some(BrowserTabScriptKind::Firefox),
+        | "Chromium"
+        | "Opera"
+        | "Vivaldi"
+        | "Whale" => Some(BrowserTabScriptKind::Chromium),
+        "Firefox" | "Firefox Developer Edition" | "Floorp" | "Zen" => {
+            Some(BrowserTabScriptKind::Firefox)
+        }
         "Safari" | "Safari Technology Preview" => Some(BrowserTabScriptKind::Safari),
         _ => None,
     }
@@ -332,6 +359,12 @@ mod tests {
         assert!(is_supported_browser_tab_target("Safari"));
         assert!(is_supported_browser_tab_target("Safari Technology Preview"));
         assert!(is_supported_browser_tab_target("Firefox"));
+        assert!(is_supported_browser_tab_target("Firefox Developer Edition"));
+        assert!(is_supported_browser_tab_target("Floorp"));
+        assert!(is_supported_browser_tab_target("Zen"));
+        assert!(is_supported_browser_tab_target("Whale"));
+        assert!(is_supported_browser_tab_target("Vivaldi"));
+        assert!(is_supported_browser_tab_target("Opera"));
     }
 
     #[test]

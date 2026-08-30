@@ -15,6 +15,7 @@ from app.tracker.macos_workspace import (
     _browser_metadata,
     _browser_script,
     _browser_automation_status_from_error,
+    _canonical_macos_app_name,
     _frontmost_via_lsappinfo,
     _run_command,
     _youtube_ids,
@@ -27,6 +28,13 @@ _MACOS_ONLY = unittest.skipUnless(sys.platform == "darwin", "macOS foreground ca
 
 @_MACOS_ONLY
 class MacosWorkspaceTests(unittest.TestCase):
+    def test_canonicalizes_firefox_developer_edition_from_bundle_id(self) -> None:
+        self.assertEqual(
+            _canonical_macos_app_name("firefox", "org.mozilla.firefoxdeveloperedition"),
+            "Firefox Developer Edition",
+        )
+        self.assertEqual(_canonical_macos_app_name("Safari", "com.apple.Safari"), "Safari")
+
     def test_browser_script_matrix(self) -> None:
         safari_script = _browser_script("Safari")
         self.assertIsNotNone(safari_script)
@@ -36,7 +44,17 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIn('name of front document', safari_script)
         self.assertIn('"STALE"', safari_script)
 
-        for app_name in ["Google Chrome", "Arc", "Aside", "Brave Browser", "Chromium", "Microsoft Edge"]:
+        for app_name in [
+            "Google Chrome",
+            "Arc",
+            "Aside",
+            "Brave Browser",
+            "Chromium",
+            "Microsoft Edge",
+            "Opera",
+            "Vivaldi",
+            "Whale",
+        ]:
             with self.subTest(app_name=app_name):
                 script = _browser_script(app_name)
                 self.assertIsNotNone(script)
@@ -57,7 +75,18 @@ class MacosWorkspaceTests(unittest.TestCase):
         self.assertIsNone(_browser_script("Preview"))
 
     def test_browser_scripts_read_ax_title_in_same_pass(self) -> None:
-        for app_name in ["Safari", "Google Chrome", "Arc", "Aside", "Brave Browser", "Chromium", "Microsoft Edge"]:
+        for app_name in [
+            "Safari",
+            "Google Chrome",
+            "Arc",
+            "Aside",
+            "Brave Browser",
+            "Chromium",
+            "Microsoft Edge",
+            "Opera",
+            "Vivaldi",
+            "Whale",
+        ]:
             with self.subTest(app_name=app_name):
                 script = _browser_script(app_name)
                 self.assertIn('first application process whose frontmost is true', script)
@@ -75,6 +104,12 @@ class MacosWorkspaceTests(unittest.TestCase):
             "Chromium",
             "Microsoft Edge",
             "Firefox",
+            "Firefox Developer Edition",
+            "Floorp",
+            "Opera",
+            "Vivaldi",
+            "Whale",
+            "Zen",
         ]
         url = 'https://www.example.com/path?ref=tracker'
         title = 'Example Title'
@@ -88,9 +123,17 @@ class MacosWorkspaceTests(unittest.TestCase):
                 ) as mock_run:
                     result = _browser_metadata(app_name)
 
-                self.assertEqual(
-                    result,
-                    BrowserMetadata(
+                if app_name in {'Safari', 'Firefox', 'Firefox Developer Edition', 'Floorp', 'Whale', 'Zen'}:
+                    expected = BrowserMetadata(
+                        browser_name=app_name,
+                        site_domain='example.com',
+                        site_url=url,
+                        ax_window_title=title,
+                        match_state='accessibility-address-bar',
+                        browser_automation_status='granted',
+                    )
+                else:
+                    expected = BrowserMetadata(
                         browser_name=app_name,
                         site_domain='example.com',
                         site_title=title,
@@ -98,18 +141,18 @@ class MacosWorkspaceTests(unittest.TestCase):
                         ax_window_title=ax_title,
                         match_state='matched',
                         browser_automation_status='granted',
-                    ),
-                )
+                    )
+                self.assertEqual(result, expected)
                 mock_run.assert_called_once()
 
     def test_browser_metadata_parses_legacy_two_line_output(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', return_value='https://www.example.com/path\nExample'):
-            result = _browser_metadata('Safari')
+            result = _browser_metadata('Google Chrome')
 
         self.assertEqual(
             result,
             BrowserMetadata(
-                browser_name='Safari',
+                browser_name='Google Chrome',
                 site_domain='example.com',
                 site_title='Example',
                 site_url='https://www.example.com/path',
@@ -119,19 +162,19 @@ class MacosWorkspaceTests(unittest.TestCase):
 
     def test_browser_metadata_returns_none_title_for_single_line_output(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', return_value='https://www.example.com/path'):
-            result = _browser_metadata('Safari')
+            result = _browser_metadata('Google Chrome')
 
         self.assertEqual(
             result,
             BrowserMetadata(
-                browser_name='Safari',
+                browser_name='Google Chrome',
                 site_domain='example.com',
                 site_url='https://www.example.com/path',
                 browser_automation_status='granted',
             ),
         )
 
-    def test_browser_metadata_marks_empty_result_separately(self) -> None:
+    def test_safari_ax_capture_marks_empty_address_result_unavailable(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', return_value='') as mock_run:
             result = _browser_metadata('Safari')
 
@@ -139,8 +182,8 @@ class MacosWorkspaceTests(unittest.TestCase):
             result,
             BrowserMetadata(
                 browser_name='Safari',
-                browser_automation_status='empty_result',
-                browser_automation_error='Safari returned an empty browser automation result.',
+                browser_automation_status='unavailable',
+                browser_automation_error='Safari accessibility address bar fallback returned an empty result.',
             ),
         )
         mock_run.assert_called_once()
@@ -189,7 +232,25 @@ class MacosWorkspaceTests(unittest.TestCase):
     def test_browser_automation_status_from_error_detects_tcc_denial(self) -> None:
         self.assertEqual(_browser_automation_status_from_error('Not authorized to send Apple events.'), 'denied')
         self.assertEqual(_browser_automation_status_from_error('execution error: Not permitted. (-1743)'), 'denied')
+        self.assertEqual(
+            _browser_automation_status_from_error(
+                'osascript 보조 액세스가 허용되지 않습니다. (-25211)'
+            ),
+            'denied',
+        )
         self.assertEqual(_browser_automation_status_from_error('Google Chrome got an error.'), 'unavailable')
+
+    def test_forced_chromium_ax_capture_marks_localized_assistive_access_denial(self) -> None:
+        with patch.dict(os.environ, {"DRIFTY_FORCE_CHROMIUM_AX_CAPTURE": "1"}), patch(
+            'app.tracker.macos_workspace._run_osascript',
+            side_effect=RuntimeError('osascript 보조 액세스가 허용되지 않습니다. (-25211)'),
+        ):
+            result = _browser_metadata('Aside')
+
+        self.assertEqual(result.browser_name, 'Aside')
+        self.assertEqual(result.browser_automation_status, 'denied')
+        self.assertIn('-25211', result.browser_automation_error or '')
+        self.assertIsNone(result.site_url)
 
     def test_youtube_ids_cover_supported_url_shapes(self) -> None:
         cases = [

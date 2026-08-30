@@ -56,6 +56,14 @@ COMMAND_TIMEOUT_SECONDS: Final = 5.0
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
 FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: Final = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"
 _BROWSER_HISTORY_FALLBACK_STATUSES: Final = frozenset({"denied", "empty_result", "stale", "unavailable"})
+_CANONICAL_MACOS_APP_NAMES_BY_BUNDLE_ID: Final = {
+    "org.mozilla.firefoxdeveloperedition": "Firefox Developer Edition",
+}
+
+
+def _canonical_macos_app_name(app_name: str | None, bundle_id: str | None) -> str | None:
+    canonical = _CANONICAL_MACOS_APP_NAMES_BY_BUNDLE_ID.get((bundle_id or "").casefold())
+    return canonical or app_name
 
 
 def _run_osascript(script: str) -> str:
@@ -153,6 +161,8 @@ def current_snapshot(include_system_transient: bool = True) -> Snapshot:
             frontmost_capture_error = _error_text(error)
             app_name, bundle_id, window_title, frontmost_fallback_error, pid = _frontmost_via_fallback_capture()
             frontmost_capture_source = "lsappinfo" if app_name else "unavailable"
+
+    app_name = _canonical_macos_app_name(app_name, bundle_id)
 
     system_transient_activity = (
         _system_transient_activity_from_rows(_onscreen_window_rows()) if include_system_transient else None

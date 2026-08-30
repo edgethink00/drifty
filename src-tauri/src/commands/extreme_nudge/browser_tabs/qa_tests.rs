@@ -1,14 +1,399 @@
 use std::{
     fs,
+    io::{Read, Write},
+    net::TcpStream,
     path::Path,
     process::{Child, Command, Stdio},
     thread,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 const SAFARI_QA_URL: &str = "https://example.com/?drifty_extreme_nudge_qa=safari-native";
 const EDGE_QA_URL: &str = "https://example.com/?drifty_extreme_nudge_qa=edge-native";
 const FIREFOX_QA_URL: &str = "https://example.com/?drifty_extreme_nudge_qa=firefox-native";
+const BROWSER_QA_ORACLE_HOST: &str = "127.0.0.1";
+const BROWSER_QA_ORACLE_PORT: u16 = 18_777;
+const ENV_BROWSER_QA_OPT_IN: &str = "DRIFTY_NATIVE_QA_BROWSER_TAB_CLOSE";
+const ENV_BROWSER_QA_BROWSER: &str = "DRIFTY_NATIVE_QA_BROWSER";
+const ENV_BROWSER_QA_URL: &str = "DRIFTY_NATIVE_QA_URL";
+const ENV_BROWSER_QA_ACTIVE_URL: &str = "DRIFTY_NATIVE_QA_ACTIVE_URL";
+const ENV_BROWSER_QA_FORCE_AX: &str = "DRIFTY_NATIVE_QA_FORCE_AX";
+const ENV_BROWSER_QA_SKIP_FOCUS: &str = "DRIFTY_NATIVE_QA_SKIP_FOCUS";
+const ENV_BROWSER_QA_SOAK_MARKER: &str = "DRIFTY_NATIVE_QA_SOAK_MARKER";
+const ENV_BROWSER_QA_SOAK_ITERATIONS: &str = "DRIFTY_NATIVE_QA_SOAK_ITERATIONS";
+const ENV_BROWSER_QA_WHALE_PROFILE: &str = "DRIFTY_NATIVE_QA_WHALE_PROFILE";
+
+#[test]
+#[ignore = "closes an explicitly selected loopback QA tab in an already running browser"]
+fn qa_closes_environment_selected_loopback_tab_through_native_path() {
+    assert_eq!(
+        std::env::var(ENV_BROWSER_QA_OPT_IN).as_deref(),
+        Ok("1"),
+        "set {ENV_BROWSER_QA_OPT_IN}=1 to confirm this native UI action"
+    );
+
+    let browser_name = std::env::var(ENV_BROWSER_QA_BROWSER)
+        .expect("set DRIFTY_NATIVE_QA_BROWSER to an installed supported browser");
+    assert!(
+        super::is_supported_browser_tab_target(&browser_name),
+        "unsupported QA browser: {browser_name}"
+    );
+
+    let qa_url = std::env::var(ENV_BROWSER_QA_URL)
+        .expect("set DRIFTY_NATIVE_QA_URL to a uniquely marked loopback URL");
+    let (host, _) = validated_loopback_qa_url(&qa_url);
+
+    let skip_focus = std::env::var(ENV_BROWSER_QA_SKIP_FOCUS).as_deref() == Ok("1");
+    if !skip_focus
+        && matches!(
+            browser_name.as_str(),
+            "Google Chrome"
+                | "Google Chrome Canary"
+                | "Microsoft Edge"
+                | "Arc"
+                | "Aside"
+                | "Brave Browser"
+                | "Chromium"
+                | "Opera"
+                | "Vivaldi"
+                | "Whale"
+        )
+    {
+        focus_chromium_qa_tab(&browser_name, &qa_url)
+            .expect("focus the exact marked Chromium QA tab before closing it");
+    } else if !skip_focus
+        && matches!(
+            browser_name.as_str(),
+            "Safari" | "Safari Technology Preview"
+        )
+    {
+        focus_safari_qa_tab(&browser_name, &qa_url)
+            .expect("focus the exact marked Safari QA tab before closing it");
+    }
+
+    let force_ax = std::env::var(ENV_BROWSER_QA_FORCE_AX).as_deref() == Ok("1");
+    let diagnostic =
+        super::close_browser_tab(&browser_name, None, Some(&qa_url), Some(&host), force_ax)
+            .expect("native close_browser_tab closes the selected QA tab");
+
+    eprintln!("browser={browser_name} diagnostic={diagnostic}");
+}
+
+#[test]
+#[ignore = "proves a marked background QA tab is not closed when another marked tab is active"]
+fn qa_refuses_background_loopback_tab_when_frontmost_is_different() {
+    assert_eq!(
+        std::env::var(ENV_BROWSER_QA_OPT_IN).as_deref(),
+        Ok("1"),
+        "set {ENV_BROWSER_QA_OPT_IN}=1 to confirm this native UI action"
+    );
+    let browser_name = std::env::var(ENV_BROWSER_QA_BROWSER)
+        .expect("set DRIFTY_NATIVE_QA_BROWSER to an installed supported browser");
+    assert!(
+        matches!(
+            browser_name.as_str(),
+            "Google Chrome"
+                | "Google Chrome Canary"
+                | "Microsoft Edge"
+                | "Arc"
+                | "Aside"
+                | "Brave Browser"
+                | "Chromium"
+                | "Opera"
+                | "Vivaldi"
+                | "Safari"
+                | "Safari Technology Preview"
+                | "Firefox Developer Edition"
+                | "Floorp"
+                | "Zen"
+                | "Whale"
+        ),
+        "background-tab refusal QA currently targets scriptable macOS browsers"
+    );
+    let target_url = std::env::var(ENV_BROWSER_QA_URL)
+        .expect("set DRIFTY_NATIVE_QA_URL to the marked background target URL");
+    let active_url = std::env::var(ENV_BROWSER_QA_ACTIVE_URL)
+        .expect("set DRIFTY_NATIVE_QA_ACTIVE_URL to a different marked active URL");
+    let (target_host, target_marker) = validated_loopback_qa_url(&target_url);
+    let (active_host, active_marker) = validated_loopback_qa_url(&active_url);
+    assert_eq!(
+        target_marker, active_marker,
+        "target and active QA URLs must belong to the same run"
+    );
+    assert_ne!(
+        target_url, active_url,
+        "the active QA URL must differ from the target"
+    );
+    assert_ne!(
+        target_host, active_host,
+        "the negative QA tab must be outside the retained exact-or-domain match policy"
+    );
+
+    let skip_focus = std::env::var(ENV_BROWSER_QA_SKIP_FOCUS).as_deref() == Ok("1");
+    if skip_focus {
+        eprintln!("browser={browser_name} focus=prearranged_by_external_oracle");
+    } else if matches!(
+        browser_name.as_str(),
+        "Safari" | "Safari Technology Preview"
+    ) {
+        focus_safari_qa_tab(&browser_name, &active_url).expect(
+            "focus the exact marked Safari sentinel before attempting the background target",
+        );
+    } else {
+        focus_chromium_qa_tab(&browser_name, &active_url).expect(
+            "focus the exact marked Chromium sentinel before attempting the background target",
+        );
+    }
+    let force_ax = std::env::var(ENV_BROWSER_QA_FORCE_AX).as_deref() == Ok("1");
+    let error = super::close_browser_tab(
+        &browser_name,
+        None,
+        Some(&target_url),
+        Some(&target_host),
+        force_ax,
+    )
+    .expect_err("frontmost close must refuse a background target outside the accepted domain");
+
+    match error {
+        super::super::ExtremeNudgeError::BrowserTabNotFound { diagnostic } => {
+            eprintln!("browser={browser_name} refusal={diagnostic}");
+        }
+        other => panic!("expected fail-closed target refusal, observed {other:?}"),
+    }
+}
+
+#[test]
+#[ignore = "opens and closes marked loopback targets repeatedly while a connection oracle proves both sentinels survive"]
+fn qa_soaks_environment_selected_browser_tab_close() {
+    assert_eq!(
+        std::env::var(ENV_BROWSER_QA_OPT_IN).as_deref(),
+        Ok("1"),
+        "set {ENV_BROWSER_QA_OPT_IN}=1 to confirm this native UI action"
+    );
+    let browser_name = std::env::var(ENV_BROWSER_QA_BROWSER)
+        .expect("set DRIFTY_NATIVE_QA_BROWSER to an installed supported browser");
+    assert!(
+        super::is_supported_browser_tab_target(&browser_name),
+        "unsupported QA browser: {browser_name}"
+    );
+    let marker = std::env::var(ENV_BROWSER_QA_SOAK_MARKER)
+        .expect("set DRIFTY_NATIVE_QA_SOAK_MARKER to a unique synthetic run marker");
+    assert!(
+        !marker.is_empty()
+            && marker.len() <= 80
+            && marker
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || ".-_".contains(character)),
+        "invalid browser QA soak marker"
+    );
+    let iterations = std::env::var(ENV_BROWSER_QA_SOAK_ITERATIONS)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(10);
+    assert!(
+        (1..=20).contains(&iterations),
+        "browser QA soak iterations must be between 1 and 20"
+    );
+
+    let left_url = browser_qa_url(&marker, "sentinel-left");
+    let right_url = browser_qa_url(&marker, "sentinel-right");
+    open_browser_qa_tab(&browser_name, &left_url).expect("open left soak sentinel");
+    wait_for_browser_qa_oracle_roles(&marker, &[("sentinel-left", 1)])
+        .expect("left soak sentinel connects to the outside oracle");
+    open_browser_qa_tab(&browser_name, &right_url).expect("open right soak sentinel");
+    wait_for_browser_qa_oracle_roles(&marker, &[("sentinel-left", 1), ("sentinel-right", 1)])
+        .expect("both soak sentinels connect to the outside oracle");
+
+    let force_ax = std::env::var(ENV_BROWSER_QA_FORCE_AX).as_deref() == Ok("1");
+    let mut diagnostics = Vec::new();
+    for index in 1..=iterations {
+        let role = format!("target-{index:02}");
+        let target_url = browser_qa_url(&marker, &role);
+        open_browser_qa_tab(&browser_name, &target_url).expect("open marked soak target");
+        wait_for_browser_qa_oracle_roles(
+            &marker,
+            &[("sentinel-left", 1), ("sentinel-right", 1), (&role, 1)],
+        )
+        .expect("target and both sentinels are connected before close");
+
+        let diagnostic = super::close_browser_tab(
+            &browser_name,
+            None,
+            Some(&target_url),
+            Some(BROWSER_QA_ORACLE_HOST),
+            force_ax,
+        )
+        .expect("native close removes the marked frontmost soak target");
+        diagnostics.push(diagnostic);
+        wait_for_browser_qa_oracle_roles(
+            &marker,
+            &[("sentinel-left", 1), ("sentinel-right", 1), (&role, 0)],
+        )
+        .expect("only the target disconnects after the close");
+    }
+
+    eprintln!(
+        "browser={browser_name} closes={iterations} false_closes=0 diagnostics={diagnostics:?}"
+    );
+}
+
+fn open_browser_qa_tab(browser_name: &str, url: &str) -> Result<(), String> {
+    match browser_name {
+        "Firefox" => open_firefox_qa_tab(url),
+        "Firefox Developer Edition" | "Floorp" | "Zen" => open_app_qa_tab(browser_name, url),
+        "Whale" => open_whale_qa_tab(url),
+        "Google Chrome Canary" => open_app_qa_tab(browser_name, url),
+        "Safari" | "Safari Technology Preview" => open_app_qa_tab(browser_name, url),
+        _ => open_chromium_qa_tab(browser_name, url),
+    }
+}
+
+fn open_whale_qa_tab(url: &str) -> Result<(), String> {
+    let profile = std::env::var(ENV_BROWSER_QA_WHALE_PROFILE)
+        .map_err(|_| format!("set {ENV_BROWSER_QA_WHALE_PROFILE} to the isolated QA profile"))?;
+    let status = Command::new("/Applications/Whale.app/Contents/MacOS/Whale")
+        .args([
+            format!("--user-data-dir={profile}"),
+            "--new-tab".to_string(),
+            url.to_string(),
+        ])
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        run_osascript_text(r#"tell application "Whale" to activate"#)?;
+        thread::sleep(Duration::from_millis(400));
+        Ok(())
+    } else {
+        Err(format!("Whale --new-tab failed with {status}"))
+    }
+}
+
+fn open_app_qa_tab(browser_name: &str, url: &str) -> Result<(), String> {
+    let status = Command::new("open")
+        .args(["-a", browser_name, url])
+        .status()
+        .map_err(|error| error.to_string())?;
+    if status.success() {
+        if matches!(browser_name, "Floorp" | "Whale" | "Zen") {
+            let browser_name = applescript_string_literal(browser_name);
+            run_osascript_text(&format!("tell application \"{browser_name}\" to activate"))?;
+        }
+        thread::sleep(Duration::from_millis(400));
+        Ok(())
+    } else {
+        Err(format!("open -a {browser_name} failed with {status}"))
+    }
+}
+
+fn open_chromium_qa_tab(browser_name: &str, url: &str) -> Result<(), String> {
+    let browser_name = applescript_string_literal(browser_name);
+    let url = applescript_string_literal(url);
+    let script = format!(
+        r#"tell application "{browser_name}"
+  if not (exists front window) then make new window
+  set qaTab to make new tab at end of tabs of front window with properties {{URL:"{url}"}}
+  set active tab index of front window to count of tabs of front window
+  activate
+  return "opened"
+end tell"#
+    );
+    let result = run_osascript_text(&script)?;
+    if result == "opened" {
+        Ok(())
+    } else {
+        Err(format!("could not open Chromium QA tab: {result}"))
+    }
+}
+
+fn validated_loopback_qa_url(raw_url: &str) -> (String, String) {
+    let parsed = url::Url::parse(raw_url).expect("browser QA URL must be valid");
+    assert!(
+        matches!(parsed.scheme(), "http" | "https"),
+        "QA URL must use http or https"
+    );
+    let host = parsed.host_str().expect("QA URL must have a host");
+    assert!(
+        matches!(host, "localhost" | "127.0.0.1" | "::1") || host.ends_with(".localhost"),
+        "QA URL must use a loopback-only host"
+    );
+    let marker = parsed
+        .query_pairs()
+        .find_map(|(key, value)| {
+            (key == "drifty_browser_qa" && !value.trim().is_empty()).then(|| value.into_owned())
+        })
+        .expect("QA URL must carry a non-empty drifty_browser_qa marker");
+    (host.to_string(), marker)
+}
+
+fn focus_chromium_qa_tab(browser_name: &str, url: &str) -> Result<(), String> {
+    let browser_name = applescript_string_literal(browser_name);
+    let url = applescript_string_literal(url);
+    let script = format!(
+        r#"set targetUrl to "{url}"
+tell application "{browser_name}"
+  set foundTarget to false
+  repeat with browserWindow in windows
+    set tabIndex to 0
+    repeat with browserTab in tabs of browserWindow
+      set tabIndex to tabIndex + 1
+      try
+        if URL of browserTab is targetUrl then
+          set active tab index of browserWindow to tabIndex
+          set index of browserWindow to 1
+          set foundTarget to true
+          exit repeat
+        end if
+      end try
+    end repeat
+    if foundTarget then exit repeat
+  end repeat
+  if foundTarget is false then return "not_found"
+  activate
+  return "focused"
+end tell"#
+    );
+
+    let result = run_osascript_text(&script)?;
+    if result == "focused" {
+        Ok(())
+    } else {
+        Err(format!("expected focused, observed {result}"))
+    }
+}
+
+fn focus_safari_qa_tab(browser_name: &str, url: &str) -> Result<(), String> {
+    let browser_name = applescript_string_literal(browser_name);
+    let url = applescript_string_literal(url);
+    let script = format!(
+        r#"set targetUrl to "{url}"
+tell application "{browser_name}"
+  set foundTarget to false
+  repeat with browserWindow in windows
+    repeat with browserTab in tabs of browserWindow
+      try
+        if URL of browserTab is targetUrl then
+          set current tab of browserWindow to browserTab
+          set index of browserWindow to 1
+          set foundTarget to true
+          exit repeat
+        end if
+      end try
+    end repeat
+    if foundTarget then exit repeat
+  end repeat
+  if foundTarget is false then return "not_found"
+  activate
+  return "focused"
+end tell"#
+    );
+
+    let result = run_osascript_text(&script)?;
+    if result == "focused" {
+        Ok(())
+    } else {
+        Err(format!("expected focused, observed {result}"))
+    }
+}
 
 #[test]
 #[ignore = "launches Safari and closes a real test tab"]
@@ -198,6 +583,179 @@ fn qa_closes_firefox_tab_through_native_browser_tab_path() {
     result.expect("native Firefox close_browser_tab closes QA tab");
 }
 
+#[test]
+#[ignore = "launches an isolated Firefox profile and proves positive and negative close behavior with a loopback connection oracle"]
+fn qa_exercises_firefox_loopback_tab_close_matrix() {
+    assert_eq!(
+        std::env::var(ENV_BROWSER_QA_OPT_IN).as_deref(),
+        Ok("1"),
+        "set {ENV_BROWSER_QA_OPT_IN}=1 to confirm this native UI action"
+    );
+    if !Path::new("/Applications/Firefox.app").exists() {
+        eprintln!("Firefox is not installed; skipping manual QA test");
+        return;
+    }
+
+    let run_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is after Unix epoch")
+        .as_millis();
+    let marker = format!("firefox-{run_id}");
+    let left_url = browser_qa_url(&marker, "sentinel-left");
+    let right_url = browser_qa_url_on_host(&marker, "sentinel-right", "negative.localhost");
+    let target_url = browser_qa_url(&marker, "target");
+    browser_qa_oracle_roles(&marker)
+        .expect("start scripts/qa/browser-ax-pages/server.mjs on 127.0.0.1:18777 first");
+
+    let profile =
+        TempProfile::new("drifty-firefox-matrix-qa").expect("create isolated Firefox QA profile");
+    prepare_firefox_profile(&profile.path()).expect("prepare Firefox QA profile");
+    let mut browser = launch_browser(
+        "/Applications/Firefox.app/Contents/MacOS/firefox",
+        &[
+            "--no-remote".to_string(),
+            "--profile".to_string(),
+            profile.path(),
+            "--new-window".to_string(),
+            left_url.clone(),
+        ],
+    )
+    .expect("launch isolated Firefox QA browser");
+
+    let result = (|| -> Result<(), String> {
+        wait_for_browser_qa_oracle_roles(&marker, &[("sentinel-left", 1)])?;
+        dismiss_firefox_startup_overlay()?;
+        open_firefox_qa_tab(&right_url)?;
+        wait_for_browser_qa_oracle_roles(&marker, &[("sentinel-left", 1), ("sentinel-right", 1)])?;
+        open_firefox_qa_tab(&target_url)?;
+        wait_for_browser_qa_oracle_roles(
+            &marker,
+            &[("sentinel-left", 1), ("sentinel-right", 1), ("target", 1)],
+        )?;
+
+        focus_firefox_qa_tab(&target_url)?;
+        focus_firefox_qa_tab(&right_url)?;
+        let refusal = match super::close_browser_tab(
+            "Firefox",
+            None,
+            Some(&target_url),
+            Some(BROWSER_QA_ORACLE_HOST),
+            false,
+        ) {
+            Err(error) => error,
+            Ok(diagnostic) => {
+                return Err(format!(
+                    "Firefox close unexpectedly accepted the negative tab: {diagnostic}"
+                ));
+            }
+        };
+        match refusal {
+            super::super::ExtremeNudgeError::BrowserTabNotFound { diagnostic } => {
+                eprintln!("browser=Firefox refusal={diagnostic}");
+            }
+            other => return Err(format!("unexpected Firefox refusal error: {other:?}")),
+        }
+        wait_for_browser_qa_oracle_roles(
+            &marker,
+            &[("sentinel-left", 1), ("sentinel-right", 1), ("target", 1)],
+        )?;
+
+        focus_firefox_qa_tab(&target_url)?;
+        let diagnostic = super::close_browser_tab(
+            "Firefox",
+            None,
+            Some(&target_url),
+            Some(BROWSER_QA_ORACLE_HOST),
+            false,
+        )
+        .map_err(|error| error.to_string())?;
+        eprintln!("browser=Firefox diagnostic={diagnostic}");
+        wait_for_browser_qa_oracle_roles(
+            &marker,
+            &[("sentinel-left", 1), ("sentinel-right", 1), ("target", 0)],
+        )
+    })();
+
+    cleanup_browser_process(&mut browser, profile.path());
+    result.expect("Firefox loopback close matrix passes without an out-of-policy close");
+}
+
+fn dismiss_firefox_startup_overlay() -> Result<(), String> {
+    run_osascript_text(
+        r#"tell application "Firefox" to activate
+delay 0.1
+tell application "System Events"
+  tell process "Firefox"
+    set frontmost to true
+    key code 53
+  end tell
+end tell"#,
+    )
+    .map(|_| ())
+}
+
+fn open_firefox_qa_tab(url: &str) -> Result<(), String> {
+    let open_result = run_osascript_text(
+        r#"tell application "Firefox" to activate
+delay 0.1
+tell application "System Events"
+  tell process "Firefox"
+    set frontmost to true
+    set allElements to entire contents of front window
+    repeat with currentElement in allElements
+      try
+        if role of currentElement is "AXButton" then
+          set buttonDescription to description of currentElement as text
+          if buttonDescription contains "새 탭" or buttonDescription contains "New Tab" or buttonDescription contains "new tab" then
+            perform action "AXPress" of currentElement
+            return "opened"
+          end if
+        end if
+      end try
+    end repeat
+    return "no_new_tab_button"
+  end tell
+end tell"#,
+    )?;
+    if open_result != "opened" {
+        return Err(format!(
+            "could not press Firefox new-tab action: {open_result}"
+        ));
+    }
+
+    let url = applescript_string_literal(url);
+    let script = format!(
+        r#"tell application "Firefox" to activate
+delay 0.2
+tell application "System Events"
+  tell process "Firefox"
+    set frontmost to true
+    set allElements to entire contents of front window
+    repeat with currentElement in allElements
+      try
+        if role of currentElement is "AXComboBox" then
+          set descriptionText to description of currentElement as text
+          if descriptionText contains "주소" or descriptionText contains "Address" or descriptionText contains "address" or descriptionText contains "URL" or descriptionText contains "url" then
+            set value of currentElement to "{url}"
+            set value of attribute "AXFocused" of currentElement to true
+            key code 36
+            return "opened"
+          end if
+        end if
+      end try
+    end repeat
+    return "no_address"
+  end tell
+end tell"#
+    );
+    let result = run_osascript_text(&script)?;
+    if result == "opened" {
+        Ok(())
+    } else {
+        Err(format!("could not open Firefox QA tab: {result}"))
+    }
+}
+
 fn open_safari_tab(url: &str) -> Result<(), String> {
     let url = applescript_string_literal(url);
     let script = format!(
@@ -213,17 +771,157 @@ fn prepare_firefox_profile(profile_path: &str) -> Result<(), String> {
     let prefs = [
         r#"user_pref("accessibility.force_disabled", -1);"#,
         r#"user_pref("browser.aboutwelcome.enabled", false);"#,
+        r#"user_pref("browser.ctrlTab.sortByRecentlyUsed", false);"#,
         r#"user_pref("browser.shell.checkDefaultBrowser", false);"#,
         r#"user_pref("browser.startup.homepage_override.mstone", "ignore");"#,
         r#"user_pref("browser.startup.firstrunSkipsHomepage", true);"#,
+        r#"user_pref("browser.translations.automaticallyPopup", false);"#,
         r#"user_pref("startup.homepage_welcome_url", "about:blank");"#,
         r#"user_pref("startup.homepage_welcome_url.additional", "");"#,
         r#"user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);"#,
+        r#"user_pref("datareporting.policy.firstRunURL", "");"#,
+        r#"user_pref("termsofuse.bypassNotification", true);"#,
         r#"user_pref("app.normandy.first_run", false);"#,
     ]
     .join("\n");
     fs::write(format!("{profile_path}/user.js"), format!("{prefs}\n"))
         .map_err(|error| error.to_string())
+}
+
+fn browser_qa_url(marker: &str, role: &str) -> String {
+    browser_qa_url_on_host(marker, role, BROWSER_QA_ORACLE_HOST)
+}
+
+fn browser_qa_url_on_host(marker: &str, role: &str, host: &str) -> String {
+    format!("http://{host}:{BROWSER_QA_ORACLE_PORT}/?drifty_browser_qa={marker}&role={role}")
+}
+
+fn wait_for_browser_qa_oracle_roles(
+    marker: &str,
+    expected: &[(&str, usize)],
+) -> Result<(), String> {
+    wait_until(Duration::from_secs(15), || {
+        let roles = browser_qa_oracle_roles(marker)?;
+        let matches = expected.iter().all(|(role, expected_count)| {
+            roles
+                .get(*role)
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0)
+                == *expected_count as u64
+        });
+        if matches {
+            Ok(true)
+        } else {
+            Err(format!(
+                "browser QA oracle roles mismatch: expected={expected:?} observed={roles:?}"
+            ))
+        }
+    })
+}
+
+fn browser_qa_oracle_roles(
+    marker: &str,
+) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+    let mut stream = TcpStream::connect((BROWSER_QA_ORACLE_HOST, BROWSER_QA_ORACLE_PORT))
+        .map_err(|error| format!("connect browser QA oracle: {error}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(2)))
+        .map_err(|error| error.to_string())?;
+    let request = format!(
+        "GET /status?drifty_browser_qa={marker} HTTP/1.1\r\nHost: {BROWSER_QA_ORACLE_HOST}:{BROWSER_QA_ORACLE_PORT}\r\nConnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let mut response = String::new();
+    stream
+        .read_to_string(&mut response)
+        .map_err(|error| error.to_string())?;
+    let (_, body) = response
+        .split_once("\r\n\r\n")
+        .ok_or_else(|| "browser QA oracle returned an invalid HTTP response".to_string())?;
+    let payload: serde_json::Value =
+        serde_json::from_str(body.trim()).map_err(|error| error.to_string())?;
+    payload
+        .get("roles")
+        .and_then(serde_json::Value::as_object)
+        .cloned()
+        .ok_or_else(|| "browser QA oracle response omitted roles".to_string())
+}
+
+fn focus_firefox_qa_tab(url: &str) -> Result<(), String> {
+    let parsed = url::Url::parse(url).map_err(|error| error.to_string())?;
+    let marker = parsed
+        .query_pairs()
+        .find_map(|(key, value)| (key == "drifty_browser_qa").then(|| value.into_owned()))
+        .ok_or_else(|| "Firefox QA URL omitted the run marker".to_string())?;
+    let role = parsed
+        .query_pairs()
+        .find_map(|(key, value)| (key == "role").then(|| value.into_owned()))
+        .ok_or_else(|| "Firefox QA URL omitted the role".to_string())?;
+    let expected_title = applescript_string_literal(&format!("Drifty QA {role} {marker}"));
+    let script = format!(
+        r#"tell application "Firefox" to activate
+delay 0.1
+tell application "System Events"
+  tell process "Firefox"
+    set frontmost to true
+    set allElements to entire contents of front window
+    repeat with currentElement in allElements
+      try
+        if role of currentElement is "AXRadioButton" and title of currentElement is "{expected_title}" then
+          perform action "AXPress" of currentElement
+          return "focused"
+        end if
+      end try
+    end repeat
+    return "not_found"
+  end tell
+end tell"#
+    );
+    let result = run_osascript_text(&script)?;
+    if result != "focused" {
+        return Err(format!("could not focus exact Firefox QA tab: {result}"));
+    }
+    wait_for_firefox_url_match(url, true)
+}
+
+fn firefox_front_url() -> Result<String, String> {
+    run_osascript_text(
+        r#"tell application "Firefox" to activate
+delay 0.1
+tell application "System Events"
+  tell process "Firefox"
+    set frontmost to true
+    if not (exists front window) then return ""
+    set allElements to entire contents of front window
+    repeat with currentElement in allElements
+      try
+        if role of currentElement is "AXComboBox" then
+          set descriptionText to description of currentElement as text
+          if descriptionText contains "주소" or descriptionText contains "Address" or descriptionText contains "address" or descriptionText contains "URL" or descriptionText contains "url" then
+            return value of currentElement as text
+          end if
+        end if
+      end try
+    end repeat
+    return ""
+  end tell
+end tell"#,
+    )
+}
+
+fn urls_match_exactly_with_optional_scheme(observed: &str, expected: &str) -> bool {
+    if observed == expected {
+        return true;
+    }
+    let observed_without_scheme = observed
+        .strip_prefix("https://")
+        .or_else(|| observed.strip_prefix("http://"));
+    let expected_without_scheme = expected
+        .strip_prefix("https://")
+        .or_else(|| expected.strip_prefix("http://"));
+    observed_without_scheme.is_some() && observed_without_scheme == expected_without_scheme
 }
 
 fn wait_for_tab_count(app_name: &str, url: &str, expected: usize) -> Result<(), String> {
@@ -287,53 +985,23 @@ fn process_exists(app_name: &str) -> Result<bool, String> {
 }
 
 fn wait_for_firefox_url_match(url: &str, expected: bool) -> Result<(), String> {
-    let url = applescript_string_literal(url);
-    let schemaless_url = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .unwrap_or(&url)
-        .to_string();
     wait_until(Duration::from_secs(12), || {
-        let script = format!(
-            r#"tell application "System Events"
-  if not (exists process "Firefox") then return "no_process"
-end tell
-tell application "Firefox" to activate
-delay 0.1
-tell application "System Events"
-  tell process "Firefox"
-    set frontmost to true
-    if not (exists front window) then return "no_window"
-    set windowTitle to name of front window
-    set currentUrl to ""
-    set focusedRole to ""
-    keystroke "l" using command down
-    delay 0.4
-    try
-      set focusedElement to value of attribute "AXFocusedUIElement"
-      set focusedRole to value of attribute "AXRole" of focusedElement as text
-      set currentUrl to value of attribute "AXValue" of focusedElement as text
-    end try
-    key code 53
-    if currentUrl is "{url}" or currentUrl is "{schemaless_url}" then return "match"
-    return "window:" & windowTitle & "|role:" & focusedRole & "|url:" & currentUrl
-  end tell
-end tell
-return "no_match""#
-        );
-        let observed = run_osascript_text(&script)?;
-        if (observed == "match") == expected {
+        let observed = firefox_front_url()?;
+        if urls_match_exactly_with_optional_scheme(&observed, url) == expected {
             Ok(true)
         } else {
             Err(format!(
-                "Firefox URL match expected {expected}, observed {observed}"
+                "Firefox URL match expected {expected}, observed {observed:?}"
             ))
         }
     })
 }
 
 fn run_osascript_text(script: &str) -> Result<String, String> {
-    let output = super::run_osascript(script).map_err(|error| error.to_string())?;
+    let output = super::run_osascript(script).map_err(|error| match error {
+        super::super::ExtremeNudgeError::AppleScriptFailed(message) => message,
+        other => other.to_string(),
+    })?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }

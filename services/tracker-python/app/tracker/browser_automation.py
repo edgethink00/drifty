@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from app.tracker.accessibility_address_bar import (
     accessibility_address_bar_script,
+    is_accessibility_address_bar_browser_app,
     is_chromium_browser_app,
     metadata_from_accessibility_address_bar_result,
 )
@@ -62,7 +63,18 @@ def browser_script(app_name: str) -> str | None:
             fallback_title="name of front document",
         )
 
-    if app_name in {"Google Chrome", "Google Chrome Canary", "Microsoft Edge", "Arc", "Aside", "Brave Browser", "Chromium"}:
+    if app_name in {
+        "Google Chrome",
+        "Google Chrome Canary",
+        "Microsoft Edge",
+        "Arc",
+        "Aside",
+        "Brave Browser",
+        "Chromium",
+        "Opera",
+        "Vivaldi",
+        "Whale",
+    }:
         return _tab_matching_script(
             app_name=app_name,
             exists_check="(count of windows) > 0",
@@ -89,12 +101,24 @@ def browser_script(app_name: str) -> str | None:
 
 
 def is_supported_browser_app(app_name: str | None) -> bool:
-    return bool(app_name and browser_script(app_name))
+    return bool(
+        app_name
+        and (
+            browser_script(app_name)
+            or is_accessibility_address_bar_browser_app(app_name)
+        )
+    )
 
 
 def browser_automation_status_from_error(message: str) -> BrowserAutomationStatus:
     normalized = message.lower()
-    if "not authorized" in normalized or "not permitted" in normalized or "-1743" in normalized:
+    if (
+        "not authorized" in normalized
+        or "not permitted" in normalized
+        or "not allowed assistive access" in normalized
+        or "-1743" in normalized
+        or "-25211" in normalized
+    ):
         return "denied"
     return "unavailable"
 
@@ -103,17 +127,20 @@ def safe_browser_automation_error(error: RuntimeError) -> str:
     return " ".join(str(error).split())[:240]
 
 
-def _chromium_accessibility_metadata(app_name: str, run_osascript: Callable[[str], str]) -> BrowserMetadata | None:
-    if not is_chromium_browser_app(app_name):
+def _accessibility_address_bar_metadata(
+    app_name: str, run_osascript: Callable[[str], str]
+) -> BrowserMetadata | None:
+    if not is_accessibility_address_bar_browser_app(app_name):
         return None
 
     try:
         result = run_osascript(accessibility_address_bar_script(app_name))
     except RuntimeError as error:
+        error_message = safe_browser_automation_error(error)
         return BrowserMetadata(
             browser_name=app_name,
-            browser_automation_status="unavailable",
-            browser_automation_error=safe_browser_automation_error(error),
+            browser_automation_status=browser_automation_status_from_error(error_message),
+            browser_automation_error=error_message,
         )
 
     metadata = metadata_from_accessibility_address_bar_result(app_name, result)
@@ -251,12 +278,26 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
     if not app_name:
         return BrowserMetadata()
 
+    if app_name in {
+        "Floorp",
+        "Firefox",
+        "Firefox Developer Edition",
+        "Google Chrome Canary",
+        "Safari",
+        "Safari Technology Preview",
+        "Whale",
+        "Zen",
+    }:
+        fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
+        if fallback:
+            return fallback
+
     script = browser_script(app_name)
     if not script:
         return BrowserMetadata()
 
     if _force_chromium_ax_capture_enabled() and is_chromium_browser_app(app_name):
-        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
         if fallback:
             return fallback
 
@@ -264,7 +305,7 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
         result = run_osascript(script)
     except RuntimeError as error:
         error_message = safe_browser_automation_error(error)
-        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
         if fallback and fallback.site_url:
             return fallback
         if fallback and browser_automation_status_from_error(error_message) != "denied":
@@ -277,7 +318,7 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
 
     normalized_result = result.strip()
     if not normalized_result:
-        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
         if fallback:
             return fallback
         return BrowserMetadata(
@@ -290,7 +331,7 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
         return BrowserMetadata(browser_name=app_name, match_state="stale", browser_automation_status="stale")
 
     if normalized_result == _NO_SCRIPTABLE_WINDOW:
-        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
         if fallback:
             return fallback
         return BrowserMetadata(
@@ -305,7 +346,7 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
     match_state = parts[2].strip() if len(parts) > 2 else None
     ax_window_title = parts[3].strip() if len(parts) > 3 else None
     if match_state == "front-fallback" and is_chromium_browser_app(app_name):
-        fallback = _chromium_accessibility_metadata(app_name, run_osascript)
+        fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
         if fallback and fallback.site_url:
             return fallback
         return BrowserMetadata(

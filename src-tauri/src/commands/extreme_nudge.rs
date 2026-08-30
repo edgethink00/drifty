@@ -142,6 +142,7 @@ impl From<ExtremeNudgeError> for ExtremeNudgeFailure {
                         Some("osascript_timeout"),
                     )
                 } else if normalized.contains("-1743")
+                    || normalized.contains("-25211")
                     || normalized.contains("not authorized to send apple events")
                     || normalized.contains("not allowed assistive access")
                 {
@@ -403,8 +404,16 @@ mod tests {
         {
             assert!(browser_tabs::is_supported_browser_tab_target("Arc"));
             assert!(browser_tabs::is_supported_browser_tab_target("Aside"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Vivaldi"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Opera"));
             assert!(browser_tabs::is_supported_browser_tab_target("Safari"));
             assert!(browser_tabs::is_supported_browser_tab_target("Firefox"));
+            assert!(browser_tabs::is_supported_browser_tab_target(
+                "Firefox Developer Edition"
+            ));
+            assert!(browser_tabs::is_supported_browser_tab_target("Floorp"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Zen"));
+            assert!(browser_tabs::is_supported_browser_tab_target("Whale"));
         }
     }
 
@@ -416,9 +425,9 @@ mod tests {
     #[test]
     fn unsupported_browser_targets_never_fall_through_to_whole_app_termination() {
         let target = ExtremeNudgeTarget {
-            app_name: "Vivaldi".to_string(),
-            bundle_id: Some("com.vivaldi.Vivaldi".to_string()),
-            browser_name: Some("Vivaldi".to_string()),
+            app_name: "Preview".to_string(),
+            bundle_id: Some("com.apple.Preview".to_string()),
+            browser_name: Some("Preview".to_string()),
             site_domain: Some("youtube.com".to_string()),
             site_url: Some("https://youtube.com/watch?v=drift".to_string()),
             force_chromium_ax_tab_close: false,
@@ -532,6 +541,19 @@ mod tests {
         assert_eq!(denied.code, ExtremeNudgeFailureCode::PermissionDenied);
         assert_eq!(
             denied.diagnostic.as_deref(),
+            Some("macos_automation_denied")
+        );
+
+        let localized_assistive_denied =
+            ExtremeNudgeFailure::from(ExtremeNudgeError::AppleScriptFailed(
+                "osascript 보조 액세스가 허용되지 않습니다. (-25211)".to_string(),
+            ));
+        assert_eq!(
+            localized_assistive_denied.code,
+            ExtremeNudgeFailureCode::PermissionDenied
+        );
+        assert_eq!(
+            localized_assistive_denied.diagnostic.as_deref(),
             Some("macos_automation_denied")
         );
 

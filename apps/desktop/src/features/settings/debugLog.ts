@@ -271,10 +271,18 @@ const SUPPORTED_BROWSER_NAMES = [
   "Aside",
   "Brave Browser",
   "Chromium",
+  "Floorp",
   "Firefox",
+  "Firefox Developer Edition",
   "Google Chrome",
+  "Google Chrome Canary",
   "Microsoft Edge",
+  "Opera",
   "Safari",
+  "Safari Technology Preview",
+  "Vivaldi",
+  "Whale",
+  "Zen",
 ];
 
 const SUPPORTED_BROWSER_NAME_SET: ReadonlySet<string> = new Set(SUPPORTED_BROWSER_NAMES);

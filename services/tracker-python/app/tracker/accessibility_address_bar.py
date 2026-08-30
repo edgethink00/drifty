@@ -14,6 +14,17 @@ CHROMIUM_BROWSER_APPS: Final = {
     "Aside",
     "Brave Browser",
     "Chromium",
+    "Opera",
+    "Vivaldi",
+    "Whale",
+}
+AX_ADDRESS_BAR_BROWSER_APPS: Final = CHROMIUM_BROWSER_APPS | {
+    "Floorp",
+    "Firefox",
+    "Firefox Developer Edition",
+    "Safari",
+    "Safari Technology Preview",
+    "Zen",
 }
 
 AX_NO_PROCESS: Final = "AX_NO_PROCESS"
@@ -28,6 +39,8 @@ _SCHEMED_PREFIXES: Final = (
     "brave://",
     "arc://",
     "aside://",
+    "vivaldi://",
+    "opera://",
     "file://",
     "about:",
 )
@@ -45,7 +58,77 @@ def is_chromium_browser_app(app_name: str | None) -> bool:
     return app_name in CHROMIUM_BROWSER_APPS
 
 
+def is_accessibility_address_bar_browser_app(app_name: str | None) -> bool:
+    return app_name in AX_ADDRESS_BAR_BROWSER_APPS
+
+
 def accessibility_address_bar_script(app_name: str) -> str:
+    process_name = "firefox" if app_name == "Firefox Developer Edition" else app_name
+    if app_name == "Zen":
+        return f'''
+            tell application "System Events"
+              if not (exists process "{process_name}") then return "{AX_NO_PROCESS}"
+              tell process "{process_name}"
+                if not (exists front window) then return "{AX_NO_FRONT_WINDOW}"
+                set targetWindow to front window
+                set axTitle to name of targetWindow
+                try
+                  set addressContainer to UI element 1 of targetWindow
+                  set addressToolbar to toolbar 1 of addressContainer
+                  set addressContainer to UI element 1 of addressToolbar
+                  set addressContainer to UI element 2 of addressContainer
+                  set currentUrl to value of combo box 1 of addressContainer as text
+                  if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
+                  return currentUrl & linefeed & axTitle
+                on error
+                  return "{AX_NO_ADDRESS_FIELD}"
+                end try
+              end tell
+            end tell
+        '''
+    if app_name in {"Safari", "Safari Technology Preview"}:
+        return f'''
+            tell application "System Events"
+              if not (exists process "{process_name}") then return "{AX_NO_PROCESS}"
+              tell process "{process_name}"
+                if not (exists front window) then return "{AX_NO_FRONT_WINDOW}"
+                set targetWindow to front window
+                set axTitle to name of targetWindow
+                try
+                  set addressField to UI element 3 of UI element 3 of toolbar 1 of targetWindow
+                  set currentUrl to value of addressField as text
+                  if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
+                  return currentUrl & linefeed & axTitle
+                on error
+                  return "{AX_NO_ADDRESS_FIELD}"
+                end try
+              end tell
+            end tell
+        '''
+
+    if app_name == "Microsoft Edge":
+        known_address_probe = "my scanKnownEdgeAddressBar(targetWindow)"
+    elif app_name == "Brave Browser":
+        known_address_probe = "my scanKnownBraveAddressBar(targetWindow)"
+    elif app_name == "Vivaldi":
+        known_address_probe = "my scanKnownVivaldiAddressBar(targetWindow)"
+    elif app_name == "Opera":
+        known_address_probe = "my scanKnownOperaAddressBar(targetWindow)"
+    elif app_name == "Whale":
+        known_address_probe = "my scanKnownWhaleAddressBar(targetWindow)"
+    else:
+        known_address_probe = "my scanKnownChromiumAddressBar(targetWindow)"
+    main_window_selection = ""
+    if is_chromium_browser_app(app_name):
+        main_window_selection = '''
+            try
+              set targetWindow to first window whose value of attribute "AXMain" is true
+            on error
+              try
+                set targetWindow to first window whose subrole is "AXStandardWindow"
+              end try
+            end try
+        '''
     return f'''
         property bestValue : ""
         property bestLength : -1
@@ -87,8 +170,7 @@ def accessibility_address_bar_script(app_name: str) -> str:
           tell application "System Events"
             try
               set addressContainer to UI element 1 of theWindow
-              set addressContainer to UI element 1 of addressContainer
-              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 3 of addressContainer
               set addressContainer to UI element 1 of addressContainer
               set addressContainer to UI element 1 of addressContainer
               set addressToolbar to UI element 1 of addressContainer
@@ -97,6 +179,93 @@ def accessibility_address_bar_script(app_name: str) -> str:
             end try
           end tell
         end scanKnownChromiumAddressBar
+
+        on scanKnownEdgeAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set addressContainer to UI element 1 of theWindow
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressToolbar to UI element 1 of addressContainer
+              set addressFieldGroup to UI element 3 of addressToolbar
+              my considerAddressCandidate(UI element 2 of addressFieldGroup)
+            end try
+          end tell
+        end scanKnownEdgeAddressBar
+
+        on scanKnownBraveAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set addressContainer to UI element 1 of theWindow
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressContainer to UI element 2 of addressContainer
+              set addressToolbar to UI element 1 of addressContainer
+              set addressFieldGroup to UI element 5 of addressToolbar
+              my considerAddressCandidate(UI element 2 of addressFieldGroup)
+            end try
+          end tell
+        end scanKnownBraveAddressBar
+
+        on scanKnownVivaldiAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              -- Vivaldi renders its browser chrome inside a first-party
+              -- extension web area when assistive-technology mode is enabled.
+              -- Keep this direct path ahead of the bounded scanner, which
+              -- intentionally does not descend into arbitrary web content.
+              set addressContainer to UI element 1 of theWindow
+              repeat 7 times
+                set addressContainer to UI element 1 of addressContainer
+              end repeat
+              set addressContainer to UI element 3 of addressContainer
+              set addressToolbar to UI element 1 of addressContainer
+              set addressFieldGroup to UI element 5 of addressToolbar
+              set addressFieldGroup to UI element 2 of addressFieldGroup
+              my considerAddressCandidate(UI element 1 of addressFieldGroup)
+            end try
+          end tell
+        end scanKnownVivaldiAddressBar
+
+        on scanKnownOperaAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set addressContainer to UI element 4 of theWindow
+              repeat 10 times
+                set addressContainer to UI element 1 of addressContainer
+              end repeat
+              set addressToolbar to UI element 2 of addressContainer
+              set addressFieldGroup to UI element 1 of addressToolbar
+              set addressFieldGroup to UI element 2 of addressFieldGroup
+              set addressFieldGroup to UI element 1 of addressFieldGroup
+              my considerAddressCandidate(UI element 2 of addressFieldGroup)
+            end try
+          end tell
+        end scanKnownOperaAddressBar
+
+        on scanKnownWhaleAddressBar(theWindow)
+          if foundAddress is true then return
+          tell application "System Events"
+            try
+              set addressContainer to UI element 1 of theWindow
+              repeat 3 times
+                set addressContainer to UI element 1 of addressContainer
+              end repeat
+              set addressContainer to UI element 6 of addressContainer
+              set addressContainer to UI element 1 of addressContainer
+              set addressToolbar to toolbar 1 of addressContainer
+              set addressFieldGroup to UI element 7 of addressToolbar
+              my considerAddressCandidate(text field 1 of addressFieldGroup)
+            end try
+          end tell
+        end scanKnownWhaleAddressBar
 
         on scanElement(theElement)
           if foundAddress is true then return
@@ -147,8 +316,8 @@ def accessibility_address_bar_script(app_name: str) -> str:
         end scanToolbarFirst
 
         tell application "System Events"
-          if not (exists process "{app_name}") then return "{AX_NO_PROCESS}"
-          tell process "{app_name}"
+          if not (exists process "{process_name}") then return "{AX_NO_PROCESS}"
+          tell process "{process_name}"
             if not (exists front window) then return "{AX_NO_FRONT_WINDOW}"
             -- Prefer the browser's main standard window. Some Chromium browsers
             -- (e.g. Aside) keep a synthetic, contentless overlay window
@@ -157,13 +326,7 @@ def accessibility_address_bar_script(app_name: str) -> str:
             -- report no address field. The main / standard window is the one
             -- that actually holds the omnibox.
             set targetWindow to front window
-            try
-              set targetWindow to first window whose value of attribute "AXMain" is true
-            on error
-              try
-                set targetWindow to first window whose subrole is "AXStandardWindow"
-              end try
-            end try
+{main_window_selection}
             set axTitle to name of targetWindow
             set bestValue to ""
             set bestLength to -1
@@ -172,7 +335,7 @@ def accessibility_address_bar_script(app_name: str) -> str:
             set visitedCount to 0
             set toolbarVisitedCount to 0
             set foundAddress to false
-            my scanKnownChromiumAddressBar(targetWindow)
+            {known_address_probe}
             my scanToolbarFirst(targetWindow)
             if foundAddress is false then
               my scanElement(targetWindow)

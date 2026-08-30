@@ -9,7 +9,11 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
-from app.tracker.accessibility_address_bar import accessibility_address_bar_script, is_chromium_browser_app
+from app.tracker.accessibility_address_bar import (
+    accessibility_address_bar_script,
+    is_accessibility_address_bar_browser_app,
+    is_chromium_browser_app,
+)
 from app.tracker.macos_workspace import (
     BrowserMetadata,
     _browser_metadata,
@@ -63,12 +67,88 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
 
         self.assertIn("on scanKnownChromiumAddressBar(theWindow)", script)
         self.assertIn("set addressContainer to UI element 1 of theWindow", script)
+        self.assertIn("set addressContainer to UI element 3 of addressContainer", script)
         self.assertIn("set addressFieldGroup to UI element 4 of addressToolbar", script)
         self.assertIn("my considerAddressCandidate(UI element 2 of addressFieldGroup)", script)
         self.assertLess(
             script.index("my scanKnownChromiumAddressBar(targetWindow)"),
             script.index("my scanToolbarFirst(targetWindow)"),
         )
+
+    def test_accessibility_address_bar_script_has_edge_specific_app_bar_path(self) -> None:
+        script = accessibility_address_bar_script("Microsoft Edge")
+
+        self.assertIn("on scanKnownEdgeAddressBar(theWindow)", script)
+        self.assertIn("set addressFieldGroup to UI element 3 of addressToolbar", script)
+        self.assertIn("my scanKnownEdgeAddressBar(targetWindow)", script)
+        self.assertLess(
+            script.index("my scanKnownEdgeAddressBar(targetWindow)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
+        )
+
+    def test_accessibility_address_bar_script_has_brave_specific_app_bar_path(self) -> None:
+        script = accessibility_address_bar_script("Brave Browser")
+
+        self.assertIn("on scanKnownBraveAddressBar(theWindow)", script)
+        self.assertIn("set addressContainer to UI element 2 of addressContainer", script)
+        self.assertIn("set addressFieldGroup to UI element 5 of addressToolbar", script)
+        self.assertIn("my scanKnownBraveAddressBar(targetWindow)", script)
+        self.assertLess(
+            script.index("my scanKnownBraveAddressBar(targetWindow)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
+        )
+
+    def test_accessibility_address_bar_script_has_vivaldi_specific_app_bar_path(self) -> None:
+        script = accessibility_address_bar_script("Vivaldi")
+
+        self.assertTrue(is_chromium_browser_app("Vivaldi"))
+        self.assertIn("on scanKnownVivaldiAddressBar(theWindow)", script)
+        self.assertIn("repeat 7 times", script)
+        self.assertIn("my scanKnownVivaldiAddressBar(targetWindow)", script)
+        self.assertLess(
+            script.index("my scanKnownVivaldiAddressBar(targetWindow)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
+        )
+
+    def test_accessibility_address_bar_script_has_opera_specific_app_bar_path(self) -> None:
+        script = accessibility_address_bar_script("Opera")
+
+        self.assertTrue(is_chromium_browser_app("Opera"))
+        self.assertIn("on scanKnownOperaAddressBar(theWindow)", script)
+        self.assertIn("set addressContainer to UI element 4 of theWindow", script)
+        self.assertIn("repeat 10 times", script)
+        self.assertIn("my scanKnownOperaAddressBar(targetWindow)", script)
+        self.assertLess(
+            script.index("my scanKnownOperaAddressBar(targetWindow)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
+        )
+
+    def test_accessibility_address_bar_script_has_zen_specific_navigation_path(self) -> None:
+        script = accessibility_address_bar_script("Zen")
+
+        self.assertIn("set addressToolbar to toolbar 1 of addressContainer", script)
+        self.assertIn("value of combo box 1 of addressContainer", script)
+        self.assertNotIn("scanToolbarFirst", script)
+        self.assertNotIn("entire contents", script)
+
+    def test_accessibility_address_bar_script_has_whale_specific_toolbar_path(self) -> None:
+        script = accessibility_address_bar_script("Whale")
+
+        self.assertTrue(is_chromium_browser_app("Whale"))
+        self.assertIn("on scanKnownWhaleAddressBar(theWindow)", script)
+        self.assertIn("set addressFieldGroup to UI element 7 of addressToolbar", script)
+        self.assertIn("my considerAddressCandidate(text field 1 of addressFieldGroup)", script)
+        self.assertLess(
+            script.index("my scanKnownWhaleAddressBar(targetWindow)"),
+            script.index("my scanToolbarFirst(targetWindow)"),
+        )
+
+    def test_safari_accessibility_capture_uses_fast_known_path(self) -> None:
+        script = accessibility_address_bar_script("Safari")
+
+        self.assertIn("UI element 3 of UI element 3 of toolbar 1 of targetWindow", script)
+        self.assertNotIn("entire contents", script)
+        self.assertNotIn('tell application "Safari"', script)
 
     def test_accessibility_address_bar_script_targets_main_window_not_front_window(self) -> None:
         script = accessibility_address_bar_script("Aside")
@@ -151,6 +231,107 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
 
         self.assertTrue(is_chromium_browser_app("Aside"))
         self.assertIn('process "Aside"', script)
+
+    def test_ax_address_bar_capture_supports_firefox_family_and_safari(self) -> None:
+        for app_name in ("Firefox", "Floorp", "Safari", "Safari Technology Preview", "Zen"):
+            with self.subTest(app_name=app_name):
+                self.assertTrue(is_accessibility_address_bar_browser_app(app_name))
+                self.assertIn(f'process "{app_name}"', accessibility_address_bar_script(app_name))
+
+    def test_firefox_uses_ax_address_bar_capture_directly(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="https://example.com/firefox\nExample - Firefox",
+        ) as mock_run:
+            result = _browser_metadata("Firefox")
+
+        self.assertEqual(result.site_url, "https://example.com/firefox")
+        self.assertEqual(result.ax_window_title, "Example - Firefox")
+        self.assertEqual(result.match_state, "accessibility-address-bar")
+        self.assertEqual(result.browser_automation_status, "granted")
+        mock_run.assert_called_once()
+
+    def test_safari_technology_preview_uses_ax_address_bar_capture_directly(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="example.com/preview\nExample - Safari Technology Preview",
+        ) as mock_run:
+            result = _browser_metadata("Safari Technology Preview")
+
+        self.assertEqual(result.browser_name, "Safari Technology Preview")
+        self.assertEqual(result.site_url, "https://example.com/preview")
+        self.assertEqual(result.ax_window_title, "Example - Safari Technology Preview")
+        self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
+        self.assertEqual(result.browser_automation_status, "granted")
+        mock_run.assert_called_once()
+
+    def test_floorp_uses_ax_address_bar_capture_directly(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="https://example.com/floorp\nExample - Floorp",
+        ) as mock_run:
+            result = _browser_metadata("Floorp")
+
+        self.assertEqual(result.browser_name, "Floorp")
+        self.assertEqual(result.site_url, "https://example.com/floorp")
+        self.assertEqual(result.match_state, "accessibility-address-bar")
+        self.assertEqual(result.browser_automation_status, "granted")
+        self.assertIn('process "Floorp"', mock_run.call_args.args[0])
+
+    def test_zen_uses_ax_address_bar_capture_directly(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="https://example.com/zen\nExample - Zen",
+        ) as mock_run:
+            result = _browser_metadata("Zen")
+
+        self.assertEqual(result.browser_name, "Zen")
+        self.assertEqual(result.site_url, "https://example.com/zen")
+        self.assertEqual(result.match_state, "accessibility-address-bar")
+        self.assertEqual(result.browser_automation_status, "granted")
+        self.assertIn('process "Zen"', mock_run.call_args.args[0])
+
+    def test_chrome_canary_uses_ax_address_bar_capture_directly(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="example.com/canary\nExample - Chrome Canary",
+        ) as mock_run:
+            result = _browser_metadata("Google Chrome Canary")
+
+        self.assertEqual(result.browser_name, "Google Chrome Canary")
+        self.assertEqual(result.site_url, "https://example.com/canary")
+        self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
+        self.assertEqual(result.browser_automation_status, "granted")
+        script = mock_run.call_args.args[0]
+        self.assertIn('process "Google Chrome Canary"', script)
+        self.assertNotIn('tell application "Google Chrome Canary"', script)
+
+    def test_firefox_developer_edition_uses_lowercase_ax_process_name(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="example.com/dev\nExample - Firefox Developer Edition",
+        ) as mock_run:
+            result = _browser_metadata("Firefox Developer Edition")
+
+        self.assertEqual(result.browser_name, "Firefox Developer Edition")
+        self.assertEqual(result.site_url, "https://example.com/dev")
+        script = mock_run.call_args.args[0]
+        self.assertIn('process "firefox"', script)
+        self.assertNotIn('process "Firefox Developer Edition"', script)
+
+    def test_whale_uses_ax_address_bar_capture_directly(self) -> None:
+        with patch(
+            "app.tracker.macos_workspace._run_osascript",
+            return_value="example.com/whale\nExample - NAVER Whale",
+        ) as mock_run:
+            result = _browser_metadata("Whale")
+
+        self.assertEqual(result.browser_name, "Whale")
+        self.assertEqual(result.site_url, "https://example.com/whale")
+        self.assertEqual(result.match_state, "accessibility-address-bar-schemaless")
+        script = mock_run.call_args.args[0]
+        self.assertIn('process "Whale"', script)
+        self.assertNotIn('tell application "Whale"', script)
 
     def test_browser_metadata_marks_missing_scriptable_window_unavailable(self) -> None:
         with patch(
