@@ -946,9 +946,12 @@
 
 .week-v2-calendar__day-head > span {
   display: grid;
-  align-content: center;
-  min-height: 2.375rem;
-  padding: var(--space-2);
+  grid-auto-flow: column;
+  justify-content: start;
+  align-items: baseline;
+  column-gap: 0.35em;
+  min-height: 28px;
+  padding: 5px 8px 6px;
   border-left: 1px solid var(--line);
 }
 
@@ -958,15 +961,17 @@
 
 .week-v2-calendar__day-head strong {
   font-family: var(--font-display);
-  font-size: 0.75rem;
+  font-size: 0.71875rem;
   font-weight: 620;
   letter-spacing: -0.02em;
+  line-height: 1.1;
 }
 
 .week-v2-calendar__day-head small {
   color: var(--text-soft);
   font-family: var(--font-mono);
-  font-size: 0.71875rem;
+  font-size: 0.6875rem;
+  line-height: 1.1;
 }
 
 .week-v2-calendar__day-head .is-weekend strong {
@@ -1294,7 +1299,7 @@
 
 .week-v2-calendar__body {
   min-width: min(100%, 840px);
-  min-height: calc(100% - 40px);
+  min-height: calc(100% - 28px);
   width: max(100%, 840px);
   max-width: none;
   box-sizing: border-box;
@@ -1338,8 +1343,8 @@
 }
 
 .week-v2-calendar__day-head > span {
-  min-height: 38px;
-  padding: 6px;
+  min-height: 28px;
+  padding: 5px 8px 6px;
 }
 
 .week-v2-calendar__day-head > span.is-today {
