@@ -1,4 +1,4 @@
-import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
+import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
@@ -59,7 +59,7 @@ const MAX_CLASSIFY_ALL_BATCHES = 100;
 const MAX_TEXT_LENGTH = 160;
 const MAX_YOUTUBE_CHANNEL_NAME_LENGTH = 120;
 const MAX_YOUTUBE_CATEGORY_LENGTH = 80;
-export const AI_CLASSIFICATION_PROMPT_VERSION = "v8.2-soul-episode-v2";
+export const AI_CLASSIFICATION_PROMPT_VERSION = "v8.2-soul-episode-v3-confidence";
 const ENHANCED_CONTEXT_RETRY_CONFIDENCE_THRESHOLD = 0.55;
 const MAX_ENHANCED_CONTEXT_RETRY_FINGERPRINTS = 512;
 const YOUTUBE_BROWSE_INHERITANCE_WINDOW_MS = 3 * 60 * 1000;
@@ -1241,6 +1241,8 @@ function toClassificationRecords(
         : "";
     const sourcePayload = payloadById.get(segmentId);
     if (!sourcePayload || !isActivityCategory(classification.category)) return [];
+    const providerProductivity = resolveRawProviderProductivity(classification);
+    if (!providerProductivity) return [];
     const withoutContext = resolveProviderProductivity(classification, classification.category, sourcePayload, null);
     const productivity = resolveProviderProductivity(classification, classification.category, sourcePayload, memoryContext);
     if (!productivity) return [];
@@ -1250,7 +1252,11 @@ function toClassificationRecords(
     const safetyReasonReturned = classification.reason === MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON;
     const rawProductivity = serverAudit?.rawProductivity
       ?? (safetyReasonReturned ? "drift" : withoutContext);
-    const finalConfidence = contextDowngraded ? Math.min(providerConfidence, 0.5) : providerConfidence;
+    const finalConfidence = confidenceForResolvedLiveActivityProductivity(
+      providerConfidence,
+      providerProductivity,
+      productivity,
+    );
     const record: ActivityClassificationRecord = {
       segmentId,
       inputFingerprint: typeof classification.inputFingerprint === "string" ? classification.inputFingerprint : sourcePayload.inputFingerprint,
@@ -2046,6 +2052,17 @@ function resolveProviderProductivity(
     item,
     memoryContext,
   );
+}
+
+function resolveRawProviderProductivity(
+  classification: EdgeClassification,
+): ProductivityLabel | null {
+  if (isLiveActivityIntent(classification.intent)) {
+    return productivityForLiveActivityIntent(classification.intent);
+  }
+  return isProductivityLabel(classification.productivity)
+    ? classification.productivity
+    : null;
 }
 
 type EdgeFunctionFailureDetail = {

@@ -1600,7 +1600,42 @@ describe("runAiClassification cloud contract", () => {
         segmentId: "segment-1",
         category: "shopping",
         productivity: "neutral",
-        promptVersion: "v8.2-soul-episode-v2",
+        confidence: 0.5,
+        promptVersion: "v8.2-soul-episode-v3-confidence",
+      })]);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("caps local confidence when a category override conflicts with provider intent", async () => {
+    const segment = createUnknownSegment(1, {
+      appName: "Google Chrome",
+      siteDomain: "example-game.test",
+      siteTitle: "Interactive coding exercise",
+    });
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([segment], { session: null });
+      nativeInvoke.mockReset();
+      nativeInvoke.mockResolvedValueOnce(localAiResponse("segment-1", {
+        category: "game",
+        intent: "work_support",
+        confidence: 0.9,
+        reason: "Interactive work support.",
+      }));
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "openrouter_byok", apiKey: "sk-or-v1-test", model: "google/gemini-3.1-flash-lite" },
+      });
+
+      expect(result.status).toBe("saved");
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({
+        segmentId: "segment-1",
+        category: "game",
+        productivity: "drift",
+        confidence: 0.5,
+        promptVersion: "v8.2-soul-episode-v3-confidence",
       })]);
     } finally {
       cleanupServiceMocks();
@@ -2022,7 +2057,7 @@ describe("runAiClassification cloud contract", () => {
       expect(result.status).toBe("saved");
       expect(getReusableAiClassifications).toHaveBeenCalledTimes(1);
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.2-soul-episode-v2" })]);
+      expect(saveClassifications).toHaveBeenCalledWith([expect.objectContaining({ segmentId: "segment-1", category: "workspace", aiResult: true, promptVersion: "v8.2-soul-episode-v3-confidence" })]);
     } finally {
       cleanupServiceMocks();
     }

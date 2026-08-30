@@ -60,6 +60,22 @@ describe("buildDriftAlarmCandidates", () => {
     });
   });
 
+  it("suppresses a resolver-adjusted low-confidence AI drift", () => {
+    const adjustedSegment: ActivitySegment = {
+      ...driftSegment,
+      classification: storedClassification("game", "drift", 0.5),
+    };
+
+    const candidates = buildDriftAlarmCandidates({
+      segments: [adjustedSegment],
+      currentSnapshot,
+      classificationOptions: { includeAiClassifications: true },
+      minimumDurationSeconds: 0,
+    });
+
+    expect(candidates).toEqual([]);
+  });
+
   it("extends the stored segment duration only while the current snapshot still matches it", () => {
     const candidates = buildDriftAlarmCandidates({
       segments: [driftSegment],
