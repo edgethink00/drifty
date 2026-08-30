@@ -52,11 +52,28 @@ pub(super) fn is_extreme_nudge_toast_payload(payload: &Value) -> bool {
     )
 }
 
+/// Only the settings action is a navigation request, so only it may pull the
+/// main window forward. The card lives in a separate always-on-top surface
+/// while the main window is often hidden (closing it hides rather than quits),
+/// so emitting the event alone lands the user on a settings screen they cannot
+/// see. Break and correction actions stay deliberately silent: they resolve the
+/// drift in place and must not steal focus from whatever the user is doing.
+fn should_reveal_main_window_for_action(action: &DriftAlarmAction) -> bool {
+    matches!(action, DriftAlarmAction::Settings)
+}
+
 #[tauri::command]
 pub fn watcher_peek_extreme_nudge_action(
     app: AppHandle,
     action: DriftAlarmAction,
 ) -> Result<(), String> {
+    // Reveal before emitting, matching the tray Settings contract in
+    // shell_action.rs, so the settings section renders in an already visible
+    // window instead of behind it.
+    if should_reveal_main_window_for_action(&action) {
+        crate::reveal_main_window(&app);
+    }
+
     watcher_peek_hide(app.clone())?;
 
     if let Some(main) = app.get_webview_window("main") {
@@ -92,5 +109,29 @@ mod tests {
         let payload = serde_json::json!({"kind": "extremeNudgeToast", "placement": "top-right"});
 
         assert!(is_extreme_nudge_toast_payload(&payload));
+    }
+
+    #[test]
+    fn reveals_main_window_only_for_the_settings_action() {
+        assert!(should_reveal_main_window_for_action(
+            &DriftAlarmAction::Settings
+        ));
+    }
+
+    /// The drift card resolves these in place. Pulling the main window forward
+    /// here would interrupt the work the user just chose to return to.
+    #[test]
+    fn keeps_resolving_actions_from_stealing_focus() {
+        assert!(!should_reveal_main_window_for_action(
+            &DriftAlarmAction::ManualCorrection
+        ));
+        assert!(!should_reveal_main_window_for_action(
+            &DriftAlarmAction::StartBreak { minutes: 15 }
+        ));
+        assert!(!should_reveal_main_window_for_action(
+            &DriftAlarmAction::ReturnToFocus {
+                target_id: "app:com.microsoft.VSCode".to_string(),
+            }
+        ));
     }
 }
