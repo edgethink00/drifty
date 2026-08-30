@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from "react";
+import type { MouseEvent } from "react";
 
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -36,8 +37,12 @@ export function UpgradePlanModal({
   useModalDismiss(onClose, { disabled: checkoutOpening });
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
 
+  const handleOverlayClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget && !checkoutOpening) onClose();
+  };
+
   return (
-    <div className="dashboard-ai-recovery dashboard-ai-recovery--upgrade">
+    <div className="dashboard-ai-recovery dashboard-ai-recovery--upgrade" onClick={handleOverlayClick}>
       <section
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
@@ -47,6 +52,7 @@ export function UpgradePlanModal({
         ref={dialogRef}
         role="dialog"
         tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
       >
         <ModalCloseButton disabled={checkoutOpening} label={t("billing.upgradeModal.dismiss")} onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">

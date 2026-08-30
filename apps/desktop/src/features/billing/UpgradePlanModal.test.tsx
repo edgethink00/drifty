@@ -60,6 +60,24 @@ describe("UpgradePlanModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("closes when the dimmed backdrop is clicked, but not when the plan panel is clicked", () => {
+    const onClose = vi.fn();
+    const { container } = render(
+      <UpgradePlanModal
+        billingActionError={null}
+        billingCheckoutLoadingInterval={null}
+        onClose={onClose}
+        onSelectBillingPlan={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("dialog", { name: /^Upgrade to Pro$/i }));
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.click(container.querySelector(".dashboard-ai-recovery")!);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("cannot be dismissed while checkout creation is in flight", () => {
     const onClose = vi.fn();
     const { container } = render(
@@ -76,6 +94,7 @@ describe("UpgradePlanModal", () => {
     expect(closeButton).toHaveProperty("disabled", true);
     fireEvent.keyDown(window, { key: "Escape" });
     fireEvent.click(closeButton);
+    fireEvent.click(container.querySelector(".dashboard-ai-recovery")!);
     expect(onClose).not.toHaveBeenCalled();
   });
 });
