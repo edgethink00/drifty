@@ -2,7 +2,7 @@ import { shiftIsoDate } from "@drifty/domain";
 import { getCalendarWeekStartDay } from "./weekCalendar";
 import { DEFAULT_START_OF_WEEK } from "../settings/settingsStorage";
 import type { StartOfWeek } from "../settings/settingsStorage";
-import { formatDayLabel, getLogicalDayRange, shiftIsoMonth } from "../../lib/formatting";
+import { formatDateRangeLabel, formatDayLabel, getLogicalDayRange, shiftIsoMonth } from "../../lib/formatting";
 
 export type DashboardPeriod = "Today" | "Week" | "Month";
 
@@ -92,5 +92,5 @@ export function shiftInsightPeriodDay(day: string, range: InsightRange, directio
 
 export function formatDashboardPeriodLabel(period: DashboardPeriod, startDay: string, endDay: string): string {
   if (period === "Today") return formatDayLabel(endDay);
-  return `${period} · ${formatDayLabel(startDay)}–${formatDayLabel(endDay)}`;
+  return `${period} · ${formatDateRangeLabel(startDay, endDay)}`;
 }

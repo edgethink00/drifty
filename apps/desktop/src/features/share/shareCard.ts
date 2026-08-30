@@ -8,7 +8,7 @@
 
 import type { ActivityCategory, CategoryDuration, FlowBlock, ProductivityDuration } from "@drifty/domain";
 import { categoryLabel } from "../../lib/activityLabels";
-import { UI_LOCALE } from "../../lib/formatting";
+import { formatDateRangeLabel, UI_LOCALE } from "../../lib/formatting";
 import type { WeekCalendarEvent, WeekDayRow } from "../dashboard/weekCalendar";
 
 export type ShareCardSliceKey = ActivityCategory | "other";
@@ -227,7 +227,7 @@ export interface ShareWeekCardData {
   readonly endDay: string;
   /** e.g. "Week 29". */
   readonly weekLabel: string;
-  /** e.g. "Jul 13 – 19" or "Jun 30 – Jul 6". */
+  /** e.g. "Jul 13–19" or "Jun 29–Jul 5". */
   readonly rangeLabel: string;
   readonly totalSeconds: number;
   readonly focusSeconds: number;
@@ -296,7 +296,7 @@ export function buildShareWeekCardData({
     startDay,
     endDay,
     weekLabel: `Week ${isoWeekNumber(startDay)}`,
-    rangeLabel: buildWeekRangeLabel(startDay, endDay),
+    rangeLabel: formatDateRangeLabel(startDay, endDay),
     totalSeconds: trackedSeconds,
     focusSeconds: focusEntry?.totalSeconds ?? 0,
     isCurrentPeriod,
@@ -312,17 +312,6 @@ export function buildShareWeekCardData({
     longestFocusSeconds: buildWeekLongestFocusSeconds(calendarEvents),
     slices: buildSlices(categoryTotals, trackedSeconds),
   };
-}
-
-function buildWeekRangeLabel(startDay: string, endDay: string): string {
-  const start = new Date(`${startDay}T12:00:00`);
-  const end = new Date(`${endDay}T12:00:00`);
-  const startLabel = start.toLocaleDateString(UI_LOCALE, { month: "short", day: "numeric" });
-  const endLabel = end.toLocaleDateString(
-    UI_LOCALE,
-    start.getMonth() === end.getMonth() ? { day: "numeric" } : { month: "short", day: "numeric" },
-  );
-  return `${startLabel} – ${endLabel}`;
 }
 
 /** ISO-8601 week number of the given ISO day. */

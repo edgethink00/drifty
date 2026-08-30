@@ -173,7 +173,21 @@ export function filterSegmentsForRange(segments: ActivitySegment[], start: strin
 
 export function formatDateRangeLabel(startDay: string, endDay: string): string {
   if (startDay === endDay) return formatDayLabel(endDay);
-  return `${formatDayLabel(startDay)}–${formatDayLabel(endDay)}`;
+  const start = parseLocalIsoDay(startDay);
+  const end = parseLocalIsoDay(endDay);
+  if (!start || !end) return `${startDay}–${endDay}`;
+
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  const startLabel = new Intl.DateTimeFormat(UI_LOCALE, sameYear
+    ? { month: "short", day: "numeric" }
+    : { month: "short", day: "numeric", year: "numeric" }).format(start);
+  const endLabel = new Intl.DateTimeFormat(UI_LOCALE, sameMonth
+    ? { day: "numeric" }
+    : sameYear
+      ? { month: "short", day: "numeric" }
+      : { month: "short", day: "numeric", year: "numeric" }).format(end);
+  return `${startLabel}–${endLabel}`;
 }
 
 export function toErrorMessage(error: unknown): string {
@@ -183,8 +197,8 @@ export function toErrorMessage(error: unknown): string {
 }
 
 export function formatDayLabel(day: string): string {
-  const parsed = new Date(`${day}T12:00:00`);
-  if (Number.isNaN(parsed.getTime())) return day;
+  const parsed = parseLocalIsoDay(day);
+  if (!parsed) return day;
   return uiDayFormatter.format(parsed);
 }
 
@@ -209,3 +223,8 @@ export const UI_LOCALE = "en-US";
 export const uiDayFormatter = new Intl.DateTimeFormat(UI_LOCALE, { weekday: "short", month: "short", day: "numeric" });
 
 export const uiTimeFormatter = new Intl.DateTimeFormat(UI_LOCALE, { hour: "numeric", minute: "2-digit" });
+
+function parseLocalIsoDay(day: string): Date | null {
+  const parsed = new Date(`${day}T12:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}

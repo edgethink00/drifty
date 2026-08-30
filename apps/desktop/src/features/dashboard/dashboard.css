@@ -492,7 +492,8 @@
 }
 
 .dashboard-page-head--today .day-nav__current {
-  min-width: 6.75rem;
+  min-width: 0;
+  width: max-content;
   gap: 2px;
   padding: 0 8px;
 }

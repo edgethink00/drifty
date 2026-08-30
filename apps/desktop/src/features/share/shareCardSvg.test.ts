@@ -42,7 +42,7 @@ const WEEK: ShareWeekCardData = {
   startDay: "2026-07-13",
   endDay: "2026-07-19",
   weekLabel: "Week 29",
-  rangeLabel: "Jul 13 – 19",
+  rangeLabel: "Jul 13–19",
   totalSeconds: 28 * 3600,
   focusSeconds: 22 * 3600 + 40 * 60,
   isCurrentPeriod: true,

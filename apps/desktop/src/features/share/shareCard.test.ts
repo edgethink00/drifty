@@ -235,7 +235,7 @@ describe("buildShareWeekCardData", () => {
   it("labels the week and range", () => {
     const data = buildShareWeekCardData(WEEK_INPUT);
     expect(data.weekLabel).toBe("Week 29");
-    expect(data.rangeLabel).toBe("Jul 13 – 19");
+    expect(data.rangeLabel).toBe("Jul 13–19");
     expect(data.focusSeconds).toBe(16 * 3600);
     expect(data.focusPercent).toBe(80);
   });
@@ -251,7 +251,7 @@ describe("buildShareWeekCardData", () => {
 
   it("spans months in the range label", () => {
     const data = buildShareWeekCardData({ ...WEEK_INPUT, startDay: "2026-06-29", endDay: "2026-07-05" });
-    expect(data.rangeLabel).toBe("Jun 29 – Jul 5");
+    expect(data.rangeLabel).toBe("Jun 29–Jul 5");
   });
 
   it("marks the best day and derives its full name", () => {

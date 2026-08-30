@@ -56,6 +56,7 @@ describe("AgentsPage shared dashboard controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     expect(screen.getByRole("button", { name: "Show previous agents week" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "This Week" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByText("Aug 24–30")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Show previous agents week" }));
     expect(props.onSelectDay).toHaveBeenCalledWith("2026-08-21");

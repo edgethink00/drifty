@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getInsightPeriodRange, shiftInsightPeriodDay } from "./dashboardPeriods";
+import { formatDashboardPeriodLabel, getInsightPeriodRange, shiftInsightPeriodDay } from "./dashboardPeriods";
 
 describe("insight period ranges", () => {
   it("builds rolling Week, Month, and 90-day ranges ending on the selected day", () => {
@@ -22,5 +22,17 @@ describe("insight period ranges", () => {
     expect(shiftInsightPeriodDay("2026-06-12", "Month", -1)).toBe("2026-05-13");
     expect(shiftInsightPeriodDay("2026-06-12", "90Day", -1)).toBe("2026-03-14");
     expect(shiftInsightPeriodDay("2026-06-12", "Month", 1)).toBe("2026-07-12");
+  });
+});
+
+describe("formatDashboardPeriodLabel", () => {
+  it("keeps a single day as a weekday date", () => {
+    expect(formatDashboardPeriodLabel("Today", "2026-08-24", "2026-08-24")).toBe("Mon, Aug 24");
+  });
+
+  it("uses the compact range grammar for week and month windows", () => {
+    expect(formatDashboardPeriodLabel("Week", "2026-08-24", "2026-08-30")).toBe("Week · Aug 24–30");
+    expect(formatDashboardPeriodLabel("Month", "2026-08-01", "2026-08-30")).toBe("Month · Aug 1–30");
+    expect(formatDashboardPeriodLabel("Week", "2026-12-28", "2027-01-03")).toBe("Week · Dec 28, 2026–Jan 3, 2027");
   });
 });
