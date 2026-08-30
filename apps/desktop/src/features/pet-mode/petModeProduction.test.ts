@@ -314,9 +314,24 @@ describe("catching the cat cancels the close", () => {
     const guard = petWindow.slice(petWindow.indexOf("const rejectionReason ="));
     const guardBody = guard.slice(0, guard.indexOf("reportLabState();"));
     expect(guardBody).toContain("renderer_busy_intervention");
-    expect(guardBody).toContain("renderer_focus_resting");
     expect(guardBody).toContain("renderer_manual_drag");
     expect(guardBody).toContain("reportNativePetContact(event.target.id, false, rejectionReason)");
+  });
+
+  it("never vetoes an automatic close just because the cat is sitting", () => {
+    // The alarm only sends an automatic target after its AI gate and a fresh
+    // current-activity re-check, and it runs the close anyway when the
+    // renderer rejects. A stale seated pose could therefore only delete the
+    // cat from a close that still happened (observed 2026-08-30:
+    // "renderer_focus_resting elapsedMs=19", then the tab closed with no cat).
+    const guard = petWindow.slice(petWindow.indexOf("const rejectionReason ="));
+    const guardBody = guard.slice(0, guard.indexOf("reportLabState();"));
+    expect(guardBody).not.toContain("focusRestingRef");
+
+    // The approach itself must still be interruptible: a genuine focus change
+    // mid-run keeps cancelling the close through activity_context_changed.
+    expect(petWindow).toContain("contextChangedInterventionTokenRef.current = actionTokenRef.current");
+    expect(petWindow).toContain('"activity_context_changed"');
   });
 
   it("warns before the close while the approach can still be interrupted", () => {

@@ -376,7 +376,7 @@ describe("PetModeWindowApp", () => {
     );
   });
 
-  it("lets explicit Lab X targets interrupt focus sitting while automatic interventions stay blocked", async () => {
+  it("stands up for an automatic close and for an explicit Lab X target while sitting in focus", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
@@ -396,6 +396,9 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
 
+    // The alarm has already cleared its AI gate and re-confirmed the live
+    // target before this arrives, so this window's seated pose is the older
+    // truth. Vetoing here only removed the cat from a close that ran anyway.
     act(() => {
       bridge.eventHandler?.({
         kind: "intervention",
@@ -407,8 +410,14 @@ describe("PetModeWindowApp", () => {
         },
       });
     });
-    await act(async () => { await Promise.resolve(); });
-    expect(bridge.moveNativePetToTarget).not.toHaveBeenCalled();
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith(
+      "automatic-while-focused",
+      false,
+      "renderer_focus_resting",
+    );
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
 
     act(() => {
       bridge.eventHandler?.({
@@ -425,7 +434,106 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+  });
+
+  it("runs the 2026-08-30 close instead of answering renderer_focus_resting in 19ms", async () => {
+    // Real capture: the alarm confirmed the live YouTube target, sent the cat,
+    // got "renderer_focus_resting elapsedMs=19" back, and closed the tab
+    // anyway. The user saw a tab vanish with the cat still sitting. The seated
+    // pose must never be the thing that answers an automatic target.
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "Codex", durationSeconds: 1200 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-episode:19618",
+          appName: "Aside",
+          browserName: "Aside",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalled();
     expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+  });
+
+  it("accepts the native run gait after standing up from a focus sit", async () => {
+    // Native emits its own facing/motion events while it walks the panel. The
+    // motion handler drops them while the window still believes it is resting,
+    // so standing up has to clear that state as well; otherwise the cat slides
+    // across the screen in its seated pose.
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "Codex", durationSeconds: 900 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-episode:native-gait",
+          appName: "Aside",
+          browserName: "Aside",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    act(() => bridge.eventHandler?.({ kind: "motion", motion: "run" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+
+    // Native keeps emitting gait frames for the whole trip. A late snapshot
+    // that still says "focus" must not be able to reseat the cat mid-run,
+    // because the alarm already re-checked the live target before sending it.
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "Codex", durationSeconds: 930 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    act(() => bridge.eventHandler?.({ kind: "motion", motion: "run" }));
+    await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
   });
 

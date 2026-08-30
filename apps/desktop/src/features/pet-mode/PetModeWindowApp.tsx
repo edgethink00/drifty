@@ -1183,17 +1183,24 @@ export function PetModeWindowApp() {
       }
       const isLabTarget = event.target.labTarget === "browser_tab_x"
         || event.target.labTarget === "drifty_window_x";
+      // A seated focus pose is deliberately NOT a rejection reason. The alarm
+      // only sends an automatic target after its own AI gate and a fresh
+      // current-activity re-check, and it runs the plain close anyway when the
+      // renderer rejects — so a stale seated pose could only delete the cat
+      // from a close that still happened. Observed 2026-08-30: the alarm
+      // confirmed the live YouTube target, this window answered
+      // "renderer_focus_resting elapsedMs=19", and the tab closed with the cat
+      // still sitting. An approach that starts here stays interruptible: a
+      // genuine focus change still cancels it via activity_context_changed.
       const rejectionReason = activeLabActionRef.current === "intervention"
         ? "renderer_busy_intervention"
-        : !isLabTarget && focusRestingRef.current
-          ? "renderer_focus_resting"
-          : manualDragRef.current
-            ? "renderer_manual_drag"
-            : isLabTarget && phaseRef.current === "entry"
-              ? "renderer_entry_active"
-              : phaseRef.current === "drag" || phaseRef.current === "release"
-                ? "renderer_drag_phase"
-                : null;
+        : manualDragRef.current
+          ? "renderer_manual_drag"
+          : isLabTarget && phaseRef.current === "entry"
+            ? "renderer_entry_active"
+            : phaseRef.current === "drag" || phaseRef.current === "release"
+              ? "renderer_drag_phase"
+              : null;
       if (rejectionReason !== null) {
         // This guard used to drop the event silently, which the main window
         // could only observe as an 8-second contact timeout — and it then
