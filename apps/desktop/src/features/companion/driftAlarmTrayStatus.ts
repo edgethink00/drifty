@@ -144,6 +144,7 @@ function suppressionReasonLabel(reason: string): string {
   const normalized = reason.trim();
   if (normalized === "ai-low-confidence") return "AI low confidence";
   if (normalized === "ai-timeout") return "AI gate timed out";
+  if (normalized === "ai-deadline") return "AI gate timed out";
   if (normalized === "ai-classified-focus") return "AI classified focus";
   if (normalized === "ai-classified-neutral") return "AI classified neutral";
   if (normalized.startsWith("ai-unavailable:")) return "AI unavailable";
@@ -154,6 +155,7 @@ function suppressionStatusLabel(reason: string): string {
   const normalized = reason.trim();
   if (normalized.startsWith("ai-unavailable:")) return "Drift alerts: AI unavailable";
   if (normalized === "ai-timeout") return "Drift alerts: AI timed out";
+  if (normalized === "ai-deadline") return "Drift alerts: AI timed out";
   return "Drift alerts: Suppressed";
 }
 

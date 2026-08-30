@@ -203,7 +203,7 @@ import {
   listenToNativeDriftAlarmDismissed,
 } from "./features/companion/driftAlarmBridge";
 import { getExtremeNudgeFailure } from "./features/companion/extremeNudgeFailure";
-import { evaluateYouTubeDriftAlarmGate } from "./features/companion/youtubeDriftAlarmGate";
+import { evaluateYouTubeDriftAlarmGate, type YouTubeDriftAlarmGateSettledResult } from "./features/companion/youtubeDriftAlarmGate";
 import {
   buildDriftAlarmManualCorrectionRecord,
   buildDriftAlarmManualCorrectionRuleInput,
@@ -1934,6 +1934,7 @@ export default function App() {
   // out a fresh reprieve every 15 seconds and make interception a free bypass.
   const petInterceptedSegmentRef = useRef<string | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
+  const pendingDriftAlarmGateGenerationRef = useRef(0);
   const lastEligibleDriftCandidateRef = useRef<DriftAlarmCandidate | null>(null);
   const pendingDriftAlarmTransientRef = useRef<DriftAlarmTransientPending | null>(null);
   const pendingDriftAlarmTransientRefreshRef = useRef(0);
@@ -2304,6 +2305,7 @@ export default function App() {
     driftAlarmHistorySegmentsRef.current = [];
     liveDriftAlarmSegmentsRef.current = [];
     pendingDriftAlarmGateRef.current = null;
+    pendingDriftAlarmGateGenerationRef.current += 1;
     lastEligibleDriftCandidateRef.current = null;
     pendingDriftAlarmTransientRef.current = null;
     lastDriftAlertSegmentRef.current = null;
@@ -2313,6 +2315,7 @@ export default function App() {
 
   function clearPausedDriftAlarmRuntime() {
     pendingDriftAlarmGateRef.current = null;
+    pendingDriftAlarmGateGenerationRef.current += 1;
     lastEligibleDriftCandidateRef.current = null;
     pendingDriftAlarmTransientRef.current = null;
     driftAlarmSessionProtectionRef.current = null;
@@ -2658,6 +2661,7 @@ export default function App() {
       Date.now(),
     );
     pendingDriftAlarmGateRef.current = null;
+    pendingDriftAlarmGateGenerationRef.current += 1;
 
     await trackerClient.saveClassifications([
       buildDriftAlarmManualCorrectionRecord({
@@ -4246,6 +4250,7 @@ export default function App() {
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "disabled" }, null);
       pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
       driftAlarmSessionProtectionRef.current = null;
       clearPendingTransientDriftAlarm();
@@ -4319,6 +4324,7 @@ export default function App() {
         evaluation,
       });
       pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
       clearPendingTransientDriftAlarm();
       publishEvaluationDriftAlarmTrayStatus({
         kind: "snoozed",
@@ -4506,6 +4512,7 @@ export default function App() {
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
       pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       lastDriftAlertSegmentRef.current = null;
@@ -4542,6 +4549,7 @@ export default function App() {
         evaluation,
       });
       pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
       lastDriftAlertSegmentRef.current = null;
       petInterceptedSegmentRef.current = null;
@@ -4569,6 +4577,7 @@ export default function App() {
     switch (transientDecision.kind) {
       case "defer":
         pendingDriftAlarmGateRef.current = null;
+        pendingDriftAlarmGateGenerationRef.current += 1;
         pendingDriftAlarmTransientRef.current = transientDecision.pending;
         publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
@@ -4579,6 +4588,7 @@ export default function App() {
         return;
       case "await_delay":
         pendingDriftAlarmGateRef.current = null;
+        pendingDriftAlarmGateGenerationRef.current += 1;
         pendingDriftAlarmTransientRef.current = transientDecision.pending;
         publishEvaluationDriftAlarmTrayStatus({
           kind: "deferred",
@@ -4589,6 +4599,7 @@ export default function App() {
         return;
       case "expired":
         pendingDriftAlarmGateRef.current = null;
+        pendingDriftAlarmGateGenerationRef.current += 1;
         pendingDriftAlarmTransientRef.current = null;
         clearPendingTransientRefresh();
         lastDriftAlertSegmentRef.current = alertKey;
@@ -5042,9 +5053,15 @@ export default function App() {
     }
     if (pendingDriftAlarmGateRef.current !== null && pendingDriftAlarmGateRef.current !== alertKey) {
       pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
     }
 
     pendingDriftAlarmGateRef.current = alertKey;
+    const gateGeneration = pendingDriftAlarmGateGenerationRef.current;
+    const isCurrentGateAttempt = () => (
+      pendingDriftAlarmGateRef.current === alertKey
+      && pendingDriftAlarmGateGenerationRef.current === gateGeneration
+    );
     recordDriftAlarmDebugEvent({
       kind: "youtube_gate_started",
       alertKey,
@@ -5057,72 +5074,122 @@ export default function App() {
       category,
       aiOptions: localAiClassificationOptions,
     }).then(async (gateResult) => {
-      if (pendingDriftAlarmGateRef.current !== alertKey) return;
-      recordDriftAlarmDebugEvent({
-        kind: "youtube_gate_result",
-        alertKey,
-        candidate: summarizeDriftAlarmCandidate(latestDrift),
-        ai: summarizeYouTubeDriftAlarmGateResult(gateResult),
-        evaluation,
-      });
-
-      if (gateResult.kind === "suppress") {
-        pendingDriftAlarmGateRef.current = null;
-        lastDriftAlertSegmentRef.current = alertKey;
+      if (!isCurrentGateAttempt()) return;
+      const applySettledGateResult = async (settledResult: YouTubeDriftAlarmGateSettledResult) => {
+        if (!isCurrentGateAttempt()) return;
         recordDriftAlarmDebugEvent({
-          kind: "delivery_suppressed",
+          kind: "youtube_gate_result",
           alertKey,
-          reason: gateResult.reason,
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          ai: summarizeYouTubeDriftAlarmGateResult(settledResult),
+          evaluation,
+        });
+
+        if (settledResult.kind === "suppress") {
+          pendingDriftAlarmGateRef.current = null;
+          pendingDriftAlarmGateGenerationRef.current += 1;
+          lastDriftAlertSegmentRef.current = alertKey;
+          recordDriftAlarmDebugEvent({
+            kind: "delivery_suppressed",
+            alertKey,
+            reason: settledResult.reason,
+            candidate: summarizeDriftAlarmCandidate(latestDrift),
+            ai: summarizeYouTubeDriftAlarmGateResult(settledResult),
+            evaluation,
+          });
+          publishEvaluationDriftAlarmTrayStatus({
+            kind: "suppressed",
+            reason: settledResult.reason,
+            candidateDetail,
+          }, new Date());
+          return;
+        }
+
+        const finalGateResult = await confirmFreshDriftAlarmCandidate();
+        if (!isCurrentGateAttempt()) return;
+        pendingDriftAlarmGateRef.current = null;
+        pendingDriftAlarmGateGenerationRef.current += 1;
+
+        if (finalGateResult === "system-transient-active") {
+          recordDriftAlarmDebugEvent({
+            kind: "delivery_suppressed",
+            alertKey,
+            reason: finalGateResult,
+            candidate: summarizeDriftAlarmCandidate(latestDrift),
+            evaluation,
+          });
+          return;
+        }
+
+        if (finalGateResult !== "confirmed") {
+          recordDriftAlarmDebugEvent({
+            kind: "delivery_suppressed",
+            alertKey,
+            reason: finalGateResult,
+            candidate: summarizeDriftAlarmCandidate(latestDrift),
+            evaluation,
+          });
+          publishEvaluationDriftAlarmTrayStatus({
+            kind: "suppressed",
+            reason: finalGateResult,
+            candidateDetail,
+          }, new Date());
+          return;
+        }
+
+        deliverCurrentDriftAlarm();
+      };
+
+      if (gateResult.kind === "pending") {
+        recordDriftAlarmDebugEvent({
+          kind: "youtube_gate_result",
+          alertKey,
           candidate: summarizeDriftAlarmCandidate(latestDrift),
           ai: summarizeYouTubeDriftAlarmGateResult(gateResult),
           evaluation,
         });
-        publishEvaluationDriftAlarmTrayStatus({
-          kind: "suppressed",
-          reason: gateResult.reason,
-          candidateDetail,
-        }, checkedAt);
-        return;
-      }
-
-      const finalGateResult = await confirmFreshDriftAlarmCandidate();
-      if (pendingDriftAlarmGateRef.current !== alertKey) return;
-      pendingDriftAlarmGateRef.current = null;
-
-      if (finalGateResult === "system-transient-active") {
-        recordDriftAlarmDebugEvent({
-          kind: "delivery_suppressed",
-          alertKey,
-          reason: finalGateResult,
-          candidate: summarizeDriftAlarmCandidate(latestDrift),
-          evaluation,
+        publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
+        void gateResult.settled.then(applySettledGateResult).catch((error) => {
+          if (error instanceof Error) {
+            console.warn("Failed to evaluate YouTube drift alarm AI gate", error);
+          }
+          if (!isCurrentGateAttempt()) return;
+          pendingDriftAlarmGateRef.current = null;
+          pendingDriftAlarmGateGenerationRef.current += 1;
+          lastDriftAlertSegmentRef.current = alertKey;
+          recordDriftAlarmDebugEvent({
+            kind: "youtube_gate_error",
+            alertKey,
+            message: toErrorMessage(error),
+            candidate: summarizeDriftAlarmCandidate(latestDrift),
+            ai: {
+              resultKind: "error",
+              category: null,
+              productivity: null,
+              confidence: null,
+              source: null,
+              model: null,
+              promptVersion: null,
+              reason: toErrorMessage(error),
+            },
+            evaluation,
+          });
+          publishEvaluationDriftAlarmTrayStatus({
+            kind: "error",
+            reason: error instanceof Error ? error.message : "AI gate failed",
+          }, new Date());
         });
         return;
       }
 
-      if (finalGateResult !== "confirmed") {
-        recordDriftAlarmDebugEvent({
-          kind: "delivery_suppressed",
-          alertKey,
-          reason: finalGateResult,
-          candidate: summarizeDriftAlarmCandidate(latestDrift),
-          evaluation,
-        });
-        publishEvaluationDriftAlarmTrayStatus({
-          kind: "suppressed",
-          reason: finalGateResult,
-          candidateDetail,
-        }, new Date());
-        return;
-      }
-
-      deliverCurrentDriftAlarm();
+      await applySettledGateResult(gateResult);
     }).catch((error) => {
       if (error instanceof Error) {
         console.warn("Failed to evaluate YouTube drift alarm AI gate", error);
       }
-      if (pendingDriftAlarmGateRef.current !== alertKey) return;
+      if (!isCurrentGateAttempt()) return;
       pendingDriftAlarmGateRef.current = null;
+      pendingDriftAlarmGateGenerationRef.current += 1;
       lastDriftAlertSegmentRef.current = alertKey;
       recordDriftAlarmDebugEvent({
         kind: "youtube_gate_error",

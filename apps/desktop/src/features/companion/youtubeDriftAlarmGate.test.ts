@@ -126,7 +126,7 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
     expect(result).toEqual({ kind: "suppress", reason: "ai-unavailable:provider missing" });
   });
 
-  it("waits twelve seconds before failing closed when live AI classification is slow", async () => {
+  it("keeps a slow live AI classification pending after twelve seconds", async () => {
     vi.useFakeTimers();
     classifyLiveActivityWithAi.mockReturnValue(new Promise(() => undefined));
 
@@ -140,7 +140,66 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
       await expect(Promise.race([result, Promise.resolve("pending")])).resolves.toBe("pending");
 
       await vi.advanceTimersByTimeAsync(1);
-      await expect(result).resolves.toEqual({ kind: "suppress", reason: "ai-timeout" });
+      const timedOut = await result;
+      expect(timedOut).toEqual(expect.objectContaining({ kind: "pending", reason: "ai-timeout" }));
+      if (timedOut.kind !== "pending") throw new Error("expected pending YouTube gate result");
+
+      const settled = timedOut.settled;
+      await vi.advanceTimersByTimeAsync(47_999);
+      await expect(Promise.race([settled, Promise.resolve("pending")])).resolves.toBe("pending");
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(settled).resolves.toEqual({ kind: "suppress", reason: "ai-deadline" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("applies a late AI drift confirmation after the twelve-second timeout", async () => {
+    vi.useFakeTimers();
+    let resolveClassification: ((value: { kind: "classified"; classification: ActivityClassificationRecord }) => void) | undefined;
+    classifyLiveActivityWithAi.mockReturnValue(new Promise((resolve) => {
+      resolveClassification = resolve;
+    }));
+
+    try {
+      const result = evaluateYouTubeDriftAlarmGate({
+        segment: createYouTubeVideoSegment(),
+        category: "entertainment",
+      });
+
+      await vi.advanceTimersByTimeAsync(12_000);
+      const timedOut = await result;
+      expect(timedOut).toEqual(expect.objectContaining({ kind: "pending", reason: "ai-timeout" }));
+      if (timedOut.kind !== "pending") throw new Error("expected pending YouTube gate result");
+
+      resolveClassification?.({
+        kind: "classified",
+        classification: createAiClassification({ productivity: "drift" }),
+      });
+      await expect(timedOut.settled).resolves.toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an on-time AI confirmation off the pending path", async () => {
+    vi.useFakeTimers();
+    classifyLiveActivityWithAi.mockImplementation(() => new Promise((resolve) => {
+      globalThis.setTimeout(() => {
+        resolve({
+          kind: "classified",
+          classification: createAiClassification({ productivity: "drift" }),
+        });
+      }, 12_000);
+    }));
+
+    try {
+      const result = evaluateYouTubeDriftAlarmGate({
+        segment: createYouTubeVideoSegment(),
+        category: "entertainment",
+      });
+      await vi.advanceTimersByTimeAsync(12_000);
+      await expect(result).resolves.toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
     } finally {
       vi.useRealTimers();
     }

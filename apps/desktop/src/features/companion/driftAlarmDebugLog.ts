@@ -59,6 +59,7 @@ const DRIFT_ALARM_DEBUG_AI_RESULT_KINDS = [
   "allow_drift",
   "suppress",
   "skipped",
+  "pending",
 ] as const;
 
 export type DriftAlarmDebugEventKind = typeof DRIFT_ALARM_DEBUG_EVENT_KINDS[number];
