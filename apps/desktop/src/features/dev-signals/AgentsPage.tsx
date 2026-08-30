@@ -92,8 +92,12 @@ const AGENT_TOOLS: Record<string, { name: string; color: string }> = {
   codex: { name: "Codex", color: "#10a37f" },
   claude: { name: "Claude Code", color: "#d97757" },
   claude_code: { name: "Claude Code", color: "#d97757" },
+  aside: { name: "Aside", color: "#7c5cff" },
   opencode: { name: "OpenCode", color: "#5b8def" },
   gemini: { name: "Gemini CLI", color: "#4285f4" },
+  hermes: { name: "Hermes", color: "#c45c26" },
+  openclaw: { name: "OpenClaw", color: "#3b82f6" },
+  kimi: { name: "Kimi", color: "#111111" },
 };
 
 function agentToolName(provider: string): string {

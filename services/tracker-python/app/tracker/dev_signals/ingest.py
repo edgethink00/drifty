@@ -12,17 +12,9 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .agent_sessions import (
-    PROVIDER_CLAUDE_CODE,
-    PROVIDER_CODEX,
-    parse_claude_session,
-    parse_codex_session,
-)
+from .adapters import PROVIDERS
 from .git_commits import collect_commits, default_author_email, repo_key_for, resolve_primary_repo
 from .discovery import default_discovery_roots, discover_repositories
-
-CODEX_SESSIONS_ROOT = Path.home() / ".codex" / "sessions"
-CLAUDE_PROJECTS_ROOT = Path.home() / ".claude" / "projects"
 
 DEFAULT_BACKFILL_DAYS = 30
 WATERMARK_KEY_PREFIX = "dev_signals_watermark_"
@@ -61,19 +53,43 @@ def _write_watermark(database, provider: str, value: float) -> None:
     database.set_meta(_watermark_key(provider), repr(float(value)))
 
 
-def _candidate_files(root: Path, watermark: float, cutoff: float) -> list[tuple[float, Path]]:
+def _candidate_files(
+    root: Path,
+    watermark: float,
+    cutoff: float,
+    patterns: tuple[str, ...] = ("*.jsonl",),
+) -> list[tuple[float, Path]]:
     """Session files newer than the watermark and inside the backfill window."""
+    candidates: list[tuple[float, Path]] = []
+    if root.is_file():
+        try:
+            modified = root.stat().st_mtime
+        except OSError:
+            return []
+        if modified > watermark and modified >= cutoff:
+            candidates.append((modified, root))
+        return candidates
     if not root.is_dir():
         return []
-    candidates: list[tuple[float, Path]] = []
-    for path in root.rglob("*.jsonl"):
+    seen: set[Path] = set()
+    for pattern in patterns:
         try:
-            modified = path.stat().st_mtime
+            matches = root.rglob(pattern)
         except OSError:
             continue
-        if modified <= watermark or modified < cutoff:
-            continue
-        candidates.append((modified, path))
+        for path in matches:
+            if path in seen:
+                continue
+            seen.add(path)
+            if not path.is_file():
+                continue
+            try:
+                modified = path.stat().st_mtime
+            except OSError:
+                continue
+            if modified <= watermark or modified < cutoff:
+                continue
+            candidates.append((modified, path))
     candidates.sort()
     return candidates
 
@@ -84,7 +100,7 @@ def ingest_agent_sessions(
     backfill_days: int = DEFAULT_BACKFILL_DAYS,
     max_files: int = MAX_FILES_PER_PASS,
 ) -> tuple[int, int, int]:
-    """Ingest new agent turns for both providers.
+    """Ingest new agent turns for every registered provider.
 
     Returns ``(turns_ingested, files_scanned, skipped_files)``.
     """
@@ -93,12 +109,17 @@ def ingest_agent_sessions(
     total_scanned = 0
     total_skipped = 0
 
-    for provider, root, parser in (
-        (PROVIDER_CODEX, CODEX_SESSIONS_ROOT, parse_codex_session),
-        (PROVIDER_CLAUDE_CODE, CLAUDE_PROJECTS_ROOT, parse_claude_session),
-    ):
-        watermark = _read_watermark(database, provider)
-        candidates = _candidate_files(root, watermark, cutoff)
+    for adapter in PROVIDERS:
+        watermark = _read_watermark(database, adapter.key)
+        try:
+            roots = adapter.discover()
+        except Exception:
+            total_skipped += 1
+            continue
+        candidates: list[tuple[float, Path]] = []
+        for root in roots:
+            candidates.extend(_candidate_files(root, watermark, cutoff, adapter.patterns))
+        candidates.sort()
         if not candidates:
             continue
 
@@ -107,7 +128,7 @@ def ingest_agent_sessions(
         for modified, path in candidates[: max(1, max_files)]:
             total_scanned += 1
             try:
-                turns = parser(path)
+                turns = adapter.parse(path)
             except Exception:
                 # A schema change degrades to fewer events, never a failed
                 # capture cycle.
@@ -125,6 +146,11 @@ def ingest_agent_sessions(
                         "cwdKey": turn.cwd_key,
                         "model": turn.model,
                         "totalTokens": turn.total_tokens,
+                        "tokensIn": turn.tokens_in,
+                        "tokensOut": turn.tokens_out,
+                        "tokensCacheRead": turn.tokens_cache_read,
+                        "tokensCacheWrite": turn.tokens_cache_write,
+                        "costUsd": turn.cost_usd,
                     }
                 )
             highest = max(highest, modified)
@@ -132,7 +158,7 @@ def ingest_agent_sessions(
         total_turns += database.save_agent_session_events(batch)
         # Only advance the watermark past files this pass actually reached, so a
         # truncated batch resumes instead of skipping the remainder.
-        _write_watermark(database, provider, highest)
+        _write_watermark(database, adapter.key, highest)
 
     return total_turns, total_scanned, total_skipped
 

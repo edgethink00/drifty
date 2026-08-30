@@ -509,6 +509,11 @@ class TrackerDatabase:
                   cwd_key TEXT,
                   model TEXT,
                   total_tokens INTEGER,
+                  tokens_in INTEGER,
+                  tokens_out INTEGER,
+                  tokens_cache_read INTEGER,
+                  tokens_cache_write INTEGER,
+                  cost_usd REAL,
                   ingested_at TEXT NOT NULL,
                   UNIQUE(provider, session_key, turn_index)
                 );
@@ -608,6 +613,18 @@ class TrackerDatabase:
             ON classification_rules(enabled, match_scope, target_kind, normalized_target_value)
             """
         )
+
+        agent_existing = {row["name"] for row in conn.execute("PRAGMA table_info(agent_session_events)")}
+        agent_optional_columns = {
+            "tokens_in": "INTEGER",
+            "tokens_out": "INTEGER",
+            "tokens_cache_read": "INTEGER",
+            "tokens_cache_write": "INTEGER",
+            "cost_usd": "REAL",
+        }
+        for column, column_type in agent_optional_columns.items():
+            if column not in agent_existing:
+                conn.execute(f"ALTER TABLE agent_session_events ADD COLUMN {column} {column_type}")
 
     def _ensure_sync_schema(self, conn: sqlite3.Connection) -> None:
         conn.execute(
@@ -2563,38 +2580,74 @@ class TrackerDatabase:
         if not events:
             return 0
         timestamp = datetime.now(timezone.utc).isoformat()
-        inserted = 0
+        keys = [
+            (event.get("provider"), event.get("sessionKey"), event.get("turnIndex"))
+            for event in events
+        ]
+        rows = [
+            (
+                event.get("provider"),
+                event.get("sessionKey"),
+                event.get("turnIndex"),
+                event.get("startedAt"),
+                event.get("endedAt"),
+                event.get("activeSeconds"),
+                event.get("cwdKey"),
+                event.get("model"),
+                event.get("totalTokens"),
+                event.get("tokensIn"),
+                event.get("tokensOut"),
+                event.get("tokensCacheRead"),
+                event.get("tokensCacheWrite"),
+                event.get("costUsd"),
+                timestamp,
+            )
+            for event in events
+        ]
         with self.connect() as conn:
-            for event in events:
-                cursor = conn.execute(
+            existing: set[tuple] = set()
+            for provider, session_key, turn_index in keys:
+                row = conn.execute(
                     """
-                    INSERT OR IGNORE INTO agent_session_events
-                      (provider, session_key, turn_index, started_at, ended_at,
-                       active_seconds, cwd_key, model, total_tokens, ingested_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    SELECT 1 FROM agent_session_events
+                    WHERE provider = ? AND session_key = ? AND turn_index = ?
                     """,
-                    (
-                        event.get("provider"),
-                        event.get("sessionKey"),
-                        event.get("turnIndex"),
-                        event.get("startedAt"),
-                        event.get("endedAt"),
-                        event.get("activeSeconds"),
-                        event.get("cwdKey"),
-                        event.get("model"),
-                        event.get("totalTokens"),
-                        timestamp,
-                    ),
-                )
-                inserted += cursor.rowcount
-        return inserted
+                    (provider, session_key, turn_index),
+                ).fetchone()
+                if row is not None:
+                    existing.add((provider, session_key, turn_index))
+            conn.executemany(
+                """
+                INSERT INTO agent_session_events
+                  (provider, session_key, turn_index, started_at, ended_at,
+                   active_seconds, cwd_key, model, total_tokens,
+                   tokens_in, tokens_out, tokens_cache_read, tokens_cache_write,
+                   cost_usd, ingested_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(provider, session_key, turn_index) DO UPDATE SET
+                  started_at = excluded.started_at,
+                  ended_at = excluded.ended_at,
+                  active_seconds = excluded.active_seconds,
+                  cwd_key = excluded.cwd_key,
+                  model = excluded.model,
+                  total_tokens = excluded.total_tokens,
+                  tokens_in = excluded.tokens_in,
+                  tokens_out = excluded.tokens_out,
+                  tokens_cache_read = excluded.tokens_cache_read,
+                  tokens_cache_write = excluded.tokens_cache_write,
+                  cost_usd = excluded.cost_usd
+                """,
+                rows,
+            )
+        return sum(1 for key in keys if key not in existing)
 
     def fetch_agent_session_events(self, start: str, end: str) -> list[dict[str, Any]]:
         with self.connect() as conn:
             rows = conn.execute(
                 """
                 SELECT provider, session_key, turn_index, started_at, ended_at,
-                       active_seconds, cwd_key, model, total_tokens
+                       active_seconds, cwd_key, model, total_tokens,
+                       tokens_in, tokens_out, tokens_cache_read, tokens_cache_write, cost_usd
                 FROM agent_session_events
                 WHERE datetime(started_at) < datetime(?)
                   AND datetime(ended_at) >= datetime(?)
@@ -2613,6 +2666,11 @@ class TrackerDatabase:
                 "cwdKey": row["cwd_key"],
                 "model": row["model"],
                 "totalTokens": row["total_tokens"],
+                "tokensIn": row["tokens_in"],
+                "tokensOut": row["tokens_out"],
+                "tokensCacheRead": row["tokens_cache_read"],
+                "tokensCacheWrite": row["tokens_cache_write"],
+                "costUsd": row["cost_usd"],
             }
             for row in rows
         ]

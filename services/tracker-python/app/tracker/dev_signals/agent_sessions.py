@@ -22,6 +22,12 @@ from .git_commits import repo_key_for, resolve_primary_repo
 
 PROVIDER_CODEX = "codex"
 PROVIDER_CLAUDE_CODE = "claude_code"
+PROVIDER_ASIDE = "aside"
+PROVIDER_OPENCODE = "opencode"
+PROVIDER_GEMINI = "gemini"
+PROVIDER_HERMES = "hermes"
+PROVIDER_OPENCLAW = "openclaw"
+PROVIDER_KIMI = "kimi"
 
 #: Turns separated by more than this are treated as idle, not agent time.
 DEFAULT_GAP_CEILING_SECONDS = 300
@@ -41,6 +47,11 @@ class AgentTurn:
     cwd_key: str | None
     model: str | None
     total_tokens: int | None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    tokens_cache_read: int | None = None
+    tokens_cache_write: int | None = None
+    cost_usd: float | None = None
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -54,6 +65,116 @@ def _parse_timestamp(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def parse_epoch(value: object) -> datetime | None:
+    """Accept Unix seconds, Unix milliseconds, or an ISO timestamp."""
+    if isinstance(value, datetime):
+        parsed = value
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        timestamp = float(value)
+        if timestamp > 1e11:
+            timestamp /= 1000.0
+        try:
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit() or (stripped.replace(".", "", 1).isdigit() and stripped.count(".") < 2):
+            try:
+                return parse_epoch(float(stripped))
+            except ValueError:
+                pass
+        return _parse_timestamp(stripped)
+    return None
+
+
+def as_int(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
+def as_float(value: object) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _first_int(*values: object) -> int | None:
+    for value in values:
+        parsed = as_int(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def tokens_from_mapping(usage: object) -> tuple[int | None, int | None, int | None, int | None, int | None, float | None]:
+    """Return total, in, out, cache_read, cache_write, cost from a usage object."""
+    if not isinstance(usage, dict):
+        return None, None, None, None, None, None
+    tokens_in = _first_int(
+        usage.get("input"),
+        usage.get("input_tokens"),
+        usage.get("prompt"),
+        usage.get("prompt_tokens"),
+        usage.get("promptTokenCount"),
+    )
+    tokens_out = _first_int(
+        usage.get("output"),
+        usage.get("output_tokens"),
+        usage.get("candidates"),
+        usage.get("completion_tokens"),
+        usage.get("candidatesTokenCount"),
+    )
+    cache_read = _first_int(
+        usage.get("cacheRead"),
+        usage.get("cache_read"),
+        usage.get("cache_read_input_tokens"),
+        usage.get("cached_input_tokens"),
+        usage.get("cached"),
+        usage.get("cached_tokens"),
+        usage.get("cachedContentTokenCount"),
+    )
+    cache_write = _first_int(
+        usage.get("cacheWrite"),
+        usage.get("cache_write"),
+        usage.get("cache_write_input_tokens"),
+        usage.get("cache_creation"),
+        usage.get("cache_creation_input_tokens"),
+        usage.get("cache_creation"),
+    )
+    cache = usage.get("cache")
+    if isinstance(cache, dict):
+        if cache_read is None:
+            cache_read = _first_int(cache.get("read"), cache.get("cacheRead"))
+        if cache_write is None:
+            cache_write = _first_int(cache.get("write"), cache.get("cacheWrite"))
+    total = _first_int(usage.get("totalTokens"), usage.get("total_tokens"), usage.get("total"), usage.get("totalTokenCount"))
+    if total is None:
+        parts = [part for part in (tokens_in, tokens_out, cache_read, cache_write) if part is not None]
+        total = sum(parts) if parts else None
+    cost = None
+    raw_cost = usage.get("cost")
+    if isinstance(raw_cost, dict):
+        cost = as_float(raw_cost.get("total"))
+        if cost is None:
+            cost = as_float(raw_cost.get("cost"))
+    else:
+        cost = as_float(raw_cost)
+    return total, tokens_in, tokens_out, cache_read, cache_write, cost
 
 
 def _cwd_key(cwd: object) -> str | None:
@@ -95,6 +216,11 @@ def _build_turn(
     cwd_key: str | None,
     model: str | None,
     total_tokens: int | None,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
+    tokens_cache_read: int | None = None,
+    tokens_cache_write: int | None = None,
+    cost_usd: float | None = None,
 ) -> AgentTurn:
     active = max(0, int((end - start).total_seconds()))
     return AgentTurn(
@@ -107,6 +233,11 @@ def _build_turn(
         cwd_key=cwd_key,
         model=model,
         total_tokens=total_tokens,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        tokens_cache_read=tokens_cache_read,
+        tokens_cache_write=tokens_cache_write,
+        cost_usd=cost_usd,
     )
 
 
@@ -123,6 +254,10 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
     cwd_key: str | None = None
     model: str | None = None
     total_tokens: int | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    cache_read: int | None = None
+    cache_write: int | None = None
     start: datetime | None = None
     last_seen: datetime | None = None
 
@@ -160,9 +295,13 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
             if isinstance(info, dict):
                 usage = info.get("total_token_usage")
                 if isinstance(usage, dict):
-                    candidate = usage.get("total_tokens")
-                    if isinstance(candidate, int):
-                        total_tokens = candidate
+                    parsed_total, parsed_in, parsed_out, parsed_read, parsed_write, _ = tokens_from_mapping(usage)
+                    if parsed_total is not None:
+                        total_tokens = parsed_total
+                    tokens_in = parsed_in
+                    tokens_out = parsed_out
+                    cache_read = parsed_read
+                    cache_write = parsed_write
             continue
 
         if event_type == "task_started" and stamp is not None:
@@ -174,6 +313,7 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
                 _build_turn(
                     PROVIDER_CODEX, session_key, len(turns), start, stamp,
                     cwd_key, model, total_tokens,
+                    tokens_in, tokens_out, cache_read, cache_write,
                 )
             )
             start = None
@@ -188,6 +328,7 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
             _build_turn(
                 PROVIDER_CODEX, session_key, len(turns), start, end,
                 cwd_key, model, total_tokens,
+                tokens_in, tokens_out, cache_read, cache_write,
             )
         )
 
@@ -205,9 +346,10 @@ def parse_claude_session(path: str | Path) -> list[AgentTurn]:
     cwd_key: str | None = None
     model: str | None = None
     stamps: list[datetime] = []
+    last_usage: dict | None = None
 
     for record in _iter_json_lines(file_path):
-        session_id = record.get("sessionId")
+        session_id = record.get("sessionId") or record.get("session_id")
         if isinstance(session_id, str) and session_id:
             session_key = session_id
         if cwd_key is None:
@@ -217,11 +359,19 @@ def parse_claude_session(path: str | Path) -> list[AgentTurn]:
             candidate_model = message.get("model")
             if isinstance(candidate_model, str) and candidate_model:
                 model = candidate_model
+            usage = message.get("usage")
+            if isinstance(usage, dict):
+                last_usage = usage
         stamp = _parse_timestamp(record.get("timestamp"))
         if stamp is not None:
             stamps.append(stamp)
 
-    return _turns_from_stamps(PROVIDER_CLAUDE_CODE, session_key, stamps, cwd_key, model)
+    total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(last_usage)
+    return _turns_from_stamps(
+        PROVIDER_CLAUDE_CODE, session_key, stamps, cwd_key, model,
+        total_tokens=total, tokens_in=tokens_in, tokens_out=tokens_out,
+        tokens_cache_read=cache_read, tokens_cache_write=cache_write, cost_usd=cost,
+    )
 
 
 def _turns_from_stamps(
@@ -231,21 +381,38 @@ def _turns_from_stamps(
     cwd_key: str | None,
     model: str | None,
     gap_ceiling_seconds: int = DEFAULT_GAP_CEILING_SECONDS,
+    total_tokens: int | None = None,
+    tokens_in: int | None = None,
+    tokens_out: int | None = None,
+    tokens_cache_read: int | None = None,
+    tokens_cache_write: int | None = None,
+    cost_usd: float | None = None,
 ) -> list[AgentTurn]:
     if not stamps:
         return []
     stamps.sort()
-    turns: list[AgentTurn] = []
+    segments: list[tuple[datetime, datetime]] = []
     start = stamps[0]
     previous = stamps[0]
     for stamp in stamps[1:]:
         if (stamp - previous).total_seconds() > gap_ceiling_seconds:
-            turns.append(
-                _build_turn(provider, session_key, len(turns), start, previous, cwd_key, model, None)
-            )
+            segments.append((start, previous))
             start = stamp
         previous = stamp
-    turns.append(
-        _build_turn(provider, session_key, len(turns), start, previous, cwd_key, model, None)
-    )
+    segments.append((start, previous))
+    last_index = len(segments) - 1
+    turns: list[AgentTurn] = []
+    for index, (segment_start, segment_end) in enumerate(segments):
+        attach = index == last_index
+        turns.append(
+            _build_turn(
+                provider, session_key, len(turns), segment_start, segment_end, cwd_key, model,
+                total_tokens if attach else None,
+                tokens_in if attach else None,
+                tokens_out if attach else None,
+                tokens_cache_read if attach else None,
+                tokens_cache_write if attach else None,
+                cost_usd if attach else None,
+            )
+        )
     return [turn for turn in turns if turn.active_seconds > 0]

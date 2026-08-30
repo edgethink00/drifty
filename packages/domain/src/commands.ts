@@ -272,6 +272,11 @@ export interface AgentSessionTurnEvent {
   cwdKey: string | null;
   model: string | null;
   totalTokens: number | null;
+  tokensIn?: number | null;
+  tokensOut?: number | null;
+  tokensCacheRead?: number | null;
+  tokensCacheWrite?: number | null;
+  costUsd?: number | null;
 }
 
 export interface AgentTimeSummaryPayload {
