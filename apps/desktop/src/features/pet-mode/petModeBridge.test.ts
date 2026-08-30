@@ -137,6 +137,13 @@ describe("pet mode enabled bridge", () => {
     });
   });
 
+  it("forwards the floor-home stay band to native", async () => {
+    tauri.invoke.mockResolvedValueOnce(12);
+    const { setNativePetModeFloorHome } = await import("./petModeBridge");
+    await expect(setNativePetModeFloorHome(12)).resolves.toBe(12);
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_set_floor_home", { points: 12 });
+  });
+
   it("forwards the explicit floor-drop decision to the native resolver", async () => {
     tauri.invoke.mockResolvedValueOnce({
       kind: "catch",

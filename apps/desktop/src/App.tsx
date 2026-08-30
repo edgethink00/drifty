@@ -268,7 +268,10 @@ import {
   getPetModeWindowSize,
   PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_HIDE_ONE_HOUR_MS,
+  persistPetModeFloorHomePt,
   persistPetModeHiddenUntil,
+  PET_MODE_FLOOR_HOME_PT,
+  resolveInitialPetModeFloorHomePt,
   resolveInitialPetModeHiddenUntil,
 } from "./features/pet-mode/petModeData";
 import {
@@ -282,6 +285,7 @@ import {
   previewNativePetModeAction,
   previewNativePetModeIntervention,
   setNativePetModeEnabled,
+  setNativePetModeFloorHome,
   setNativePetModeGuides,
   updateNativePetMode,
   type PetVisibilityAction,
@@ -798,6 +802,11 @@ export default function App() {
       void setNativePetModeGuides(next);
       return next;
     });
+  }, []);
+  const [petModeFloorHomePt, setPetModeFloorHomePt] = useState(resolveInitialPetModeFloorHomePt);
+  const handlePetModeFloorHomePtChange = useCallback((value: number) => {
+    const next = persistPetModeFloorHomePt(value);
+    setPetModeFloorHomePt(next);
   }, []);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
@@ -5794,6 +5803,13 @@ export default function App() {
     });
   }, [petModeActive, petModeRevealRevision, petModeSize, petModeSyncRetryNonce]);
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+    const points = isDevModeActive ? petModeFloorHomePt : PET_MODE_FLOOR_HOME_PT;
+    void setNativePetModeFloorHome(points).catch((nextError) => {
+      console.warn("Failed to sync Pet Mode floor home", nextError);
+    });
+  }, [isDevModeActive, petModeFloorHomePt]);
+  useEffect(() => {
     if (!petModeActive || !isTauriRuntime()) return;
     void updateNativePetMode(buildPetModeSnapshot(watcherSnapshot)).catch((nextError) => {
       console.warn("Failed to update Pet Mode snapshot", nextError);
@@ -8684,6 +8700,8 @@ export default function App() {
                     }}
                     petModeGuidesEnabled={petModeGuidesEnabled}
                     onTogglePetModeGuides={handleTogglePetModeGuides}
+                    petModeFloorHomePt={petModeFloorHomePt}
+                    onPetModeFloorHomePtChange={handlePetModeFloorHomePtChange}
                     teamsBetaEnabled={teamsBetaEnabled}
                     profileBetaEnabled={profileBetaEnabled}
                     agentsBetaEnabled={agentsBetaEnabled}

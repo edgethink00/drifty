@@ -631,6 +631,37 @@ export type PetModeSize = (typeof PET_MODE_SIZES)[number];
 export const PET_MODE_DEFAULT_SIZE: PetModeSize = 100;
 export const PET_MODE_SIZE_STORAGE_KEY = "drifty.pet.size";
 export const PET_MODE_GUIDES_STORAGE_KEY = "drifty.pet.guides";
+export const PET_MODE_FLOOR_HOME_STORAGE_KEY = "drifty.dev.pet.floorHomePt.v1";
+export const PET_MODE_FLOOR_HOME_PT = 20;
+export const PET_MODE_FLOOR_HOME_RANGE = { min: 0, max: 65, step: 1 } as const;
+
+export function clampPetModeFloorHomePt(value: unknown): number {
+  const next = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(next)) return PET_MODE_FLOOR_HOME_PT;
+  return Math.min(PET_MODE_FLOOR_HOME_RANGE.max, Math.max(PET_MODE_FLOOR_HOME_RANGE.min, Math.round(next)));
+}
+
+export function resolveInitialPetModeFloorHomePt(): number {
+  if (typeof window === "undefined") return PET_MODE_FLOOR_HOME_PT;
+  try {
+    const stored = window.localStorage.getItem(PET_MODE_FLOOR_HOME_STORAGE_KEY);
+    if (stored == null || stored.trim() === "") return PET_MODE_FLOOR_HOME_PT;
+    return clampPetModeFloorHomePt(stored);
+  } catch {
+    return PET_MODE_FLOOR_HOME_PT;
+  }
+}
+
+export function persistPetModeFloorHomePt(value: number): number {
+  const next = clampPetModeFloorHomePt(value);
+  if (typeof window === "undefined") return next;
+  try {
+    window.localStorage.setItem(PET_MODE_FLOOR_HOME_STORAGE_KEY, String(next));
+  } catch {
+    // Ignore quota/private-mode failures; the in-memory slider still works.
+  }
+  return next;
+}
 
 export function isPetModeSize(value: unknown): value is PetModeSize {
   return typeof value === "number" && (PET_MODE_SIZES as readonly number[]).includes(value);

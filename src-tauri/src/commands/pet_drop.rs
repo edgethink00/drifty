@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub const PET_DROP_HOP_PT: f64 = 4.0;
 pub const PET_DROP_CATCH_PT: f64 = 65.0;
 pub const PET_DROP_TOP_HOME_PT: f64 = 58.0;
-pub const PET_DROP_FLOOR_HOME_PT: f64 = 40.0;
+pub const PET_DROP_FLOOR_HOME_PT: f64 = 20.0;
 pub const PET_DROP_ON_LEDGE_PT: f64 = 18.0;
 pub const PET_DROP_FEET_INSET_PT: f64 = 93.0;
 pub const PET_DROP_SLAB_LEFT_PT: f64 = 28.0;
@@ -148,12 +148,31 @@ pub fn nearest_ledge<'a>(
     found[0]
 }
 
+#[cfg(test)]
 pub fn plan_pet_drop(
     held: bool,
     pet: &PetRect,
     work: &PetRect,
     windows: &[(&str, PetRect)],
     dock: Option<&PetRect>,
+) -> PetDropPlan {
+    plan_pet_drop_with_floor_home(held, pet, work, windows, dock, PET_DROP_FLOOR_HOME_PT)
+}
+
+pub fn clamp_floor_home_pt(floor_home_pt: f64) -> f64 {
+    if !floor_home_pt.is_finite() {
+        return PET_DROP_FLOOR_HOME_PT;
+    }
+    floor_home_pt.clamp(0.0, PET_DROP_CATCH_PT)
+}
+
+pub fn plan_pet_drop_with_floor_home(
+    held: bool,
+    pet: &PetRect,
+    work: &PetRect,
+    windows: &[(&str, PetRect)],
+    dock: Option<&PetRect>,
+    floor_home_pt: f64,
 ) -> PetDropPlan {
     if held {
         return PetDropPlan {
@@ -167,7 +186,7 @@ pub fn plan_pet_drop(
 
     let feet = pet_feet_y(pet);
     let top_home = pet.y <= work.y + PET_DROP_TOP_HOME_PT;
-    let floor_home = feet >= work.bottom() - PET_DROP_FLOOR_HOME_PT;
+    let floor_home = feet >= work.bottom() - clamp_floor_home_pt(floor_home_pt);
     let (ledge, ledge_y) = nearest_ledge(pet, windows, dock, work);
     let air = (ledge_y - feet).max(0.0);
     let has_ledge = ledge != "floor";
@@ -306,6 +325,41 @@ mod tests {
     fn floor_home_stays() {
         let plan = plan_pet_drop(false, &pet_at(80.0, 820.0), &work(), &[], None);
         assert_eq!(plan.kind, PetDropKind::StayFloor);
+    }
+
+    #[test]
+    fn former_floor_home_band_now_falls_to_the_floor() {
+        // Floor home is now 20pt of air under the paws. The old 40pt band
+        // (y=767, air=40) must fall; the new boundary stays at air=20 and
+        // starts falling at air=21.
+        let stay = plan_pet_drop(false, &pet_at(80.0, 787.0), &work(), &[], None);
+        assert_eq!(stay.kind, PetDropKind::StayFloor);
+
+        let fall = plan_pet_drop(false, &pet_at(80.0, 786.0), &work(), &[], None);
+        assert_eq!(fall.kind, PetDropKind::Catch);
+        assert_eq!(fall.ledge, "floor");
+        assert!((fall.target_y - (work().bottom() - 93.0)).abs() < 0.01);
+
+        let former_band = plan_pet_drop(false, &pet_at(80.0, 767.0), &work(), &[], None);
+        assert_eq!(former_band.kind, PetDropKind::Catch);
+        assert_eq!(former_band.ledge, "floor");
+    }
+
+    #[test]
+    fn custom_floor_home_overrides_the_shipped_band() {
+        let pet = pet_at(80.0, 767.0);
+        let shipped = plan_pet_drop(false, &pet, &work(), &[], None);
+        assert_eq!(shipped.kind, PetDropKind::Catch);
+
+        let restored = plan_pet_drop_with_floor_home(false, &pet, &work(), &[], None, 40.0);
+        assert_eq!(restored.kind, PetDropKind::StayFloor);
+
+        let tight = plan_pet_drop_with_floor_home(false, &pet_at(80.0, 787.0), &work(), &[], None, 10.0);
+        assert_eq!(tight.kind, PetDropKind::Catch);
+
+        assert_eq!(clamp_floor_home_pt(f64::NAN), PET_DROP_FLOOR_HOME_PT);
+        assert_eq!(clamp_floor_home_pt(-4.0), 0.0);
+        assert_eq!(clamp_floor_home_pt(90.0), PET_DROP_CATCH_PT);
     }
 
     #[test]

@@ -113,6 +113,11 @@ export async function setNativePetModeSize(width: number, height: number): Promi
   await invoke("pet_mode_set_size", { width, height });
 }
 
+export async function setNativePetModeFloorHome(points: number): Promise<number | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<number>("pet_mode_set_floor_home", { points });
+}
+
 /**
  * Why the intervention no longer resolves to a bare boolean: every non-contact
  * outcome used to collapse into `false`, and the caller translated that into

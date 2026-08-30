@@ -267,6 +267,22 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Music note", { selector: ".pet-mode-lab__status" })).toBeTruthy();
   });
 
+  it("lets Dev calibrate the floor-home stay band without changing the shipped default", () => {
+    const onPetModeFloorHomePtChange = vi.fn();
+    renderProductionDevSettings({
+      petModeEnabled: true,
+      petModeFloorHomePt: 20,
+      onPetModeFloorHomePtChange,
+    });
+
+    const slider = screen.getByRole("slider", { name: "Floor home stay band" });
+    expect(slider.getAttribute("min")).toBe("0");
+    expect(slider.getAttribute("max")).toBe("65");
+    expect((slider as HTMLInputElement).value).toBe("20");
+    fireEvent.change(slider, { target: { value: "12" } });
+    expect(onPetModeFloorHomePtChange).toHaveBeenCalledWith(12);
+  });
+
   it("persists a bounded cursor chase policy from the Pet Mode Lab", () => {
     const props = renderProductionDevSettings({ petModeEnabled: true });
 

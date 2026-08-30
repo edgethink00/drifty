@@ -23,7 +23,8 @@ use objc2_app_kit::{NSView, NSWindow, NSWindowButton};
 use objc2_foundation::NSPoint;
 
 use super::pet_drop::{
-    plan_pet_drop, plan_pet_shake_floor_drop, PetDropKind, PetDropPlan, PetRect,
+    clamp_floor_home_pt, plan_pet_drop_with_floor_home, plan_pet_shake_floor_drop,
+    PetDropKind, PetDropPlan, PetRect, PET_DROP_FLOOR_HOME_PT,
 };
 use super::pet_drop_windows::{inferred_bottom_dock, list_on_screen_ledges};
 use super::pet_hit_region::{
@@ -148,6 +149,7 @@ static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex:
 /// 144x99 would let a 125% pet clamp to a right edge computed for a smaller
 /// window and hang off the screen.
 static PET_MODE_SIZE: Mutex<(f64, f64)> = Mutex::new((PET_MODE_WIDTH, PET_MODE_HEIGHT));
+static PET_MODE_FLOOR_HOME_PT: Mutex<f64> = Mutex::new(PET_DROP_FLOOR_HOME_PT);
 static PET_MODE_PREVIEW_RETURN_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1270,6 +1272,24 @@ pub fn pet_mode_set_size(app: AppHandle, width: f64, height: f64) -> Result<(), 
     apply_pet_mode_size(&window, width, height).map(|_| ())
 }
 
+fn current_floor_home_pt() -> f64 {
+    PET_MODE_FLOOR_HOME_PT
+        .lock()
+        .map(|value| *value)
+        .unwrap_or(PET_DROP_FLOOR_HOME_PT)
+}
+
+/// Dev-only floor-home override used while calibrating the stay band. Production
+/// drops keep the shipped 20pt default unless this command is called.
+#[tauri::command]
+pub fn pet_mode_set_floor_home(points: f64) -> Result<f64, String> {
+    let next = clamp_floor_home_pt(points);
+    if let Ok(mut current) = PET_MODE_FLOOR_HOME_PT.lock() {
+        *current = next;
+    }
+    Ok(next)
+}
+
 fn apply_pet_mode_size(window: &WebviewWindow, width: f64, height: f64) -> Result<bool, String> {
     if !(width.is_finite() && height.is_finite()) || width <= 0.0 || height <= 0.0 {
         return Err("Pet Mode size must be a positive, finite size".to_string());
@@ -1721,15 +1741,23 @@ pub fn probe_pet_drop_plan(
                 .iter()
                 .map(|(name, rect)| (name.as_str(), rect.clone()))
                 .collect();
-            plan_pet_drop(
+            plan_pet_drop_with_floor_home(
                 false,
                 &pet,
                 &work,
                 &named,
                 dock.as_ref().or(inferred_dock.as_ref()),
+                current_floor_home_pt(),
             )
         }
-        Err(_) => plan_pet_drop(false, &pet, &work, &[], inferred_dock.as_ref()),
+        Err(_) => plan_pet_drop_with_floor_home(
+            false,
+            &pet,
+            &work,
+            &[],
+            inferred_dock.as_ref(),
+            current_floor_home_pt(),
+        ),
     };
     Ok(plan)
 }

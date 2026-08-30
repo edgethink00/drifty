@@ -49,6 +49,11 @@ import {
   buildPetModeSnapshot,
   resolveInitialPetModeEnabled,
   persistPetModeHiddenUntil,
+  persistPetModeFloorHomePt,
+  PET_MODE_FLOOR_HOME_PT,
+  PET_MODE_FLOOR_HOME_STORAGE_KEY,
+  clampPetModeFloorHomePt,
+  resolveInitialPetModeFloorHomePt,
   resolveInitialPetModeHiddenUntil,
   resolvePetModePresent,
   shouldShowPetModeMusicNote,
@@ -371,5 +376,21 @@ describe("pet temporary hide", () => {
   it("keeps a disabled pet absent regardless of the hide", () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "0");
     expect(resolvePetModePresent()).toBe(false);
+  });
+});
+
+
+describe("pet floor home calibration", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("defaults to 20pt and clamps Dev overrides into the catch band", () => {
+    expect(PET_MODE_FLOOR_HOME_PT).toBe(20);
+    expect(resolveInitialPetModeFloorHomePt()).toBe(20);
+    expect(clampPetModeFloorHomePt(-3)).toBe(0);
+    expect(clampPetModeFloorHomePt(90)).toBe(65);
+    expect(clampPetModeFloorHomePt("12.4")).toBe(12);
+    expect(persistPetModeFloorHomePt(12)).toBe(12);
+    expect(window.localStorage.getItem(PET_MODE_FLOOR_HOME_STORAGE_KEY)).toBe("12");
+    expect(resolveInitialPetModeFloorHomePt()).toBe(12);
   });
 });

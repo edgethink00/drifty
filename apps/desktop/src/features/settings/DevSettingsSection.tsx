@@ -22,6 +22,8 @@ import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import {
+  PET_MODE_FLOOR_HOME_PT,
+  PET_MODE_FLOOR_HOME_RANGE,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
   type PetModeLabAction,
@@ -96,6 +98,8 @@ type DevSettingsSectionProps = {
   readonly onPlacePetModeCenter: () => void;
   readonly petModeGuidesEnabled?: boolean;
   readonly onTogglePetModeGuides?: () => void;
+  readonly petModeFloorHomePt?: number;
+  readonly onPetModeFloorHomePtChange?: (value: number) => void;
   readonly onPreviewPetModeAction: (action: PetModePreviewAction) => void;
   readonly onCheckLatestBuild: () => void;
   readonly onInstallLatestBuild: () => void;
@@ -165,6 +169,8 @@ export function DevSettingsSection({
   onPlacePetModeCenter,
   petModeGuidesEnabled,
   onTogglePetModeGuides,
+  petModeFloorHomePt = PET_MODE_FLOOR_HOME_PT,
+  onPetModeFloorHomePtChange,
   onPreviewPetModeAction,
   onCheckLatestBuild,
   onInstallLatestBuild,
@@ -416,6 +422,15 @@ export function DevSettingsSection({
                 <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
                 <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact, drop calibration guides, and the live drop preview badge" title="Toggle feet contact line (93pt), calibration guides, and the live drop preview badge on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
               </div>
+              <PetModeHuntRange
+                label="하단집"
+                detail="발밑 이 거리까지는 땅에 떨어진 것으로 보고 유지합니다. 다음 드롭부터 적용됩니다."
+                value={petModeFloorHomePt}
+                range={PET_MODE_FLOOR_HOME_RANGE}
+                valueLabel={`${petModeFloorHomePt}pt`}
+                ariaLabel="Floor home stay band"
+                onChange={(value) => onPetModeFloorHomePtChange?.(value)}
+              />
               <div className="pet-mode-lab__experiment-policy pet-mode-lab__shortcut-policy" data-active={petModeBrowserXShortcutEnabled}>
                 <span>
                   <strong>{petModeBrowserXShortcutEnabled ? "Shortcut armed this session" : "Browser X shortcut off"}</strong>
@@ -701,7 +716,7 @@ function PetModeHuntRange({
           style={{ "--pet-hunt-range-fill": `${fill}%` } as CSSProperties}
           onChange={(event) => onChange(Number(event.currentTarget.value))}
         />
-        <output>{valueLabel}</output>
+        <output aria-hidden="true">{valueLabel}</output>
       </span>
     </label>
   );
