@@ -150,10 +150,6 @@
     padding-inline: 0.35rem;
   }
 
-  .app-shell:has(.content--settings) .settings-sidebar-heading {
-    padding: 0.25rem 0.35rem 0.5rem;
-  }
-
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -168,6 +164,11 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.35rem;
+  }
+
+  .app-shell:has(.content--settings) .sidebar--settings .settings-nav-group .nav-label {
+    grid-column: 1 / -1;
+    padding: 8px 0.35rem 2px;
   }
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav::-webkit-scrollbar {

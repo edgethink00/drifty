@@ -4,19 +4,13 @@ export type SettingsSection = "account" | "general" | "permissions" | "appearanc
 
 const SETTINGS_NAV_GROUPS = [
   {
-    id: "app",
-    labelKey: "settings.sidebar.groupApp",
+    id: "personal",
+    labelKey: "settings.sidebar.groupPersonal",
     items: [
       { id: "general", labelKey: "settings.section.general" },
       { id: "permissions", labelKey: "settings.section.permissions" },
       { id: "appearance", labelKey: "settings.section.appearance" },
       { id: "notifications", labelKey: "settings.section.notifications" },
-    ],
-  },
-  {
-    id: "accountData",
-    labelKey: "settings.sidebar.groupAccountData",
-    items: [
       { id: "account", labelKey: "settings.section.account" },
       { id: "privacy", labelKey: "settings.section.privacy" },
     ],
@@ -95,15 +89,12 @@ export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, on
         <span>{t("common.back")}</span>
       </button>
 
-      <div className="settings-sidebar-heading">
-        <strong>{t("common.settings")}</strong>
-      </div>
-
       <nav className="settings-nav" aria-label={t("settings.sidebar.sections")}>
         {visibleNavGroups.map((group) => {
           const groupLabel = t(group.labelKey);
           return (
-            <div key={group.id} className="settings-nav-group" role="group" aria-label={groupLabel}>
+            <div key={group.id} className="settings-nav-group" role="group" aria-labelledby={`settings-nav-group-${group.id}`}>
+              <div id={`settings-nav-group-${group.id}`} className="nav-label">{groupLabel}</div>
               {group.items.map((item) => {
                 const label = t(item.labelKey);
                 const isActive = activeSection === item.id;

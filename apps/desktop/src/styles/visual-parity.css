@@ -200,7 +200,6 @@
 .sidebar--collapsed .nav-label,
 .sidebar--collapsed .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
 .sidebar--collapsed .settings-sidebar-back span,
-.sidebar--collapsed .settings-sidebar-heading,
 .sidebar--collapsed .live-pill .k,
 .sidebar--collapsed .live-pill__summary-copy,
 .sidebar--collapsed .live-pill .app-name,
@@ -290,17 +289,6 @@
     pointer-events: none;
     transform: translateX(-4px);
     white-space: nowrap;
-  }
-
-  .sidebar--collapsed .settings-sidebar-heading {
-    max-height: 0;
-    margin: 0;
-    padding: 0;
-    border-bottom: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-    transform: translateX(-4px);
   }
 
   .sidebar--collapsed .settings-nav {

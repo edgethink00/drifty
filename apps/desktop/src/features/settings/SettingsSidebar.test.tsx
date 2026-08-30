@@ -23,26 +23,30 @@ describe("SettingsSidebar", () => {
 
     render(<SettingsSidebar activeSection="permissions" isCollapsed={false} showDevSection={false} onBack={onBack} onSectionChange={vi.fn()} />);
 
-    const appGroup = screen.getByRole("group", { name: /^App$/ });
     const aiGroup = screen.getByRole("group", { name: /^AI$/ });
-    const accountDataGroup = screen.getByRole("group", { name: /^Account & data$/ });
-    expect(within(appGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
+    const personalGroup = screen.getByRole("group", { name: /^Personal$/ });
+    expect(within(personalGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "General",
       "Permissions",
       "Appearance",
       "Companion & Alerts",
+      "Account",
+      "Privacy & Data",
     ]);
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "AI setup",
       "Classification rules",
     ]);
-    expect(within(accountDataGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Account",
-      "Privacy & Data",
-    ]);
     const advancedGroup = screen.getByRole("group", { name: /^Advanced$/ });
     expect(within(advancedGroup).getAllByRole("button").map((button) => button.textContent)).toEqual(["Agents & CLI"]);
-    expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-label"))).toEqual(["App", "Account & data", "AI", "Advanced"]);
+    expect(screen.getAllByRole("group").map((group) => group.getAttribute("aria-labelledby"))).toEqual([
+      "settings-nav-group-personal",
+      "settings-nav-group-ai",
+      "settings-nav-group-advanced",
+    ]);
+    expect(within(personalGroup).getByText(/^Personal$/).className).toBe("nav-label");
+    expect(within(aiGroup).getByText(/^AI$/).className).toBe("nav-label");
+    expect(within(advancedGroup).getByText(/^Advanced$/).className).toBe("nav-label");
     expect(screen.getByRole("button", { name: /^Permissions$/ }).getAttribute("aria-current")).toBe("page");
 
     fireEvent.click(screen.getByRole("button", { name: /^Back$/ }));

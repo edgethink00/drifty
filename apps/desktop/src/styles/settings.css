@@ -28,7 +28,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--text);
+  color: color-mix(in srgb, var(--text) 72%, transparent);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -38,6 +38,7 @@
 .settings-sidebar-back:hover {
   background: color-mix(in srgb, var(--text) 5%, transparent);
   border-color: transparent;
+  color: var(--text);
   transform: none;
 }
 
@@ -45,20 +46,6 @@
   width: 0.88rem;
   height: 0.88rem;
   flex: 0 0 auto;
-}
-
-.settings-sidebar-heading {
-  display: grid;
-  padding: 0.38rem var(--sidebar-row-inline-padding) 0.62rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.settings-sidebar-heading strong {
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 1.06rem;
-  font-weight: 620;
-  line-height: 1.1;
 }
 
 .sidebar--settings .settings-nav {
@@ -71,6 +58,14 @@
   display: grid;
   gap: 0.2rem;
   min-width: 0;
+}
+
+.sidebar--settings .nav-label {
+  padding-top: 10px;
+}
+
+.sidebar--settings .settings-nav-group:first-child .nav-label {
+  padding-top: 6px;
 }
 
 .sidebar--settings .settings-nav-item {
@@ -120,7 +115,7 @@
   justify-content: center;
   line-height: 0;
   overflow: visible;
-  color: color-mix(in srgb, var(--text) 55%, transparent);
+  color: color-mix(in srgb, var(--text) 68%, transparent);
   transition: color .15s;
 }
 

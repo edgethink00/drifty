@@ -156,15 +156,14 @@ describe("sidebar motion styles", () => {
     const styles = readStyles();
     const collapsedBackBlock = cssBlock(styles, ".sidebar--collapsed .settings-sidebar-back");
     const collapsedBackCopyBlock = cssBlock(styles, ".sidebar--collapsed .settings-sidebar-back span");
-    const collapsedHeadingBlock = cssBlock(styles, ".sidebar--collapsed .settings-sidebar-heading");
+    const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
 
     expect(collapsedBackBlock).toContain("justify-content: center;");
     expect(collapsedBackBlock).toContain("padding: 0;");
     expect(collapsedBackCopyBlock).toContain("max-width: 0;");
     expect(collapsedBackCopyBlock).toContain("opacity: 0;");
-    expect(collapsedHeadingBlock).toContain("max-height: 0;");
-    expect(collapsedHeadingBlock).toContain("opacity: 0;");
-    expect(collapsedHeadingBlock).toContain("pointer-events: none;");
+    expect(collapsedNavLabelBlock).toContain("overflow: hidden;");
+    expect(collapsedNavLabelBlock).toContain("color: transparent;");
   });
 
 
@@ -206,8 +205,8 @@ describe("sidebar motion styles", () => {
     const navItemBlock = cssBlock(styles, ".nav-item");
     const navLabelBlock = cssBlock(styles, ".nav-label");
     const settingsBackBlock = cssBlock(styles, ".settings-sidebar-back");
-    const settingsHeadingBlock = cssBlock(styles, ".settings-sidebar-heading");
     const settingsNavItemBlock = cssBlock(styles, ".sidebar--settings .settings-nav-item");
+    const settingsNavLabelBlock = cssBlock(styles, ".sidebar--settings .nav-label");
 
     expect(styles).toContain("--sidebar-inline-gutter: 8px;");
     expect(styles).toContain("--sidebar-row-inline-padding: 10px;");
@@ -216,7 +215,7 @@ describe("sidebar motion styles", () => {
     expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(navLabelBlock).toContain("padding: 12px var(--sidebar-row-inline-padding) 4px;");
     expect(settingsBackBlock).toContain("padding: 0.5rem var(--sidebar-row-inline-padding);");
-    expect(settingsHeadingBlock).toContain("padding: 0.38rem var(--sidebar-row-inline-padding) 0.62rem;");
+    expect(settingsNavLabelBlock).toContain("padding-top: 10px;");
     expect(settingsNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(settingsNavItemBlock).not.toContain("overflow: hidden;");
     expect(settingsNavItemBlock).not.toContain("text-overflow: ellipsis;");
