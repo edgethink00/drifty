@@ -7765,6 +7765,7 @@ export default function App() {
           showDevSection={DEV_SETTINGS_ENABLED && devModeEnabled}
           onBack={handleSettingsBack}
           onSectionChange={setSettingsSection}
+          onSendFeedback={() => setFeedbackModalOpen(true)}
         />
       ) : (
         <aside className={isSidebarVisuallyCollapsed ? "sidebar sidebar--collapsed" : "sidebar"}>
@@ -8525,7 +8526,6 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
-                    onSendFeedback={() => setFeedbackModalOpen(true)}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
                   />

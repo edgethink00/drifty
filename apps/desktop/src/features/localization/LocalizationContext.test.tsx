@@ -90,7 +90,6 @@ describe("Korean localization preview", () => {
           updaterMessage={null}
           onAutoInstallFutureUpdatesChange={() => undefined}
           onCheckForUpdates={() => undefined}
-          onSendFeedback={() => undefined}
           onStartOfDayChange={() => undefined}
           onStartOfWeekChange={() => undefined}
         />
@@ -99,8 +98,7 @@ describe("Korean localization preview", () => {
 
     expect(screen.queryByText("표시 언어")).toBeNull();
     expect(screen.queryByRole("combobox", { name: "표시 언어" })).toBeNull();
-    expect(screen.getByText("커뮤니티 및 지원")).toBeTruthy();
-    expect(screen.getByText("Drifty 커뮤니티")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "피드백 보내기" })).toHaveLength(1);
+    expect(screen.queryByText("커뮤니티 및 지원")).toBeNull();
+    expect(screen.queryByText("Drifty 커뮤니티")).toBeNull();
   });
 });

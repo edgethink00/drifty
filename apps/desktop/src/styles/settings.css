@@ -68,6 +68,33 @@
   padding-top: 6px;
 }
 
+.settings-sidebar-links {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.settings-sidebar-links .settings-nav-item--link {
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.settings-nav-item__external {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-left: auto;
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+.settings-sidebar-links__error {
+  margin: 0;
+  padding: 0 var(--sidebar-row-inline-padding);
+  color: var(--warn);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .sidebar--settings .settings-nav-item {
   min-height: var(--nav-item-height);
   padding: 0 var(--sidebar-row-inline-padding);

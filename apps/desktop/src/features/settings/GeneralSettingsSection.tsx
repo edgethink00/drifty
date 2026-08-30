@@ -8,7 +8,6 @@ import {
 import { useLocalization } from "../localization/LocalizationContext";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
-import { CommunitySupportSettingsBlock } from "./CommunitySupportSettingsBlock";
 
 type GeneralSettingsSectionProps = {
   readonly autoInstallFutureUpdates: boolean;
@@ -20,7 +19,6 @@ type GeneralSettingsSectionProps = {
   readonly updaterMessage: string | null;
   readonly onAutoInstallFutureUpdatesChange: (enabled: boolean) => void;
   readonly onCheckForUpdates: () => void;
-  readonly onSendFeedback: () => void;
   readonly onStartOfDayChange: (value: string) => void;
   readonly onStartOfWeekChange: (value: StartOfWeek) => void;
 };
@@ -35,7 +33,6 @@ export function GeneralSettingsSection({
   updaterMessage,
   onAutoInstallFutureUpdatesChange,
   onCheckForUpdates,
-  onSendFeedback,
   onStartOfDayChange,
   onStartOfWeekChange,
 }: GeneralSettingsSectionProps) {
@@ -63,7 +60,6 @@ export function GeneralSettingsSection({
         <div className="settings-row"><div><div className="lbl">{t("settings.general.autoUpdates")}</div><div className="desc">{t("settings.general.autoUpdatesDescription")}</div></div><div className="ctrl"><Toggle checked={autoInstallFutureUpdates} onChange={onAutoInstallFutureUpdatesChange} ariaLabel={t("settings.general.autoUpdates")} /></div></div>
         <div className="settings-row"><div><div className="lbl">{t("settings.general.manualUpdate")}</div><div className="desc">{t("settings.general.manualUpdateDescription")}</div>{updaterMessage ? <p className="capture-recency" role="status">{localizeUpdateMessage(updaterMessage, "status", effectiveLanguage, t)}</p> : null}{updaterError ? <p className="capture-recency capture-recency--error" role="alert">{localizeUpdateMessage(updaterError, "error", effectiveLanguage, t)}</p> : null}</div><div className="ctrl"><button type="button" className="settings-btn" onClick={onCheckForUpdates} disabled={updaterChecking || updaterInstalling}>{updaterChecking ? t("settings.general.checking") : t("settings.general.checkForUpdates")}</button></div></div>
       </div>
-      <CommunitySupportSettingsBlock onSendFeedback={onSendFeedback} />
     </div>
   );
 }

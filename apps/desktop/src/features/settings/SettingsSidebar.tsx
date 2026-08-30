@@ -1,4 +1,7 @@
 import { useLocalization } from "../localization/LocalizationContext";
+import { useRef, useState } from "react";
+
+export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
 export type SettingsSection = "account" | "general" | "permissions" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
 
@@ -69,9 +72,39 @@ type SettingsSidebarProps = {
   readonly showDevSection: boolean;
   readonly onBack: () => void;
   readonly onSectionChange: (section: SettingsSection) => void;
+  readonly onSendFeedback: () => void;
 };
 
-export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, onBack, onSectionChange }: SettingsSidebarProps) {
+function FeedbackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.2" y="5.2" width="17.6" height="13.6" rx="2.4" />
+      <path d="m3.8 6.6 8.2 5.8 8.2-5.8" />
+    </svg>
+  );
+}
+
+function CommunityIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M17 20v-1a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v1" />
+      <circle cx="9.5" cy="8" r="3.2" />
+      <path d="M22 20v-1a4 4 0 0 0-3-3.87" />
+      <path d="M15.5 4.8a3.2 3.2 0 0 1 0 6.2" />
+    </svg>
+  );
+}
+
+function ExternalLinkIcon() {
+  return (
+    <svg className="settings-nav-item__external" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4.2 2H2.8a.8.8 0 0 0-.8.8v6.4a.8.8 0 0 0 .8.8h6.4a.8.8 0 0 0 .8-.8V7.8" />
+      <path d="M6.4 2H10v3.6M10 2 5.4 6.6" />
+    </svg>
+  );
+}
+
+export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, onBack, onSectionChange, onSendFeedback }: SettingsSidebarProps) {
   const visibleNavGroups = SETTINGS_NAV_GROUPS
     .map((group) => ({
       ...group,
@@ -79,6 +112,26 @@ export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, on
     }))
     .filter((group) => group.items.length > 0);
   const { t } = useLocalization();
+  const discordOpeningRef = useRef(false);
+  const [discordOpening, setDiscordOpening] = useState(false);
+  const [discordError, setDiscordError] = useState(false);
+
+  async function openDiscordCommunity() {
+    if (discordOpeningRef.current) return;
+
+    discordOpeningRef.current = true;
+    setDiscordOpening(true);
+    setDiscordError(false);
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(DRIFTY_DISCORD_INVITE_URL);
+    } catch {
+      setDiscordError(true);
+    } finally {
+      discordOpeningRef.current = false;
+      setDiscordOpening(false);
+    }
+  }
 
   return (
     <aside className={isCollapsed ? "sidebar sidebar--settings sidebar--collapsed" : "sidebar sidebar--settings"} aria-label={t("settings.sidebar.label")}>
@@ -117,6 +170,30 @@ export function SettingsSidebar({ activeSection, isCollapsed, showDevSection, on
           );
         })}
       </nav>
+      <div className="settings-sidebar-links" role="group" aria-label={t("settings.sidebar.support")}>
+        <button
+          type="button"
+          className="settings-nav-item settings-nav-item--link"
+          onClick={onSendFeedback}
+        >
+          <span className="settings-nav-item__icon" aria-hidden="true"><FeedbackIcon /></span>
+          <span className="settings-nav-item__label">{t("account.sendFeedback")}</span>
+          {isCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{t("account.sendFeedback")}</span> : null}
+        </button>
+        <button
+          type="button"
+          className="settings-nav-item settings-nav-item--link"
+          onClick={() => void openDiscordCommunity()}
+          disabled={discordOpening}
+          aria-busy={discordOpening}
+        >
+          <span className="settings-nav-item__icon" aria-hidden="true"><CommunityIcon /></span>
+          <span className="settings-nav-item__label">{t("settings.sidebar.community")}</span>
+          <ExternalLinkIcon />
+          {isCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{t("settings.sidebar.community")}</span> : null}
+        </button>
+        {discordError ? <p className="settings-sidebar-links__error" role="alert">{t("settings.general.communityOpenFailed")}</p> : null}
+      </div>
     </aside>
   );
 }
