@@ -23,12 +23,20 @@ from app.tracker.dev_signals.aggregation import (
     summarize_agent_time,
 )
 from app.tracker.dev_signals.adapters import (
+    parse_amp_store,
     parse_aside_store,
+    parse_cline_store,
+    parse_copilot_store,
+    parse_droid_store,
     parse_gemini_store,
+    parse_goose_store,
     parse_hermes_store,
     parse_kimi_store,
     parse_openclaw_store,
     parse_opencode_store,
+    parse_pi_store,
+    parse_roo_store,
+    parse_zed_store,
 )
 from app.tracker.dev_signals.agent_sessions import (
     UNTERMINATED_TURN_CAP_SECONDS,
@@ -1057,6 +1065,363 @@ class KimiSessionTests(TempDirTestCase):
     def test_missing_is_empty(self) -> None:
         self.assertEqual(parse_kimi_store(self.tmp_path / "nope.jsonl"), [])
 
+
+
+
+class PiSessionTests(TempDirTestCase):
+    def test_skips_title_and_drops_prompt(self) -> None:
+        secret = "pi-prompt-secret"
+        path = self.tmp_path / "pi.jsonl"
+        path.write_text(
+            "\n".join([
+                json.dumps({"type": "title", "title": secret}),
+                json.dumps({"type": "session", "id": "pi_ses_1", "timestamp": "2026-08-21T10:00:00Z", "cwd": str(self.tmp_path)}),
+                json.dumps({"type": "message", "timestamp": "2026-08-21T10:01:00Z", "message": {"role": "user", "content": secret}}),
+                json.dumps({"type": "message", "timestamp": "2026-08-21T10:02:00Z", "message": {"role": "assistant", "model": "claude-sonnet", "usage": {"input": 4, "output": 2, "cacheRead": 1, "cacheWrite": 0}}}),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        turns = parse_pi_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "pi")
+        self.assertEqual(turns[0].session_key, "pi_ses_1")
+        self.assertEqual(turns[0].active_seconds, 120)
+        self.assertEqual(turns[0].tokens_in, 4)
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_pi_store(self.tmp_path / "nope.jsonl"), [])
+
+
+class DroidSessionTests(TempDirTestCase):
+    def test_settings_plus_jsonl_without_prompt(self) -> None:
+        secret = "droid-user-secret"
+        session_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+        settings = self.tmp_path / f"{session_id}.settings.json"
+        settings.write_text(json.dumps({
+            "model": "custom:Claude-Opus-4.5-Thinking-[Anthropic]-0",
+            "tokenUsage": {"inputTokens": 9, "outputTokens": 3, "cacheReadTokens": 2, "cacheCreationTokens": 1},
+        }), encoding="utf-8")
+        jsonl = self.tmp_path / f"{session_id}.jsonl"
+        jsonl.write_text(
+            "\n".join([
+                json.dumps({"type": "message", "timestamp": "2026-08-21T10:00:00Z", "message": {"role": "user", "content": secret}}),
+                json.dumps({"type": "message", "timestamp": "2026-08-21T10:01:00Z", "message": {"role": "assistant", "content": secret}}),
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        turns = parse_droid_store(settings)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "droid")
+        self.assertEqual(turns[0].active_seconds, 60)
+        self.assertEqual(turns[0].tokens_in, 9)
+        self.assertEqual(turns[0].tokens_cache_read, 2)
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+
+    def test_settings_without_jsonl_is_capped(self) -> None:
+        settings = self.tmp_path / "only.settings.json"
+        settings.write_text(json.dumps({
+            "model": "claude",
+            "providerLockTimestamp": "2026-08-21T10:00:00Z",
+            "tokenUsage": {"inputTokens": 4, "outputTokens": 1},
+        }), encoding="utf-8")
+        # Force a later mtime by rewriting after a sleep is unnecessary; parser
+        # uses mtime only when lock/mtime differ. Cap still applies to long gaps.
+        turns = parse_droid_store(settings)
+        self.assertEqual(len(turns), 1)
+        self.assertLessEqual(turns[0].active_seconds, 120)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_droid_store(self.tmp_path / "nope.settings.json"), [])
+
+
+class AmpSessionTests(TempDirTestCase):
+    def test_usage_ledger_without_message_bodies(self) -> None:
+        secret = "amp-message-secret"
+        path = self.tmp_path / "T-abc.json"
+        path.write_text(json.dumps({
+            "id": "T-abc",
+            "created": 1_700_000_000_000,
+            "messages": [{"role": "user", "content": secret}],
+            "usageLedger": {"events": [{
+                "timestamp": "2026-08-21T10:01:00Z",
+                "model": "claude-sonnet",
+                "credits": 0.2,
+                "tokens": {"input": 8, "output": 2, "cacheReadInputTokens": 3, "cacheCreationInputTokens": 1},
+            }]},
+        }), encoding="utf-8")
+        turns = parse_amp_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "amp")
+        self.assertEqual(turns[0].session_key, "T-abc")
+        self.assertEqual(turns[0].tokens_in, 8)
+        self.assertEqual(turns[0].cost_usd, 0.2)
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+        self.assertEqual(turns[0].active_seconds, 1)
+
+
+    def test_idle_gap_is_not_billed(self) -> None:
+        path = self.tmp_path / "T-gap.json"
+        path.write_text(json.dumps({
+            "id": "T-gap",
+            "created": 1_700_000_000_000,
+            "usageLedger": {"events": [
+                {"timestamp": "2026-08-21T10:00:00Z", "tokens": {"input": 1, "output": 1}},
+                {"timestamp": "2026-08-21T12:00:00Z", "tokens": {"input": 8, "output": 2}},
+            ]},
+        }), encoding="utf-8")
+        turns = parse_amp_store(path)
+        self.assertEqual(len(turns), 2)
+        self.assertEqual([turn.active_seconds for turn in turns], [1, 1])
+        self.assertEqual(turns[-1].tokens_in, 8)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_amp_store(self.tmp_path / "T-missing.json"), [])
+
+
+class CopilotSessionTests(TempDirTestCase):
+    def test_otel_attributes_without_prompt(self) -> None:
+        secret = "copilot-prompt-secret"
+        path = self.tmp_path / "otel.jsonl"
+        path.write_text(
+            json.dumps({
+                "startTimeUnixNano": 1_700_000_000_000_000_000,
+                "endTimeUnixNano": 1_700_000_030_000_000_000,
+                "attributes": {
+                    "gen_ai.usage.input_tokens": 6,
+                    "gen_ai.usage.output_tokens": 2,
+                    "gen_ai.request.model": "gpt-4.1",
+                    "session.id": "copilot-1",
+                    "prompt": secret,
+                },
+            }) + "\n",
+            encoding="utf-8",
+        )
+        turns = parse_copilot_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "copilot")
+        self.assertEqual(turns[0].session_key, "copilot-1")
+        self.assertEqual(turns[0].active_seconds, 30)
+        self.assertEqual(turns[0].tokens_in, 6)
+        self.assertEqual(turns[0].model, "gpt-4.1")
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+
+    def test_duration_nano_is_not_read_as_milliseconds(self) -> None:
+        path = self.tmp_path / "nano.jsonl"
+        path.write_text(
+            json.dumps({
+                "startTimeUnixNano": 1_700_000_000_000_000_000,
+                "durationNano": 2_000_000_000,
+                "attributes": {"gen_ai.usage.input_tokens": 3, "gen_ai.usage.output_tokens": 1, "session.id": "n1"},
+            }) + "\n",
+            encoding="utf-8",
+        )
+        turns = parse_copilot_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 2)
+
+    def test_same_trace_is_counted_once(self) -> None:
+        path = self.tmp_path / "dup.jsonl"
+        lines = [
+            json.dumps({
+                "traceId": "abc",
+                "startTimeUnixNano": 1_700_000_000_000_000_000,
+                "endTimeUnixNano": 1_700_000_010_000_000_000,
+                "attributes": {"gen_ai.usage.input_tokens": 4, "gen_ai.usage.output_tokens": 1, "session.id": "s"},
+            }),
+            json.dumps({
+                "traceId": "abc",
+                "startTimeUnixNano": 1_700_000_000_000_000_000,
+                "endTimeUnixNano": 1_700_000_010_000_000_000,
+                "attributes": {"gen_ai.usage.input_tokens": 4, "gen_ai.usage.output_tokens": 1, "session.id": "s"},
+            }),
+        ]
+        path.write_text(chr(10).join(lines) + chr(10), encoding="utf-8")
+        turns = parse_copilot_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 10)
+
+    def test_records_without_attributes_are_skipped(self) -> None:
+        path = self.tmp_path / "bare.jsonl"
+        path.write_text(
+            json.dumps({
+                "timestamp": "2026-08-21T10:00:00Z",
+                "gen_ai.usage.input_tokens": 9,
+                "prompt": "should-not-matter",
+            }) + "\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(parse_copilot_store(path), [])
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_copilot_store(self.tmp_path / "nope.jsonl"), [])
+
+
+class ClineRooSessionTests(TempDirTestCase):
+    def test_ui_messages_api_req_without_prompt(self) -> None:
+        secret = "cline-prompt-secret"
+        task = self.tmp_path / "tasks" / "task-1"
+        task.mkdir(parents=True)
+        (task / "ui_messages.json").write_text(json.dumps([
+            {"type": "say", "say": "text", "ts": "2026-08-21T10:00:00Z", "text": secret},
+            {"type": "say", "say": "api_req_started", "ts": "2026-08-21T10:00:00Z",
+             "text": json.dumps({"cost": 0.11, "tokensIn": 12, "tokensOut": 4, "cacheReads": 3, "cacheWrites": 1})},
+            {"type": "say", "say": "text", "ts": "2026-08-21T10:00:20Z", "text": secret},
+        ]), encoding="utf-8")
+        turns = parse_cline_store(task / "ui_messages.json")
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "cline")
+        self.assertEqual(turns[0].session_key, "task-1")
+        self.assertEqual(turns[0].active_seconds, 20)
+        self.assertEqual(turns[0].tokens_in, 12)
+        self.assertEqual(turns[0].cost_usd, 0.11)
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+        roo = parse_roo_store(task / "ui_messages.json")
+        self.assertEqual(roo[0].provider, "roo")
+
+
+    def test_long_gap_is_not_billed_as_one_turn(self) -> None:
+        task = self.tmp_path / "tasks" / "task-gap"
+        task.mkdir(parents=True)
+        (task / "ui_messages.json").write_text(json.dumps([
+            {"type": "say", "say": "api_req_started", "ts": "2026-08-21T10:00:00Z",
+             "text": json.dumps({"tokensIn": 2, "tokensOut": 1})},
+            {"type": "say", "say": "text", "ts": "2026-08-21T12:00:00Z", "text": "later"},
+        ]), encoding="utf-8")
+        turns = parse_cline_store(task / "ui_messages.json")
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 1)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_cline_store(self.tmp_path / "nope.json"), [])
+
+
+class GooseSessionTests(TempDirTestCase):
+    def test_sessions_table_without_messages(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "sessions.db"
+        conn = sqlite3.connect(db)
+        conn.execute(
+            """CREATE TABLE sessions (
+              id TEXT PRIMARY KEY,
+              model_config_json TEXT,
+              provider_name TEXT,
+              created_at TEXT,
+              updated_at TEXT,
+              total_tokens INTEGER,
+              input_tokens INTEGER,
+              output_tokens INTEGER,
+              accumulated_total_tokens INTEGER,
+              accumulated_input_tokens INTEGER,
+              accumulated_output_tokens INTEGER,
+              working_dir TEXT,
+              title TEXT
+            )"""
+        )
+        secret = "goose-title-secret"
+        conn.execute(
+            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("g1", json.dumps({"model_name": "claude-sonnet"}), "anthropic",
+             "2026-08-21T10:00:00Z", "2026-08-21T10:02:00Z",
+             9, 6, 3, 9, 6, 3, str(self.tmp_path), secret),
+        )
+        conn.commit()
+        conn.close()
+        turns = parse_goose_store(db)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "goose")
+        self.assertEqual(turns[0].active_seconds, 120)
+        self.assertEqual(turns[0].tokens_in, 6)
+        self.assertEqual(turns[0].model, "claude-sonnet")
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+    def test_open_session_is_skipped(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "open.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE sessions (id TEXT, model_config_json TEXT, created_at TEXT, input_tokens INTEGER, output_tokens INTEGER)")
+        conn.execute("INSERT INTO sessions VALUES ('open', ?, '2026-08-21T10:00:00Z', 1, 1)", (json.dumps({"model_name": "gpt"}),))
+        conn.commit()
+        conn.close()
+        self.assertEqual(parse_goose_store(db), [])
+
+    def test_updated_at_without_ended_at_is_capped(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "updated.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE sessions (id TEXT, model_config_json TEXT, created_at TEXT, updated_at TEXT, input_tokens INTEGER, output_tokens INTEGER)")
+        conn.execute(
+            "INSERT INTO sessions VALUES ('u1', ?, '2026-08-21T10:00:00Z', '2026-08-21T12:00:00Z', 1, 1)",
+            (json.dumps({"model_name": "gpt"}),),
+        )
+        conn.commit()
+        conn.close()
+        turns = parse_goose_store(db)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 120)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_goose_store(self.tmp_path / "nope.db"), [])
+
+
+class ZedSessionTests(TempDirTestCase):
+    def test_hosted_thread_json_without_prompt(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "threads.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE threads (id TEXT, created_at TEXT, updated_at TEXT, folder_paths TEXT, data_type TEXT, data TEXT)")
+        secret = "zed-prompt-secret"
+        payload = {
+            "model": {"provider": "zed.dev", "model": "zed-hosted"},
+            "token_usage": {"input_tokens": 5, "output_tokens": 2, "cache_read_input_tokens": 1, "cache_creation_input_tokens": 0},
+            "messages": [{"role": "user", "content": secret}],
+        }
+        conn.execute(
+            "INSERT INTO threads VALUES (?, ?, ?, ?, ?, ?)",
+            ("z1", "2026-08-21T10:00:00Z", "2026-08-21T10:01:30Z", json.dumps([str(self.tmp_path)]), "json", json.dumps(payload)),
+        )
+        conn.commit()
+        conn.close()
+        turns = parse_zed_store(db)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "zed")
+        self.assertEqual(turns[0].active_seconds, 90)
+        self.assertEqual(turns[0].tokens_in, 5)
+        self.assertEqual(turns[0].model, "zed-hosted")
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+    def test_external_provider_is_skipped(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "external.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE threads (id TEXT, created_at TEXT, updated_at TEXT, folder_paths TEXT, data_type TEXT, data TEXT)")
+        payload = {"model": {"provider": "anthropic", "model": "claude"}, "token_usage": {"input_tokens": 5, "output_tokens": 2}}
+        conn.execute("INSERT INTO threads VALUES ('z2', '2026-08-21T10:00:00Z', '2026-08-21T10:01:00Z', NULL, 'json', ?)", (json.dumps(payload),))
+        conn.commit()
+        conn.close()
+        self.assertEqual(parse_zed_store(db), [])
+
+
+    def test_lifetime_without_request_stamps_is_capped(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "lifetime.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE threads (id TEXT, created_at TEXT, updated_at TEXT, folder_paths TEXT, data_type TEXT, data TEXT)")
+        payload = {"model": {"provider": "zed.dev", "model": "zed-hosted"}, "token_usage": {"input_tokens": 5, "output_tokens": 2}}
+        conn.execute(
+            "INSERT INTO threads VALUES ('z3', '2026-08-21T10:00:00Z', '2026-08-21T12:00:00Z', NULL, 'json', ?)",
+            (json.dumps(payload),),
+        )
+        conn.commit()
+        conn.close()
+        turns = parse_zed_store(db)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 120)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_zed_store(self.tmp_path / "nope.db"), [])
 
 
 class IngestRegistryTests(TempDirTestCase):

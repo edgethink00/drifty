@@ -18,14 +18,23 @@ from pathlib import Path
 from typing import Callable
 
 from .agent_sessions import (
+    PROVIDER_AMP,
     PROVIDER_ASIDE,
     PROVIDER_CLAUDE_CODE,
+    PROVIDER_CLINE,
     PROVIDER_CODEX,
+    PROVIDER_COPILOT,
+    PROVIDER_DROID,
     PROVIDER_GEMINI,
+    PROVIDER_GOOSE,
     PROVIDER_HERMES,
     PROVIDER_KIMI,
     PROVIDER_OPENCLAW,
     PROVIDER_OPENCODE,
+    PROVIDER_PI,
+    PROVIDER_ROO,
+    PROVIDER_ZED,
+    DEFAULT_GAP_CEILING_SECONDS,
     UNTERMINATED_TURN_CAP_SECONDS,
     AgentTurn,
     _build_turn,
@@ -899,6 +908,755 @@ def _parse_kimi_file(path: Path) -> list[AgentTurn]:
     )
 
 
+
+def _append_unique_path(found: list[Path], seen: set[Path], path: Path) -> None:
+    if path in seen:
+        return
+    seen.add(path)
+    found.append(path)
+
+
+def _vscode_global_storage_roots() -> list[Path]:
+    home = Path.home()
+    roots = [
+        home / "Library" / "Application Support" / "Code" / "User" / "globalStorage",
+        home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage",
+        home / "Library" / "Application Support" / "Code - Insiders" / "User" / "globalStorage",
+        home / ".config" / "Code" / "User" / "globalStorage",
+        home / ".vscode-server" / "data" / "User" / "globalStorage",
+    ]
+    return [root for root in roots if _existing_dir(root) is not None]
+
+
+def _discover_vscode_task_roots(*extension_ids: str) -> list[Path]:
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for storage in _vscode_global_storage_roots():
+        for extension_id in extension_ids:
+            tasks = storage / extension_id / "tasks"
+            if _existing_dir(tasks) is not None:
+                _append_unique_path(found, seen, tasks)
+    return found
+
+
+def _mapping_model(*values: object) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            nested = value.get("modelId") or value.get("model") or value.get("model_name") or value.get("id")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+    return None
+
+
+def _attr_value(attributes: dict, *keys: str):
+    for key in keys:
+        if key in attributes:
+            return attributes[key]
+    return None
+
+
+def discover_pi() -> list[Path]:
+    homes = [
+        Path.home() / ".pi" / "agent" / "sessions",
+        Path.home() / ".omp" / "agent" / "sessions",
+        Path.home() / ".senpi" / "agent" / "sessions",
+        Path.home() / ".omo" / "agent" / "sessions",
+    ]
+    env_home = os.environ.get("SENPI_CODING_AGENT_DIR") or os.environ.get("PI_CONFIG_DIR")
+    if env_home:
+        homes.insert(0, Path(env_home).expanduser() / "sessions")
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for home in homes:
+        if _existing_dir(home) is not None:
+            _append_unique_path(found, seen, home)
+        profiles = home.parent.parent / "profiles" if home.name == "sessions" else None
+        if profiles is not None and _existing_dir(profiles) is not None:
+            try:
+                for profile in sorted(profiles.glob("*/agent/sessions")):
+                    if profile.is_dir():
+                        _append_unique_path(found, seen, profile)
+            except OSError:
+                continue
+    return found
+
+
+def parse_pi_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.rglob("*.jsonl"))
+        except OSError:
+            return []
+        for file_path in files:
+            turns.extend(_parse_pi_file(file_path))
+        return turns
+    if target.is_file():
+        return _parse_pi_file(target)
+    return []
+
+
+def _parse_pi_file(path: Path) -> list[AgentTurn]:
+    session_key = path.stem
+    cwd_key = None
+    model = None
+    stamps: list = []
+    last_usage = None
+    awaiting_session = True
+    for record in _iter_json_records(path):
+        record_type = record.get("type")
+        if awaiting_session:
+            if record_type == "title":
+                continue
+            if record_type != "session":
+                return []
+            awaiting_session = False
+            session_id = record.get("id")
+            if isinstance(session_id, str) and session_id:
+                session_key = session_id
+            if cwd_key is None:
+                cwd_key = _cwd_key(record.get("cwd"))
+            stamp = parse_epoch(record.get("timestamp"))
+            if stamp is not None:
+                stamps.append(stamp)
+            continue
+        stamp = parse_epoch(record.get("timestamp"))
+        if stamp is not None:
+            stamps.append(stamp)
+        message = record.get("message") if isinstance(record.get("message"), dict) else {}
+        candidate_model = record.get("model") or message.get("model")
+        if isinstance(candidate_model, str) and candidate_model:
+            model = candidate_model
+        usage = message.get("usage") if isinstance(message, dict) else None
+        if usage is None:
+            usage = record.get("usage")
+        if isinstance(usage, dict):
+            last_usage = usage
+        if cwd_key is None:
+            cwd_key = _cwd_key(record.get("cwd") or message.get("cwd"))
+    total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(last_usage)
+    return _turns_from_stamps(
+        PROVIDER_PI, session_key, stamps, cwd_key, model,
+        total_tokens=total, tokens_in=tokens_in, tokens_out=tokens_out,
+        tokens_cache_read=cache_read, tokens_cache_write=cache_write, cost_usd=cost,
+    )
+
+
+def _iter_json_records(path: Path):
+    try:
+        handle = path.open("r", encoding="utf-8", errors="replace")
+    except OSError:
+        return
+    with handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except (TypeError, ValueError):
+                continue
+            if isinstance(record, dict):
+                yield record
+
+
+def discover_droid() -> list[Path]:
+    root = Path.home() / ".factory" / "sessions"
+    if _existing_dir(root) is None:
+        return []
+    return [root]
+
+
+def parse_droid_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.rglob("*.settings.json"))
+        except OSError:
+            return []
+        if files:
+            for file_path in files:
+                turns.extend(_parse_droid_settings(file_path))
+            return turns
+        try:
+            jsonl_files = sorted(target.rglob("*.jsonl"))
+        except OSError:
+            return []
+        for file_path in jsonl_files:
+            turns.extend(_parse_droid_jsonl(file_path, None))
+        return turns
+    if target.name.endswith(".settings.json"):
+        return _parse_droid_settings(target)
+    if target.suffix.lower() == ".jsonl":
+        return _parse_droid_jsonl(target, None)
+    return []
+
+
+def _parse_droid_settings(path: Path) -> list[AgentTurn]:
+    try:
+        payload = _load_json_object(path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return []
+    if payload is None:
+        return []
+    model = _mapping_model(payload.get("model"))
+    usage = payload.get("tokenUsage") or payload.get("token_usage")
+    jsonl_path = path.with_name(path.name.replace(".settings.json", ".jsonl"))
+    if jsonl_path.is_file():
+        turns = _parse_droid_jsonl(jsonl_path, usage, model=model)
+        if turns:
+            return turns
+    start = parse_epoch(payload.get("providerLockTimestamp") or payload.get("updatedAt") or payload.get("createdAt"))
+    if start is None:
+        try:
+            start = parse_epoch(path.stat().st_mtime)
+        except OSError:
+            return []
+    last_seen = None
+    try:
+        last_seen = parse_epoch(path.stat().st_mtime)
+    except OSError:
+        last_seen = None
+    if last_seen is None or last_seen < start:
+        end = start + timedelta(seconds=1)
+    else:
+        end = _cap_unfinished(start, last_seen)
+        if end == start:
+            end = start + timedelta(seconds=1)
+    total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(usage if isinstance(usage, dict) else None)
+    session_key = path.name.replace(".settings.json", "")
+    turn = _build_turn(
+        PROVIDER_DROID, session_key, 0, start, end, None, model, total,
+        tokens_in, tokens_out, cache_read, cache_write, cost,
+    )
+    return [turn] if turn.active_seconds > 0 else []
+
+
+def _parse_droid_jsonl(path: Path, usage: object, model: str | None = None) -> list[AgentTurn]:
+    session_key = path.stem
+    cwd_key = None
+    stamps = []
+    last_usage = usage if isinstance(usage, dict) else None
+    resolved_model = model
+    for record in _iter_json_records(path):
+        stamp = parse_epoch(record.get("timestamp"))
+        if stamp is not None:
+            stamps.append(stamp)
+        if cwd_key is None:
+            cwd_key = _cwd_key(record.get("cwd"))
+        message = record.get("message") if isinstance(record.get("message"), dict) else {}
+        candidate_model = record.get("model") or message.get("model")
+        if isinstance(candidate_model, str) and candidate_model:
+            resolved_model = candidate_model
+        nested_usage = message.get("usage") if isinstance(message, dict) else None
+        if nested_usage is None:
+            nested_usage = record.get("usage") or record.get("tokenUsage")
+        if isinstance(nested_usage, dict):
+            last_usage = nested_usage
+    total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(last_usage)
+    return _turns_from_stamps(
+        PROVIDER_DROID, session_key, stamps, cwd_key, resolved_model,
+        total_tokens=total, tokens_in=tokens_in, tokens_out=tokens_out,
+        tokens_cache_read=cache_read, tokens_cache_write=cache_write, cost_usd=cost,
+    )
+
+
+def discover_amp() -> list[Path]:
+    roots = [
+        Path.home() / ".local" / "share" / "amp" / "threads",
+        Path.home() / "Library" / "Application Support" / "amp" / "threads",
+    ]
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if _existing_dir(root) is not None:
+            _append_unique_path(found, seen, root)
+    return found
+
+
+def parse_amp_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.glob("T-*.json"))
+        except OSError:
+            return []
+        for file_path in files:
+            turns.extend(_parse_amp_file(file_path))
+        return turns
+    if target.is_file():
+        return _parse_amp_file(target)
+    return []
+
+
+def _parse_amp_file(path: Path) -> list[AgentTurn]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, TypeError, ValueError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    session_key = payload.get("id") if isinstance(payload.get("id"), str) and payload.get("id") else path.stem
+    stamps = []
+    last_usage = None
+    model = None
+    cost = None
+    ledger = payload.get("usageLedger") if isinstance(payload.get("usageLedger"), dict) else {}
+    events = ledger.get("events") if isinstance(ledger, dict) else None
+    has_ledger = isinstance(events, list) and any(isinstance(event, dict) for event in events)
+    if has_ledger:
+        for event in events:
+            if not isinstance(event, dict):
+                continue
+            stamp = parse_epoch(event.get("timestamp"))
+            if stamp is not None:
+                stamps.append(stamp)
+            candidate_model = event.get("model")
+            if isinstance(candidate_model, str) and candidate_model:
+                model = candidate_model
+            tokens = event.get("tokens")
+            if isinstance(tokens, dict):
+                last_usage = tokens
+            event_cost = as_float(event.get("credits"))
+            if event_cost is not None:
+                cost = event_cost if cost is None else cost + event_cost
+    else:
+        messages = payload.get("messages")
+        if isinstance(messages, list):
+            for message in messages:
+                if not isinstance(message, dict):
+                    continue
+                usage = message.get("usage")
+                if not isinstance(usage, dict):
+                    continue
+                last_usage = usage
+                stamp = parse_epoch(message.get("timestamp") or usage.get("timestamp"))
+                if stamp is not None:
+                    stamps.append(stamp)
+                candidate_model = usage.get("model") or message.get("model")
+                if isinstance(candidate_model, str) and candidate_model:
+                    model = candidate_model
+                event_cost = as_float(usage.get("credits"))
+                if event_cost is not None:
+                    cost = event_cost if cost is None else cost + event_cost
+    if not stamps:
+        return []
+    total, tokens_in, tokens_out, cache_read, cache_write, mapped_cost = tokens_from_mapping(last_usage)
+    return _turns_from_stamps(
+        PROVIDER_AMP, session_key, stamps, None, model,
+        total_tokens=total, tokens_in=tokens_in, tokens_out=tokens_out,
+        tokens_cache_read=cache_read, tokens_cache_write=cache_write,
+        cost_usd=mapped_cost if mapped_cost is not None else cost,
+        min_active_seconds=1,
+    )
+
+
+def discover_copilot() -> list[Path]:
+    env_path = os.environ.get("COPILOT_OTEL_FILE_EXPORTER_PATH")
+    found: list[Path] = []
+    seen: set[Path] = set()
+    if env_path:
+        candidate = Path(env_path).expanduser()
+        if candidate.is_file() or candidate.is_dir():
+            _append_unique_path(found, seen, candidate)
+    root = Path.home() / ".copilot" / "otel"
+    if _existing_dir(root) is not None:
+        _append_unique_path(found, seen, root)
+    return found
+
+
+def parse_copilot_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.glob("*.jsonl"))
+        except OSError:
+            return []
+        for file_path in files:
+            turns.extend(_parse_copilot_file(file_path))
+        return turns
+    if target.is_file():
+        return _parse_copilot_file(target)
+    return []
+
+
+def _otel_end(record: dict, start: datetime) -> datetime | None:
+    end = parse_epoch(record.get("endTimeUnixNano") or record.get("end_time"))
+    if end is not None:
+        return end
+    nano = as_float(record.get("durationNano"))
+    if nano is not None and nano >= 0:
+        return start + timedelta(seconds=nano / 1_000_000_000.0)
+    millis = as_float(record.get("duration_ms") or record.get("durationMillis"))
+    if millis is not None and millis >= 0:
+        return start + timedelta(milliseconds=millis)
+    return None
+
+
+def _parse_copilot_file(path: Path) -> list[AgentTurn]:
+    turns: list[AgentTurn] = []
+    seen_traces: set[str] = set()
+    for index, record in enumerate(_iter_json_records(path)):
+        attributes = record.get("attributes")
+        if not isinstance(attributes, dict):
+            continue
+        usage = {
+            "input_tokens": _attr_value(attributes, "gen_ai.usage.input_tokens", "input_tokens"),
+            "output_tokens": _attr_value(attributes, "gen_ai.usage.output_tokens", "output_tokens"),
+            "cache_read_input_tokens": _attr_value(
+                attributes,
+                "gen_ai.usage.cache_read.input_tokens",
+                "gen_ai.usage.cache_read_input_tokens",
+            ),
+            "cache_creation_input_tokens": _attr_value(
+                attributes,
+                "gen_ai.usage.cache_creation.input_tokens",
+                "gen_ai.usage.cache_creation_input_tokens",
+            ),
+        }
+        total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(usage)
+        if all(value is None for value in (total, tokens_in, tokens_out, cache_read, cache_write)):
+            continue
+        start = parse_epoch(
+            record.get("startTimeUnixNano")
+            or record.get("timeUnixNano")
+            or attributes.get("start_time")
+            or record.get("timestamp")
+        )
+        if start is None:
+            continue
+        end = _otel_end(record, start)
+        if end is None:
+            end = start + timedelta(seconds=1)
+        if end < start:
+            continue
+        if end == start:
+            end = start + timedelta(seconds=1)
+        session_key = (
+            _attr_value(attributes, "session.id", "gen_ai.conversation.id", "gen_ai.session.id")
+            or record.get("traceId")
+            or path.stem
+        )
+        if not isinstance(session_key, str) or not session_key:
+            session_key = path.stem
+        trace_id = record.get("traceId") or record.get("trace_id") or attributes.get("trace_id")
+        if isinstance(trace_id, str) and trace_id:
+            if trace_id in seen_traces:
+                continue
+            seen_traces.add(trace_id)
+        model = _mapping_model(
+            _attr_value(attributes, "gen_ai.request.model", "gen_ai.response.model", "model")
+        )
+        turn = _build_turn(
+            PROVIDER_COPILOT,
+            str(session_key),
+            _stable_turn_index(session_key, start.isoformat(), index),
+            start, end, None, model, total,
+            tokens_in, tokens_out, cache_read, cache_write, cost,
+        )
+        if turn.active_seconds > 0:
+            turns.append(turn)
+    return turns
+
+
+def discover_cline() -> list[Path]:
+    return _discover_vscode_task_roots(
+        "saoudrizwan.claude-dev",
+        "saoudrizwan.claude-dev-nightly",
+    )
+
+
+def discover_roo() -> list[Path]:
+    return _discover_vscode_task_roots(
+        "rooveterinaryinc.roo-cline",
+        "kilocode.kilo-code",
+    )
+
+
+def parse_cline_store(path: str | Path) -> list[AgentTurn]:
+    return _parse_vscode_task_store(path, PROVIDER_CLINE)
+
+
+def parse_roo_store(path: str | Path) -> list[AgentTurn]:
+    return _parse_vscode_task_store(path, PROVIDER_ROO)
+
+
+def _parse_vscode_task_store(path: str | Path, provider: str) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.rglob("ui_messages.json"))
+        except OSError:
+            return []
+        for file_path in files:
+            turns.extend(_parse_vscode_ui_messages(file_path, provider))
+        return turns
+    if target.is_file():
+        return _parse_vscode_ui_messages(target, provider)
+    return []
+
+
+def _parse_vscode_ui_messages(path: Path, provider: str) -> list[AgentTurn]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, TypeError, ValueError):
+        return []
+    entries = payload if isinstance(payload, list) else []
+    session_key = path.parent.name if path.parent.name else path.stem
+    model = None
+    turns: list[AgentTurn] = []
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") != "say" or entry.get("say") != "api_req_started":
+            continue
+        stamp = parse_epoch(entry.get("ts") or entry.get("timestamp"))
+        if stamp is None:
+            continue
+        raw_text = entry.get("text")
+        usage = _load_json_object(raw_text) if isinstance(raw_text, str) else (raw_text if isinstance(raw_text, dict) else None)
+        if usage is None:
+            continue
+        total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(usage)
+        end = stamp + timedelta(seconds=1)
+        if index + 1 < len(entries) and isinstance(entries[index + 1], dict):
+            nxt = parse_epoch(entries[index + 1].get("ts") or entries[index + 1].get("timestamp"))
+            if nxt is not None and nxt >= stamp:
+                gap = (nxt - stamp).total_seconds()
+                if 0 < gap <= DEFAULT_GAP_CEILING_SECONDS:
+                    end = nxt
+        turn = _build_turn(
+            provider, session_key, index, stamp, end, None, model, total,
+            tokens_in, tokens_out, cache_read, cache_write, cost,
+        )
+        if turn.active_seconds > 0:
+            turns.append(turn)
+    return turns
+
+
+def discover_goose() -> list[Path]:
+    env_root = os.environ.get("GOOSE_PATH_ROOT")
+    homes = []
+    if env_root:
+        homes.append(Path(env_root).expanduser() / "data" / "sessions" / "sessions.db")
+    homes.extend(
+        [
+            Path.home() / ".local" / "share" / "goose" / "sessions" / "sessions.db",
+            Path.home() / "Library" / "Application Support" / "goose" / "sessions" / "sessions.db",
+            Path.home() / ".local" / "share" / "Block" / "goose" / "sessions" / "sessions.db",
+        ]
+    )
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for db in homes:
+        if _existing_file(db) is not None:
+            _append_unique_path(found, seen, db)
+    return found
+
+
+def parse_goose_store(path: str | Path) -> list[AgentTurn]:
+    db_path = Path(path).expanduser()
+    connection = _readonly_sqlite(db_path)
+    if connection is None:
+        return []
+    try:
+        tables = _table_names(connection)
+        if "sessions" not in tables:
+            return []
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(sessions)")}
+        needed = {"id", "created_at"}
+        if not needed.issubset(columns):
+            return []
+        select_cols = [
+            "id",
+            "created_at",
+            "model_config_json" if "model_config_json" in columns else "NULL AS model_config_json",
+            "provider_name" if "provider_name" in columns else "NULL AS provider_name",
+            "total_tokens" if "total_tokens" in columns else "NULL AS total_tokens",
+            "input_tokens" if "input_tokens" in columns else "NULL AS input_tokens",
+            "output_tokens" if "output_tokens" in columns else "NULL AS output_tokens",
+            "accumulated_total_tokens" if "accumulated_total_tokens" in columns else "NULL AS accumulated_total_tokens",
+            "accumulated_input_tokens" if "accumulated_input_tokens" in columns else "NULL AS accumulated_input_tokens",
+            "accumulated_output_tokens" if "accumulated_output_tokens" in columns else "NULL AS accumulated_output_tokens",
+            "updated_at" if "updated_at" in columns else "NULL AS updated_at",
+            "ended_at" if "ended_at" in columns else "NULL AS ended_at",
+            "working_dir" if "working_dir" in columns else ("cwd" if "cwd" in columns else "NULL AS working_dir"),
+        ]
+        try:
+            rows = connection.execute(
+                f"SELECT {', '.join(select_cols)} FROM sessions ORDER BY created_at, id"
+            ).fetchall()
+        except sqlite3.Error:
+            return []
+    finally:
+        connection.close()
+    turns: list[AgentTurn] = []
+    for row in rows:
+        session_id = row["id"]
+        if not isinstance(session_id, str) or not session_id:
+            continue
+        start = parse_epoch(row["created_at"])
+        if start is None:
+            continue
+        finished = parse_epoch(row["ended_at"])
+        if finished is None:
+            updated = parse_epoch(row["updated_at"])
+            if updated is None:
+                continue
+            finished = _cap_unfinished(start, updated)
+        if finished < start:
+            continue
+        model = None
+        config = _load_json_object(row["model_config_json"])
+        if isinstance(config, dict):
+            model = _mapping_model(config.get("model_name"), config.get("model"))
+        tokens_in = row["accumulated_input_tokens"] if isinstance(row["accumulated_input_tokens"], int) else row["input_tokens"]
+        tokens_out = row["accumulated_output_tokens"] if isinstance(row["accumulated_output_tokens"], int) else row["output_tokens"]
+        total = row["accumulated_total_tokens"] if isinstance(row["accumulated_total_tokens"], int) else row["total_tokens"]
+        if not isinstance(tokens_in, int):
+            tokens_in = None
+        if not isinstance(tokens_out, int):
+            tokens_out = None
+        if not isinstance(total, int):
+            parts = [part for part in (tokens_in, tokens_out) if isinstance(part, int)]
+            total = sum(parts) if parts else None
+        turn = _build_turn(
+            PROVIDER_GOOSE, session_id, 0, start, finished, _cwd_key(row["working_dir"]), model, total,
+            tokens_in if isinstance(tokens_in, int) else None,
+            tokens_out if isinstance(tokens_out, int) else None,
+            None, None, None,
+        )
+        if turn.active_seconds > 0:
+            turns.append(turn)
+    return turns
+
+
+def discover_zed() -> list[Path]:
+    homes = [
+        Path.home() / "Library" / "Application Support" / "Zed" / "threads" / "threads.db",
+        Path.home() / ".local" / "share" / "zed" / "threads" / "threads.db",
+    ]
+    xdg = os.environ.get("XDG_DATA_HOME")
+    if xdg:
+        homes.insert(0, Path(xdg).expanduser() / "zed" / "threads" / "threads.db")
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for db in homes:
+        if _existing_file(db) is not None:
+            _append_unique_path(found, seen, db)
+    return found
+
+
+def parse_zed_store(path: str | Path) -> list[AgentTurn]:
+    db_path = Path(path).expanduser()
+    connection = _readonly_sqlite(db_path)
+    if connection is None:
+        return []
+    try:
+        tables = _table_names(connection)
+        if "threads" not in tables:
+            return []
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(threads)")}
+        if "id" not in columns or "updated_at" not in columns:
+            return []
+        created = "created_at" if "created_at" in columns else "NULL"
+        folder = "folder_paths" if "folder_paths" in columns else "NULL"
+        data_type = "data_type" if "data_type" in columns else "'json'"
+        data = "data" if "data" in columns else "NULL"
+        try:
+            rows = connection.execute(
+                f"SELECT id, updated_at, {created} AS created_at, {folder} AS folder_paths, {data_type} AS data_type, {data} AS data FROM threads"
+            ).fetchall()
+        except sqlite3.Error:
+            return []
+    finally:
+        connection.close()
+    turns: list[AgentTurn] = []
+    for row in rows:
+        session_id = row["id"]
+        if not isinstance(session_id, str) or not session_id:
+            continue
+        payload = row["data"]
+        thread = None
+        data_type = row["data_type"] if isinstance(row["data_type"], str) else "json"
+        if isinstance(payload, (bytes, bytearray, str)) and str(data_type).lower() == "json":
+            thread = _load_json_object(payload if not isinstance(payload, bytes) else payload.decode("utf-8", "replace"))
+        if not isinstance(thread, dict):
+            continue
+        if thread.get("imported") is True:
+            continue
+        model_info = thread.get("model") if isinstance(thread.get("model"), dict) else {}
+        provider = model_info.get("provider") if isinstance(model_info, dict) else None
+        if not isinstance(provider, str) or provider.lower() != "zed.dev":
+            continue
+        model = _mapping_model(model_info.get("model") if isinstance(model_info, dict) else None)
+        request_stamps = []
+        usages = []
+        requests = thread.get("requests") if isinstance(thread.get("requests"), list) else []
+        for request in requests:
+            if not isinstance(request, dict):
+                continue
+            stamp = parse_epoch(request.get("timestamp") or request.get("created_at") or request.get("updated_at"))
+            if stamp is not None:
+                request_stamps.append(stamp)
+            if isinstance(request.get("token_usage"), dict):
+                usages.append(request["token_usage"])
+        if not usages and isinstance(thread.get("token_usage"), dict):
+            usages.append(thread["token_usage"])
+        usage_total = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+        for usage in usages:
+            total, tokens_in, tokens_out, cache_read, cache_write, _ = tokens_from_mapping(usage)
+            if tokens_in:
+                usage_total["input_tokens"] += tokens_in
+            if tokens_out:
+                usage_total["output_tokens"] += tokens_out
+            if cache_read:
+                usage_total["cache_read_input_tokens"] += cache_read
+            if cache_write:
+                usage_total["cache_creation_input_tokens"] += cache_write
+            if total and tokens_in is None and tokens_out is None:
+                usage_total["input_tokens"] += total
+        cwd_key = None
+        folders = row["folder_paths"]
+        if isinstance(folders, str) and folders:
+            try:
+                parsed_folders = json.loads(folders)
+            except (TypeError, ValueError):
+                parsed_folders = folders
+            if isinstance(parsed_folders, list) and parsed_folders:
+                cwd_key = _cwd_key(parsed_folders[0])
+            elif isinstance(parsed_folders, str):
+                cwd_key = _cwd_key(parsed_folders)
+        total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(usage_total)
+        if request_stamps:
+            turns.extend(_turns_from_stamps(
+                PROVIDER_ZED, session_id, request_stamps, cwd_key, model,
+                total_tokens=total, tokens_in=tokens_in, tokens_out=tokens_out,
+                tokens_cache_read=cache_read, tokens_cache_write=cache_write, cost_usd=cost,
+            ))
+            continue
+        start = parse_epoch(row["created_at"]) or parse_epoch(row["updated_at"])
+        if start is None:
+            continue
+        end = _cap_unfinished(start, parse_epoch(row["updated_at"]))
+        if end < start:
+            continue
+        turn = _build_turn(
+            PROVIDER_ZED, session_id, 0, start, end, cwd_key, model, total,
+            tokens_in, tokens_out, cache_read, cache_write, cost,
+        )
+        if turn.active_seconds > 0:
+            turns.append(turn)
+    return turns
+
+
 def parse_jsonl_tree(parser: Callable[[Path], list[AgentTurn]], root: Path) -> list[AgentTurn]:
     if root.is_file():
         return parser(root)
@@ -926,4 +1684,12 @@ PROVIDERS: tuple[ProviderAdapter, ...] = (
     ProviderAdapter(PROVIDER_HERMES, discover_hermes, parse_hermes_store, ("*.db",)),
     ProviderAdapter(PROVIDER_OPENCLAW, discover_openclaw, parse_openclaw_store),
     ProviderAdapter(PROVIDER_KIMI, discover_kimi, parse_kimi_store, ("wire.jsonl",)),
+    ProviderAdapter(PROVIDER_PI, discover_pi, parse_pi_store),
+    ProviderAdapter(PROVIDER_DROID, discover_droid, parse_droid_store, ("*.settings.json",)),
+    ProviderAdapter(PROVIDER_AMP, discover_amp, parse_amp_store, ("T-*.json",)),
+    ProviderAdapter(PROVIDER_COPILOT, discover_copilot, parse_copilot_store),
+    ProviderAdapter(PROVIDER_CLINE, discover_cline, parse_cline_store, ("ui_messages.json",)),
+    ProviderAdapter(PROVIDER_ROO, discover_roo, parse_roo_store, ("ui_messages.json",)),
+    ProviderAdapter(PROVIDER_GOOSE, discover_goose, parse_goose_store, ("*.db",)),
+    ProviderAdapter(PROVIDER_ZED, discover_zed, parse_zed_store, ("*.db",)),
 )

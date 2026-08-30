@@ -28,6 +28,14 @@ PROVIDER_GEMINI = "gemini"
 PROVIDER_HERMES = "hermes"
 PROVIDER_OPENCLAW = "openclaw"
 PROVIDER_KIMI = "kimi"
+PROVIDER_PI = "pi"
+PROVIDER_DROID = "droid"
+PROVIDER_AMP = "amp"
+PROVIDER_COPILOT = "copilot"
+PROVIDER_CLINE = "cline"
+PROVIDER_ROO = "roo"
+PROVIDER_GOOSE = "goose"
+PROVIDER_ZED = "zed"
 
 #: Turns separated by more than this are treated as idle, not agent time.
 DEFAULT_GAP_CEILING_SECONDS = 300
@@ -78,7 +86,9 @@ def parse_epoch(value: object) -> datetime | None:
         return None
     if isinstance(value, (int, float)):
         timestamp = float(value)
-        if timestamp > 1e11:
+        if timestamp > 1e17:
+            timestamp /= 1_000_000_000.0
+        elif timestamp > 1e11:
             timestamp /= 1000.0
         try:
             return datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -128,6 +138,8 @@ def tokens_from_mapping(usage: object) -> tuple[int | None, int | None, int | No
     tokens_in = _first_int(
         usage.get("input"),
         usage.get("input_tokens"),
+        usage.get("inputTokens"),
+        usage.get("tokensIn"),
         usage.get("prompt"),
         usage.get("prompt_tokens"),
         usage.get("promptTokenCount"),
@@ -135,6 +147,8 @@ def tokens_from_mapping(usage: object) -> tuple[int | None, int | None, int | No
     tokens_out = _first_int(
         usage.get("output"),
         usage.get("output_tokens"),
+        usage.get("outputTokens"),
+        usage.get("tokensOut"),
         usage.get("candidates"),
         usage.get("completion_tokens"),
         usage.get("candidatesTokenCount"),
@@ -143,6 +157,9 @@ def tokens_from_mapping(usage: object) -> tuple[int | None, int | None, int | No
         usage.get("cacheRead"),
         usage.get("cache_read"),
         usage.get("cache_read_input_tokens"),
+        usage.get("cacheReadTokens"),
+        usage.get("cacheReadInputTokens"),
+        usage.get("cacheReads"),
         usage.get("cached_input_tokens"),
         usage.get("cached"),
         usage.get("cached_tokens"),
@@ -154,6 +171,9 @@ def tokens_from_mapping(usage: object) -> tuple[int | None, int | None, int | No
         usage.get("cache_write_input_tokens"),
         usage.get("cache_creation"),
         usage.get("cache_creation_input_tokens"),
+        usage.get("cacheCreationTokens"),
+        usage.get("cacheCreationInputTokens"),
+        usage.get("cacheWrites"),
         usage.get("cache_creation"),
     )
     cache = usage.get("cache")
@@ -387,6 +407,7 @@ def _turns_from_stamps(
     tokens_cache_read: int | None = None,
     tokens_cache_write: int | None = None,
     cost_usd: float | None = None,
+    min_active_seconds: int = 0,
 ) -> list[AgentTurn]:
     if not stamps:
         return []
@@ -403,6 +424,8 @@ def _turns_from_stamps(
     last_index = len(segments) - 1
     turns: list[AgentTurn] = []
     for index, (segment_start, segment_end) in enumerate(segments):
+        if segment_end == segment_start and min_active_seconds > 0:
+            segment_end = segment_start + timedelta(seconds=min_active_seconds)
         attach = index == last_index
         turns.append(
             _build_turn(

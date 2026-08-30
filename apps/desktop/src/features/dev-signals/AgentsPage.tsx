@@ -98,6 +98,14 @@ const AGENT_TOOLS: Record<string, { name: string; color: string }> = {
   hermes: { name: "Hermes", color: "#c45c26" },
   openclaw: { name: "OpenClaw", color: "#3b82f6" },
   kimi: { name: "Kimi", color: "#111111" },
+  pi: { name: "Pi", color: "#0f766e" },
+  droid: { name: "Droid", color: "#ea580c" },
+  amp: { name: "Amp", color: "#7c3aed" },
+  copilot: { name: "Copilot CLI", color: "#24292f" },
+  cline: { name: "Cline", color: "#2563eb" },
+  roo: { name: "Roo / Kilo", color: "#db2777" },
+  goose: { name: "Goose", color: "#ca8a04" },
+  zed: { name: "Zed", color: "#84cc16" },
 };
 
 function agentToolName(provider: string): string {
