@@ -106,6 +106,13 @@ describe("DevSettingsSection", () => {
     expect(props.onTeamsBetaChange).toHaveBeenCalledWith(true);
   });
 
+  it("keeps the Korean localization preview behind the Dev toggle", () => {
+    renderProductionDevSettings();
+
+    expect(screen.getByRole("switch", { name: "Toggle Korean localization preview" })).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: "Display language" })).toBeNull();
+  });
+
   it("keeps the detailed Pet Mode Lab in Dev while the pet itself ships elsewhere", () => {
     renderProductionDevSettings();
     expect(screen.getByRole("group", { name: "Pet Mode Lab" })).toBeTruthy();

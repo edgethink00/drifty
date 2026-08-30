@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   LocalizationProvider,
@@ -23,19 +23,12 @@ function WelcomeHarness() {
   );
 }
 
-describe("WelcomeStep language choice", () => {
-  it("lets a new user opt into Korean beta from the first screen", () => {
+describe("WelcomeStep language policy", () => {
+  it("keeps the first onboarding screen English-only", () => {
     render(<WelcomeHarness />);
 
     expect(screen.getByText("Welcome to drifty.")).toBeTruthy();
-    const languageGroup = screen.getByRole("radiogroup", { name: "Display language" });
-    const koreanOption = screen.getByRole("radio", { name: "한국어 Beta" });
-    expect(koreanOption.getAttribute("aria-checked")).toBe("false");
-
-    fireEvent.click(koreanOption);
-
-    expect(screen.getByText("Drifty에 오신 것을 환영합니다.")).toBeTruthy();
-    expect(languageGroup.getAttribute("aria-label")).toBe("표시 언어");
-    expect(screen.getByRole("radio", { name: "한국어 베타" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+    expect(screen.queryByRole("radio", { name: /한국어/i })).toBeNull();
   });
 });

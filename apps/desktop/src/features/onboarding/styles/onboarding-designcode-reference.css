@@ -183,54 +183,6 @@
   animation: dcOnbRise 0.55s 0.48s both;
 }
 
-.dc-onb-welcome__language {
-  display: inline-flex;
-  gap: 3px;
-  margin-top: 4px;
-  padding: 3px;
-  border: 1px solid color-mix(in srgb, var(--dc-onb-soft) 30%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--dc-onb-soft) 8%, transparent);
-  animation: dcOnbRise 0.55s 0.48s both;
-}
-
-.dc-onb-welcome__language button {
-  min-height: 30px;
-  padding: 5px 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--dc-onb-muted);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.dc-onb-welcome__language button:hover {
-  color: var(--dc-onb-text);
-}
-
-.dc-onb-welcome__language button:focus-visible {
-  outline: 2px solid var(--dc-onb-accent);
-  outline-offset: 1px;
-}
-
-.dc-onb-welcome__language button.is-active {
-  background: var(--dc-onb-surface);
-  color: var(--dc-onb-text);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--dc-onb-text) 10%, transparent);
-}
-
-.dc-onb-welcome__language button span {
-  margin-left: 2px;
-  color: var(--dc-onb-soft);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-
 
 
 
@@ -2085,7 +2037,6 @@
   .dc-onb-welcome__icon,
   .dc-onb-welcome__headline,
   .dc-onb-welcome__body,
-  .dc-onb-welcome__language,
   .dc-onb-cat-stage__mover,
   .dc-onb-advanced-cards,
   .dc-onb-spinner,
