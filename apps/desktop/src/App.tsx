@@ -306,7 +306,7 @@ import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze,
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
 import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
-import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildWatcherSnapshot, buildWatcherSnapshotFromCurrent, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, showDueDriftWatcherPeek } from "./features/companion/watcherData";
+import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
 import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
@@ -1951,6 +1951,8 @@ export default function App() {
   const breakRecoveryAssessmentRef = useRef<DriftAlarmBreakSnooze | null>(null);
   const autoStartAttemptedRef = useRef(false);
   const watcherSnapshotRef = useRef<WatcherSnapshot>(getDefaultWatcherSnapshot());
+  const petModeLiveObservedAtMsRef = useRef(0);
+  const petModeLiveSnapshotRef = useRef(getDefaultWatcherSnapshot());
   const watcherEventRef = useRef<WatcherPeekEvent | null>(null);
   const watcherRequestInFlightRef = useRef(false);
   const watcherRecoveryTimeoutRef = useRef(0);
@@ -4224,6 +4226,24 @@ export default function App() {
     const liveSegments = input.liveSegments;
     const evaluationToday = currentDriftAlarmDay();
     const baseSegments = driftAlarmBaseSegmentsRef.current;
+    if (petModeActive && alarmSnapshot) {
+      const observedAtMs = snapshotObservedAtMs(alarmSnapshot);
+      if (shouldReplacePetModeLiveSnapshot(observedAtMs, petModeLiveObservedAtMsRef.current) && observedAtMs !== null) {
+        petModeLiveObservedAtMsRef.current = observedAtMs;
+        const livePetSnapshot = buildLiveWatcherSnapshot(
+          alarmSnapshot,
+          baseSegments,
+          {
+            includeAiClassifications: showAiClassificationImpact,
+            rules: classificationRules,
+          },
+        );
+        petModeLiveSnapshotRef.current = livePetSnapshot;
+        void updateNativePetMode(buildPetModeSnapshot(livePetSnapshot)).catch((nextError) => {
+          console.warn("Failed to update Pet Mode snapshot", nextError);
+        });
+      }
+    }
     const evaluation = buildDriftAlarmDebugEvaluationSummary({
       selectedDay: selectedDayRef.current,
       today: evaluationToday,
@@ -5756,11 +5776,29 @@ export default function App() {
       neutral: (selectedDayProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0) / total,
     };
   }, [selectedDayProductivityTotals]);
+  const petModeLiveSnapshot = useMemo(() => {
+    const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
+    if (!currentSnapshot) return petModeLiveSnapshotRef.current;
+    const observedAtMs = snapshotObservedAtMs(currentSnapshot);
+    if (!shouldReplacePetModeLiveSnapshot(observedAtMs, petModeLiveObservedAtMsRef.current)) {
+      return petModeLiveSnapshotRef.current;
+    }
+    if (observedAtMs !== null) petModeLiveObservedAtMsRef.current = observedAtMs;
+    return buildLiveWatcherSnapshot(
+      currentSnapshot,
+      todaySegments,
+      {
+        includeAiClassifications: showAiClassificationImpact,
+        rules: classificationRules,
+      },
+    );
+  }, [classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay]);
   const watcherSnapshot = useMemo(() => buildWatcherSnapshot(segments, selectedDayClassificationOptions), [selectedDayClassificationOptions, segments]);
   useEffect(() => { watcherSnapshotRef.current = watcherSnapshot; }, [watcherSnapshot]);
+  useEffect(() => { petModeLiveSnapshotRef.current = petModeLiveSnapshot; }, [petModeLiveSnapshot]);
   useEffect(() => {
     if (!isTauriRuntime()) return;
-    const snapshot = petModeActive ? buildPetModeSnapshot(watcherSnapshot) : null;
+    const snapshot = petModeActive ? buildPetModeSnapshot(petModeLiveSnapshotRef.current) : null;
     const revealRevision = petModeRevealRevision;
     const forceReveal = petModeActive
       && revealRevision > handledPetModeRevealRevisionRef.current
@@ -5811,10 +5849,10 @@ export default function App() {
   }, [isDevModeActive, petModeFloorHomePt]);
   useEffect(() => {
     if (!petModeActive || !isTauriRuntime()) return;
-    void updateNativePetMode(buildPetModeSnapshot(watcherSnapshot)).catch((nextError) => {
+    void updateNativePetMode(buildPetModeSnapshot(petModeLiveSnapshot)).catch((nextError) => {
       console.warn("Failed to update Pet Mode snapshot", nextError);
     });
-  }, [petModeActive, watcherSnapshot]);
+  }, [petModeActive, petModeLiveSnapshot]);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -5879,17 +5917,22 @@ export default function App() {
   const companionTodaySnapshot = useMemo(() => {
     const todaySegments = selectedDay === todayDay ? segments : driftAlarmBaseSegmentsRef.current;
     if (currentSnapshot) {
-      return buildWatcherSnapshotFromCurrent(
+      return buildLiveWatcherSnapshot(
         currentSnapshot,
         todaySegments,
-        null,
-        selectedDayClassificationOptions,
+        {
+          includeAiClassifications: showAiClassificationImpact,
+          rules: classificationRules,
+        },
       );
     }
     return selectedDay === todayDay
       ? watcherSnapshot
-      : buildWatcherSnapshot(todaySegments, selectedDayClassificationOptions);
-  }, [currentSnapshot, segments, selectedDay, selectedDayClassificationOptions, todayDay, watcherSnapshot]);
+      : buildWatcherSnapshot(todaySegments, {
+        includeAiClassifications: showAiClassificationImpact,
+        rules: classificationRules,
+      });
+  }, [classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot]);
 
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;

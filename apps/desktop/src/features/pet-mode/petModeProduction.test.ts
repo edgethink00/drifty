@@ -155,6 +155,22 @@ describe("pet promoted out of Dev", () => {
     expect(devSettings).toContain("Pet Mode Lab");
     expect(devSettings).not.toContain("PetCoatPicker");
   });
+
+  it("sits or chases from the live frontmost app, not the dashboard day's last row", () => {
+    // Observed 2026-08-30: the dashboard was on 2026-08-29 while YouTube was
+    // live-drifting. The pet sat on that historical focus row and skipped the
+    // chase, so Automatic close ran without the cat.
+    expect(app).toContain("const petModeLiveSnapshot = useMemo(() => {");
+    expect(app).toContain("buildLiveWatcherSnapshot(");
+    expect(app).toContain("buildPetModeSnapshot(petModeLiveSnapshot)");
+    expect(app).not.toContain("buildPetModeSnapshot(watcherSnapshot)");
+    const evalBlock = app.slice(app.indexOf("const evaluateDriftAlarm = useCallback"));
+    expect(evalBlock.slice(0, 1600)).toContain("if (petModeActive && alarmSnapshot)");
+    expect(evalBlock.slice(0, 1600)).toContain("petModeLiveObservedAtMsRef.current");
+    expect(evalBlock.slice(0, 1600)).toContain("updateNativePetMode(buildPetModeSnapshot(livePetSnapshot))");
+    expect(evalBlock.slice(0, 1800)).toContain("petModeLiveSnapshotRef.current = livePetSnapshot");
+    expect(evalBlock.slice(0, 1800)).toContain("shouldReplacePetModeLiveSnapshot");
+  });
 });
 
 describe("pet symbol orientation", () => {

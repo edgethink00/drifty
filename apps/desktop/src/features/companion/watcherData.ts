@@ -115,6 +115,46 @@ export async function resolveWatcherSnapshot(segments: ActivitySegment[], driftR
   }
 }
 
+/**
+ * Classify the frontmost app for overlay posture.
+ *
+ * Duration and today's totals still come from the supplied day segments, but
+ * the productivity label that sits or chases the pet must come from `current`
+ * itself. Mixing the dashboard day's fallback candidates here is how a
+ * historical focus row can keep the cat seated during a live drift.
+ */
+export function buildLiveWatcherSnapshot(
+  current: CurrentActivitySnapshot,
+  todaySegments: ActivitySegment[],
+  classificationOptions?: ClassificationOptions,
+  driftReminderElapsedSeconds: number | null = null,
+): WatcherSnapshot {
+  const liveIdentity = currentSnapshotToSegment(current, 0);
+  return buildWatcherSnapshotFromCurrent(
+    current,
+    todaySegments,
+    driftReminderElapsedSeconds,
+    {
+      includeAiClassifications: classificationOptions?.includeAiClassifications,
+      rules: classificationOptions?.rules,
+      fallbackCandidates: [liveIdentity],
+    },
+  );
+}
+
+export function snapshotObservedAtMs(snapshot: { readonly observedAt?: string | null } | null | undefined): number | null {
+  if (!snapshot?.observedAt) return null;
+  const observedAtMs = Date.parse(snapshot.observedAt);
+  return Number.isFinite(observedAtMs) ? observedAtMs : null;
+}
+
+export function shouldReplacePetModeLiveSnapshot(
+  incomingObservedAtMs: number | null,
+  currentObservedAtMs: number,
+): boolean {
+  return incomingObservedAtMs !== null && incomingObservedAtMs >= currentObservedAtMs;
+}
+
 export function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segments: ActivitySegment[], driftReminderElapsedSeconds: number | null = null, classificationOptions?: ClassificationOptions): WatcherSnapshot {
   const timing = getCurrentSnapshotTiming(current, segments);
   const segment = currentSnapshotToSegment(current, timing.durationSeconds);
