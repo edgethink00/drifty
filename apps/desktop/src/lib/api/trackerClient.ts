@@ -366,6 +366,10 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_get_dev_signals", { ...query });
     return result ?? null;
   },
+  async getAgentConcurrencyPeak(query: TimelineQuery) {
+    const result = await safeInvoke("tracker_get_agent_concurrency_peak", { ...query });
+    return result ?? null;
+  },
   async getDevRepos() {
     const result = await safeInvoke("tracker_get_dev_repos");
     return result?.repos ?? [];

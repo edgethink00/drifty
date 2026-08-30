@@ -3,11 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   buildAgentsDayModel,
   buildAgentsGridCells,
+  buildAgentsIntensityBands,
   buildAgentsTimelineSegments,
   buildAgentsWeekModel,
   agentMinutesByRepo,
-  agentsIntensityBandFor,
   gridRepoLegend,
+  lockAgentsIntensityPeak,
   visibleAgentsIntensityBands,
   weekdayLabelFor,
   type AgentsDaySource,
@@ -179,27 +180,91 @@ describe("buildAgentsGridCells", () => {
 });
 
 describe("agent intensity bands", () => {
-  it("keeps stable logarithmic meaning through 50+ concurrent turns", () => {
-    expect([1, 4, 5, 19, 49, 50].map((value) => agentsIntensityBandFor(value).label)).toEqual([
+  it("keeps ×1 alone and grows later slots toward the personal peak", () => {
+    expect(buildAgentsIntensityBands(4).map((band) => band.label)).toEqual(["×1", "×2", "×3", "×4"]);
+    expect(buildAgentsIntensityBands(9).map((band) => band.label)).toEqual([
+      "×1",
+      "×2",
+      "×3",
+      "×4",
+      "×5–6",
+      "×7–9",
+    ]);
+    expect(buildAgentsIntensityBands(12).map((band) => band.label)).toEqual([
+      "×1",
+      "×2",
+      "×3",
+      "×4–5",
+      "×6–8",
+      "×9–12",
+    ]);
+    expect(buildAgentsIntensityBands(25).map((band) => band.label)).toEqual([
+      "×1",
+      "×2–3",
+      "×4–5",
+      "×6–9",
+      "×10–15",
+      "×16–25",
+    ]);
+    expect(buildAgentsIntensityBands(50).map((band) => band.label)).toEqual([
       "×1",
       "×2–4",
-      "×5–9",
-      "×10–19",
-      "×20–49",
-      "×50+",
+      "×5–8",
+      "×9–16",
+      "×17–29",
+      "×30–50",
     ]);
   });
 
-  it("expands the legend only as far as the observed peak", () => {
-    expect(visibleAgentsIntensityBands(0)).toEqual([]);
-    expect(visibleAgentsIntensityBands(11).map((band) => band.label)).toEqual([
+  it("keeps the personal legend even when the visible day is quieter", () => {
+    const bands = buildAgentsIntensityBands(9);
+    expect(visibleAgentsIntensityBands(0, bands)).toEqual([]);
+    expect(visibleAgentsIntensityBands(1, bands).map((band) => band.label)).toEqual([
       "×1",
-      "×2–4",
-      "×5–9",
-      "×10–19",
+      "×2",
+      "×3",
+      "×4",
+      "×5–6",
+      "×7–9",
     ]);
-    const highPeakBands = visibleAgentsIntensityBands(50);
-    expect(highPeakBands[highPeakBands.length - 1]?.label).toBe("×50+");
+  });
+
+  it("opens the last slot only when live concurrency outruns the locked peak", () => {
+    expect(buildAgentsIntensityBands(9, { overflow: true }).map((band) => band.label)).toEqual([
+      "×1",
+      "×2",
+      "×3",
+      "×4",
+      "×5–6",
+      "×7+",
+    ]);
+  });
+
+  it("raises the locked peak immediately and shrinks only across a later day", () => {
+    expect(lockAgentsIntensityPeak({
+      previousPeak: 9,
+      observedPeak: 12,
+      previousLockedOnDay: "2026-08-31",
+      todayDay: "2026-08-31",
+    })).toEqual({ peak: 12, lockedOnDay: "2026-08-31" });
+    expect(lockAgentsIntensityPeak({
+      previousPeak: 12,
+      observedPeak: 8,
+      previousLockedOnDay: "2026-08-31",
+      todayDay: "2026-08-31",
+    })).toEqual({ peak: 12, lockedOnDay: "2026-08-31" });
+    expect(lockAgentsIntensityPeak({
+      previousPeak: 12,
+      observedPeak: 9,
+      previousLockedOnDay: "2026-08-31",
+      todayDay: "2026-09-01",
+    })).toEqual({ peak: 12, lockedOnDay: "2026-09-01" });
+    expect(lockAgentsIntensityPeak({
+      previousPeak: 12,
+      observedPeak: 8,
+      previousLockedOnDay: "2026-08-31",
+      todayDay: "2026-09-01",
+    })).toEqual({ peak: 8, lockedOnDay: "2026-09-01" });
   });
 });
 
@@ -251,7 +316,16 @@ describe("buildAgentsTimelineSegments", () => {
       commits: [],
     };
     expect(buildAgentsTimelineSegments(highConcurrencySource, "intensity")).toMatchObject([
-      { start: 200, end: 210, peakConcurrency: 50, intensityBand: { label: "×50+" } },
+      { start: 200, end: 210, peakConcurrency: 50, intensityBand: { label: "×30–50" } },
+    ]);
+    expect(buildAgentsTimelineSegments(
+      highConcurrencySource,
+      "intensity",
+      [],
+      5,
+      buildAgentsIntensityBands(9),
+    )).toMatchObject([
+      { start: 200, end: 210, peakConcurrency: 50, intensityBand: { label: "×7–9" } },
     ]);
   });
 

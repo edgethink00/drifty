@@ -54,7 +54,7 @@ from app.tracker.engagement_policy import (
     EngagementDecision,
     decide_engagement,
 )
-from app.tracker.dev_signals.aggregation import summarize_agent_time
+from app.tracker.dev_signals.aggregation import peak_concurrency, summarize_agent_time
 from app.tracker.dev_signals.discovery import discover_repositories as discover_dev_repositories
 from app.tracker.dev_signals.ingest import (
     DEFAULT_BACKFILL_DAYS as DEV_SIGNALS_BACKFILL_DAYS,
@@ -1350,6 +1350,17 @@ def get_dev_signals(payload: dict):
     )
 
 
+def get_agent_concurrency_peak(payload: dict):
+    """Highest concurrent agent-turn count in a date range.
+
+    Your Agents uses this to lock a personal intensity scale without pulling
+    every turn body for the lookback window.
+    """
+    start, end = day_bounds(payload)
+    agent_events = database().fetch_agent_session_events(start, end)
+    return response(True, {"peak": peak_concurrency(agent_events)})
+
+
 def get_projects(payload: dict):
     return response(True, database().get_projects())
 
@@ -1836,6 +1847,7 @@ COMMANDS = {
     "delete_dev_repo": delete_dev_repo,
     "sync_dev_signals": sync_dev_signals,
     "get_dev_signals": get_dev_signals,
+    "get_agent_concurrency_peak": get_agent_concurrency_peak,
     "save_project_anchors": save_project_anchors,
     "delete_project_anchor": delete_project_anchor,
     "save_project_assignments": save_project_assignments,

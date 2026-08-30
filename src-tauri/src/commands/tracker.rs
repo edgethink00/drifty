@@ -872,6 +872,24 @@ pub async fn tracker_get_dev_signals(
 }
 
 #[tauri::command]
+pub async fn tracker_get_agent_concurrency_peak(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    day: Option<String>,
+    start: Option<String>,
+    end: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_agent_concurrency_peak(&app, day, start, end)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_sync_dev_signals(
     app: AppHandle,
     controller: State<'_, TrackerController>,

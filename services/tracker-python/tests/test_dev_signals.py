@@ -16,6 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app import main as tracker_main
 from app.storage.db import TrackerDatabase
 from app.tracker.dev_signals.aggregation import (
     merge_spans,
@@ -477,6 +478,49 @@ class StorageTests(GitRepoTestCase):
         plain.mkdir()
         self.assertIsNone(register_repo(database, str(plain)))
         self.assertEqual(database.list_dev_repos(), [])
+
+    def test_agent_concurrency_peak_command_returns_overlap_count(self) -> None:
+        database = self._database()
+        database.save_agent_session_events(
+            [
+                {
+                    "provider": "codex",
+                    "sessionKey": "s1",
+                    "turnIndex": 0,
+                    "startedAt": "2026-08-21T10:00:00+00:00",
+                    "endedAt": "2026-08-21T10:10:00+00:00",
+                    "activeSeconds": 600,
+                    "cwdKey": "k",
+                    "model": "m",
+                    "totalTokens": 10,
+                },
+                {
+                    "provider": "aside",
+                    "sessionKey": "s2",
+                    "turnIndex": 0,
+                    "startedAt": "2026-08-21T10:05:00+00:00",
+                    "endedAt": "2026-08-21T10:15:00+00:00",
+                    "activeSeconds": 600,
+                    "cwdKey": "k",
+                    "model": "m",
+                    "totalTokens": 10,
+                },
+            ]
+        )
+        previous_path = tracker_main.DB_PATH
+        previous_cache = tracker_main._DATABASE_CACHE
+        tracker_main.DB_PATH = self.tmp_path / "tracker.sqlite3"
+        tracker_main._DATABASE_CACHE = None
+        try:
+            result = tracker_main.get_agent_concurrency_peak({
+                "start": "2026-08-21T00:00:00",
+                "end": "2026-08-21T23:59:59",
+            })
+        finally:
+            tracker_main.DB_PATH = previous_path
+            tracker_main._DATABASE_CACHE = previous_cache
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["data"]["peak"], 2)
 
 
 class CommitTimestampTests(GitRepoTestCase):

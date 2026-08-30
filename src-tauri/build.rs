@@ -58,6 +58,7 @@ fn main() {
             "tracker_refresh_non_ai_classifications",
             "tracker_get_classification_metrics",
             "tracker_get_dev_signals",
+            "tracker_get_agent_concurrency_peak",
             "tracker_get_dev_repos",
             "tracker_sync_dev_signals",
             "tracker_get_team_projects",

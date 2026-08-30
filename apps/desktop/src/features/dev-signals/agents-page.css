@@ -90,14 +90,11 @@
     0 0 0 4px var(--accent);
 }
 
-:root[data-theme="light"] .agents-week-calendar__event[data-agent-intensity-band="x50+"] {
+.agents-week-calendar__event[data-agent-intensity-contrast="light"] {
   --agent-event-foreground: #ffffff;
 }
 
-:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x5-9"],
-:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x10-19"],
-:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x20-49"],
-:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-band="x50+"] {
+:root[data-theme="dark"] .agents-week-calendar__event[data-agent-intensity-contrast="light"] {
   --agent-event-foreground: var(--canvas);
 }
 

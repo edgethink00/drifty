@@ -416,6 +416,20 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_dev_signals", build_period_payload(day, start, end))
     }
 
+    pub fn get_agent_concurrency_peak(
+        &self,
+        app: &AppHandle,
+        day: Option<String>,
+        start: Option<String>,
+        end: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_agent_concurrency_peak",
+            build_period_payload(day, start, end),
+        )
+    }
+
     pub fn get_dev_repos(&self, app: &AppHandle) -> Result<Value, TrackerError> {
         self.invoke::<Value>(app, "get_dev_repos", json!({}))
     }
@@ -967,6 +981,7 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "get_projects"
         | "get_project_assignments"
         | "get_dev_signals"
+        | "get_agent_concurrency_peak"
         | "get_dev_repos"
         | "get_project_window_assignments"
         | "get_team_projects"
@@ -1882,6 +1897,7 @@ mod tests {
             "get_projects",
             "get_project_assignments",
             "get_dev_signals",
+            "get_agent_concurrency_peak",
             "get_dev_repos",
             "get_project_window_assignments",
             "get_team_projects",

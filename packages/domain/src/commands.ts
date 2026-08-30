@@ -34,6 +34,7 @@ export const trackerInvokeCommands = [
   "tracker_get_classification_metrics",
   "tracker_get_projects",
   "tracker_get_dev_signals",
+  "tracker_get_agent_concurrency_peak",
   "tracker_get_dev_repos",
   "tracker_sync_dev_signals",
   "tracker_save_project",
@@ -125,6 +126,7 @@ export type TrackerCommandMap = {
   tracker_get_classification_metrics: { args: { query: ClassificationQuery }; result: ClassificationMetrics };
   tracker_get_projects: { args: undefined; result: Project[] };
   tracker_get_dev_signals: { args: DevSignalsQueryArgs; result: DevSignalsDayPayload };
+  tracker_get_agent_concurrency_peak: { args: DevSignalsQueryArgs; result: AgentConcurrencyPeakPayload };
   tracker_get_dev_repos: { args: undefined; result: { repos: DevRepoRecord[] } };
   tracker_sync_dev_signals: { args: DevSignalsSyncArgs; result: DevSignalsSyncResult };
   tracker_save_project: { args: { query: { input: ProjectInput } }; result: Project };
@@ -252,6 +254,10 @@ export type DevSignalsQueryArgs = {
 export type DevSignalsSyncArgs = {
   backfillDays?: number;
 };
+
+export interface AgentConcurrencyPeakPayload {
+  peak: number;
+}
 
 export interface DevCommitEvent {
   repoKey: string;
@@ -827,6 +833,7 @@ export interface TrackerApi {
   getClassificationMetrics(query: ClassificationQuery): Promise<ClassificationMetrics>;
   getProjects(): Promise<Project[]>;
   getDevSignals(query: TimelineQuery): Promise<DevSignalsDayPayload | null>;
+  getAgentConcurrencyPeak(query: TimelineQuery): Promise<AgentConcurrencyPeakPayload | null>;
   getDevRepos(): Promise<DevRepoRecord[]>;
   syncDevSignals(backfillDays?: number): Promise<DevSignalsSyncResult | null>;
   saveProject(input: ProjectInput): Promise<Project>;

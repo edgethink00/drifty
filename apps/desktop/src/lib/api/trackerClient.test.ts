@@ -53,6 +53,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_get_classification_metrics",
   "tracker_get_projects",
   "tracker_get_dev_signals",
+  "tracker_get_agent_concurrency_peak",
   "tracker_get_dev_repos",
   "tracker_sync_dev_signals",
   "tracker_save_project",

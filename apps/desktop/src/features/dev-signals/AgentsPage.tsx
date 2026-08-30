@@ -63,6 +63,7 @@ import {
 import type { AgentsDaySource } from "./agentsPageModel";
 import { formatClock, formatHours } from "./devSignalsModel";
 import { useAgentsData } from "./useAgentsData";
+import { useAgentsIntensityScale } from "./useAgentsIntensityScale";
 import { AGENTS_UNKNOWN_COLOR, agentsSeriesColors } from "./agentsPalette";
 import {
   AgentsBreakdownComposed,
@@ -144,14 +145,18 @@ function AgentToolGlyph({ provider, fallbackName, size }: { readonly provider: s
   );
 }
 
-/* Concurrency → stable logarithmic tone. The absolute bands keep a color's
-   meaning comparable across quiet days and 50-agent peaks. */
-function intensityColor(level: number): string {
-  return intensityBandColor(agentsIntensityBandFor(level));
+/* Concurrency → personal intensity tone. The same slot is one color across
+   Day and Week; labels keep the actual concurrent-turn count. */
+function intensityColor(level: number, bands: readonly AgentsIntensityBand[]): string {
+  return intensityBandColor(agentsIntensityBandFor(level, bands));
 }
 
 function intensityBandColor(band: AgentsIntensityBand): string {
   return `color-mix(in srgb, var(--productivity-focus) ${band.tonePercent}%, var(--flow-chart-plot-surface))`;
+}
+
+function intensityContrast(band: AgentsIntensityBand): "light" | "dark" {
+  return band.tonePercent >= 70 ? "light" : "dark";
 }
 
 function rankedAgentRepos(sources: readonly AgentsDaySource[]): string[] {
@@ -266,11 +271,12 @@ function AgentsTimelineHead({ colorMode, intervalMinutes, legendEntries, onColor
  * The 24-hour timeline as a flow-chart-card: same axis row, same gutter token,
  * same card chrome (top border, spacing) the day view's chart uses.
  */
-function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, onColorModeChange, onIntervalChange }: {
+function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensityBands, onColorModeChange, onIntervalChange }: {
   readonly model: AgentsDayModel;
   readonly source: AgentsDaySource;
   readonly colorMode: AgentsGridColorMode;
   readonly intervalMinutes: FlowIntervalMinutes;
+  readonly intensityBands: readonly AgentsIntensityBand[];
   readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
   readonly onIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
 }) {
@@ -295,7 +301,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, onColorM
     for (const cell of gridCells.values()) {
       const color = colorMode === "repo"
         ? (cell.topRepo ? repoColors.get(cell.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
-        : intensityColor(cell.concurrency);
+        : intensityColor(cell.concurrency, intensityBands);
       byCell.set(`${cell.minuteOfDay}`, {
         id: `agent-${cell.minuteOfDay}`,
         day: model.day,
@@ -313,7 +319,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, onColorM
       } as FlowBlock);
     }
     return byCell;
-  }, [gridCells, colorMode, repoColors, model.day, intervalMinutes]);
+  }, [gridCells, colorMode, intensityBands, repoColors, model.day, intervalMinutes]);
   const gridBlockList = useMemo(() => Array.from(gridBlocks.values()), [gridBlocks]);
   const hoverGroupsByCell = useMemo(
     () => buildFlowBlockHoverGroups(gridBlockList, intervalMinutes, 0),
@@ -325,12 +331,12 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, onColorM
       return repoLegendEntries(repoLegend, repoColors, Array.from(gridCells.values()).some((cell) => cell.topRepo === null));
     }
     const peakConcurrency = Math.max(0, ...Array.from(gridCells.values(), (cell) => cell.concurrency));
-    return visibleAgentsIntensityBands(peakConcurrency).map((band) => ({
+    return visibleAgentsIntensityBands(peakConcurrency, intensityBands).map((band) => ({
       projectId: band.id,
       name: band.label,
       color: intensityBandColor(band),
     }));
-  }, [colorMode, gridCells, repoLegend, repoColors]);
+  }, [colorMode, gridCells, intensityBands, repoLegend, repoColors]);
 
   return (
     /* Same bordered chart box the day view wraps its flow chart in — without
@@ -523,11 +529,12 @@ type AgentsWeekNowMarkerStyle = CSSProperties & {
   "--week-calendar-now-line-end": string;
 };
 
-function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeChange, sources, todayDay }: {
+function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands, onColorModeChange, sources, todayDay }: {
   readonly colorMode: AgentsGridColorMode;
   readonly header: ReactNode;
   readonly loading: boolean;
   readonly models: readonly AgentsDayModel[];
+  readonly intensityBands: readonly AgentsIntensityBand[];
   readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
   readonly sources: readonly AgentsDaySource[];
   readonly todayDay: string;
@@ -546,12 +553,12 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeCha
       return repoLegendEntries(repoOrder, repoColors, hasUnlabelled);
     }
     const peakConcurrency = Math.max(0, ...models.map((model) => model.concurrencyPeak));
-    return visibleAgentsIntensityBands(peakConcurrency).map((band) => ({
+    return visibleAgentsIntensityBands(peakConcurrency, intensityBands).map((band) => ({
       projectId: band.id,
       name: band.label,
       color: intensityBandColor(band),
     }));
-  }, [colorMode, hasUnlabelled, models, repoColors, repoOrder]);
+  }, [colorMode, hasUnlabelled, intensityBands, models, repoColors, repoOrder]);
   const { eventsByDay, hoverGroupsById } = useMemo(() => {
     const nextEventsByDay = new Map<string, {
       id: string;
@@ -561,12 +568,13 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeCha
       peakConcurrency: number;
       providerLabel: string;
       intensityBandId: AgentsIntensityBand["id"];
+      intensityBand: AgentsIntensityBand;
       tone: string;
       foreground?: string;
     }[]>();
     const nextGroupsById = new Map<string, FlowBlockHoverGroup>();
     for (const source of sources) {
-      const segments = buildAgentsTimelineSegments(source, colorMode, repoOrder);
+      const segments = buildAgentsTimelineSegments(source, colorMode, repoOrder, AGENTS_WEEK_BUCKET_MINUTES, intensityBands);
       const events = segments.map((segment) => {
         // Start bucket is the segment's durable identity. Live refreshes may
         // extend the end or change its dominant tone without replacing the
@@ -615,6 +623,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeCha
           peakConcurrency: segment.peakConcurrency,
           providerLabel,
           intensityBandId: segment.intensityBand.id,
+          intensityBand: segment.intensityBand,
           tone,
           ...(colorMode === "repo" ? { foreground: readableForeground(tone) } : {}),
         };
@@ -622,7 +631,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeCha
       nextEventsByDay.set(source.day, events);
     }
     return { eventsByDay: nextEventsByDay, hoverGroupsById: nextGroupsById };
-  }, [colorMode, repoColors, repoOrder, sources]);
+  }, [colorMode, intensityBands, repoColors, repoOrder, sources]);
   const orderedEventIds = useMemo(
     () => week.days.flatMap((day) => (eventsByDay.get(day.day) ?? []).map((event) => event.id)),
     [eventsByDay, week.days],
@@ -733,6 +742,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, onColorModeCha
                         } as CSSProperties}
                         data-agent-hover-id={event.id}
                         data-agent-intensity-band={event.intensityBandId}
+                        data-agent-intensity-contrast={colorMode === "intensity" ? intensityContrast(event.intensityBand) : undefined}
                         tabIndex={keyboardTabStopId === event.id ? 0 : -1}
                         onFocus={() => setActiveKeyboardEventId(event.id)}
                         onKeyDown={(keyEvent) => {
@@ -1012,6 +1022,15 @@ export function AgentsPage({
   );
   const { days, loading, live } = useAgentsData(range.startDay, range.endDay);
   const models = useMemo(() => days.map(buildAgentsDayModel), [days]);
+  const visiblePeak = useMemo(
+    () => Math.max(0, ...models.map((model) => model.concurrencyPeak)),
+    [models],
+  );
+  const intensityScale = useAgentsIntensityScale({
+    visiblePeak,
+    todayDay,
+    live,
+  });
   const dayModel = models[models.length - 1] ?? null;
   const daySource = days[days.length - 1] ?? null;
 
@@ -1116,6 +1135,7 @@ export function AgentsPage({
               header={pageHead}
               loading={loading}
               models={models}
+              intensityBands={intensityScale.bands}
               onColorModeChange={setColorMode}
               sources={scopedSources}
               todayDay={todayDay}
@@ -1138,6 +1158,7 @@ export function AgentsPage({
               model={dayModel}
               source={daySource}
               intervalMinutes={flowIntervalMinutes}
+              intensityBands={intensityScale.bands}
               onColorModeChange={setColorMode}
               onIntervalChange={onFlowIntervalChange}
             />

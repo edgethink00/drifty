@@ -9,6 +9,17 @@ vi.mock("./useAgentsData", () => ({
   useAgentsData: vi.fn(),
 }));
 
+vi.mock("./useAgentsIntensityScale", async () => {
+  const actual = await vi.importActual<typeof import("./useAgentsIntensityScale")>("./useAgentsIntensityScale");
+  return {
+    ...actual,
+    useAgentsIntensityScale: ({ visiblePeak }: { visiblePeak: number }) => ({
+      peak: visiblePeak,
+      bands: actual.agentsIntensityBandsForScale({ peak: visiblePeak, lockedOnDay: "2026-08-28" }, visiblePeak),
+    }),
+  };
+});
+
 const source: AgentsDaySource = {
   day: "2026-08-28",
   attention: [[60, 90]],
@@ -249,7 +260,7 @@ describe("AgentsPage shared dashboard controls", () => {
 
     renderAgentsPage();
 
-    expect(screen.getByText("×50+")).toBeTruthy();
+    expect(screen.getByText("×30–50")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Project" }));
     expect(screen.getByRole("button", { name: "Project" }).getAttribute("aria-pressed")).toBe("true");
 
@@ -258,7 +269,7 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(screen.getAllByText("drifty_mac").length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Intensity" }));
-    expect(screen.getByText("×50+")).toBeTruthy();
+    expect(screen.getByText("×30–50")).toBeTruthy();
     const event = screen.getByLabelText(/Agent run on Fri, 2026-08-28, drifty_mac/i);
     expect(event.getAttribute("aria-label")).toContain("Claude Code + Codex, peak ×50");
     fireEvent(event, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));

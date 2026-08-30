@@ -87,6 +87,7 @@
     "allow-cloud-sync-http-post",
     "allow-tracker-get-projects",
     "allow-tracker-get-dev-signals",
+    "allow-tracker-get-agent-concurrency-peak",
     "allow-tracker-get-dev-repos",
     "allow-tracker-sync-dev-signals",
     "allow-tracker-save-project",

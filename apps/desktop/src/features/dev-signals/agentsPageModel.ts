@@ -209,8 +209,10 @@ export type AgentsGridCell = {
   readonly attended: boolean;
 };
 
+export type AgentsIntensitySlot = "b0" | "b1" | "b2" | "b3" | "b4" | "b5";
+
 export type AgentsIntensityBand = {
-  readonly id: "x1" | "x2-4" | "x5-9" | "x10-19" | "x20-49" | "x50+";
+  readonly id: AgentsIntensitySlot;
   readonly label: string;
   readonly min: number;
   readonly max: number | null;
@@ -218,33 +220,133 @@ export type AgentsIntensityBand = {
   readonly tonePercent: number;
 };
 
-/**
- * Stable concurrency bands for both Day and Week.
- *
- * These are deliberately absolute rather than period-relative: the same tone
- * always means the same load, so a quiet week and a 50-concurrent-turn week remain
- * comparable. The logarithmic widening keeps large peaks readable without
- * turning the legend into dozens of near-identical entries.
- */
-export const AGENTS_INTENSITY_BANDS: readonly AgentsIntensityBand[] = [
-  { id: "x1", label: "×1", min: 1, max: 1, tonePercent: 30 },
-  { id: "x2-4", label: "×2–4", min: 2, max: 4, tonePercent: 44 },
-  { id: "x5-9", label: "×5–9", min: 5, max: 9, tonePercent: 58 },
-  { id: "x10-19", label: "×10–19", min: 10, max: 19, tonePercent: 70 },
-  { id: "x20-49", label: "×20–49", min: 20, max: 49, tonePercent: 82 },
-  { id: "x50+", label: "×50+", min: 50, max: null, tonePercent: 94 },
-];
+export const AGENTS_INTENSITY_LOOKBACK_DAYS = 28;
+export const AGENTS_INTENSITY_MAX_BANDS = 6;
+export const AGENTS_INTENSITY_GROWTH = 1.65;
+export const AGENTS_INTENSITY_SHRINK_RATIO = 0.75;
+export const AGENTS_INTENSITY_TONE_START = 30;
+export const AGENTS_INTENSITY_TONE_END = 94;
 
-export function agentsIntensityBandFor(concurrency: number): AgentsIntensityBand {
-  const safeConcurrency = Math.max(1, Math.floor(concurrency));
-  return AGENTS_INTENSITY_BANDS.find((band) => band.max === null || safeConcurrency <= band.max)
-    ?? AGENTS_INTENSITY_BANDS[AGENTS_INTENSITY_BANDS.length - 1]!;
+const INTENSITY_SLOTS: readonly AgentsIntensitySlot[] = ["b0", "b1", "b2", "b3", "b4", "b5"];
+
+function intensityLabel(min: number, max: number | null): string {
+  if (max === null) return `×${min}+`;
+  return min === max ? `×${min}` : `×${min}–${max}`;
 }
 
-export function visibleAgentsIntensityBands(peakConcurrency: number): readonly AgentsIntensityBand[] {
-  if (peakConcurrency <= 0) return [];
-  const peakBand = agentsIntensityBandFor(peakConcurrency);
-  return AGENTS_INTENSITY_BANDS.slice(0, AGENTS_INTENSITY_BANDS.indexOf(peakBand) + 1);
+function intensityTonePercent(index: number, count: number): number {
+  if (count <= 1) return AGENTS_INTENSITY_TONE_END;
+  const t = index / (count - 1);
+  return Math.round(AGENTS_INTENSITY_TONE_START + t * (AGENTS_INTENSITY_TONE_END - AGENTS_INTENSITY_TONE_START));
+}
+
+function growingWidths(total: number, parts: number): number[] {
+  if (parts <= 0 || total <= 0) return [];
+  if (total <= parts) return Array.from({ length: total }, () => 1);
+  const raw = Array.from({ length: parts }, (_, index) => AGENTS_INTENSITY_GROWTH ** index);
+  const sum = raw.reduce((acc, value) => acc + value, 0);
+  const exact = raw.map((weight) => (total * weight) / sum);
+  const widths = exact.map((value) => Math.floor(value));
+  let remain = total - widths.reduce((acc, value) => acc + value, 0);
+  const order = exact
+    .map((value, index) => ({ index, frac: value - widths[index]! }))
+    .sort((left, right) => right.frac - left.frac || left.index - right.index);
+  for (let step = 0; step < remain; step += 1) {
+    widths[order[step]!.index] += 1;
+  }
+  for (let index = 0; index < widths.length; index += 1) {
+    if (widths[index] !== 0) continue;
+    for (let donor = widths.length - 1; donor >= 0; donor -= 1) {
+      if (widths[donor]! > 1) {
+        widths[donor]! -= 1;
+        widths[index] = 1;
+        break;
+      }
+    }
+  }
+  return widths.filter((width) => width > 0);
+}
+
+/**
+ * Personal concurrency bands for Day and Week.
+ *
+ * Color is relative to this person's recent peak; labels keep the actual
+ * concurrent-turn numbers. ×1 stays a singleton so serial work never shares a
+ * tone with parallelism. Remaining slots grow toward the locked peak so quiet
+ * users keep 1-wide steps and a 50-agent day still reads as a log-like ramp.
+ */
+export function buildAgentsIntensityBands(
+  scalePeak: number,
+  options: { readonly overflow?: boolean } = {},
+): readonly AgentsIntensityBand[] {
+  const peak = Math.max(1, Math.floor(scalePeak));
+  const overflow = options.overflow === true;
+  const closedSlots = Math.min(AGENTS_INTENSITY_MAX_BANDS, peak);
+  const ranges: Array<{ min: number; max: number | null }> = [{ min: 1, max: 1 }];
+  if (closedSlots > 1) {
+    const widths = growingWidths(peak - 1, closedSlots - 1);
+    let cursor = 2;
+    for (const width of widths) {
+      ranges.push({ min: cursor, max: cursor + width - 1 });
+      cursor += width;
+    }
+  }
+  if (overflow) {
+    const lastClosed = ranges[Math.min(ranges.length, AGENTS_INTENSITY_MAX_BANDS) - 1]!;
+    lastClosed.max = null;
+    if (ranges.length > AGENTS_INTENSITY_MAX_BANDS) ranges.length = AGENTS_INTENSITY_MAX_BANDS;
+  }
+  return ranges.map((range, index) => ({
+    id: INTENSITY_SLOTS[index]!,
+    label: intensityLabel(range.min, range.max),
+    min: range.min,
+    max: range.max,
+    tonePercent: intensityTonePercent(index, ranges.length),
+  }));
+}
+
+/** Fallback bands used by tests that do not pass a personal scale. */
+export const AGENTS_INTENSITY_BANDS: readonly AgentsIntensityBand[] = buildAgentsIntensityBands(50);
+
+export function agentsIntensityBandFor(
+  concurrency: number,
+  bands: readonly AgentsIntensityBand[] = AGENTS_INTENSITY_BANDS,
+): AgentsIntensityBand {
+  const safeConcurrency = Math.max(1, Math.floor(concurrency));
+  const fallback = bands[bands.length - 1] ?? buildAgentsIntensityBands(1)[0]!;
+  return bands.find((band) => band.max === null || safeConcurrency <= band.max) ?? fallback;
+}
+
+export function visibleAgentsIntensityBands(
+  peakConcurrency: number,
+  bands: readonly AgentsIntensityBand[] = AGENTS_INTENSITY_BANDS,
+): readonly AgentsIntensityBand[] {
+  if (peakConcurrency <= 0 || bands.length === 0) return [];
+  return bands;
+}
+
+export function lockAgentsIntensityPeak(args: {
+  readonly previousPeak: number;
+  readonly observedPeak: number;
+  readonly previousLockedOnDay?: string | null;
+  readonly todayDay: string;
+}): { readonly peak: number; readonly lockedOnDay: string } {
+  const previousPeak = Math.max(0, Math.floor(args.previousPeak));
+  const observedPeak = Math.max(0, Math.floor(args.observedPeak));
+  if (observedPeak <= 0 && previousPeak <= 0) {
+    return { peak: 0, lockedOnDay: args.todayDay };
+  }
+  if (observedPeak > previousPeak) {
+    return { peak: observedPeak, lockedOnDay: args.todayDay };
+  }
+  if (args.previousLockedOnDay === args.todayDay) {
+    return { peak: previousPeak, lockedOnDay: args.todayDay };
+  }
+  const shouldShrink = previousPeak > 0 && observedPeak < previousPeak * AGENTS_INTENSITY_SHRINK_RATIO;
+  return {
+    peak: shouldShrink ? observedPeak : previousPeak,
+    lockedOnDay: args.todayDay,
+  };
 }
 
 export type AgentsTimelineColorMode = "intensity" | "repo";
@@ -303,7 +405,8 @@ export function buildAgentsTimelineSegments(
   source: AgentsDaySource,
   colorMode: AgentsTimelineColorMode,
   repoOrder: readonly string[] = [],
-  bucketMinutes = AGENTS_WEEK_BUCKET_MINUTES,
+  bucketMinutes: number = AGENTS_WEEK_BUCKET_MINUTES,
+  bands: readonly AgentsIntensityBand[] = AGENTS_INTENSITY_BANDS,
 ): AgentsTimelineSegment[] {
   const turns: TimelineTurn[] = source.turns
     .map((turn) => {
@@ -356,7 +459,7 @@ export function buildAgentsTimelineSegments(
       start: Math.max(turn.start, start),
       end: Math.min(turn.end, end),
     })));
-    const intensityBand = agentsIntensityBandFor(atomPeakConcurrency);
+    const intensityBand = agentsIntensityBandFor(atomPeakConcurrency, bands);
     const visualKey = colorMode === "repo" ? `repo:${atomTopRepo ?? "__unknown__"}` : `intensity:${intensityBand.id}`;
 
     if (!current || current.end !== start || current.visualKey !== visualKey) {
