@@ -1003,6 +1003,12 @@ export function AgentsPage({
   const headlineMinutes = period === "Today"
     ? dayModel?.agentMinutes ?? 0
     : models.reduce((sum, model) => sum + model.agentMinutes, 0);
+  const headlineDuration = headlineMinutes >= 1 ? formatHours(headlineMinutes) : null;
+  const titleAriaLabel = loading
+    ? "Loading agent activity"
+    : headlineDuration === null
+      ? "No agent activity"
+      : `Agents ran for ${headlineDuration}`;
   const dateLabel = formatDateRangeLabel(range.startDay, range.endDay);
   const totalCommits = period === "Today"
     ? dayModel?.commitCount ?? 0
@@ -1025,13 +1031,13 @@ export function AgentsPage({
     <div className="pg-head dashboard-page-head dashboard-page-head--focus-summary dashboard-page-head--today">
       <div className="dashboard-page-head__row">
         <div className="dashboard-page-head__summary">
-          <h1 aria-label={loading ? "Loading agent activity" : `Agents ran for ${formatHours(headlineMinutes)}`} className="dashboard-page-head__title">
+          <h1 aria-label={titleAriaLabel} className="dashboard-page-head__title">
             {loading ? (
-              <span className="dashboard-page-head__focus-word">Loading agent activity</span>
-            ) : headlineMinutes > 0 ? (
-              <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="dashboard-page-head__focus-value">{formatHours(headlineMinutes)}</span></>
-            ) : (
+              <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
+            ) : headlineDuration === null ? (
               <span className="dashboard-page-head__focus-word">No agent activity</span>
+            ) : (
+              <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
             )}
           </h1>
         </div>

@@ -81,9 +81,69 @@ describe("AgentsPage shared dashboard controls", () => {
 
     renderAgentsPage();
 
-    expect(screen.getByRole("heading", { name: "Loading agent activity" })).toBeTruthy();
+    const heading = screen.getByRole("heading", { name: "Loading agent activity" });
+    expect(heading).toBeTruthy();
+    expect(heading.textContent).toBe("Agents ran");
+    expect(heading.querySelector(".loading-skeleton-line--metric")).toBeTruthy();
+    expect(screen.queryByText("Loading agent activity")).toBeNull();
     expect(screen.queryByText(/sample/i)).toBeNull();
     expect(document.querySelector(".page--agents")?.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("keeps Agents ran visible when the requested day is still loading", () => {
+    const { rerender } = render(
+      <AgentsPage
+        flowIntervalMinutes={3}
+        onFlowIntervalChange={vi.fn()}
+        onSelectDay={vi.fn()}
+        selectedDay="2026-08-28"
+        startOfWeek="monday"
+        todayDay="2026-08-28"
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Agents ran for 1.0h" }).textContent).toBe("Agents ran1.0h");
+
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{ day: "2026-08-27", attention: [], turns: [], commits: [] }],
+      loading: true,
+      live: false,
+    });
+    rerender(
+      <AgentsPage
+        flowIntervalMinutes={3}
+        onFlowIntervalChange={vi.fn()}
+        onSelectDay={vi.fn()}
+        selectedDay="2026-08-27"
+        startOfWeek="monday"
+        todayDay="2026-08-28"
+      />,
+    );
+
+    const loadingHeading = screen.getByRole("heading", { name: "Loading agent activity" });
+    expect(loadingHeading.textContent).toBe("Agents ran");
+    expect(loadingHeading.querySelector(".loading-skeleton-line--metric")).toBeTruthy();
+    expect(screen.queryByText("Loading agent activity")).toBeNull();
+  });
+
+  it("keeps sub-minute agent time out of the headline", () => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{
+        ...source,
+        attention: [],
+        turns: [[60, 60.4, "codex", "drifty_mac"]],
+        commits: [],
+      }],
+      loading: false,
+      live: true,
+    });
+
+    renderAgentsPage();
+
+    const heading = screen.getByRole("heading", { name: "No agent activity" });
+    expect(heading).toBeTruthy();
+    expect(heading.textContent).toBe("No agent activity");
+    expect(heading.querySelector(".dashboard-page-head__focus-value")).toBeNull();
   });
 
   it("shows shared hover details for Day cells and Week runs", () => {
