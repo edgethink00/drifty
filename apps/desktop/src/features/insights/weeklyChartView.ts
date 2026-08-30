@@ -59,6 +59,13 @@ export function formatChartHourLabel(value: number): string {
   return Number.isInteger(value) ? `${value}` : `${value.toFixed(1).replace(/\.0$/, "")}`;
 }
 
+// Residual buckets are the lens leftover, not the answer. The bar uses
+// column-reverse, so array order is bottom -> top; residuals always sort last
+// and render as the cap. `__no_project__` matches insightData.NO_PROJECT_KEY.
+function isResidualWeeklyChartKey(key: WeeklyChartSeriesItem["key"]): boolean {
+  return key === "neutral" || key === "__no_project__";
+}
+
 export function buildWeeklyChartView(
   weekly: WeeklyBreakdownDay[],
   mode: WeeklyChartMode,
@@ -115,7 +122,7 @@ export function buildWeeklyChartView(
       off,
       totalSeconds: total,
       barHeightPct: Math.min((total / (axisMax * 3600)) * 100, 100),
-      segments: off ? [] : orderedSegmentsForDay(day, total, series, valueFor),
+      segments: off ? [] : orderedSegmentsForDay(day, total, series, valueFor, mode),
     };
   });
 
@@ -127,17 +134,25 @@ function orderedSegmentsForDay(
   total: number,
   series: readonly WeeklyChartSeriesItem[],
   valueFor: (day: WeeklyBreakdownDay, key: WeeklyChartSeriesItem["key"]) => number,
+  mode: WeeklyChartMode,
 ): WeeklyChartSegment[] {
-  return series
+  const present = series
     .map((item) => {
       const value = valueFor(day, item.key);
       return value > 0
         ? { key: item.key, heightPct: (value / total) * 100, color: item.color, seconds: value, order: item.order }
         : null;
     })
-    .filter((segment): segment is OrderedWeeklyChartSegment => segment !== null)
-    .sort((left, right) => right.seconds - left.seconds || left.order - right.order)
-    .map(({ key, heightPct, color, seconds }) => ({ key, heightPct, color, seconds }));
+    .filter((segment): segment is OrderedWeeklyChartSegment => segment !== null);
+
+  present.sort((left, right) => {
+    const residualDelta = Number(isResidualWeeklyChartKey(left.key)) - Number(isResidualWeeklyChartKey(right.key));
+    if (residualDelta !== 0) return residualDelta;
+    if (mode === "category") return right.seconds - left.seconds || left.order - right.order;
+    return left.order - right.order;
+  });
+
+  return present.map(({ key, heightPct, color, seconds }) => ({ key, heightPct, color, seconds }));
 }
 
 function categorySecondsFor(day: WeeklyBreakdownDay, key: WeeklyChartSeriesItem["key"]): number {

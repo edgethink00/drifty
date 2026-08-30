@@ -153,6 +153,125 @@ describe("insight weekly builders", () => {
       "learning",
     ]);
   });
+
+  it("keeps Neutral as the productivity residual cap even when it is the day's largest share", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 1800,
+        neutralSeconds: 7200,
+        driftSeconds: 3600,
+        categorySeconds: {},
+        projectSeconds: {},
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "productivity", []);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([
+      "focus",
+      "drift",
+      "neutral",
+    ]);
+  });
+
+  it("keeps productivity series order when Drift is larger than Focus", () => {
+    const weekly = [
+      {
+        weekdayIndex: 3,
+        weekday: "Thu",
+        isActive: true,
+        focusSeconds: 1800,
+        neutralSeconds: 1200,
+        driftSeconds: 7200,
+        categorySeconds: {},
+        projectSeconds: {},
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "productivity", []);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([
+      "focus",
+      "drift",
+      "neutral",
+    ]);
+  });
+
+  it("omits a missing Neutral residual instead of inventing a cap", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 3600,
+        neutralSeconds: 0,
+        driftSeconds: 1800,
+        categorySeconds: {},
+        projectSeconds: {},
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "productivity", []);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([
+      "focus",
+      "drift",
+    ]);
+  });
+
+  it("renders a Neutral-only day as a residual-only bar", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 0,
+        neutralSeconds: 3600,
+        driftSeconds: 0,
+        categorySeconds: {},
+        projectSeconds: {},
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "productivity", []);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual(["neutral"]);
+    expect(chart.columns[0]?.totalSeconds).toBe(3600);
+  });
+
+  it("does not promote a small category such as utility to the residual cap", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 0,
+        neutralSeconds: 0,
+        driftSeconds: 0,
+        categorySeconds: {
+          workspace: 7200,
+          utility: 600,
+          entertainment: 1800,
+        },
+        projectSeconds: {},
+      },
+    ];
+
+    const chart = buildWeeklyChartView(weekly, "category", [
+      { category: "workspace", seconds: 7200 },
+      { category: "utility", seconds: 600 },
+      { category: "entertainment", seconds: 1800 },
+    ]);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([
+      "workspace",
+      "entertainment",
+      "utility",
+    ]);
+  });
 });
 
 describe("weekly project view", () => {
@@ -204,5 +323,82 @@ describe("weekly project view", () => {
     expect(column?.segments.map((segment) => segment.key)).toEqual(["p1", "p2"]);
     expect(column?.segments.map((segment) => segment.color)).toEqual(["#111111", "#222222"]);
     expect(column?.segments[0]?.seconds).toBe(5400);
+  });
+
+  it("keeps No project as the residual cap even when it is the day's largest share", () => {
+    const weekly = [{
+      weekdayIndex: 0,
+      weekday: "Mon",
+      isActive: true,
+      focusSeconds: 0,
+      neutralSeconds: 0,
+      driftSeconds: 0,
+      categorySeconds: {},
+      projectSeconds: { p1: 1800, p2: 3600, [NO_PROJECT_KEY]: 7200 },
+    }];
+    const chart = buildWeeklyChartView(weekly, "project", [], [
+      { key: "p2", color: "#222222" },
+      { key: "p1", color: "#111111" },
+      { key: NO_PROJECT_KEY, color: "#9ca3af" },
+    ]);
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([
+      "p2",
+      "p1",
+      NO_PROJECT_KEY,
+    ]);
+  });
+
+  it("keeps the week-level project series even when a smaller project leads one day", () => {
+    const weekly = [
+      {
+        weekdayIndex: 0,
+        weekday: "Mon",
+        isActive: true,
+        focusSeconds: 0,
+        neutralSeconds: 0,
+        driftSeconds: 0,
+        categorySeconds: {},
+        projectSeconds: { p1: 5400, p2: 600, [NO_PROJECT_KEY]: 1800 },
+      },
+      {
+        weekdayIndex: 1,
+        weekday: "Tue",
+        isActive: true,
+        focusSeconds: 0,
+        neutralSeconds: 0,
+        driftSeconds: 0,
+        categorySeconds: {},
+        projectSeconds: { p1: 600, p2: 5400, [NO_PROJECT_KEY]: 1800 },
+      },
+    ];
+    const chart = buildWeeklyChartView(weekly, "project", [], [
+      { key: "p1", color: "#111111" },
+      { key: "p2", color: "#222222" },
+      { key: NO_PROJECT_KEY, color: "#9ca3af" },
+    ]);
+
+    expect(chart.columns.map((column) => column.segments.map((segment) => segment.key))).toEqual([
+      ["p1", "p2", NO_PROJECT_KEY],
+      ["p1", "p2", NO_PROJECT_KEY],
+    ]);
+  });
+
+  it("renders a No-project-only day as a residual-only bar", () => {
+    const weekly = [{
+      weekdayIndex: 0,
+      weekday: "Mon",
+      isActive: true,
+      focusSeconds: 0,
+      neutralSeconds: 0,
+      driftSeconds: 0,
+      categorySeconds: {},
+      projectSeconds: { [NO_PROJECT_KEY]: 3600 },
+    }];
+    const chart = buildWeeklyChartView(weekly, "project", [], [
+      { key: "p1", color: "#111111" },
+      { key: NO_PROJECT_KEY, color: "#9ca3af" },
+    ]);
+
+    expect(chart.columns[0]?.segments.map((segment) => segment.key)).toEqual([NO_PROJECT_KEY]);
   });
 });
