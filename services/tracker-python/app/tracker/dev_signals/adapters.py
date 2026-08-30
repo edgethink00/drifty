@@ -33,6 +33,9 @@ from .agent_sessions import (
     PROVIDER_OPENCODE,
     PROVIDER_PI,
     PROVIDER_ROO,
+    PROVIDER_CURSOR_CLI,
+    PROVIDER_KIRO,
+    PROVIDER_QWEN,
     PROVIDER_ZED,
     DEFAULT_GAP_CEILING_SECONDS,
     UNTERMINATED_TURN_CAP_SECONDS,
@@ -1657,6 +1660,314 @@ def parse_zed_store(path: str | Path) -> list[AgentTurn]:
     return turns
 
 
+
+def discover_qwen() -> list[Path]:
+    homes = []
+    env_home = os.environ.get("QWEN_DATA_DIR") or os.environ.get("QWEN_HOME")
+    if env_home:
+        homes.append(Path(env_home).expanduser())
+    homes.append(Path.home() / ".qwen")
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for home in homes:
+        projects = home / "projects"
+        if _existing_dir(projects) is not None:
+            _append_unique_path(found, seen, projects)
+    return found
+
+
+def parse_qwen_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.rglob("*.jsonl"))
+        except OSError:
+            return []
+        for file_path in files:
+            if file_path.parent.name != "chats":
+                continue
+            turns.extend(_parse_qwen_file(file_path))
+        return turns
+    if target.is_file():
+        return _parse_qwen_file(target)
+    return []
+
+
+def _parse_qwen_file(path: Path) -> list[AgentTurn]:
+    session_key = path.stem
+    parent = path.parent
+    if parent.name == "chats" and parent.parent.name:
+        session_key = f"{parent.parent.name}-{path.stem}"
+    cwd_key = _cwd_key(parent.parent.name) if parent.name == "chats" else None
+    stamps = []
+    last_usage = None
+    model = None
+    for record in _iter_json_records(path):
+        if cwd_key is None:
+            cwd_key = _cwd_key(record.get("cwd"))
+        session_id = record.get("sessionId") or record.get("session_id")
+        if isinstance(session_id, str) and session_id:
+            session_key = session_id
+        usage = record.get("usageMetadata") or record.get("usage_metadata")
+        if not isinstance(usage, dict):
+            continue
+        if record.get("type") not in (None, "assistant"):
+            continue
+        stamp = parse_epoch(record.get("timestamp"))
+        if stamp is not None:
+            stamps.append(stamp)
+        candidate_model = record.get("model")
+        if isinstance(candidate_model, str) and candidate_model:
+            model = candidate_model
+        last_usage = {
+            "promptTokenCount": usage.get("promptTokenCount"),
+            "candidatesTokenCount": usage.get("candidatesTokenCount"),
+            "cachedContentTokenCount": usage.get("cachedContentTokenCount"),
+            "totalTokenCount": usage.get("totalTokenCount"),
+        }
+    if not stamps:
+        return []
+    total, tokens_in, tokens_out, cache_read, cache_write, cost = tokens_from_mapping(last_usage)
+    return _turns_from_stamps(
+        PROVIDER_QWEN, session_key, stamps, cwd_key, model,
+        total_tokens=total, tokens_in=tokens_in, tokens_out=tokens_out,
+        tokens_cache_read=cache_read, tokens_cache_write=cache_write, cost_usd=cost,
+        min_active_seconds=1,
+    )
+
+
+def discover_kiro() -> list[Path]:
+    found: list[Path] = []
+    seen: set[Path] = set()
+    cli = Path.home() / ".kiro" / "sessions" / "cli"
+    if _existing_dir(cli) is not None:
+        _append_unique_path(found, seen, cli)
+    sqlite = Path.home() / "Library" / "Application Support" / "kiro-cli" / "data.sqlite3"
+    if _existing_file(sqlite) is not None:
+        _append_unique_path(found, seen, sqlite)
+    return found
+
+
+def parse_kiro_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.suffix.lower() in {".sqlite3", ".db"} or target.name == "data.sqlite3":
+        return _parse_kiro_sqlite(target)
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            json_files = sorted(target.rglob("*.json"))
+        except OSError:
+            return []
+        for file_path in json_files:
+            if file_path.name == "session.json":
+                # IDE transcripts are prompt-bearing and currently lack real
+                # token/time fields. Skip rather than invent agent time.
+                continue
+            if file_path.suffix.lower() == ".json":
+                turns.extend(_parse_kiro_cli_header(file_path))
+        return turns
+    if target.name == "session.json":
+        return []
+    if target.suffix.lower() == ".json":
+        return _parse_kiro_cli_header(target)
+    return []
+
+
+def _parse_kiro_cli_header(path: Path) -> list[AgentTurn]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, TypeError, ValueError):
+        return []
+    if not isinstance(payload, dict):
+        return []
+    session_key = payload.get("session_id") if isinstance(payload.get("session_id"), str) and payload.get("session_id") else path.stem
+    cwd_key = _cwd_key(payload.get("cwd"))
+    model = None
+    state = payload.get("session_state") if isinstance(payload.get("session_state"), dict) else {}
+    model_info = ((state.get("rts_model_state") or {}) if isinstance(state, dict) else {})
+    if isinstance(model_info, dict):
+        info = model_info.get("model_info") if isinstance(model_info.get("model_info"), dict) else {}
+        model = _mapping_model(info.get("model_id") if isinstance(info, dict) else None)
+    if not isinstance(state, dict) or not state:
+        return []
+    metadata = state.get("conversation_metadata") if isinstance(state.get("conversation_metadata"), dict) else {}
+    turns_meta = metadata.get("user_turn_metadatas") if isinstance(metadata, dict) else None
+    if not isinstance(turns_meta, list):
+        return []
+    turns: list[AgentTurn] = []
+    for index, item in enumerate(turns_meta):
+        if not isinstance(item, dict):
+            continue
+        tokens_in = item.get("input_token_count") if isinstance(item.get("input_token_count"), int) else None
+        tokens_out = item.get("output_token_count") if isinstance(item.get("output_token_count"), int) else None
+        if not tokens_in and not tokens_out:
+            continue
+        end = parse_epoch(item.get("end_timestamp"))
+        start = parse_epoch(item.get("start_timestamp"))
+        duration = as_float(item.get("turn_duration"))
+        if start is None and end is not None and duration is not None and duration >= 0:
+            # turn_duration is milliseconds in current Kiro headers.
+            start = end - timedelta(milliseconds=duration if duration > 10 else duration * 1000)
+        if start is None and end is not None:
+            start = end - timedelta(seconds=1)
+        if end is None and start is not None:
+            end = start + timedelta(seconds=1)
+        if start is None or end is None or end < start:
+            continue
+        if end == start:
+            end = start + timedelta(seconds=1)
+        total = None
+        parts = [part for part in (tokens_in, tokens_out) if isinstance(part, int)]
+        if parts:
+            total = sum(parts)
+        turn = _build_turn(
+            PROVIDER_KIRO, str(session_key), index, start, end, cwd_key, model, total,
+            tokens_in, tokens_out, None, None, None,
+        )
+        if turn.active_seconds > 0:
+            turns.append(turn)
+    return turns
+
+
+def _parse_kiro_sqlite(path: Path) -> list[AgentTurn]:
+    connection = _readonly_sqlite(path)
+    if connection is None:
+        return []
+    try:
+        tables = _table_names(connection)
+        if "conversations_v2" not in tables:
+            return []
+        try:
+            rows = connection.execute("SELECT key, conversation_id, value FROM conversations_v2").fetchall()
+        except sqlite3.Error:
+            return []
+    finally:
+        connection.close()
+    turns: list[AgentTurn] = []
+    for row in rows:
+        payload = _load_json_object(row["value"])
+        if not isinstance(payload, dict):
+            continue
+        session_key = row["conversation_id"] if isinstance(row["conversation_id"], str) else None
+        if not session_key:
+            continue
+        cwd_key = _cwd_key(row["key"])
+        model = None
+        info = payload.get("model_info") if isinstance(payload.get("model_info"), dict) else {}
+        if isinstance(info, dict):
+            model = _mapping_model(info.get("model_id"))
+        history = payload.get("history") if isinstance(payload.get("history"), list) else []
+        for index, item in enumerate(history):
+            if not isinstance(item, dict):
+                continue
+            meta = item.get("request_metadata") if isinstance(item.get("request_metadata"), dict) else {}
+            tokens_in = meta.get("input_token_count") if isinstance(meta.get("input_token_count"), int) else None
+            tokens_out = meta.get("output_token_count") if isinstance(meta.get("output_token_count"), int) else None
+            if not tokens_in and not tokens_out:
+                continue
+            stamp = parse_epoch(meta.get("end_timestamp") or item.get("timestamp"))
+            if stamp is None:
+                continue
+            start = stamp - timedelta(seconds=1)
+            total = sum(part for part in (tokens_in, tokens_out) if isinstance(part, int))
+            turn = _build_turn(
+                PROVIDER_KIRO, session_key, index, start, stamp, cwd_key, model, total,
+                tokens_in, tokens_out, None, None, None,
+            )
+            if turn.active_seconds > 0:
+                turns.append(turn)
+    return turns
+
+
+def discover_cursor_cli() -> list[Path]:
+    found: list[Path] = []
+    seen: set[Path] = set()
+    chats = Path.home() / ".cursor" / "chats"
+    if _existing_dir(chats) is not None:
+        _append_unique_path(found, seen, chats)
+    return found
+
+
+def parse_cursor_cli_store(path: str | Path) -> list[AgentTurn]:
+    target = Path(path).expanduser()
+    if target.is_dir():
+        turns: list[AgentTurn] = []
+        try:
+            files = sorted(target.rglob("store.db"))
+        except OSError:
+            return []
+        for file_path in files:
+            turns.extend(_parse_cursor_cli_db(file_path))
+        return turns
+    if target.name == "store.db" or target.suffix.lower() == ".db":
+        return _parse_cursor_cli_db(target)
+    return []
+
+
+def _parse_cursor_cli_db(path: Path) -> list[AgentTurn]:
+    connection = _readonly_sqlite(path)
+    if connection is None:
+        return []
+    try:
+        tables = _table_names(connection)
+        session_table = None
+        for candidate in ("sessions", "session"):
+            if candidate in tables:
+                session_table = candidate
+                break
+        if session_table is None:
+            return []
+        columns = {row[1] for row in connection.execute(f"PRAGMA table_info({session_table})")}
+        id_col = next((name for name in ("id", "session_id", "thread_id", "chat_id") if name in columns), None)
+        if id_col is None:
+            return []
+        created_col = next((name for name in ("created_at", "createdAt", "started_at", "created") if name in columns), None)
+        updated_col = next((name for name in ("updated_at", "updatedAt", "ended_at", "last_message_at", "mtime") if name in columns), None)
+        cwd_col = next((name for name in ("cwd", "directory", "workspace", "root_path") if name in columns), None)
+        model_col = next((name for name in ("model", "model_id", "modelId") if name in columns), None)
+        select = [id_col]
+        aliases = {id_col: "id"}
+        for col, alias in ((created_col, "created_at"), (updated_col, "updated_at"), (cwd_col, "cwd"), (model_col, "model")):
+            if col:
+                select.append(f"{col} AS {alias}" if col != alias else col)
+                aliases[alias] = alias
+        try:
+            rows = connection.execute(f"SELECT {', '.join(select)} FROM {session_table}").fetchall()
+        except sqlite3.Error:
+            return []
+        # Never open blobs/messages tables even if present.
+    finally:
+        connection.close()
+    session_key_prefix = path.parent.name
+    turns: list[AgentTurn] = []
+    for row in rows:
+        raw_id = row["id"] if "id" in row.keys() else None
+        if raw_id is None:
+            continue
+        session_key = f"{session_key_prefix}:{raw_id}" if session_key_prefix else str(raw_id)
+        start = parse_epoch(row["created_at"]) if "created_at" in row.keys() else None
+        end = parse_epoch(row["updated_at"]) if "updated_at" in row.keys() else None
+        if start is None or end is None:
+            continue
+        if end < start:
+            continue
+        observed = (end - start).total_seconds()
+        if observed > UNTERMINATED_TURN_CAP_SECONDS:
+            end = start + timedelta(seconds=UNTERMINATED_TURN_CAP_SECONDS)
+        if end == start:
+            end = start + timedelta(seconds=1)
+        cwd_key = _cwd_key(row["cwd"]) if "cwd" in row.keys() else _cwd_key(path.parent.parent.name)
+        model = row["model"] if "model" in row.keys() and isinstance(row["model"], str) else None
+        turn = _build_turn(
+            PROVIDER_CURSOR_CLI, session_key, 0, start, end, cwd_key, model, None,
+            None, None, None, None, None,
+        )
+        if turn.active_seconds > 0:
+            turns.append(turn)
+    return turns
+
+
 def parse_jsonl_tree(parser: Callable[[Path], list[AgentTurn]], root: Path) -> list[AgentTurn]:
     if root.is_file():
         return parser(root)
@@ -1692,4 +2003,7 @@ PROVIDERS: tuple[ProviderAdapter, ...] = (
     ProviderAdapter(PROVIDER_ROO, discover_roo, parse_roo_store, ("ui_messages.json",)),
     ProviderAdapter(PROVIDER_GOOSE, discover_goose, parse_goose_store, ("*.db",)),
     ProviderAdapter(PROVIDER_ZED, discover_zed, parse_zed_store, ("*.db",)),
+    ProviderAdapter(PROVIDER_QWEN, discover_qwen, parse_qwen_store, ("*.jsonl",)),
+    ProviderAdapter(PROVIDER_KIRO, discover_kiro, parse_kiro_store, ("*.json", "*.sqlite3", "*.db")),
+    ProviderAdapter(PROVIDER_CURSOR_CLI, discover_cursor_cli, parse_cursor_cli_store, ("store.db",)),
 )

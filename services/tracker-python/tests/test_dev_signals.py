@@ -35,6 +35,9 @@ from app.tracker.dev_signals.adapters import (
     parse_openclaw_store,
     parse_opencode_store,
     parse_pi_store,
+    parse_cursor_cli_store,
+    parse_kiro_store,
+    parse_qwen_store,
     parse_roo_store,
     parse_zed_store,
 )
@@ -1422,6 +1425,167 @@ class ZedSessionTests(TempDirTestCase):
 
     def test_missing_is_empty(self) -> None:
         self.assertEqual(parse_zed_store(self.tmp_path / "nope.db"), [])
+
+
+class QwenSessionTests(TempDirTestCase):
+    def test_assistant_usage_without_prompt(self) -> None:
+        secret = "qwen-prompt-secret"
+        chats = self.tmp_path / "projects" / "demo" / "chats"
+        chats.mkdir(parents=True)
+        path = chats / "session.jsonl"
+        records = [
+            {"type": "user", "timestamp": "2026-08-21T10:00:00Z", "content": secret},
+            {
+                "type": "assistant",
+                "timestamp": "2026-08-21T10:01:00Z",
+                "sessionId": "q1",
+                "model": "qwen3.5-plus",
+                "usageMetadata": {
+                    "promptTokenCount": 11,
+                    "candidatesTokenCount": 4,
+                    "thoughtsTokenCount": 2,
+                    "cachedContentTokenCount": 1,
+                },
+                "content": secret,
+            },
+        ]
+        path.write_text(chr(10).join(json.dumps(record) for record in records) + chr(10), encoding="utf-8")
+        turns = parse_qwen_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "qwen")
+        self.assertEqual(turns[0].session_key, "q1")
+        self.assertEqual(turns[0].active_seconds, 1)
+        self.assertEqual(turns[0].tokens_in, 11)
+        self.assertEqual(turns[0].tokens_out, 4)
+        self.assertEqual(turns[0].tokens_cache_read, 1)
+        self.assertEqual(turns[0].model, "qwen3.5-plus")
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+
+    def test_idle_user_wait_is_not_billed(self) -> None:
+        path = self.tmp_path / "gap.jsonl"
+        records = [
+            {"type": "user", "timestamp": "2026-08-21T10:00:00Z"},
+            {"type": "assistant", "timestamp": "2026-08-21T10:20:00Z", "usageMetadata": {"promptTokenCount": 2, "candidatesTokenCount": 1}},
+        ]
+        path.write_text(chr(10).join(json.dumps(record) for record in records) + chr(10), encoding="utf-8")
+        turns = parse_qwen_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 1)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_qwen_store(self.tmp_path / "nope.jsonl"), [])
+
+
+class KiroSessionTests(TempDirTestCase):
+    def test_explicit_header_tokens_without_opening_jsonl(self) -> None:
+        secret = "kiro-prompt-secret"
+        path = self.tmp_path / "session-1.json"
+        path.write_text(json.dumps({
+            "session_id": "k1",
+            "cwd": str(self.tmp_path),
+            "title": secret,
+            "session_state": {
+                "rts_model_state": {"model_info": {"model_id": "claude-sonnet-4-5"}},
+                "conversation_metadata": {"user_turn_metadatas": [{
+                    "input_token_count": 8,
+                    "output_token_count": 3,
+                    "turn_duration": 2000,
+                    "end_timestamp": "2026-08-21T10:01:00Z",
+                }]}
+            },
+        }), encoding="utf-8")
+        sibling = self.tmp_path / "session-1.jsonl"
+        sibling.write_text(json.dumps({"kind": "Prompt", "data": {"content": [{"kind": "text", "data": secret}]}}) + chr(10), encoding="utf-8")
+        turns = parse_kiro_store(path)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "kiro")
+        self.assertEqual(turns[0].session_key, "k1")
+        self.assertEqual(turns[0].tokens_in, 8)
+        self.assertEqual(turns[0].tokens_out, 3)
+        self.assertEqual(turns[0].active_seconds, 2)
+        self.assertEqual(turns[0].model, "claude-sonnet-4-5")
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+    def test_zero_token_turns_are_skipped(self) -> None:
+        path = self.tmp_path / "session-2.json"
+        path.write_text(json.dumps({
+            "session_id": "k2",
+            "session_state": {"conversation_metadata": {"user_turn_metadatas": [{
+                "input_token_count": 0,
+                "output_token_count": 0,
+                "end_timestamp": "2026-08-21T10:01:00Z",
+            }]}}
+        }), encoding="utf-8")
+        self.assertEqual(parse_kiro_store(path), [])
+
+    def test_ide_session_json_is_skipped(self) -> None:
+        path = self.tmp_path / "session.json"
+        path.write_text(json.dumps({
+            "id": "ide",
+            "createdAt": "2026-08-21T10:00:00Z",
+            "lastModifiedAt": "2026-08-21T12:00:00Z",
+            "modelId": "claude",
+        }), encoding="utf-8")
+        self.assertEqual(parse_kiro_store(path), [])
+
+
+    def test_unrelated_json_is_skipped(self) -> None:
+        path = self.tmp_path / "package.json"
+        path.write_text(json.dumps({"name": "not-kiro", "version": "1"}), encoding="utf-8")
+        self.assertEqual(parse_kiro_store(path), [])
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_kiro_store(self.tmp_path / "nope.json"), [])
+
+
+class CursorCliSessionTests(TempDirTestCase):
+    def test_sessions_table_without_messages(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "abc" / "store.db"
+        db.parent.mkdir()
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE blobs (id INTEGER, body TEXT)")
+        conn.execute("CREATE TABLE sessions (id TEXT, created_at TEXT, updated_at TEXT, cwd TEXT, model TEXT, title TEXT)")
+        secret = "cursor-cli-title-secret"
+        conn.execute("INSERT INTO blobs VALUES (1, ?)", (secret,))
+        conn.execute(
+            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?)",
+            ("s1", "2026-08-21T10:00:00Z", "2026-08-21T10:01:00Z", str(self.tmp_path), "gpt-5", secret),
+        )
+        conn.commit()
+        conn.close()
+        turns = parse_cursor_cli_store(db)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].provider, "cursor_cli")
+        self.assertEqual(turns[0].active_seconds, 60)
+        self.assertEqual(turns[0].model, "gpt-5")
+        self.assertNotIn(secret, json.dumps([turn.__dict__ for turn in turns]))
+
+    def test_open_session_is_skipped(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "store.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE sessions (id TEXT, created_at TEXT)")
+        conn.execute("INSERT INTO sessions VALUES ('open', '2026-08-21T10:00:00Z')")
+        conn.commit()
+        conn.close()
+        self.assertEqual(parse_cursor_cli_store(db), [])
+
+    def test_long_lifetime_is_capped(self) -> None:
+        import sqlite3
+        db = self.tmp_path / "long.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE sessions (id TEXT, created_at TEXT, updated_at TEXT)")
+        conn.execute("INSERT INTO sessions VALUES ('long', '2026-08-21T10:00:00Z', '2026-08-21T12:00:00Z')")
+        conn.commit()
+        conn.close()
+        turns = parse_cursor_cli_store(db)
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].active_seconds, 120)
+
+    def test_missing_is_empty(self) -> None:
+        self.assertEqual(parse_cursor_cli_store(self.tmp_path / "nope.db"), [])
 
 
 class IngestRegistryTests(TempDirTestCase):

@@ -106,6 +106,9 @@ const AGENT_TOOLS: Record<string, { name: string; color: string }> = {
   roo: { name: "Roo / Kilo", color: "#db2777" },
   goose: { name: "Goose", color: "#ca8a04" },
   zed: { name: "Zed", color: "#84cc16" },
+  qwen: { name: "Qwen CLI", color: "#8b5cf6" },
+  kiro: { name: "Kiro", color: "#f59e0b" },
+  cursor_cli: { name: "Cursor CLI", color: "#111827" },
 };
 
 function agentToolName(provider: string): string {

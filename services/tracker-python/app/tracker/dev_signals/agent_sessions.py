@@ -36,6 +36,9 @@ PROVIDER_CLINE = "cline"
 PROVIDER_ROO = "roo"
 PROVIDER_GOOSE = "goose"
 PROVIDER_ZED = "zed"
+PROVIDER_QWEN = "qwen"
+PROVIDER_KIRO = "kiro"
+PROVIDER_CURSOR_CLI = "cursor_cli"
 
 #: Turns separated by more than this are treated as idle, not agent time.
 DEFAULT_GAP_CEILING_SECONDS = 300

@@ -538,7 +538,7 @@ export function DevSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">Your Agents (beta)</div>
-            <div className="desc">Show the Your Agents tab under the Dashboard section: agent session time from local logs on this Mac (Codex, Claude Code, Aside, OpenCode, Gemini CLI, Pi, Droid, Amp, Copilot CLI, and other supported tools), paired with git commit activity. Reads only local files and keeps them local. Dev-mode opt-in.</div>
+            <div className="desc">Show the Your Agents tab under the Dashboard section: agent session time from local logs on this Mac (Codex, Claude Code, Aside, OpenCode, Gemini CLI, Pi, Droid, Amp, Copilot CLI, Qwen CLI, Kiro, Cursor CLI, and other supported tools), paired with git commit activity. Reads only local files and keeps them local. Dev-mode opt-in.</div>
           </div>
           <div className="ctrl">
             <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />
