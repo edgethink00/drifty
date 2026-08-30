@@ -413,6 +413,16 @@ describe("LeaderboardView", () => {
     expect(refreshStatus.closest(".leaderboard-toolbar__status-slot")).toBe(statusSlot);
   });
 
+  it("omits the idle refresh sentence so the toolbar stays empty until there is a real status", () => {
+    renderView({
+      leaderboard: [makeLeaderboardRow({ display_name: "Alex", focus_seconds_7d: 7200 })],
+    });
+
+    const toolbar = screen.getByLabelText(/global leaderboard/i).querySelector(".leaderboard-toolbar");
+    expect(toolbar?.querySelector(".leaderboard-refresh-status--idle")).toBeNull();
+    expect(screen.queryByText(/scores refresh throughout the day/i)).toBeNull();
+  });
+
   it("renders an error state when the fetch fails", () => {
     renderView({ error: "RPC exploded" });
 
@@ -458,7 +468,7 @@ describe("LeaderboardView", () => {
     expect(joinActions).not.toBeNull();
     expect(joinActions?.contains(joinButton)).toBe(true);
     expect(joinActionRow).not.toBeNull();
-    expect(optedOutHero.style.gap).toBe("var(--space-2)");
+    expect(optedOutHero.style.gap).toBe("var(--space-3)");
     expect(joinActionRow?.style.paddingTop).toBe("");
     expect(joinActionRow?.style.borderTop).toBe("");
 
@@ -489,7 +499,7 @@ describe("LeaderboardView", () => {
     expect(leaveActions?.contains(leaveButton)).toBe(true);
     expect(joinActions?.className).toBe(leaveActions?.className);
     expect(joinActionRow?.className).toBe(leaveActionRow?.className);
-    expect(optedInHero.style.gap).toBe("var(--space-2)");
+    expect(optedInHero.style.gap).toBe("var(--space-3)");
     expect(leaveActionRow?.style.paddingTop).toBe("");
     expect(leaveActionRow?.style.borderTop).toBe("");
   });

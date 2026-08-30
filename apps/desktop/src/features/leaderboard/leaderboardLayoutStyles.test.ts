@@ -30,4 +30,18 @@ describe("leaderboard operate layout styles", () => {
     expect(ruleContaining(".leaderboard-pagination__actions .app-btn", /min-width:/)).toMatch(/min-width:\s*1\.75rem;/);
     expect(ruleContaining(".leaderboard-pagination__actions .app-btn", /border-radius:/)).toMatch(/border-radius:\s*var\(--radius-sm\);/);
   });
+
+  it("gives the ranking list extra height by tightening board chrome", () => {
+    expect(ruleContaining(".content--leaderboard .leaderboard-board-block", /padding:/)).toMatch(/padding:\s*0\.35rem 0\.85rem 0;/);
+    expect(ruleContaining(".content--leaderboard .leaderboard-list-frame", /margin-top:/)).toMatch(/margin-top:\s*0\.28rem;/);
+    expect(ruleContaining(".leaderboard-list-head", /min-height:/)).toMatch(/min-height:\s*1\.75rem;/);
+  });
+
+  it("keeps the period control on the same toolbar row as the board stats", () => {
+    const toolbarColumns = rules(".content--leaderboard .leaderboard-board-block .leaderboard-toolbar")
+      .filter((body) => /grid-template-columns:/.test(body));
+    expect(toolbarColumns.some((body) => /max-content minmax\(0, 1fr\) minmax\(11rem, 14rem\)/.test(body))).toBe(true);
+    expect(toolbarColumns.every((body) => !/grid-column:\s*1 \/ -1/.test(body))).toBe(true);
+  });
+
 });

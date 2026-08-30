@@ -136,7 +136,7 @@ export function LeaderboardView({
           <section
             className="leaderboard-hero"
             aria-label="Your leaderboard participation"
-            style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", alignItems: "stretch" }}
+            style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
           >
             <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
               <div

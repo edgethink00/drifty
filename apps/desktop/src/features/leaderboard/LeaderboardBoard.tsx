@@ -216,11 +216,7 @@ function LeaderboardToolbar({
             <span className="leaderboard-refresh-status" data-tone={statusTone} role="status" aria-live="polite">
               {statusMessage}
             </span>
-          ) : (
-            <span className="leaderboard-refresh-status leaderboard-refresh-status--idle" aria-hidden="true">
-              Scores refresh throughout the day
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
       <div className="leaderboard-toolbar__stats" aria-label="Leaderboard scope" aria-hidden={isLoading || undefined}>

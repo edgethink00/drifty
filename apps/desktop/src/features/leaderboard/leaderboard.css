@@ -1367,7 +1367,7 @@
   grid-template-columns: minmax(0, 1fr) repeat(2, minmax(5.25rem, 0.14fr));
   gap: var(--space-2);
   align-items: center;
-  min-height: 2.15rem;
+  min-height: 1.75rem;
   padding: 0 var(--space-3);
   color: color-mix(in srgb, var(--text-soft) 88%, transparent);
   font-size: 0.6875rem;
@@ -2850,7 +2850,11 @@
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  padding-bottom: var(--page-content-inline);
+  padding-bottom: var(--space-3);
+}
+
+.content--leaderboard .pg-head {
+  margin-bottom: 0.45rem;
 }
 
 .content--leaderboard .leaderboard-page-layout,
@@ -2862,7 +2866,7 @@
 
 .content--leaderboard .leaderboard-panel__stack {
   display: grid;
-  gap: var(--space-2);
+  gap: 0.55rem;
   grid-template-rows: auto minmax(0, 1fr);
 }
 
@@ -2873,7 +2877,7 @@
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   overflow: hidden;
-  padding: var(--space-3);
+  padding: 0.35rem 0.85rem 0;
 }
 
 .content--leaderboard .leaderboard-board-block--paginated {
@@ -2883,8 +2887,8 @@
 .content--leaderboard .leaderboard-board-block .leaderboard-toolbar {
   align-items: center;
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: auto minmax(16rem, 1fr) minmax(12rem, 15rem);
+  gap: var(--space-2) var(--space-3);
+  grid-template-columns: max-content minmax(0, 1fr) minmax(11rem, 14rem);
   min-width: 0;
   padding: 0;
 }
@@ -2901,7 +2905,7 @@
 }
 
 .content--leaderboard .leaderboard-refresh-status {
-  max-width: 13rem;
+  max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2909,8 +2913,9 @@
 
 .content--leaderboard .leaderboard-toolbar__stats {
   display: grid;
-  gap: var(--space-3);
-  grid-template-columns: repeat(3, minmax(5.5rem, 1fr));
+  gap: 3.25rem;
+  grid-template-columns: repeat(3, max-content);
+  justify-content: start;
   min-width: 0;
 }
 
@@ -2930,12 +2935,16 @@
   width: 100%;
 }
 
+.content--leaderboard .leaderboard-toolbar__stats .label-mono {
+  white-space: nowrap;
+}
+
 .content--leaderboard .leaderboard-list-frame {
   align-content: start;
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   border-radius: var(--radius-md);
-  margin-top: var(--space-2);
+  margin-top: 0.28rem;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -2985,7 +2994,7 @@
   gap: var(--space-3);
   grid-template-columns: minmax(0, 1fr) auto auto;
   margin: 0 calc(var(--space-3) * -1);
-  padding: var(--space-1) var(--space-3);
+  padding: 0.12rem var(--space-3) 0.2rem;
 }
 
 .leaderboard-pagination__summary,
@@ -3038,11 +3047,7 @@
 
 @container leaderboard-board (max-width: 50rem) {
   .content--leaderboard .leaderboard-board-block .leaderboard-toolbar {
-    grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.42fr);
-  }
-
-  .content--leaderboard .leaderboard-toolbar__control-row {
-    grid-column: 1 / -1;
+    grid-template-columns: max-content minmax(0, 1fr) minmax(11rem, 14rem);
   }
 
   .content--leaderboard .leaderboard-refresh-status {
