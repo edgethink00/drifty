@@ -1,6 +1,7 @@
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { Toggle } from "../../components/Toggle";
 import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
+import { resolvePlanCardState } from "../billing/planCardState";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
 import type {
   BillingEntitlement,
@@ -101,9 +102,23 @@ export function AccountSettingsSection({
   const isPaymentRequiredLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "payment_required";
   const isCurrentCloudPlan = currentBillingPlan === "individual" && !shouldShowCloudCheckoutPlans;
   const shouldShowDeviceManagement = isCurrentCloudPlan || isDeviceLimitLocked || cloudDevices.length > 0;
-  // During a trial the plan is not owned yet: the cards must stay purchasable so
-  // the user can convert, instead of reading as "Current plan" and locking.
-  const planCardsCurrentPlan = billingEntitlementStatus === "trialing" ? "free" : currentBillingPlan;
+  // A trial holds Pro access without owning the subscription. Passing the real
+  // state (instead of relabelling the account as Free) keeps Pro purchasable
+  // while the cards still say the trial is what is currently running.
+  const planState = resolvePlanCardState(
+    billingEntitlementStatus === null
+      ? null
+      : {
+        plan: "individual",
+        status: billingEntitlementStatus,
+        canUseApp: billingEntitlementStatus !== "locked",
+        trialEndsAt: null,
+        currentPeriodEnd: null,
+        lockedReason: billingEntitlementLockedReason ?? undefined,
+      },
+  );
+  const isTrialing = planState === "pro_trial";
+  const planCardsCurrentPlan: BillingPlanId | null = isTrialing ? null : currentBillingPlan;
   // The Pro card already names the plan a subscriber owns, so it also
   // carries billing management. That removes the separate status row that would
   // otherwise repeat the same plan name directly under the same card.
@@ -124,6 +139,7 @@ export function AccountSettingsSection({
         manageCurrentPlanLabel={isPaymentRequiredLocked ? t("settings.account.fixBilling") : undefined}
         manageCurrentPlanLoading={billingPortalLoading}
         mode="display"
+        planState={planState}
         onManageCurrentPlan={canManageCurrentPlan ? () => void onManageCloudBilling() : undefined}
         onSelectFreePlan={onOpenAiSetup}
         onSelectPlan={(interval) => {

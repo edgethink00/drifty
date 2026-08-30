@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { BillingInterval } from "./billingService";
+import type { PlanCardState } from "./planCardState";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 
@@ -54,6 +55,7 @@ export function IndividualPlanCards({
   disabled = false,
   loadingInterval,
   mode = "checkout",
+  planState = null,
   onBillingIntervalChange,
   onSelectFreePlan,
   onSelectPlan,
@@ -67,6 +69,13 @@ export function IndividualPlanCards({
   readonly loadingInterval: BillingInterval | null;
   /** `checkout` and `display` name the host surface for styling. */
   readonly mode?: "checkout" | "display";
+  /**
+   * The account's real billing state. It decides what each card says; `currentPlan`
+   * only decides which card is styled as owned. A trial is Pro access that has
+   * not converted, so Pro must stay purchasable while Free stops claiming to be
+   * the current plan.
+   */
+  readonly planState?: PlanCardState | null;
   readonly onBillingIntervalChange?: (interval: VisibleBillingInterval) => void;
   readonly onSelectFreePlan?: () => void;
   readonly onSelectPlan?: (interval: VisibleBillingInterval) => void;
@@ -83,6 +92,7 @@ export function IndividualPlanCards({
   const [internalBillingInterval, setInternalBillingInterval] = useState<VisibleBillingInterval>("monthly");
   const selectedInterval = billingInterval ?? internalBillingInterval;
   const individualPrice = INDIVIDUAL_PRICE_BY_INTERVAL[selectedInterval];
+  const isTrialing = planState === "pro_trial";
   const individualIsCurrent = currentPlan === "individual";
   const canSelectIndividual = Boolean(onSelectPlan) && !individualIsCurrent;
 
@@ -91,9 +101,11 @@ export function IndividualPlanCards({
     onBillingIntervalChange?.(interval);
   };
 
-  const individualBadgeLabel = individualIsCurrent
-    ? t("billing.plan.currentBadge")
-    : t("billing.plan.recommendedBadge");
+  const individualBadgeLabel = isTrialing
+    ? t("billing.plan.trialBadge")
+    : individualIsCurrent
+      ? t("billing.plan.currentBadge")
+      : t("billing.plan.recommendedBadge");
 
   const individualContent = (
     <>
@@ -176,7 +188,10 @@ export function IndividualPlanCards({
     <div className={`individual-plan-suite individual-plan-suite--${mode}`} aria-label={t("billing.plan.suiteAria")}>
       {intervalSwitch}
       <div className="individual-plan-cards">
-        <article className={`individual-plan-card${currentPlan === "free" ? " individual-plan-card--current" : ""}`} aria-label={t("billing.plan.freeAria")}>
+        <article
+          className={`individual-plan-card${currentPlan === "free" && !isTrialing ? " individual-plan-card--current" : ""}`}
+          aria-label={t("billing.plan.freeAria")}
+        >
           <span className="individual-plan-card__top">
             <span className="individual-plan-card__topline">
               <span>{t("billing.plan.free")}</span>
@@ -198,7 +213,8 @@ export function IndividualPlanCards({
             </button>
           ) : (
             <span className="individual-plan-card__cta">
-              {currentPlan === "free" ? t("billing.plan.currentPlan") : t("billing.plan.included")}
+              {/* A trial runs on Pro, so Free is included by it, never the current plan. */}
+              {currentPlan === "free" && !isTrialing ? t("billing.plan.currentPlan") : t("billing.plan.included")}
             </span>
           )}
         </article>

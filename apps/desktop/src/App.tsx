@@ -8677,6 +8677,7 @@ export default function App() {
         <UpgradePlanModal
           billingActionError={billingActionError}
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
+          billingEntitlement={effectiveBillingEntitlement}
           billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || isSidebarCtaPreviewActive}
           onClose={() => setUpgradePlanModalOpen(false)}
           onSelectBillingPlan={(billingInterval) => {

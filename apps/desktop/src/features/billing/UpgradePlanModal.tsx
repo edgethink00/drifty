@@ -4,18 +4,22 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { IndividualPlanCards } from "./IndividualPlanCards";
+import { resolvePlanCardState } from "./planCardState";
 import { useLocalization } from "../localization/LocalizationContext";
-import type { BillingInterval } from "./billingService";
+import type { BillingEntitlement, BillingInterval } from "./billingService";
 
 export function UpgradePlanModal({
   billingActionError,
   billingCheckoutLoadingInterval,
+  billingEntitlement = null,
   billingPlansDisabled = false,
   onClose,
   onSelectBillingPlan,
 }: {
   readonly billingActionError: string | null;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  /** The account's live entitlement; a trial must not be described as Free. */
+  readonly billingEntitlement?: BillingEntitlement | null;
   readonly billingPlansDisabled?: boolean;
   readonly onClose: () => void;
   readonly onSelectBillingPlan: (interval: BillingInterval) => void;
@@ -27,6 +31,8 @@ export function UpgradePlanModal({
   const titleId = `${id}-title`;
   const descriptionId = `${id}-description`;
   const checkoutOpening = billingCheckoutLoadingInterval !== null;
+  const planState = resolvePlanCardState(billingEntitlement);
+  const isTrialing = planState === "pro_trial";
   useModalDismiss(onClose, { disabled: checkoutOpening });
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
 
@@ -53,10 +59,11 @@ export function UpgradePlanModal({
           className="dashboard-ai-recovery__plans"
         >
           <IndividualPlanCards
-            currentPlan="free"
+            currentPlan={isTrialing ? null : "free"}
             disabled={billingPlansDisabled}
             loadingInterval={billingCheckoutLoadingInterval}
             mode="checkout"
+            planState={planState}
             onSelectPlan={(interval) => {
               setCheckoutRequested(true);
               onSelectBillingPlan(interval);
