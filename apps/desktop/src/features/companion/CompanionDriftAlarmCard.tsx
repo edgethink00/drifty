@@ -1,5 +1,6 @@
 import { CompanionPillMoment, type CompanionPillDriftEvent } from "./CompanionPillMoment";
 import type { DriftAlarmAction, DriftAlarmEvent } from "./driftAlarmEvent";
+import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 
 export function toCompanionDriftAlarmMoment(alarm: DriftAlarmEvent): CompanionPillDriftEvent {
   const target = alarm.focusTargets[0] ?? null;
@@ -54,6 +55,50 @@ export function CompanionDriftAlarmCard({
         <div className="pill__clip">
           <CompanionPillMoment
             event={moment}
+            autoDismissEnabled={!isPreview}
+            onDismiss={onDismiss}
+            onOpenDashboard={onOpenDashboard}
+            onAction={onAction}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Compact Automatic close card shared by browser QA and the copy editor. */
+export function CompanionAutomaticCloseCard({
+  event,
+  isPreview = false,
+  onAction,
+  onDismiss,
+  onOpenDashboard,
+}: {
+  readonly event: ExtremeNudgeToastEvent;
+  readonly isPreview?: boolean;
+  readonly onAction: (action: DriftAlarmAction) => void;
+  readonly onDismiss: () => void;
+  readonly onOpenDashboard: () => void;
+}) {
+  const previewInertProps = isPreview ? { inert: "" } : {};
+  const previewLabel = event.focusLabel ? `${event.title} Back in ${event.focusLabel}` : event.title;
+  return (
+    <div
+      className={`companion-drift-alarm-card companion-pill-surface${isPreview ? " companion-drift-alarm-card--preview" : ""}`}
+      data-state="nudge"
+      data-preview={isPreview ? "true" : undefined}
+      role={isPreview ? "group" : "alertdialog"}
+      aria-label={isPreview ? previewLabel : event.title}
+    >
+      <div
+        className="pill"
+        data-state="nudge"
+        data-card-state="nudge"
+        {...previewInertProps}
+      >
+        <div className="pill__clip">
+          <CompanionPillMoment
+            event={event}
             autoDismissEnabled={!isPreview}
             onDismiss={onDismiss}
             onOpenDashboard={onOpenDashboard}

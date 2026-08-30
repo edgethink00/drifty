@@ -394,19 +394,28 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("radio", { name: "V2" })).toBeNull();
   });
 
-  /* Drift alarms, the break-over card and the day review only ever appeared
+  /* Drift alerts, the break-over card and the day review only ever appeared
      after real drift, so their layout could not be reviewed on demand. */
   it("previews the decision cards through the active notification surface", () => {
     const props = renderProductionDevSettings();
-    fireEvent.click(screen.getByRole("button", { name: "Drift alarm" }));
+    fireEvent.click(screen.getByRole("button", { name: "Drift alert" }));
     fireEvent.click(screen.getByRole("button", { name: "Break over" }));
-    fireEvent.click(screen.getByRole("button", { name: "Extreme nudge" }));
+    fireEvent.click(screen.getByRole("button", { name: "Automatic close" }));
     fireEvent.click(screen.getByRole("button", { name: "Day review" }));
 
     expect(props.onPreviewCompanionMoment).toHaveBeenNthCalledWith(1, "drift-alarm");
     expect(props.onPreviewCompanionMoment).toHaveBeenNthCalledWith(2, "break-return");
     expect(props.onPreviewCompanionMoment).toHaveBeenNthCalledWith(3, "extreme-nudge");
     expect(props.onPreviewCompanionDayReview).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the production Automatic close name in AX diagnostics", () => {
+    renderProductionDevSettings();
+    fireEvent.click(screen.getByRole("button", { name: /^AX fallback diagnostics/ }));
+
+    expect(screen.getByText("Force Chromium AX automatic close")).toBeTruthy();
+    expect(screen.getByRole("switch", { name: "Force Chromium Accessibility automatic close" })).toBeTruthy();
+    expect(screen.queryByText(/Extreme nudge/)).toBeNull();
   });
 
   it("shows pre-release update status and disables the check while busy", () => {

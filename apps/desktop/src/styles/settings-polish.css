@@ -943,8 +943,9 @@
   color: var(--text-soft);
   font-size: 0.78125rem;
   font-weight: 650;
-  min-height: 2.2rem;
-  padding: 0 var(--space-2);
+  line-height: 1.15;
+  min-height: 2.6rem;
+  padding: 4px var(--space-2);
 }
 
 .drift-copy-modal__tab:hover,
@@ -1051,7 +1052,6 @@
   align-self: start;
   display: grid;
   gap: var(--space-3);
-  justify-items: center;
   max-height: min(620px, calc(100vh - 220px));
   overflow: visible;
   padding-bottom: var(--space-4);
@@ -1061,6 +1061,7 @@
 
 .drift-copy-preview__alarm {
   display: grid;
+  justify-self: center;
   justify-items: center;
   max-width: 100%;
   width: 22rem;
@@ -1071,21 +1072,39 @@
 }
 
 .drift-copy-preview__notification {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 92%, var(--canvas));
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 10%, transparent);
   display: grid;
-  gap: var(--space-2);
-  justify-items: center;
-  padding: var(--space-3);
+  gap: 7px;
+  justify-self: center;
+  padding: 12px 14px 14px;
   width: min(100%, 26.8rem);
 }
 
-.drift-copy-preview__notification-kicker {
+.drift-copy-preview__notification-app {
+  align-items: center;
   color: var(--text-soft);
-  font-family: var(--font-mono);
+  display: grid;
   font-size: 0.71875rem;
-  justify-self: start;
-  text-transform: uppercase;
+  gap: 6px;
+  grid-template-columns: auto 1fr auto;
+}
+
+.drift-copy-preview__notification-app img {
+  border-radius: 5px;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+.drift-copy-preview__notification-app span {
+  color: var(--text-muted);
+  font-weight: 620;
+}
+
+.drift-copy-preview__notification-app time {
+  color: var(--text-soft);
 }
 
 .drift-copy-preview__notification-title {
@@ -1096,67 +1115,11 @@
   justify-self: start;
 }
 
-.drift-copy-preview__notification-source {
-  align-items: flex-start;
-  color: var(--text-muted);
-  column-gap: var(--space-2);
-  display: grid;
-  font-size: .82rem;
-  grid-template-columns: auto minmax(0, max-content);
-  justify-content: center;
-  min-width: 0;
-  row-gap: 2px;
-}
-
-.drift-copy-preview__notification-source .src-tile {
-  height: 1.125rem;
-  justify-self: end;
-  width: 1.125rem;
-}
-
-.drift-copy-preview__notification-source .src-tile .site-favicon,
-.drift-copy-preview__notification-source .src-tile .app-icon,
-.drift-copy-preview__notification-source .src-tile .app-glyph {
-  border-radius: inherit;
-  height: 100%;
-  width: 100%;
-}
-
-.drift-copy-preview__notification-place {
-  color: var(--text);
-  font-size: .86rem;
-  font-weight: 400;
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: start;
-}
-
-.drift-copy-preview__notification p {
+.drift-copy-preview__notification-body {
   color: var(--text-soft);
   font-size: 0.84375rem;
-  grid-column: 1 / -1;
-  grid-row: 2;
-  justify-self: center;
   line-height: 1.45;
   margin: 0;
-  text-align: center;
-}
-
-.drift-copy-preview__extreme {
-  display: grid;
-  justify-items: center;
-  min-height: 6.5rem;
-  width: min(100%, 26.8rem);
-}
-
-.drift-copy-preview__extreme .extreme-nudge-toast {
-  animation: none;
-  position: static;
-  width: min(100%, 22rem);
-}
-
-.drift-copy-preview__extreme .extreme-nudge-toast::after {
-  animation: none;
 }
 
 @media (max-width: 900px) {

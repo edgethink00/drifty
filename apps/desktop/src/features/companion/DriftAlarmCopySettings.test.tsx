@@ -9,12 +9,12 @@ describe("DriftAlarmCopySettings", () => {
   it("previews draft edits and saves production drift alarm copy on command", () => {
     const onChange = renderSettings();
 
-    const alarmCopy = screen.getByRole("group", { name: "Alarm copy" });
+    const alarmCopy = screen.getByRole("group", { name: "Alert titles" });
     expect(within(alarmCopy).queryByLabelText("Title")).toBeNull();
-    fireEvent.click(within(alarmCopy).getByRole("button", { name: "Edit alarm copy" }));
+    fireEvent.click(within(alarmCopy).getByRole("button", { name: "Edit alert titles" }));
 
-    const dialog = screen.getByRole("dialog", { name: "Edit alarm copy" });
-    const tablist = within(dialog).getByRole("tablist", { name: "Alarm copy sections" });
+    const dialog = screen.getByRole("dialog", { name: "Edit alert titles" });
+    const tablist = within(dialog).getByRole("tablist", { name: "Alert title sections" });
     expect(tablist.closest(".drift-copy-editor")).not.toBeNull();
     expect(tablist.closest(".drift-copy-preview")).toBeNull();
     expect(within(dialog).getByRole("button", { name: "Close" }).classList.contains("modal-x")).toBe(true);
@@ -25,7 +25,7 @@ describe("DriftAlarmCopySettings", () => {
     expect(within(dialog).queryByLabelText("Correction action")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Back from {context}" } });
     expect(onChange).not.toHaveBeenCalled();
-    const driftPreview = within(dialog).getByRole("complementary", { name: "Alarm copy preview" });
+    const driftPreview = within(dialog).getByRole("complementary", { name: "Alert title preview" });
     expect(driftPreview.textContent).toContain("Back from youtube.com");
     expect(driftPreview.textContent).toContain("This seems outside your focus flow.");
     expect(driftPreview.textContent).not.toContain("(now drifting)");
@@ -34,31 +34,37 @@ describe("DriftAlarmCopySettings", () => {
     expect(driftPreview.querySelector(".companion-drift-alarm-card .view--drift")).toBeTruthy();
     expect(driftPreview.querySelector(".drift-alarm-backdrop")).toBeNull();
 
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Break return" }));
+    fireEvent.click(within(dialog).getByRole("tab", { name: "Break over" }));
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();
     expect(within(dialog).queryByLabelText("Paused from pill")).toBeNull();
     expect(within(dialog).queryByLabelText("Next focus pill")).toBeNull();
     expect(within(dialog).queryByLabelText("Extend break label")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "{breakDuration} Back" } });
     expect(onChange).not.toHaveBeenCalled();
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Back");
+    expect(within(dialog).getByRole("complementary", { name: "Alert title preview" }).textContent).toContain("Back");
 
-    fireEvent.click(within(dialog).getByRole("tab", { name: "Notification" }));
+    fireEvent.click(within(dialog).getByRole("tab", { name: "macOS notification" }));
     expect(within(dialog).queryByLabelText("Dashboard action")).toBeNull();
     expect(within(dialog).queryByLabelText("No focus target text")).toBeNull();
     expect(within(dialog).queryByLabelText("Desktop notification body")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Decision needed" } });
     expect(onChange).not.toHaveBeenCalled();
-    const notificationPreview = within(dialog).getByRole("complementary", { name: "Alarm copy preview" });
+    const notificationPreview = within(dialog).getByRole("complementary", { name: "Alert title preview" });
     expect(notificationPreview.textContent).not.toContain("Open dashboard");
-    expect(within(notificationPreview).getByLabelText("Notification source youtube.com")).toBeTruthy();
-    expect(notificationPreview.querySelector(".drift-copy-preview__notification-source .site-favicon")).toBeTruthy();
+    expect(notificationPreview.textContent).toContain("Drifty");
+    expect(notificationPreview.textContent).toContain("5 minutes on youtube.com");
+    expect(notificationPreview.querySelector(".drift-copy-preview__notification-source")).toBeNull();
 
     fireEvent.click(within(dialog).getByRole("tab", { name: "Automatic close" }));
     expect(within(dialog).queryByLabelText("Summary")).toBeNull();
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Removed {closed}" } });
     expect(onChange).not.toHaveBeenCalled();
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Removed youtube.com");
+    const automaticClosePreview = within(dialog).getByRole("complementary", { name: "Alert title preview" });
+    expect(automaticClosePreview.textContent).toContain("Removed youtube.com");
+    expect(automaticClosePreview.textContent).toContain("Back in");
+    expect(automaticClosePreview.textContent).toContain("Xcode");
+    expect(automaticClosePreview.querySelector(".extreme-nudge-toast")).toBeNull();
+    expect(automaticClosePreview.querySelector(".view--nudge")).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(onChange).toHaveBeenLastCalledWith({
@@ -68,28 +74,28 @@ describe("DriftAlarmCopySettings", () => {
       notificationTitle: "Decision needed",
       extremeNudgeTitle: "Removed {closed}",
     });
-    expect(screen.queryByRole("dialog", { name: "Edit alarm copy" })).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Edit alert titles" })).toBeNull();
   });
 
   it("resets and cancels draft alarm copy without saving", () => {
     const onChange = renderSettings();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit alarm copy" }));
-    const dialog = screen.getByRole("dialog", { name: "Edit alarm copy" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit alert titles" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit alert titles" });
 
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Back from {context}" } });
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Back from youtube.com");
-    fireEvent.click(within(dialog).getByRole("button", { name: "Reset alarm copy" }));
+    expect(within(dialog).getByRole("complementary", { name: "Alert title preview" }).textContent).toContain("Back from youtube.com");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Reset titles" }));
     expect(onChange).not.toHaveBeenCalled();
-    expect(within(dialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Let's get you back in flow.");
+    expect(within(dialog).getByRole("complementary", { name: "Alert title preview" }).textContent).toContain("Let's get you back in flow.");
 
     fireEvent.change(within(dialog).getByLabelText("Title"), { target: { value: "Back from {context}" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(onChange).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Edit alarm copy" }));
-    const reopenedDialog = screen.getByRole("dialog", { name: "Edit alarm copy" });
-    expect(within(reopenedDialog).getByRole("complementary", { name: "Alarm copy preview" }).textContent).toContain("Let's get you back in flow.");
+    fireEvent.click(screen.getByRole("button", { name: "Edit alert titles" }));
+    const reopenedDialog = screen.getByRole("dialog", { name: "Edit alert titles" });
+    expect(within(reopenedDialog).getByRole("complementary", { name: "Alert title preview" }).textContent).toContain("Let's get you back in flow.");
   });
 });
 

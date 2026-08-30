@@ -22,9 +22,9 @@ export type CompanionMilestonePreviewId =
    spacing and wording matter most — could not be looked at without waiting for
    real drift. These previews fire the same events the tracker does. */
 export const COMPANION_MOMENT_PREVIEW_OPTIONS = [
-  { id: "drift-alarm", label: "Drift alarm" },
+  { id: "drift-alarm", label: "Drift alert" },
   { id: "break-return", label: "Break over" },
-  { id: "extreme-nudge", label: "Extreme nudge" },
+  { id: "extreme-nudge", label: "Automatic close" },
   { id: "reentry", label: "Long-break return" },
 ] as const;
 

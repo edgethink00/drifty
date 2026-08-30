@@ -17,8 +17,8 @@ export type DriftAlarmCopyGroup = {
 
 const DRIFT_COPY_SECTION = {
   key: "drift",
-  title: "Drift alarm",
-  description: "Customize the representative title shown when drift is detected.",
+  title: "Drift alert",
+  description: "Shown by Companion when drift is detected.",
   fields: [
     { key: "driftTitle", label: "Title", hint: "{context}" },
   ],
@@ -26,8 +26,8 @@ const DRIFT_COPY_SECTION = {
 
 const BREAK_RETURN_COPY_SECTION = {
   key: "breakReturn",
-  title: "Break return",
-  description: "Customize the representative title shown when a selected break ends.",
+  title: "Break over",
+  description: "Shown by Companion when a selected break ends.",
   fields: [
     { key: "breakReturnTitle", label: "Title", hint: "{breakDuration}" },
   ],
@@ -35,8 +35,8 @@ const BREAK_RETURN_COPY_SECTION = {
 
 const NOTIFICATION_COPY_SECTION = {
   key: "notification",
-  title: "Notification",
-  description: "Customize the representative title used by the native desktop notification.",
+  title: "macOS notification",
+  description: "Shown by macOS when Drifty sends a background drift notification.",
   fields: [
     { key: "notificationTitle", label: "Title", hint: "Plain text" },
   ],
@@ -45,7 +45,7 @@ const NOTIFICATION_COPY_SECTION = {
 const EXTREME_NUDGE_COPY_SECTION = {
   key: "extremeNudge",
   title: "Automatic close",
-  description: "Customize the representative title used by the Automatic close toast.",
+  description: "Shown after Drifty closes a supported distracting tab or app.",
   fields: [
     { key: "extremeNudgeTitle", label: "Title", hint: "{closed}" },
   ],

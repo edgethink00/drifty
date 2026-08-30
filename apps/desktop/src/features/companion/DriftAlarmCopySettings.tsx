@@ -5,22 +5,20 @@ import {
   type DriftAlarmEvent,
   type DriftAlarmFocusTarget,
 } from "./driftAlarmEvent";
-import { CompanionDriftAlarmCard } from "./CompanionDriftAlarmCard";
-import { DriftAlarmSourceIcon } from "./DriftAlarmSourceIcon";
-import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import { CompanionAutomaticCloseCard, CompanionDriftAlarmCard } from "./CompanionDriftAlarmCard";
+import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import driftyIcon from "../../assets/drifty-icon.png";
 
 type AlarmPreviewSectionKey = Extract<DriftAlarmCopySectionKey, "drift" | "breakReturn">;
 
 const NOTIFICATION_PREVIEW = {
   place: "youtube.com",
   driftDurationLabel: "5 minutes",
-  sourceAppName: "Google Chrome",
-  sourceIconSrc: null,
 } as const;
 
 const EXTREME_NUDGE_PREVIEW = {
@@ -171,24 +169,24 @@ export function DriftAlarmCopySettings({
                 ) : null}
                 {activeSectionKey === "notification" ? (
                   <div className="drift-copy-preview__notification">
-                    <span className="drift-copy-preview__notification-kicker">{t("settings.alarmCopy.macosNotification")}</span>
-                    <strong className="drift-copy-preview__notification-title">{notificationPreview.title}</strong>
-                    <div className="drift-copy-preview__notification-source" aria-label={t("settings.alarmCopy.notificationSourceAria", { source: NOTIFICATION_PREVIEW.place })}>
-                      <span className="src-tile src-tile--drift" aria-hidden="true">
-                        <DriftAlarmSourceIcon
-                          appName={NOTIFICATION_PREVIEW.sourceAppName}
-                          iconSrc={NOTIFICATION_PREVIEW.sourceIconSrc}
-                          siteDomain={NOTIFICATION_PREVIEW.place}
-                        />
-                      </span>
-                      <span className="drift-copy-preview__notification-place">{NOTIFICATION_PREVIEW.place}</span>
-                      <p>{notificationPreview.body}</p>
+                    <div className="drift-copy-preview__notification-app">
+                      <img src={driftyIcon} alt="" aria-hidden="true" />
+                      <span>{t("settings.alarmCopy.notificationAppName")}</span>
+                      <time>{t("settings.alarmCopy.notificationTime")}</time>
                     </div>
+                    <strong className="drift-copy-preview__notification-title">{notificationPreview.title}</strong>
+                    <p className="drift-copy-preview__notification-body">{notificationPreview.body}</p>
                   </div>
                 ) : null}
                 {activeSectionKey === "extremeNudge" ? (
-                  <div className="drift-copy-preview__extreme">
-                    <ExtremeNudgeToast event={extremeNudgePreview} isPreview />
+                  <div className="drift-copy-preview__alarm">
+                    <CompanionAutomaticCloseCard
+                      event={extremeNudgePreview}
+                      isPreview
+                      onAction={ignorePreviewAction}
+                      onDismiss={ignorePreviewAction}
+                      onOpenDashboard={ignorePreviewAction}
+                    />
                   </div>
                 ) : null}
               </aside>

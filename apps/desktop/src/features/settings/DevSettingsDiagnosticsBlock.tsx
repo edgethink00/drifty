@@ -74,11 +74,11 @@ export function DevSettingsAxFallbackCard({
       </div>
       <div className="settings-row">
         <div>
-          <div className="lbl">Force Chromium AX extreme nudge</div>
-          <div className="desc">Skip Chromium tab AppleScript close paths so Extreme nudge must use the Accessibility fallback.</div>
+          <div className="lbl">Force Chromium AX automatic close</div>
+          <div className="desc">Skip Chromium tab AppleScript close paths so Automatic close must use the Accessibility fallback.</div>
         </div>
         <div className="ctrl">
-          <Toggle checked={forceChromiumAxExtremeNudgeEnabled} onChange={onForceChromiumAxExtremeNudgeChange} ariaLabel="Force Chromium Accessibility extreme nudge" />
+          <Toggle checked={forceChromiumAxExtremeNudgeEnabled} onChange={onForceChromiumAxExtremeNudgeChange} ariaLabel="Force Chromium Accessibility automatic close" />
         </div>
       </div>
     </SettingsCollapsibleCard>

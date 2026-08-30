@@ -304,13 +304,6 @@ html[data-theme="dark"] .extreme-nudge-toast {
   to { transform: scaleX(0); }
 }
 
-.drift-copy-preview__extreme .extreme-nudge-toast[data-phase],
-.drift-copy-preview__extreme .extreme-nudge-toast[data-phase]::after {
-  animation: none;
-  opacity: 1;
-  transform: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .extreme-nudge-toast,
   .extreme-nudge-toast::after {

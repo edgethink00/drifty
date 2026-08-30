@@ -42,6 +42,10 @@ describe("companion moment previews", () => {
       "extreme-nudge",
       "reentry",
     ]);
+    expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.label)).toContain("Automatic close");
+    expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.label)).not.toContain("Extreme nudge");
+    expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.label)).toContain("Drift alert");
+    expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.label)).not.toContain("Drift alarm");
   });
 
   it("builds a drift alarm carrying a focus target to return to", () => {
