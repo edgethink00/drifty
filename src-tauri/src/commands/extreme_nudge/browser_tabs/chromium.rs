@@ -25,17 +25,6 @@ pub(super) fn tab_close_script(
       end if
     end if
   end try
-  repeat with browserWindow in windows
-    repeat with browserTab in tabs of browserWindow
-      try
-        set currentUrl to URL of browserTab
-        if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
-          close browserTab
-          return "closed_browser_tab:chromium_scanned_tab"
-        end if
-      end try
-    end repeat
-  end repeat
 end tell"##
         )
     };
@@ -51,6 +40,13 @@ property toolbarMaxVisited : 120
 property foundAddress : false
 set targetUrl to "{site_url}"
 set targetDomain to "{site_domain}"
+
+tell application "System Events"
+  if not (exists process "{browser_name}") then return "not_found:chromium_not_running"
+  tell process "{browser_name}"
+    if frontmost is false then return "not_found:chromium_not_frontmost"
+  end tell
+end tell
 
 {apple_script_tab_close}
 try

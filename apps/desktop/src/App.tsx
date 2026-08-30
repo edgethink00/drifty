@@ -777,14 +777,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [petModeHiddenUntil]);
 
-  // Turning the pet back on from Settings or the account menu is an explicit
-  // "show it now", so it must clear a pending temporary hide instead of leaving
-  // the user with a toggle that appears on but shows nothing.
-  useEffect(() => {
-    if (!petModeEnabled) return;
-    setPetModeHiddenUntil((current) => (current === null ? current : persistPetModeHiddenUntil(null)));
-  }, [petModeEnabled]);
-
   const [petModeLabPointerStatus, setPetModeLabPointerStatus] = useState<string | null>(null);
   const [petModeLabInputBounds, setPetModeLabInputBounds] = useState<string | null>(null);
   // Intentionally session-only: a destructive global shortcut must be armed
@@ -4725,9 +4717,11 @@ export default function App() {
           // Only a real catch earns that mercy. A silent renderer rejection,
           // an over-budget approach, or a hung webview is a technical failure
           // of the animation, not a user decision: skip the theatre and run
-          // the close the user turned on. (Observed 2026-08-29: an 8-second
-          // contact timeout was misread as a catch and the drift tab
-          // survived with only the companion card showing.)
+          // the close the user turned on. A verified context change is handled
+          // separately below because the original target is no longer safe to
+          // close. (Observed 2026-08-29: an 8-second contact timeout was misread
+          // as a catch and the drift tab survived with only the companion card
+          // showing.)
           if (intervention.outcome === "user_intercepted") {
             return { applied: false, diagnostic: "pet_intercepted" } as const;
           }
@@ -4742,6 +4736,28 @@ export default function App() {
               candidate: summarizeDriftAlarmCandidate(latestDrift),
               evaluation,
             });
+          }
+          // Focus or another non-drift context can become current during the
+          // native approach. That is neither a catch nor a technical failure:
+          // the target is no longer current, so do not close it in the
+          // background and do not spend the user's one-round catch reprieve.
+          if (intervention.outcome === "cancelled") {
+            return { applied: false, diagnostic: "pet_context_changed" } as const;
+          }
+          // The renderer can observe broad context changes, but it does not
+          // receive the exact local activity identity. Re-check after every
+          // approach (including an 8s timeout) so a tab/app that was current
+          // before the animation can never be closed after the user moved on.
+          const postInterventionGateResult = await confirmFreshDriftAlarmCandidate();
+          if (postInterventionGateResult === "current-snapshot-unavailable") {
+            // Fail closed when the tracker cannot prove the target is still
+            // current, but keep the ordinary fallback alarm visible. Treating
+            // telemetry loss as a context change would silently reproduce the
+            // user's "Automatic close did nothing" symptom.
+            return { applied: false, diagnostic: "pet_target_unverified" } as const;
+          }
+          if (postInterventionGateResult !== "confirmed") {
+            return { applied: false, diagnostic: "pet_target_changed" } as const;
           }
         }
         return applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
@@ -4760,6 +4776,18 @@ export default function App() {
         if (!result.applied) {
           if (lastDriftAlertSegmentRef.current === alertKey) {
             const intercepted = result.diagnostic === "pet_intercepted";
+            const targetChanged = result.diagnostic === "pet_context_changed"
+              || result.diagnostic === "pet_target_changed";
+            if (targetChanged) {
+              lastDriftAlertSegmentRef.current = null;
+              petInterceptedSegmentRef.current = null;
+              publishEvaluationDriftAlarmTrayStatus({
+                kind: "suppressed",
+                reason: result.diagnostic,
+                candidateDetail,
+              }, new Date());
+              return;
+            }
             if (intercepted) {
               petInterceptedSegmentRef.current = deliverySourceSegmentId ?? segment.id;
               // Let the next poll consume the promised one-round reprieve.
@@ -4817,7 +4845,7 @@ export default function App() {
       setBreakRecoveryAssessment(null);
     };
 
-    const confirmFreshDriftAlarmCandidate = async (): Promise<"confirmed" | "current-window-changed" | "current-snapshot-unavailable" | "system-transient-active"> => {
+    async function confirmFreshDriftAlarmCandidate(): Promise<"confirmed" | "current-window-changed" | "current-snapshot-unavailable" | "system-transient-active"> {
       let freshSnapshot: CurrentActivitySnapshot | null = null;
       try {
         freshSnapshot = await trackerClient.getCurrentSnapshot();
@@ -4874,7 +4902,7 @@ export default function App() {
         evaluation,
       });
       return result;
-    };
+    }
 
     const deliverCurrentDriftAlarm = () => {
       recordDriftAlarmDebugEvent({

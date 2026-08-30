@@ -322,10 +322,60 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("automatic-drift-nudge", false, "user_intercepted");
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("automatic-drift-nudge", false, "activity_context_changed");
     expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("automatic-drift-nudge");
     expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("reserves user_intercepted for a real pointer catch", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishMove!: () => void;
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
+      finishMove = () => resolve({
+        facing: "right",
+        targetKind: "browser_tab_close",
+        confidence: "high",
+        diagnostic: "ax_selected_tab_close",
+        targetX: 640,
+        targetY: 48,
+      });
+    }));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "automatic-caught-nudge",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 41, clientX: 12, clientY: 12 });
+    await act(async () => {
+      finishMove();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "automatic-caught-nudge",
+      false,
+      "user_intercepted",
+    );
   });
 
   it("lets explicit Lab X targets interrupt focus sitting while automatic interventions stay blocked", async () => {
@@ -1707,8 +1757,42 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
 
+    expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-without-geometry", false, "target_unavailable");
     expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+  });
+
+  it("reports native movement failures as technical rejections instead of user catches", async () => {
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockRejectedValueOnce(new Error("No monitor is available"));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-native-failure",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "drift-native-failure",
+      false,
+      "renderer_intervention_failed",
+    );
   });
 
   it("does not fake a paw contact for Browser X when exact AX geometry is unavailable", async () => {

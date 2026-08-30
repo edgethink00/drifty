@@ -40,6 +40,14 @@ fn qa_closes_edge_tab_through_native_browser_tab_path() {
         eprintln!("Microsoft Edge is not installed; skipping manual QA test");
         return;
     }
+    match process_exists("Microsoft Edge") {
+        Ok(true) => {
+            eprintln!("Microsoft Edge is already running; skipping isolated QA test");
+            return;
+        }
+        Ok(false) => {}
+        Err(error) => panic!("failed to confirm Edge precondition: {error}"),
+    }
 
     let profile = TempProfile::new("drifty-edge-native-qa").expect("create Edge QA profile");
     let mut browser = launch_browser(
@@ -55,6 +63,19 @@ fn qa_closes_edge_tab_through_native_browser_tab_path() {
     .expect("launch Edge QA browser");
 
     let result = wait_for_tab_count("Microsoft Edge", EDGE_QA_URL, 1)
+        .map_err(|error| format!("Edge QA tab did not open: {error}"))
+        .and_then(|_| {
+            run_osascript_text(r#"tell application "Microsoft Edge" to activate"#).map(|_| ())
+        })
+        .and_then(|_| {
+            // SSH-launched automation cannot always activate GUI apps itself.
+            // Leave enough time for the Computer Use foreground handoff used by
+            // the attended pre-merge smoke without weakening the assertion.
+            wait_until(Duration::from_secs(20), || {
+                process_is_frontmost("Microsoft Edge")
+            })
+            .map_err(|error| format!("Edge did not become frontmost: {error}"))
+        })
         .and_then(|_| {
             super::close_browser_tab(
                 "Microsoft Edge",
@@ -65,10 +86,74 @@ fn qa_closes_edge_tab_through_native_browser_tab_path() {
             )
             .map_err(|error| error.to_string())
         })
-        .and_then(|_| wait_for_tab_count("Microsoft Edge", EDGE_QA_URL, 0));
+        .and_then(|_| {
+            wait_for_tab_count("Microsoft Edge", EDGE_QA_URL, 0)
+                .map_err(|error| format!("Edge QA tab remained after close: {error}"))
+        });
 
-    cleanup_browser_process(&mut browser, profile.path());
+    cleanup_edge_browser(&mut browser, profile.path());
     result.expect("native Edge close_browser_tab closes QA tab");
+}
+
+#[test]
+#[ignore = "launches Microsoft Edge with a temporary profile and proves a background tab is preserved"]
+fn qa_refuses_to_close_edge_after_the_browser_loses_frontmost() {
+    if !Path::new("/Applications/Microsoft Edge.app").exists() {
+        eprintln!("Microsoft Edge is not installed; skipping manual QA test");
+        return;
+    }
+    match process_exists("Microsoft Edge") {
+        Ok(true) => {
+            eprintln!("Microsoft Edge is already running; skipping isolated QA test");
+            return;
+        }
+        Ok(false) => {}
+        Err(error) => panic!("failed to confirm Edge precondition: {error}"),
+    }
+
+    let profile = TempProfile::new("drifty-edge-background-guard-qa")
+        .expect("create Edge background-guard QA profile");
+    let mut browser = launch_browser(
+        "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+        &[
+            format!("--user-data-dir={}", profile.path()),
+            "--no-first-run".to_string(),
+            "--no-default-browser-check".to_string(),
+            "--new-window".to_string(),
+            EDGE_QA_URL.to_string(),
+        ],
+    )
+    .expect("launch Edge background-guard QA browser");
+
+    let result = wait_for_tab_count("Microsoft Edge", EDGE_QA_URL, 1)
+        .and_then(|_| run_osascript_text(r#"tell application "Finder" to activate"#).map(|_| ()))
+        .and_then(|_| {
+            wait_until(Duration::from_secs(4), || {
+                process_is_frontmost("Microsoft Edge").map(|frontmost| !frontmost)
+            })
+        })
+        .and_then(|_| {
+            match super::close_browser_tab(
+                "Microsoft Edge",
+                None,
+                Some(EDGE_QA_URL),
+                Some("example.com"),
+                false,
+            ) {
+                Err(super::ExtremeNudgeError::BrowserTabNotFound { diagnostic })
+                    if diagnostic == "chromium_not_frontmost" =>
+                {
+                    Ok(())
+                }
+                other => Err(format!(
+                    "expected chromium_not_frontmost, observed {other:?}"
+                )),
+            }
+        })
+        .and_then(|_| wait_for_tab_count("Microsoft Edge", EDGE_QA_URL, 1));
+
+    cleanup_edge_browser(&mut browser, profile.path());
+    result.expect("native Edge close guard preserves a tab after focus moves away");
 }
 
 #[test]
@@ -174,6 +259,33 @@ end tell"#
         .map_err(|error| error.to_string())
 }
 
+fn process_is_frontmost(app_name: &str) -> Result<bool, String> {
+    let app_name = applescript_string_literal(app_name);
+    let observed = run_osascript_text(&format!(
+        r#"tell application "System Events"
+  if not (exists process "{app_name}") then return "missing"
+  tell process "{app_name}" to return frontmost
+end tell"#
+    ))?;
+    match observed.as_str() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("unexpected frontmost state: {observed}")),
+    }
+}
+
+fn process_exists(app_name: &str) -> Result<bool, String> {
+    let app_name = applescript_string_literal(app_name);
+    let observed = run_osascript_text(&format!(
+        r#"tell application "System Events" to return exists process "{app_name}""#
+    ))?;
+    match observed.as_str() {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(format!("unexpected process state: {observed}")),
+    }
+}
+
 fn wait_for_firefox_url_match(url: &str, expected: bool) -> Result<(), String> {
     let url = applescript_string_literal(url);
     let schemaless_url = url
@@ -262,6 +374,17 @@ fn cleanup_browser_process(child: &mut Child, profile_path: String) {
     let _ = child.kill();
     let _ = child.wait();
     let _ = Command::new("pkill").args(["-f", &profile_path]).status();
+}
+
+fn cleanup_edge_browser(child: &mut Child, profile_path: String) {
+    let _ = run_osascript_text(r#"tell application "Microsoft Edge" to quit"#);
+    cleanup_browser_process(child, profile_path);
+    let _ = Command::new("pkill")
+        .args(["-x", "Microsoft Edge"])
+        .status();
+    let _ = wait_until(Duration::from_secs(4), || {
+        process_exists("Microsoft Edge").map(|exists| !exists)
+    });
 }
 
 fn applescript_string_literal(value: &str) -> String {

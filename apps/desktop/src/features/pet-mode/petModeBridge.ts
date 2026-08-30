@@ -124,6 +124,7 @@ export async function setNativePetModeSize(width: number, height: number): Promi
 export type PetModeInterventionOutcome =
   | "contacted"
   | "user_intercepted"
+  | "cancelled"
   | "rejected"
   | "timed_out"
   | "failed";
@@ -137,7 +138,11 @@ export type PetModeInterventionResult = {
 };
 
 function classifyPetModeContactEvent(payload: PetModeContactEvent): PetModeInterventionOutcome {
-  if (payload.contacted !== false) return "contacted";
+  if (payload.contacted === true) return "contacted";
+  // A malformed or version-skewed event must not claim the paw reached its
+  // target. Treat it as a technical rejection so the caller can use the plain
+  // Automatic close path the user explicitly enabled.
+  if (payload.contacted !== false) return "rejected";
   // The renderer distinguishes a guard rejection from a user catch. A missing
   // reason (undefined from a stale renderer, null once Rust serializes an
   // omitted Option) came only from the interrupted-action paths, so it keeps
@@ -145,7 +150,8 @@ function classifyPetModeContactEvent(payload: PetModeContactEvent): PetModeInter
   if (payload.reason == null || payload.reason === "user_intercepted") {
     return "user_intercepted";
   }
-  if (typeof payload.reason !== "string") return "user_intercepted";
+  if (payload.reason === "activity_context_changed") return "cancelled";
+  if (typeof payload.reason !== "string") return "rejected";
   return "rejected";
 }
 

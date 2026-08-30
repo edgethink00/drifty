@@ -199,7 +199,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tab_close_script_matches_active_tab_before_scanning_windows() {
+    fn chromium_tab_close_script_only_closes_the_current_front_tab() {
         let script = tab_close_script(
             "Google Chrome",
             "https://youtube.com/watch?v=abc",
@@ -210,8 +210,11 @@ mod tests {
 
         assert!(script.contains("URL of active tab of front window"));
         assert!(script.contains("close active tab of front window"));
-        assert!(script.contains("repeat with browserWindow in windows"));
-        assert!(script.contains("repeat with browserTab in tabs of browserWindow"));
+        assert!(script
+            .contains("if frontmost is false then return \"not_found:chromium_not_frontmost\""));
+        assert!(!script.contains("repeat with browserWindow in windows"));
+        assert!(!script.contains("repeat with browserTab in tabs of browserWindow"));
+        assert!(!script.contains("chromium_scanned_tab"));
     }
 
     #[test]
@@ -345,7 +348,11 @@ mod tests {
         assert!(script.contains("tell application \"Safari\""));
         assert!(script.contains("URL of current tab of front window"));
         assert!(script.contains("close current tab of front window"));
-        assert!(script.contains("repeat with browserTab in tabs of browserWindow"));
+        assert!(
+            script.contains("if frontmost is false then return \"not_found:safari_not_frontmost\"")
+        );
+        assert!(!script.contains("repeat with browserWindow in windows"));
+        assert!(!script.contains("repeat with browserTab in tabs of browserWindow"));
         assert!(script.contains("normalizedUrlHost(currentUrl) is targetDomain"));
     }
 
@@ -362,7 +369,9 @@ mod tests {
 
         assert!(script.contains("tell application \"System Events\""));
         assert!(script.contains("process \"Firefox\""));
-        assert!(script.contains("tell application \"Firefox\" to activate"));
+        assert!(!script.contains("tell application \"Firefox\" to activate"));
+        assert!(script
+            .contains("if frontmost is false then return \"not_found:firefox_not_frontmost\""));
         assert!(script.contains("keystroke \"l\" using command down"));
         assert!(script.contains("AXFocusedUIElement"));
         assert!(script.contains("key code 53"));

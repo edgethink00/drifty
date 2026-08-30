@@ -7,7 +7,7 @@ use std::{
 #[cfg(target_os = "macos")]
 use objc2::rc::autoreleasepool;
 #[cfg(target_os = "macos")]
-use objc2_app_kit::NSRunningApplication;
+use objc2_app_kit::{NSRunningApplication, NSWorkspace};
 #[cfg(target_os = "macos")]
 use objc2_foundation::{NSObjectProtocol, NSString};
 use serde::{Deserialize, Serialize};
@@ -98,6 +98,8 @@ enum ExtremeNudgeError {
     MissingBundleId(String),
     #[error("No running app found for the captured identity")]
     AppNotRunning(String),
+    #[error("The captured app is no longer frontmost")]
+    AppNotFrontmost(String),
     #[error("Unable to terminate the captured app")]
     AppTerminateFailed(String),
     #[error("Browser automation failed")]
@@ -125,6 +127,10 @@ impl From<ExtremeNudgeError> for ExtremeNudgeFailure {
             ExtremeNudgeError::AppNotRunning(_) => {
                 Self::new(ExtremeNudgeFailureCode::AppNotRunning, None)
             }
+            ExtremeNudgeError::AppNotFrontmost(_) => Self::new(
+                ExtremeNudgeFailureCode::AppCloseFailed,
+                Some("app_not_frontmost"),
+            ),
             ExtremeNudgeError::AppTerminateFailed(_) => {
                 Self::new(ExtremeNudgeFailureCode::AppCloseFailed, None)
             }
@@ -194,11 +200,15 @@ pub async fn extreme_nudge_apply(
 fn apply_extreme_nudge(
     target: &ExtremeNudgeTarget,
 ) -> Result<ExtremeNudgeOutcome, ExtremeNudgeError> {
-    if let Some(browser_name) = target
-        .browser_name
-        .as_deref()
-        .filter(|name| browser_tabs::is_supported_browser_tab_target(name))
-    {
+    if let Some(browser_name) = normalized_optional_text(target.browser_name.as_deref()) {
+        // A captured browser target is never an app-level target. Falling
+        // through here used to quit the entire unsupported browser, including
+        // unrelated tabs, when only tab-close support was missing.
+        if !browser_tabs::is_supported_browser_tab_target(&browser_name) {
+            return Err(ExtremeNudgeError::BrowserTabNotFound {
+                diagnostic: "unsupported_browser".to_string(),
+            });
+        }
         let site_url = normalized_optional_text(target.site_url.as_deref());
         let site_domain = browser_tabs::normalized_site_domain(target.site_domain.as_deref())
             .or_else(|| {
@@ -211,7 +221,7 @@ fn apply_extreme_nudge(
         }
 
         let diagnostic = browser_tabs::close_browser_tab(
-            browser_name,
+            &browser_name,
             target.bundle_id.as_deref(),
             site_url.as_deref(),
             site_domain.as_deref(),
@@ -279,12 +289,29 @@ fn is_protected_bundle_id(bundle_id: &str) -> bool {
 
 #[cfg(target_os = "macos")]
 fn terminate_app_by_bundle_id(bundle_id: &str) -> Result<(), ExtremeNudgeError> {
+    terminate_app_by_bundle_id_impl(bundle_id, true)
+}
+
+#[cfg(target_os = "macos")]
+fn terminate_app_by_bundle_id_impl(
+    bundle_id: &str,
+    require_frontmost: bool,
+) -> Result<(), ExtremeNudgeError> {
     autoreleasepool(|_| {
         let bundle_identifier = NSString::from_str(bundle_id);
         let applications =
             NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_identifier);
         if applications.count() == 0 {
             return Err(ExtremeNudgeError::AppNotRunning(bundle_id.to_string()));
+        }
+        if require_frontmost {
+            let frontmost_matches = NSWorkspace::sharedWorkspace()
+                .frontmostApplication()
+                .and_then(|application| application.bundleIdentifier())
+                .is_some_and(|identifier| identifier.to_string() == bundle_id);
+            if !frontmost_matches {
+                return Err(ExtremeNudgeError::AppNotFrontmost(bundle_id.to_string()));
+            }
         }
 
         for index in 0..applications.count() {
@@ -384,6 +411,34 @@ mod tests {
     #[test]
     fn browser_tab_detection_rejects_unsupported_browsers() {
         assert!(!browser_tabs::is_supported_browser_tab_target("Preview"));
+    }
+
+    #[test]
+    fn unsupported_browser_targets_never_fall_through_to_whole_app_termination() {
+        let target = ExtremeNudgeTarget {
+            app_name: "Vivaldi".to_string(),
+            bundle_id: Some("com.vivaldi.Vivaldi".to_string()),
+            browser_name: Some("Vivaldi".to_string()),
+            site_domain: Some("youtube.com".to_string()),
+            site_url: Some("https://youtube.com/watch?v=drift".to_string()),
+            force_chromium_ax_tab_close: false,
+        };
+
+        assert!(matches!(
+            apply_extreme_nudge(&target),
+            Err(ExtremeNudgeError::BrowserTabNotFound { diagnostic })
+                if diagnostic == "unsupported_browser"
+        ));
+    }
+
+    #[test]
+    fn a_stale_app_target_fails_closed_with_a_safe_diagnostic() {
+        let failure = ExtremeNudgeFailure::from(ExtremeNudgeError::AppNotFrontmost(
+            "com.example.StaleTarget".to_string(),
+        ));
+
+        assert_eq!(failure.code, ExtremeNudgeFailureCode::AppCloseFailed);
+        assert_eq!(failure.diagnostic.as_deref(), Some("app_not_frontmost"));
     }
 
     #[test]

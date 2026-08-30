@@ -354,6 +354,27 @@ describe("pet mode intervention outcome classification", () => {
     await expect(result).resolves.toMatchObject({ outcome: "rejected", reason: "renderer_focus_resting" });
   });
 
+  it("keeps an activity-context cancellation distinct from a user catch", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false, reason: "activity_context_changed" });
+    await expect(result).resolves.toMatchObject({
+      outcome: "cancelled",
+      reason: "activity_context_changed",
+    });
+  });
+
+  it("treats malformed contact payloads as technical rejections", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1" });
+    await expect(result).resolves.toMatchObject({ outcome: "rejected" });
+  });
+
+  it("does not turn a malformed reason into a user catch", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false, reason: 42 as unknown as string });
+    await expect(result).resolves.toMatchObject({ outcome: "rejected" });
+  });
+
   it("classifies eight seconds of silence as timed_out, never as a catch", async () => {
     // This is the exact failure observed on 2026-08-29: no contact report
     // arrived and the old boolean collapse turned the timeout into

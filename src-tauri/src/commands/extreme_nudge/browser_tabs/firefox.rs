@@ -14,14 +14,10 @@ pub(super) fn tab_close_script(
         r##"tell application "System Events"
   set targetUrl to "{site_url}"
   set targetDomain to "{site_domain}"
-  if not (exists process "{process_name}") then return "not_found"
-end tell
-tell application "{process_name}" to activate
-delay 0.1
-tell application "System Events"
+  if not (exists process "{process_name}") then return "not_found:firefox_not_running"
   tell process "{process_name}"
-    if frontmost is false then return "not_found"
-    if not (exists front window) then return "not_found"
+    if frontmost is false then return "not_found:firefox_not_frontmost"
+    if not (exists front window) then return "not_found:firefox_no_front_window"
     set currentUrl to ""
     keystroke "l" using command down
     delay 0.4
@@ -33,11 +29,11 @@ tell application "System Events"
     if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
       delay 0.05
       keystroke "w" using command down
-      return "closed_browser_tab"
+      return "closed_browser_tab:firefox_front_tab"
     end if
   end tell
 end tell
-return "not_found"
+return "not_found:firefox_target_mismatch"
 
 {handlers}"##
     )

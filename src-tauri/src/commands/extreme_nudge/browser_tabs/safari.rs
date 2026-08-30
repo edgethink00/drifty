@@ -11,29 +11,24 @@ pub(super) fn tab_close_script(
     let site_domain = target.site_domain;
     let handlers = matching_handlers();
     format!(
-        r##"tell application "{browser_name}"
-  if not (exists front window) then return "not_found"
-  set targetUrl to "{site_url}"
-  set targetDomain to "{site_domain}"
+        r##"set targetUrl to "{site_url}"
+set targetDomain to "{site_domain}"
+tell application "System Events"
+  if not (exists process "{browser_name}") then return "not_found:safari_not_running"
+  tell process "{browser_name}"
+    if frontmost is false then return "not_found:safari_not_frontmost"
+  end tell
+end tell
+tell application "{browser_name}"
+  if not (exists front window) then return "not_found:safari_no_front_window"
   try
     set currentUrl to URL of current tab of front window
     if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
       close current tab of front window
-      return "closed_browser_tab"
+      return "closed_browser_tab:safari_front_tab"
     end if
   end try
-  repeat with browserWindow in windows
-    repeat with browserTab in tabs of browserWindow
-      try
-        set currentUrl to URL of browserTab
-        if my tabMatchesTarget(currentUrl, targetUrl, targetDomain) then
-          close browserTab
-          return "closed_browser_tab"
-        end if
-      end try
-    end repeat
-  end repeat
-  return "not_found"
+  return "not_found:safari_target_mismatch"
 end tell
 
 {handlers}"##

@@ -229,9 +229,12 @@ describe("catching the cat cancels the close", () => {
     expect(body).toContain("const intervention = await playNativePetModeIntervention");
     expect(body).toContain('if (intervention.outcome === "user_intercepted")');
     expect(body).toContain("pet_intercepted");
-    // Non-catch outcomes are logged for diagnosis but do not return early.
+    // Technical failures are logged and fall through; a verified context
+    // change returns early because the original target is no longer current.
     expect(body).toContain('if (intervention.outcome !== "contacted")');
     expect(body).toContain("extreme_nudge_pet_skipped");
+    expect(body).toContain('if (intervention.outcome === "cancelled")');
+    expect(body).toContain("pet_context_changed");
     expect(body).not.toContain("if (!contacted)");
   });
 
@@ -260,12 +263,32 @@ describe("catching the cat cancels the close", () => {
     expect(spentReprieve).toContain("lastDriftAlertSegmentRef.current = null");
   });
 
-  it("reports a missed contact immediately instead of waiting out the timeout", () => {
+  it("reports every missed contact exactly once with its real cause", () => {
     // Without this the caller burns the full contact timeout before it can
-    // react, leaving a caught cat in the user's hand and a silent screen.
+    // react. Conflating cancellation causes here also grants a catch reprieve
+    // for focus changes and technical failures, or leaves a duplicate event
+    // that can resolve a later intervention from the same drift episode.
     const finallyBlock = petWindow.slice(petWindow.indexOf("} finally {"));
-    expect(finallyBlock.slice(0, finallyBlock.indexOf("if (movedToTarget)")))
-      .toContain('reportNativePetContact(target.id, false, "user_intercepted")');
+    const terminalReport = finallyBlock.slice(0, finallyBlock.indexOf("if (movedToTarget)"));
+    expect(terminalReport).toContain("!terminalContactReported");
+    expect(terminalReport).toContain("userInterceptedInterventionTokenRef.current === token");
+    expect(terminalReport).toContain('"activity_context_changed"');
+    expect(terminalReport).toContain('"renderer_intervention_failed"');
+    expect(terminalReport).toContain('"renderer_action_cancelled"');
+    expect(terminalReport).toContain("reportNativePetContact(target.id, false, reason)");
+  });
+
+  it("drops a context-changed target without closing it or spending a catch reprieve", () => {
+    const branch = app.slice(app.indexOf("if (targetChanged) {"));
+    const body = branch.slice(0, branch.indexOf("if (intercepted) {"));
+    expect(body).toContain("lastDriftAlertSegmentRef.current = null");
+    expect(body).toContain("petInterceptedSegmentRef.current = null");
+    expect(body).toContain("reason: result.diagnostic");
+    expect(body).toContain("return;");
+    expect(body).not.toContain("showFallbackDriftAlarm");
+    expect(app).toContain('diagnostic: "pet_target_changed"');
+    expect(app).toContain('diagnostic: "pet_target_unverified"');
+    expect(app).toContain("await confirmFreshDriftAlarmCandidate()");
   });
 
   it("rejects a guarded intervention loudly instead of letting it time out", () => {

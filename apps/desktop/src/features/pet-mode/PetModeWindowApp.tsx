@@ -203,6 +203,12 @@ export function PetModeWindowApp() {
   // lets focus preserve deliberate Lab previews without allowing an automatic
   // nudge to retain motion ownership.
   const automaticInterventionRef = useRef(false);
+  // The action token says only that ownership changed. These refs retain why an
+  // automatic intervention lost ownership so a focus transition or renderer
+  // failure can never impersonate the one destructive-action veto the user
+  // controls directly: catching the cat.
+  const userInterceptedInterventionTokenRef = useRef<number | null>(null);
+  const contextChangedInterventionTokenRef = useRef<number | null>(null);
   const menuOpenRef = useRef(false);
   const labLifeLoopEnabledRef = useRef(false);
   const petModeEnabledRef = useRef(initialAppearance.enabled);
@@ -730,6 +736,8 @@ export function PetModeWindowApp() {
     const token = ++actionTokenRef.current;
     let movedToTarget = false;
     let contacted = false;
+    let terminalContactReported = false;
+    let technicalFailure = false;
 
     try {
       if (target.labTarget === "browser_tab_x" || target.labTarget === "drifty_window_x") {
@@ -749,6 +757,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
         // Not a user catch: the AX scan never produced a real X to point at.
         await reportNativePetContact(target.id, false, "target_unavailable");
+        terminalContactReported = true;
         return;
       }
       movedToTarget = true;
@@ -794,13 +803,30 @@ export function PetModeWindowApp() {
       }
 
       if (token !== actionTokenRef.current) return;
+    } catch (error) {
+      technicalFailure = true;
+      throw error;
     } finally {
-      // Every early return above means the paw never reached its contact frame:
-      // the user grabbed the cat, or another action took over. Report that
-      // immediately so the caller resolves now instead of burning the full
-      // contact timeout before it can react.
-      if (!contacted && !target.preview) {
-        void reportNativePetContact(target.id, false, "user_intercepted").catch(() => undefined);
+      // Report exactly one terminal non-contact result. The old blanket
+      // `user_intercepted` fallback also covered focus changes, native movement
+      // errors, and the already-reported target-unavailable branch. That both
+      // cancelled Automatic close incorrectly and could leak a duplicate event
+      // into the next same-episode intervention.
+      if (!contacted && !terminalContactReported && !target.preview) {
+        const reason = userInterceptedInterventionTokenRef.current === token
+          ? "user_intercepted"
+          : contextChangedInterventionTokenRef.current === token
+            ? "activity_context_changed"
+            : technicalFailure
+              ? "renderer_intervention_failed"
+              : "renderer_action_cancelled";
+        void reportNativePetContact(target.id, false, reason).catch(() => undefined);
+      }
+      if (userInterceptedInterventionTokenRef.current === token) {
+        userInterceptedInterventionTokenRef.current = null;
+      }
+      if (contextChangedInterventionTokenRef.current === token) {
+        contextChangedInterventionTokenRef.current = null;
       }
       if (token !== actionTokenRef.current) return;
       if (movedToTarget) {
@@ -1289,6 +1315,9 @@ export function PetModeWindowApp() {
         && !automaticInterventionRef.current;
       if (manualDragRef.current || explicitLabPreviewOwnsMotion) return;
       focusRestAppliedRef.current = true;
+      if (automaticInterventionRef.current && activeLabActionRef.current === "intervention") {
+        contextChangedInterventionTokenRef.current = actionTokenRef.current;
+      }
       actionTokenRef.current += 1;
       void cancelNativePetMotion().catch(() => undefined);
       if (!visibleRef.current) {
@@ -1630,6 +1659,9 @@ export function PetModeWindowApp() {
     void reportNativePetPointer().catch(() => undefined);
     if (typeof event.button === "number" && event.button > 0) return;
     if (manualDragRef.current) return;
+    if (automaticInterventionRef.current && activeLabActionRef.current === "intervention") {
+      userInterceptedInterventionTokenRef.current = actionTokenRef.current;
+    }
     const dragToken = ++actionTokenRef.current;
     manualDragRef.current = true;
     void cancelNativePetMotion().catch(() => undefined);

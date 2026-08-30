@@ -9,7 +9,7 @@ use std::{
 };
 
 use objc2::rc::autoreleasepool;
-use objc2_app_kit::NSRunningApplication;
+use objc2_app_kit::{NSRunningApplication, NSWorkspace};
 use objc2_foundation::NSString;
 
 const BACKGROUND_QA_ENV: &str = "DRIFTY_NATIVE_QA_BACKGROUND_APP";
@@ -48,7 +48,10 @@ fn qa_terminates_a_real_app_and_observes_its_exit() {
     );
 
     let termination_started = Instant::now();
-    let termination_result = super::terminate_app_by_bundle_id(CALCULATOR_BUNDLE_ID);
+    // This QA proves the low-level terminate-and-observe primitive while
+    // keeping Calculator in the background. Production calls use the guarded
+    // wrapper and refuse to terminate an app that is no longer frontmost.
+    let termination_result = super::terminate_app_by_bundle_id_impl(CALCULATOR_BUNDLE_ID, false);
     eprintln!(
         "native termination returned {:?} after {:?}; running={}",
         termination_result,
@@ -71,6 +74,92 @@ fn qa_terminates_a_real_app_and_observes_its_exit() {
             running_application_count(CALCULATOR_BUNDLE_ID) == 0
         }),
         "Calculator remained registered after termination succeeded"
+    );
+}
+
+#[test]
+#[ignore = "launches a hidden Calculator and proves the production guard preserves it"]
+fn qa_refuses_to_terminate_an_app_that_is_no_longer_frontmost() {
+    assert_eq!(
+        env::var(BACKGROUND_QA_ENV).as_deref(),
+        Ok("1"),
+        "refusing to launch a real app without explicit background-app QA opt-in"
+    );
+    assert_eq!(
+        running_application_count(CALCULATOR_BUNDLE_ID),
+        0,
+        "refusing to reuse or close a pre-existing Calculator instance"
+    );
+
+    let _guard = RunningAppGuard::new(CALCULATOR_BUNDLE_ID);
+    let status = Command::new("/usr/bin/open")
+        .args(["-g", "-j", "-n", CALCULATOR_PATH])
+        .status()
+        .expect("launch Calculator in the background");
+    assert!(status.success(), "open returned {status}");
+    assert!(
+        wait_until(Duration::from_secs(8), || {
+            running_application_count(CALCULATOR_BUNDLE_ID) == 1
+        }),
+        "Calculator did not register with NSRunningApplication"
+    );
+
+    assert!(matches!(
+        super::terminate_app_by_bundle_id(CALCULATOR_BUNDLE_ID),
+        Err(super::ExtremeNudgeError::AppNotFrontmost(bundle_id))
+            if bundle_id == CALCULATOR_BUNDLE_ID
+    ));
+    assert_eq!(
+        running_application_count(CALCULATOR_BUNDLE_ID),
+        1,
+        "the production guard unexpectedly terminated background Calculator"
+    );
+}
+
+#[test]
+#[ignore = "launches Calculator and terminates it only after an attended foreground handoff"]
+fn qa_terminates_a_foreground_app_through_the_production_guard() {
+    assert_eq!(
+        env::var(BACKGROUND_QA_ENV).as_deref(),
+        Ok("1"),
+        "refusing to close a real app without explicit background-app QA opt-in"
+    );
+    assert_eq!(
+        running_application_count(CALCULATOR_BUNDLE_ID),
+        0,
+        "refusing to reuse or close a pre-existing Calculator instance"
+    );
+
+    let _guard = RunningAppGuard::new(CALCULATOR_BUNDLE_ID);
+    let status = Command::new("/usr/bin/open")
+        .args(["-g", "-j", "-n", CALCULATOR_PATH])
+        .status()
+        .expect("launch Calculator in the background");
+    assert!(status.success(), "open returned {status}");
+    assert!(
+        wait_until(Duration::from_secs(8), || {
+            running_application_count(CALCULATOR_BUNDLE_ID) == 1
+        }),
+        "Calculator did not register with NSRunningApplication"
+    );
+
+    // The SSH session cannot reliably activate GUI apps. The attended
+    // pre-merge smoke raises Calculator through Computer Use while this test
+    // waits, then production code must accept and terminate that exact app.
+    assert!(
+        wait_until(Duration::from_secs(20), || {
+            frontmost_application_bundle_id().as_deref() == Some(CALCULATOR_BUNDLE_ID)
+        }),
+        "Calculator did not become frontmost during the attended QA window"
+    );
+
+    super::terminate_app_by_bundle_id(CALCULATOR_BUNDLE_ID)
+        .expect("production app termination guard accepts foreground Calculator");
+    assert!(
+        wait_until(Duration::from_secs(3), || {
+            running_application_count(CALCULATOR_BUNDLE_ID) == 0
+        }),
+        "Calculator remained registered after guarded termination succeeded"
     );
 }
 
@@ -97,6 +186,15 @@ fn running_application_count(bundle_id: &str) -> usize {
     autoreleasepool(|_| {
         let bundle_identifier = NSString::from_str(bundle_id);
         NSRunningApplication::runningApplicationsWithBundleIdentifier(&bundle_identifier).count()
+    })
+}
+
+fn frontmost_application_bundle_id() -> Option<String> {
+    autoreleasepool(|_| {
+        NSWorkspace::sharedWorkspace()
+            .frontmostApplication()
+            .and_then(|application| application.bundleIdentifier())
+            .map(|identifier| identifier.to_string())
     })
 }
 
