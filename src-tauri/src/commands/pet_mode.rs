@@ -1791,6 +1791,10 @@ pub async fn pet_mode_resolve_drop(
         let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
         let duration_ms = plan.duration_ms;
         let drop_window = window.clone();
+        // Keep native travel on this command so the renderer cannot start the
+        // next life beat while the window is still falling. The standing pose
+        // is owned by the webview for the whole duration; sitting waits until
+        // this animation returns.
         async_runtime::spawn_blocking(move || {
             animate_pet_window_drop(&drop_window, start, target, duration_ms, motion_revision)
         })

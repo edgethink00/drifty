@@ -242,11 +242,10 @@ pub fn plan_pet_drop(
     }
 }
 
-/// The Dev-only shake gesture deliberately ignores intermediate window ledges:
-/// it is an explicit request to send the cat to the bottom of the current
-/// monitor's usable desktop lane. The native clamp uses the complete panel
-/// bounds, so target the panel bottom rather than the visible-paw inset used by
-/// ordinary ledge catches.
+/// An explicit shake just before release ignores intermediate window ledges
+/// and sends the cat to the bottom of the current monitor's usable desktop
+/// lane. The native clamp uses the complete panel bounds, so target the panel
+/// bottom rather than the visible-paw inset used by ordinary ledge catches.
 pub fn plan_pet_shake_floor_drop(pet: &PetRect, work: &PetRect) -> PetDropPlan {
     let target_y = (work.bottom() - pet.height).max(work.y);
     let distance = (target_y - pet.y).max(0.0);

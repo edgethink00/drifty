@@ -672,7 +672,8 @@
   color: #ff9f0a;
   animation: pet-mode-hunt-alert var(--pet-hunt-alert-duration, 480ms) cubic-bezier(.22, 1, .36, 1) both;
 }
-.pet-mode-cat.is-playful-paw .pet-mode-cat__alert { opacity: 0; animation: none; }
+.pet-mode-cat.is-playful-paw .pet-mode-cat__alert,
+.pet-mode-cat.is-quiet-notice .pet-mode-cat__alert { opacity: 0; animation: none; }
 
 /* Anger mark. Drawn rather than typed, but it keeps the alert grammar: same
    corner, same dark halo, same 620ms beat. It is reserved for the brief annoyed

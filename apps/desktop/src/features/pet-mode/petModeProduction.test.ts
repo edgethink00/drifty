@@ -308,6 +308,7 @@ describe("catching the cat cancels the close", () => {
     expect(css).toContain(".pet-mode-cat--run .pet-mode-cat__alert");
     expect(css).toContain(".pet-mode-cat--paw .pet-mode-cat__alert");
     expect(css).toContain(".pet-mode-cat--stalk.has-hunt-alert .pet-mode-cat__alert");
+    expect(css).toContain(".pet-mode-cat.is-quiet-notice .pet-mode-cat__alert");
     expect(css).toContain("@keyframes pet-mode-hunt-alert");
   });
 

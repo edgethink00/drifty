@@ -10,7 +10,6 @@ import {
   PET_MODE_DRAG_PICKUP_TIMELINE,
   PET_MODE_DRAG_RELEASE_TIMELINE,
   PET_MODE_DRAG_SETTLE_MS,
-  PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS,
   PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   PET_MODE_ENTRY_HIDDEN_SAFETY_PX,
@@ -179,16 +178,11 @@ describe("petModeData", () => {
   });
 
   it("only quiets autonomous life actions during focused work", () => {
-    expect(PET_MODE_LIFE_ACTION_INTERVAL_MS).toBe(12 * 60 * 1000);
-    expect(PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS).toBe(4 * 60 * 1000);
-    expect(getPetModeLifeActionInterval("neutral")).toBe(12 * 60 * 1000);
-    expect(getPetModeLifeActionInterval("focus")).toBe(19.8 * 60 * 1000);
-    expect(getPetModeLifeActionInterval("neutral", true)).toBe(4 * 60 * 1000);
-    expect(getPetModeLifeActionInterval("focus", true)).toBe(6.6 * 60 * 1000);
-    expect(getPetModeNextActionInterval("neutral", null)).toBe(12 * 60 * 1000);
-    expect(getPetModeNextActionInterval("focus", "walk")).toBe(19.8 * 60 * 1000);
-    expect(getPetModeNextActionInterval("neutral", null, true)).toBe(4 * 60 * 1000);
-    expect(getPetModeNextActionInterval("focus", "walk", true)).toBe(6.6 * 60 * 1000);
+    expect(PET_MODE_LIFE_ACTION_INTERVAL_MS).toBe(4 * 60 * 1000);
+    expect(getPetModeLifeActionInterval("neutral")).toBe(4 * 60 * 1000);
+    expect(getPetModeLifeActionInterval("focus")).toBe(6.6 * 60 * 1000);
+    expect(getPetModeNextActionInterval("neutral", null)).toBe(4 * 60 * 1000);
+    expect(getPetModeNextActionInterval("focus", "walk")).toBe(6.6 * 60 * 1000);
     expect(getPetModeNextActionInterval("neutral", "sit")).toBe(PET_MODE_SETTLED_ACTION_INTERVAL_MS);
     expect(getPetModeNextActionInterval("focus", "sleep")).toBe(PET_MODE_SETTLED_ACTION_INTERVAL_MS * 1.65);
   });

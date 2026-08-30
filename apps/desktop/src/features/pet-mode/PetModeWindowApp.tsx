@@ -42,8 +42,6 @@ import {
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_DRAG_PICKUP_MS,
-  PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
-  PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   getPetModeDefaultEntryTravelDistance,
   getPetModeWindowSize,
@@ -116,16 +114,6 @@ function expressiveInteractionsEnabled(): boolean {
     && window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY) === "1";
 }
 
-function dropLifePreviewEnabled(): boolean {
-  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
-    && window.localStorage.getItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY) === "1";
-}
-
-function shakeFloorDropEnabled(): boolean {
-  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
-    && window.localStorage.getItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY) === "1";
-}
-
 function guaranteedOutcomesEnabled(): boolean {
   return expressiveInteractionsEnabled()
     && window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1";
@@ -166,7 +154,6 @@ export function PetModeWindowApp() {
   const [hitRegionTransitionCount, setHitRegionTransitionCount] = useState(0);
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
-  const [dropLifePreviewRevision, setDropLifePreviewRevision] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
   // Only the return from a successful Drifty-window close wears the proud
   // lids; every approach and every other walk keeps the shipped neutral face.
@@ -228,6 +215,7 @@ export function PetModeWindowApp() {
   const manualDropReactionRef = useRef<PetModePostDropReaction | null>(null);
   const previousPostDropReactionRef = useRef<PetModePostDropReaction | null>(null);
   const dragReleasePoseRef = useRef<PetModeRestPose>("idle");
+  const releaseLandingRef = useRef(false);
   const hitTargetRef = useRef<HTMLButtonElement | null>(null);
   const contactAnchorRef = useRef<HTMLSpanElement | null>(null);
   const gazeEngagedRef = useRef(false);
@@ -408,55 +396,45 @@ export function PetModeWindowApp() {
     setDragProbe(null);
     const releaseToken = ++actionTokenRef.current;
     manualReleaseTokenRef.current = releaseToken;
-    const previewEnabled = dropLifePreviewEnabled();
     const reducedMotion = prefersReducedMotion();
     const forceFloorDrop = !reducedMotion
-      && result?.shakeDetected === true
-      && shakeFloorDropEnabled();
-    const reaction = previewEnabled && !reducedMotion
+      && result?.shakeDetected === true;
+    const reaction = !reducedMotion
       ? pickPetModePostDropReaction(Math.random(), previousPostDropReactionRef.current)
       : "stay";
-    manualDropReactionRef.current = previewEnabled ? reaction : null;
-    // Shipped focus drops keep the current held-to-sit handoff. In the preview,
-    // the two expressive branches land on four paws first, play once, then use
-    // the focus-derived resting pose again.
-    const releasePose: PetModeRestPose = focusRestingRef.current && reaction === "stay"
-      ? "sit"
-      : "idle";
-    dragReleasePoseRef.current = releasePose;
+    manualDropReactionRef.current = reaction;
+    // Keep the standing rest pose for the whole fall. Sitting too early makes a
+    // falling cat look already settled; the focus-derived rest pose waits until
+    // native travel has finished.
+    const airbornePose: PetModeRestPose = "idle";
+    dragReleasePoseRef.current = airbornePose;
+    releaseLandingRef.current = false;
 
     void (async () => {
       try {
         if (!reducedMotion) {
           flushSync(() => {
-            updateDragReleasePose(releasePose);
+            updateDragReleasePose(airbornePose);
             commitPhase("release");
           });
-          // Native may settle immediately (hop) or animate to a nearby ledge
-          // (catch). Keep the visual handoff alive for at least its authored
-          // duration, while never holding its last frame after native is done.
-          await Promise.all([
-            resolveNativePetDrop(forceFloorDrop).catch(() => null),
-            delay(PET_MODE_DRAG_SETTLE_MS),
-          ]);
+          // Native owns the fall. Keep the standing silhouette until that
+          // travel returns, then sit if focus wants the resting pose.
+          const dropPlan = await resolveNativePetDrop(forceFloorDrop).catch(() => null);
           if (releaseToken !== actionTokenRef.current) return;
+          const dropDurationMs = dropPlan?.durationMs ?? 0;
+          const remainingSettleMs = Math.max(0, PET_MODE_DRAG_SETTLE_MS - dropDurationMs);
+          const sitLeadMs = remainingSettleMs > 0 ? Math.min(remainingSettleMs, 48) : 0;
+          if (remainingSettleMs > sitLeadMs) await delay(remainingSettleMs - sitLeadMs);
+          if (releaseToken !== actionTokenRef.current) return;
+          releaseLandingRef.current = true;
+          const landedPose: PetModeRestPose = focusRestingRef.current && reaction === "stay"
+            ? "sit"
+            : "idle";
+          if (landedPose !== airbornePose) updateDragReleasePose(landedPose);
+          if (sitLeadMs > 0) await delay(sitLeadMs);
         }
 
         if (releaseToken !== actionTokenRef.current) return;
-        if (!previewEnabled) {
-          // The preview-off branch deliberately mirrors the shipped release
-          // path: settle into the focus-derived rest pose, save placement in
-          // the background, and do not re-arm unrelated autonomous clocks.
-          const finalPose = dragReleasePoseRef.current;
-          focusRestAppliedRef.current = finalPose === "sit";
-          commitPhase(finalPose);
-          if (rememberPosition) {
-            void rememberNativePetPosition().catch((error) => {
-              void reportNativePetDragError(error).catch(() => undefined);
-            });
-          }
-          return;
-        }
         commitPhase(dragReleasePoseRef.current);
         if (rememberPosition) {
           // Capture the user's chosen home before a reaction walk changes the
@@ -513,24 +491,11 @@ export function PetModeWindowApp() {
           setManualGazeActive(false);
           manualReleaseTokenRef.current = null;
           manualDropReactionRef.current = null;
+          releaseLandingRef.current = false;
         }
       }
     })();
   }, [commitFacing, commitPhase, restartAutonomousCycle, updateDragReleasePose]);
-
-  useEffect(() => {
-    const handleStorage = (event: StorageEvent) => {
-      if (
-        event.key !== null
-        && event.key !== DEV_MODE_STORAGE_KEY
-        && event.key !== PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY
-      ) return;
-      if (!dropLifePreviewEnabled()) previousPostDropReactionRef.current = null;
-      setDropLifePreviewRevision((revision) => revision + 1);
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
 
   useEffect(() => {
     let disposed = false;
@@ -1292,7 +1257,9 @@ export function PetModeWindowApp() {
       // only the quiet release; a user-triggered walk/look keeps ownership and
       // will settle into the newly correct final pose when it finishes.
       const reaction = manualDropReactionRef.current ?? "stay";
-      if (phaseRef.current === "release") {
+      // Sit only during the last landing frames. A focus boundary during the
+      // airborne stretch must not fold the cat up in mid-air.
+      if (phaseRef.current === "release" && releaseLandingRef.current) {
         updateDragReleasePose(resting && reaction === "stay" ? "sit" : "idle");
       }
       focusRestAppliedRef.current = resting && reaction === "stay";
@@ -1501,7 +1468,6 @@ export function PetModeWindowApp() {
       const interval = getPetModeNextActionInterval(
         snapshot?.productivity ?? null,
         previousAutonomousActionRef.current,
-        dropLifePreviewEnabled(),
       );
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
@@ -1517,7 +1483,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, dropLifePreviewRevision, petModeEnabled, playLifeAction, snapshot?.productivity]);
+  }, [autonomousCycle, petModeEnabled, playLifeAction, snapshot?.productivity]);
 
   useEffect(() => {
     if (snapshot?.productivity === "focus") return undefined;
@@ -1826,6 +1792,7 @@ export function PetModeWindowApp() {
             dragReleasePose={dragReleasePose}
             proudWalk={proudWalk}
             musicNoteVisible={musicNoteVisible}
+            quietNotice={phase === "notice" && manualGazeActive}
           />
           <span
             ref={contactAnchorRef}

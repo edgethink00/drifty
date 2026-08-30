@@ -15,12 +15,7 @@ export const PET_MODE_HIDE_ONE_HOUR_MS = 60 * 60 * 1000;
 export const PET_MODE_PRESENCE_RATIO = 0.6;
 export const PET_MODE_PRESENT_MS = 9 * 60 * 1000;
 export const PET_MODE_AWAY_MS = 6 * 60 * 1000;
-export const PET_MODE_LIFE_ACTION_INTERVAL_MS = 12 * 60 * 1000;
-// The shorter rhythm stays behind the same Dev preview as the new drop
-// reactions. This keeps the shipped cadence unchanged until the combined
-// behavior has been reviewed in the real desktop app. The scheduler's existing
-// 0.72-1.28 jitter places preview actions roughly every 2m53s-5m07s.
-export const PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS = 4 * 60 * 1000;
+export const PET_MODE_LIFE_ACTION_INTERVAL_MS = 4 * 60 * 1000;
 // Sitting and sleeping are long holds, so the scheduler cannot keep using one
 // flat interval: after a settled pose the pet should consider its next move
 // sooner than it would after standing around.
@@ -39,14 +34,6 @@ export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
 // itself) lets reviewers compare the shipped cat and the experiment without
 // leaving the diagnostics surface.
 export const PET_MODE_EXPERIMENTS_STORAGE_KEY = "drifty.dev.petModeExperiments.v1";
-// Dev-only gate for the manual-drop reaction variants and their shorter life
-// cadence. Dev mode is checked again by the pet webview so a persisted value
-// cannot alter production behavior after the diagnostics surface is disabled.
-export const PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY = "drifty.dev.petModeDropLifePreview.v1";
-// Dev-only direct-manipulation experiment. The pet webview checks Dev mode at
-// release time as well as this persisted preference, so leaving the toggle on
-// can never change shipped drag behavior after Dev mode is disabled.
-export const PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY = "drifty.dev.petModeShakeFloorDrop.v1";
 // Dev-only override for repeatedly QAing the pack's visible probability
 // outcomes. It affects only angry wake and music-note rolls, not life-action
 // selection or timing. The renderer also checks Dev mode itself, so a
@@ -426,14 +413,10 @@ export function getPetModeGaitFrameIndex(
 
 export function getPetModeLifeActionInterval(
   productivity: ProductivityLabel | null,
-  dropLifePreviewEnabled = false,
 ): number {
   // B3 stays intentionally subtle: focused work only makes autonomous actions
   // rarer. It never changes the pet's mood or creates a reward/punishment loop.
-  const base = dropLifePreviewEnabled
-    ? PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS
-    : PET_MODE_LIFE_ACTION_INTERVAL_MS;
-  return adjustPetModeIntervalForFocus(base, productivity);
+  return adjustPetModeIntervalForFocus(PET_MODE_LIFE_ACTION_INTERVAL_MS, productivity);
 }
 
 /**
@@ -446,14 +429,10 @@ export function getPetModeLifeActionInterval(
 export function getPetModeNextActionInterval(
   productivity: ProductivityLabel | null,
   previousAction: PetModeLifeAction | null,
-  dropLifePreviewEnabled = false,
 ): number {
-  const standingInterval = dropLifePreviewEnabled
-    ? PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS
-    : PET_MODE_LIFE_ACTION_INTERVAL_MS;
   const base = previousAction === "sit" || previousAction === "sleep"
     ? PET_MODE_SETTLED_ACTION_INTERVAL_MS
-    : standingInterval;
+    : PET_MODE_LIFE_ACTION_INTERVAL_MS;
   return adjustPetModeIntervalForFocus(base, productivity);
 }
 

@@ -8,8 +8,6 @@ import {
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
-  PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS,
-  PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
   PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_FALLBACK_GRACE_MS,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
@@ -21,10 +19,10 @@ import {
   PET_MODE_PRESENT_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
-  PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_TAIL_FLICK_DURATION_MS,
+  PET_MODE_LIFE_ACTION_INTERVAL_MS,
   type PetModeOutingTicket,
   type PetModeWindowEvent,
 } from "./petModeData";
@@ -1262,13 +1260,12 @@ describe("PetModeWindowApp", () => {
     expect(latestPublish).toMatchObject({ interactive: false });
   });
 
-  it("re-arms the autonomous clock when the Dev preview changes in the settings webview", async () => {
+  it("uses the shipped 4-minute standing cadence for autonomous life actions", async () => {
     vi.useFakeTimers();
     // 0.7 keeps the independent tail-flick timer quiet, chooses `sit`, and
     // applies a deterministic 1.112 cadence multiplier.
     vi.spyOn(Math, "random").mockReturnValue(0.7);
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -1278,17 +1275,8 @@ describe("PetModeWindowApp", () => {
     await act(async () => undefined);
     act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
 
-    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
-    window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, "1");
-    act(() => {
-      window.dispatchEvent(new StorageEvent("storage", {
-        key: PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY,
-        newValue: "1",
-      }));
-    });
-
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(PET_MODE_DROP_LIFE_PREVIEW_INTERVAL_MS * 1.112 - 1);
+      await vi.advanceTimersByTimeAsync(PET_MODE_LIFE_ACTION_INTERVAL_MS * 1.112 - 1);
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
 
@@ -2064,8 +2052,8 @@ describe("PetModeWindowApp", () => {
     expect(document.querySelector(".pet-mode-cat--anger")).toBeNull();
   });
 
-  it("keeps the shipped focused release when the drop preview is off", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.95);
+  it("lands a focused hop on four paws, then sits", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     Object.defineProperty(window, "matchMedia", {
@@ -2110,9 +2098,7 @@ describe("PetModeWindowApp", () => {
 
     await act(async () => { completeNativeDrag(); await Promise.resolve(); });
     expect(cat.getAttribute("data-phase")).toBe("release");
-    expect(cat.getAttribute("data-region-id")).toBe("release:sit");
-    expect(cat.querySelector(".pet-mode-cat__release-rest .pet-mode-cat__sit-pose")).toBeTruthy();
-    expect(cat.querySelector('.pet-mode-cat__release-rest img[src="/pet-mode/paw/f001.png"]')).toBeNull();
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
 
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
     expect(cat.getAttribute("data-phase")).toBe("sit");
@@ -2121,12 +2107,11 @@ describe("PetModeWindowApp", () => {
     expect(bridge.sampleNativePetCursor).not.toHaveBeenCalled();
   });
 
-  it("ignores a persisted drop preview whenever Dev mode is off", async () => {
+  it("uses the 30 percent manual-drop walk even when Dev mode is off", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.7);
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
-    window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -2156,16 +2141,14 @@ describe("PetModeWindowApp", () => {
       await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS);
       await Promise.resolve();
     });
+    expect(bridge.roamNativePet).toHaveBeenCalledWith(true);
     expect(cat.getAttribute("data-phase")).toBe("idle");
-    expect(bridge.roamNativePet).not.toHaveBeenCalled();
   });
 
   it("uses the 30 percent manual-drop branch for a short same-level walk", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.7);
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -2204,8 +2187,6 @@ describe("PetModeWindowApp", () => {
     vi.spyOn(Math, "random").mockReturnValue(0.95);
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_DROP_LIFE_PREVIEW_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.sampleNativePetCursor.mockResolvedValueOnce({
       cursorX: 610,
@@ -2254,6 +2235,7 @@ describe("PetModeWindowApp", () => {
     });
     expect(cat.getAttribute("data-phase")).toBe("notice");
     expect(cat.classList.contains("is-mirrored")).toBe(true);
+    expect(cat.classList.contains("is-quiet-notice")).toBe(true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(PET_MODE_POST_DROP_LOOK_DURATION_MS);
@@ -2306,8 +2288,7 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
     expect(cat.getAttribute("data-phase")).toBe("release");
-    expect(cat.getAttribute("data-region-id")).toBe("release:sit");
-    expect(cat.querySelector(".pet-mode-cat__release-rest .pet-mode-cat__sit-pose")).toBeTruthy();
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
     expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(cancellationCount);
 
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
@@ -2350,7 +2331,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
     await act(async () => { completeNativeDrag(); await Promise.resolve(); });
     expect(cat.getAttribute("data-phase")).toBe("release");
-    expect(cat.getAttribute("data-region-id")).toBe("release:sit");
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
     const cancellationCount = bridge.cancelNativePetMotion.mock.calls.length;
 
     act(() => {
@@ -2650,11 +2631,9 @@ describe("PetModeWindowApp", () => {
     expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
   });
 
-  it("forces the floor drop only when Dev mode and the shake experiment are both enabled", async () => {
+  it("forces the floor drop when a shake is detected", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
@@ -2679,10 +2658,9 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
   });
 
-  it("keeps the shipped drop when a persisted shake toggle outlives Dev mode", async () => {
+  it("still forces the floor drop when Dev mode is off", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
@@ -2703,14 +2681,12 @@ describe("PetModeWindowApp", () => {
       });
     });
 
-    expect(bridge.resolveNativePetDrop).toHaveBeenCalledWith(false);
+    expect(bridge.resolveNativePetDrop).toHaveBeenCalledWith(true);
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
   });
 
   it("does not animate or force a shake drop when reduced motion is requested", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
-    window.localStorage.setItem(PET_MODE_SHAKE_FLOOR_DROP_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
@@ -2809,6 +2785,58 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
     });
     expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("keeps a long focused catch standing until native landing finishes", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: false }),
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    let finishDrop!: (value: { kind: string; distance: number; durationMs: number; targetY: number; ledge: string }) => void;
+    bridge.resolveNativePetDrop.mockImplementationOnce(() => new Promise((resolve) => {
+      finishDrop = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 43, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
+
+    await act(async () => {
+      finishDrop({ kind: "catch", distance: 420, durationMs: 520, targetY: 700, ledge: "floor" });
+      await Promise.resolve();
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
   });
 
   it("publishes the committed silhouette instead of owning the full native rectangle", async () => {

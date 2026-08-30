@@ -80,6 +80,7 @@ export function PetModeCat({
   dragReleasePose = "idle",
   proudWalk = false,
   musicNoteVisible = false,
+  quietNotice = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -104,6 +105,8 @@ export function PetModeCat({
   readonly proudWalk?: boolean;
   /** Shows the reviewed one-shot good-mood note without replacing the body pose. */
   readonly musicNoteVisible?: boolean;
+  /** Hides the drift-notice bang when the same pose is reused as a drop greeting. */
+  readonly quietNotice?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -324,7 +327,7 @@ export function PetModeCat({
     && preserveEntryLanding
     && walkFrames.length > 0
     && renderedEntrySequenceRef.current === entrySequence;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy";
   const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")
