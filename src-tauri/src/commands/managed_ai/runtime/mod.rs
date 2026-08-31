@@ -30,6 +30,21 @@ pub(super) fn start_runtime(
         return Ok(running_status(&runtime_path, spec, artifact_dir));
     }
 
+    // Starting the same model is idempotent. Connection probes, the first-day
+    // gate, and background classification can all ask for the runtime while its
+    // initial model load is still in flight. Restarting that tracked child on
+    // every request resets the warm-up clock and can leave the UI oscillating
+    // between "connecting" and "not running" indefinitely.
+    if !process::stop_child_if_start_timed_out(spec.id)? && process::child_alive_for_model(spec.id)?
+    {
+        return Ok(status_for_spec(
+            ManagedAiInstallState::Starting,
+            spec,
+            Some(artifact_dir.to_path_buf()),
+            "Managed local AI runtime is starting.",
+        ));
+    }
+
     process::stop_stale_runtime_server(&runtime_path)?;
     let model_path = artifact_dir.join(spec.file_name);
     if !model_path.is_file() {

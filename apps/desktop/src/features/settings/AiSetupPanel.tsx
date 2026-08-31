@@ -217,6 +217,7 @@ export function AiSetupPanel({
             canManageBilling={cloudCanManageBilling}
             onDriftyRouteChange={handleDriftyRouteChange}
             onInstallModel={managedLocalAi.installModel}
+            onStartModel={managedLocalAi.startModel}
             onDeleteModel={managedLocalAi.deleteModel}
             onLocalAiSetupChange={onLocalAiSetupChange}
             onManageCloudBilling={onManageCloudBilling}

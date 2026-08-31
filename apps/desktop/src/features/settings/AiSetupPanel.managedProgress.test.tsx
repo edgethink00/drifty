@@ -70,4 +70,40 @@ describe("AiSetupPanel managed local progress", () => {
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
   });
+
+  it("blocks a second installed-model selection while the current runtime is starting", async () => {
+    setManagedStatusMock({
+      state: "starting",
+      selectedModelId: "drifty-qwen3-5-2b-economy",
+      installedModels: [
+        {
+          id: "drifty-qwen3-5-2b-economy",
+          artifactDir: "/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-2b-economy",
+        },
+        {
+          id: "drifty-qwen3-5-4b-default",
+          artifactDir: "/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-4b-default",
+        },
+      ],
+      baseUrl: "http://127.0.0.1:39217/v1",
+      model: "drifty-qwen3.5-2b-local",
+      message: "Starting managed local AI runtime...",
+      progress: null,
+      artifactDir: "/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-2b-economy",
+      errorKind: null,
+      memoryUsageBytes: null,
+    });
+    renderPanel();
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+
+    await waitFor(() => {
+      for (const label of [/^Qwen 3\.5 2B$/i, /^Qwen 3\.5 4B$/i]) {
+        const option = within(modelBeingUsed).getByRole("option", { name: label });
+        if (!(option instanceof HTMLButtonElement)) throw new Error("Managed model option should be a button.");
+        expect(option.disabled).toBe(true);
+      }
+    });
+  });
 });

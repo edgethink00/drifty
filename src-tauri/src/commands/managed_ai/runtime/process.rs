@@ -36,6 +36,18 @@ pub(super) fn start_child(
     spec: ManagedAiModelSpec,
 ) -> Result<(), ManagedAiError> {
     let mut guard = runtime_guard()?;
+    if let Some(runtime) = guard.as_mut() {
+        if runtime.model_id == spec.id {
+            if runtime.child.try_wait()?.is_none() {
+                // The entire check lives under the process-slot lock. Two
+                // callers can pass start_runtime's optimistic checks together,
+                // but only the first one may create the child; later callers
+                // adopt that same in-flight load instead of restarting it.
+                return Ok(());
+            }
+            *guard = None;
+        }
+    }
     stop_child_in_guard(&mut guard)?;
     let child = spawn_runtime(root, runtime_path, model_path, spec)?;
     *guard = Some(ManagedRuntimeChild {

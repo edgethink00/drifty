@@ -118,7 +118,15 @@ export function driftyModelOptions({
             void onDeleteModel(model.id);
           },
         });
-        return { value: model.id, label: model.label, actions } satisfies SettingsSelectOption<string>;
+        return {
+          value: model.id,
+          label: model.label,
+          // The managed action hook deliberately ignores overlapping work. Keep a
+          // second model selection from changing the persisted identity while the
+          // current install/start still owns that action slot.
+          disabled: busy,
+          actions,
+        } satisfies SettingsSelectOption<string>;
       }
       const installing = status?.selectedModelId === model.id && status.state === "installing";
       const failed = status?.selectedModelId === model.id && status.state === "error" && isRetryableManagedModelError(status.errorKind);

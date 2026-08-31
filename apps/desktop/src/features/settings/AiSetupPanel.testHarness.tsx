@@ -66,7 +66,7 @@ const { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatu
             selectedModelId: modelId,
             installedModels: upsertInstalledModel(managedStatus.installedModels, modelId),
             baseUrl: "http://127.0.0.1:39217/v1",
-            model: "drifty-qwen3.5-4b-local",
+            model: runtimeModelForId(modelId),
             message: "Managed local AI runtime is running.",
             artifactDir: `/Users/test/Library/Application Support/Drifty/managed-ai/models/${modelId}`,
             progress: null,
@@ -115,6 +115,21 @@ function upsertInstalledModel(
     ...installedModels.filter((item) => item.id !== modelId),
     { id: modelId, artifactDir },
   ];
+}
+
+function runtimeModelForId(modelId: string): string {
+  switch (modelId) {
+    case "drifty-qwen3-5-2b-economy":
+      return "drifty-qwen3.5-2b-local";
+    case "drifty-qwen3-5-4b-default":
+      return "drifty-qwen3.5-4b-local";
+    case "drifty-gemma-4-12b-local":
+      return "drifty-gemma4-12b-local";
+    case "drifty-qwen3-6-27b-smart":
+      return "drifty-qwen3.6-27b-local";
+    default:
+      return modelId;
+  }
 }
 
 export { invokeMock, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock };

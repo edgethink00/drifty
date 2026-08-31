@@ -16,8 +16,12 @@ export type NativeOpenAiChatResponse = {
 
 type ManagedLocalProviderConfig = Extract<LocalAiProviderConfig, { readonly provider: "managed_local" }>;
 
-const READY_POLL_ATTEMPTS = 16;
 const READY_POLL_INTERVAL_MS = 500;
+// Rust owns the runtime's two-minute cold-start deadline. Keep the renderer
+// willing to wait for that full lifecycle so larger managed models and slower
+// machines are not reported as disconnected after the old eight-second window.
+export const MANAGED_LOCAL_AI_READY_TIMEOUT_MS = 120_000;
+const READY_POLL_ATTEMPTS = Math.ceil(MANAGED_LOCAL_AI_READY_TIMEOUT_MS / READY_POLL_INTERVAL_MS);
 const CONNECTION_ERROR_MARKERS = [
   "error sending request for url",
   "connection refused",

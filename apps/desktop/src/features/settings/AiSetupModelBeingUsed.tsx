@@ -35,6 +35,7 @@ type AiSetupModelBeingUsedProps = {
   readonly canManageBilling: boolean;
   readonly onDriftyRouteChange: (route: DriftyAiRoute) => void;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
+  readonly onStartModel: (modelId: string) => void | Promise<void>;
   readonly onDeleteModel: (modelId: string) => void | Promise<void>;
   readonly onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>;
   readonly onManageCloudBilling: () => void | Promise<void>;
@@ -64,6 +65,7 @@ export function AiSetupModelBeingUsed({
   canManageBilling,
   onDriftyRouteChange,
   onInstallModel,
+  onStartModel,
   onDeleteModel,
   onLocalAiSetupChange,
   onManageCloudBilling,
@@ -157,7 +159,18 @@ export function AiSetupModelBeingUsed({
         if (!isSelectableManagedModel(modelId, managedLocalStatus)) return;
         onDriftyRouteChange("local");
         onProviderChange("drifty");
-        onLocalAiSetupChange((current) => ({ ...current, provider: "managed_local", driftyRoute: "local", managedLocalModelId: modelId }));
+        onLocalAiSetupChange((current) => ({
+          ...current,
+          provider: "managed_local",
+          driftyRoute: "local",
+          managedLocalModelId: modelId,
+          // Do not let the automatic probe pair the newly selected model id
+          // with the previous model's endpoint identity while the switch is
+          // still in flight. startModel fills both fields from native status.
+          managedLocalBaseUrl: current.managedLocalModelId === modelId ? current.managedLocalBaseUrl : "",
+          managedLocalModel: current.managedLocalModelId === modelId ? current.managedLocalModel : "",
+        }));
+        void onStartModel(modelId);
         return;
       case "openrouter":
         onProviderChange("openrouter");

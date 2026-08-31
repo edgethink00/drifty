@@ -85,6 +85,72 @@ fn start_spawns_runtime_for_downloaded_model() {
 
 #[cfg(unix)]
 #[test]
+fn repeated_start_reuses_the_same_in_flight_runtime_child() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+    let starts_path = root.path().join("runtime-starts.txt");
+    write_counting_fake_runtime(root.path(), &starts_path).expect("write fake runtime");
+
+    let first = start_model_at_root(root.path(), spec.id).expect("first start status");
+    let second = start_model_at_root(root.path(), spec.id).expect("second start status");
+    runtime::stop_runtime_for_tests();
+
+    assert!(matches!(first.state, ManagedAiInstallState::Starting));
+    assert!(matches!(second.state, ManagedAiInstallState::Starting));
+    let starts = std::fs::read_to_string(starts_path).expect("read runtime starts");
+    assert_eq!(
+        starts.lines().count(),
+        1,
+        "the in-flight runtime must not restart"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn concurrent_start_creates_only_one_runtime_child() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
+    let starts_path = root.path().join("runtime-starts.txt");
+    write_counting_fake_runtime(root.path(), &starts_path).expect("write fake runtime");
+    let barrier = std::sync::Barrier::new(3);
+
+    std::thread::scope(|scope| {
+        let first = scope.spawn(|| {
+            barrier.wait();
+            runtime::start_runtime(root.path(), spec, &artifact_dir)
+        });
+        let second = scope.spawn(|| {
+            barrier.wait();
+            runtime::start_runtime(root.path(), spec, &artifact_dir)
+        });
+        barrier.wait();
+        first
+            .join()
+            .expect("first start thread")
+            .expect("first start");
+        second
+            .join()
+            .expect("second start thread")
+            .expect("second start");
+    });
+    runtime::stop_runtime_for_tests();
+
+    let starts = std::fs::read_to_string(starts_path).expect("read runtime starts");
+    assert_eq!(
+        starts.lines().count(),
+        1,
+        "concurrent starts must share one child"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
     let _globals = lock_runtime_globals();
     let _memory = SufficientMemoryForTests::pin();
@@ -161,6 +227,23 @@ fn spawn_adopted_runtime(root: &Path) -> Child {
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn adopted runtime process")
+}
+
+#[cfg(unix)]
+fn write_counting_fake_runtime(root: &Path, starts_path: &Path) -> Result<(), ManagedAiError> {
+    let runtime_dir = root.join("runtime");
+    std::fs::create_dir_all(&runtime_dir)?;
+    let runtime_path = runtime_dir.join("llama-server");
+    let starts_path = shell_quote(starts_path);
+    std::fs::write(
+        &runtime_path,
+        format!("#!/bin/sh\nprintf 'started\\n' >> {starts_path}\nwhile true; do sleep 5; done\n"),
+    )?;
+    let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
+    use std::os::unix::fs::PermissionsExt;
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(runtime_path, permissions)?;
+    Ok(())
 }
 
 fn wait_for_exit(child: &mut Child) -> bool {
