@@ -81,14 +81,15 @@ describe("Korean localization preview", () => {
     render(
       <LocalizationTestProvider language="ko">
         <GeneralSettingsSection
-          autoInstallFutureUpdates={false}
+          backgroundUpdatesEnabled={false}
+          backgroundUpdatesSupported
           startOfDayValue="04:00"
           startOfWeek="monday"
           updaterChecking={false}
           updaterError={null}
           updaterInstalling={false}
           updaterMessage={null}
-          onAutoInstallFutureUpdatesChange={() => undefined}
+          onBackgroundUpdatesEnabledChange={() => undefined}
           onCheckForUpdates={() => undefined}
           onStartOfDayChange={() => undefined}
           onStartOfWeekChange={() => undefined}
@@ -100,5 +101,29 @@ describe("Korean localization preview", () => {
     expect(screen.queryByRole("combobox", { name: "표시 언어" })).toBeNull();
     expect(screen.queryByText("커뮤니티 및 지원")).toBeNull();
     expect(screen.queryByText("Drifty 커뮤니티")).toBeNull();
+  });
+
+  it("hides macOS-only background update preparation on unsupported platforms", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <GeneralSettingsSection
+          backgroundUpdatesEnabled
+          backgroundUpdatesSupported={false}
+          startOfDayValue="04:00"
+          startOfWeek="monday"
+          updaterChecking={false}
+          updaterError={null}
+          updaterInstalling={false}
+          updaterMessage={null}
+          onBackgroundUpdatesEnabledChange={() => undefined}
+          onCheckForUpdates={() => undefined}
+          onStartOfDayChange={() => undefined}
+          onStartOfWeekChange={() => undefined}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.queryByRole("switch", { name: "Automatically update Drifty" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Check for Updates" })).toBeTruthy();
   });
 });

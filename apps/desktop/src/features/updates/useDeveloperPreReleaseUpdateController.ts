@@ -6,15 +6,9 @@ import {
   isDeveloperPreReleaseUpdaterAvailable,
   type DeveloperPreReleaseUpdate,
 } from "./preReleaseUpdaterClient";
-import {
-  persistAutoInstallFutureUpdates,
-  resolveInitialAutoInstallFutureUpdates,
-} from "./updatePolicy";
-
 export type PreReleaseUpdateStatus = "idle" | "checking" | "available" | "none" | "installing" | "installed" | "unavailable" | "error";
 
 export type DeveloperPreReleaseUpdateController = {
-  readonly autoInstallFutureUpdates: boolean;
   readonly busy: boolean;
   readonly canInstallPreReleaseUpdate: boolean;
   readonly error: string | null;
@@ -27,7 +21,6 @@ export type DeveloperPreReleaseUpdateController = {
   readonly checkLatestBuild: () => Promise<void>;
   readonly dismissPrompt: () => void;
   readonly installLatestBuild: () => Promise<void>;
-  readonly setAutoInstallFutureUpdates: (enabled: boolean) => void;
 };
 
 const MISSING_PRE_RELEASE_MANIFEST_ERROR = "Could not fetch a valid release JSON from the remote";
@@ -47,7 +40,6 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
   ));
   const [error, setError] = useState<string | null>(null);
   const [promptedUpdateVersion, setPromptedUpdateVersion] = useState<string | null>(null);
-  const [autoInstallFutureUpdates, setAutoInstallFutureUpdatesState] = useState(resolveInitialAutoInstallFutureUpdates);
   const statusRef = useRef(statusInitialValue);
   const updateRef = useRef<DeveloperPreReleaseUpdate | null>(null);
 
@@ -131,11 +123,6 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
     }
   }, [setStatus, setUpdate]);
 
-  const setAutoInstallFutureUpdates = useCallback((enabled: boolean) => {
-    setAutoInstallFutureUpdatesState(enabled);
-    persistAutoInstallFutureUpdates(enabled);
-  }, []);
-
   const dismissPrompt = useCallback(() => setPromptedUpdateVersion(null), []);
 
   return useMemo(() => {
@@ -146,7 +133,6 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
     const promptUpdate = update?.available === true && update.version === promptedUpdateVersion ? update : null;
 
     return {
-      autoInstallFutureUpdates,
       busy,
       canInstallPreReleaseUpdate,
       error,
@@ -159,17 +145,14 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
       checkLatestBuild,
       dismissPrompt,
       installLatestBuild,
-      setAutoInstallFutureUpdates,
     };
   }, [
-    autoInstallFutureUpdates,
     checkLatestBuild,
     dismissPrompt,
     error,
     installLatestBuild,
     message,
     promptedUpdateVersion,
-    setAutoInstallFutureUpdates,
     status,
     update,
   ]);

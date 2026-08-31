@@ -1,13 +1,18 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GENERAL_PROMPT_AFTER_MS,
+  UPDATE_AUTO_INSTALL_STORAGE_KEY,
+  UPDATE_BACKGROUND_APPLY_STORAGE_KEY,
   fallbackUpdatePolicy,
   fetchUpdatePolicy,
-  markUpdateAutoInstallAttempted,
+  markUpdateBackgroundPreparationAttempted,
+  markUpdateBackgroundPreparationFailed,
   markUpdateInteracted,
   normalizeUpdatePolicyMetadata,
   parseUpdateInteractionMap,
-  shouldAutoInstallUpdate,
+  persistBackgroundUpdatesEnabled,
+  resolveInitialBackgroundUpdatesEnabled,
+  shouldPrepareUpdateInBackground,
   shouldShowAutomaticUpdateDialog,
   updatePolicyUrl,
   upsertUpdateSeen,
@@ -23,33 +28,64 @@ function requireInteraction(map: ReturnType<typeof upsertUpdateSeen>) {
 }
 
 describe("updatePolicy", () => {
-  it("defaults missing policy metadata to a general non-auto-install update", () => {
-    const policy = fallbackUpdatePolicy(VERSION);
+  beforeEach(() => {
+    const values = new Map<string, string>();
+    vi.stubGlobal("window", {
+      localStorage: {
+        clear: () => values.clear(),
+        getItem: (key: string) => values.get(key) ?? null,
+        removeItem: (key: string) => values.delete(key),
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+    });
+  });
 
-    expect(policy).toEqual({
+  it("defaults missing policy metadata to the existing 72-hour manual prompt policy", () => {
+    expect(fallbackUpdatePolicy(VERSION)).toEqual({
       version: VERSION,
+      policyVersion: 1,
       urgency: "general",
       promptAfterMs: DEFAULT_GENERAL_PROMPT_AFTER_MS,
-      autoInstallEligible: false,
+      backgroundDownloadEligible: false,
+      installBehavior: "manual",
       message: null,
     });
   });
 
-  it("normalizes urgent metadata for immediate prompts and future auto-install", () => {
+  it("normalizes policy-v2 next-launch preparation metadata", () => {
+    expect(normalizeUpdatePolicyMetadata({
+      version: VERSION,
+      policyVersion: 2,
+      urgency: "general",
+      promptAfterHours: 72,
+      backgroundDownload: true,
+      installBehavior: "next-launch",
+      message: "Stability fixes.",
+    }, VERSION)).toEqual({
+      version: VERSION,
+      policyVersion: 2,
+      urgency: "general",
+      promptAfterMs: DEFAULT_GENERAL_PROMPT_AFTER_MS,
+      backgroundDownloadEligible: true,
+      installBehavior: "next-launch",
+      message: "Stability fixes.",
+    });
+  });
+
+  it("never converts legacy autoInstall metadata into background permission", () => {
     const policy = normalizeUpdatePolicyMetadata({
       version: VERSION,
-      urgency: "urgent",
+      urgency: "general",
+      promptAfterHours: 72,
       autoInstall: true,
-      message: "Security fix.",
     }, VERSION);
 
-    expect(policy).toEqual({
-      version: VERSION,
-      urgency: "urgent",
-      promptAfterMs: 0,
-      autoInstallEligible: true,
-      message: "Security fix.",
-    });
+    expect(policy).toEqual(expect.objectContaining({
+      policyVersion: 1,
+      promptAfterMs: DEFAULT_GENERAL_PROMPT_AFTER_MS,
+      backgroundDownloadEligible: false,
+      installBehavior: "manual",
+    }));
   });
 
   it("fetches policy metadata from the matching versioned release", async () => {
@@ -71,7 +107,7 @@ describe("updatePolicy", () => {
     expect(policy.version).toBe(VERSION);
   });
 
-  it("shows general automatic prompts only after three days without interaction", () => {
+  it("opens the existing native dialog after 72 hours, unless the release was handled", () => {
     const policy = fallbackUpdatePolicy(VERSION);
     const seen = upsertUpdateSeen({}, VERSION, NOW_MS);
     const interaction = requireInteraction(seen);
@@ -81,7 +117,6 @@ describe("updatePolicy", () => {
       interaction,
       nowMs: NOW_MS + DEFAULT_GENERAL_PROMPT_AFTER_MS - 1,
     })).toBe(false);
-
     expect(shouldShowAutomaticUpdateDialog({
       policy,
       interaction,
@@ -94,40 +129,88 @@ describe("updatePolicy", () => {
       interaction: interacted,
       nowMs: NOW_MS + DEFAULT_GENERAL_PROMPT_AFTER_MS,
     })).toBe(false);
+
+    const urgent = normalizeUpdatePolicyMetadata({
+      version: VERSION,
+      urgency: "urgent",
+      message: "Data loss fix.",
+    }, VERSION);
+    if (!urgent) throw new Error("Expected urgent policy");
+    expect(shouldShowAutomaticUpdateDialog({ policy: urgent, interaction, nowMs: NOW_MS })).toBe(true);
   });
 
-  it("allows automatic install only for opted-in, eligible, not-yet-attempted releases", () => {
+  it("prepares only opted-in v2 releases and stops after three failures", () => {
     const policy = normalizeUpdatePolicyMetadata({
       version: VERSION,
+      policyVersion: 2,
       urgency: "general",
-      autoInstall: true,
+      backgroundDownload: true,
+      installBehavior: "next-launch",
     }, VERSION);
     if (!policy) throw new Error("Expected metadata to normalize");
 
     const seen = upsertUpdateSeen({}, VERSION, NOW_MS);
-    const interaction = requireInteraction(seen);
-
-    expect(shouldAutoInstallUpdate({
-      autoInstallFutureUpdates: true,
+    expect(shouldPrepareUpdateInBackground({
+      backgroundPreparationSupported: true,
+      backgroundUpdatesEnabled: true,
       policy,
-      interaction,
+      interaction: requireInteraction(seen),
     })).toBe(true);
-
-    const attempted = requireInteraction(markUpdateAutoInstallAttempted(seen, VERSION, NOW_MS + 1));
-    expect(shouldAutoInstallUpdate({
-      autoInstallFutureUpdates: true,
+    expect(shouldPrepareUpdateInBackground({
+      backgroundPreparationSupported: true,
+      backgroundUpdatesEnabled: false,
       policy,
-      interaction: attempted,
+      interaction: requireInteraction(seen),
+    })).toBe(false);
+    expect(shouldPrepareUpdateInBackground({
+      backgroundPreparationSupported: false,
+      backgroundUpdatesEnabled: true,
+      policy,
+      interaction: requireInteraction(seen),
+    })).toBe(false);
+
+    const attempted = markUpdateBackgroundPreparationAttempted(seen, VERSION, NOW_MS + 1);
+    expect(shouldPrepareUpdateInBackground({
+      backgroundPreparationSupported: true,
+      backgroundUpdatesEnabled: true,
+      policy,
+      interaction: requireInteraction(attempted),
+    })).toBe(false);
+
+    const failedOnce = markUpdateBackgroundPreparationFailed(attempted, VERSION);
+    const attemptedTwice = markUpdateBackgroundPreparationAttempted(failedOnce, VERSION, NOW_MS + 2);
+    const failedTwice = markUpdateBackgroundPreparationFailed(attemptedTwice, VERSION);
+    const attemptedThrice = markUpdateBackgroundPreparationAttempted(failedTwice, VERSION, NOW_MS + 3);
+    const failedThrice = markUpdateBackgroundPreparationFailed(attemptedThrice, VERSION);
+    expect(shouldPrepareUpdateInBackground({
+      backgroundPreparationSupported: true,
+      backgroundUpdatesEnabled: true,
+      policy,
+      interaction: requireInteraction(failedThrice),
     })).toBe(false);
   });
 
-  it("ignores malformed persisted interaction state", () => {
-    expect(parseUpdateInteractionMap("{bad json")).toEqual({});
+  it("migrates interaction and preference storage without reviving legacy restarts", () => {
     expect(parseUpdateInteractionMap(JSON.stringify({
-      [VERSION]: { firstSeenAtMs: NOW_MS, interactedAtMs: null, autoInstallAttemptedAtMs: null },
+      [VERSION]: { firstSeenAtMs: NOW_MS, interactedAtMs: null, autoInstallAttemptedAtMs: NOW_MS + 1 },
       malformed: { firstSeenAtMs: "nope" },
     }))).toEqual({
-      [VERSION]: { firstSeenAtMs: NOW_MS, interactedAtMs: null, autoInstallAttemptedAtMs: null },
+      [VERSION]: {
+        firstSeenAtMs: NOW_MS,
+        interactedAtMs: null,
+        backgroundPreparationAttemptedAtMs: NOW_MS + 1,
+        backgroundPreparationFailureCount: 0,
+      },
     });
+
+    expect(resolveInitialBackgroundUpdatesEnabled()).toBe(true);
+    window.localStorage.setItem(UPDATE_AUTO_INSTALL_STORAGE_KEY, "0");
+    expect(resolveInitialBackgroundUpdatesEnabled()).toBe(false);
+    window.localStorage.setItem(UPDATE_AUTO_INSTALL_STORAGE_KEY, "1");
+    expect(resolveInitialBackgroundUpdatesEnabled()).toBe(true);
+
+    persistBackgroundUpdatesEnabled(true);
+    expect(window.localStorage.getItem(UPDATE_BACKGROUND_APPLY_STORAGE_KEY)).toBe("1");
+    expect(window.localStorage.getItem(UPDATE_AUTO_INSTALL_STORAGE_KEY)).toBe("0");
   });
 });

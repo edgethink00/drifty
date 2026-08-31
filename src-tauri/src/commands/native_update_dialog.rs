@@ -12,8 +12,8 @@ use objc2::{define_class, msg_send, AnyThread, DefinedClass, MainThreadMarker};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSBackingStoreType, NSButton, NSColor,
     NSControlSize, NSControlStateValueOff, NSControlStateValueOn, NSFont, NSImage, NSImageScaling,
-    NSImageView, NSModalPanelWindowLevel, NSModalResponse, NSModalResponseCancel, NSModalResponseOK,
-    NSPanel, NSTextField, NSView, NSWindowStyleMask,
+    NSImageView, NSModalPanelWindowLevel, NSModalResponse, NSModalResponseCancel,
+    NSModalResponseOK, NSPanel, NSTextField, NSView, NSWindowStyleMask,
 };
 #[cfg(target_os = "macos")]
 use objc2_foundation::{NSData, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
@@ -33,7 +33,7 @@ const SIDE_PADDING: f64 = 24.0;
 #[serde(rename_all = "camelCase")]
 pub struct NativeUpdatePromptResult {
     confirmed: bool,
-    auto_install_future_updates: bool,
+    background_updates_enabled: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -50,7 +50,7 @@ struct UpdatePromptButtonTargetIvars {
 #[cfg(target_os = "macos")]
 struct NativeUpdatePrompt {
     panel: Retained<NSPanel>,
-    auto_install_checkbox: Retained<NSButton>,
+    background_updates_checkbox: Retained<NSButton>,
     _later_target: Retained<UpdatePromptButtonTarget>,
     _update_target: Retained<UpdatePromptButtonTarget>,
 }
@@ -87,10 +87,11 @@ pub async fn update_prompt_show_native(
     app: AppHandle,
     version: String,
     urgent: bool,
-    auto_install_future_updates: bool,
+    message: Option<String>,
+    background_updates_enabled: bool,
 ) -> Result<NativeUpdatePromptResult, String> {
     async_runtime::spawn_blocking(move || {
-        show_native_update_prompt(app, version, urgent, auto_install_future_updates)
+        show_native_update_prompt(app, version, urgent, message, background_updates_enabled)
     })
     .await
     .map_err(|error| error.to_string())?
@@ -111,14 +112,16 @@ fn show_native_update_prompt(
     app: AppHandle,
     version: String,
     urgent: bool,
-    auto_install_future_updates: bool,
+    message: Option<String>,
+    background_updates_enabled: bool,
 ) -> Result<NativeUpdatePromptResult, String> {
     let (sender, receiver) = mpsc::channel();
     app.run_on_main_thread(move || {
         let _ = sender.send(show_native_update_prompt_on_main_thread(
             &version,
             urgent,
-            auto_install_future_updates,
+            message.as_deref(),
+            background_updates_enabled,
         ));
     })
     .map_err(|error| error.to_string())?;
@@ -147,8 +150,9 @@ fn show_native_update_status(
 #[cfg(target_os = "macos")]
 fn show_native_update_prompt_on_main_thread(
     version: &str,
-    _urgent: bool,
-    auto_install_future_updates: bool,
+    urgent: bool,
+    message: Option<&str>,
+    background_updates_enabled: bool,
 ) -> Result<NativeUpdatePromptResult, String> {
     autoreleasepool(|_| {
         let Some(mtm) = MainThreadMarker::new() else {
@@ -156,14 +160,14 @@ fn show_native_update_prompt_on_main_thread(
         };
 
         let app = NSApplication::sharedApplication(mtm);
-        let prompt = update_prompt_panel(mtm, version, auto_install_future_updates);
+        let prompt = update_prompt_panel(mtm, version, urgent, message, background_updates_enabled);
         present_update_panel(mtm, &prompt.panel);
         let response = app.runModalForWindow(&prompt.panel);
         prompt.panel.orderOut(None);
 
         Ok(NativeUpdatePromptResult {
             confirmed: response == NSModalResponseOK,
-            auto_install_future_updates: prompt.auto_install_checkbox.state()
+            background_updates_enabled: prompt.background_updates_checkbox.state()
                 == NSControlStateValueOn,
         })
     })
@@ -173,9 +177,16 @@ fn show_native_update_prompt_on_main_thread(
 fn update_prompt_panel(
     mtm: MainThreadMarker,
     version: &str,
-    auto_install_future_updates: bool,
+    urgent: bool,
+    message: Option<&str>,
+    background_updates_enabled: bool,
 ) -> NativeUpdatePrompt {
-    let (panel, root) = create_update_panel(mtm, "Drifty update", PANEL_WIDTH, PANEL_HEIGHT);
+    let panel_title = if urgent {
+        "Important Drifty update"
+    } else {
+        "Drifty update"
+    };
+    let (panel, root) = create_update_panel(mtm, panel_title, PANEL_WIDTH, PANEL_HEIGHT);
 
     let icon_data = NSData::with_bytes(UPDATE_DIALOG_ICON_PNG);
     if let Some(icon) = NSImage::initWithData(NSImage::alloc(), &icon_data) {
@@ -190,29 +201,31 @@ fn update_prompt_panel(
 
     let text_width = PANEL_WIDTH - SIDE_PADDING * 2.0;
 
-    let title =
-        NSTextField::labelWithString(&NSString::from_str(&format!("Drifty {version}")), mtm);
+    let title_copy = if urgent {
+        format!("Important update · Drifty {version}")
+    } else {
+        format!("Drifty {version}")
+    };
+    let title = NSTextField::labelWithString(&NSString::from_str(&title_copy), mtm);
     title.setFrame(frame(SIDE_PADDING, 112.0, text_width, 18.0));
     title.setFont(Some(&NSFont::boldSystemFontOfSize(13.0)));
     title.setTextColor(Some(&NSColor::whiteColor().colorWithAlphaComponent(0.92)));
     root.addSubview(&title);
 
-    let body = NSTextField::wrappingLabelWithString(
-        &NSString::from_str("A new Drifty update is available."),
-        mtm,
-    );
-    body.setFrame(frame(SIDE_PADDING, 84.0, text_width, 20.0));
+    let body_copy = normalize_update_prompt_message(message, urgent);
+    let body = NSTextField::wrappingLabelWithString(&NSString::from_str(&body_copy), mtm);
+    body.setFrame(frame(SIDE_PADDING, 78.0, text_width, 32.0));
     body.setFont(Some(&NSFont::systemFontOfSize(13.0)));
     body.setTextColor(Some(&NSColor::whiteColor().colorWithAlphaComponent(0.9)));
     root.addSubview(&body);
 
-    let auto_install_checkbox = update_prompt_checkbox(
+    let background_updates_checkbox = update_prompt_checkbox(
         mtm,
-        "Automatically install future updates",
-        auto_install_future_updates,
+        "Automatically update Drifty",
+        background_updates_enabled,
     );
-    auto_install_checkbox.setFrame(frame(SIDE_PADDING, 58.0, text_width, 18.0));
-    root.addSubview(&auto_install_checkbox);
+    background_updates_checkbox.setFrame(frame(SIDE_PADDING, 54.0, text_width, 18.0));
+    root.addSubview(&background_updates_checkbox);
 
     let later_target = UpdatePromptButtonTarget::new(mtm, NSModalResponseCancel);
     let later = update_prompt_button(mtm, "Later", &later_target);
@@ -227,10 +240,29 @@ fn update_prompt_panel(
 
     NativeUpdatePrompt {
         panel,
-        auto_install_checkbox,
+        background_updates_checkbox,
         _later_target: later_target,
         _update_target: update_target,
     }
+}
+
+fn normalize_update_prompt_message(message: Option<&str>, urgent: bool) -> String {
+    let normalized = message
+        .unwrap_or_default()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let fallback = if urgent {
+        "This update includes an important stability or security fix."
+    } else {
+        "A new Drifty update is available."
+    };
+    let source = if normalized.is_empty() {
+        fallback
+    } else {
+        normalized.as_str()
+    };
+    source.chars().take(180).collect()
 }
 
 #[cfg(target_os = "macos")]
@@ -422,9 +454,10 @@ fn create_update_panel(
 fn show_native_update_prompt_on_main_thread(
     _version: &str,
     _urgent: bool,
-    auto_install_future_updates: bool,
+    _message: Option<&str>,
+    background_updates_enabled: bool,
 ) -> Result<NativeUpdatePromptResult, String> {
-    let _ = auto_install_future_updates;
+    let _ = background_updates_enabled;
     Err("Native update prompt is only available on macOS.".to_string())
 }
 
@@ -474,5 +507,14 @@ mod tests {
             !mask.contains(NSWindowStyleMask::Closable),
             "native update panels must not mix system window buttons with the custom card"
         );
+    }
+
+    #[test]
+    fn urgent_update_prompt_uses_the_release_reason() {
+        assert_eq!(
+            normalize_update_prompt_message(Some("  Activity   records may be lost.  "), true),
+            "Activity records may be lost."
+        );
+        assert!(normalize_update_prompt_message(None, true).contains("important"));
     }
 }

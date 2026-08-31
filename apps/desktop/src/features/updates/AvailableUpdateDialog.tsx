@@ -9,24 +9,24 @@ type AvailableUpdateDialogUpdate = {
 };
 
 export type AvailableUpdateDialogProps = {
-  autoInstallFutureUpdates: boolean;
+  backgroundUpdatesEnabled: boolean;
   policy: UpdatePolicy | null;
   update: AvailableUpdateDialogUpdate;
   updaterChecking: boolean;
   updaterError: string | null;
   updaterInstalling: boolean;
-  onAutoInstallFutureUpdatesChange: (enabled: boolean) => void;
+  onBackgroundUpdatesEnabledChange: (enabled: boolean) => void;
   onDismiss: () => void;
   onInstall: () => void;
 };
 
 type NativeUpdatePromptResult = {
-  readonly autoInstallFutureUpdates: boolean;
+  readonly backgroundUpdatesEnabled: boolean;
   readonly confirmed: boolean;
 };
 
 type ActiveUpdateWindow = {
-  readonly prompt: Promise<NativeUpdatePromptResult>;
+  readonly prompt: Promise<NativeUpdatePromptResult | null>;
   readonly version: string;
 };
 
@@ -35,10 +35,12 @@ let activeUpdateWindow: ActiveUpdateWindow | null = null;
 function showNativeUpdatePrompt(
   version: string,
   urgent: boolean,
-  autoInstallFutureUpdates: boolean,
+  message: string | null,
+  backgroundUpdatesEnabled: boolean,
 ) {
-  return invoke<NativeUpdatePromptResult>("update_prompt_show_native", {
-    autoInstallFutureUpdates,
+  return invoke<NativeUpdatePromptResult | null>("update_prompt_show_native", {
+    backgroundUpdatesEnabled,
+    message,
     version,
     urgent,
   });
@@ -47,11 +49,12 @@ function showNativeUpdatePrompt(
 function getNativeUpdatePrompt(
   version: string,
   urgent: boolean,
-  autoInstallFutureUpdates: boolean,
+  message: string | null,
+  backgroundUpdatesEnabled: boolean,
 ) {
   if (activeUpdateWindow?.version === version) return activeUpdateWindow.prompt;
 
-  const prompt = showNativeUpdatePrompt(version, urgent, autoInstallFutureUpdates).finally(() => {
+  const prompt = showNativeUpdatePrompt(version, urgent, message, backgroundUpdatesEnabled).finally(() => {
     if (activeUpdateWindow?.prompt === prompt) activeUpdateWindow = null;
   });
   activeUpdateWindow = { prompt, version };
@@ -59,26 +62,31 @@ function getNativeUpdatePrompt(
 }
 
 export function AvailableUpdateDialog({
-  autoInstallFutureUpdates,
+  backgroundUpdatesEnabled,
   policy,
   update,
   updaterChecking,
   updaterError,
   updaterInstalling,
-  onAutoInstallFutureUpdatesChange,
+  onBackgroundUpdatesEnabledChange,
   onDismiss,
   onInstall,
 }: AvailableUpdateDialogProps) {
   const urgent = policy?.urgency === "urgent" || updaterError !== null;
+  const message = policy?.message ?? update.body ?? null;
 
   useEffect(() => {
     if (updaterChecking || updaterInstalling) return;
 
     let subscribed = true;
 
-    void getNativeUpdatePrompt(update.version, urgent, autoInstallFutureUpdates).then((result) => {
+    void getNativeUpdatePrompt(update.version, urgent, message, backgroundUpdatesEnabled).then((result) => {
       if (!subscribed) return;
-      onAutoInstallFutureUpdatesChange(result.autoInstallFutureUpdates);
+      if (!result) {
+        onDismiss();
+        return;
+      }
+      onBackgroundUpdatesEnabledChange(result.backgroundUpdatesEnabled);
       if (result.confirmed) {
         onInstall();
         onDismiss();
@@ -99,8 +107,9 @@ export function AvailableUpdateDialog({
       subscribed = false;
     };
   }, [
-    autoInstallFutureUpdates,
-    onAutoInstallFutureUpdatesChange,
+    backgroundUpdatesEnabled,
+    message,
+    onBackgroundUpdatesEnabledChange,
     onDismiss,
     onInstall,
     update.version,

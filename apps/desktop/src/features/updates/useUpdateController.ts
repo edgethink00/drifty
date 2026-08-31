@@ -6,15 +6,16 @@ import {
   fallbackUpdatePolicy,
   fetchUpdatePolicy,
   clearPostUpdateRelaunchFocusPending,
-  markUpdateAutoInstallAttempted,
+  markUpdateBackgroundPreparationAttempted,
+  markUpdateBackgroundPreparationFailed,
   markUpdateInteracted,
   markPostUpdateRelaunchFocusPending,
   msUntilAutomaticDialog,
-  persistAutoInstallFutureUpdates,
+  persistBackgroundUpdatesEnabled,
   persistUpdateInteractionMap,
   readUpdateInteractionMap,
-  resolveInitialAutoInstallFutureUpdates,
-  shouldAutoInstallUpdate,
+  resolveInitialBackgroundUpdatesEnabled,
+  shouldPrepareUpdateInBackground,
   shouldShowAutomaticUpdateDialog,
   upsertUpdateSeen,
   type UpdateInteractionMap,
@@ -22,26 +23,34 @@ import {
 } from "./updatePolicy";
 
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
-type UpdateCheckMode = "manual" | "automatic";
+export type UpdateCheckMode = "manual" | "automatic";
 
-export type ManualUpdateCheckResult =
+export type UpdateCheckResult =
   | { readonly kind: "available"; readonly version: string }
   | { readonly kind: "none" }
   | { readonly kind: "error"; readonly message: string };
 
+export type UpdateLifecycleStatus = "idle" | "available" | "downloading" | "installing";
+
 type UseUpdateControllerResult = {
-  readonly autoInstallFutureUpdates: boolean;
+  readonly backgroundUpdatesEnabled: boolean;
   readonly availableUpdate: AvailableUpdate | null;
   readonly currentUpdatePolicy: UpdatePolicy | null;
   readonly dismissAvailableUpdate: () => void;
-  readonly handleCheckForUpdates: (mode?: UpdateCheckMode) => Promise<ManualUpdateCheckResult | void>;
+  readonly handleCheckForUpdates: (mode?: UpdateCheckMode) => Promise<UpdateCheckResult | void>;
   readonly handleInstallUpdate: () => Promise<void>;
-  readonly setAutoInstallFutureUpdates: (autoInstall: boolean) => void;
+  readonly setBackgroundUpdatesEnabled: (enabled: boolean) => void;
   readonly shouldShowAvailableUpdateDialog: boolean;
+  readonly updateLifecycleStatus: UpdateLifecycleStatus;
   readonly updaterChecking: boolean;
+  readonly updaterDownloading: boolean;
   readonly updaterError: string | null;
   readonly updaterInstalling: boolean;
   readonly updaterMessage: string | null;
+};
+
+type UseUpdateControllerOptions = {
+  readonly backgroundPreparationSupported: boolean;
 };
 
 function releaseUpdateResource(update: AvailableUpdate | null): void {
@@ -51,18 +60,23 @@ function releaseUpdateResource(update: AvailableUpdate | null): void {
   });
 }
 
-export function useUpdateController(): UseUpdateControllerResult {
+export function useUpdateController({
+  backgroundPreparationSupported,
+}: UseUpdateControllerOptions): UseUpdateControllerResult {
   const updaterCheckingRef = useRef(false);
-  const updaterInstallingRef = useRef(false);
+  const updaterOperatingRef = useRef(false);
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
   const availableUpdateRef = useRef<AvailableUpdate | null>(null);
   const [availableUpdateSource, setAvailableUpdateSource] = useState<UpdateCheckMode | null>(null);
   const [availableUpdatePolicy, setAvailableUpdatePolicy] = useState<UpdatePolicy | null>(null);
+  const [dismissedPromptVersion, setDismissedPromptVersion] = useState<string | null>(null);
+  const preparedUpdateVersionRef = useRef<string | null>(null);
   const [updateInteractions, setUpdateInteractions] = useState<UpdateInteractionMap>(readUpdateInteractionMap);
   const updateInteractionsRef = useRef(updateInteractions);
   const [updatePromptNowMs, setUpdatePromptNowMs] = useState(() => Date.now());
-  const [autoInstallFutureUpdates, setAutoInstallFutureUpdates] = useState(resolveInitialAutoInstallFutureUpdates);
+  const [backgroundUpdatesEnabled, setBackgroundUpdatesEnabled] = useState(resolveInitialBackgroundUpdatesEnabled);
   const [updaterChecking, setUpdaterChecking] = useState(false);
+  const [updaterDownloading, setUpdaterDownloading] = useState(false);
   const [updaterInstalling, setUpdaterInstalling] = useState(false);
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
@@ -86,16 +100,22 @@ export function useUpdateController(): UseUpdateControllerResult {
     if (previousUpdate !== nextUpdate) releaseUpdateResource(previousUpdate);
   }, []);
 
+  const rememberPreparedUpdate = useCallback((version: string | null) => {
+    preparedUpdateVersionRef.current = version;
+  }, []);
+
   useEffect(() => () => {
     const currentUpdate = availableUpdateRef.current;
     availableUpdateRef.current = null;
     releaseUpdateResource(currentUpdate);
   }, []);
 
-  const installUpdate = useCallback(async (resolveUpdate: () => Promise<AvailableUpdate | null | undefined>) => {
-    if (updaterInstallingRef.current) return;
+  const installUpdateAndRestart = useCallback(async (
+    resolveUpdate: () => Promise<AvailableUpdate | null | undefined>,
+  ) => {
+    if (updaterOperatingRef.current) return;
 
-    updaterInstallingRef.current = true;
+    updaterOperatingRef.current = true;
     setUpdaterInstalling(true);
     setUpdaterError(null);
 
@@ -109,13 +129,48 @@ export function useUpdateController(): UseUpdateControllerResult {
       clearPostUpdateRelaunchFocusPending();
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
     } finally {
-      updaterInstallingRef.current = false;
+      updaterOperatingRef.current = false;
       setUpdaterInstalling(false);
     }
   }, []);
 
-  const handleCheckForUpdates = useCallback(async (mode: UpdateCheckMode = "manual"): Promise<ManualUpdateCheckResult | void> => {
-    if (updaterCheckingRef.current || updaterInstallingRef.current) return;
+  const prepareUpdateInBackground = useCallback(async (
+    updateToPrepare: AvailableUpdate,
+    version: string,
+  ): Promise<boolean> => {
+    if (updaterOperatingRef.current) return false;
+
+    updaterOperatingRef.current = true;
+    setUpdaterDownloading(true);
+    setUpdaterError(null);
+    setUpdaterMessage(`Preparing Drifty ${version} in the background...`);
+
+    try {
+      await updateToPrepare.download();
+      setUpdaterDownloading(false);
+      setUpdaterInstalling(true);
+      await updateToPrepare.install();
+      rememberPreparedUpdate(version);
+      setUpdaterMessage(`Drifty ${version} is ready for the next launch.`);
+      replaceAvailableUpdate(null);
+      return true;
+    } catch (nextError) {
+      updateStoredInteractions((currentInteractions) => (
+        markUpdateBackgroundPreparationFailed(currentInteractions, version)
+      ));
+      setUpdaterError(`Update preparation failed: ${toErrorMessage(nextError)}`);
+      return false;
+    } finally {
+      updaterOperatingRef.current = false;
+      setUpdaterDownloading(false);
+      setUpdaterInstalling(false);
+    }
+  }, [rememberPreparedUpdate, replaceAvailableUpdate, updateStoredInteractions]);
+
+  const handleCheckForUpdates = useCallback(async (
+    mode: UpdateCheckMode = "manual",
+  ): Promise<UpdateCheckResult | void> => {
+    if (updaterCheckingRef.current || updaterOperatingRef.current) return;
 
     const isManualCheck = mode === "manual";
     updaterCheckingRef.current = true;
@@ -128,6 +183,12 @@ export function useUpdateController(): UseUpdateControllerResult {
     try {
       const nextUpdate = await check();
       if (nextUpdate) {
+        if (preparedUpdateVersionRef.current === nextUpdate.version) {
+          releaseUpdateResource(nextUpdate);
+          if (isManualCheck) setUpdaterMessage(`Drifty ${nextUpdate.version} is ready for the next launch.`);
+          return { kind: "available", version: nextUpdate.version };
+        }
+
         const nowMs = Date.now();
         const nextPolicy = await fetchUpdatePolicy(nextUpdate.version);
         const nextInteractions = updateStoredInteractions((currentInteractions) => {
@@ -138,48 +199,64 @@ export function useUpdateController(): UseUpdateControllerResult {
         replaceAvailableUpdate(nextUpdate);
         setAvailableUpdatePolicy(nextPolicy);
         setAvailableUpdateSource(mode);
+        setDismissedPromptVersion(null);
         setUpdatePromptNowMs(nowMs);
         if (isManualCheck) {
           setUpdaterMessage(`Drifty ${nextUpdate.version} is available.`);
         }
-        if (!isManualCheck && shouldAutoInstallUpdate({
-          autoInstallFutureUpdates,
+        if (!isManualCheck && nextPolicy.urgency === "general" && shouldPrepareUpdateInBackground({
+          backgroundPreparationSupported,
+          backgroundUpdatesEnabled,
           policy: nextPolicy,
           interaction: nextInteraction,
         })) {
-          updateStoredInteractions((currentInteractions) => markUpdateAutoInstallAttempted(currentInteractions, nextUpdate.version, Date.now()));
-          await installUpdate(async () => nextUpdate);
+          updateStoredInteractions((currentInteractions) => markUpdateBackgroundPreparationAttempted(
+            currentInteractions,
+            nextUpdate.version,
+            Date.now(),
+          ));
+          const prepared = await prepareUpdateInBackground(nextUpdate, nextUpdate.version);
+          if (!prepared) {
+            return { kind: "error", message: `Unable to prepare Drifty ${nextUpdate.version}.` };
+          }
         }
-        return isManualCheck ? { kind: "available", version: nextUpdate.version } : undefined;
+        return { kind: "available", version: nextUpdate.version };
       }
-      if (isManualCheck) {
+
+      if (!preparedUpdateVersionRef.current) {
         replaceAvailableUpdate(null);
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
-        setUpdaterMessage("Drifty is up to date.");
-        return { kind: "none" };
       }
+      if (isManualCheck) setUpdaterMessage("Drifty is up to date.");
+      return { kind: "none" };
     } catch (nextError) {
+      const message = `Update check failed: ${toErrorMessage(nextError)}`;
       if (isManualCheck) {
-        const message = `Update check failed: ${toErrorMessage(nextError)}`;
         replaceAvailableUpdate(null);
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
         setUpdaterError(message);
-        return { kind: "error", message };
       }
+      return { kind: "error", message };
     } finally {
       updaterCheckingRef.current = false;
       if (isManualCheck) setUpdaterChecking(false);
     }
-  }, [autoInstallFutureUpdates, installUpdate, replaceAvailableUpdate, updateStoredInteractions]);
+  }, [
+    backgroundPreparationSupported,
+    backgroundUpdatesEnabled,
+    prepareUpdateInBackground,
+    replaceAvailableUpdate,
+    updateStoredInteractions,
+  ]);
 
   const handleInstallUpdate = useCallback(async () => {
     const offeredUpdate = availableUpdateRef.current;
-    if (!offeredUpdate || updaterCheckingRef.current || updaterInstallingRef.current) return;
+    if (!offeredUpdate || updaterCheckingRef.current || updaterOperatingRef.current) return;
 
     setUpdaterMessage("Checking for the latest update...");
-    await installUpdate(async () => {
+    await installUpdateAndRestart(async () => {
       const latestUpdate = await check();
       if (!latestUpdate) {
         replaceAvailableUpdate(null);
@@ -200,6 +277,7 @@ export function useUpdateController(): UseUpdateControllerResult {
       // refreshed release in the quiet titlebar state instead of reopening a
       // stale or already-confirmed modal prompt.
       setAvailableUpdateSource("automatic");
+      setDismissedPromptVersion(latestUpdate.version);
       setUpdatePromptNowMs(nowMs);
       updateStoredInteractions((currentInteractions) => markUpdateInteracted(
         upsertUpdateSeen(currentInteractions, latestUpdate.version, nowMs),
@@ -209,35 +287,50 @@ export function useUpdateController(): UseUpdateControllerResult {
       setUpdaterMessage(`Installing Drifty ${latestUpdate.version}...`);
       return latestUpdate;
     });
-  }, [availableUpdatePolicy, installUpdate, replaceAvailableUpdate, updateStoredInteractions]);
+  }, [
+    availableUpdatePolicy,
+    installUpdateAndRestart,
+    replaceAvailableUpdate,
+    updateStoredInteractions,
+  ]);
 
   const dismissAvailableUpdate = useCallback(() => {
     const updateToDismiss = availableUpdateRef.current;
-    if (updateToDismiss) {
-      updateStoredInteractions((currentInteractions) => markUpdateInteracted(currentInteractions, updateToDismiss.version, Date.now()));
-    }
-    replaceAvailableUpdate(null);
-    setAvailableUpdatePolicy(null);
-    setAvailableUpdateSource(null);
-  }, [replaceAvailableUpdate, updateStoredInteractions]);
+    if (!updateToDismiss) return;
+    updateStoredInteractions((currentInteractions) => markUpdateInteracted(
+      currentInteractions,
+      updateToDismiss.version,
+      Date.now(),
+    ));
+    setDismissedPromptVersion(updateToDismiss.version);
+    setAvailableUpdateSource("automatic");
+  }, [updateStoredInteractions]);
 
-  const currentUpdatePolicy = availableUpdate ? availableUpdatePolicy ?? fallbackUpdatePolicy(availableUpdate.version) : null;
-  const availableUpdateInteraction = availableUpdate ? updateInteractions[availableUpdate.version] ?? null : null;
-  const shouldShowAvailableUpdateDialog = availableUpdate && currentUpdatePolicy
-    ? availableUpdateSource === "manual"
+  const offeredUpdateVersion = availableUpdate?.version ?? null;
+  const currentUpdatePolicy = offeredUpdateVersion
+    ? availableUpdatePolicy ?? fallbackUpdatePolicy(offeredUpdateVersion)
+    : null;
+  const availableUpdateInteraction = offeredUpdateVersion ? updateInteractions[offeredUpdateVersion] ?? null : null;
+  const shouldShowAvailableUpdateDialog = Boolean(
+    availableUpdate
+    && currentUpdatePolicy
+    && dismissedPromptVersion !== availableUpdate.version
+    && (
+      availableUpdateSource === "manual"
       || (availableUpdateSource === "automatic" && shouldShowAutomaticUpdateDialog({
         policy: currentUpdatePolicy,
         interaction: availableUpdateInteraction,
         nowMs: updatePromptNowMs,
       }))
-    : false;
+    ),
+  );
 
   useEffect(() => {
-    persistAutoInstallFutureUpdates(autoInstallFutureUpdates);
-  }, [autoInstallFutureUpdates]);
+    persistBackgroundUpdatesEnabled(backgroundUpdatesEnabled);
+  }, [backgroundUpdatesEnabled]);
 
   useEffect(() => {
-    if (!availableUpdate || !currentUpdatePolicy || availableUpdateSource !== "automatic") return undefined;
+    if (!offeredUpdateVersion || !currentUpdatePolicy || availableUpdateSource !== "automatic") return undefined;
 
     const remainingMs = msUntilAutomaticDialog({
       policy: currentUpdatePolicy,
@@ -252,18 +345,28 @@ export function useUpdateController(): UseUpdateControllerResult {
 
     const timeoutId = window.setTimeout(() => setUpdatePromptNowMs(Date.now()), remainingMs);
     return () => window.clearTimeout(timeoutId);
-  }, [availableUpdate, availableUpdateInteraction, availableUpdateSource, currentUpdatePolicy]);
+  }, [availableUpdateInteraction, availableUpdateSource, currentUpdatePolicy, offeredUpdateVersion]);
+
+  const updateLifecycleStatus: UpdateLifecycleStatus = updaterDownloading
+    ? "downloading"
+    : updaterInstalling
+      ? "installing"
+      : availableUpdate
+          ? "available"
+          : "idle";
 
   return {
-    autoInstallFutureUpdates,
+    backgroundUpdatesEnabled,
     availableUpdate,
     currentUpdatePolicy,
     dismissAvailableUpdate,
     handleCheckForUpdates,
     handleInstallUpdate,
-    setAutoInstallFutureUpdates,
+    setBackgroundUpdatesEnabled,
     shouldShowAvailableUpdateDialog,
+    updateLifecycleStatus,
     updaterChecking,
+    updaterDownloading,
     updaterError,
     updaterInstalling,
     updaterMessage,

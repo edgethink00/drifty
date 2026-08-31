@@ -76,6 +76,7 @@ import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicCla
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
+import { useAutomaticUpdateScheduler } from "./features/updates/useAutomaticUpdateScheduler";
 import { useUpdateController } from "./features/updates/useUpdateController";
 import { consumePostUpdateRelaunchFocusPending, fallbackUpdatePolicy } from "./features/updates/updatePolicy";
 import { useDeveloperPreReleaseUpdateController } from "./features/updates/useDeveloperPreReleaseUpdateController";
@@ -404,7 +405,6 @@ const LazyFeedbackModal = lazy(async () => ({
 const LazyDebugLogModal = lazy(async () => ({
   default: (await import("./features/settings/DebugLogModal")).DebugLogModal,
 }));
-const AUTO_UPDATE_CHECK_DELAY_MS = 2500;
 const POST_UPDATE_RELAUNCH_FOCUS_DELAY_MS = 250;
 const MANUAL_UPDATE_STATUS_NOTICE_MS = 6_000;
 const APP_REFRESH_INTERVAL_MS = 30_000;
@@ -494,7 +494,6 @@ export default function App() {
     };
   }, []);
   const contentRef = useRef<HTMLElement>(null);
-  const autoUpdateLaunchCheckScheduledRef = useRef(false);
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
   const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
@@ -568,19 +567,30 @@ export default function App() {
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const {
-    autoInstallFutureUpdates,
+    backgroundUpdatesEnabled,
     availableUpdate,
     currentUpdatePolicy,
     dismissAvailableUpdate,
     handleCheckForUpdates,
     handleInstallUpdate,
-    setAutoInstallFutureUpdates,
+    setBackgroundUpdatesEnabled,
     shouldShowAvailableUpdateDialog,
+    updateLifecycleStatus,
     updaterChecking,
+    updaterDownloading,
     updaterError,
     updaterInstalling,
     updaterMessage,
-  } = useUpdateController();
+  } = useUpdateController({
+    // Tauri's Windows updater exits the current process from `install()`.
+    // Keep unattended next-launch preparation on the macOS path proven by
+    // packaged runtime QA until another platform has its own safe contract.
+    backgroundPreparationSupported: hostPlatform === "macos",
+  });
+  useAutomaticUpdateScheduler({
+    enabled: isTauriRuntime(),
+    checkForUpdates: () => handleCheckForUpdates("automatic"),
+  });
   const developerPreReleaseUpdateController = useDeveloperPreReleaseUpdateController();
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
@@ -4080,23 +4090,6 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauriRuntime()) return undefined;
-    if (autoUpdateLaunchCheckScheduledRef.current) return undefined;
-    autoUpdateLaunchCheckScheduledRef.current = true;
-
-    let checkStarted = false;
-    const timeoutId = window.setTimeout(() => {
-      checkStarted = true;
-      void handleCheckForUpdates("automatic");
-    }, AUTO_UPDATE_CHECK_DELAY_MS);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-      if (!checkStarted) autoUpdateLaunchCheckScheduledRef.current = false;
-    };
-  }, [handleCheckForUpdates]);
-
-  useEffect(() => {
-    if (!isTauriRuntime()) return undefined;
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -5815,7 +5808,12 @@ export default function App() {
     || cmdOpen,
   );
   const visibleUpdate = updateDialogBlocked || !shouldShowAvailableUpdateDialog ? null : availableUpdate;
-  const titlebarUpdate = updateDialogBlocked || visibleUpdate ? null : availableUpdate;
+  const titlebarUpdateVersion = updateDialogBlocked
+    || visibleUpdate
+    || updaterDownloading
+    || updaterInstalling
+    ? null
+    : availableUpdate?.version ?? null;
   const latestBuildPromptUpdate = developerPreReleaseUpdateController.promptUpdate;
 
   const dayTotalSeconds = useMemo(() => totalDurationSeconds(segments), [segments]);
@@ -7511,7 +7509,7 @@ export default function App() {
   // Keep developer update recovery available even when onboarding or account policy owns the app shell.
   const latestBuildPrompt = latestBuildPromptUpdate?.version ? (
     <AvailableUpdateDialog
-      autoInstallFutureUpdates={developerPreReleaseUpdateController.autoInstallFutureUpdates}
+      backgroundUpdatesEnabled={backgroundUpdatesEnabled}
       policy={fallbackUpdatePolicy(latestBuildPromptUpdate.version)}
       update={{
         body: latestBuildPromptUpdate.body,
@@ -7521,7 +7519,7 @@ export default function App() {
       updaterChecking={developerPreReleaseUpdateController.status === "checking"}
       updaterError={developerPreReleaseUpdateController.error}
       updaterInstalling={developerPreReleaseUpdateController.status === "installing"}
-      onAutoInstallFutureUpdatesChange={developerPreReleaseUpdateController.setAutoInstallFutureUpdates}
+      onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
       onDismiss={developerPreReleaseUpdateController.dismissPrompt}
       onInstall={() => void developerPreReleaseUpdateController.installLatestBuild()}
     />
@@ -7794,11 +7792,11 @@ export default function App() {
         <div className="window-drag-region" data-tauri-drag-region />
         <div className="window-chrome-actions">
           <AiConnectionStatusBar status={effectiveAiConnectionStatus} onOpenSettings={openAiSetupSettings} />
-          {titlebarUpdate ? (
+          {titlebarUpdateVersion ? (
             <TopbarUpdateButton
-              isInstalling={updaterInstalling}
               onInstall={() => void handleInstallUpdate()}
-              version={titlebarUpdate.version}
+              status={updateLifecycleStatus}
+              version={titlebarUpdateVersion}
             />
           ) : null}
         </div>
@@ -8571,14 +8569,15 @@ export default function App() {
                 )}
                 {settingsSection === "general" && (
                   <GeneralSettingsSection
-                    autoInstallFutureUpdates={autoInstallFutureUpdates}
+                    backgroundUpdatesSupported={hostPlatform === "macos"}
+                    backgroundUpdatesEnabled={backgroundUpdatesEnabled}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
                     updaterChecking={updaterChecking}
                     updaterError={updaterError}
-                    updaterInstalling={updaterInstalling}
+                    updaterInstalling={updaterInstalling || updaterDownloading}
                     updaterMessage={updaterMessage}
-                    onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
+                    onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
@@ -8928,13 +8927,13 @@ export default function App() {
 
       {visibleUpdate ? (
         <AvailableUpdateDialog
-          autoInstallFutureUpdates={autoInstallFutureUpdates}
+          backgroundUpdatesEnabled={backgroundUpdatesEnabled}
           policy={currentUpdatePolicy}
           update={visibleUpdate}
           updaterChecking={updaterChecking}
           updaterError={updaterError}
           updaterInstalling={updaterInstalling}
-          onAutoInstallFutureUpdatesChange={setAutoInstallFutureUpdates}
+          onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
           onDismiss={dismissAvailableUpdate}
           onInstall={() => void handleInstallUpdate()}
         />
