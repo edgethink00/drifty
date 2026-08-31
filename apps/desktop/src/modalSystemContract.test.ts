@@ -10,7 +10,6 @@ const modalSurfaces = [
   ["Send feedback", "./features/feedback/FeedbackModal.tsx", /className="auth-modal modal-shell feedback-modal"\s+data-modal-variant="standard"/],
   ["Delete account", "./features/auth/AccountDeletionModal.tsx", /className="auth-modal modal-shell account-deletion-modal"\s+data-modal-variant="compact"/],
   ["Delete history", "./features/settings/DeleteHistoryModal.tsx", /className="auth-modal modal-shell delete-history-modal"\s+data-modal-variant="compact"/],
-  ["Project analysis consent", "./features/classification/ProjectPassConsentModal.tsx", /className="auth-modal modal-shell project-pass-consent-modal"\s+data-modal-variant="standard"/],
   ["Public profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal" data-modal-variant="standard"/],
   ["Edit profile", "./features/profile/ProfileModals.tsx", /className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace"/],
   ["Profile embed", "./features/profile/ProfileEmbedsModal.tsx", /className="auth-modal modal-shell profile-modal profile-embeds-modal"\s+data-modal-variant="workspace"/],
@@ -49,7 +48,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every production popup surface under one explicit variant", () => {
-    expect(modalSurfaces).toHaveLength(25);
+    expect(modalSurfaces).toHaveLength(24);
 
     for (const [name, path, pattern] of modalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);

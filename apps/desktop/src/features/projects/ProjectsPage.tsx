@@ -8,8 +8,9 @@ import { ProjectDetailView } from "./ProjectDetailView";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
 import { ProjectsManager } from "./ProjectsManager";
-import { ProjectPassConsentModal } from "../classification/ProjectPassConsentModal";
 import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../settings/analysisModelSetup";
+import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
+import { formatProjectMatchCooldown, NO_PROJECT_MATCH_COOLDOWN, type ProjectMatchCooldown } from "./projectMatchCooldown";
 
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
@@ -63,26 +64,23 @@ export interface ProjectsPageProps {
   readonly runError: string | null;
   readonly analysisConnected: boolean;
   readonly analysisSetup: AnalysisAiSetupState;
-  readonly consentOpen: boolean;
-  readonly consentProviderLabel: string;
-  readonly consentIncludesSiteUrl: boolean;
-  readonly consentIncludesWindowTitles: boolean;
-  readonly consentIncludesContentContext: boolean;
-  readonly consentStoresCloudSamples: boolean;
+  readonly autoAnalysis: ProjectAutoAnalysisState;
+  /** Suppresses a redundant manual re-run right after a completed pass. */
+  readonly matchCooldown: ProjectMatchCooldown;
   readonly onTrendWindowChange: (range: { readonly startDay: string; readonly endDay: string }) => void;
   readonly onConfigureModel: () => void;
   readonly onOpenTrends: () => void;
-  readonly onSaveProject: (input: ProjectInput) => void;
+  readonly onSaveProject: (input: ProjectInput) => Promise<boolean> | boolean;
   readonly onDeleteProject: (id: string) => void;
   readonly onRunAnalysis: () => void;
-  readonly onConsentConfirm: () => void;
-  readonly onConsentCancel: () => void;
 }
 
 interface ProjectMatchingCardProps {
   readonly activeProjectCount: number;
   readonly analysisConnected: boolean;
   readonly analysisSetup: AnalysisAiSetupState;
+  readonly autoAnalysis: ProjectAutoAnalysisState;
+  readonly matchCooldown: ProjectMatchCooldown;
   readonly layout: "strip" | "card";
   readonly running: boolean;
   readonly onConfigureModel: () => void;
@@ -91,6 +89,28 @@ interface ProjectMatchingCardProps {
 
 function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
   const modelLabel = analysisModelLabel(props.analysisSetup);
+  const autoPhase = aggregateProjectAutoAnalysisPhase(props.autoAnalysis);
+  // A queued burst is still pending work, so "Match now" stays clickable even
+  // though the previous pass finished moments ago.
+  const cooldownActive = props.matchCooldown.active && autoPhase !== "queued" && autoPhase !== "error";
+  const readiness = autoPhase === "running"
+    ? "Matching"
+    : autoPhase === "queued"
+      ? "Matching soon"
+      : autoPhase === "error"
+        ? "Retry needed"
+        : !props.analysisConnected
+          ? "Setup required"
+          : cooldownActive ? "Up to date" : "Ready";
+  const actionLabel = autoPhase === "running"
+    ? "Matching…"
+    : autoPhase === "queued"
+      ? "Match now"
+      : autoPhase === "error"
+        ? "Retry latest 7 days"
+        : cooldownActive
+          ? `Just matched · ${formatProjectMatchCooldown(props.matchCooldown.remainingSeconds)}`
+          : "Refresh latest 7 days";
   return (
     <div
       className={`projects-model-status projects-model-status--${props.layout}${props.analysisConnected ? " is-connected" : " is-disconnected"}`}
@@ -102,7 +122,11 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
         <span className="projects-model-status__value">
           {props.layout === "strip"
             ? <>Uses {modelLabel} to refresh the latest 7 days. Live activity classification is configured separately.</>
-            : <>Refresh project assignments without changing live activity classification.</>}
+            : autoPhase === "running"
+              ? <>Matching your new project against the latest 7 days.</>
+              : autoPhase === "queued"
+                ? <>Grouping your new projects into one matching run.</>
+                : <>Refresh project assignments without changing live activity classification.</>}
         </span>
         {props.layout !== "strip" ? (
           <dl className="projects-model-status__meta">
@@ -114,11 +138,11 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
       {props.layout === "card" ? (
         <span className={`projects-model-status__readiness${props.analysisConnected ? " is-connected" : ""}`}>
           <span className="projects-model-status__readiness-dot" aria-hidden="true" />
-          {props.analysisConnected ? "Ready" : "Setup required"}
+          {readiness}
         </span>
       ) : (
         <span className={`projects-model-status__chip${props.analysisConnected ? " is-connected" : ""}`}>
-          {props.analysisConnected ? "Project model ready" : "Project model setup required"}
+          {autoPhase === "running" || autoPhase === "queued" ? "Matching recent activity" : props.analysisConnected ? "Project model ready" : "Project model setup required"}
         </span>
       )}
       <div className="projects-model-status__actions">
@@ -127,15 +151,20 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
           type="button"
           className="app-btn app-btn--secondary"
           onClick={props.onRunAnalysis}
-          disabled={props.running || !props.analysisConnected || props.activeProjectCount === 0}
+          disabled={(props.running && autoPhase !== "queued") || cooldownActive || !props.analysisConnected || props.activeProjectCount === 0}
+          title={cooldownActive ? "This window was just matched. Assignments are already up to date." : undefined}
         >
-          {props.running ? "Refreshing…" : "Refresh latest 7 days"}
+          {props.running ? (autoPhase === "running" ? "Matching…" : "Refreshing…") : actionLabel}
         </button>
       </div>
       {props.activeProjectCount === 0 ? (
         <p className="projects-model-status__reason">Create at least one active project before refreshing assignments.</p>
-      ) : !props.analysisConnected ? (
+      ) : autoPhase === "waiting_for_model" || !props.analysisConnected ? (
         <p className="projects-model-status__reason">Connect a project matching model before refreshing assignments.</p>
+      ) : autoPhase === "error" ? (
+        <p className="projects-model-status__reason">Automatic matching paused. Retry when you are ready.</p>
+      ) : cooldownActive ? (
+        <p className="projects-model-status__reason">The latest 7 days were just matched, so assignments are already up to date.</p>
       ) : null}
     </div>
   );
@@ -325,6 +354,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             totalSecondsByProject={libraryTotalSecondsByProject}
             lastActivityByProject={libraryLastActivityByProject}
             totalCaption="Latest 7 days"
+            autoAnalysis={props.autoAnalysis}
             onSave={props.onSaveProject}
             onDelete={props.onDeleteProject}
             onOpenProject={openProject}
@@ -360,6 +390,8 @@ export function ProjectsPage(props: ProjectsPageProps) {
                 activeProjectCount={activeProjects.length}
                 analysisConnected={props.analysisConnected}
                 analysisSetup={props.analysisSetup}
+                autoAnalysis={props.autoAnalysis}
+                matchCooldown={props.matchCooldown}
                 layout="card"
                 running={props.running}
                 onConfigureModel={props.onConfigureModel}
@@ -376,6 +408,8 @@ export function ProjectsPage(props: ProjectsPageProps) {
             activeProjectCount={activeProjects.length}
             analysisConnected={props.analysisConnected}
             analysisSetup={props.analysisSetup}
+            autoAnalysis={props.autoAnalysis}
+            matchCooldown={props.matchCooldown}
             layout="strip"
             running={props.running}
             onConfigureModel={props.onConfigureModel}
@@ -384,16 +418,6 @@ export function ProjectsPage(props: ProjectsPageProps) {
         </div>
       ) : null}
 
-      <ProjectPassConsentModal
-        open={props.consentOpen}
-        providerLabel={props.consentProviderLabel}
-        includesSiteUrl={props.consentIncludesSiteUrl}
-        includesWindowTitles={props.consentIncludesWindowTitles}
-        includesContentContext={props.consentIncludesContentContext}
-        storesCloudSamples={props.consentStoresCloudSamples}
-        onConfirm={props.onConsentConfirm}
-        onCancel={props.onConsentCancel}
-      />
     </div>
   );
 }

@@ -186,6 +186,7 @@ describe("useProjectClassification scheduled passes", () => {
       corrections: 1,
       tokensIn: 10,
       tokensOut: 5,
+      failedChunks: 0,
     };
     scheduledProjectPass.mockResolvedValueOnce(summary);
     const { hook } = renderClassification(scheduledTracker, { analysisConnected: true });
@@ -218,6 +219,7 @@ describe("useProjectClassification scheduled passes", () => {
       corrections: 0,
       tokensIn: 0,
       tokensOut: 0,
+      failedChunks: 0,
     });
     const { hook } = renderClassification(tracker, { analysisConnected: true });
     let outcome!: ScheduledProjectPassOutcome;
@@ -267,6 +269,7 @@ describe("useProjectClassification manual passes", () => {
       corrections: 0,
       tokensIn: 0,
       tokensOut: 0,
+      failedChunks: 0,
     };
     scheduledProjectPass.mockResolvedValueOnce(summary);
     const { hook } = renderClassification(tracker, {
@@ -280,5 +283,120 @@ describe("useProjectClassification manual passes", () => {
 
     expect(hook.result.current.lastRunSummary).toEqual(summary);
     expect(hook.result.current.runError).toBeNull();
+  });
+
+  it("keeps an automatic pass failure out of the run-error banner", async () => {
+    const tracker = {
+      getProjects: vi.fn(async () => []),
+      getProjectAssignments: vi.fn(async () => []),
+      getProjectWindowAssignments: vi.fn(async () => []),
+      getAiReviewEvents: vi.fn(async () => []),
+      getProjectPassRuns: vi.fn(async () => []),
+    } as unknown as TrackerApi;
+    scheduledProjectPass.mockRejectedValueOnce(new Error("error sending request for url (http://127.0.0.1:8791/v1/chat/completions)"));
+    const { hook } = renderClassification(tracker, { analysisConnected: true, selectedDayRange: rangeA });
+
+    let summary: ProjectPassSummary | null = null;
+    await act(async () => {
+      summary = await hook.result.current.backfillLast7Days({ quiet: true });
+    });
+
+    expect(summary).toBeNull();
+    expect(hook.result.current.runError).toBeNull();
+    expect(hook.result.current.running).toBe(false);
+  });
+
+  it("still reports a user-requested pass failure in the banner", async () => {
+    const tracker = {
+      getProjects: vi.fn(async () => []),
+      getProjectAssignments: vi.fn(async () => []),
+      getProjectWindowAssignments: vi.fn(async () => []),
+      getAiReviewEvents: vi.fn(async () => []),
+      getProjectPassRuns: vi.fn(async () => []),
+    } as unknown as TrackerApi;
+    scheduledProjectPass.mockRejectedValueOnce(new Error("provider unavailable"));
+    const { hook } = renderClassification(tracker, { analysisConnected: true, selectedDayRange: rangeA });
+
+    await act(async () => {
+      await hook.result.current.backfillLast7Days();
+    });
+
+    expect(hook.result.current.runError).toBe("provider unavailable");
+  });
+
+  it("does not mark the window fresh when a pass finished with failed chunks", async () => {
+    const tracker = {
+      getProjects: vi.fn(async () => []),
+      getProjectAssignments: vi.fn(async () => []),
+      getProjectWindowAssignments: vi.fn(async () => []),
+      getAiReviewEvents: vi.fn(async () => []),
+      getProjectPassRuns: vi.fn(async () => []),
+    } as unknown as TrackerApi;
+    // A partially failed pass still records a run row, but the window is stale.
+    scheduledProjectPass.mockResolvedValueOnce({
+      ran: true,
+      chunks: 2,
+      assignments: 0,
+      corrections: 0,
+      tokensIn: 10,
+      tokensOut: 2,
+      failedChunks: 1,
+    });
+    const { hook } = renderClassification(tracker, { analysisConnected: true, selectedDayRange: rangeA });
+
+    await act(async () => {
+      await hook.result.current.backfillLast7Days({ quiet: true });
+    });
+
+    expect(hook.result.current.lastSuccessfulPassAtMs).toBeNull();
+  });
+
+  it("marks the window fresh only after a clean pass", async () => {
+    const tracker = {
+      getProjects: vi.fn(async () => []),
+      getProjectAssignments: vi.fn(async () => []),
+      getProjectWindowAssignments: vi.fn(async () => []),
+      getAiReviewEvents: vi.fn(async () => []),
+      getProjectPassRuns: vi.fn(async () => []),
+    } as unknown as TrackerApi;
+    scheduledProjectPass.mockResolvedValueOnce({
+      ran: true,
+      chunks: 1,
+      assignments: 3,
+      corrections: 0,
+      tokensIn: 10,
+      tokensOut: 2,
+      failedChunks: 0,
+    });
+    const { hook } = renderClassification(tracker, { analysisConnected: true, selectedDayRange: rangeA });
+
+    await act(async () => {
+      await hook.result.current.backfillLast7Days({ quiet: true });
+    });
+
+    expect(hook.result.current.lastSuccessfulPassAtMs).not.toBeNull();
+  });
+
+  it("reports a scheduled pass with failed chunks as failed, not completed", async () => {
+    const { tracker } = createTracker();
+    const scheduledTracker = { ...tracker, getProjectPassRuns: vi.fn(async () => []) } as TrackerApi;
+    scheduledProjectPass.mockResolvedValueOnce({
+      ran: true,
+      chunks: 2,
+      assignments: 0,
+      corrections: 0,
+      tokensIn: 5,
+      tokensOut: 1,
+      failedChunks: 2,
+    });
+    const { hook } = renderClassification(scheduledTracker, { analysisConnected: true });
+    let outcome!: ScheduledProjectPassOutcome;
+
+    await act(async () => {
+      outcome = await hook.result.current.runScheduledPass("schedule", rangeA);
+    });
+
+    expect(outcome).toEqual({ status: "failed", category: "provider_error" });
+    expect(hook.result.current.lastSuccessfulPassAtMs).toBeNull();
   });
 });

@@ -95,17 +95,27 @@ export interface UseProjectClassificationResult {
   readonly projectLegend: ProjectLegendEntry[];
   readonly projectModeAvailable: boolean;
   readonly passRuns: ProjectPassRun[];
+  /**
+   * Epoch ms of the last pass observed to finish with no failed chunks, or null
+   * when this session has not seen one. Freshness guards (the manual refresh
+   * cooldown) key on this rather than on the newest `project_pass_runs` row: a
+   * partially failed pass still records a row for cost accounting, but it did
+   * NOT bring the window up to date. Recorded rows carry no failure flag, so
+   * this deliberately starts null after a relaunch — offering a redundant
+   * refresh is a smaller failure than locking a stale window behind a guard.
+   */
+  readonly lastSuccessfulPassAtMs: number | null;
   readonly aiReviewEvents: AiReviewEvent[];
   readonly running: boolean;
   readonly progress: { readonly done: number; readonly total: number } | null;
   readonly lastRunSummary: ProjectPassSummary | null;
   readonly runError: string | null;
   readonly revertReviewEvent: (id: number) => Promise<void>;
-  readonly saveProject: (input: ProjectInput) => Promise<void>;
+  readonly saveProject: (input: ProjectInput) => Promise<Project | null>;
   readonly deleteProject: (id: string) => Promise<void>;
   readonly addAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
   readonly deleteAnchor: (projectId: string, kind: ProjectAnchor["kind"], value: string) => Promise<void>;
-  readonly runPassNow: (range?: { start: string; end: string }) => Promise<void>;
+  readonly runPassNow: (range?: { start: string; end: string }) => Promise<ProjectPassSummary | null>;
   /**
    * Quiet background pass for the scheduler (Item 1). Unlike runPassNow it never
    * touches the manual-run UI state (running/progress/runError), and returns only
@@ -113,7 +123,12 @@ export interface UseProjectClassificationResult {
    * or expose provider errors.
    */
   readonly runScheduledPass: (trigger: "schedule" | "open" | "eod", range: { start: string; end: string }) => Promise<ScheduledProjectPassOutcome>;
-  readonly backfillLast7Days: () => Promise<void>;
+  /**
+   * Latest-7-days pass. `quiet` suppresses the run-error banner for passes the
+   * user did not explicitly request (project creation), so failures surface as
+   * that project's own row state instead of a raw provider message.
+   */
+  readonly backfillLast7Days: (options?: { readonly quiet?: boolean }) => Promise<ProjectPassSummary | null>;
   readonly reload: () => Promise<void>;
 }
 
@@ -147,6 +162,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const [insightAssignments, setInsightAssignments] = useState<ProjectAssignmentRecord[]>([]);
   const [insightWindowAssignments, setInsightWindowAssignments] = useState<ProjectWindowAssignmentRecord[]>([]);
   const [passRuns, setPassRuns] = useState<ProjectPassRun[]>([]);
+  const [lastSuccessfulPassAtMs, setLastSuccessfulPassAtMs] = useState<number | null>(null);
   const [aiReviewEvents, setAiReviewEvents] = useState<AiReviewEvent[]>([]);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{ readonly done: number; readonly total: number } | null>(null);
@@ -317,10 +333,12 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     return createProjectPassInference(setup);
   }, [analysisSetup, resolveOpenRouterKey]);
 
-  const runPassNow = useCallback(
-    async (range?: { start: string; end: string }) => {
-      const effectiveRange = range ?? selectedDayRangeValue;
-      if (!effectiveRange || !analysisConnected) return;
+  const runForegroundPass = useCallback(
+    async (
+      effectiveRange: { start: string; end: string },
+      options: { readonly trigger: "manual" | "backfill"; readonly quiet?: boolean },
+    ): Promise<ProjectPassSummary | null> => {
+      if (!analysisConnected) return null;
       setRunning(true);
       setRunError(null);
       setProgress(null);
@@ -331,7 +349,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         const workProfile = await resolveClassificationWorkProfileForPrompt(privacySettings.optional.workProfile).catch(() => null);
         const summary = await runProjectPass({
           range: effectiveRange,
-          trigger: range ? "backfill" : "manual",
+          trigger: options.trigger,
           tracker,
           inference,
           now,
@@ -345,24 +363,40 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
           onProgress: (done, total) => setProgress({ done, total }),
         });
         setLastRunSummary(summary);
+        // Only a clean pass makes the window fresh; a partially failed one must
+        // not start a cooldown that hides the retry the user needs.
+        if (summary.ran && summary.failedChunks === 0) setLastSuccessfulPassAtMs(Date.now());
         // A pass can "succeed" with nothing to show — surface that instead of
         // silently returning to the button so the user isn't left guessing.
-        if (!summary.ran && summary.skippedReason !== "already analyzed") {
+        if (!options.quiet && !summary.ran && summary.skippedReason !== "already analyzed") {
           setRunError(summary.skippedReason ? `Nothing to analyze — ${summary.skippedReason}.` : "Nothing to analyze in this range.");
         } else if (summary.assignments === 0 && summary.corrections === 0) {
-          if (summary.ran) {
+          if (!options.quiet && summary.ran) {
             setRunError("The analysis model returned no results. Check that your Intelligence model is set up (API key + model) under Configure in AI setup, then try again.");
           }
         }
         await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+        return summary;
       } catch (error) {
-        setRunError(error instanceof Error ? error.message : String(error));
+        // A pass the user did not ask for reports through the project's own row
+        // state, never through a banner carrying a raw provider/transport message.
+        if (!options.quiet) setRunError(error instanceof Error ? error.message : String(error));
+        return null;
       } finally {
         setRunning(false);
         setProgress(null);
       }
     },
-    [selectedDayRangeValue, analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+    [analysisConnected, buildInference, tracker, now, args.startOfDayMinutes, loadAssignments, loadInsightAssignments, loadPassRuns],
+  );
+
+  const runPassNow = useCallback(
+    async (range?: { start: string; end: string }): Promise<ProjectPassSummary | null> => {
+      const effectiveRange = range ?? selectedDayRangeValue;
+      if (!effectiveRange) return null;
+      return runForegroundPass(effectiveRange, { trigger: range ? "backfill" : "manual" });
+    },
+    [runForegroundPass, selectedDayRangeValue],
   );
 
   const runScheduledPass = useCallback(
@@ -394,6 +428,10 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
         // coalesces this with any concurrent manual run.
         if (summary.ran) {
           await Promise.all([loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
+          // Chunks that produced no usable output are provider failures, so the
+          // tick must not be reported (or measured) as a clean completion.
+          if (summary.failedChunks > 0) return { status: "failed", category: "provider_error" };
+          setLastSuccessfulPassAtMs(Date.now());
           return { status: "completed", summary };
         }
 
@@ -411,12 +449,14 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   // tracker call never escapes as an unhandled rejection — the app's global
   // handler replaces the whole UI with an error screen on any such rejection.
   const saveProject = useCallback(
-    async (input: ProjectInput) => {
+    async (input: ProjectInput): Promise<Project | null> => {
       try {
-        await tracker.saveProject(input);
+        const saved = await tracker.saveProject(input);
         await loadProjects();
+        return saved;
       } catch (error) {
         setRunError(error instanceof Error ? error.message : String(error));
+        return null;
       }
     },
     [tracker, loadProjects],
@@ -458,9 +498,9 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     [tracker, loadProjects],
   );
 
-  const backfillLast7Days = useCallback(async () => {
-    await runPassNow(last7DaysRange(now()));
-  }, [runPassNow]); // eslint-disable-line react-hooks/exhaustive-deps
+  const backfillLast7Days = useCallback(async (options: { readonly quiet?: boolean } = {}) => {
+    return runForegroundPass(last7DaysRange(now()), { trigger: "backfill", quiet: options.quiet });
+  }, [runForegroundPass]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(async () => {
     await Promise.all([loadProjects(), loadAssignments(), loadInsightAssignments(), loadPassRuns()]);
@@ -477,6 +517,7 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
     projectLegend,
     projectModeAvailable,
     passRuns,
+    lastSuccessfulPassAtMs,
     aiReviewEvents,
     running,
     progress,

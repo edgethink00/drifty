@@ -204,6 +204,85 @@ function mockTracker(overrides: Partial<TrackerApi> = {}): { tracker: TrackerApi
 }
 
 describe("runProjectPass orchestration", () => {
+  it("does not hand a wider-range caller the running narrow pass's result", async () => {
+    const { tracker } = mockTracker();
+    let releaseFirst!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let call = 0;
+    const inference: ProjectPassInference = vi.fn(async () => {
+      call += 1;
+      if (call === 1) await firstStarted;
+      return {
+        output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+        usage: { model: "test-model" },
+      };
+    });
+    const common = { trigger: "schedule" as const, tracker, inference, now: () => "2026-04-06T23:00:00+00:00", contextPolicy: CONTEXT_POLICY };
+
+    const todayRange = { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" };
+    const weekRange = { start: "2026-03-30T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" };
+    const todayPass = runProjectPass({ ...common, range: todayRange });
+    const weekPass = runProjectPass({ ...common, range: weekRange, trigger: "backfill" });
+    expect(weekPass).not.toBe(todayPass);
+
+    releaseFirst();
+    await Promise.all([todayPass, weekPass]);
+    // The 7-day caller must have actually run rather than reusing the today run.
+    expect(inference).toHaveBeenCalledTimes(2);
+  });
+
+  it("still coalesces concurrent callers asking for the same range", async () => {
+    const { tracker } = mockTracker();
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [], corrections: [] },
+      usage: {},
+    }));
+    const range = { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" };
+    const common = { range, trigger: "schedule" as const, tracker, inference, now: () => "2026-04-06T23:00:00+00:00", contextPolicy: CONTEXT_POLICY };
+
+    const a = runProjectPass(common);
+    const b = runProjectPass(common);
+    expect(b).toBe(a);
+    await Promise.all([a, b]);
+  });
+
+  it("reports a failed chunk instead of presenting it as an empty result", async () => {
+    const { tracker } = mockTracker();
+    // A provider HTTP/parse failure surfaces as a null output, not a throw.
+    const inference: ProjectPassInference = vi.fn(async () => ({ output: null, usage: { provider: "custom" } }));
+
+    const summary = await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "backfill",
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
+    });
+
+    expect(summary.assignments).toBe(0);
+    expect(summary.failedChunks).toBeGreaterThan(0);
+  });
+
+  it("reports zero failed chunks when every chunk produced output", async () => {
+    const { tracker } = mockTracker();
+    const inference: ProjectPassInference = vi.fn(async () => ({
+      output: { assignments: [{ id: "w0", projectId: "p1", confidence: 0.9 }], corrections: [] },
+      usage: {},
+    }));
+
+    const summary = await runProjectPass({
+      range: { start: "2026-04-06T00:00:00+00:00", end: "2026-04-06T23:59:59+00:00" },
+      trigger: "backfill",
+      tracker,
+      inference,
+      now: () => "2026-04-06T23:00:00+00:00",
+      contextPolicy: CONTEXT_POLICY,
+    });
+
+    expect(summary.failedChunks).toBe(0);
+  });
+
   it("applies assignments + corrections and records one pass with the id used for events", async () => {
     const { tracker, spies } = mockTracker();
     const inference: ProjectPassInference = vi.fn(async () => ({

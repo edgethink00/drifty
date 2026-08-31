@@ -1,7 +1,7 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
@@ -37,6 +37,8 @@ import {
 } from "./features/dashboard/dashboardAiUnavailablePreview";
 import { useBrowserHistoryBootstrap } from "./features/dashboard/useBrowserHistoryBootstrap";
 import { useLeaderboardProfileController } from "./features/leaderboard/useLeaderboardProfileController";
+import { IDLE_PROJECT_AUTO_ANALYSIS, projectsAwaitingAutoAnalysis, projectsBlockedOnModel, resolveProjectAutoAnalysisAfterPass, setProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./features/projects/projectAutoAnalysisState";
+import { NO_PROJECT_MATCH_COOLDOWN, resolveProjectMatchCooldown } from "./features/projects/projectMatchCooldown";
 import { fetchOwnLeaderboardCheckpoint } from "./features/leaderboard/leaderboardService";
 import type { SocialSection } from "./features/social/SocialPage";
 import { useFocusCard } from "./features/share/useFocusCard";
@@ -131,7 +133,6 @@ import {
   resolveInitialDashboardFlowIntervalMinutes,
 } from "./features/flow-chart/flowChartDetailPreference";
 
-const PROJECT_PASS_CONSENT_STORAGE_KEY = "drifty.projectPass.consent.v1";
 import { buildDebugLogPayload, readRecentEnhancedContextDebugEvents } from "./features/settings/debugLog";
 import { readContextualGuardAuditEvents } from "./features/classification/contextualGuardAuditLog";
 import {
@@ -421,6 +422,10 @@ const AUTO_AI_CLASSIFICATION_INTERVAL_MS = 2 * 60 * 1000;
 // and ~13× the mid-day assignment revisions of 60m for no end-of-day accuracy
 // gain, so 60m is the efficient pick.
 const PROJECT_PASS_SCHEDULE_INTERVAL_MS = 60 * 60 * 1000;
+// Debounce window for creation-triggered matching. Long enough to absorb a
+// burst of "add several projects in a row", short enough that a single
+// creation still feels immediate.
+const PROJECT_AUTO_ANALYSIS_DEBOUNCE_MS = 8_000;
 const LIVE_DRIFT_ALARM_AI_UNAVAILABLE_RETRY_MS = 2 * 60 * 1000;
 const LIVE_DRIFT_ALARM_AI_UNKNOWN_RETRY_MS = 5 * 60 * 1000;
 
@@ -6359,14 +6364,6 @@ export default function App() {
     analysisConnected: analysisModel.analysisConnected,
     onClassificationChanged: () => { void refreshHistoryData(); },
   });
-  const [projectPassPrivacySettings, setProjectPassPrivacySettings] = useState(
-    () => readAiPrivacyRequestSettings(),
-  );
-  useEffect(() => {
-    const syncSettings = () => setProjectPassPrivacySettings(readAiPrivacyRequestSettings());
-    window.addEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, syncSettings);
-    return () => window.removeEventListener(AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT, syncSettings);
-  }, []);
   // Preserve the fixed 3-minute decisions as virtual activity slices. Legacy
   // segment rows remain as fallback for days that have not been re-analyzed yet,
   // and manual segment assignments override every overlapping AI slice.
@@ -6541,40 +6538,153 @@ export default function App() {
       blocksByInterval.get(DASHBOARD_SUMMARY_FLOW_INTERVAL_MINUTES) ?? [],
     ] as const;
   }, [effectiveSelectedDayClassificationOptions, effectiveSelectedDaySegments, selectedDayProjectProjection.segments, flowIntervalMinutes, selectedDay, startOfDayMinutes, flowProjectColorBySegment, flowProjectIdBySegment]);
-  const [projectPassConsented, setProjectPassConsented] = useState(() => {
-    try {
-      return typeof window !== "undefined" && window.localStorage.getItem(PROJECT_PASS_CONSENT_STORAGE_KEY) === "1";
-    } catch {
-      return false;
-    }
+  // Which newly created project is waiting on (or running) automatic matching,
+  // so the Projects row can show an honest state instead of a finished-looking
+  // "0m" for a project that has never been analyzed.
+  const [projectAutoAnalysis, setProjectAutoAnalysis] = useState<ProjectAutoAnalysisState>(IDLE_PROJECT_AUTO_ANALYSIS);
+  // The waiting state itself is the source of truth for "which projects still
+  // need a run", so retrying from the matching card resumes them instead of
+  // leaving their rows stuck on the pending label.
+  const projectsAwaitingAnalysis = projectsAwaitingAutoAnalysis(projectAutoAnalysis);
+  // One pass covers the whole latest-7-days window, so every waiting project
+  // resolves together rather than queueing a separate run per project.
+  const runProjectAutoAnalysis = useCallback(async (projectIds: readonly string[]) => {
+    if (projectIds.length === 0) return;
+    setProjectAutoAnalysis((current) => projectIds.reduce(
+      (next, projectId) => setProjectAutoAnalysisPhase(next, projectId, "running"),
+      current,
+    ));
+    const summary = await projectClassification.backfillLast7Days({ quiet: true });
+    // A pass that ran but had chunks fail is not a completed empty result; the
+    // row must keep offering a retry instead of claiming "No recent match".
+    const resolvedPhase = summary === null || (summary.failedChunks ?? 0) > 0 ? "error" : "complete";
+    setProjectAutoAnalysis((current) => resolveProjectAutoAnalysisAfterPass(current, projectIds, resolvedPhase));
+  }, [projectClassification]);
+  // Creating projects is bursty: people often add several in a row. One pass
+  // already covers the whole latest-7-days window for every project, so the
+  // burst is collected and run once after it settles instead of paying for a
+  // separate provider round per project.
+  const runProjectAutoAnalysisRef = useRef(runProjectAutoAnalysis);
+  useEffect(() => {
+    runProjectAutoAnalysisRef.current = runProjectAutoAnalysis;
   });
-  const [projectPassConsentOpen, setProjectPassConsentOpen] = useState(false);
+  const queuedAutoAnalysisIdsRef = useRef<string[]>([]);
+  const queuedAutoAnalysisTimerRef = useRef<number | null>(null);
+  // Creating the first project also satisfies the scheduler's "has an active
+  // project" gate, which would otherwise fire its own on-open tick over the
+  // same window while the debounce is still collecting. Marking the tick as
+  // already spent keeps a burst of creations to exactly one pass.
+  const projectPassOpenTickedRef = useRef(false);
+  const flushQueuedProjectAutoAnalysis = useCallback(() => {
+    queuedAutoAnalysisTimerRef.current = null;
+    const projectIds = queuedAutoAnalysisIdsRef.current;
+    queuedAutoAnalysisIdsRef.current = [];
+    if (projectIds.length > 0) void runProjectAutoAnalysisRef.current(projectIds);
+  }, []);
+  // A project deleted (or archived) inside the debounce window should not pull
+  // a provider pass along with it.
+  const dropQueuedProjectAutoAnalysis = useCallback((projectId: string) => {
+    queuedAutoAnalysisIdsRef.current = queuedAutoAnalysisIdsRef.current.filter((id) => id !== projectId);
+    if (queuedAutoAnalysisIdsRef.current.length === 0 && queuedAutoAnalysisTimerRef.current !== null) {
+      window.clearTimeout(queuedAutoAnalysisTimerRef.current);
+      queuedAutoAnalysisTimerRef.current = null;
+    }
+    setProjectAutoAnalysis((current) => {
+      if (!(projectId in current)) return current;
+      const next = { ...current };
+      delete next[projectId];
+      return next;
+    });
+  }, []);
+  const handleDeleteProject = useCallback((projectId: string) => {
+    dropQueuedProjectAutoAnalysis(projectId);
+    void projectClassification.deleteProject(projectId);
+  }, [dropQueuedProjectAutoAnalysis, projectClassification]);
+  const scheduleProjectAutoAnalysis = useCallback((projectId: string) => {
+    projectPassOpenTickedRef.current = true;
+    if (!queuedAutoAnalysisIdsRef.current.includes(projectId)) {
+      queuedAutoAnalysisIdsRef.current.push(projectId);
+    }
+    setProjectAutoAnalysis((current) => setProjectAutoAnalysisPhase(current, projectId, "queued"));
+    // A newer project restarts the window, so a steady stream of creations
+    // still resolves in a single pass once the user stops.
+    if (queuedAutoAnalysisTimerRef.current !== null) window.clearTimeout(queuedAutoAnalysisTimerRef.current);
+    queuedAutoAnalysisTimerRef.current = window.setTimeout(flushQueuedProjectAutoAnalysis, PROJECT_AUTO_ANALYSIS_DEBOUNCE_MS);
+  }, [flushQueuedProjectAutoAnalysis]);
+  useEffect(() => () => {
+    if (queuedAutoAnalysisTimerRef.current !== null) window.clearTimeout(queuedAutoAnalysisTimerRef.current);
+  }, []);
+  // Connecting a model is what unblocks projects parked on "Setup needed", so
+  // they resume through the same debounce instead of waiting for a manual click.
+  const scheduleProjectAutoAnalysisRef = useRef(scheduleProjectAutoAnalysis);
+  useEffect(() => {
+    scheduleProjectAutoAnalysisRef.current = scheduleProjectAutoAnalysis;
+  });
+  useEffect(() => {
+    if (!analysisModel.analysisConnected) return;
+    const blocked = projectsBlockedOnModel(projectAutoAnalysis);
+    if (blocked.length === 0) return;
+    for (const projectId of blocked) scheduleProjectAutoAnalysisRef.current(projectId);
+  }, [analysisModel.analysisConnected, projectAutoAnalysis]);
   const requestProjectPassRun = useCallback(() => {
-    if (projectPassConsented) {
-      void projectClassification.backfillLast7Days();
+    // An explicit click should not wait out the debounce window.
+    if (queuedAutoAnalysisTimerRef.current !== null) {
+      window.clearTimeout(queuedAutoAnalysisTimerRef.current);
+      flushQueuedProjectAutoAnalysis();
       return;
     }
-    setProjectPassConsentOpen(true);
-  }, [projectPassConsented, projectClassification]);
-  const confirmProjectPassConsent = useCallback(() => {
-    try {
-      window.localStorage.setItem(PROJECT_PASS_CONSENT_STORAGE_KEY, "1");
-    } catch {
-      /* ignore */
+    if (projectsAwaitingAnalysis.length > 0) {
+      void runProjectAutoAnalysis(projectsAwaitingAnalysis);
+      return;
     }
-    setProjectPassConsented(true);
-    setProjectPassConsentOpen(false);
     void projectClassification.backfillLast7Days();
-  }, [projectClassification]);
-  const analysisProviderLabel = analysisModel.analysisSetup.provider === "cloud"
-    ? "Drifty Cloud"
-    : analysisModel.analysisSetup.provider === "openrouter"
-      ? `OpenRouter (${analysisModelDisplayLabel(analysisModel.analysisSetup.openRouterModel)})`
-      : analysisModel.analysisSetup.provider === "openai"
-        ? `OpenAI (${analysisModelDisplayLabel(analysisModel.analysisSetup.openaiModel)})`
-        : analysisModel.analysisSetup.provider === "anthropic"
-          ? `Anthropic (${analysisModelDisplayLabel(analysisModel.analysisSetup.anthropicModel)})`
-          : "your custom endpoint";
+  }, [flushQueuedProjectAutoAnalysis, projectsAwaitingAnalysis, projectClassification, runProjectAutoAnalysis]);
+  // Creating a project is the moment the user expects results, so persistence
+  // success starts the same latest-7-days pass the manual action runs. Project
+  // matching sends the same minimized fields to the same configured provider as
+  // live AI classification, under the same privacy settings, so it follows that
+  // surface's boundary instead of adding a separate approval step. Missing model
+  // setup stays explicit: it becomes a visible state on the new project rather
+  // than a silent no-op.
+  const handleSaveProject = useCallback(async (input: ProjectInput): Promise<boolean> => {
+    const isNewActiveProject = !input.id && (input.status ?? "active") === "active";
+    const saved = await projectClassification.saveProject(input);
+    if (!saved) return false;
+    // Archiving is an edit, not a creation: it must also release any queued
+    // matching for that project so an archived project cannot pull a provider
+    // pass along behind it.
+    if (saved.id && saved.status !== "active") {
+      dropQueuedProjectAutoAnalysis(saved.id);
+      return true;
+    }
+    if (!isNewActiveProject || !saved.id) return true;
+
+    if (!analysisModel.analysisConnected) {
+      setProjectAutoAnalysis((current) => setProjectAutoAnalysisPhase(current, saved.id, "waiting_for_model"));
+      return true;
+    }
+    scheduleProjectAutoAnalysis(saved.id);
+    return true;
+  }, [analysisModel.analysisConnected, dropQueuedProjectAutoAnalysis, projectClassification, scheduleProjectAutoAnalysis]);
+  // Keyed on the last pass that actually completed cleanly, not on the newest
+  // recorded row: a partially failed pass still records a row (its tokens were
+  // spent) but leaves the window stale, and locking the retry behind it would
+  // hide the button exactly when it is needed.
+  const lastSuccessfulProjectPassAtMs = projectClassification.lastSuccessfulPassAtMs;
+  const [projectMatchCooldown, setProjectMatchCooldown] = useState(NO_PROJECT_MATCH_COOLDOWN);
+  useEffect(() => {
+    const next = resolveProjectMatchCooldown(lastSuccessfulProjectPassAtMs, Date.now());
+    setProjectMatchCooldown(next);
+    if (!next.active) return undefined;
+    // Tick only while the guard is live; the label counts down to zero and the
+    // button re-enables without needing a tab switch.
+    const intervalId = window.setInterval(() => {
+      const current = resolveProjectMatchCooldown(lastSuccessfulProjectPassAtMs, Date.now());
+      setProjectMatchCooldown(current);
+      if (!current.active) window.clearInterval(intervalId);
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [lastSuccessfulProjectPassAtMs]);
   const dashboardCategoryTotals = useMemo(() => buildCategoryDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
   const classificationCategoryBreakdowns = useMemo(
     () => buildClassificationCategoryBreakdowns(classificationSegments, classificationOptions, classificationTotalSeconds),
@@ -6841,20 +6951,25 @@ export default function App() {
   }, [isPreviewSurface, runAutoAiClassificationBatch]);
 
   // Heavy project pass scheduler (Item 1). Keeps TODAY's project attributions
-  // fresh with an on-open tick + an hourly tick. Dev-preview + consent gated;
-  // ticks are SILENT (runScheduledPass never pops the consent modal and never
-  // disturbs the manual-run UI). runScheduledPass gets a fresh identity each
+  // fresh with an on-open tick + an hourly tick. Ticks are SILENT: runScheduledPass
+  // never disturbs the manual-run UI. runScheduledPass gets a fresh identity each
   // render (its `now` closure), so we call it through a ref and keep the effect's
   // deps stable — otherwise the interval would reset every render and never fire.
   const runScheduledProjectPassRef = useRef(projectClassification.runScheduledPass);
   useEffect(() => {
     runScheduledProjectPassRef.current = projectClassification.runScheduledPass;
   });
-  const projectPassOpenTickedRef = useRef(false);
+  // Matching has nothing to attribute to until at least one active project
+  // exists, so an empty library is the gate that keeps a fresh install from
+  // sending anything on a schedule.
+  const hasActiveProject = projectClassification.projects.some((project) => project.status === "active");
   useEffect(() => {
     if (isPreviewSurface) return undefined;
-    if (!projectClassificationFeatureEnabled || !projectPassConsented) {
-      projectPassOpenTickedRef.current = false; // re-enabling should re-tick on open
+    if (!projectClassificationFeatureEnabled || !hasActiveProject) {
+      // A first project should re-tick on open, but only once creation-triggered
+      // work has settled: resetting mid-burst would let this effect run the same
+      // window again the moment the new project lands.
+      if (queuedAutoAnalysisTimerRef.current === null) projectPassOpenTickedRef.current = false;
       return undefined;
     }
     const tick = (trigger: "schedule" | "open") => {
@@ -6885,7 +7000,7 @@ export default function App() {
     }
     const intervalId = setInterval(() => tick("schedule"), PROJECT_PASS_SCHEDULE_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [isPreviewSurface, projectClassificationFeatureEnabled, projectPassConsented, startOfDayMinutes, analysisModel.analysisConnected]);
+  }, [isPreviewSurface, projectClassificationFeatureEnabled, hasActiveProject, startOfDayMinutes, analysisModel.analysisConnected]);
 
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
@@ -8389,12 +8504,8 @@ export default function App() {
             runError={projectClassification.runError}
             analysisConnected={analysisModel.analysisConnected}
             analysisSetup={analysisModel.analysisSetup}
-            consentOpen={projectPassConsentOpen}
-            consentProviderLabel={analysisProviderLabel}
-            consentIncludesSiteUrl={projectPassPrivacySettings.optional.siteUrl}
-            consentIncludesWindowTitles={projectPassPrivacySettings.optional.windowTitle}
-            consentIncludesContentContext={projectPassPrivacySettings.optional.contentContext}
-            consentStoresCloudSamples={analysisModel.analysisSetup.provider === "cloud"}
+            autoAnalysis={projectAutoAnalysis}
+            matchCooldown={projectMatchCooldown}
             onTrendWindowChange={handleProjectsTrendWindowChange}
             onConfigureModel={() => {
               navigateToTab("settings");
@@ -8402,11 +8513,9 @@ export default function App() {
               setAiSetupRequestedTab("intelligence");
             }}
             onOpenTrends={openProjectTrends}
-            onSaveProject={(input) => void projectClassification.saveProject(input)}
-            onDeleteProject={(id) => void projectClassification.deleteProject(id)}
+            onSaveProject={handleSaveProject}
+            onDeleteProject={handleDeleteProject}
             onRunAnalysis={() => requestProjectPassRun()}
-            onConsentConfirm={confirmProjectPassConsent}
-            onConsentCancel={() => setProjectPassConsentOpen(false)}
           />
         ) : null}
 

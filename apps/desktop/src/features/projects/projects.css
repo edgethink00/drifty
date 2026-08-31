@@ -772,6 +772,52 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A project that has not been matched yet must not read as a finished 0m
+   result, so the time cell carries its analysis state until a real total
+   exists. Same type scale as the total it replaces. */
+.projects-page .projects-table__analysis-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-width: 0;
+  font-size: 0.74rem;
+  font-weight: 560;
+  line-height: 1.2;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.projects-page .projects-table__analysis-state--running,
+.projects-page .projects-table__analysis-state--attention {
+  color: var(--text-soft);
+}
+
+.projects-page .projects-table__analysis-state--error {
+  color: var(--warn);
+}
+
+.projects-page .projects-table__analysis-spinner {
+  flex: 0 0 auto;
+  width: 0.62rem;
+  height: 0.62rem;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  border-top-color: var(--accent);
+  animation: projects-table-analysis-spin 0.9s linear infinite;
+}
+
+@keyframes projects-table-analysis-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .projects-page .projects-table__analysis-spinner {
+    animation: none;
+  }
+}
+
 .projects-page .pt-menu-slot {
   position: relative;
   display: grid;

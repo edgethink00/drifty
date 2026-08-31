@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Project } from "@drifty/domain";
 
 import { ProjectsManager, type ProjectsManagerProps } from "./ProjectsManager";
+import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
 
 function project(overrides: Partial<Project> = {}): Project {
   return {
@@ -29,6 +30,7 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
     totalSecondsByProject: new Map([["p1", 5 * 3600 + 30 * 60]]),
     lastActivityByProject: new Map([["p1", "2026-07-10"]]),
     totalCaption: "Latest 7 days",
+    autoAnalysis: IDLE_PROJECT_AUTO_ANALYSIS,
     onSave: vi.fn(),
     onDelete: vi.fn(),
     onOpenProject: vi.fn(),
@@ -130,5 +132,70 @@ describe("ProjectsManager", () => {
     );
     expect(screen.getByText("—")).toBeTruthy();
     expect(screen.getByText("0m")).toBeTruthy();
+  });
+
+  it("shows a live matching state instead of a finished 0m for a project being analyzed", () => {
+    render(
+      <ProjectsManager
+        {...baseProps({
+          projects: [project({ id: "p3", name: "Idle", anchors: [] })],
+          totalSecondsByProject: new Map(),
+          lastActivityByProject: new Map(),
+          autoAnalysis: { p3: "running" },
+        })}
+      />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("Matching…");
+    expect(screen.queryByText("0m")).toBeNull();
+  });
+
+  it("separates setup, failure, and analyzed-but-empty from an unanalyzed project", () => {
+    const props = {
+      projects: [project({ id: "p3", name: "Idle", anchors: [] })],
+      totalSecondsByProject: new Map<string, number>(),
+      lastActivityByProject: new Map<string, string>(),
+    };
+    const { rerender } = render(<ProjectsManager {...baseProps({ ...props, autoAnalysis: { p3: "waiting_for_model" } })} />);
+    expect(screen.getByText("Setup needed")).toBeTruthy();
+
+    rerender(<ProjectsManager {...baseProps({ ...props, autoAnalysis: { p3: "error" } })} />);
+    expect(screen.getByText("Retry needed")).toBeTruthy();
+
+    rerender(<ProjectsManager {...baseProps({ ...props, autoAnalysis: { p3: "queued" } })} />);
+    expect(screen.getByText("Matching soon…")).toBeTruthy();
+    expect(screen.queryByText("0m")).toBeNull();
+
+    rerender(<ProjectsManager {...baseProps({ ...props, autoAnalysis: { p3: "complete" } })} />);
+    expect(screen.getByText("No recent match")).toBeTruthy();
+    expect(screen.queryByText("0m")).toBeNull();
+  });
+
+  it("leaves other projects' totals untouched while one project is matching", () => {
+    render(
+      <ProjectsManager
+        {...baseProps({
+          projects: [project(), project({ id: "p2", name: "New work", anchors: [] })],
+          autoAnalysis: { p2: "running" },
+        })}
+      />,
+    );
+    expect(screen.getByText("5h 30m")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Matching…");
+  });
+
+  it("keeps an earlier project's pending state when a second project starts matching", () => {
+    render(
+      <ProjectsManager
+        {...baseProps({
+          projects: [project({ id: "p1", name: "First" }), project({ id: "p2", name: "Second", anchors: [] })],
+          totalSecondsByProject: new Map(),
+          lastActivityByProject: new Map(),
+          autoAnalysis: { p1: "error", p2: "running" },
+        })}
+      />,
+    );
+    expect(screen.getByText("Retry needed")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("Matching…");
+    expect(screen.queryByText("0m")).toBeNull();
   });
 });

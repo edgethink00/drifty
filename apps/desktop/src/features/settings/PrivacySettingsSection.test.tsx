@@ -90,6 +90,9 @@ describe("PrivacySettingsSection AI review", () => {
       "Work profile",
       "Recent-activity context",
       "Enhanced context",
+      // Project matching also sends what the user wrote when defining a project;
+      // live classification does not, so it needs its own disclosure row.
+      "Your project names and descriptions",
     ]);
     // The channel name is a real outbound field; it lost its only assertion when the
     // per-row tooltip was removed, so the glossary carries that coverage now.

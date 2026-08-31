@@ -40,6 +40,7 @@ describe("app analytics mapping", () => {
         corrections: 1,
         tokensIn: 100,
         tokensOut: 20,
+        failedChunks: 0,
       },
     })).toEqual({
       trigger: "schedule",

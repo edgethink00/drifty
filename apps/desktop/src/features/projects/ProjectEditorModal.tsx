@@ -11,7 +11,8 @@ export interface ProjectEditorModalProps {
   /** Full project list, for dimming colors already used by other projects. */
   readonly projects: readonly Project[];
   readonly busy?: boolean;
-  readonly onSave: (input: ProjectInput) => void;
+  /** Resolves true when the project was persisted; the modal stays open on failure. */
+  readonly onSave: (input: ProjectInput) => Promise<boolean> | boolean;
   readonly onClose: () => void;
 }
 
@@ -27,6 +28,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   const [description, setDescription] = useState(project?.description ?? "");
   const [color, setColor] = useState(project?.color || PROJECT_COLOR_SWATCHES[0].color);
   const [colorTouched, setColorTouched] = useState(isEditing);
+  const [saving, setSaving] = useState(false);
 
   const usedColors = useMemo(
     () => new Set(
@@ -38,13 +40,14 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
   );
   const suggestedColor = useMemo(() => firstUnusedProjectColor([...usedColors]), [usedColors]);
   const effectiveColor = colorTouched ? color : suggestedColor;
-  const canSave = name.trim().length > 0 && !busy;
+  const isBusy = busy || saving;
+  const canSave = name.trim().length > 0 && !isBusy;
 
-  useModalDismiss(onClose, { disabled: busy });
+  useModalDismiss(onClose, { disabled: isBusy });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const trimmedName = name.trim();
-    if (!trimmedName) return;
+    if (!trimmedName || isBusy) return;
     const input: ProjectInput = {
       name: trimmedName,
       description: description.trim(),
@@ -52,12 +55,29 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
       status: project?.status ?? "active",
     };
     if (project) input.id = project.id;
-    onSave(input);
+    // Persistence is asynchronous, and a new project immediately triggers
+    // automatic matching. Closing before the save resolves would both discard
+    // the user's input on failure and start analysis for a project that does
+    // not exist yet.
+    setSaving(true);
+    try {
+      const saved = await onSave(input);
+      if (saved) onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Closing mid-save would leave the user with no editor while persistence (and
+  // the matching run it triggers) is still in flight, so every dismissal path
+  // is inert until the save settles.
+  const requestClose = () => {
+    if (isBusy) return;
     onClose();
   };
 
   return (
-    <div className="auth-modal__overlay" onClick={onClose}>
+    <div className="auth-modal__overlay" onClick={requestClose}>
       <section
         className="auth-modal modal-shell project-editor-modal"
         data-modal-variant="standard"
@@ -66,7 +86,7 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
         aria-labelledby="projects-editor-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label="Close project editor" onClick={onClose} />
+        <ModalCloseButton label="Close project editor" onClick={requestClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="projects-editor-title">{isEditing ? "Edit project" : "New project"}</h2>
@@ -87,9 +107,9 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
           }}
         />
         <div className="modal-foot">
-          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
-          <button type="button" className="modal-btn modal-btn--primary" onClick={handleSave} disabled={!canSave}>
-            {isEditing ? "Save changes" : "Create project"}
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>Cancel</button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave}>
+            {saving ? "Saving…" : isEditing ? "Save changes" : "Create project"}
           </button>
         </div>
       </section>

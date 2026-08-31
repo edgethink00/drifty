@@ -370,6 +370,13 @@ export function AiPrivacyReview() {
               <dt>{t("settings.aiPrivacy.rowEnhancedContext")}</dt>
               <dd>{t("settings.aiPrivacy.meaningEnhancedContext")}</dd>
             </div>
+            {/* Project matching is the one surface that also sends what the user
+                wrote when defining a project, so it is disclosed here rather
+                than left implicit in the shared activity rows. */}
+            <div className="ai-privacy-review__glossary-item">
+              <dt>{t("settings.aiPrivacy.projectDefinitions")}</dt>
+              <dd>{t("settings.aiPrivacy.projectDefinitionsReceipt")}</dd>
+            </div>
           </dl>
         </details>
 

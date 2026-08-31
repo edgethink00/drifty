@@ -3,6 +3,7 @@ import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { ProjectEditorModal } from "./ProjectEditorModal";
 import { SettingsSelect } from "../settings/SettingsSelect";
+import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 
 const DEFAULT_PROJECT_COLOR = "#6366f1";
 
@@ -18,10 +19,11 @@ export interface ProjectsManagerProps {
   readonly lastActivityByProject: ReadonlyMap<string, string>;
   /** Caption in the per-project time column, e.g. "Latest 7 days". */
   readonly totalCaption: string;
-  readonly onSave: (input: ProjectInput) => void;
+  readonly onSave: (input: ProjectInput) => Promise<boolean> | boolean;
   readonly onDelete: (id: string) => void;
   /** Row click → project detail. */
   readonly onOpenProject: (projectId: string) => void;
+  readonly autoAnalysis: ProjectAutoAnalysisState;
   readonly busy?: boolean;
 }
 
@@ -54,6 +56,7 @@ export function ProjectsManager({
   onSave,
   onDelete,
   onOpenProject,
+  autoAnalysis,
   busy = false,
 }: ProjectsManagerProps): JSX.Element {
   const [query, setQuery] = useState("");
@@ -172,6 +175,18 @@ export function ProjectsManager({
         {filtered.map((project) => {
           const isArchived = project.status === "archived";
           const totalSeconds = totalSecondsByProject.get(project.id) ?? 0;
+          const autoPhase = projectAutoAnalysisPhase(autoAnalysis, project.id);
+          const timeState = autoPhase === "running"
+            ? { label: "Matching…", tone: "running" }
+            : autoPhase === "queued"
+              ? { label: "Matching soon…", tone: "running" }
+              : autoPhase === "waiting_for_model"
+                ? { label: "Setup needed", tone: "attention" }
+                : autoPhase === "error"
+                  ? { label: "Retry needed", tone: "error" }
+                  : autoPhase === "complete" && totalSeconds === 0
+                    ? { label: "No recent match", tone: "muted" }
+                    : null;
           return (
             <div
               className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`}
@@ -196,7 +211,18 @@ export function ProjectsManager({
                 <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id))}</span>
                 <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
                 <div className="pt-total">
-                  <b>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</b>
+                  {timeState ? (
+                    <span
+                      className={`projects-table__analysis-state projects-table__analysis-state--${timeState.tone}`}
+                      role={autoPhase === "running" || autoPhase === "queued" ? "status" : undefined}
+                      aria-live={autoPhase === "running" || autoPhase === "queued" ? "polite" : undefined}
+                    >
+                      {autoPhase === "running" || autoPhase === "queued" ? <span className="projects-table__analysis-spinner" aria-hidden="true" /> : null}
+                      {timeState.label}
+                    </span>
+                  ) : (
+                    <b>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</b>
+                  )}
                 </div>
                 <span className="pt-menu-slot">
                   <button

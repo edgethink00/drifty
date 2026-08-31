@@ -33,7 +33,7 @@ export interface ProjectDetailViewProps {
   readonly windowProjectSeconds: number;
   readonly lastActivityLabel: string;
   readonly busy?: boolean;
-  readonly onSave: (input: ProjectInput) => void;
+  readonly onSave: (input: ProjectInput) => Promise<boolean> | boolean;
 }
 
 /**

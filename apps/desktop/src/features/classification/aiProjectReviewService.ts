@@ -267,6 +267,12 @@ export interface ProjectPassSummary {
   readonly corrections: number;
   readonly tokensIn: number;
   readonly tokensOut: number;
+  /**
+   * Chunks whose inference produced no usable output (HTTP error, unparseable
+   * body). These are failures, not "nothing matched", so callers must not
+   * present them as a completed empty result.
+   */
+  readonly failedChunks: number;
 }
 
 interface ProjectPassChunkResult {
@@ -275,17 +281,45 @@ interface ProjectPassChunkResult {
   readonly correctionClassifications: ActivityClassificationRecord[];
   readonly correctionEvents: Array<Omit<AiReviewEventInput, "passId">>;
   readonly cached: boolean;
+  readonly failed?: boolean;
 }
 
 let inFlight: Promise<ProjectPassSummary> | null = null;
+let inFlightRangeKey: string | null = null;
+let queuedTail: Promise<unknown> = Promise.resolve();
 
-/** Serialize passes so scheduled + on-open + manual triggers never overlap. */
+function projectPassRangeKey(range: { readonly start: string; readonly end: string }): string {
+  return `${range.start}..${range.end}`;
+}
+
+/**
+ * Serialize passes so scheduled + on-open + manual triggers never overlap.
+ *
+ * Coalescing is keyed on the analyzed range: a caller asking for a WIDER window
+ * (project creation backfills the latest 7 days) must not be handed the running
+ * today-only pass's promise and told its window is complete. Different ranges
+ * queue behind the current run instead of sharing its result.
+ */
 export function runProjectPass(options: RunProjectPassOptions): Promise<ProjectPassSummary> {
-  if (inFlight) return inFlight;
-  inFlight = runProjectPassInner(options).finally(() => {
-    inFlight = null;
-  });
-  return inFlight;
+  const rangeKey = projectPassRangeKey(options.range);
+  if (inFlight && inFlightRangeKey === rangeKey) return inFlight;
+
+  const start = (): Promise<ProjectPassSummary> => {
+    inFlightRangeKey = rangeKey;
+    inFlight = runProjectPassInner(options).finally(() => {
+      inFlight = null;
+      inFlightRangeKey = null;
+    });
+    return inFlight;
+  };
+
+  if (!inFlight) return start();
+
+  // A pass for a different range waits its turn; settled either way so one
+  // failure cannot wedge the queue.
+  const queued = queuedTail.then(start, start);
+  queuedTail = queued.catch(() => undefined);
+  return queued;
 }
 
 async function runProjectPassInner(options: RunProjectPassOptions): Promise<ProjectPassSummary> {
@@ -327,6 +361,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       corrections: 0,
       tokensIn: 0,
       tokensOut: 0,
+      failedChunks: 0,
     };
   }
 
@@ -387,7 +422,10 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     };
     const prompt = buildProjectPassPrompt(promptInput);
     const { output, usage } = await inference(prompt, promptInput);
-    if (!output) return { usage, windowAssignments: [], correctionClassifications: [], correctionEvents: [], cached: false };
+    // A null output means the provider call failed or returned something we
+    // could not parse. Recording it as an ordinary empty chunk would make a
+    // transport failure indistinguishable from "no project matched".
+    if (!output) return { usage, windowAssignments: [], correctionClassifications: [], correctionEvents: [], cached: false, failed: true };
     const resolved = resolveProjectPassApply({
       output,
       windows: chunk.coreWindows,
@@ -409,6 +447,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     bufferedClassifications.push(...result.correctionClassifications);
     bufferedEvents.push(...result.correctionEvents);
   }
+  const failedChunks = results.reduce((count, result) => (result.failed ? count + 1 : count), 0);
 
   if (results.length > 0 && results.every((result) => result.cached)) {
     return {
@@ -419,6 +458,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
       corrections: 0,
       tokensIn: 0,
       tokensOut: 0,
+      failedChunks: 0,
     };
   }
 
@@ -460,6 +500,7 @@ async function runProjectPassInner(options: RunProjectPassOptions): Promise<Proj
     corrections: bufferedClassifications.length,
     tokensIn,
     tokensOut,
+    failedChunks,
   };
 }
 

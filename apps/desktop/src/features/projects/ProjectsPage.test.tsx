@@ -6,6 +6,8 @@ import type { ActivitySegment } from "@drifty/domain";
 
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
 import { ProjectsPage, type ProjectsPageProps } from "./ProjectsPage";
+import { IDLE_PROJECT_AUTO_ANALYSIS } from "./projectAutoAnalysisState";
+import { NO_PROJECT_MATCH_COOLDOWN } from "./projectMatchCooldown";
 
 function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProps {
   return {
@@ -23,33 +25,19 @@ function baseProps(overrides: Partial<ProjectsPageProps> = {}): ProjectsPageProp
     runError: null,
     analysisConnected: true,
     analysisSetup: DEFAULT_ANALYSIS_AI_SETUP,
-    consentOpen: false,
-    consentProviderLabel: "Custom endpoint",
-    consentIncludesSiteUrl: true,
-    consentIncludesWindowTitles: true,
-    consentIncludesContentContext: true,
-    consentStoresCloudSamples: false,
+    autoAnalysis: IDLE_PROJECT_AUTO_ANALYSIS,
+    matchCooldown: NO_PROJECT_MATCH_COOLDOWN,
     onTrendWindowChange: vi.fn(),
     onConfigureModel: vi.fn(),
     onOpenTrends: vi.fn(),
     onSaveProject: vi.fn(),
     onDeleteProject: vi.fn(),
     onRunAnalysis: vi.fn(),
-    onConsentConfirm: vi.fn(),
-    onConsentCancel: vi.fn(),
     ...overrides,
   };
 }
 
 describe("ProjectsPage", () => {
-  it("shows the current project-pass context scope in the consent modal", () => {
-    render(<ProjectsPage {...baseProps({ consentOpen: true })} />);
-
-    expect(screen.getByRole("dialog", { name: /Turn on project analysis/i })).toBeTruthy();
-    expect(screen.getByText(/Each 3-minute activity window is classified independently/i)).toBeTruthy();
-    expect(screen.getByText(/window title, page\/video title/i)).toBeTruthy();
-  });
-
   it("keeps assignment refresh loading on the button instead of showing chunk progress", () => {
     render(
       <ProjectsPage
@@ -68,6 +56,85 @@ describe("ProjectsPage", () => {
     expect(screen.queryByText(/chunk 1 of 3/i)).toBeNull();
     expect(screen.queryByRole("status", { name: /Analyzing your activity/i })).toBeNull();
     expect(screen.getByRole("button", { name: /Explore in Trends/i })).toBeTruthy();
+  });
+
+  it("reports automatic matching on the model card while a new project is analyzed", () => {
+    render(
+      <ProjectsPage
+        {...baseProps({
+          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
+          running: true,
+          autoAnalysis: { p1: "running" },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Matching…" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("Matching")).toBeTruthy();
+  });
+
+  it("explains a paused automatic run instead of leaving the new project silent", () => {
+    render(
+      <ProjectsPage
+        {...baseProps({
+          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
+          autoAnalysis: { p1: "error" },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/Automatic matching paused/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Retry latest 7 days" })).toBeTruthy();
+  });
+
+  it("blocks a redundant refresh right after a completed pass", () => {
+    const onRunAnalysis = vi.fn();
+    render(
+      <ProjectsPage
+        {...baseProps({
+          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
+          matchCooldown: { active: true, remainingSeconds: 72 },
+          onRunAnalysis,
+        })}
+      />,
+    );
+
+    const action = screen.getByRole("button", { name: /Just matched/i });
+    expect(action).toHaveProperty("disabled", true);
+    fireEvent.click(action);
+    expect(onRunAnalysis).not.toHaveBeenCalled();
+    expect(screen.getByText(/already up to date/i)).toBeTruthy();
+    // The readiness badge must not still claim "Ready" while the action is locked.
+    expect(screen.getByText("Up to date")).toBeTruthy();
+    expect(screen.queryByText("Ready")).toBeNull();
+  });
+
+  it("keeps a queued burst clickable even inside the cooldown window", () => {
+    render(
+      <ProjectsPage
+        {...baseProps({
+          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
+          autoAnalysis: { p1: "queued" },
+          matchCooldown: { active: true, remainingSeconds: 30 },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Match now" })).toHaveProperty("disabled", false);
+  });
+
+  it("keeps a failed run retryable even inside the cooldown window", () => {
+    render(
+      <ProjectsPage
+        {...baseProps({
+          projects: [{ id: "p1", name: "Drifty", description: "Mac app", color: "#000", status: "active", anchors: [], createdAt: "", updatedAt: "" }],
+          autoAnalysis: { p1: "error" },
+          matchCooldown: { active: true, remainingSeconds: 30 },
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Retry latest 7 days" })).toHaveProperty("disabled", false);
   });
 
   it("uses one seven-day window for the overview, project totals, and assignment refresh", () => {
