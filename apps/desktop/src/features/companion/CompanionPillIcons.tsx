@@ -34,6 +34,14 @@ export function PillOpenArrowIcon() {
   );
 }
 
+export function PillFeedbackCheckIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5.2 10.2l3 3.1 6.7-7" />
+    </svg>
+  );
+}
+
 export function PillCaretIcon() {
   return (
     <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">

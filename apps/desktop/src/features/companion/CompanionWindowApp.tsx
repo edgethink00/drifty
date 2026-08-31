@@ -63,7 +63,13 @@ const COMPANION_MOMENT_QUEUE_GAP_MS = 700;
 export function CompanionWindowApp() {
   const [peekEvent, setPeekEvent] = useState<WatcherPeekEvent | null>(null);
   const [momentEvent, setMomentEvent] = useState<CompanionPillMomentEvent | null>(resolveDevelopmentPreviewMoment);
-  const momentEventRef = useRef<CompanionPillMomentEvent | null>(null);
+  /* Development previews start with a real moment instead of receiving one
+     through the native bridge. Seed the imperative event ref from that same
+     state so review links exercise the actual click and dismissal flow. */
+  const momentEventRef = useRef<CompanionPillMomentEvent | null>(momentEvent);
+  useEffect(() => {
+    momentEventRef.current = momentEvent;
+  }, [momentEvent]);
   /* The once-a-day review slot is marked only when this surface confirms an
      actual visible display; shipping the payload is not enough (see the
      reporter hook). */
@@ -96,7 +102,15 @@ export function CompanionWindowApp() {
   const enqueueMomentNow = useCallback((nextMoment: CompanionPillMomentEvent) => {
     const current = momentEventRef.current;
     const nextKey = companionMomentIdentity(nextMoment);
-    if (current && companionMomentIdentity(current) === nextKey) return;
+    if (current && companionMomentIdentity(current) === nextKey) {
+      /* A correction acknowledgement replaces the decision in place, without
+         collapsing the native panel or queuing a second card. */
+      if (isDriftCorrectionMoment(current) && isDriftCorrectionMoment(nextMoment)
+        && current.correctionStatus !== nextMoment.correctionStatus) {
+        activateMoment(nextMoment);
+      }
+      return;
+    }
     if (momentQueueRef.current.some((queued) => companionMomentIdentity(queued) === nextKey)) return;
 
     if (!current) {
@@ -339,10 +353,19 @@ export function CompanionWindowApp() {
   }), [handleHideForOneHour, handleOpenDashboard, handleOpenSettings, handleTurnOffCompanion]);
 
   const handleMomentAction = useCallback((action: DriftAlarmAction) => {
+    if (action.type === "manual_correction") {
+      const current = momentEventRef.current;
+      if (current && isDriftCorrectionMoment(current)) {
+        activateMoment({ ...current, correctionStatus: "acknowledged" });
+      }
+      recordCompanionEngagementMetric(companionActionMetric(action));
+      ignoreCompanionBridgePromise(triggerNativeExtremeNudgeAction(action));
+      return;
+    }
     finishCurrentMoment();
     recordCompanionEngagementMetric(companionActionMetric(action));
     ignoreCompanionBridgePromise(triggerNativeExtremeNudgeAction(action));
-  }, [finishCurrentMoment]);
+  }, [activateMoment, finishCurrentMoment]);
 
   const handleDismiss = useCallback((reason: CompanionPillDismissReason) => {
     const kind = momentEvent?.kind;
@@ -353,7 +376,13 @@ export function CompanionWindowApp() {
     }
     finishCurrentMoment();
     recordCompanionEngagementMetric(reason === "auto" ? "moment_auto_dismissed" : "moment_dismissed");
-    if (kind) ignoreCompanionBridgePromise(dismissNativeCompanionMoment(kind));
+    if (kind) {
+      const dismissKind = momentEvent && isDriftCorrectionMoment(momentEvent)
+        && momentEvent.correctionStatus === "acknowledged"
+        ? "notDriftFeedback"
+        : kind;
+      ignoreCompanionBridgePromise(dismissNativeCompanionMoment(dismissKind));
+    }
   }, [finishCurrentMoment, momentEvent]);
 
   const handleStateChange = useCallback((state: Parameters<typeof setNativeCompanionPillState>[0]) => {
@@ -588,6 +617,12 @@ function companionActionMetric(action: DriftAlarmAction): CompanionEngagementMet
   return action.type;
 }
 
+function isDriftCorrectionMoment(
+  event: CompanionPillMomentEvent,
+): event is Extract<CompanionPillMomentEvent, { kind: "driftAlarm" | "extremeNudgeToast" }> {
+  return event.kind === "driftAlarm" || event.kind === "extremeNudgeToast";
+}
+
 function ignoreCompanionBridgePromise(promise: Promise<unknown>) {
   void promise.catch(ignoreCompanionBridgeRejection);
 }
@@ -598,11 +633,15 @@ function ignoreCompanionBridgeRejection() {
 
 function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   const preview = isDevelopmentPreview();
+  const correctionStatus = resolveDevelopmentCorrectionStatus();
   const language = new URLSearchParams(window.location.search).get("driftyCompanionLanguage") === "ko"
     ? "ko"
     : "en";
   if (preview === "drift-alarm") {
-    return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("drift-alarm"));
+    return {
+      ...toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("drift-alarm")),
+      correctionStatus,
+    };
   }
   if (preview === "break-return") {
     return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("break-return"));
@@ -610,6 +649,12 @@ function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   if (preview === "reentry") return buildCompanionReentryPreview(Date.now(), language);
   if (preview === "dayReview") return buildCompanionDayReviewPreview();
   return null;
+}
+
+function resolveDevelopmentCorrectionStatus() {
+  if (!import.meta.env.DEV || typeof window === "undefined") return undefined;
+  const value = new URLSearchParams(window.location.search).get("driftyCompanionCorrection");
+  return value === "acknowledged" ? value : undefined;
 }
 
 function isDevelopmentPreview(): string | null {

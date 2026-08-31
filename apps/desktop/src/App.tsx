@@ -174,10 +174,12 @@ import {
   buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
   type DriftAlarmAction,
+  type DriftAlarmCorrectionStatus,
   type DriftAlarmEvent,
   type DriftAlarmFocusTarget,
 } from "./features/companion/driftAlarmEvent";
 import { CompanionDriftAlarmCard } from "./features/companion/CompanionDriftAlarmCard";
+import type { ExtremeNudgeToastEvent } from "./features/companion/ExtremeNudgeToast";
 import {
   hideNativeWatcherPeek,
   isTauriRuntime,
@@ -1961,6 +1963,7 @@ export default function App() {
   const endOfDayReviewLastPresentedAtRef = useRef<number | null>(null);
   const driftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
   const lastDriftAlarmEventRef = useRef<DriftAlarmEvent | null>(null);
+  const lastExtremeNudgeToastEventRef = useRef<ExtremeNudgeToastEvent | null>(null);
   const driftAlarmSourceSegmentsRef = useRef<Map<string, ActivitySegment>>(new Map());
   const appIconRequestsInFlightRef = useRef<Set<string>>(new Set());
   const siteIconRequestsInFlightRef = useRef<Set<string>>(new Set());
@@ -2531,6 +2534,7 @@ export default function App() {
 
     driftAlarmEventRef.current = event;
     lastDriftAlarmEventRef.current = event;
+    lastExtremeNudgeToastEventRef.current = null;
 
     if (!isTauriRuntime()) {
       setDriftAlarmEvent(event);
@@ -2637,6 +2641,33 @@ export default function App() {
     dismissDriftAlarm();
   }, [dismissDriftAlarm, recordCurrentDriftAlarmDismiss]);
 
+  const presentDriftAlarmCorrectionStatus = useCallback(({
+    event,
+    extremeNudgeEvent,
+    status,
+  }: {
+    event: DriftAlarmEvent;
+    extremeNudgeEvent: ExtremeNudgeToastEvent | null;
+    status: DriftAlarmCorrectionStatus;
+  }): Promise<void> => {
+    const nextEvent: DriftAlarmEvent = { ...event, correctionStatus: status };
+    lastDriftAlarmEventRef.current = nextEvent;
+    driftAlarmEventRef.current = null;
+
+    if (!isTauriRuntime()) {
+      setDriftAlarmEvent(nextEvent);
+      return Promise.resolve();
+    }
+
+    if (extremeNudgeEvent) {
+      const nextToastEvent: ExtremeNudgeToastEvent = { ...extremeNudgeEvent, correctionStatus: status };
+      lastExtremeNudgeToastEventRef.current = nextToastEvent;
+      return showNativeExtremeNudgeToast(nextToastEvent).then(() => undefined);
+    }
+
+    return showNativeCompanionDriftAlarm(nextEvent).then(() => undefined);
+  }, []);
+
   async function applyDriftAlarmManualCorrection(event: DriftAlarmEvent | null): Promise<void> {
     const sourceSegmentId = event?.sourceSegmentId?.trim();
     if (!sourceSegmentId) {
@@ -2646,7 +2677,7 @@ export default function App() {
         reason: "source_segment_id_missing",
         delivery: event ? summarizeDriftAlarmEvent(event) : null,
       });
-      return;
+      throw new Error("source_segment_id_missing");
     }
 
     const sourceSegment = segmentsRef.current.find((segment) => segment.id === sourceSegmentId)
@@ -2659,7 +2690,7 @@ export default function App() {
         reason: "source_segment_missing",
         delivery: event ? summarizeDriftAlarmEvent(event) : null,
       });
-      return;
+      throw new Error("source_segment_missing");
     }
 
     // The correction's durable writes can involve multiple tracker round trips.
@@ -2686,7 +2717,9 @@ export default function App() {
       classificationOptions: selectedDayClassificationOptions,
       segment: sourceSegment,
     });
-    if (ruleInput) await saveClassificationRule(ruleInput);
+    if (!ruleInput) throw new Error("classification_rule_target_missing");
+    const ruleSaved = await saveClassificationRule(ruleInput);
+    if (!ruleSaved) throw new Error("classification_rule_save_failed");
 
     const correctedRecord = buildDriftAlarmManualCorrectionRecord({
       classifiedAt: new Date().toISOString(),
@@ -2751,7 +2784,7 @@ export default function App() {
         };
       recordDriftInteraction(interaction);
     }
-    dismissDriftAlarm();
+    if (action.type !== "manual_correction") dismissDriftAlarm();
 
     switch (action.type) {
       case "settings":
@@ -2759,10 +2792,31 @@ export default function App() {
         navigateToTab("settings");
         return;
       case "manual_correction":
-        void applyDriftAlarmManualCorrection(currentAlarmEvent).catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : String(error);
-          console.warn("Failed to save drift alarm manual correction", message);
-        });
+        if (!currentAlarmEvent) return;
+        {
+          const extremeNudgeEvent = lastExtremeNudgeToastEventRef.current;
+          void presentDriftAlarmCorrectionStatus({
+            event: currentAlarmEvent,
+            extremeNudgeEvent,
+            status: "acknowledged",
+          }).catch((error: unknown) => {
+            console.warn("Failed to present drift alarm correction acknowledgement", toErrorMessage(error));
+          });
+          void applyDriftAlarmManualCorrection(currentAlarmEvent).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            console.warn("Failed to save drift alarm manual correction", message);
+            /* A correction failure is diagnostic, not a new decision for the
+               user. The panel already owns its short acknowledgement timer,
+               so leave its lifecycle alone rather than letting a late write
+               failure hide a newer, unrelated Companion moment. */
+            if (lastDriftAlarmEventRef.current?.id === currentAlarmEvent.id) {
+              lastDriftAlarmEventRef.current = null;
+            }
+            if (lastExtremeNudgeToastEventRef.current?.id === extremeNudgeEvent?.id) {
+              lastExtremeNudgeToastEventRef.current = null;
+            }
+          });
+        }
         return;
       case "return_to_focus": {
         const target = currentAlarmEvent?.focusTargets.find((focusTarget) => focusTarget.targetId === action.targetId) ?? null;
@@ -2787,7 +2841,7 @@ export default function App() {
         return;
       }
     }
-  }, [dismissDriftAlarm, navigateToTab, recordDriftInteraction, returnToFocusTarget, selectedDayClassificationOptions]);
+  }, [dismissDriftAlarm, navigateToTab, presentDriftAlarmCorrectionStatus, recordDriftInteraction, returnToFocusTarget, selectedDayClassificationOptions]);
 
   const dismissWatcherPeek = useCallback(() => {
     clearWatcherEvent();
@@ -4853,9 +4907,12 @@ export default function App() {
           }
         }
         const driftAlarmEvent = buildCurrentDriftAlarmEvent(resolvedDriftAlarmFocusTargets);
+        driftAlarmEventRef.current = driftAlarmEvent;
         lastDriftAlarmEventRef.current = driftAlarmEvent;
         const latestFocusTarget = resolvedDriftAlarmFocusTargets[0] ?? null;
-        void showNativeExtremeNudgeToast(buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions)).catch((error) => console.warn("Failed to show extreme nudge toast", error));
+        const extremeNudgeToastEvent = buildExtremeNudgeToastEvent(segment, latestFocusTarget, driftAlarmCopy, driftAlarmEvent.breakOptions);
+        lastExtremeNudgeToastEventRef.current = extremeNudgeToastEvent;
+        void showNativeExtremeNudgeToast(extremeNudgeToastEvent).catch((error) => console.warn("Failed to show extreme nudge toast", error));
         markCurrentDriftAlarmDelivered();
         if (latestFocusTarget) {
           window.setTimeout(() => {

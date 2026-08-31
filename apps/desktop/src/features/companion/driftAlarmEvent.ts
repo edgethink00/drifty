@@ -7,6 +7,14 @@ export type DriftAlarmAction =
   | { readonly type: "manual_correction" }
   | { readonly type: "settings" };
 
+/** A brief acknowledgement shown immediately after a Not a drift correction. */
+export type DriftAlarmCorrectionStatus = "acknowledged";
+export const DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS = 1_800;
+export const DRIFT_ALARM_CORRECTION_FEEDBACK_COPY = {
+  title: "Learning signal added",
+  subtitle: "Similar decisions will now weigh this as not drift.",
+} as const;
+
 export type DriftAlarmFocusTarget = {
   readonly targetId: string;
   readonly label: string;
@@ -48,6 +56,8 @@ type DriftAlarmEventBase = {
   readonly copy?: DriftAlarmRenderedCopy;
   readonly sourceSegmentId?: string | null;
   readonly decisionClassification?: DriftAlarmDecisionClassification | null;
+  /** Transient UI feedback for the explicit Not a drift correction. */
+  readonly correctionStatus?: DriftAlarmCorrectionStatus;
 };
 
 export type DriftAlarmEvent = DriftAlarmEventBase & (

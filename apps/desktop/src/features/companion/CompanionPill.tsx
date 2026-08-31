@@ -130,6 +130,7 @@ export function CompanionPill({
   const suppressClickResetTimerRef = useRef<number | null>(null);
   const momentVisualExitTimerRef = useRef<number | null>(null);
   const exitingMomentKeyRef = useRef<string | null>(null);
+  const activeMomentKey = momentEvent ? companionMomentKey(momentEvent) : null;
 
   useEffect(() => {
     if (momentExitTimerRef.current !== null) {
@@ -241,7 +242,7 @@ export function CompanionPill({
         momentEnterTimerRef.current = null;
       }
     };
-  }, [momentEvent, nativeTransition, usesNativeTransitionPhases]);
+  }, [activeMomentKey, nativeTransition, usesNativeTransitionPhases]);
 
   useEffect(() => () => {
     if (momentEnterTimerRef.current !== null) {
@@ -327,6 +328,12 @@ export function CompanionPill({
 
   const handleMomentAction = useCallback((action: DriftAlarmAction) => {
     if (!onMomentAction) return;
+    /* Not a drift changes the current card into a save/result state. Let the
+       action through without playing the ordinary card-exit animation first. */
+    if (action.type === "manual_correction") {
+      onMomentAction(action);
+      return;
+    }
     finishMomentAfterVisualExit(() => onMomentAction(action));
   }, [finishMomentAfterVisualExit, onMomentAction]);
 

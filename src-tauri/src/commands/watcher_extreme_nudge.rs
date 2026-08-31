@@ -62,6 +62,10 @@ fn should_reveal_main_window_for_action(action: &DriftAlarmAction) -> bool {
     matches!(action, DriftAlarmAction::Settings)
 }
 
+fn should_hide_before_forwarding(action: &DriftAlarmAction) -> bool {
+    !matches!(action, DriftAlarmAction::ManualCorrection)
+}
+
 #[tauri::command]
 pub fn watcher_peek_extreme_nudge_action(
     app: AppHandle,
@@ -74,7 +78,11 @@ pub fn watcher_peek_extreme_nudge_action(
         crate::reveal_main_window(&app);
     }
 
-    watcher_peek_hide(app.clone())?;
+    // A manual correction stays mounted so the renderer can replace the
+    // decision with its acknowledgement card. Every other action closes now.
+    if should_hide_before_forwarding(&action) {
+        watcher_peek_hide(app.clone())?;
+    }
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit("drift-alarm-action", DriftAlarmActionPayload { action })
@@ -132,6 +140,17 @@ mod tests {
             &DriftAlarmAction::ReturnToFocus {
                 target_id: "app:com.microsoft.VSCode".to_string(),
             }
+        ));
+    }
+
+    #[test]
+    fn keeps_manual_correction_visible_for_acknowledgement() {
+        assert!(!should_hide_before_forwarding(
+            &DriftAlarmAction::ManualCorrection
+        ));
+        assert!(should_hide_before_forwarding(&DriftAlarmAction::Settings));
+        assert!(should_hide_before_forwarding(
+            &DriftAlarmAction::StartBreak { minutes: 15 }
         ));
     }
 }

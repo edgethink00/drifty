@@ -988,6 +988,46 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .card__copy { display: flex; flex-direction: column; gap: 3px; }
 .companion-pill-surface .card__sub { font-size: 11px; color: var(--text-soft); }
 .companion-pill-surface .card__sub b { color: var(--text-muted); font-weight: 600; }
+
+/* A correction stays in the card long enough to prove that the control did
+   something. The shell does not jump: only the decision row gives way to a
+   compact save/result state, with the same typography and spacing tokens. */
+.companion-pill-surface .view--drift-feedback {
+  justify-content: center;
+}
+.companion-pill-surface .drift-feedback__body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: auto 0;
+  padding-right: 0;
+}
+.companion-pill-surface .drift-feedback__body .card__copy {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+}
+.companion-pill-surface .drift-feedback__mark {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--p-neutral) 13%, transparent);
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--p-neutral) 24%, transparent);
+}
+.companion-pill-surface .drift-feedback__mark svg {
+  width: 17px;
+  height: 17px;
+}
+.companion-pill-surface .view--drift-feedback[data-correction-state="acknowledged"] .drift-feedback__mark {
+  color: var(--p-focus);
+  background: color-mix(in srgb, var(--p-focus) 13%, transparent);
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--p-focus) 25%, transparent);
+}
 /* User-authored alarm titles share a fixed 130px decision card. Keep two
    readable lines, then clip before copy can displace the action row. */
 .companion-pill-surface :is(.view--drift, .view--nudge) .card__title {
@@ -1002,6 +1042,11 @@ html[data-surface="companion"] #root {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The compact acknowledgement has enough room for its full explanation. */
+.companion-pill-surface .drift-feedback__subtitle {
+  line-height: 1.35;
   white-space: nowrap;
 }
 .companion-pill-surface .card__actions { display: flex; gap: 6px; margin-top: auto; }

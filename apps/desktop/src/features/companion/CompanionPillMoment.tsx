@@ -9,9 +9,21 @@ import {
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { CompanionReentryEvent } from "./companionReentry";
-import type { DriftAlarmAction } from "./driftAlarmEvent";
+import {
+  DRIFT_ALARM_CORRECTION_FEEDBACK_COPY,
+  DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS,
+  type DriftAlarmAction,
+  type DriftAlarmCorrectionStatus,
+} from "./driftAlarmEvent";
 import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
-import { PillDismissIcon, PillMilestoneKindIcon, PillOpenArrowIcon, PillReentryIcon, PillTrophyIcon } from "./CompanionPillIcons";
+import {
+  PillDismissIcon,
+  PillFeedbackCheckIcon,
+  PillMilestoneKindIcon,
+  PillOpenArrowIcon,
+  PillReentryIcon,
+  PillTrophyIcon,
+} from "./CompanionPillIcons";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
 
@@ -60,6 +72,7 @@ export type CompanionPillDriftEvent = {
   returnTargetId: string | null;
   breakLabel: string;
   correctionLabel: string;
+  correctionStatus?: DriftAlarmCorrectionStatus;
   /** When the alarm fired; drives staleness so a drift card cannot survive
       a sleep cycle and describe a session that ended hours ago. */
   generatedAt?: string;
@@ -88,6 +101,9 @@ export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
 
 /** Match dwell time to how much there is to read and whether there is a CTA. */
 export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEvent): number {
+  if ((event.kind === "driftAlarm" || event.kind === "extremeNudgeToast") && event.correctionStatus) {
+    return DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS;
+  }
   if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
   if (event.kind === "reentry") return 8_000;
   if (event.kind === "driftAlarm") {
@@ -225,9 +241,22 @@ export function CompanionPillMoment({
   /* Dragging holds the countdown too. AppKit takes the mouse for the whole
      gesture, so hover alone would stop reporting and the card could expire out
      from under the cursor while it was being moved. */
-  const isPaused = isLocallyHovered || isKeyboardFocusWithin || isPointerInside || isDragging;
+  const isCorrectionFeedback = (event.kind === "driftAlarm" || event.kind === "extremeNudgeToast")
+    && event.correctionStatus !== undefined;
+  /* The acknowledgement replaces the button under the pointer. If ordinary
+     hover pausing carried across that replacement, a short confirmation would
+     remain forever until the user happened to move the mouse. It has no
+     decision to protect, so only an active drag may pause this short state. */
+  const isPaused = isDragging
+    || (!isCorrectionFeedback && (isLocallyHovered || isKeyboardFocusWithin || isPointerInside));
   const remainingMsRef = useRef(budgetMs);
   const startedAtRef = useRef<number | null>(null);
+  const autoDismissResetKey = correctionAutoDismissResetKey(event);
+
+  useEffect(() => {
+    remainingMsRef.current = budgetMs;
+    startedAtRef.current = null;
+  }, [autoDismissResetKey, budgetMs]);
 
   /* Wall-clock expiry, independent of the pauseable budget: the budget freezes
      with the machine, so without this a card fired seconds before sleep would
@@ -263,7 +292,7 @@ export function CompanionPillMoment({
         startedAtRef.current = null;
       }
     };
-  }, [autoDismissEnabled, isActive, isPaused, onDismiss]);
+  }, [autoDismissEnabled, autoDismissResetKey, budgetMs, isActive, isPaused, onDismiss]);
 
   const holdHandlers = {
     onPointerEnter: () => setIsLocallyHovered(true),
@@ -352,6 +381,19 @@ export function CompanionPillMoment({
     );
   }
 
+  if (event.correctionStatus) {
+    return (
+      <DriftCorrectionFeedbackView
+        status={event.correctionStatus}
+        isActive={isActive}
+        autoDismissState={autoDismissState}
+        autoDismissStyle={autoDismissStyle}
+        onDismiss={onDismiss}
+        holdHandlers={holdHandlers}
+      />
+    );
+  }
+
   if (event.kind === "extremeNudgeToast") {
     return (
       <div
@@ -434,11 +476,69 @@ export function CompanionPillMoment({
   );
 }
 
+function DriftCorrectionFeedbackView({
+  status,
+  isActive,
+  autoDismissState,
+  autoDismissStyle,
+  onDismiss,
+  holdHandlers,
+}: {
+  status: DriftAlarmCorrectionStatus;
+  isActive: boolean;
+  autoDismissState: "running" | "paused" | undefined;
+  autoDismissStyle: CSSProperties;
+  onDismiss: (reason: CompanionPillDismissReason) => void;
+  holdHandlers: {
+    onPointerEnter: () => void;
+    onPointerLeave: () => void;
+    onMouseDownCapture: () => void;
+    onPointerDownCapture: () => void;
+    onFocusCapture: () => void;
+    onBlurCapture: (event: FocusEvent<HTMLElement>) => void;
+    onKeyDownCapture: (event: KeyboardEvent<HTMLElement>) => void;
+  };
+}) {
+  return (
+    <div
+      className={`view view--drift view--drift-feedback card card--float-close${isActive ? " is-active" : ""}`}
+      data-view="drift-feedback"
+      data-correction-state={status}
+      data-auto={autoDismissState}
+      aria-hidden={!isActive}
+      aria-live="polite"
+      role="status"
+      style={autoDismissStyle}
+      {...holdHandlers}
+    >
+      <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
+        <PillDismissIcon />
+      </button>
+      <div className="drift-feedback__body">
+        <span className="drift-feedback__mark" aria-hidden="true">
+          <PillFeedbackCheckIcon />
+        </span>
+        <div className="card__copy">
+          <div className="card__title">{DRIFT_ALARM_CORRECTION_FEEDBACK_COPY.title}</div>
+          <div className="card__sub drift-feedback__subtitle">{DRIFT_ALARM_CORRECTION_FEEDBACK_COPY.subtitle}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function monotonicNowMs(): number {
   if (typeof performance !== "undefined" && typeof performance.now === "function") {
     return performance.now();
   }
   return Date.now();
+}
+
+function correctionAutoDismissResetKey(event: CompanionPillMomentEvent): string {
+  if (event.kind === "driftAlarm" || event.kind === "extremeNudgeToast") {
+    return `${event.kind}:${event.id}:${event.correctionStatus ?? "idle"}`;
+  }
+  return `${event.kind}:${"id" in event ? event.id : event.generatedAt}`;
 }
 
 function MilestoneView({

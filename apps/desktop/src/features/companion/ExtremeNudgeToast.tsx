@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type FocusEvent, type KeyboardEvent } from "react";
 import { BreakDurationPicker } from "./BreakDurationPicker";
 import { FlagIcon } from "./DriftAlarmIcons";
-import type { DriftAlarmAction } from "./driftAlarmEvent";
+import {
+  DRIFT_ALARM_CORRECTION_FEEDBACK_COPY,
+  DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS,
+  type DriftAlarmAction,
+  type DriftAlarmCorrectionStatus,
+} from "./driftAlarmEvent";
 import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import { useDelayedDriftAlarmAction } from "./useDelayedDriftAlarmAction";
 import { isNativeWatcherCursorInside } from "./watcherBridge";
+import { PillFeedbackCheckIcon } from "./CompanionPillIcons";
 
 export type ExtremeNudgeToastEvent = {
   kind: "extremeNudgeToast";
@@ -15,6 +21,7 @@ export type ExtremeNudgeToastEvent = {
   closedLabel: string;
   focusLabel: string | null;
   breakOptions?: readonly number[];
+  correctionStatus?: DriftAlarmCorrectionStatus;
 };
 
 type ToastPhase = "visible" | "leaving";
@@ -44,7 +51,12 @@ export function ExtremeNudgeToast({
   const visibleTimerRef = useRef<number | null>(null);
   const visibleTimerStartedAtMsRef = useRef<number | null>(null);
   const breakOptions = event.breakOptions ?? [];
-  const isTimerPaused = isFocusHoldingTimer || isHoverHoldingTimer;
+  const visibleDurationMs = correctionVisibleDurationMs(event.correctionStatus);
+  const feedbackCopy = correctionFeedbackCopy(event.correctionStatus);
+  /* The result state has no decision left to protect. Keep its promised short
+     dwell even if the pointer remains where the Not a drift button was. */
+  const isTimerPaused = event.correctionStatus === undefined
+    && (isFocusHoldingTimer || isHoverHoldingTimer);
   const handleAction = useCallback((action: DriftAlarmAction) => {
     onAction?.(action);
   }, [onAction]);
@@ -76,7 +88,7 @@ export function ExtremeNudgeToast({
 
   useEffect(() => {
     clearToastTimers();
-    remainingVisibleMsRef.current = EXTREME_NUDGE_TOAST_VISIBLE_MS;
+    remainingVisibleMsRef.current = visibleDurationMs;
     setPhase("visible");
     setSelectedBreakMinutes(null);
     setIsFocusHoldingTimer(false);
@@ -84,7 +96,7 @@ export function ExtremeNudgeToast({
     isPointerOriginFocusRef.current = false;
     clearPendingDriftAlarmAction();
     return clearToastTimers;
-  }, [clearPendingDriftAlarmAction, clearToastTimers, event.id]);
+  }, [clearPendingDriftAlarmAction, clearToastTimers, event.id, event.correctionStatus, visibleDurationMs]);
 
   useEffect(() => {
     if (isPreview || phase !== "visible" || isTimerPaused) {
@@ -102,7 +114,7 @@ export function ExtremeNudgeToast({
     }, remainingVisibleMsRef.current);
 
     return pauseVisibleTimer;
-  }, [isPreview, isTimerPaused, onDismiss, pauseVisibleTimer, phase]);
+  }, [isPreview, isTimerPaused, onDismiss, pauseVisibleTimer, phase, visibleDurationMs]);
 
   const selectBreakMinutes = (minutes: number) => {
     setSelectedBreakMinutes(minutes);
@@ -170,8 +182,9 @@ export function ExtremeNudgeToast({
       ref={toastRef}
       className="extreme-nudge-toast"
       data-phase={phase}
+      data-correction-state={event.correctionStatus}
       data-timer-paused={isTimerPaused ? "true" : undefined}
-      style={{ "--extreme-toast-visible-duration": `${EXTREME_NUDGE_TOAST_VISIBLE_MS}ms` } as CSSProperties}
+      style={{ "--extreme-toast-visible-duration": `${visibleDurationMs}ms` } as CSSProperties}
       role={isPreview ? "group" : "status"}
       aria-live={isPreview ? undefined : "polite"}
       aria-atomic={isPreview ? undefined : "true"}
@@ -186,14 +199,15 @@ export function ExtremeNudgeToast({
       onPointerLeave={resumeHoverTimer}
     >
       <div className="extreme-nudge-toast__mark" aria-hidden="true">
-        <ExtremeNudgeScissorsIcon />
+        {event.correctionStatus === "acknowledged" ? <PillFeedbackCheckIcon /> : null}
+        {!event.correctionStatus ? <ExtremeNudgeScissorsIcon /> : null}
       </div>
       <div className="extreme-nudge-toast__copy">
-        <p className="extreme-nudge-toast__eyebrow">Automatic close</p>
-        <h2>{event.title}</h2>
-        <p>{event.focusLabel ? `Focus switched to ${event.focusLabel}` : "Focus target was not available"}</p>
+        {!feedbackCopy ? <p className="extreme-nudge-toast__eyebrow">Automatic close</p> : null}
+        <h2>{feedbackCopy?.title ?? event.title}</h2>
+        <p>{feedbackCopy?.subtitle ?? (event.focusLabel ? `Focus switched to ${event.focusLabel}` : "Focus target was not available")}</p>
       </div>
-      {onAction ? (
+      {!event.correctionStatus && onAction ? (
         <div className="extreme-nudge-toast__actions">
           {breakOptions.length > 0 ? (
             <BreakDurationPicker
@@ -212,6 +226,16 @@ export function ExtremeNudgeToast({
       ) : null}
     </aside>
   );
+}
+
+function correctionVisibleDurationMs(status: DriftAlarmCorrectionStatus | undefined): number {
+  if (status === "acknowledged") return DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS;
+  return EXTREME_NUDGE_TOAST_VISIBLE_MS;
+}
+
+function correctionFeedbackCopy(status: DriftAlarmCorrectionStatus | undefined) {
+  if (status === "acknowledged") return DRIFT_ALARM_CORRECTION_FEEDBACK_COPY;
+  return null;
 }
 
 function ExtremeNudgeScissorsIcon() {

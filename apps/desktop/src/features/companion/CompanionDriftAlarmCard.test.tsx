@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildDriftAlarmEvent } from "./driftAlarmEvent";
 import { CompanionDriftAlarmCard, toCompanionDriftAlarmMoment } from "./CompanionDriftAlarmCard";
+
+afterEach(cleanup);
 
 function alarm() {
   return buildDriftAlarmEvent({
@@ -55,6 +57,27 @@ describe("CompanionDriftAlarmCard", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(onDismiss).toHaveBeenCalledWith("explicit");
+  });
+
+  it("replaces the decision row with one learning acknowledgement", () => {
+    const onAction = vi.fn();
+    const onDismiss = vi.fn();
+    const baseAlarm = alarm();
+    render(
+      <CompanionDriftAlarmCard
+        event={{ ...baseAlarm, correctionStatus: "acknowledged" }}
+        onAction={onAction}
+        onDismiss={onDismiss}
+        onOpenDashboard={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("Learning signal added");
+    expect(screen.getByRole("status").textContent).toContain("Similar decisions will now weigh this as not drift.");
+    expect(document.querySelector(".drift-feedback__signal")).toBeNull();
+    expect(document.querySelector(".drift-feedback__subtitle")?.textContent).toBe("Similar decisions will now weigh this as not drift.");
+    expect(screen.queryByRole("button", { name: "Not a drift" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeTruthy();
   });
 
   it("keeps the copy-editor preview readable but removes its fake actions from keyboard input", () => {

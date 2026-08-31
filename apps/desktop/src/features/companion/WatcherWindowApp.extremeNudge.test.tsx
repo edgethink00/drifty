@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WatcherWindowApp } from "./WatcherWindowApp";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import { DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS } from "./driftAlarmEvent";
 import { EXTREME_NUDGE_TOAST_VISIBLE_MS } from "./extremeNudgeTiming";
 import type { WatcherWindowEvent } from "./watcherBridge";
 
@@ -259,6 +260,33 @@ describe("WatcherWindowApp extreme nudge toast", () => {
     fireEvent.click(screen.getByRole("button", { name: "Not a drift" }));
 
     expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "manual_correction" });
+    expect(screen.getByRole("status").textContent).toContain("Learning signal added");
+    expect(screen.getByRole("status").textContent).toContain("Similar decisions will now weigh this as not drift.");
+    expect(screen.queryByRole("button", { name: "Not a drift" })).toBeNull();
+  });
+
+  it("updates the same extreme nudge toast with one learning acknowledgement and then closes it", async () => {
+    await renderExtremeNudgeToast();
+
+    act(() => {
+      bridge.showHandler?.({ ...extremeNudgeToastEvent, correctionStatus: "acknowledged" });
+    });
+
+    const toast = screen.getByRole("status");
+    expect(toast.textContent).toContain("Learning signal added");
+    expect(toast.textContent).toContain("Similar decisions will now weigh this as not drift.");
+    expect(toast.querySelector(".extreme-nudge-toast__eyebrow")).toBeNull();
+    expect(toast.style.getPropertyValue("--extreme-toast-visible-duration")).toBe(
+      `${DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS}ms`,
+    );
+    fireEvent.pointerEnter(toast);
+    expect(toast.hasAttribute("data-timer-paused")).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS + 280);
+    });
+    expect(bridge.hideNativeWatcherPeek).toHaveBeenCalledOnce();
     expect(screen.queryByRole("status")).toBeNull();
   });
+
 });

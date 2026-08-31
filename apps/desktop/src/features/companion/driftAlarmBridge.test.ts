@@ -59,6 +59,8 @@ describe("driftAlarmBridge validation", () => {
 
     expect(isDriftAlarmEvent(driftEvent)).toBe(true);
     expect(isDriftAlarmEvent(breakReturnEvent)).toBe(true);
+    expect(isDriftAlarmEvent({ ...driftEvent, correctionStatus: "acknowledged" })).toBe(true);
+    expect(isDriftAlarmEvent({ ...driftEvent, correctionStatus: "failed" })).toBe(false);
   });
 
   it("rejects mismatched break-return payload details", () => {

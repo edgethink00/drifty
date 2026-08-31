@@ -16,6 +16,7 @@ export function toCompanionDriftAlarmMoment(alarm: DriftAlarmEvent): CompanionPi
     returnTargetId: target?.targetId ?? null,
     breakLabel: alarm.copy?.breakChoiceLabel ?? "Take a break",
     correctionLabel: alarm.copy?.manualCorrectionLabel ?? "Not a drift",
+    correctionStatus: alarm.correctionStatus,
     generatedAt: alarm.generatedAt,
   };
 }
@@ -42,8 +43,11 @@ export function CompanionDriftAlarmCard({
       data-state="drift"
       data-mode={moment.mode}
       data-preview={isPreview ? "true" : undefined}
-      role={isPreview ? "group" : "alertdialog"}
-      aria-label={isPreview ? `${moment.title} ${moment.summary}` : moment.title}
+      role={isPreview ? "group" : moment.correctionStatus ? undefined : "alertdialog"}
+      aria-live={!isPreview && moment.correctionStatus ? "polite" : undefined}
+      aria-label={isPreview
+        ? `${moment.title} ${moment.summary}`
+        : moment.correctionStatus ? undefined : moment.title}
     >
       <div
         className="pill"

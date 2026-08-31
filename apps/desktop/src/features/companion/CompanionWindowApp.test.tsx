@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionWindowApp } from "./CompanionWindowApp";
 import type { EndOfDayReviewEvent } from "./EndOfDayReview";
 import { buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
+import { DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS } from "./driftAlarmEvent";
 import type { WatcherPeekEvent } from "./WatcherPeek";
 import type { CompanionPillWindowEvent, NativeCompanionPointerEvent } from "./watcherBridge";
 
@@ -141,6 +143,7 @@ describe("CompanionWindowApp", () => {
     bridge.showHandler = null;
     bridge.snapshotHandler = null;
     window.localStorage.clear();
+    window.history.replaceState({}, "", "/");
     bridge.setNativeCompanionPillState.mockResolvedValue({ prepared: false, menuAnchorX: null });
     delete document.documentElement.dataset.surface;
     delete document.documentElement.dataset.theme;
@@ -423,6 +426,64 @@ describe("CompanionWindowApp", () => {
     fireEvent.click(container.querySelector(".view--nudge .card__close")!);
     act(() => vi.advanceTimersByTime(1_000));
     expect(container.textContent).not.toContain("1 hour of focus today");
+  });
+
+  it("replaces Not a drift with one learning acknowledgement", async () => {
+    vi.useFakeTimers();
+    const { container, getByRole } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    const nudge = buildCompanionExtremeNudgePreview();
+
+    await act(async () => {
+      bridge.showHandler?.(nudge);
+      await Promise.resolve();
+    });
+    await act(async () => {
+      bridge.transitionHandler?.({ state: "nudge", phase: "started", anchor: "center" });
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180);
+    });
+
+    await act(async () => {
+      fireEvent.click(getByRole("button", { name: "Not a drift" }));
+      await Promise.resolve();
+    });
+    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "manual_correction" });
+    expect(container.textContent).toContain("Learning signal added");
+    expect(container.textContent).toContain("Similar decisions will now weigh this as not drift.");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS + 160);
+    });
+    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("notDriftFeedback");
+  });
+
+  it("keeps the development drift preview interactive through acknowledgement dismissal", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState({}, "", "/?driftyCompanionPreview=drift-alarm");
+    const { container, getByRole } = render(
+      <StrictMode>
+        <CompanionWindowApp />
+      </StrictMode>,
+    );
+    await act(async () => undefined);
+
+    await act(async () => {
+      bridge.transitionHandler?.({ state: "drift", phase: "completed", anchor: "center" });
+      await Promise.resolve();
+    });
+    fireEvent.pointerEnter(container.querySelector(".view--drift")!);
+    fireEvent.click(getByRole("button", { name: "Not a drift" }));
+    await act(async () => Promise.resolve());
+
+    expect(container.textContent).toContain("Learning signal added");
+    expect(container.textContent).toContain("Similar decisions will now weigh this as not drift.");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS + 160);
+    });
+    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("notDriftFeedback");
   });
 
   it("lets an extreme nudge preempt and permanently discard an active day review", async () => {

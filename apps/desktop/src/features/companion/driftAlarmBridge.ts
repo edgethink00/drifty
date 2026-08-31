@@ -104,6 +104,8 @@ export function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {
     && (candidate.decisionClassification === undefined
       || candidate.decisionClassification === null
       || isDecisionClassification(candidate.decisionClassification))
+    && (candidate.correctionStatus === undefined
+      || candidate.correctionStatus === "acknowledged")
     && isDriftAlarmModePayload(candidate)
   );
 }

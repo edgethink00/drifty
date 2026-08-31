@@ -131,6 +131,13 @@ export function WatcherWindowApp() {
   }, [event]);
 
   const handleExtremeNudgeAction = useCallback((action: Parameters<typeof triggerNativeExtremeNudgeAction>[0]) => {
+    if (action.type === "manual_correction") {
+      setEvent((current) => isExtremeNudgeToast(current)
+        ? { ...current, correctionStatus: "acknowledged" }
+        : current);
+      ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action));
+      return;
+    }
     setEvent(null);
     ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action));
   }, []);

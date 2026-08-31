@@ -125,6 +125,20 @@ html[data-theme="dark"] .extreme-nudge-toast {
   width: 1.08rem;
 }
 
+.extreme-nudge-toast[data-correction-state="acknowledged"] {
+  --extreme-toast-tone: var(--accent);
+}
+
+.extreme-nudge-toast[data-correction-state="acknowledged"] .extreme-nudge-toast__mark {
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  color: var(--accent-strong);
+}
+
+.extreme-nudge-toast__mark > svg {
+  height: 1rem;
+  width: 1rem;
+}
+
 .extreme-nudge-toast__copy {
   min-width: 0;
 }
