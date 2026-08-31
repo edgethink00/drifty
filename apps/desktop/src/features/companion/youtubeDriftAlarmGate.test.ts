@@ -66,7 +66,7 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
       category: "entertainment",
     });
 
-    expect(result).toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
+    expect(result).toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift", aiConfirmed: true });
     expect(classifyLiveActivityWithAi).toHaveBeenCalledTimes(1);
     expect(classifyLiveActivityWithAi).toHaveBeenCalledWith(expect.objectContaining({
       id: "youtube-video-1",
@@ -112,7 +112,7 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
       category: "entertainment",
     });
 
-    expect(result).toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
+    expect(result).toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift", aiConfirmed: true });
   });
 
   it("fails closed when live AI classification is unavailable", async () => {
@@ -176,7 +176,7 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
         kind: "classified",
         classification: createAiClassification({ productivity: "drift" }),
       });
-      await expect(timedOut.settled).resolves.toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
+      await expect(timedOut.settled).resolves.toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift", aiConfirmed: true });
     } finally {
       vi.useRealTimers();
     }
@@ -199,7 +199,7 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
         category: "entertainment",
       });
       await vi.advanceTimersByTimeAsync(12_000);
-      await expect(result).resolves.toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift" });
+      await expect(result).resolves.toEqual({ kind: "allow_drift", reason: "ai-confirmed-drift", aiConfirmed: true });
     } finally {
       vi.useRealTimers();
     }

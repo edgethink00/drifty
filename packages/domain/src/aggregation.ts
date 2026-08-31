@@ -21,6 +21,7 @@ import {
   type ProductivityScoreDimensionKey,
 } from "./productivityRubric";
 import { classifyYouTubeActivity, classifyYouTubeWindowTitle } from "./youtubeClassification";
+import { classifySocialActivity } from "./socialClassification";
 
 const UI_LOCALE = "en-US";
 const MINUTES_PER_DAY = 24 * 60;
@@ -1956,10 +1957,12 @@ const DOMAIN_CLASSIFICATIONS: ClassificationRegistryEntry[] = [
   { id: "netflix", mode: "single-purpose", category: "entertainment", productivity: "drift", confidence: 0.95, domains: ["netflix.com"] },
   { id: "twitch", mode: "single-purpose", category: "entertainment", productivity: "drift", confidence: 0.9, domains: ["twitch.tv"] },
   { id: "disney-hulu", mode: "single-purpose", category: "entertainment", productivity: "drift", confidence: 0.9, domains: ["disneyplus.com", "hulu.com", "primevideo.com"] },
-  { id: "instagram", mode: "single-purpose", category: "social_media", productivity: "drift", confidence: 0.9, domains: ["instagram.com"] },
-  { id: "facebook", mode: "single-purpose", category: "social_media", productivity: "drift", confidence: 0.9, domains: ["facebook.com"] },
-  { id: "tiktok", mode: "single-purpose", category: "social_media", productivity: "drift", confidence: 0.9, domains: ["tiktok.com"] },
-  { id: "twitter-x", mode: "single-purpose", category: "social_media", productivity: "drift", confidence: 0.9, domains: ["x.com", "twitter.com"] },
+  /* Social hosts are multipurpose: `classifySocialActivity` splits feed from
+     DMs and profiles by URL path, so the host alone never decides drift. */
+  { id: "instagram", mode: "multipurpose", confidence: 0.55, domains: ["instagram.com"] },
+  { id: "facebook", mode: "multipurpose", confidence: 0.55, domains: ["facebook.com"] },
+  { id: "tiktok", mode: "multipurpose", confidence: 0.55, domains: ["tiktok.com"] },
+  { id: "twitter-x", mode: "multipurpose", confidence: 0.55, domains: ["x.com", "twitter.com"] },
   { id: "amazon", mode: "single-purpose", category: "shopping", productivity: "drift", confidence: 0.9, domains: ["amazon.com", "amazon.co.kr"] },
   { id: "coupang", mode: "single-purpose", category: "shopping", productivity: "drift", confidence: 0.9, domains: ["coupang.com"] },
   { id: "ebay", mode: "single-purpose", category: "shopping", productivity: "drift", confidence: 0.9, domains: ["ebay.com"] },
@@ -1998,6 +2001,14 @@ function classifyBrowserActivity(segment: ActivitySegment): ActivityClassificati
   const youtubeClassification = classifyYouTubeActivity(segment);
   if (youtubeClassification) {
     return detail(youtubeClassification, "browser", "youtube", 0.95, "Matched YouTube-specific metadata and URL rules");
+  }
+
+  const socialClassification = classifySocialActivity(segment);
+  if (socialClassification && socialClassification.category !== "unknown") {
+    return detail(socialClassification, "browser", "domain-db", 0.9, "Matched social consumption surface by URL path");
+  }
+  if (socialClassification) {
+    return unknownDetail("browser", "Social surface needs AI classification");
   }
 
   const domainEntry = findDomainClassification(segment.siteDomain);

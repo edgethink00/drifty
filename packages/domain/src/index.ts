@@ -9,4 +9,5 @@ export * from "./projectPassWindow";
 export * from "./projectRun";
 export * from "./projectPassPrompt";
 export * from "./projectWindowAssignments";
+export * from "./socialClassification";
 export * from "./youtubeClassification";

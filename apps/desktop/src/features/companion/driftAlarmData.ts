@@ -1,6 +1,6 @@
 import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import { isTauriRuntime } from "./watcherBridge";
-import { classifyActivity, classifyActivityDetailed } from "@drifty/domain";
+import { classifyActivity, classifyActivityDetailed, isUnresolvedSocialSurface } from "@drifty/domain";
 import type { ActivityCategory, ActivityClassificationDetail, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { getLatestWatcherSegment } from "./watcherData";
@@ -403,6 +403,34 @@ export function buildRecentFocusTargets(segments: ActivitySegment[], historySegm
 export function canApplyExtremeNudgeToCategory(category: ActivityCategory): boolean {
   return category !== "communication";
 }
+
+/**
+ * Closing a tab or quitting an app cannot be undone, so it needs stronger
+ * evidence than showing a card does. A social surface only reaches this point
+ * when its URL path could not settle the question on its own, so the live AI
+ * verdict is the only thing standing between a work DM and a destroyed tab:
+ * without it, the alarm still shows, but nothing gets closed.
+ */
+export function canApplyExtremeNudgeToSurface(input: {
+  readonly segment: ActivitySegment;
+  readonly category: ActivityCategory;
+  readonly aiConfirmedDrift: boolean;
+  readonly classificationSource?: ActivityClassificationDetail["source"] | null;
+}): boolean {
+  if (!canApplyExtremeNudgeToCategory(input.category)) return false;
+  if (!isUnresolvedSocialSurface(input.segment)) return true;
+  // A user rule, a manual correction, or a stored AI verdict already answered
+  // this exact question. Demanding a fresh confirmation would override the
+  // user's own instruction and quietly stop closing what they asked to close.
+  if (input.classificationSource && RESOLVED_DRIFT_SOURCES.has(input.classificationSource)) return true;
+  return input.aiConfirmedDrift;
+}
+
+const RESOLVED_DRIFT_SOURCES: ReadonlySet<ActivityClassificationDetail["source"]> = new Set([
+  "manual",
+  "rule",
+  "llm",
+]);
 
 export function formatFocusTargetDetail({
   appName,

@@ -248,7 +248,7 @@ import { DeleteHistoryModal } from "./features/settings/DeleteHistoryModal";
 import { PrivacySettingsSection } from "./features/settings/PrivacySettingsSection";
 import { getAuthMetadataAvatarUrl } from "./features/auth/accountDisplay";
 import { buildClassificationActivityRows, buildClassificationCategoryBreakdowns, buildClassificationSourceSummaries, classifySegmentSourceKey, classifySourceKey } from "./features/classification/classificationViewData";
-import { buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToCategory, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
+import { buildDriftAlarmCandidates, buildExtremeNudgeTarget, buildExtremeNudgeToastEvent, activateFocusTargetSite, buildRecentFocusTargets, canApplyExtremeNudgeToSurface, hasDriftAlarmFocusTargetUpdate } from "./features/companion/driftAlarmData";
 import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
@@ -4995,7 +4995,7 @@ export default function App() {
       return result;
     }
 
-    const deliverCurrentDriftAlarm = () => {
+    const deliverCurrentDriftAlarm = (aiConfirmedDrift = false) => {
       recordDriftAlarmDebugEvent({
         kind: "delivery_started",
         alertKey,
@@ -5055,7 +5055,12 @@ export default function App() {
         if (outcome) completeBreakRecoveryAssessment(activeAssessment, outcome);
       }
 
-      const shouldApplyExtremeNudge = extremeNudgeEnabled && canApplyExtremeNudgeToCategory(category);
+      const shouldApplyExtremeNudge = extremeNudgeEnabled && canApplyExtremeNudgeToSurface({
+        segment,
+        category,
+        aiConfirmedDrift,
+        classificationSource: confirmedDecisionClassification?.source ?? null,
+      });
       if (lastDriftAlertSegmentRef.current === null) {
         if (shouldApplyExtremeNudge) {
           applyCurrentExtremeNudge(false);
@@ -5216,7 +5221,7 @@ export default function App() {
           return;
         }
 
-        deliverCurrentDriftAlarm();
+        deliverCurrentDriftAlarm(settledResult.kind === "allow_drift" && settledResult.aiConfirmed);
       };
 
       if (gateResult.kind === "pending") {

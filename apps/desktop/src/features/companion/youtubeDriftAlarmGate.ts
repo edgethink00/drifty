@@ -2,6 +2,8 @@ import {
   classifyActivityDetailed,
   isYouTubeBrowsePage,
   isYouTubeVideoSegment,
+  isUnresolvedSocialSurface,
+  resolveSocialSurface,
 } from "@drifty/domain";
 import type {
   ActivityCategory,
@@ -20,7 +22,7 @@ export const YOUTUBE_DRIFT_ALARM_GATE_DEADLINE_MS = 60_000;
 const AI_DRIFT_ALARM_MINIMUM_CONFIDENCE = 0.85;
 
 export type YouTubeDriftAlarmGateSettledResult =
-  | { kind: "allow_drift"; reason: string }
+  | { kind: "allow_drift"; reason: string; aiConfirmed: boolean }
   | { kind: "suppress"; reason: string }
   | { kind: "skipped"; reason: string };
 
@@ -37,13 +39,8 @@ export type YouTubeDriftAlarmGateInput = {
 };
 
 export async function evaluateYouTubeDriftAlarmGate(input: YouTubeDriftAlarmGateInput): Promise<YouTubeDriftAlarmGateResult> {
-  const skipReason = youtubeGateSkipReason(input.segment);
-  if (skipReason) return { kind: "skipped", reason: skipReason };
-
-  const deterministicClassification = classifyActivityDetailed(input.segment, { includeAiClassifications: false });
-  if (deterministicClassification.source !== "youtube" || deterministicClassification.productivity !== "drift") {
-    return { kind: "skipped", reason: "not-deterministic-youtube-drift" };
-  }
+  const subject = resolveDriftAlarmGateSubject(input.segment);
+  if (subject.kind === "skip") return { kind: "skipped", reason: subject.reason };
 
   const timeoutMs = input.timeoutMs ?? DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS;
   const deadlineMs = Math.max(timeoutMs, input.deadlineMs ?? YOUTUBE_DRIFT_ALARM_GATE_DEADLINE_MS);
@@ -83,6 +80,37 @@ function youtubeGateSkipReason(segment: ActivitySegment): string | null {
   return null;
 }
 
+/**
+ * Which candidates must clear the AI gate before an intervention fires.
+ *
+ * YouTube videos were the original case. Social surfaces join them because a
+ * host verdict alone cannot separate a doomscroll from a work DM or a profile
+ * someone was asked to read — and the intervention on the other side of this
+ * gate can close the tab. Social consumption surfaces (reels, explore, a
+ * settled home feed) carry their own evidence and skip the gate, the same way
+ * a resolved YouTube video does.
+ */
+type DriftAlarmGateSubject =
+  | { readonly kind: "check" }
+  | { readonly kind: "skip"; readonly reason: string };
+
+function resolveDriftAlarmGateSubject(segment: ActivitySegment): DriftAlarmGateSubject {
+  if (resolveSocialSurface(segment)) {
+    return isUnresolvedSocialSurface(segment)
+      ? { kind: "check" }
+      : { kind: "skip", reason: "social-consumption-surface" };
+  }
+
+  const skipReason = youtubeGateSkipReason(segment);
+  if (skipReason) return { kind: "skip", reason: skipReason };
+
+  const deterministicClassification = classifyActivityDetailed(segment, { includeAiClassifications: false });
+  if (deterministicClassification.source !== "youtube" || deterministicClassification.productivity !== "drift") {
+    return { kind: "skip", reason: "not-deterministic-youtube-drift" };
+  }
+  return { kind: "check" };
+}
+
 function isYouTubeShortsSegment(segment: ActivitySegment): boolean {
   if (segment.youtubeIsShorts) return true;
   const siteUrl = segment.siteUrl?.trim();
@@ -111,7 +139,7 @@ function gateResultForAiClassification(productivity: ProductivityLabel, confiden
   switch (productivity) {
     case "drift":
       if (confidence < AI_DRIFT_ALARM_MINIMUM_CONFIDENCE) return { kind: "suppress", reason: "ai-low-confidence" };
-      return { kind: "allow_drift", reason: "ai-confirmed-drift" };
+      return { kind: "allow_drift", reason: "ai-confirmed-drift", aiConfirmed: true };
     case "focus":
     case "neutral":
       return { kind: "suppress", reason: `ai-classified-${productivity}` };
