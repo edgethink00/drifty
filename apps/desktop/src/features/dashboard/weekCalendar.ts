@@ -46,6 +46,9 @@ export type WeekCalendarEventIdentity = WeekCalendarIdentity & {
 
 export type WeekCalendarEvent = {
   id: string;
+  /** Full captured records contributing to this rendered aggregate. Mutations
+   *  intentionally operate on these records, never on the visual time slice. */
+  segmentIds: string[];
   appName: string;
   category: ActivityCategory;
   productivity: ProductivityLabel;
@@ -57,6 +60,8 @@ export type WeekCalendarEvent = {
   identities: WeekCalendarEventIdentity[];
   hiddenIdentityCount: number;
   isGroupedCluster: boolean;
+  hasMixedCategory: boolean;
+  hasMixedProductivity: boolean;
   classificationSource: ClassificationSource;
   aiClassification: boolean;
   topMinutes: number;
@@ -462,6 +467,7 @@ export function buildWeekCalendarEvents(
 
       eventsByDay.get(day)!.push({
         id: `${day}-${dominantCategory}-${dominantProductivity}-${startMinute}-${endMinute}`,
+        segmentIds: Array.from(segmentIds),
         appName: displayAppName,
         category: dominantCategory,
         productivity: dominantProductivity,
@@ -473,6 +479,8 @@ export function buildWeekCalendarEvents(
         identities: visibleIdentities,
         hiddenIdentityCount: Math.max(0, orderedIdentities.length - visibleIdentities.length),
         isGroupedCluster: group.length > 1 || orderedIdentities.length > 1,
+        hasMixedCategory: categoryTotals.size > 1,
+        hasMixedProductivity: productivityTotals.size > 1,
         classificationSource: dominantSource,
         aiClassification: aiSeconds > totalSeconds / 2,
         topMinutes: startMinute - minMinute,

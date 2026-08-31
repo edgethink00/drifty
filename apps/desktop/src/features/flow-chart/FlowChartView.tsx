@@ -1,12 +1,25 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { logicalMinuteOfDay, normalizeStartOfDayMinutes, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+import {
+  isRemoteDeviceSegment,
+  logicalMinuteOfDay,
+  normalizeStartOfDayMinutes,
+  type ActivityCategory,
+  type ActivitySegment,
+  type ClassificationOptions,
+  type FlowBlock,
+  type FlowIntervalMinutes,
+  type ProductivityLabel,
+} from "@drifty/domain";
+import { WeekActivityInspector, type ActivityInspectorEvent } from "../dashboard/WeekActivityInspector";
+import { formatCalendarMinuteLabel } from "../../lib/formatting";
 import { FlowChartGrid } from "./FlowChartGrid";
 import { FlowChartHeader } from "./FlowChartHeader";
+import { blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { FlowHoverLayer } from "./FlowHoverLayer";
-import { buildFlowBlockHoverGroups } from "./flowHoverGroups";
+import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
@@ -26,6 +39,11 @@ export function FlowChartView({
   colorMode: controlledColorMode,
   onColorModeChange,
   deviceLabelById,
+  segments = [],
+  activityActionsEnabled = false,
+  onClassifyActivity,
+  onDeleteActivity,
+  classificationOptions,
 }: {
   blocks: FlowBlock[];
   appIcons: Record<string, string | null>;
@@ -39,6 +57,15 @@ export function FlowChartView({
   colorMode?: FlowColorMode;
   onColorModeChange?: (mode: FlowColorMode) => void;
   deviceLabelById?: ReadonlyMap<string, string>;
+  segments?: readonly ActivitySegment[];
+  activityActionsEnabled?: boolean;
+  onClassifyActivity?: (
+    nextSegments: readonly ActivitySegment[],
+    category: ActivityCategory,
+    productivity: ProductivityLabel,
+  ) => Promise<void>;
+  onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
+  classificationOptions?: ClassificationOptions;
 }) {
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   // projectId → legend entry, so the hover card can name a block's project.
@@ -54,6 +81,13 @@ export function FlowChartView({
   const setColorMode = onColorModeChange ?? setInternalColorMode;
   const effectiveColorMode: FlowColorMode = colorMode === "project" && !projectModeAvailable ? "category" : colorMode;
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
+  const [activityInspector, setActivityInspector] = useState<{
+    readonly event: ActivityInspectorEvent;
+    readonly group: FlowBlockHoverGroup;
+    readonly pointer: { readonly x: number; readonly y: number };
+    readonly fallbackRect: Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">;
+    readonly restoreFocusTarget: HTMLElement | null;
+  } | null>(null);
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const currentLogicalMinute = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined ? logicalMinuteOfDay(currentMinuteOfDay, boundaryMinutes) : null;
@@ -70,6 +104,69 @@ export function FlowChartView({
     () => buildFlowBlockHoverGroups(blocks, intervalMinutes, boundaryMinutes),
     [blocks, boundaryMinutes, intervalMinutes],
   );
+  const segmentsById = useMemo(
+    () => new Map(segments.map((segment) => [segment.id, segment])),
+    [segments],
+  );
+  const inspectedSegments = useMemo(() => (
+    activityInspector?.event.segmentIds.flatMap((segmentId) => {
+      const segment = segmentsById.get(segmentId);
+      return segment ? [segment] : [];
+    }) ?? []
+  ), [activityInspector, segmentsById]);
+  const closeActivityInspector = useCallback(() => {
+    setActivityInspector((current) => {
+      const restoreFocusTarget = current?.restoreFocusTarget ?? null;
+      window.setTimeout(() => {
+        if (restoreFocusTarget?.isConnected) restoreFocusTarget.focus();
+      }, 0);
+      return null;
+    });
+  }, []);
+  const openActivityInspector = useCallback((group: FlowBlockHoverGroup, target: HTMLElement, pointer: { readonly x: number; readonly y: number }) => {
+    const block = group.block;
+    const displayName = blockDisplayName(block);
+    const [startLabel, endLabel] = formatGroupTimeRange(group).split("–");
+    const identityId = block.siteDomain ?? block.bundleId ?? block.appName;
+    const rect = target.getBoundingClientRect();
+    setActivityInspector({
+      group,
+      event: {
+        id: `${block.day}-${group.startMinuteOfDay}-${group.endMinuteOfDay}-${identityId}`,
+        segmentIds: group.segmentIds,
+        appName: displayName,
+        category: block.category,
+        productivity: block.productivity,
+        startLabel: startLabel || formatCalendarMinuteLabel(block.day, group.startMinuteOfDay, boundaryMinutes),
+        endLabel: endLabel || formatCalendarMinuteLabel(block.day, group.endMinuteOfDay, boundaryMinutes),
+        identities: [{
+          id: identityId,
+          label: displayName,
+          appName: block.appName,
+          bundleId: block.bundleId ?? null,
+          siteDomain: block.siteDomain ?? null,
+        }],
+        hasMixedCategory: false,
+        hasMixedProductivity: false,
+      },
+      pointer,
+      fallbackRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      restoreFocusTarget: target,
+    });
+  }, [boundaryMinutes]);
+  const activityActionsDisabledReason = useMemo(() => {
+    if (!activityInspector) return null;
+    if (inspectedSegments.length !== activityInspector.event.segmentIds.length) {
+      return "Some source records are no longer available. Refresh the day before editing.";
+    }
+    if (inspectedSegments.some(isRemoteDeviceSegment)) {
+      return "Synced activity can be viewed here, but must be edited on the Mac that recorded it.";
+    }
+    if (!activityActionsEnabled) {
+      return "Activity editing is unavailable in preview or replay mode.";
+    }
+    return null;
+  }, [activityActionsEnabled, activityInspector, inspectedSegments]);
   // The minute axis sits a hair under the shared 11px floor. It is the densest
   // repeated label in the app (up to 20 marks per hour), so at the full floor it
   // read heavier than everything around it; 3% back keeps it legible without
@@ -107,6 +204,7 @@ export function FlowChartView({
         hoverGroupsByCell={hoverGroupsByCell}
         intervalMinutes={intervalMinutes}
         setFlowGridElement={setFlowGridElement}
+        onOpenActivity={openActivityInspector}
       />
 
       <FlowHoverLayer
@@ -117,8 +215,25 @@ export function FlowChartView({
         appIcons={appIcons}
         deviceLabelById={deviceLabelById}
         projectsById={projectsById}
+        disabled={activityInspector !== null}
       />
-      {hoveredLegend ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
+      {hoveredLegend && !activityInspector ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
+      {activityInspector ? (
+        <WeekActivityInspector
+          key={activityInspector.event.id}
+          event={activityInspector.event}
+          segments={inspectedSegments}
+          appIcons={appIcons}
+          deviceLabelById={deviceLabelById}
+          pointer={activityInspector.pointer}
+          fallbackRect={activityInspector.fallbackRect}
+          actionsDisabledReason={activityActionsDisabledReason}
+          onClose={closeActivityInspector}
+          onClassify={onClassifyActivity}
+          onDelete={onDeleteActivity}
+          classificationOptions={classificationOptions}
+        />
+      ) : null}
     </section>
   );
 }

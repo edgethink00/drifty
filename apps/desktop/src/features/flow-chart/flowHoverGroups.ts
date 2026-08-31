@@ -5,6 +5,7 @@ const MINUTES_PER_DAY = 24 * 60;
 export type FlowBlockHoverGroup = {
   readonly block: FlowBlock;
   readonly blocks: readonly FlowBlock[];
+  readonly segmentIds: readonly string[];
   readonly startMinuteOfDay: number;
   readonly endMinuteOfDay: number;
   readonly durationSeconds: number;
@@ -13,6 +14,7 @@ export type FlowBlockHoverGroup = {
 type MutableFlowBlockHoverGroup = {
   block: FlowBlock;
   blocks: FlowBlock[];
+  segmentIds: Set<string>;
   identityKey: string;
   startMinuteOfDay: number;
   endMinuteOfDay: number;
@@ -44,6 +46,7 @@ function startGroup(block: FlowBlock, intervalMinutes: FlowIntervalMinutes): Mut
   return {
     block,
     blocks: [block],
+    segmentIds: new Set(block.sourceSegmentIds ?? []),
     identityKey: blockIdentityKey(block),
     startMinuteOfDay: block.minuteOfDay,
     endMinuteOfDay: blockEndMinute(block, intervalMinutes),
@@ -55,6 +58,7 @@ function finishGroup(group: MutableFlowBlockHoverGroup, target: Map<number, Flow
   const hoverGroup: FlowBlockHoverGroup = {
     block: group.block,
     blocks: [...group.blocks],
+    segmentIds: [...group.segmentIds],
     startMinuteOfDay: group.startMinuteOfDay,
     endMinuteOfDay: group.endMinuteOfDay,
     durationSeconds: group.durationSeconds,
@@ -79,6 +83,7 @@ export function buildFlowBlockHoverGroups(blocks: readonly FlowBlock[], interval
     }
 
     currentGroup.blocks.push(block);
+    for (const segmentId of block.sourceSegmentIds ?? []) currentGroup.segmentIds.add(segmentId);
     currentGroup.endMinuteOfDay = blockEndMinute(block, intervalMinutes);
     currentGroup.durationSeconds += block.durationSeconds;
   }

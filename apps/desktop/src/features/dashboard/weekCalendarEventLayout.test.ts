@@ -5,6 +5,7 @@ import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalen
 function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): WeekCalendarEvent {
   return {
     id: "event",
+    segmentIds: ["segment-1", "segment-2", "segment-3"],
     appName: "Chrome, Preview, Finder",
     category: "workspace",
     productivity: "focus",
@@ -15,6 +16,8 @@ function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): Week
     sessionCount: 3,
     identities: [],
     hiddenIdentityCount: 0,
+    hasMixedCategory: true,
+    hasMixedProductivity: false,
     isGroupedCluster: true,
     classificationSource: "rule",
     aiClassification: false,

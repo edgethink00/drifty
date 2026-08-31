@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
+import type { ActivitySegment, FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 import { SiteIconProvider } from "../../components/SiteIconContext";
 import { readAppStyles } from "../../test/readStyles";
@@ -582,5 +582,114 @@ describe("FlowChartView", () => {
     expect(categoryHover.textContent).toContain("Social media");
     expect(categoryHover.textContent).toContain("instagram.com");
     expect(categoryHover.textContent).not.toContain("Google Chrome");
+  });
+});
+
+describe("FlowChartView activity inspector", () => {
+  it("labels mixed source records as dominant", () => {
+    const block = makeFlowBlock({
+      sourceSegmentIds: ["seg-a", "seg-b"],
+      category: "workspace",
+      productivity: "focus",
+    });
+    const mixedSegments: ActivitySegment[] = [
+      {
+        id: "seg-a",
+        startedAt: "2026-04-06T14:00:00",
+        endedAt: "2026-04-06T14:02:00",
+        durationSeconds: 120,
+        appName: "Arc",
+        platform: "macos",
+        source: "nsworkspace",
+        classification: {
+          category: "workspace",
+          productivity: "focus",
+          source: "manual",
+          confidence: 1,
+        },
+      },
+      {
+        id: "seg-b",
+        startedAt: "2026-04-06T14:02:00",
+        endedAt: "2026-04-06T14:03:00",
+        durationSeconds: 60,
+        appName: "Arc",
+        platform: "macos",
+        source: "nsworkspace",
+        classification: {
+          category: "learning",
+          productivity: "neutral",
+          source: "manual",
+          confidence: 1,
+        },
+      },
+    ];
+    render(
+      <FlowChartView
+        blocks={[block]}
+        appIcons={{}}
+        intervalMinutes={3}
+        activityActionsEnabled
+        segments={mixedSegments}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /time block: 14:00–14:03/i }));
+    expect(screen.getByText("Workspace (dominant)")).toBeTruthy();
+    expect(screen.getByText("Focus (dominant)")).toBeTruthy();
+  });
+
+  it("opens the activity inspector from a flow cell", () => {
+    const block = makeFlowBlock({ sourceSegmentIds: ["seg-docs"] });
+    render(
+      <FlowChartView
+        blocks={[block]}
+        appIcons={{}}
+        intervalMinutes={3}
+        activityActionsEnabled
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /time block: 14:00–14:03/i }));
+    expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Edit classification/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Delete activity/ })).toBeTruthy();
+  });
+
+  it("hides the flow hover card while the inspector is open", () => {
+    const block = makeFlowBlock({ sourceSegmentIds: ["seg-docs"] });
+    render(
+      <FlowChartView
+        blocks={[block]}
+        appIcons={{}}
+        intervalMinutes={3}
+        activityActionsEnabled
+      />,
+    );
+    const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+    fireNativePointerMove(cell, 180, 120);
+    expect(document.querySelector(".flow-hover-card")).toBeTruthy();
+    fireEvent.click(cell);
+    expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
+    fireNativePointerMove(cell, 220, 160);
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
+  });
+
+  it("opens the inspector from a hovered flow cell without a more-actions control", () => {
+    const block = makeFlowBlock({ sourceSegmentIds: ["seg-docs"] });
+    render(
+      <FlowChartView
+        blocks={[block]}
+        appIcons={{}}
+        intervalMinutes={3}
+        activityActionsEnabled
+      />,
+    );
+
+    const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+    fireNativePointerMove(cell, 180, 120);
+    expect(screen.queryByRole("button", { name: "More actions for docs.example.com" })).toBeNull();
+    fireEvent.click(cell);
+    expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
   });
 });

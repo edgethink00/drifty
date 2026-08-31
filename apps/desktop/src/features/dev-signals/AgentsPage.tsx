@@ -611,6 +611,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
         nextGroupsById.set(id, {
           block,
           blocks: [block],
+          segmentIds: [],
           startMinuteOfDay: hoverStartMinute,
           endMinuteOfDay: hoverEndMinute,
           durationSeconds: block.durationSeconds,

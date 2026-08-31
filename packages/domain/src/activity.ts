@@ -212,6 +212,9 @@ export interface SiteDuration {
 
 export interface FlowBlock {
   id: string;
+  /** Full captured records contributing to the winning visual bucket. The same
+   *  record can contribute to adjacent buckets, so grouped UI must de-duplicate. */
+  sourceSegmentIds?: readonly string[];
   day: string;
   hour: number;
   quarter: number;

@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { logicalMinuteOfDay, type ActivitySegment, type AppIconMap, type CategoryDuration, type ClassificationOptions, type DeviceTimelineFilter, type FlowBlock, type FlowIntervalMinutes, type ProductivityDuration } from "@drifty/domain";
+import { logicalMinuteOfDay, type ActivityCategory, type ActivitySegment, type AppIconMap, type CategoryDuration, type ClassificationOptions, type DeviceTimelineFilter, type FlowBlock, type FlowIntervalMinutes, type ProductivityDuration, type ProductivityLabel } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
@@ -45,6 +45,7 @@ type DashboardPageProps = {
   readonly dashboardEffectiveProductivityTotals: ProductivityDuration[];
   readonly dashboardProductivityTotals: ProductivityDuration[];
   readonly dashboardReplay: DashboardDemoReplayBannerState | null;
+  readonly dashboardActivityActionsEnabled?: boolean;
   readonly dashboardRange: {
     readonly startDay: string;
     readonly endDay: string;
@@ -87,6 +88,12 @@ type DashboardPageProps = {
   readonly onManageCloudBilling?: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
   readonly onSelectDay: (day: string) => void;
+  readonly onClassifyDashboardActivity?: (
+    segments: readonly ActivitySegment[],
+    category: ActivityCategory,
+    productivity: ProductivityLabel,
+  ) => Promise<void>;
+  readonly onDeleteDashboardActivity?: (segmentIds: readonly string[]) => Promise<void>;
 };
 
 export function DashboardPage({
@@ -105,6 +112,7 @@ export function DashboardPage({
   dashboardEffectiveProductivityTotals,
   dashboardProductivityTotals,
   dashboardReplay,
+  dashboardActivityActionsEnabled = false,
   dashboardRange,
   dashPeriod,
   flowBlocks,
@@ -143,6 +151,8 @@ export function DashboardPage({
   onManageCloudBilling,
   onSelectBillingPlan,
   onSelectDay,
+  onClassifyDashboardActivity,
+  onDeleteDashboardActivity,
 }: DashboardPageProps) {
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
   const [shareCardOpen, setShareCardOpen] = useState(false);
@@ -316,6 +326,10 @@ export function DashboardPage({
           axisScalePercent={WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT}
           sideOpen={breakdownOpen}
           onToggleSide={toggleBreakdown}
+          deviceLabelById={deviceLabelById}
+          activityActionsEnabled={dashboardActivityActionsEnabled && !isDashboardReplayActive}
+          onClassifyActivity={onClassifyDashboardActivity}
+          onDeleteActivity={onDeleteDashboardActivity}
         />
       ) : dashPeriod === "Month" ? (
         <HistoryCalendarPanel
@@ -352,6 +366,11 @@ export function DashboardPage({
                   colorMode={flowColorMode}
                   onColorModeChange={setFlowColorMode}
                   deviceLabelById={deviceLabelById}
+                  segments={dashboardSegments}
+                  activityActionsEnabled={dashboardActivityActionsEnabled && !isDashboardReplayActive}
+                  onClassifyActivity={onClassifyDashboardActivity}
+                  onDeleteActivity={onDeleteDashboardActivity}
+                  classificationOptions={dashboardClassificationOptions}
                 />
               </div>
             </div>

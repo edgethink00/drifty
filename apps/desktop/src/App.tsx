@@ -1,7 +1,7 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
@@ -6804,6 +6804,56 @@ export default function App() {
     startOfDayMinutes,
   ]);
 
+  const dashboardActivityActionsEnabled = !isPreviewSurface
+    && !isDashboardDemoReplayActive
+    && !shouldBlockLocalTrackerAccess;
+
+  const handleClassifyDashboardActivity = useCallback(async (
+    targetSegments: readonly ActivitySegment[],
+    category: ActivityCategory,
+    productivity: ProductivityLabel,
+  ) => {
+    if (targetSegments.length === 0) throw new Error("No source activity records are available.");
+    if (isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess) {
+      throw new Error("Activity editing is unavailable on this dashboard surface.");
+    }
+
+    setError(null);
+    try {
+      const classifiedAt = new Date().toISOString();
+      await trackerClient.saveClassifications(targetSegments.map((segment) => buildClassificationCorrectionRecord({
+        category,
+        classifiedAt,
+        productivity,
+        segment,
+      })));
+      clearLocalActivityCaches();
+      await refresh(selectedDayRef.current);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+      throw caught;
+    }
+  }, [clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
+
+  const handleDeleteDashboardActivity = useCallback(async (ids: readonly string[]) => {
+    if (ids.length === 0) throw new Error("No source activity records are available.");
+    if (isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess) {
+      throw new Error("Activity editing is unavailable on this dashboard surface.");
+    }
+
+    setError(null);
+    try {
+      await trackerClient.deleteActivitySegments(ids);
+      clearLocalActivityCaches();
+      const deletedIds = new Set(ids);
+      setHistorySearchSegments((currentSegments) => currentSegments.filter((segment) => !deletedIds.has(segment.id)));
+      await refresh(selectedDayRef.current);
+    } catch (caught) {
+      setError(toErrorMessage(caught));
+      throw caught;
+    }
+  }, [clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
+
   const handleDeleteHistorySegments = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0 || historyDeleting) return;
 
@@ -8338,6 +8388,7 @@ export default function App() {
             dashboardEffectiveProductivityTotals={stickyDashboardEffectiveProductivityTotals}
             dashboardProductivityTotals={stickyDashboardProductivityTotals}
             dashboardReplay={dashboardReplay}
+            dashboardActivityActionsEnabled={dashboardActivityActionsEnabled}
             dashboardRange={effectiveDashboardRange}
             dashPeriod={dashPeriod}
             flowBlocks={flowBlocks}
@@ -8384,6 +8435,8 @@ export default function App() {
               if (dashboardAiUnavailablePreview) return;
               void startCloudCheckout(billingInterval);
             }}
+            onClassifyDashboardActivity={handleClassifyDashboardActivity}
+            onDeleteDashboardActivity={handleDeleteDashboardActivity}
             onSelectDay={selectDay}
           />
         ) : null}

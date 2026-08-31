@@ -16,6 +16,7 @@ type FlowHoverLayerProps = {
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly projectsById?: ReadonlyMap<string, ProjectLegendEntry>;
   readonly showClassificationSource?: boolean;
+  readonly disabled?: boolean;
 };
 
 // Owns the pointer-driven hover state so that moving across cells re-renders only this
@@ -31,10 +32,11 @@ export function FlowHoverLayer({
   deviceLabelById,
   projectsById,
   showClassificationSource,
+  disabled = false,
 }: FlowHoverLayerProps) {
   const [hoveredBlock, setHoveredBlock] = useState<FlowHoverState | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  useFlowChartHoverDelegation({ gridElement, cardRef, hoverGroupsByCell, setHoveredBlock });
+  useFlowChartHoverDelegation({ gridElement, cardRef, hoverGroupsByCell, setHoveredBlock, disabled });
 
   useLayoutEffect(() => {
     if (!hoveredBlock) return;
@@ -43,13 +45,13 @@ export function FlowHoverLayer({
 
   return (
     <>
-      {gridElement && hoveredBlock
+      {gridElement && !disabled && hoveredBlock
         ? createPortal(
             <FlowHoverGroupHighlights group={hoveredBlock.group} intervalMinutes={intervalMinutes} boundaryMinutes={boundaryMinutes} />,
             gridElement,
           )
         : null}
-      {hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={cardRef} deviceLabelById={deviceLabelById} projectsById={projectsById} showClassificationSource={showClassificationSource} /> : null}
+      {!disabled && hoveredBlock ? <FlowHoverCard hover={hoveredBlock} appIcons={appIcons} cardRef={cardRef} deviceLabelById={deviceLabelById} projectsById={projectsById} showClassificationSource={showClassificationSource} /> : null}
     </>
   );
 }

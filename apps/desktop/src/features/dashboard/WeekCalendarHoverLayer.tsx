@@ -11,6 +11,7 @@ type WeekCalendarHoverLayerProps = {
   readonly bodyElement: HTMLDivElement | null;
   readonly eventsById: ReadonlyMap<string, WeekCalendarEvent>;
   readonly appIcons: AppIconMap;
+  readonly disabled?: boolean;
 };
 
 type LiftedEventElement = {
@@ -42,7 +43,7 @@ function dropLiftedEventElement(lifted: LiftedEventElement | null): null {
  * card follows the pointer through direct DOM writes without any React state
  * or layout measurement; the hovered event's z-index lift is a direct style
  * write too. */
-export function WeekCalendarHoverLayer({ bodyElement, eventsById, appIcons }: WeekCalendarHoverLayerProps) {
+export function WeekCalendarHoverLayer({ bodyElement, eventsById, appIcons, disabled = false }: WeekCalendarHoverLayerProps) {
   const [hover, setHover] = useState<WeekCalendarHoverState | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const eventsByIdRef = useRef(eventsById);
@@ -61,7 +62,14 @@ export function WeekCalendarHoverLayer({ bodyElement, eventsById, appIcons }: We
   }, [eventsById]);
 
   useEffect(() => {
-    if (!bodyElement) return undefined;
+    if (!bodyElement || disabled) {
+      activeEventIdRef.current = null;
+      latestPointerRef.current = null;
+      hoverLiftRef.current = dropLiftedEventElement(hoverLiftRef.current);
+      focusLiftRef.current = dropLiftedEventElement(focusLiftRef.current);
+      setHover(null);
+      return undefined;
+    }
 
     const clearHover = () => {
       latestPointerRef.current = null;
@@ -130,7 +138,7 @@ export function WeekCalendarHoverLayer({ bodyElement, eventsById, appIcons }: We
       hoverLiftRef.current = dropLiftedEventElement(hoverLiftRef.current);
       focusLiftRef.current = dropLiftedEventElement(focusLiftRef.current);
     };
-  }, [bodyElement]);
+  }, [bodyElement, disabled]);
 
-  return hover ? <WeekCalendarHoverCard hover={hover} appIcons={appIcons} cardRef={cardRef} /> : null;
+  return !disabled && hover ? <WeekCalendarHoverCard hover={hover} appIcons={appIcons} cardRef={cardRef} /> : null;
 }

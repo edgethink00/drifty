@@ -1633,4 +1633,31 @@ describe('domain helpers', () => {
     expect(blocks.map((block) => block.durationSeconds)).toEqual([300, 300, 300]);
   });
 
+  it('keeps every overlapping source segment id when a later overlap replaces the winning descriptor', () => {
+    const blocks = buildFlowBlocks([
+      {
+        ...segments[0],
+        id: 'code-short',
+        appName: 'Code',
+        startedAt: localIso(9, 0),
+        endedAt: localIso(9, 2),
+        durationSeconds: 120,
+      },
+      {
+        ...segments[0],
+        id: 'mail-long',
+        appName: 'Code',
+        windowTitle: 'inbox',
+        startedAt: localIso(9, 0),
+        endedAt: localIso(9, 5),
+        durationSeconds: 300,
+      },
+    ], '2026-04-06');
+
+    const firstBucket = blocks.find((block) => block.minuteOfDay === 9 * 60);
+    expect(firstBucket?.appName).toBe('Code');
+    expect(firstBucket?.windowTitle).toBe('inbox');
+    expect(firstBucket?.sourceSegmentIds).toEqual(['code-short', 'mail-long']);
+  });
+
 });

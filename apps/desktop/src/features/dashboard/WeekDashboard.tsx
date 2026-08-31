@@ -3,9 +3,10 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDuration, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
-import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
-import type { ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration } from "@drifty/domain";
+import { buildAppUsageSummaries, isRemoteDeviceSegment, logicalMinuteOfDay } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
+import { WeekActivityInspector } from "./WeekActivityInspector";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
@@ -176,6 +177,21 @@ type WeekDashboardProps = {
    *  one preference; standalone renders (tests) fall back to open. */
   readonly sideOpen?: boolean;
   readonly onToggleSide?: () => void;
+  readonly deviceLabelById?: ReadonlyMap<string, string>;
+  readonly activityActionsEnabled?: boolean;
+  readonly onClassifyActivity?: (
+    segments: readonly ActivitySegment[],
+    category: ActivityCategory,
+    productivity: ProductivityLabel,
+  ) => Promise<void>;
+  readonly onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
+};
+
+type WeekActivityInspectorState = {
+  readonly event: WeekCalendarEvent;
+  readonly pointer: { readonly x: number; readonly y: number };
+  readonly fallbackRect: Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">;
+  readonly restoreFocusTarget: HTMLElement | null;
 };
 
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
@@ -206,6 +222,10 @@ export function WeekDashboard({
   axisScalePercent = WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT,
   sideOpen: controlledSideOpen,
   onToggleSide,
+  deviceLabelById,
+  activityActionsEnabled = false,
+  onClassifyActivity,
+  onDeleteActivity,
 }: WeekDashboardProps) {
   // Controlled by DashboardPage in the app (shared Day/Week preference);
   // standalone renders fall back to local state so the toggle still works.
@@ -215,6 +235,7 @@ export function WeekDashboard({
   const [colorMode, setColorMode] = useState<WeekDashboardColorMode>("category");
   const [legendHover, setLegendHover] = useState<FlowLegendHoverState | null>(null);
   const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
+  const [activityInspector, setActivityInspector] = useState<WeekActivityInspectorState | null>(null);
   const legendHoverCardRef = useRef<HTMLDivElement>(null);
   // Element state (not just a ref) so the hover layer's delegation effect can
   // re-subscribe when the calendar body mounts.
@@ -340,6 +361,48 @@ export function WeekDashboard({
     }
     return byId;
   }, [calendarEvents]);
+  const segmentsById = useMemo(
+    () => new Map(segments.map((segment) => [segment.id, segment])),
+    [segments],
+  );
+  const inspectedSegments = useMemo(() => (
+    activityInspector?.event.segmentIds.flatMap((segmentId) => {
+      const segment = segmentsById.get(segmentId);
+      return segment ? [segment] : [];
+    }) ?? []
+  ), [activityInspector, segmentsById]);
+  const closeActivityInspector = useCallback(() => {
+    setActivityInspector((current) => {
+      const restoreFocusTarget = current?.restoreFocusTarget ?? null;
+      window.setTimeout(() => {
+        if (restoreFocusTarget?.isConnected) restoreFocusTarget.focus();
+      }, 0);
+      return null;
+    });
+  }, []);
+  const openActivityInspector = useCallback((event: WeekCalendarEvent, target: HTMLElement, pointer: { readonly x: number; readonly y: number }) => {
+    const eventElement = target.closest<HTMLElement>(".week-v2-calendar__event") ?? target;
+    const rect = eventElement.getBoundingClientRect();
+    setActivityInspector({
+      event,
+      pointer,
+      fallbackRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      restoreFocusTarget: target,
+    });
+  }, []);
+  const activityActionsDisabledReason = useMemo(() => {
+    if (!activityInspector) return null;
+    if (inspectedSegments.length !== activityInspector.event.segmentIds.length) {
+      return "Some source records are no longer available. Refresh the week before editing.";
+    }
+    if (inspectedSegments.some(isRemoteDeviceSegment)) {
+      return "Synced activity can be viewed here, but must be edited on the Mac that recorded it.";
+    }
+    if (!activityActionsEnabled) {
+      return "Activity editing is unavailable in preview or replay mode.";
+    }
+    return null;
+  }, [activityActionsEnabled, activityInspector, inspectedSegments]);
 
   useLayoutEffect(() => {
     const scroller = calendarScrollerRef.current;
@@ -460,37 +523,52 @@ export function WeekDashboard({
                       };
                       return (
                         <article
-                          aria-label={event.detailTitle.replace(/\n/g, ", ")}
                           className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
                           data-event-id={event.id}
                           key={event.id}
-                          tabIndex={0}
+                          onContextMenu={(contextMenuEvent) => {
+                            contextMenuEvent.preventDefault();
+                            openActivityInspector(
+                              event,
+                              contextMenuEvent.target instanceof HTMLElement ? contextMenuEvent.target : contextMenuEvent.currentTarget,
+                              { x: contextMenuEvent.clientX, y: contextMenuEvent.clientY },
+                            );
+                          }}
                           style={eventStyle}
-                          title={event.detailTitle}
                         >
-                          <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
-                          {eventLayout.showsIdentityStrip ? (
-                            <span
-                              className="week-v2-calendar__identity-strip"
-                              style={identityStrip.tilePx !== 18 ? {
-                                "--week-identity-tile": `${identityStrip.tilePx}px`,
-                                "--week-identity-gap": `${identityStrip.gapPx}px`,
-                              } as WeekIdentityStripStyle : undefined}
-                              aria-hidden="true"
-                            >
-                              {event.identities.slice(0, identityStrip.visibleCount).map((identity) => (
-                                <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
-                                  {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} /> : null}
-                                </span>
-                              ))}
-                              {identityStrip.hiddenCount > 0 ? (
-                                <span className="week-v2-calendar__identity-more">+{identityStrip.hiddenCount}</span>
-                              ) : null}
-                            </span>
-                          ) : null}
-                          {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster && eventLayout.showsIdentityStrip ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
-                          {!eventLayout.isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
+                          <button
+                            type="button"
+                            className="week-v2-calendar__event-open"
+                            aria-label={`${event.detailTitle.replace(/\n/g, ", ")}. Open activity details.`}
+                            aria-haspopup="dialog"
+                            aria-expanded={activityInspector?.event.id === event.id}
+                            title={event.detailTitle}
+                            onClick={(clickEvent) => openActivityInspector(event, clickEvent.currentTarget, { x: clickEvent.clientX, y: clickEvent.clientY })}
+                          >
+                            <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
+                            {eventLayout.showsIdentityStrip ? (
+                              <span
+                                className="week-v2-calendar__identity-strip"
+                                style={identityStrip.tilePx !== 18 ? {
+                                  "--week-identity-tile": `${identityStrip.tilePx}px`,
+                                  "--week-identity-gap": `${identityStrip.gapPx}px`,
+                                } as WeekIdentityStripStyle : undefined}
+                                aria-hidden="true"
+                              >
+                                {event.identities.slice(0, identityStrip.visibleCount).map((identity) => (
+                                  <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
+                                    {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} /> : null}
+                                  </span>
+                                ))}
+                                {identityStrip.hiddenCount > 0 ? (
+                                  <span className="week-v2-calendar__identity-more">+{identityStrip.hiddenCount}</span>
+                                ) : null}
+                              </span>
+                            ) : null}
+                            {eventLayout.hidesInlineText ? null : <strong className={event.isGroupedCluster && eventLayout.showsIdentityStrip ? "week-v2-calendar__event-label" : undefined}>{event.appName}</strong>}
+                            {!eventLayout.isCompactEvent ? <small>{event.startLabel}–{event.endLabel}</small> : null}
                           {eventLayout.showsInlineDetail ? <em>{event.detailSummary}</em> : null}
+                          </button>
                         </article>
                       );
                     })}
@@ -509,8 +587,24 @@ export function WeekDashboard({
             </div>
           </div>
         </section>
-        <WeekCalendarHoverLayer appIcons={appIcons} bodyElement={calendarBodyElement} eventsById={eventsById} />
-        {legendHover ? <FlowLegendHoverCard hover={legendHover} appIcons={appIcons} cardRef={legendHoverCardRef} /> : null}
+        <WeekCalendarHoverLayer appIcons={appIcons} bodyElement={calendarBodyElement} eventsById={eventsById} disabled={activityInspector !== null} />
+        {activityInspector ? (
+          <WeekActivityInspector
+            key={activityInspector.event.id}
+            event={activityInspector.event}
+            segments={inspectedSegments}
+            appIcons={appIcons}
+            deviceLabelById={deviceLabelById}
+            pointer={activityInspector.pointer}
+            fallbackRect={activityInspector.fallbackRect}
+            actionsDisabledReason={activityActionsDisabledReason}
+            onClose={closeActivityInspector}
+            onClassify={onClassifyActivity}
+            onDelete={onDeleteActivity}
+            classificationOptions={classificationOptions}
+          />
+        ) : null}
+        {legendHover && !activityInspector ? <FlowLegendHoverCard hover={legendHover} appIcons={appIcons} cardRef={legendHoverCardRef} /> : null}
 
         <BreakdownSidePanel
           open={sideOpen}
@@ -634,7 +728,7 @@ export function WeekDashboard({
             />
           </div>
         </BreakdownSidePanel>
-        {breakdownHover ? <CompactClassificationHoverCard hover={breakdownHover} appIcons={appIcons} /> : null}
+        {breakdownHover && !activityInspector ? <CompactClassificationHoverCard hover={breakdownHover} appIcons={appIcons} /> : null}
       </div>
     </section>
   );

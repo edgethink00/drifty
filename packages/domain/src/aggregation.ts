@@ -625,6 +625,7 @@ function buildFlowBlocksWithContext(
       candidates.set(candidateKey, {
         block: {
           id: `${day}-${minuteOfDay}`,
+          sourceSegmentIds: [segment.id],
           day,
           hour,
           quarter,
@@ -638,10 +639,17 @@ function buildFlowBlocksWithContext(
     }
 
     existing.block.durationSeconds += overlapSeconds;
+    if (!existing.block.sourceSegmentIds?.includes(segment.id)) {
+      existing.block = {
+        ...existing.block,
+        sourceSegmentIds: [...(existing.block.sourceSegmentIds ?? []), segment.id],
+      };
+    }
     if (existing.strongestOverlapSeconds < overlapSeconds) {
       existing.block = {
         ...existing.block,
         ...descriptor,
+        sourceSegmentIds: existing.block.sourceSegmentIds,
         durationSeconds: existing.block.durationSeconds,
       };
       existing.strongestOverlapSeconds = overlapSeconds;

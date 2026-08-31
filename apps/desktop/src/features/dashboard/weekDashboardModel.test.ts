@@ -75,6 +75,27 @@ describe("buildWeekDashboardModel", () => {
     expect(model.row.focusSeconds).toBe(75 * 60);
     expect(model.row.slices.map((slice) => slice.category)).toEqual(["workspace", "learning", "entertainment"]);
     expect(model.calendarEvents.map((event) => event.appName)).toEqual(["Design App", "Research App", "Video App"]);
+    expect(model.calendarEvents.map((event) => event.segmentIds)).toEqual([["design"], ["research"], ["video"]]);
+  });
+
+  it("retains every exact source record when overlapping segments become one calendar block", () => {
+    const segments = [
+      makeSegment("design-doc", "2026-06-18T09:00:00", "2026-06-18T09:45:00", "Design App", "workspace", "focus"),
+      makeSegment("design-call", "2026-06-18T09:10:00", "2026-06-18T09:30:00", "Meeting App", "communication", "focus"),
+    ];
+
+    const model = buildWeekDashboardDayModel({
+      day: "2026-06-18",
+      segments,
+      classificationOptions: { includeAiClassifications: true },
+      startOfDayMinutes: 0,
+    });
+
+    expect(model.calendarEvents).toHaveLength(1);
+    expect(model.calendarEvents[0].sessionCount).toBe(2);
+    expect(model.calendarEvents[0].segmentIds).toEqual(["design-doc", "design-call"]);
+    expect(model.calendarEvents[0].hasMixedCategory).toBe(true);
+    expect(model.calendarEvents[0].hasMixedProductivity).toBe(false);
   });
 
   it("uses cached closed days and computes the current logical day live", () => {

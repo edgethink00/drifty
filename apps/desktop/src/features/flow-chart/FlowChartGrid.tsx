@@ -18,6 +18,7 @@ type FlowChartGridProps = {
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly setFlowGridElement: (element: HTMLDivElement | null) => void;
+  readonly onOpenActivity?: (group: FlowBlockHoverGroup, target: HTMLButtonElement, pointer: { readonly x: number; readonly y: number }) => void;
 };
 
 type FlowCurrentHourStyle = CSSProperties & Record<"--flow-current-hour", number>;
@@ -36,6 +37,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   hoverGroupsByCell,
   intervalMinutes,
   setFlowGridElement,
+  onOpenActivity,
 }: FlowChartGridProps) {
   const rowMinuteOffsets = useMemo(
     () => Array.from({ length: 60 / intervalMinutes }, (_, index) => index * intervalMinutes),
@@ -109,6 +111,17 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
                     data-flow-minute={block.minuteOfDay}
                     style={cellStyle}
+                    onClick={(event) => {
+                      const group = hoverGroupsByCell.get(block.minuteOfDay);
+                      if (!group || !onOpenActivity) return;
+                      onOpenActivity(group, event.currentTarget, { x: event.clientX, y: event.clientY });
+                    }}
+                    onContextMenu={(event) => {
+                      const group = hoverGroupsByCell.get(block.minuteOfDay);
+                      if (!group || !onOpenActivity) return;
+                      event.preventDefault();
+                      onOpenActivity(group, event.currentTarget, { x: event.clientX, y: event.clientY });
+                    }}
                   >
                     <span className="flow-cell__mark" aria-hidden="true" />
                   </button>

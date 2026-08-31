@@ -8,6 +8,7 @@ type FlowChartHoverDelegationArgs = {
   readonly cardRef: RefObject<HTMLDivElement | null>;
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly setHoveredBlock: Dispatch<SetStateAction<FlowHoverState | null>>;
+  readonly disabled?: boolean;
 };
 
 type PointerPosition = {
@@ -34,6 +35,7 @@ export function useFlowChartHoverDelegation({
   cardRef,
   hoverGroupsByCell,
   setHoveredBlock,
+  disabled = false,
 }: FlowChartHoverDelegationArgs): void {
   const hoverGroupsRef = useRef(hoverGroupsByCell);
   const activeGroupRef = useRef<FlowBlockHoverGroup | null>(null);
@@ -52,7 +54,16 @@ export function useFlowChartHoverDelegation({
   }, [hoverGroupsByCell, setHoveredBlock]);
 
   useEffect(() => {
-    if (!gridElement) return undefined;
+    if (!gridElement || disabled) {
+      activeGroupRef.current = null;
+      latestPointerRef.current = null;
+      setHoveredBlock(null);
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current);
+        frameRef.current = null;
+      }
+      return undefined;
+    }
 
     const clearHover = () => {
       if (activeGroupRef.current === null) return;
@@ -100,5 +111,5 @@ export function useFlowChartHoverDelegation({
       }
       latestPointerRef.current = null;
     };
-  }, [cardRef, gridElement, setHoveredBlock]);
+  }, [cardRef, disabled, gridElement, setHoveredBlock]);
 }

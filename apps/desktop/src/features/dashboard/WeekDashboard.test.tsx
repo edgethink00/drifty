@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ActivitySegment, CategoryDuration, ProductivityDuration } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, CategoryDuration, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekDashboard } from "./WeekDashboard";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { readAppStyles } from "../../test/readStyles";
@@ -89,7 +89,10 @@ function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): Week
     durationMinutes: 60,
     endLabel: "10:00 AM",
     hiddenIdentityCount: 0,
+    hasMixedCategory: false,
+    hasMixedProductivity: false,
     id: "event-1",
+    segmentIds: ["week-focus-code"],
     identities: [],
     isGroupedCluster: false,
     isShort: false,
@@ -104,6 +107,7 @@ function makeWeekCalendarEvent(overrides: Partial<WeekCalendarEvent> = {}): Week
 }
 
 type WeekDashboardRenderOverrides = {
+  readonly activityActionsEnabled?: boolean;
   readonly axisScalePercent?: number;
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly categoryEntries?: CategoryDuration[];
@@ -115,6 +119,12 @@ type WeekDashboardRenderOverrides = {
   readonly sideOpen?: boolean;
   readonly totalSeconds?: number;
   readonly onToggleSide?: () => void;
+  readonly onClassifyActivity?: (
+    segments: readonly ActivitySegment[],
+    category: ActivityCategory,
+    productivity: ProductivityLabel,
+  ) => Promise<void>;
+  readonly onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
 };
 
 function renderWeekDashboard(overrides: WeekDashboardRenderOverrides = {}) {
@@ -194,12 +204,201 @@ describe("WeekDashboard axis scale", () => {
 
     const calendarBody = container.querySelector<HTMLElement>(".week-v2-calendar__body");
     const currentMarker = container.querySelector<HTMLElement>(".week-v2-calendar__now-marker--line");
-    const event = screen.getByLabelText("9:00 AM-10:00 AM, Design review");
+    const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
 
     expect(calendarBody?.style.height).toBe("1075.2px");
     expect(currentMarker?.style.getPropertyValue("--week-calendar-now-offset")).toBe("403.2px");
-    expect(event.style.top).toBe("403.2px");
-    expect(event.style.height).toBe("40.8px");
+    expect(event?.style.top).toBe("403.2px");
+    expect(event?.style.height).toBe("40.8px");
+  });
+});
+
+describe("WeekDashboard activity inspector", () => {
+  const groupedEvent = makeWeekCalendarEvent({
+    id: "event-grouped",
+    segmentIds: ["week-focus-code", "week-drift-browser"],
+    sessionCount: 2,
+    isGroupedCluster: true,
+    hasMixedCategory: true,
+    hasMixedProductivity: false,
+  });
+  const groupedEvents = new Map<string, WeekCalendarEvent[]>([["2024-01-03", [groupedEvent]]]);
+
+  it("opens the inspector from the block body and reports the exact source-record scope", () => {
+    renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }), { clientX: 180, clientY: 120 });
+
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+    expect(within(inspector).getByText("2 captured records")).toBeTruthy();
+    expect(within(inspector).queryByText("Only these 2 records")).toBeNull();
+    expect(within(inspector).getByText("Focus (dominant)")).toBeTruthy();
+    expect(within(inspector).queryByText("Workspace (dominant)")).toBeNull();
+    expect(document.activeElement).toBe(inspector);
+    expect(inspector).not.toBe(within(inspector).getByRole("button", { name: "Close activity inspector" }));
+    expect(inspector.style.left).toBe("196px");
+    expect(inspector.style.top).toBe("136px");
+    expect(styles).toMatch(/:root\[data-theme="dark"\] \.week-activity-inspector\s*\{[^}]*--week-inspector-choice-bg:/);
+    expect(styles).toMatch(/:root\[data-theme="dark"\] \.week-activity-inspector\s*\{[^}]*background:\s*color-mix/);
+  });
+
+  it("keeps compact grouped icon-only blocks body-clickable without a more-actions control", () => {
+    const iconOnlyEvent = makeWeekCalendarEvent({
+      activeDurationMinutes: 14,
+      durationMinutes: 14,
+      isGroupedCluster: true,
+      isShort: true,
+      sessionCount: 2,
+      identities: [{
+        id: "visual-studio-code",
+        label: "Visual Studio Code",
+        appName: "Visual Studio Code",
+        bundleId: "com.microsoft.VSCode",
+        browserName: null,
+        siteDomain: null,
+        siteTitle: null,
+        seconds: 14 * 60,
+        firstStartMinute: 0,
+      }],
+    });
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [iconOnlyEvent]]]),
+      activityActionsEnabled: true,
+    });
+
+    expect(screen.queryByRole("button", { name: "More actions for Design review" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+  });
+
+  it("applies a changed category and productivity only to the selected source records", async () => {
+    const onClassifyActivity = vi.fn().mockResolvedValue(undefined);
+    renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      onClassifyActivity,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Edit classification/ }));
+    expect(screen.queryByText(/Future activity will not be changed/i)).toBeNull();
+    expect(styles).toMatch(/\.week-activity-inspector__choice-grid\s*\{[^}]*grid-template-columns:\s*repeat\(3,/);
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Workspace" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Learning" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Neutral" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(onClassifyActivity).toHaveBeenCalledWith(weekSegments, "learning", "neutral");
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens from right-click and confirms full-record deletion before calling the mutation", async () => {
+    const onDeleteActivity = vi.fn().mockResolvedValue(undefined);
+    const { container } = renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      onDeleteActivity,
+    });
+
+    fireEvent.contextMenu(container.querySelector<HTMLElement>(".week-v2-calendar__event")!);
+    fireEvent.click(screen.getByRole("button", { name: /Delete activity/ }));
+
+    expect(screen.getByText("Deleting 2 captured records cannot be undone.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete 2 records" }));
+
+    await waitFor(() => {
+      expect(onDeleteActivity).toHaveBeenCalledWith(["week-focus-code", "week-drift-browser"]);
+    });
+  });
+
+  it("hides the week hover card while the inspector is open", () => {
+    const { container } = renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });
+    const event = container.querySelector(".week-v2-calendar__event")!;
+    fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
+    expect(document.querySelector(".week-calendar-hover-card")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+    expect(document.querySelector(".week-calendar-hover-card")).toBeNull();
+  });
+
+  it("closes the inspector when the week calendar scrolls", () => {
+    const { container } = renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }), { clientX: 180, clientY: 120 });
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+    fireEvent.scroll(container.querySelector(".week-v2-calendar__scroller")!);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps the inspector open when scrolling inside it", () => {
+    renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }), { clientX: 180, clientY: 120 });
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+    fireEvent.scroll(inspector);
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+  });
+
+  it("anchors keyboard opens to the block instead of the viewport origin", () => {
+    renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });
+    const openButton = screen.getByRole("button", { name: /Open activity details/ });
+    const eventBlock = openButton.closest(".week-v2-calendar__event");
+    if (!(eventBlock instanceof HTMLElement)) throw new Error("expected a week calendar event");
+    eventBlock.getBoundingClientRect = () => ({ x: 80, y: 90, width: 120, height: 40, top: 90, left: 80, bottom: 130, right: 200, toJSON: () => undefined });
+    fireEvent.click(openButton, { clientX: 0, clientY: 0 });
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+    expect(inspector.style.left).toBe("112px");
+    expect(inspector.style.top).toBe("122px");
+  });
+
+  it("closes on Escape and restores focus to the control that opened it", async () => {
+    renderWeekDashboard({ calendarEvents: groupedEvents, activityActionsEnabled: true });
+    const openButton = screen.getByRole("button", { name: /Open activity details/ });
+    fireEvent.click(openButton);
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(document.activeElement).toBe(openButton);
+    });
+  });
+
+  it("keeps a compact block body-clickable without placing an ellipsis inside it", () => {
+    const compactEvent = makeWeekCalendarEvent({
+      activeDurationMinutes: 5,
+      durationMinutes: 5,
+      isShort: true,
+    });
+    renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [compactEvent]]]),
+      activityActionsEnabled: true,
+    });
+
+    expect(screen.queryByRole("button", { name: "More actions for Design review" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+  });
+
+  it("allows inspection but disables mutation for synced activity", () => {
+    const remoteSegment: ActivitySegment = {
+      ...weekSegments[0],
+      id: "remote-segment",
+      deviceId: "remote-mac",
+    };
+    const remoteEvent = makeWeekCalendarEvent({ segmentIds: [remoteSegment.id] });
+    renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [remoteEvent]]]),
+      segments: [remoteSegment],
+      activityActionsEnabled: true,
+      onClassifyActivity: vi.fn().mockResolvedValue(undefined),
+      onDeleteActivity: vi.fn().mockResolvedValue(undefined),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+
+    expect(screen.getByText(/must be edited on the Mac that recorded it/i)).toBeTruthy();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Edit classification/ }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: /Delete activity/ }).disabled).toBe(true);
   });
 });
 

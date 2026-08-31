@@ -2411,3 +2411,433 @@
   font-size: var(--type-setting-desc-size);
   line-height: 1.45;
 }
+
+/* ── Week activity inspector ────────────────────────────────────────────────
+   The calendar block remains the focus target at every density. Click or
+   right-click opens the inspector; compact blocks stay body-clickable. */
+.week-v2-calendar__event {
+  display: block;
+  padding: 0;
+}
+
+.week-v2-calendar__event-open {
+  appearance: none;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.week-v2-calendar__event-open:focus {
+  outline: none;
+}
+
+.week-v2-calendar__event:has(.week-v2-calendar__event-open:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--canvas) 84%, var(--accent));
+  outline-offset: 2px;
+}
+
+.week-v2-calendar__event--short .week-v2-calendar__event-open {
+  align-items: flex-start;
+  padding: 2px 6px;
+}
+
+.week-v2-calendar__event--compact .week-v2-calendar__event-open {
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 3px 6px;
+}
+
+.week-v2-calendar__event--tiny .week-v2-calendar__event-open {
+  justify-content: center;
+  padding: 1px 5px;
+}
+
+.week-v2-calendar__event--micro .week-v2-calendar__event-open {
+  padding: 0;
+}
+
+.week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) .week-v2-calendar__event-open {
+  gap: 0;
+  padding-block: 2px 3px;
+}
+
+.week-v2-calendar__event--dense .week-v2-calendar__event-open {
+  gap: 0;
+  padding-inline: 4px;
+}
+
+
+.week-activity-inspector {
+  --week-inspector-border: color-mix(in srgb, var(--line-strong) 82%, transparent);
+  --week-inspector-choice-bg: color-mix(in srgb, var(--text) 3.5%, transparent);
+  --week-inspector-divider: var(--line);
+  --week-inspector-highlight: color-mix(in srgb, white 38%, transparent);
+  position: fixed;
+  z-index: var(--z-settings-popover);
+  box-sizing: border-box;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 8px;
+  border: 1px solid var(--week-inspector-border);
+  border-radius: 14px;
+  background: var(--shell-floating-surface-strong, var(--surface));
+  color: var(--text);
+  box-shadow:
+    0 22px 52px color-mix(in srgb, black 20%, transparent),
+    0 3px 10px color-mix(in srgb, black 8%, transparent),
+    inset 0 1px 0 var(--week-inspector-highlight);
+  backdrop-filter: blur(24px) saturate(1.14);
+  -webkit-backdrop-filter: blur(24px) saturate(1.14);
+}
+
+:root[data-theme="dark"] .week-activity-inspector {
+  --week-inspector-border: color-mix(in srgb, var(--text) 16%, transparent);
+  --week-inspector-choice-bg: color-mix(in srgb, var(--text) 6.5%, transparent);
+  --week-inspector-divider: color-mix(in srgb, var(--text) 9%, transparent);
+  --week-inspector-highlight: color-mix(in srgb, white 8%, transparent);
+  background: color-mix(in srgb, var(--surface-strong) 94%, transparent);
+  box-shadow:
+    0 24px 58px color-mix(in srgb, black 42%, transparent),
+    0 4px 12px color-mix(in srgb, black 18%, transparent),
+    inset 0 1px 0 var(--week-inspector-highlight);
+}
+
+.week-activity-inspector__header {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 2px 2px 7px;
+  border-bottom: 1px solid var(--week-inspector-divider);
+}
+
+.week-activity-inspector__identity,
+.week-activity-inspector__icon-button,
+.week-activity-inspector__action-icon,
+.week-activity-inspector__danger-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.week-activity-inspector__identity {
+  width: 28px;
+  height: 28px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.week-activity-inspector__identity .app-glyph--sm,
+.week-activity-inspector__identity .site-favicon {
+  width: 20px;
+  height: 20px;
+}
+
+.week-activity-inspector__heading {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.week-activity-inspector__heading strong {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-activity-inspector__heading span {
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.week-activity-inspector__icon-button {
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.week-activity-inspector__icon-button:hover:not(:disabled) {
+  background: var(--bg-2);
+  color: var(--text);
+}
+
+.week-activity-inspector:focus {
+  outline: none;
+}
+
+.week-activity-inspector__icon-button:focus-visible,
+.week-activity-inspector__action:focus-visible,
+.week-activity-inspector__choice-grid label:has(input:focus-visible) {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 1px;
+}
+
+.week-activity-inspector__icon-button svg,
+.week-activity-inspector__action svg,
+.week-activity-inspector__danger-mark svg {
+  width: 16px;
+  height: 16px;
+}
+
+.week-activity-inspector__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 12px;
+  padding: 12px 7px;
+}
+
+.week-activity-inspector__summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.week-activity-inspector__summary span,
+.week-activity-inspector__summary strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-activity-inspector__summary span {
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.week-activity-inspector__summary strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  font-weight: 590;
+}
+
+.week-activity-inspector__summary i,
+.week-activity-inspector__choice-grid i {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+.week-activity-inspector__notice,
+.week-activity-inspector__error {
+  margin: 0 4px 8px;
+  padding: 8px 9px;
+  border: 1px solid var(--danger-line);
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: color-mix(in srgb, var(--warn) 78%, var(--text));
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.week-activity-inspector__actions {
+  display: grid;
+  gap: 2px;
+  padding-top: 3px;
+  border-top: 1px solid var(--week-inspector-divider);
+}
+
+.week-activity-inspector__action {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.week-activity-inspector__action:hover:not(:disabled) {
+  background: var(--bg-2);
+}
+
+.week-activity-inspector__action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.week-activity-inspector__action > span:nth-child(2) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.week-activity-inspector__action strong {
+  font-size: 0.75rem;
+  font-weight: 590;
+}
+
+.week-activity-inspector__action-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--text-muted);
+}
+
+.week-activity-inspector__action--danger,
+.week-activity-inspector__action--danger .week-activity-inspector__action-icon {
+  color: var(--warn);
+}
+
+.week-activity-inspector__action--danger .week-activity-inspector__action-icon {
+  background: var(--danger-soft);
+}
+
+.week-activity-inspector__editor,
+.week-activity-inspector__confirmation {
+  padding: 12px 7px 5px;
+}
+
+.week-activity-inspector__confirmation > p {
+  margin: 0 2px 11px;
+  color: var(--text-muted);
+  font-size: 0.71875rem;
+  line-height: 1.42;
+}
+
+.week-activity-inspector__editor fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.week-activity-inspector__editor fieldset + fieldset {
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--week-inspector-divider);
+}
+
+.week-activity-inspector__editor legend {
+  margin-bottom: 6px;
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.week-activity-inspector__choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.week-activity-inspector__choice-grid label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 29px;
+  padding: 3px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: var(--week-inspector-choice-bg);
+  cursor: pointer;
+}
+
+.week-activity-inspector__choice-grid label:hover {
+  border-color: var(--line-strong);
+  background: var(--surface-strong);
+}
+
+.week-activity-inspector__choice-grid label.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 64%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.week-activity-inspector__choice-grid input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.week-activity-inspector__choice-grid span {
+  overflow: hidden;
+  min-width: 0;
+  font-size: 0.6875rem;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-activity-inspector__choice-grid--productivity span {
+  text-transform: capitalize;
+}
+
+.week-activity-inspector__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.week-activity-inspector__footer .app-btn {
+  --btn-h: 1.8rem;
+  padding-inline: 12px;
+  font-size: 0.71875rem;
+}
+
+.week-activity-inspector__confirmation {
+  text-align: center;
+}
+
+.week-activity-inspector__confirmation .week-activity-inspector__footer {
+  justify-content: center;
+}
+
+.week-activity-inspector__danger-mark {
+  width: 40px;
+  height: 40px;
+  margin: 3px auto 10px;
+  border-radius: 11px;
+  background: var(--danger-soft);
+  color: var(--warn);
+}

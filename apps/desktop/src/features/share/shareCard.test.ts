@@ -190,6 +190,7 @@ function weekRow(day: string, dayName: string, focusSeconds: number, totalSecond
 function focusEvent(topMinutes: number, durationMinutes: number, productivity: WeekCalendarEvent["productivity"] = "focus"): WeekCalendarEvent {
   return {
     id: `event-${topMinutes}`,
+    segmentIds: [`segment-${topMinutes}`],
     appName: "Preview",
     category: "workspace",
     productivity,
@@ -200,6 +201,8 @@ function focusEvent(topMinutes: number, durationMinutes: number, productivity: W
     sessionCount: 1,
     identities: [],
     hiddenIdentityCount: 0,
+    hasMixedCategory: false,
+    hasMixedProductivity: false,
     isGroupedCluster: false,
     classificationSource: "fallback",
     aiClassification: false,

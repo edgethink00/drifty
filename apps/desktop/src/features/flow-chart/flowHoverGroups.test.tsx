@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
 import { buildFlowBlockHoverGroups } from "./flowHoverGroups";
@@ -31,6 +31,15 @@ function fireNativePointerMove(target: Element, clientX: number, clientY: number
 }
 
 describe("flow hover groups", () => {
+  it("unions source segment ids across adjacent cells", () => {
+    const blocks = [
+      makeFlowBlock({ id: "cmux-a", minuteOfDay: 60, sourceSegmentIds: ["seg-a"] }),
+      makeFlowBlock({ id: "cmux-b", minuteOfDay: 63, sourceSegmentIds: ["seg-b", "seg-a"] }),
+    ];
+    const groups = buildFlowBlockHoverGroups(blocks, 3, 0);
+    expect(groups.get(60)?.segmentIds).toEqual(["seg-a", "seg-b"]);
+  });
+
   it("keeps separated or different-identity cells in separate hover groups", () => {
     const blocks = [
       makeFlowBlock({ id: "cmux-start", minuteOfDay: 60 }),
@@ -73,5 +82,30 @@ describe("flow hover groups", () => {
     if (!(highlight instanceof HTMLElement)) throw new Error("expected a flow hover highlight element");
     expect(highlight.style.getPropertyValue("--flow-hover-row")).toBe("0");
     expect(highlight.style.getPropertyValue("--flow-hover-row-span")).toBe("10");
+  });
+  it("opens the shared activity inspector from a grouped flow cell", () => {
+    const onClassifyActivity = vi.fn();
+    const onDeleteActivity = vi.fn();
+    const blocks = Array.from({ length: 4 }, (_, index) => makeFlowBlock({
+      id: `cmux-${index}`,
+      minuteOfDay: 60 + index * 3,
+      sourceSegmentIds: ["seg-a"],
+    }));
+
+    render(
+      <FlowChartView
+        blocks={blocks}
+        appIcons={{}}
+        intervalMinutes={3}
+        activityActionsEnabled
+        segments={[]}
+        onClassifyActivity={onClassifyActivity}
+        onDeleteActivity={onDeleteActivity}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button", { name: /time block: 01:00–01:12/i })[0]);
+    expect(screen.getByRole("dialog", { name: "cmux" })).toBeTruthy();
+    expect(screen.getByText("0 captured records")).toBeTruthy();
   });
 });
