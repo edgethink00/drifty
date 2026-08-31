@@ -139,7 +139,7 @@ html {
   --modal-inset-standard: 32px;
   --modal-inset-workspace: 24px;
   --modal-inset-expressive: 28px;
-  --week-calendar-event-radius: 5.5px;
+  --week-calendar-event-radius: 4px;
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;
   --z-settings-popover: 70;
