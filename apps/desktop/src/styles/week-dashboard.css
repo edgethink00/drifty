@@ -348,7 +348,7 @@
 
 .week-v2-calendar__time-rail span {
   position: absolute;
-  right: var(--space-2);
+  right: 4px;
   transform: translateY(6px);
   color: color-mix(in srgb, var(--text-soft) 78%, var(--text));
   font-family: var(--font-mono);

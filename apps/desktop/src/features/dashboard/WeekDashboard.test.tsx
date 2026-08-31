@@ -203,6 +203,16 @@ describe("WeekDashboard axis scale", () => {
   });
 });
 
+describe("WeekDashboard time rail", () => {
+  it("positions time-rail labels with a tighter right inset so two-digit hours fit in the 2.5rem rail", () => {
+    expect(styles).toMatch(/\.week-v2-calendar__time-rail span\s*\{[^}]*right:\s*4px/);
+  });
+
+  it("keeps the original 2.5rem grid-column width for the time rail", () => {
+    expect(styles).toMatch(/grid-template-columns:\s*2\.5rem repeat\(7/);
+  });
+});
+
 describe("WeekDashboard breakdown panel", () => {
   it("follows the controlled sideOpen prop and reports toggles to the owner", () => {
     const onToggleSide = vi.fn();
