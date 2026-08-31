@@ -5,6 +5,7 @@ import { PetModeWindowApp } from "./PetModeWindowApp";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
+  PET_MODE_PET_STREAK_TO_DROWSY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
   PET_MODE_STORAGE_KEY,
@@ -13,6 +14,7 @@ import {
 
 const bridge = vi.hoisted(() => ({
   eventHandler: null as ((event: PetModeWindowEvent) => void) | null,
+  beginNativePetDrag: vi.fn().mockResolvedValue({ moved: false, startX: 0, startY: 0, endX: 0, endY: 0 }),
   moveNativePetToTarget: vi.fn().mockResolvedValue({
     facing: "right",
     targetKind: "window_close",
@@ -26,10 +28,11 @@ const bridge = vi.hoisted(() => ({
 
 vi.mock("./petModeBridge", () => ({
   alignNativePetContact: vi.fn().mockResolvedValue(undefined),
-  beginNativePetDrag: vi.fn().mockResolvedValue({ moved: false, startX: 0, startY: 0, endX: 0, endY: 0 }),
+  beginNativePetDrag: bridge.beginNativePetDrag,
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),
   listenToNativePetDragEnd: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetDragStart: vi.fn().mockResolvedValue(vi.fn()),
+  listenToNativePetStrokeDetected: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetDragProbe: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetModeEvent: vi.fn().mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
     bridge.eventHandler = handler;
@@ -228,6 +231,74 @@ describe("pet expressions", () => {
     expect(phase()).toBe("sleep");
   });
 
+  it("lowers the lids after continued petting, then sleeps", async () => {
+    vi.useFakeTimers();
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+    expect(phase()).toBe("happy");
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+    expect(phase()).toBe("drowsy");
+
+    for (let i = PET_MODE_PET_STREAK_TO_DROWSY; i < PET_MODE_PET_STREAK_TO_SLEEP; i += 1) {
+      petOnce();
+      await act(async () => { await Promise.resolve(); });
+    }
+    expect(phase()).toBe("sleep");
+  });
+
+  it("advances one stage for a back-and-forth stroke instead of skipping to sleep", async () => {
+    bridge.beginNativePetDrag.mockResolvedValueOnce({
+      moved: false,
+      strokeDetected: true,
+      startX: 0,
+      startY: 0,
+      endX: 0,
+      endY: 0,
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+
+    expect(phase()).toBe("drowsy");
+  });
+
+  it("settles into sleep after a second back-and-forth stroke", async () => {
+    bridge.beginNativePetDrag
+      .mockResolvedValueOnce({
+        moved: false,
+        strokeDetected: true,
+        startX: 0,
+        startY: 0,
+        endX: 0,
+        endY: 0,
+      })
+      .mockResolvedValueOnce({
+        moved: false,
+        strokeDetected: true,
+        startX: 0,
+        startY: 0,
+        endX: 0,
+        endY: 0,
+      });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+    expect(phase()).toBe("drowsy");
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+    expect(phase()).toBe("sleep");
+  });
+
   it("keeps repeated petting on the existing happy response when the experiment is off", async () => {
     window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "0");
     render(<PetModeWindowApp />);
@@ -237,6 +308,25 @@ describe("pet expressions", () => {
       petOnce();
       await act(async () => { await Promise.resolve(); });
     }
+
+    expect(phase()).toBe("happy");
+  });
+
+  it("keeps a stroke on the existing happy response when the experiment is off", async () => {
+    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "0");
+    bridge.beginNativePetDrag.mockResolvedValueOnce({
+      moved: false,
+      strokeDetected: true,
+      startX: 0,
+      startY: 0,
+      endX: 0,
+      endY: 0,
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
 
     expect(phase()).toBe("happy");
   });

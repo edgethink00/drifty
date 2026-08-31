@@ -35,6 +35,7 @@ type PetModeCatPhase =
   | "anger"
   | "paw"
   | "happy"
+  | "drowsy"
   | "blink"
   | "stretch"
   | "tail"
@@ -329,7 +330,8 @@ export function PetModeCat({
     && renderedEntrySequenceRef.current === entrySequence;
   const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}`;
   const usesSeparatedFace = phase === "blink"
-    || phase === "happy";
+    || phase === "happy"
+    || phase === "drowsy";
   const usesIdleGaze = (phase === "idle" || phase === "blink" || phase === "happy")
     && !holdsRenderedEntryVector;
   const usesNoticeGaze = phase === "notice";
@@ -406,6 +408,8 @@ export function PetModeCat({
         ? `${phase}:${renderedLifeMotionFrame}`
         : phase === "happy"
           ? "happy"
+          : phase === "drowsy"
+            ? "drowsy"
           : phase === "drag"
             ? `drag:${dragPickupPose}`
             : phase === "release"
@@ -688,6 +692,7 @@ function isLifeMotionPhase(phase: PetModeCatPhase): phase is LifeMotionPhase {
 
 function PetModeExpression({ phase }: { readonly phase: PetModeCatPhase }) {
   const happy = phase === "happy";
+  const drowsy = phase === "drowsy";
   return (
     <svg className="pet-mode-cat__expression" viewBox="0 0 797 581" aria-hidden="true">
       <g className="pet-mode-cat__expression-face">
@@ -704,6 +709,10 @@ function PetModeExpression({ phase }: { readonly phase: PetModeCatPhase }) {
         ) : happy ? (
           <g className="pet-mode-cat__eyes pet-mode-cat__eyes--happy">
             <path d="M570 259 Q581.3 240 593 259 M670 249 Q679.7 230 689.5 249" />
+          </g>
+        ) : drowsy ? (
+          <g className="pet-mode-cat__eyes pet-mode-cat__eyes--drowsy">
+            <path d="M570 248 Q581.3 262 593 248 M670 238 Q679.7 252 689.5 238" />
           </g>
         ) : (
           <g className="pet-mode-cat__eyes pet-mode-cat__eyes--open">

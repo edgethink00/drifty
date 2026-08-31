@@ -395,6 +395,8 @@ impl PetModePhysicalRect {
 pub struct PetModeNativeDragResult {
     moved: bool,
     shake_detected: bool,
+    #[serde(default)]
+    stroke_detected: bool,
     start_x: f64,
     start_y: f64,
     end_x: f64,
@@ -1365,13 +1367,14 @@ pub async fn pet_mode_begin_drag(
     #[cfg(debug_assertions)]
     {
         eprintln!(
-            "[pet-mode-drag] end window={after:?} moved={} shake_detected={}",
-            drag.moved, drag.shake_detected
+            "[pet-mode-drag] end window={after:?} moved={} shake_detected={} stroke_detected={}",
+            drag.moved, drag.shake_detected, drag.stroke_detected
         );
     }
     let result = PetModeNativeDragResult {
         moved: drag.moved,
         shake_detected: drag.shake_detected,
+        stroke_detected: drag.stroke_detected,
         start_x: before.x,
         start_y: before.y,
         end_x: after.x,

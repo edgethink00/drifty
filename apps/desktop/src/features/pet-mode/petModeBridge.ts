@@ -379,6 +379,8 @@ export type PetModeNativeDragResult = {
   readonly moved: boolean;
   /** Optional while an HMR renderer can still be paired with an older native process. */
   readonly shakeDetected?: boolean;
+  /** Optional while an HMR renderer can still be paired with an older native process. */
+  readonly strokeDetected?: boolean;
   readonly startX: number;
   readonly startY: number;
   readonly endX: number;
@@ -409,6 +411,13 @@ export async function listenToNativePetDragStart(
 ): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
   return listen<boolean>("pet-mode-drag-start", () => onDragStart());
+}
+
+export async function listenToNativePetStrokeDetected(
+  onStrokeDetected: () => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<boolean>("pet-mode-stroke-detected", () => onStrokeDetected());
 }
 
 export async function reportNativePetDragError(error: unknown): Promise<void> {

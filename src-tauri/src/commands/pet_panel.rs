@@ -8,11 +8,24 @@ const PET_SHAKE_MIN_SAMPLE_DISTANCE_PT: f64 = 2.0;
 const PET_SHAKE_MIN_LEG_PT: f64 = 24.0;
 const PET_SHAKE_MIN_PATH_PT: f64 = 220.0;
 const PET_SHAKE_MIN_REVERSALS: usize = 4;
+// A stroke is a short back-and-forth on the cat, not a relocation. Keep the
+// legs small enough that a real petting motion qualifies, but require enough
+// reversals and so little net travel that a pickup-and-move cannot fake it.
+const PET_STROKE_MIN_LEG_PT: f64 = 8.0;
+const PET_STROKE_MIN_REVERSALS: usize = 2;
+const PET_STROKE_MIN_PATH_PT: f64 = 24.0;
+const PET_STROKE_MAX_NET_PT: f64 = 18.0;
+const PET_STROKE_MAX_DURATION_MS: u64 = 2_400;
+// Wait just long enough for a second reverse to land before treating the
+// first 7px of movement as a pickup. A relocating drag still starts as soon
+// as that reverse never arrives.
+const PET_STROKE_PICKUP_GRACE_MS: u64 = 220;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PetPanelDragOutcome {
     pub moved: bool,
     pub shake_detected: bool,
+    pub stroke_detected: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -57,13 +70,16 @@ impl PetShakeDetector {
         if path < PET_SHAKE_MIN_PATH_PT {
             return false;
         }
-        meaningful_axis_reversals(&samples, |sample| sample.x) >= PET_SHAKE_MIN_REVERSALS
-            || meaningful_axis_reversals(&samples, |sample| sample.y) >= PET_SHAKE_MIN_REVERSALS
+        meaningful_axis_reversals(&samples, PET_SHAKE_MIN_LEG_PT, |sample| sample.x)
+            >= PET_SHAKE_MIN_REVERSALS
+            || meaningful_axis_reversals(&samples, PET_SHAKE_MIN_LEG_PT, |sample| sample.y)
+                >= PET_SHAKE_MIN_REVERSALS
     }
 }
 
 fn meaningful_axis_reversals(
     samples: &[PetShakeSample],
+    min_leg_pt: f64,
     coordinate: impl Fn(&PetShakeSample) -> f64,
 ) -> usize {
     let Some(first) = samples.first() else {
@@ -75,22 +91,22 @@ fn meaningful_axis_reversals(
     for sample in &samples[1..] {
         let value = coordinate(sample);
         match direction {
-            0 if value - extreme >= PET_SHAKE_MIN_LEG_PT => {
+            0 if value - extreme >= min_leg_pt => {
                 direction = 1;
                 extreme = value;
             }
-            0 if extreme - value >= PET_SHAKE_MIN_LEG_PT => {
+            0 if extreme - value >= min_leg_pt => {
                 direction = -1;
                 extreme = value;
             }
             1 if value > extreme => extreme = value,
-            1 if extreme - value >= PET_SHAKE_MIN_LEG_PT => {
+            1 if extreme - value >= min_leg_pt => {
                 reversals += 1;
                 direction = -1;
                 extreme = value;
             }
             -1 if value < extreme => extreme = value,
-            -1 if value - extreme >= PET_SHAKE_MIN_LEG_PT => {
+            -1 if value - extreme >= min_leg_pt => {
                 reversals += 1;
                 direction = 1;
                 extreme = value;
@@ -99,6 +115,37 @@ fn meaningful_axis_reversals(
         }
     }
     reversals
+}
+
+fn pet_stroke_detected(samples: &[PetShakeSample]) -> bool {
+    let Some(last) = samples.last() else {
+        return false;
+    };
+    let cutoff = last.at_ms.saturating_sub(PET_STROKE_MAX_DURATION_MS);
+    let window: Vec<_> = samples
+        .iter()
+        .copied()
+        .filter(|sample| sample.at_ms >= cutoff)
+        .collect();
+    if window.len() < PET_STROKE_MIN_REVERSALS + 2 {
+        return false;
+    }
+    let mut path = 0.0;
+    for pair in window.windows(2) {
+        path += (pair[1].x - pair[0].x).hypot(pair[1].y - pair[0].y);
+    }
+    if path < PET_STROKE_MIN_PATH_PT {
+        return false;
+    }
+    let start = window[0];
+    let end = window[window.len() - 1];
+    let net = (end.x - start.x).hypot(end.y - start.y);
+    if net > PET_STROKE_MAX_NET_PT {
+        return false;
+    }
+    let reversals = meaningful_axis_reversals(&window, PET_STROKE_MIN_LEG_PT, |sample| sample.x)
+        .max(meaningful_axis_reversals(&window, PET_STROKE_MIN_LEG_PT, |sample| sample.y));
+    reversals >= PET_STROKE_MIN_REVERSALS
 }
 
 /// Configure the desktop pet as the same kind of non-activating macOS panel
@@ -508,6 +555,7 @@ pub fn perform_pet_panel_drag(
     let mut pickup_started_at: Option<Instant> = None;
     let pickup_delay = Duration::from_millis(pickup_delay_ms.min(500));
     let mut last_probe_at = Instant::now();
+    let mut stroke_hold = false;
 
     loop {
         let pointer = app.cursor_position().map_err(|error| error.to_string())?;
@@ -518,14 +566,28 @@ pub fn perform_pet_panel_drag(
         );
         let dx = pointer.x - start_pointer.x;
         let dy = pointer.y - start_pointer.y;
-        if !moved && is_pet_drag_delta(dx, dy) {
+        let elapsed_ms = gesture_started.elapsed().as_millis().min(u64::MAX as u128) as u64;
+        let samples: Vec<_> = shake_detector.samples.iter().copied().collect();
+        let stroking = pet_stroke_detected(&samples);
+        if stroking && !stroke_hold {
+            stroke_hold = true;
+            window
+                .emit("pet-mode-stroke-detected", true)
+                .map_err(|error| error.to_string())?;
+        }
+        // Once a stroke is recognized, keep the cat in place for the rest of
+        // this press. Before that, wait a short grace so the second reverse
+        // can arrive instead of flashing the held pose on the first 7px.
+        let waiting_for_stroke = !stroke_hold && elapsed_ms < PET_STROKE_PICKUP_GRACE_MS;
+        if !moved && is_pet_drag_delta(dx, dy) && !stroke_hold && !waiting_for_stroke {
             moved = true;
             pickup_started_at = Some(Instant::now());
             // A press remains a normal petting tap until physical pointer
             // movement crosses this threshold. Emitting at that exact boundary
             // prevents a click from ever flashing the held sprite, while the
             // native pickup hold below gives WebKit time to paint it before the
-            // panel starts following the cursor.
+            // panel starts following the cursor. A recognized stroke keeps the
+            // cat in place instead of starting that pickup.
             window
                 .emit("pet-mode-drag-start", true)
                 .map_err(|error| error.to_string())?;
@@ -570,6 +632,7 @@ pub fn perform_pet_panel_drag(
     Ok(PetPanelDragOutcome {
         moved,
         shake_detected: moved && shake_detector.detected(),
+        stroke_detected: !moved && stroke_hold,
     })
 }
 
@@ -585,12 +648,15 @@ pub fn perform_pet_panel_drag(
     Ok(PetPanelDragOutcome {
         moved: true,
         shake_detected: false,
+        stroke_detected: false,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{is_pet_drag_delta, pet_drag_origin, PetShakeDetector};
+    use super::{
+        is_pet_drag_delta, pet_drag_origin, pet_stroke_detected, PetShakeDetector, PetShakeSample,
+    };
     #[cfg(target_os = "macos")]
     use super::{pet_panel_native_origin_after_logical_move, pet_panel_needs_main_thread_hop};
 
@@ -744,6 +810,54 @@ mod tests {
         assert!(detector.detected());
         detector.observe(1_700, 50.0, 0.0);
         assert!(!detector.detected());
+    }
+
+    #[test]
+    fn a_short_back_and_forth_on_the_cat_counts_as_a_stroke() {
+        let samples = [
+            PetShakeSample { at_ms: 0, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 80, x: 12.0, y: 1.0 },
+            PetShakeSample { at_ms: 160, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 240, x: 12.0, y: -1.0 },
+            PetShakeSample { at_ms: 320, x: 1.0, y: 0.0 },
+        ];
+        assert!(pet_stroke_detected(&samples));
+    }
+
+    #[test]
+    fn a_relocating_drag_is_not_a_stroke() {
+        let samples = [
+            PetShakeSample { at_ms: 0, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 80, x: 12.0, y: 0.0 },
+            PetShakeSample { at_ms: 160, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 240, x: 12.0, y: 0.0 },
+            PetShakeSample { at_ms: 320, x: 40.0, y: 8.0 },
+        ];
+        assert!(!pet_stroke_detected(&samples));
+    }
+
+    #[test]
+    fn a_late_reverse_still_counts_as_a_stroke() {
+        let samples = [
+            PetShakeSample { at_ms: 0, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 60, x: 10.0, y: 0.0 },
+            PetShakeSample { at_ms: 120, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 180, x: 10.0, y: 0.0 },
+            PetShakeSample { at_ms: 240, x: 1.0, y: 0.0 },
+        ];
+        assert!(pet_stroke_detected(&samples));
+    }
+
+    #[test]
+    fn a_recent_window_that_ends_far_from_its_start_is_not_a_stroke() {
+        let samples = [
+            PetShakeSample { at_ms: 0, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 80, x: 12.0, y: 0.0 },
+            PetShakeSample { at_ms: 160, x: 0.0, y: 0.0 },
+            PetShakeSample { at_ms: 240, x: 12.0, y: 0.0 },
+            PetShakeSample { at_ms: 2_500, x: 40.0, y: 0.0 },
+        ];
+        assert!(!pet_stroke_detected(&samples));
     }
 
     #[test]

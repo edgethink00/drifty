@@ -11,6 +11,7 @@ import {
   listenToNativePetDragEnd,
   listenToNativePetDragProbe,
   listenToNativePetDragStart,
+  listenToNativePetStrokeDetected,
   listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest,
   moveNativePetToTarget,
@@ -49,6 +50,7 @@ import {
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_EXPERIMENTS_STORAGE_KEY,
+  PET_MODE_PET_STREAK_TO_DROWSY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
@@ -107,7 +109,7 @@ import {
 import "./petMode.css";
 
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
-type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase">;
+type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase"> | "drowsy";
 
 function expressiveInteractionsEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
@@ -211,6 +213,7 @@ export function PetModeWindowApp() {
   // `null` means the pet has not completed an autonomous action yet.
   const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
   const manualDragRef = useRef(false);
+  const strokeHoldRef = useRef(false);
   const manualReleaseTokenRef = useRef<number | null>(null);
   const manualDropReactionRef = useRef<PetModePostDropReaction | null>(null);
   const previousPostDropReactionRef = useRef<PetModePostDropReaction | null>(null);
@@ -520,13 +523,36 @@ export function PetModeWindowApp() {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetDragStart(() => {
-      if (!manualDragRef.current || phaseRef.current === "drag") return;
+      if (!manualDragRef.current || strokeHoldRef.current || phaseRef.current === "drag") return;
       sleepTouchRef.current = 0;
       const pickupPose: PetModeRestPose = phaseRef.current === "sit" ? "sit" : "idle";
       flushSync(() => {
         setDragPickupPose(pickupPose);
         commitPhase("drag");
       });
+    }).then((nextUnlisten) => {
+      if (disposed) {
+        cleanupTauriEventListener(nextUnlisten);
+        return;
+      }
+      unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      cleanupTauriEventListener(unlisten);
+    };
+  }, [commitPhase]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetStrokeDetected(() => {
+      strokeHoldRef.current = true;
+      // A late drag-start can still arrive after the first reverse. Keep the
+      // current resting pose instead of flashing the held sprite.
+      if (phaseRef.current === "drag") {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+      }
     }).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
@@ -668,7 +694,7 @@ export function PetModeWindowApp() {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetDragEnd((result) => {
-      if (!result.moved) return;
+      if (!result.moved || result.strokeDetected) return;
       // The native tracker is the authority for mouse-up. Depending only on
       // the invoke promise can leave WebKit in `drag` after the native loop has
       // already released, especially when the panel crosses app/display
@@ -911,6 +937,9 @@ export function PetModeWindowApp() {
       commitPhase("sleep");
       if (preview) return;
       await delay(randomBetween(PET_MODE_SLEEP_MIN_MS, PET_MODE_SLEEP_MAX_MS));
+    } else if (action === "drowsy") {
+      commitPhase("drowsy");
+      return;
     } else if (action === "sit") {
       commitPhase("sit");
       if (preview) return;
@@ -919,7 +948,7 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       await roamNativePet();
     } else {
-      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "sit" | "walk" | "stop" | "life_loop" | "music_note" | "stretch_with_note" | "tail_flick_with_note" | "sleep_angry_wake">, PetModeCatPhase> = {
+      const phaseByAction: Record<Exclude<LifeAction, "outing" | "wake" | "sleep" | "drowsy" | "sit" | "walk" | "stop" | "life_loop" | "music_note" | "stretch_with_note" | "tail_flick_with_note" | "sleep_angry_wake">, PetModeCatPhase> = {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
@@ -1637,6 +1666,7 @@ export function PetModeWindowApp() {
     }
     const dragToken = ++actionTokenRef.current;
     manualDragRef.current = true;
+    strokeHoldRef.current = false;
     void cancelNativePetMotion().catch(() => undefined);
     void (async () => {
       try {
@@ -1655,7 +1685,7 @@ export function PetModeWindowApp() {
         // may invalidate their own token while AppKit runs its native tracking
         // loop, but they must never strand manualDragRef at true or suppress the
         // user's release transition.
-        if (result.moved) {
+        if (result.moved && !result.strokeDetected) {
           finishManualDrag(result);
           return;
         }
@@ -1664,10 +1694,12 @@ export function PetModeWindowApp() {
         // gesture is a normal petting tap. Cancel any interrupted life pose
         // before playing the existing happy reaction, while preserving the
         // deliberate two-touch wake behavior for a sleeping cat.
+        // A recognized stroke is the same relationship: the cat stayed put
+        // while the pointer moved back and forth on it.
         if (phaseRef.current !== "sleep") {
           commitPhase(focusRestingRef.current ? "sit" : "idle");
         }
-        handlePet();
+        handlePet(result.strokeDetected === true ? "stroke" : "tap");
       } catch (error) {
         void reportNativePetDragError(error).catch(() => undefined);
         manualDragRef.current = false;
@@ -1712,7 +1744,7 @@ export function PetModeWindowApp() {
     });
   };
 
-  const handlePet = () => {
+  const handlePet = (gesture: "tap" | "stroke" = "tap") => {
     if (manualDragRef.current) return;
     if (phaseRef.current === "sleep") {
       if (sleepTouchRef.current === 0) {
@@ -1730,6 +1762,8 @@ export function PetModeWindowApp() {
       && phaseRef.current !== "blink"
       && phaseRef.current !== "tail"
       && phaseRef.current !== "sit"
+      && phaseRef.current !== "happy"
+      && phaseRef.current !== "drowsy"
     ) return;
 
     // OFF preserves the shipped interaction: every awake touch simply plays
@@ -1741,18 +1775,22 @@ export function PetModeWindowApp() {
       return;
     }
 
-    // Repeated petting is a relationship, not a series of unrelated taps. Each
-    // pet inside the streak window adds to a run; a long enough run settles the
-    // cat instead of replaying the same happy beat forever. The streak decays
-    // on its own so attention has to be renewed rather than banked.
+    // Continued attention moves through a small relationship: heart, drowsy
+    // lids, then sleep. A recognized stroke is a stronger beat, so it advances
+    // one stage instead of jumping straight to the nap.
     const now = Date.now();
     const continuing = now - lastPetAtRef.current <= PET_MODE_PET_STREAK_WINDOW_MS;
-    petStreakRef.current = continuing ? petStreakRef.current + 1 : 1;
+    const increment = gesture === "stroke" ? 2 : 1;
+    petStreakRef.current = continuing ? petStreakRef.current + increment : increment;
     lastPetAtRef.current = now;
 
     if (petStreakRef.current >= PET_MODE_PET_STREAK_TO_SLEEP) {
       petStreakRef.current = 0;
       void playLifeAction("sleep", false);
+      return;
+    }
+    if (petStreakRef.current >= PET_MODE_PET_STREAK_TO_DROWSY) {
+      void playLifeAction("drowsy");
       return;
     }
     void playLifeAction("pet");

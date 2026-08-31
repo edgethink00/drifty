@@ -25,9 +25,11 @@ export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
 export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
 export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
 // Petting in a streak reads as sustained attention rather than repeated taps.
-// Four pets inside the window settle the cat; the window is short enough that
-// coming back an hour later starts a new streak instead of resuming the old one.
+// The first beat is the shipped happy heart. Continued attention lowers the
+// lids, then a longer run settles into sleep. A recognized stroke counts as
+// one stronger beat instead of skipping straight to the nap.
 export const PET_MODE_PET_STREAK_WINDOW_MS = 6 * 1000;
+export const PET_MODE_PET_STREAK_TO_DROWSY = 2;
 export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
 // The expressive interaction pack is intentionally Dev-gated while its
 // product rules are being calibrated. A second key (rather than Dev mode by

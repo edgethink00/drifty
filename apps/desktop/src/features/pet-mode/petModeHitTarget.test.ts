@@ -51,6 +51,8 @@ describe("pet mode hit target", () => {
   it("keeps the WebView button aligned with native ownership", () => {
     expect(css).toContain(".pet-mode-hit-target { pointer-events: auto; }");
     expect(app).not.toContain("pet-mode-hit-shape");
+    expect(css).toContain(".pet-mode-hit-target:hover,");
+    expect(css).toContain("transform: none;");
   });
 
   it("keeps reduced-motion drag and release states single-layered", () => {

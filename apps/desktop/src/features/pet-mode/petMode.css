@@ -143,6 +143,12 @@
    so its full button is safe and cannot disagree with the grab cursor. */
 .pet-mode-hit-target { pointer-events: auto; }
 
+.pet-mode-hit-target:hover,
+.pet-mode-hit-target:active {
+  /* The shared button hover lift is a chrome affordance. The cat is a body on
+     the desktop, so hovering it must not float the paws off the ground line. */
+  transform: none;
+}
 .pet-mode-hit-target:active { cursor: grabbing; }
 .pet-mode-contact-anchor {
   position: absolute;
@@ -289,6 +295,8 @@
 .pet-mode-cat--release .pet-mode-cat__motion { transform: none; }
 .pet-mode-cat--happy .pet-mode-cat__motion,
 .pet-mode-cat--happy .pet-mode-cat__expression { animation: pet-mode-companion-lean .6s cubic-bezier(.25, 1, .5, 1) 2; }
+.pet-mode-cat--drowsy .pet-mode-cat__motion,
+.pet-mode-cat--drowsy .pet-mode-cat__expression { animation: pet-mode-companion-lean .72s cubic-bezier(.25, 1, .5, 1) 1; }
 .pet-mode-cat--sleep .pet-mode-cat__motion {
   animation: pet-mode-sleep-breathe 2.8s ease-in-out infinite;
   transform-origin: 50% 92%;
@@ -597,6 +605,7 @@
   opacity: 0;
 }
 .pet-mode-cat--happy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
+.pet-mode-cat--drowsy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
 .pet-mode-cat--sleep .pet-mode-cat__zzz { opacity: .8; animation: pet-mode-zzz 1.8s ease-in-out infinite; }
 .pet-mode-cat.is-mirrored .pet-mode-cat__zzz { transform: scaleX(-1); }
 
