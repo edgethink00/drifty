@@ -26,7 +26,7 @@ import {
   enhancedContextRetryEligibility,
   type ContentContextEgressSummary,
 } from "./contentContextEgressPolicy";
-import { toLocalProviderEnhancedRetryRequest, toLocalProviderRequest, type LocalAiProviderConfig, type MinimizedActivityPayload } from "./localAiProviderRequest";
+import { MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES, toLocalProviderEnhancedRetryRequest, toLocalProviderRequest, type LocalAiProviderConfig, type LocalAiProviderEnhancedRetryRequestInput, type LocalAiProviderRequest, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
@@ -48,6 +48,15 @@ import {
   cloudAiRequestBackoffs,
   type CloudAiBackoffStatus,
 } from "./cloudAiRequestBackoff";
+import {
+  describeLocalAiClassificationFailure,
+  localAiInvalidResponseError,
+  localAiProviderResponseError,
+  localAiTransportError,
+  shouldRetryLocalAiWithSmallerBatch,
+} from "./localAiClassificationFailure";
+
+export { describeLocalAiClassificationFailure } from "./localAiClassificationFailure";
 
 const EDGE_MAX_BATCH_SIZE = 20;
 const DEFAULT_BATCH_SIZE = EDGE_MAX_BATCH_SIZE;
@@ -115,6 +124,7 @@ type EdgeClassificationResponse = {
   classifications?: unknown;
   model?: unknown;
   latencyMs?: unknown;
+  resultLatencyMsById?: unknown;
 };
 
 // Granularity of AI classification:
@@ -204,7 +214,7 @@ export type LiveAiClassificationResult =
   | { kind: "unavailable"; reason: string };
 
 type OpenAiChatResponse = {
-  choices?: Array<{ message?: { content?: unknown } }>;
+  choices?: Array<{ finish_reason?: unknown; message?: { content?: unknown } }>;
 };
 
 type AiClassificationUsageRow = {
@@ -232,11 +242,12 @@ type AiClassificationUsageRow = {
 
 export type AiClassificationStatus = "disabled" | "idle" | "running" | "saved" | "empty" | "error";
 
-// "transport" — the provider was unreachable (fetch/HTTP/timeout failures).
+// "transport" — no provider response completed (fetch/timeout and Cloud
+// invocation failures).
 // "quota" — Cloud answered with an account/provider quota response.
-// "content" — the provider responded but the result was unusable; the
-// connection itself is fine, so connection status must not treat it as a
-// disconnect.
+// "content" — the provider responded but the result was unusable. Local
+// connection health uses separate evidence because malformed 2xx content is
+// reachable while authentication/model/provider HTTP errors are not usable.
 export type AiClassificationFailureKind = "transport" | "quota" | "content";
 export type AiClassificationQuotaWindow = "minute" | "hour" | "day" | "unknown";
 
@@ -1228,6 +1239,9 @@ function toClassificationRecords(
         ? response.classifications
         : [];
   const model = !Array.isArray(response) && typeof response?.model === "string" ? response.model : null;
+  const resultLatencyMsById = !Array.isArray(response) && isRecord(response?.resultLatencyMsById)
+    ? response.resultLatencyMsById
+    : null;
   const payloadById = new Map(payload.map((item) => [item.segmentId, item]));
   const classifiedAt = new Date().toISOString();
 
@@ -1273,7 +1287,9 @@ function toClassificationRecords(
       aiResult: true,
       // Fresh responses must always carry a latency so fingerprint-cache reuse
       // (which stores none) stays distinguishable as "AI cache" downstream.
-      latencyMs: responseLatencyMs(data) ?? 0,
+      latencyMs: typeof resultLatencyMsById?.[segmentId] === "number" && Number.isFinite(resultLatencyMsById[segmentId])
+        ? resultLatencyMsById[segmentId]
+        : responseLatencyMs(data) ?? 0,
       classifiedAt,
     };
     if (rawProductivity) {
@@ -1369,7 +1385,7 @@ async function classifyLivePayloadWithLocalAi(
   workProfile: string | null,
   memoryContext: LiveClassificationMemoryContext,
 ): Promise<LiveAiClassificationResult> {
-  const providerRequest = toLocalProviderRequest(provider, [payload], workProfile, memoryContext);
+  const providerRequest = localProviderRequestForClassification(provider, [payload], workProfile, memoryContext);
   if (!providerRequest) return unavailableLiveClassification("Local AI provider is not fully configured.");
 
   try {
@@ -1569,14 +1585,12 @@ async function runLocalAiClassification(
     };
   }
 
-  const response = await invokeOpenAiChatWithManagedLocalRetry(
-    providerRequest.request,
-    provider.provider === "managed_local" ? provider : null,
+  const data = await requestLocalClassificationBatches(
+    representatives,
+    provider,
+    workProfile,
+    memoryContext,
   );
-  const responseFailure = localProviderResponseFailure(response, provider);
-  if (responseFailure) throw new Error(responseFailure);
-
-  const data = toLocalClassificationResponse(response, providerRequest.model);
   const representativeRecords = await selectLocalAiClassificationRecords({
     firstPassRecords: toClassificationRecords(data, representatives, memoryContext, "local"),
     representatives,
@@ -1610,6 +1624,172 @@ async function runLocalAiClassification(
     metrics,
     usedAiProvider: true,
   };
+}
+
+async function requestLocalClassificationBatches(
+  payload: readonly MinimizedActivityPayload[],
+  provider: LocalAiProviderConfig,
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+): Promise<EdgeClassificationResponse> {
+  const batches = provider.provider === "managed_local"
+    ? partitionManagedLocalItems(payload, provider, workProfile, memoryContext)
+    : [payload];
+  const responses: EdgeClassificationResponse[] = [];
+  for (const batch of batches) {
+    responses.push(await requestLocalClassificationBatchWithFallback(batch, provider, workProfile, memoryContext));
+  }
+  return mergeLocalClassificationResponses(responses);
+}
+
+async function requestLocalClassificationBatchWithFallback(
+  payload: readonly MinimizedActivityPayload[],
+  provider: LocalAiProviderConfig,
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+  allowSplit = true,
+): Promise<EdgeClassificationResponse> {
+  const providerRequest = localProviderRequestForClassification(provider, payload, workProfile, memoryContext);
+  if (!providerRequest) throw new Error("Local AI provider is not fully configured.");
+
+  try {
+    return await requestLocalClassificationResponse(providerRequest, provider);
+  } catch (error) {
+    // One split means at most three requests for a top-level batch: the
+    // original request plus two smaller children. Do not recursively fan out
+    // malformed responses into up to nineteen long-running local requests.
+    if (!allowSplit || provider.provider !== "managed_local" || payload.length <= 1 || !shouldRetryLocalAiWithSmallerBatch(error)) throw error;
+    const midpoint = Math.ceil(payload.length / 2);
+    const first = await requestLocalClassificationBatchWithFallback(payload.slice(0, midpoint), provider, workProfile, memoryContext, false);
+    const second = await requestLocalClassificationBatchWithFallback(payload.slice(midpoint), provider, workProfile, memoryContext, false);
+    return mergeLocalClassificationResponses([first, second]);
+  }
+}
+
+function partitionManagedLocalItems(
+  items: readonly MinimizedActivityPayload[],
+  provider: Extract<LocalAiProviderConfig, { readonly provider: "managed_local" }>,
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+): MinimizedActivityPayload[][] {
+  const partitions: MinimizedActivityPayload[][] = [];
+  let pending: MinimizedActivityPayload[] = [];
+  for (const item of items) {
+    const candidate = [...pending, item];
+    const request = localProviderRequestForClassification(provider, candidate, workProfile, memoryContext, false);
+    if (pending.length > 0 && (candidate.length > MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE || localProviderPromptBytes(request) > MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES)) {
+      partitions.push(pending);
+      pending = [item];
+      continue;
+    }
+    pending = candidate;
+  }
+  if (pending.length > 0) partitions.push(pending);
+  return partitions;
+}
+
+function localProviderRequestForClassification(
+  provider: LocalAiProviderConfig,
+  payload: readonly MinimizedActivityPayload[],
+  workProfile: string | null,
+  memoryContext: LiveClassificationMemoryContext,
+  shedOptionalMemory = true,
+): LocalAiProviderRequest | null {
+  const segmentIds = payload.map((item) => item.segmentId);
+  if (provider.provider !== "managed_local") {
+    return toLocalProviderRequest(provider, payload, workProfile, memoryContextForItems(memoryContext, segmentIds));
+  }
+
+  const boundedMemory = memoryContextForItems(memoryContext, segmentIds, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES);
+  const boundedRequest = toLocalProviderRequest(provider, payload, workProfile, boundedMemory);
+  if (!shedOptionalMemory || localProviderPromptBytes(boundedRequest) <= MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES) return boundedRequest;
+
+  // Item evidence is authoritative. If a single title-heavy request is still
+  // oversized after the managed-memory cap, shed optional Soul/Episode context
+  // before the partitioner decides whether the item batch itself must shrink.
+  return toLocalProviderRequest(provider, payload, workProfile, memoryContextForItems(memoryContext, segmentIds, 0));
+}
+
+function localProviderPromptBytes(providerRequest: LocalAiProviderRequest | null): number {
+  const messages = providerRequest?.request.messages;
+  const firstMessage = Array.isArray(messages) ? messages[0] : null;
+  const content = isRecord(firstMessage) && typeof firstMessage.content === "string" ? firstMessage.content : "";
+  return new TextEncoder().encode(content).byteLength;
+}
+
+function localProviderEnhancedRetryRequestForClassification(
+  input: LocalAiProviderEnhancedRetryRequestInput,
+): LocalAiProviderRequest | null {
+  if (input.provider.provider !== "managed_local") return toLocalProviderEnhancedRetryRequest(input);
+
+  const withBoundedMemory = toLocalProviderEnhancedRetryRequest({
+    ...input,
+    memoryContext: memoryContextForItems(input.memoryContext ?? { soul: null, episodeByItemId: {} }, input.payload.map((item) => item.segmentId), MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES),
+  });
+  if (localProviderPromptBytes(withBoundedMemory) <= MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES) return withBoundedMemory;
+
+  const withoutMemory = toLocalProviderEnhancedRetryRequest({
+    ...input,
+    memoryContext: { soul: null, episodeByItemId: {} },
+  });
+  return localProviderPromptBytes(withoutMemory) <= MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES ? withoutMemory : null;
+}
+
+function mergeLocalClassificationResponses(responses: readonly EdgeClassificationResponse[]): EdgeClassificationResponse {
+  const results: unknown[] = [];
+  const resultLatencyMsById: Record<string, number> = {};
+  let model: unknown;
+  let latencyMs = 0;
+  for (const response of responses) {
+    const entries = Array.isArray(response.results)
+      ? response.results
+      : Array.isArray(response.classifications) ? response.classifications : [];
+    const responseModel = typeof response.model === "string" ? response.model : null;
+    const responseLatency = responseLatencyMs(response);
+    const responseResultLatencies = isRecord(response.resultLatencyMsById) ? response.resultLatencyMsById : null;
+    results.push(...entries.map((entry) => {
+      if (!isRecord(entry)) return entry;
+      const id = typeof entry.segmentId === "string" ? entry.segmentId : typeof entry.id === "string" ? entry.id : null;
+      if (id) {
+        const entryLatency = responseResultLatencies?.[id];
+        if (typeof entryLatency === "number" && Number.isFinite(entryLatency)) resultLatencyMsById[id] = entryLatency;
+        else if (responseLatency !== null) resultLatencyMsById[id] = responseLatency;
+      }
+      return {
+        ...entry,
+        ...(responseModel === null ? {} : { model: responseModel }),
+      };
+    }));
+    if (responseModel !== null) model = responseModel;
+    if (responseLatency !== null) {
+      latencyMs += responseLatency;
+    }
+  }
+  return { results, model, latencyMs, resultLatencyMsById };
+}
+
+async function requestLocalClassificationResponse(
+  providerRequest: NonNullable<ReturnType<typeof toLocalProviderRequest>>,
+  provider: LocalAiProviderConfig,
+): Promise<EdgeClassificationResponse> {
+  let response: NativeOpenAiChatResponse;
+  try {
+    response = await invokeOpenAiChatWithManagedLocalRetry(
+      providerRequest.request,
+      provider.provider === "managed_local" ? provider : null,
+    );
+  } catch (error) {
+    throw localAiTransportError(error);
+  }
+
+  const responseFailure = localProviderResponseFailure(response, provider);
+  if (responseFailure) throw localAiProviderResponseError(responseFailure);
+
+  try {
+    return toLocalClassificationResponse(response, providerRequest.model);
+  } catch (error) {
+    throw localAiInvalidResponseError(error);
+  }
 }
 
 async function selectLocalAiClassificationRecords(input: {
@@ -1689,7 +1869,7 @@ async function classifyLocalEnhancedRetry(input: {
   }
 
   const enhancedPayload = await toEnhancedRetryPayload(input.payload, egress.providerContext);
-  const providerRequest = toLocalProviderEnhancedRetryRequest({
+  const providerRequest = localProviderEnhancedRetryRequestForClassification({
     provider: input.provider,
     payload: [enhancedPayload],
     workProfile: input.workProfile,
@@ -1875,7 +2055,11 @@ function retryEvidenceForRecord(record: ActivityClassificationRecord): "normal" 
 function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model: string): EdgeClassificationResponse {
   const bodyText = typeof response.body === "string" ? response.body : "";
   const body = JSON.parse(bodyText) as OpenAiChatResponse;
-  const content = body.choices?.[0]?.message?.content;
+  const firstChoice = body.choices?.[0];
+  if (firstChoice?.finish_reason === "length") {
+    throw new SyntaxError("The response reached its output limit before completing JSON.");
+  }
+  const content = firstChoice?.message?.content;
   const text = typeof content === "string" ? content : Array.isArray(content)
     ? content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n")
     : "";
@@ -1885,6 +2069,7 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
     ...parsed,
     model,
     latencyMs: responseLatencyMs(response),
+    resultLatencyMsById: {},
   };
 }
 

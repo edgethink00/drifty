@@ -33,8 +33,9 @@ export type LocalAiConnectionEvent =
   // A provider round-trip completed (classifications saved, or the provider
   // responded with unusable content) — proof the connection itself works.
   | { readonly kind: "provider_contact_ok"; readonly message: string }
-  // A classification run failed at the transport layer (fetch/HTTP/timeout).
-  | { readonly kind: "classification_transport_failure"; readonly issueKind?: AiConnectionIssueKind; readonly message: string };
+  // A classification run produced direct evidence that the configured route
+  // is unusable (transport, authentication, credits, model, or provider error).
+  | { readonly kind: "classification_failure"; readonly issueKind?: AiConnectionIssueKind; readonly message: string };
 
 export type CloudAiConnectionCheck = {
   readonly issueKind: AiConnectionIssueKind;
@@ -47,8 +48,8 @@ export type CloudAiConnectionEvent =
   | { readonly kind: "provider_contact_ok"; readonly message: string }
   | { readonly kind: "classification_transport_failure"; readonly issueKind?: AiConnectionIssueKind; readonly message: string };
 
-// A lone transport failure from a background classification run is weak
-// evidence (rate limits, wake-from-sleep blips); require this many consecutive
+// A lone failure from a background classification run is weak evidence (rate
+// limits, wake-from-sleep blips); require this many consecutive
 // failures before tearing down an established "connected" state.
 export const CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD = 2;
 export const CLOUD_AI_FAILURE_EPISODE_MS = 10 * 60 * 1000;
@@ -95,7 +96,7 @@ export function nextLocalAiConnectionCheck(
         checkedAt,
         consecutiveFailures: priorFailures + 1,
       };
-    case "classification_transport_failure": {
+    case "classification_failure": {
       const consecutiveFailures = priorFailures + 1;
       if (matchingPrevious?.status === "connected" && consecutiveFailures < CLASSIFICATION_FAILURE_DISCONNECT_THRESHOLD) {
         return { ...matchingPrevious, consecutiveFailures };

@@ -70,7 +70,7 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIconDomain, type SiteIconMap } from "./features/app-icons/siteIconRequests";
 import { SiteIconProvider } from "./components/SiteIconContext";
-import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, describeLocalAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
@@ -3367,7 +3367,7 @@ export default function App() {
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       return summary;
     } catch (error) {
-      if (args[2]?.localProvider) recordLocalAiClassificationError(toErrorMessage(error));
+      if (args[2]?.localProvider) recordLocalAiClassificationError(describeLocalAiClassificationFailure(error));
       else await recordCloudAiClassificationError(error, cloudAiConnectionGeneration);
       throw error;
     }
@@ -3382,7 +3382,7 @@ export default function App() {
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       return summary;
     } catch (error) {
-      if (args[2]?.localProvider) recordLocalAiClassificationError(toErrorMessage(error));
+      if (args[2]?.localProvider) recordLocalAiClassificationError(describeLocalAiClassificationFailure(error));
       else await recordCloudAiClassificationError(error, cloudAiConnectionGeneration);
       throw error;
     }
@@ -6808,10 +6808,9 @@ export default function App() {
         await refreshLeaderboardData();
       }
     } catch (nextError) {
-      const failure = localAiClassificationOptions
-        ? { message: toErrorMessage(nextError), failureKind: "transport" as const }
-        : await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
-      if (localAiClassificationOptions) recordLocalAiClassificationError(failure.message);
+      const localFailure = localAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
+      const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
+      if (localFailure) recordLocalAiClassificationError(localFailure);
       captureAiClassificationRun(trigger, providerKind, "current_day", {
         status: "error",
         selectedSegments: 0,
@@ -7262,10 +7261,9 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
       captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
-      const failure = localAiClassificationOptions
-        ? { message: toErrorMessage(nextError), failureKind: "transport" as const }
-        : await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
-      if (localAiClassificationOptions) recordLocalAiClassificationError(failure.message);
+      const localFailure = localAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
+      const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
+      if (localFailure) recordLocalAiClassificationError(localFailure);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",
@@ -7318,10 +7316,9 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
       captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
-      const failure = localAiClassificationOptions
-        ? { message: toErrorMessage(nextError), failureKind: "transport" as const }
-        : await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
-      if (localAiClassificationOptions) recordLocalAiClassificationError(failure.message);
+      const localFailure = localAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
+      const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
+      if (localFailure) recordLocalAiClassificationError(localFailure);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       captureAiClassificationRun("manual", providerKind, range, {
         status: "error",

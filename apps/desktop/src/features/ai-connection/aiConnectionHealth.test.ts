@@ -97,10 +97,10 @@ describe("localAiProviderLabel", () => {
 describe("nextLocalAiConnectionCheck", () => {
   const target = { provider: "openrouter_byok", fingerprint: "fp-1" } as const;
 
-  it("keeps an established connected state through a single classification transport failure", () => {
+  it("keeps an established connected state through a single classification failure", () => {
     const connected = check({ status: "connected", consecutiveFailures: 0 });
     const next = nextLocalAiConnectionCheck(connected, target, {
-      kind: "classification_transport_failure",
+      kind: "classification_failure",
       message: "TypeError: Failed to fetch",
     }, 2_000);
 
@@ -112,11 +112,11 @@ describe("nextLocalAiConnectionCheck", () => {
   it("tears down connected only on the second consecutive classification failure", () => {
     const connected = check({ status: "connected", consecutiveFailures: 0 });
     const afterFirst = nextLocalAiConnectionCheck(connected, target, {
-      kind: "classification_transport_failure",
+      kind: "classification_failure",
       message: "TypeError: Failed to fetch",
     }, 2_000);
     const afterSecond = nextLocalAiConnectionCheck(afterFirst, target, {
-      kind: "classification_transport_failure",
+      kind: "classification_failure",
       message: "TypeError: Failed to fetch",
     }, 3_000);
 
@@ -127,7 +127,7 @@ describe("nextLocalAiConnectionCheck", () => {
 
   it("fails immediately when a classification error arrives with no established state", () => {
     const next = nextLocalAiConnectionCheck(null, target, {
-      kind: "classification_transport_failure",
+      kind: "classification_failure",
       message: "Provider returned HTTP 401.",
     }, 1_000);
 
@@ -178,7 +178,7 @@ describe("nextLocalAiConnectionCheck", () => {
   it("does not carry failure history across a provider or fingerprint change", () => {
     const failed = check({ status: "failed", consecutiveFailures: 5 });
     const next = nextLocalAiConnectionCheck(failed, { provider: "self_hosted", fingerprint: "fp-2" }, {
-      kind: "classification_transport_failure",
+      kind: "classification_failure",
       message: "timed out",
     }, 2_000);
 

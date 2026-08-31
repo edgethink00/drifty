@@ -11,6 +11,7 @@ import {
   type LocalAiConnectionEvent,
 } from "../ai-connection/aiConnectionHealth";
 import type { AiClassificationSummary } from "../classification/aiClassificationService";
+import type { LocalAiClassificationFailure } from "../classification/localAiClassificationFailure";
 import { localAiProviderConfigFromSetup } from "./localAiClassificationOptions";
 import type { LocalAiClassificationOptions } from "./localAiClassificationOptions";
 import { isActiveProviderTestable } from "./aiSetupProviderSelection";
@@ -45,7 +46,7 @@ type UseAiSetupControllerResult = {
   readonly localAiMemoryUsageBytes: number | null;
   readonly localAiProviderStatus: LocalAiProviderStatus;
   readonly localAiSetup: LocalAiSetupState;
-  readonly recordLocalAiClassificationError: (message: string) => void;
+  readonly recordLocalAiClassificationError: (failure: LocalAiClassificationFailure) => void;
   readonly recordLocalAiClassificationSummary: (summary: AiClassificationSummary) => void;
   readonly setAiSetupDialogOpen: Dispatch<SetStateAction<boolean>>;
   readonly setLocalAiSetup: Dispatch<SetStateAction<LocalAiSetupState>>;
@@ -126,7 +127,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
         return;
       }
       applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
-        kind: "classification_transport_failure",
+        kind: "classification_failure",
         message: summary.message,
       });
       return;
@@ -141,11 +142,19 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     });
   }, [applyLocalAiConnectionEvent, localAiConnectionFingerprint, localAiSetup.provider]);
 
-  const recordLocalAiClassificationError = useCallback((message: string) => {
+  const recordLocalAiClassificationError = useCallback((failure: LocalAiClassificationFailure) => {
     if (!localAiConnectionFingerprint) return;
+    if (failure.connectionEvidence === "reachable") {
+      applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
+        kind: "provider_contact_ok",
+        message: failure.message,
+      });
+      return;
+    }
+    if (failure.connectionEvidence === "none") return;
     applyLocalAiConnectionEvent(localAiSetup.provider, localAiConnectionFingerprint, {
-      kind: "classification_transport_failure",
-      message,
+      kind: "classification_failure",
+      message: failure.message,
     });
   }, [applyLocalAiConnectionEvent, localAiConnectionFingerprint, localAiSetup.provider]);
 

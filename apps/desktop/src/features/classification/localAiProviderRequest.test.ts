@@ -5,6 +5,10 @@ import {
   type EnhancedContextProviderPayload,
 } from "./contentContextEgressPolicy";
 import {
+  MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE,
+  MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES,
+  MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES,
+  MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS,
   toLocalProviderEnhancedRetryRequest,
   toLocalProviderRequest,
   type LocalAiProviderRequest,
@@ -95,6 +99,25 @@ function promptFromRequest(request: LocalAiProviderRequest | null): string {
 }
 
 describe("toLocalProviderRequest", () => {
+  it("keeps managed local generations inside the measured 10-item context budget", () => {
+    const request = toLocalProviderRequest(
+      {
+        provider: "managed_local",
+        baseUrl: "http://127.0.0.1:39217/v1",
+        model: "drifty-qwen3.5-2b-local",
+        modelId: "drifty-qwen3-5-2b-economy",
+      },
+      [basePayload],
+      null,
+    );
+
+    expect(MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE).toBe(10);
+    expect(MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES).toBe(9_000);
+    expect(MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES).toBe(3_000);
+    expect(MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS).toBe(1024);
+    expect(request?.request["maxTokens"]).toBe(1024);
+  });
+
   it("requests the production intent contract and strict OpenRouter JSON schema", () => {
     const request = toLocalProviderRequest(
       { provider: "openrouter_byok", apiKey: "test-key", model: "google/gemini-3.1-flash-lite" },

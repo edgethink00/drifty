@@ -54,7 +54,19 @@ const OPENROUTER_SOUL_REFINEMENT_RESPONSE_FORMAT = {
     },
   },
 } as const;
-export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 4096;
+// The bundled runtime has a 4096-token context. A synthetic 20-item Qwen 3.5
+// 2B run exhausted 1024 output tokens and returned truncated JSON, while the
+// same production prompt shape completed 10 items in 724 output tokens. Keep
+// both limits together so prompt + completion retain headroom; the service
+// halves a batch once if the runtime still reports finish_reason=length.
+export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_TOKENS = 1024;
+export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE = 10;
+// Byte bounds are a tokenizer-free preflight, calibrated against the bundled
+// Qwen tokenizer. They keep ordinary 10-item prompts intact while forcing
+// unusually title-heavy or multilingual prompts into smaller batches before
+// the 4096-token runtime rejects or truncates them.
+export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES = 9_000;
+export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES = 3_000;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS = 180_000;
 export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
 

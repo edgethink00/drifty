@@ -25,6 +25,13 @@ const runnerMocks = vi.hoisted(() => ({
   runAuto: vi.fn(async () => undefined),
 }));
 
+const TRANSPORT_FAILURE = {
+  message: "TypeError: Failed to fetch",
+  failureKind: "transport",
+  usedAiProvider: false,
+  connectionEvidence: "failure",
+} as const;
+
 vi.mock("./useAiConnectionTestRunner", () => ({
   useAiConnectionTestRunner: (options: {
     localAiSetup: unknown;
@@ -93,7 +100,7 @@ describe("useAiSetupController connection resilience", () => {
     const { result } = await renderConnectedController();
 
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
 
     expect(result.current.localAiProviderStatus).toEqual({ kind: "connected" });
@@ -104,10 +111,10 @@ describe("useAiSetupController connection resilience", () => {
     const { result } = await renderConnectedController();
 
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
 
     expect(result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "network" });
@@ -118,7 +125,7 @@ describe("useAiSetupController connection resilience", () => {
     const { result } = await renderConnectedController();
 
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
     await act(async () => {
       result.current.recordLocalAiClassificationSummary({
@@ -131,10 +138,70 @@ describe("useAiSetupController connection resilience", () => {
       });
     });
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
 
     // The content error reset the counter, so this is failure #1 again.
+    expect(result.current.localAiProviderStatus).toEqual({ kind: "connected" });
+  });
+
+  it("treats a thrown invalid-response failure as provider contact, not a disconnect", async () => {
+    const { result } = await renderConnectedController();
+
+    await act(async () => {
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
+    });
+    await act(async () => {
+      result.current.recordLocalAiClassificationError({
+        message: "Local AI returned an invalid or incomplete response.",
+        failureKind: "content",
+        usedAiProvider: true,
+        connectionEvidence: "reachable",
+      });
+    });
+    await act(async () => {
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
+    });
+
+    expect(result.current.localAiProviderStatus).toEqual({ kind: "connected" });
+    expect(result.current.localAiConnectionPersistentFailure).toBe(false);
+  });
+
+  it("does not turn an OpenRouter credits rejection into a healthy connection", async () => {
+    const { result } = await renderConnectedController();
+    const creditsFailure = {
+      message: "OpenRouter credits are required.",
+      failureKind: "content",
+      usedAiProvider: true,
+      connectionEvidence: "failure",
+    } as const;
+
+    await act(async () => {
+      result.current.recordLocalAiClassificationError(creditsFailure);
+    });
+    expect(result.current.localAiProviderStatus).toEqual({ kind: "connected" });
+
+    await act(async () => {
+      result.current.recordLocalAiClassificationError(creditsFailure);
+    });
+    expect(result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "credits" });
+  });
+
+  it("ignores thrown failures without provider-contact evidence", async () => {
+    const { result } = await renderConnectedController();
+
+    await act(async () => {
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
+    });
+    await act(async () => {
+      result.current.recordLocalAiClassificationError({
+        message: "Tracker database is busy.",
+        failureKind: "content",
+        usedAiProvider: false,
+        connectionEvidence: "none",
+      });
+    });
+
     expect(result.current.localAiProviderStatus).toEqual({ kind: "connected" });
   });
 
@@ -142,10 +209,10 @@ describe("useAiSetupController connection resilience", () => {
     const { result } = await renderConnectedController();
 
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
     expect(result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "network" });
 
@@ -169,10 +236,10 @@ describe("useAiSetupController connection resilience", () => {
     const { result } = await renderConnectedController();
 
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
     await act(async () => {
-      result.current.recordLocalAiClassificationError("TypeError: Failed to fetch");
+      result.current.recordLocalAiClassificationError(TRANSPORT_FAILURE);
     });
     expect(result.current.localAiProviderStatus).toEqual({ kind: "failed", issueKind: "network" });
 
