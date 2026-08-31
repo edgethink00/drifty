@@ -143,7 +143,9 @@
   line-height: 0;
   overflow: visible;
   color: color-mix(in srgb, var(--text) 68%, transparent);
-  transition: color .15s;
+  transition:
+    color .15s,
+    transform var(--sidebar-duration) var(--sidebar-ease);
 }
 
 .settings-nav-item__icon svg {

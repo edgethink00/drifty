@@ -107,17 +107,44 @@ describe("sidebar motion styles", () => {
     expect(collapsedTrackerPauseIconBlock).toContain("height: 9px;");
   });
 
-  it("pins collapsed rail controls to the final rail instead of centering inside the animating sidebar", () => {
+  it("pins collapsed rail boxes while their marks ride onto one center axis", () => {
     const styles = readStyles();
     const collapsedSidebarBlock = cssBlock(styles, ".sidebar--collapsed");
+    const collapsedScrollBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-scroll");
+    const collapsedBrandBlock = cssBlock(styles, ".sidebar--collapsed .brand");
+    const collapsedBrandLogoBlock = cssBlock(styles, ".sidebar--collapsed .brand__logo");
     const navItemMotionBlock = cssBlock(styles, ".nav-item", "last");
     const navLabelMotionBlock = cssBlock(styles, ".nav-item > span:not(.nav-item__hover-label):not(.status-badge)", "last");
+    const collapsedNavItemBlock = cssBlock(styles, ".sidebar--collapsed .nav-item");
+    const collapsedNavIconBlock = cssBlock(styles, ".sidebar--collapsed .nav-item > svg");
+    const collapsedSettingsIconBlock = cssBlock(styles, ".sidebar--collapsed .settings-nav-item__icon");
+    const collapsedTrackerControlBlock = cssBlock(styles, ".sidebar--collapsed .tracker-control");
+    const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
     const collapsedRailWidthBlock =
       styles.match(/\.sidebar--collapsed \.brand,\s*\.sidebar--collapsed \.nav-label,\s*\.sidebar--collapsed \.sidebar-nav,\s*\.sidebar--collapsed \.settings-sidebar-back,\s*\.sidebar--collapsed \.settings-nav,\s*\.sidebar--collapsed \.sidebar-foot\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
+    const reducedMotionBlock = styles.match(/@media \(prefers-reduced-motion: reduce\) \{[\s\S]*?transition-duration: 0\.01ms !important;[\s\S]*?\n\}/)?.[0] ?? "";
 
     expect(collapsedSidebarBlock).toContain("align-items: flex-start;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-brand-align-x: 1px;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-nav-icon-align-x: 2px;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: 1px;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-tracker-align-x: 1px;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: -1.5px;");
+    expect(collapsedScrollBlock).toContain("width: 100%;");
+    expect(collapsedScrollBlock).toContain("min-width: 0;");
+    expect(collapsedBrandBlock).toContain("transform: translateX(var(--sidebar-collapse-brand-align-x));");
+    expect(collapsedBrandLogoBlock).not.toContain("transform:");
     expect(navItemMotionBlock).not.toMatch(/transition:[^;]*(?:width|padding)/);
     expect(navLabelMotionBlock).not.toMatch(/transition:[^;]*(?:width|max-width|padding|margin)/);
+    expect(collapsedNavItemBlock).toContain("min-width: 0;");
+    expect(collapsedNavIconBlock).toContain("transform: translateX(var(--sidebar-collapse-nav-icon-align-x));");
+    expect(collapsedSettingsIconBlock).toContain("transform: translateX(var(--sidebar-collapse-settings-icon-align-x));");
+    expect(collapsedTrackerControlBlock).toContain("transform: translateX(var(--sidebar-collapse-tracker-align-x));");
+    expect(collapsedAccountTriggerBlock).toContain("transform: translateX(var(--sidebar-collapse-account-align-x));");
+    expect(styles).toMatch(/\.nav-item > svg\s*\{[^}]*transition:\s*transform var\(--sidebar-duration\) var\(--sidebar-ease\);/);
+    expect(styles).toMatch(/\.settings-nav-item__icon\s*\{[^}]*transform var\(--sidebar-duration\) var\(--sidebar-ease\)/);
+    expect(reducedMotionBlock).toContain(".nav-item > svg");
+    expect(reducedMotionBlock).toContain(".settings-nav-item__icon");
     expect(collapsedRailWidthBlock).toContain(".sidebar--collapsed .brand");
     expect(collapsedRailWidthBlock).toContain(".sidebar--collapsed .sidebar-nav");
     expect(collapsedRailWidthBlock).toContain(".sidebar--collapsed .sidebar-foot");

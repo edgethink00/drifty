@@ -163,13 +163,31 @@
     transform var(--sidebar-fade-duration) ease-out;
 }
 
+.nav-item > svg {
+  transition: transform var(--sidebar-duration) var(--sidebar-ease);
+}
+
 .sidebar--collapsed {
+  /* Every standalone mark lands on the 27px centre of the 54px rail. The
+     offsets are the measured deltas from each expanded left anchor; keeping
+     them on transform lets collapse and expansion use the shell's 380ms ride
+     without changing flex alignment at frame zero. */
+  --sidebar-collapse-brand-align-x: 1px;
+  --sidebar-collapse-nav-icon-align-x: 2px;
+  --sidebar-collapse-settings-icon-align-x: 1px;
+  --sidebar-collapse-tracker-align-x: 1px;
+  --sidebar-collapse-account-align-x: -1.5px;
   align-items: flex-start;
   gap: 3px;
   overflow-x: hidden;
   overflow-y: hidden;
   padding: var(--window-chrome-height) 8px var(--content-panel-gap);
   scrollbar-width: none;
+}
+
+.sidebar--collapsed .sidebar-scroll {
+  width: 100%;
+  min-width: 0;
 }
 
 .sidebar--collapsed .brand,
@@ -215,6 +233,7 @@
   justify-content: flex-start;
   padding: 10px 4px;
   margin: 0 0 4px;
+  transform: translateX(var(--sidebar-collapse-brand-align-x));
 }
 
   /* Show the standalone icon while collapsed. */
@@ -243,6 +262,7 @@
     gap: 0;
     justify-content: flex-start;
     width: 100%;
+    min-width: 0;
     height: var(--nav-item-height);
     padding: 0 10px;
     border-radius: 10px;
@@ -268,9 +288,10 @@
     transform: translate3d(0, -50%, 0);
   }
 
-  .sidebar--collapsed .nav-item svg {
+  .sidebar--collapsed .nav-item > svg {
     width: 14px;
     height: 14px;
+    transform: translateX(var(--sidebar-collapse-nav-icon-align-x));
   }
 
   .sidebar--collapsed .settings-sidebar-back {
@@ -319,6 +340,10 @@
   /* Collapsed rail shows the section icon (centered) instead of the first-letter glyph. */
   .sidebar--collapsed .settings-nav-item::before {
     content: none;
+  }
+
+  .sidebar--collapsed .settings-nav-item__icon {
+    transform: translateX(var(--sidebar-collapse-settings-icon-align-x));
   }
 
   .sidebar--collapsed .settings-nav-item__icon svg {
@@ -423,6 +448,7 @@
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     overflow: visible;
+    transform: translateX(var(--sidebar-collapse-tracker-align-x));
   }
 
   .sidebar--collapsed .live-pill,
@@ -627,6 +653,7 @@
     margin-inline: 0;
     padding: 5px 7px;
     border-radius: 10px;
+    transform: translateX(var(--sidebar-collapse-account-align-x));
   }
 
   .sidebar--collapsed .account-avatar {
@@ -658,8 +685,10 @@
   .brand__logo,
   .nav-label,
   .nav-item,
+  .nav-item > svg,
   .nav-item > span:not(.nav-item__hover-label):not(.status-badge),
   .nav-item__hover-label,
+  .settings-nav-item__icon,
   .settings-nav-item__label,
   .tracker-control,
   .live-pill,
