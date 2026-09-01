@@ -243,6 +243,7 @@ fn write_counting_fake_runtime(root: &Path, starts_path: &Path) -> Result<(), Ma
     use std::os::unix::fs::PermissionsExt;
     permissions.set_mode(0o755);
     std::fs::set_permissions(runtime_path, permissions)?;
+    runtime::write_runtime_completion_fixture(root)?;
     Ok(())
 }
 

@@ -472,6 +472,7 @@ fn write_fake_runtime(root: &Path, args_path: &Path) -> Result<(), ManagedAiErro
         permissions.set_mode(0o755);
     }
     std::fs::set_permissions(runtime_path, permissions)?;
+    runtime::write_runtime_completion_fixture(root)?;
     Ok(())
 }
 

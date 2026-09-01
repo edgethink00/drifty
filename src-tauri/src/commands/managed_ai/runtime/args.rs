@@ -1,5 +1,8 @@
 use std::{ffi::OsString, path::Path};
 
+#[cfg(target_os = "macos")]
+use std::process::Command;
+
 use super::super::ManagedAiModelSpec;
 use super::{RUNTIME_HOST, RUNTIME_PORT};
 
@@ -8,7 +11,15 @@ const RUNTIME_PARALLEL_SLOTS: &str = "1";
 const RUNTIME_PROMPT_CACHE_MIB: &str = "256";
 
 pub(super) fn runtime_args(model_path: &Path, spec: ManagedAiModelSpec) -> Vec<OsString> {
-    [
+    runtime_args_for_platform(model_path, spec, legacy_macos_cpu_fallback())
+}
+
+fn runtime_args_for_platform(
+    model_path: &Path,
+    spec: ManagedAiModelSpec,
+    force_cpu: bool,
+) -> Vec<OsString> {
+    let mut args = Vec::from([
         OsString::from("-m"),
         model_path.as_os_str().to_owned(),
         OsString::from("--host"),
@@ -29,8 +40,34 @@ pub(super) fn runtime_args(model_path: &Path, spec: ManagedAiModelSpec) -> Vec<O
         OsString::from("none"),
         OsString::from("--reasoning-budget"),
         OsString::from("0"),
-    ]
-    .into()
+    ]);
+    if force_cpu {
+        args.extend([OsString::from("--device"), OsString::from("none")]);
+    }
+    args
+}
+
+#[cfg(target_os = "macos")]
+fn legacy_macos_cpu_fallback() -> bool {
+    let version = Command::new("/usr/bin/sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok());
+    version
+        .as_deref()
+        .and_then(parse_macos_major_version)
+        .map_or(true, |major| major < 26)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn legacy_macos_cpu_fallback() -> bool {
+    false
+}
+
+fn parse_macos_major_version(version: &str) -> Option<u32> {
+    version.trim().split('.').next()?.parse().ok()
 }
 
 #[cfg(test)]
@@ -54,5 +91,36 @@ mod tests {
         assert!(args
             .windows(2)
             .any(|pair| pair == ["--alias", "drifty-qwen3.5-4b-local"]));
+    }
+
+    #[test]
+    fn legacy_macos_runtime_disables_metal() {
+        let spec = super::super::super::require_model("drifty-qwen3-5-2b-economy")
+            .expect("known managed model");
+        let args = runtime_args_for_platform(Path::new("/tmp/Qwen3.5-2B-Q4_K_M.gguf"), spec, true)
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(args.windows(2).any(|pair| pair == ["--device", "none"]));
+    }
+
+    #[test]
+    fn current_macos_runtime_keeps_accelerated_device_selection() {
+        let spec = super::super::super::require_model("drifty-qwen3-5-2b-economy")
+            .expect("known managed model");
+        let args = runtime_args_for_platform(Path::new("/tmp/Qwen3.5-2B-Q4_K_M.gguf"), spec, false)
+            .into_iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+
+        assert!(!args.windows(2).any(|pair| pair == ["--device", "none"]));
+    }
+
+    #[test]
+    fn parses_macos_major_versions() {
+        assert_eq!(parse_macos_major_version("14.8.7\n"), Some(14));
+        assert_eq!(parse_macos_major_version("26.0"), Some(26));
+        assert_eq!(parse_macos_major_version("not-a-version"), None);
     }
 }

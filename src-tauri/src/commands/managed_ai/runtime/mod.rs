@@ -19,6 +19,11 @@ const RUNTIME_PORT: &str = "39217";
 #[cfg(target_os = "windows")]
 const RUNTIME_PORT_NUMBER: u16 = 39_217;
 
+#[cfg(test)]
+pub(super) fn write_runtime_completion_fixture(root: &Path) -> Result<(), ManagedAiError> {
+    install::write_runtime_completion_fixture(root)
+}
+
 pub(super) fn start_runtime(
     root: &Path,
     spec: ManagedAiModelSpec,

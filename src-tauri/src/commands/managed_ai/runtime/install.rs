@@ -41,13 +41,27 @@ const RUNTIME_ARCHIVES: &[RuntimeArchive] = &[
     RuntimeArchive {
         os: "macos",
         arch: "aarch64",
-        url: "https://github.com/ggml-org/llama.cpp/releases/download/b9690/llama-b9690-bin-macos-arm64.tar.gz",
-        sha256: "2a6369266a8e349ee282cd98b39ddb2cf23f57860d2225d20c791aa5a3f3a44b",
-        expected_size_bytes: 10_911_721,
+        // The upstream b9690 arm64 artifact is built with a macOS 26.0
+        // deployment target. This rebuild uses the exact b9690 source commit
+        // with a macOS 13.0 target so it can honor Drifty's supported OS range.
+        url: "https://github.com/edgethink00/drifty_releases/releases/download/1.9.4/llama-b9690-drifty-bin-macos-arm64-macos13.tar.gz",
+        sha256: "ed5c2580fbd32be0878db83d3a6fe5364fcce26cdc7ed48db71e1f83642308ce",
+        expected_size_bytes: 7_334_981,
         format: RuntimeArchiveFormat::TarGz,
         payload_dir: Some("llama-b9690"),
         runtime_file_name: "llama-server",
-        required_files: &["llama-server"],
+        required_files: &[
+            "llama-server",
+            "DRIFTY_RUNTIME_MACOS13",
+            "libllama-server-impl.dylib",
+            "libllama-common.0.dylib",
+            "libmtmd.0.dylib",
+            "libllama.0.dylib",
+            "libggml.0.dylib",
+            "libggml-cpu.0.dylib",
+            "libggml-metal.0.dylib",
+            "libggml-base.0.dylib",
+        ],
     },
     RuntimeArchive {
         os: "macos",
@@ -278,6 +292,20 @@ fn runtime_install_complete(root: &Path, archive: &RuntimeArchive) -> bool {
         .all(|file_name| runtime_dir.join(file_name).is_file())
 }
 
+#[cfg(test)]
+pub(super) fn write_runtime_completion_fixture(root: &Path) -> Result<(), ManagedAiError> {
+    let archive = runtime_archive_for_current_arch()?;
+    let runtime_dir = root.join("runtime");
+    fs::create_dir_all(&runtime_dir)?;
+    for file_name in archive.required_files {
+        let path = runtime_dir.join(file_name);
+        if !path.exists() {
+            fs::write(path, b"test runtime dependency")?;
+        }
+    }
+    Ok(())
+}
+
 fn ensure_runtime_executable(path: &Path) -> Result<(), ManagedAiError> {
     #[cfg(unix)]
     {
@@ -309,6 +337,16 @@ mod tests {
         assert!(runtime_archive_for("windows", "x86_64").is_some());
         assert!(runtime_archive_for("windows", "armv7").is_none());
         assert!(runtime_archive_for("linux", "x86_64").is_none());
+    }
+
+    #[test]
+    fn macos_arm_runtime_uses_the_current_release_tag_and_compatibility_marker() {
+        let archive = runtime_archive_for("macos", "aarch64").expect("arm64 runtime archive");
+
+        assert!(archive
+            .url
+            .contains(&format!("/download/{}/", env!("CARGO_PKG_VERSION"))));
+        assert!(archive.required_files.contains(&"DRIFTY_RUNTIME_MACOS13"));
     }
 
     #[test]
