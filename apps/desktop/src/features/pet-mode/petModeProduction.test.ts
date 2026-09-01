@@ -258,7 +258,7 @@ describe("catching the cat cancels the close", () => {
     // The user is already looking at the screen with a hand on the pointer, so
     // a system banner on top of the companion is pure noise.
     expect(app).toContain('const intercepted = result.diagnostic === "pet_intercepted"');
-    expect(app).toContain("showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted)");
+    expect(app).toContain("showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted, breakReturnAlarm)");
     const interceptedBranch = app.slice(app.indexOf("if (intercepted) {"));
     expect(interceptedBranch.slice(0, interceptedBranch.indexOf("showFallbackDriftAlarm")))
       .toContain("lastDriftAlertSegmentRef.current = null");

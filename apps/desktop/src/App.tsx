@@ -2850,6 +2850,9 @@ export default function App() {
         const nextSnooze = buildBreakSnooze({ attempt, event: currentAlarmEvent });
         pendingBreakReturnAlarmRef.current = null;
         breakRecoveryAssessmentRef.current = null;
+        // An explicit break starts a new intervention cycle at expiry. Do not
+        // spend its first post-break poll on a reprieve earned before the break.
+        petInterceptedSegmentRef.current = null;
         driftAlarmSnoozeRef.current = nextSnooze;
         setBreakRecoveryAssessment(null);
         setDriftAlarmSnooze(nextSnooze);
@@ -4706,6 +4709,7 @@ export default function App() {
     const buildCurrentDriftAlarmEvent = (
       focusTargets: readonly DriftAlarmFocusTarget[] = availableDriftAlarmFocusTargetsForAlarm,
       petIntercepted = false,
+      breakReturnAlarm: DriftAlarmBreakSnooze | null = null,
     ) => {
       const contextLabel = getWatcherContextLabel(segment, category);
       const sourceSiteDomain = segment.siteDomain?.trim() ?? null;
@@ -4718,6 +4722,26 @@ export default function App() {
         ?? null;
       const sourceSegmentId = deliverySourceSegmentId ?? segment.id;
       rememberDriftAlarmSourceSegment(driftAlarmSourceSegmentsRef.current, sourceSegmentId, segment);
+
+      if (breakReturnAlarm && !petIntercepted) {
+        return buildBreakReturnAlarmEvent({
+          id: `break-return:${alertKey}:${breakReturnAlarm.untilMs}`,
+          contextLabel,
+          driftDurationSeconds: deliveryDriftDurationSeconds,
+          preservedFocusStrikeSeconds: 0,
+          generatedAt: new Date().toISOString(),
+          focusTargets,
+          sourceSiteDomain,
+          sourceAppName,
+          sourceIconSrc,
+          copySettings: driftAlarmCopy,
+          sourceSegmentId,
+          decisionClassification: confirmedDecisionClassification,
+          breakDurationMinutes: breakReturnAlarm.minutes,
+          pausedFromLabel: breakReturnAlarm.pausedFromLabel,
+          nextFocusLabel: focusTargets[0]?.label ?? "your focus",
+        });
+      }
 
       return buildDriftAlarmEvent({
         id: alertKey,
@@ -4735,8 +4759,17 @@ export default function App() {
         petIntercepted,
       });
     };
-    const showCurrentDriftAlarm = (petIntercepted = false) => {
-      showDriftAlarm(buildCurrentDriftAlarmEvent(availableDriftAlarmFocusTargetsForAlarm, petIntercepted));
+    const showCurrentDriftAlarm = (
+      petIntercepted = false,
+      breakReturnAlarm: DriftAlarmBreakSnooze | null = null,
+    ) => {
+      showDriftAlarm(buildCurrentDriftAlarmEvent(
+        breakReturnAlarm?.focusTargets.length
+          ? breakReturnAlarm.focusTargets
+          : availableDriftAlarmFocusTargetsForAlarm,
+        petIntercepted,
+        breakReturnAlarm,
+      ));
     };
     const markCurrentDriftAlarmDelivered = () => {
       recordDriftAlarmDebugEvent({
@@ -4747,8 +4780,12 @@ export default function App() {
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "delivered", candidateDetail }, checkedAt);
     };
-    const showFallbackDriftAlarm = (notify: boolean, petIntercepted = false) => {
-      showCurrentDriftAlarm(petIntercepted);
+    const showFallbackDriftAlarm = (
+      notify: boolean,
+      petIntercepted = false,
+      breakReturnAlarm: DriftAlarmBreakSnooze | null = null,
+    ) => {
+      showCurrentDriftAlarm(petIntercepted, breakReturnAlarm);
       markCurrentDriftAlarmDelivered();
       if (notify) {
         recordDriftAlarmDebugEvent({
@@ -4768,7 +4805,10 @@ export default function App() {
         });
       }
     };
-    const applyCurrentExtremeNudge = (notifyOnFallback: boolean) => {
+    const applyCurrentExtremeNudge = (
+      notifyOnFallback: boolean,
+      breakReturnAlarm: DriftAlarmBreakSnooze | null = null,
+    ) => {
       lastDriftAlertSegmentRef.current = alertKey;
       // One caught cat per drift stretch keeps the reprieve meaningful without
       // letting it become permanent: this round stays quiet, and the next poll
@@ -4890,7 +4930,7 @@ export default function App() {
             // Reuse the same alarm surface, but never fire an OS notification
             // on top of it: the user is already looking at the screen and has a
             // hand on the pointer.
-            showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted);
+            showFallbackDriftAlarm(intercepted ? false : notifyOnFallback, intercepted, breakReturnAlarm);
           }
           return;
         }
@@ -4904,7 +4944,11 @@ export default function App() {
             console.warn("Failed to resolve current drift alarm focus target availability", String(error));
           }
         }
-        const driftAlarmEvent = buildCurrentDriftAlarmEvent(resolvedDriftAlarmFocusTargets);
+        const driftAlarmEvent = buildCurrentDriftAlarmEvent(
+          resolvedDriftAlarmFocusTargets,
+          false,
+          breakReturnAlarm,
+        );
         driftAlarmEventRef.current = driftAlarmEvent;
         lastDriftAlarmEventRef.current = driftAlarmEvent;
         const latestFocusTarget = resolvedDriftAlarmFocusTargets[0] ?? null;
@@ -4929,7 +4973,7 @@ export default function App() {
           evaluation,
         });
         if (lastDriftAlertSegmentRef.current === alertKey) {
-          showFallbackDriftAlarm(notifyOnFallback);
+          showFallbackDriftAlarm(notifyOnFallback, false, breakReturnAlarm);
         }
       });
     };
@@ -5007,45 +5051,33 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
+      const shouldApplyExtremeNudge = extremeNudgeEnabled && canApplyExtremeNudgeToSurface({
+        segment,
+        category,
+        aiConfirmedDrift,
+        classificationSource: confirmedDecisionClassification?.source ?? null,
+      });
       const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
       if (pendingBreakReturnAlarm) {
+        // Break expiry ends the exact snooze. The separate 10-minute recovery
+        // assessment is analytics, not hidden intervention grace: after the
+        // fresh candidate gates pass, apply the user's current delivery policy.
         const outcome = resolveBreakRecoveryOutcome({
           attempt: pendingBreakReturnAlarm,
           driftCandidate: deliveryCandidate,
           nowMs: Date.now(),
         });
         if (outcome) completeBreakRecoveryAssessment(pendingBreakReturnAlarm, outcome);
-        const focusTargets = pendingBreakReturnAlarm.focusTargets.length
-          ? pendingBreakReturnAlarm.focusTargets
-          : availableDriftAlarmFocusTargetsForAlarm;
-        const breakReturnContextLabel = getWatcherContextLabel(segment, category);
-        const breakReturnSiteDomain = segment.siteDomain?.trim() ?? null;
-        const breakReturnAppName = segment.appName.trim() || "Unknown app";
-        const breakReturnIconKey = segment.bundleId?.trim() ?? breakReturnAppName;
-        const breakReturnIconSrc = (breakReturnSiteDomain ? siteIconsRef.current[breakReturnSiteDomain.toLowerCase()] : null)
-          ?? appIconsRef.current[breakReturnIconKey]
-          ?? appIconsRef.current[breakReturnAppName]
-          ?? null;
-
-        showDriftAlarm(buildBreakReturnAlarmEvent({
-          id: `break-return:${alertKey}:${pendingBreakReturnAlarm.untilMs}`,
-          contextLabel: breakReturnContextLabel,
-          driftDurationSeconds: deliveryDriftDurationSeconds,
-          preservedFocusStrikeSeconds: 0,
-          generatedAt: new Date().toISOString(),
-          focusTargets,
-          sourceSiteDomain: breakReturnSiteDomain,
-          sourceAppName: breakReturnAppName,
-          sourceIconSrc: breakReturnIconSrc,
-          copySettings: driftAlarmCopy,
-          sourceSegmentId: deliverySourceSegmentId ?? segment.id,
-          decisionClassification: confirmedDecisionClassification,
-          breakDurationMinutes: pendingBreakReturnAlarm.minutes,
-          pausedFromLabel: pendingBreakReturnAlarm.pausedFromLabel,
-          nextFocusLabel: focusTargets[0]?.label ?? "your focus",
-        }));
+        // Consume the pending context before starting an async close so the
+        // next poll cannot launch a duplicate. The captured value still gives
+        // every close-failure path the correct break-return fallback context.
         pendingBreakReturnAlarmRef.current = null;
+        if (shouldApplyExtremeNudge) {
+          applyCurrentExtremeNudge(false, pendingBreakReturnAlarm);
+          return;
+        }
         lastDriftAlertSegmentRef.current = alertKey;
+        showCurrentDriftAlarm(false, pendingBreakReturnAlarm);
         markCurrentDriftAlarmDelivered();
         return;
       }
@@ -5060,12 +5092,6 @@ export default function App() {
         if (outcome) completeBreakRecoveryAssessment(activeAssessment, outcome);
       }
 
-      const shouldApplyExtremeNudge = extremeNudgeEnabled && canApplyExtremeNudgeToSurface({
-        segment,
-        category,
-        aiConfirmedDrift,
-        classificationSource: confirmedDecisionClassification?.source ?? null,
-      });
       if (lastDriftAlertSegmentRef.current === null) {
         if (shouldApplyExtremeNudge) {
           applyCurrentExtremeNudge(false);
