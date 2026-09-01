@@ -41,6 +41,7 @@ apps/desktop/.env
 .env.sentry-build-plugin
 supabase/.temp/
 apps/desktop/supabase/.temp/
+apps/desktop/supabase/.branches/
 apps/desktop/supabase/supabase/.temp/
 /*.png
 qa-/*.png
