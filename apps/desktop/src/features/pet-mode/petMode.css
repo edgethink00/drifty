@@ -763,9 +763,10 @@
 .pet-mode-cat.is-playful-paw .pet-mode-cat__alert,
 .pet-mode-cat.is-quiet-notice .pet-mode-cat__alert { opacity: 0; animation: none; }
 
-/* Anger mark. Drawn rather than typed, but it keeps the alert grammar: same
-   corner, same dark halo, same 620ms beat. It is reserved for the brief annoyed
-   wake-up reaction; ordinary awake petting never drives this phase. */
+/* Anger mark. The inner glyph cracks outward from the corner nearest the
+   temple, while the outer SVG only owns the reaction-length presence. Keeping
+   those jobs separate avoids both the old vertical orbit and the center-based
+   sticker pop. Ordinary awake petting never drives this phase. */
 .pet-mode-cat__anger {
   position: absolute;
   inset: 0;
@@ -780,10 +781,55 @@
   pointer-events: none;
 }
 .pet-mode-cat--anger .pet-mode-cat__anger {
+  /* This declaration is also the reduced-motion fallback once animation is
+     disabled by the media query below. */
   opacity: 1;
-  animation: pet-mode-alert 620ms ease-in-out infinite;
+  animation: pet-mode-anger-presence var(--pet-anger-duration) linear both;
+}
+.pet-mode-cat--anger .pet-mode-cat__anger-glyph {
+  animation: pet-mode-anger-crack var(--pet-anger-duration) linear both;
   transform-box: fill-box;
-  transform-origin: center;
+  /* The mark's lower-left corner is the point nearest the cat's temple. The
+     parent facing transform mirrors this anchor for left-facing artwork. */
+  transform-origin: 14% 88%;
+}
+
+@keyframes pet-mode-anger-presence {
+  0% {
+    opacity: 0;
+  }
+  2.67%, 85.78% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes pet-mode-anger-crack {
+  0% {
+    clip-path: circle(0% at 14% 88%);
+    transform: scale(.72, .64);
+    animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+  }
+  8% {
+    clip-path: circle(72% at 14% 88%);
+    transform: scale(.95, 1.03);
+    animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+  }
+  14.22% {
+    clip-path: circle(160% at 14% 88%);
+    transform: scale(1.025, 1.04);
+    animation-timing-function: cubic-bezier(.16, 1, .3, 1);
+  }
+  20.44% {
+    clip-path: circle(160% at 14% 88%);
+    transform: scale(.995, 1);
+  }
+  25.78%, 100% {
+    clip-path: circle(160% at 14% 88%);
+    transform: scale(1);
+  }
 }
 
 @keyframes pet-mode-alert {
@@ -909,6 +955,7 @@
   .pet-mode-cat__zzz,
   .pet-mode-cat__alert,
   .pet-mode-cat__anger,
+  .pet-mode-cat__anger-glyph,
   .pet-mode-cat__shadow,
   .pet-mode-cat__face-erase,
   .pet-mode-cat__expression,

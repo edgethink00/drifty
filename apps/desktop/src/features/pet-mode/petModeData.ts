@@ -31,21 +31,17 @@ export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
 export const PET_MODE_PET_STREAK_WINDOW_MS = 6 * 1000;
 export const PET_MODE_PET_STREAK_TO_DROWSY = 2;
 export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
-// The expressive interaction pack is intentionally Dev-gated while its
-// product rules are being calibrated. A second key (rather than Dev mode by
-// itself) lets reviewers compare the shipped cat and the experiment without
-// leaving the diagnostics surface.
-export const PET_MODE_EXPERIMENTS_STORAGE_KEY = "drifty.dev.petModeExperiments.v1";
-// Dev-only override for repeatedly QAing the pack's visible probability
-// outcomes. It affects only angry wake and music-note rolls, not life-action
-// selection or timing. The renderer also checks Dev mode itself, so a
-// persisted toggle cannot change production behavior after Dev mode is off.
+// Dev-only override for repeatedly QAing the production pack's visible
+// probability outcomes. It affects only angry wake and music-note rolls, not
+// life-action selection or timing. The renderer also checks Dev mode itself,
+// so a persisted toggle cannot change production behavior after Dev mode is
+// off.
 export const PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY = "drifty.dev.petModeGuaranteedOutcomes.v1";
 // Waking a sleeping cat can earn a brief annoyed beat. The roll happens only
 // on the second sleep touch, never on ordinary petting or the touch that merely
 // checks whether the cat wants to stay asleep.
 export const PET_MODE_SLEEP_WAKE_ANGER_CHANCE = 0.25;
-export const PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS = 1_200;
+export const PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS = 1_350;
 // A music note is a rare good-mood accent, not another default idle effect.
 // It can accompany the two relaxed life motions and uses the same reviewed
 // one-shot timing as the existing heart.
@@ -206,10 +202,8 @@ export type PetModePreviewAction =
 export function shouldShowPetModeMusicNote(
   action: PetModePreviewAction,
   roll: number,
-  expressiveInteractionsEnabled: boolean,
 ): boolean {
-  return expressiveInteractionsEnabled
-    && (action === "stretch" || action === "tail_flick")
+  return (action === "stretch" || action === "tail_flick")
     && roll >= 0
     && roll < PET_MODE_MUSIC_NOTE_CHANCE;
 }

@@ -54,7 +54,6 @@ import {
   resolvePetModeEntryDurationMs,
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
-  PET_MODE_EXPERIMENTS_STORAGE_KEY,
   PET_MODE_PET_STREAK_TO_DROWSY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
@@ -116,13 +115,8 @@ import "./petMode.css";
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
 type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase"> | "drowsy";
 
-function expressiveInteractionsEnabled(): boolean {
-  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
-    && window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY) === "1";
-}
-
 function guaranteedOutcomesEnabled(): boolean {
-  return expressiveInteractionsEnabled()
+  return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
     && window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1";
 }
 
@@ -254,23 +248,6 @@ export function PetModeWindowApp() {
     }
     setMusicNoteVisible(false);
   }, []);
-
-  useEffect(() => {
-    const handleStorage = (event: StorageEvent) => {
-      if (
-        event.key !== null
-        && event.key !== DEV_MODE_STORAGE_KEY
-        && event.key !== PET_MODE_EXPERIMENTS_STORAGE_KEY
-      ) return;
-      if (expressiveInteractionsEnabled()) return;
-      petStreakRef.current = 0;
-      lastPetAtRef.current = 0;
-      setProudWalk(false);
-      stopMusicNote();
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [stopMusicNote]);
 
   useEffect(() => () => {
     if (musicNoteTimerRef.current !== null) {
@@ -664,10 +641,6 @@ export function PetModeWindowApp() {
         && event.key !== PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY
         && event.key !== DEV_MODE_STORAGE_KEY
       ) return;
-      if (
-        event.key === DEV_MODE_STORAGE_KEY
-        && window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1"
-      ) stopMusicNote();
       if (resolvePetModeDriftHuntSettings().enabled) return;
       actionTokenRef.current += 1;
       void cancelNativePetMotion().catch(() => undefined);
@@ -676,7 +649,7 @@ export function PetModeWindowApp() {
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, [commitPhase, setActiveLabAction, stopMusicNote]);
+  }, [commitPhase, setActiveLabAction]);
 
   useEffect(() => {
     let disposed = false;
@@ -826,12 +799,10 @@ export function PetModeWindowApp() {
       }
       if (token !== actionTokenRef.current) return;
       if (movedToTarget) {
-        // With the expressive-interactions experiment enabled, every real
-        // successful close earns the E04 face for the walk home. Approaches,
-        // failed contacts, generic previews, and Show Pet stay neutral.
-        const proudReturn = expressiveInteractionsEnabled()
-          && contacted
-          && !target.preview;
+        // Every real successful close earns the E04 face for the walk home.
+        // Approaches, failed contacts, generic previews, and Show Pet stay
+        // neutral.
+        const proudReturn = contacted && !target.preview;
         setProudWalk(proudReturn);
         commitPhase("walk");
         try {
@@ -889,13 +860,13 @@ export function PetModeWindowApp() {
     if (action === "music_note") {
       // This is an additive accent, so a Dev preview must not cancel or replace
       // the pose currently underneath it (including focused sitting).
-      if (!expressiveInteractionsEnabled()) return;
+      if (window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1") return;
       playMusicNote();
       await delay(PET_MODE_MUSIC_NOTE_DURATION_MS);
       return;
     }
     if (action === "stretch_with_note" || action === "tail_flick_with_note") {
-      if (!expressiveInteractionsEnabled()) return;
+      if (window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1") return;
       const token = ++actionTokenRef.current;
       await revealForAction();
       if (token !== actionTokenRef.current) return;
@@ -913,7 +884,7 @@ export function PetModeWindowApp() {
       return;
     }
     if (action === "sleep_angry_wake") {
-      if (!expressiveInteractionsEnabled()) return;
+      if (window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1") return;
       const token = ++actionTokenRef.current;
       await revealForAction();
       if (token !== actionTokenRef.current) return;
@@ -966,13 +937,11 @@ export function PetModeWindowApp() {
         pet: 1_200,
       };
       commitPhase(phaseByAction[action]);
-      const musicNoteDevEnabled = expressiveInteractionsEnabled();
       const guaranteedOutcomes = guaranteedOutcomesEnabled();
       if (
-        musicNoteDevEnabled
-        && (action === "stretch" || action === "tail_flick")
+        (action === "stretch" || action === "tail_flick")
         && (guaranteedOutcomes
-          || shouldShowPetModeMusicNote(action, Math.random(), musicNoteDevEnabled))
+          || shouldShowPetModeMusicNote(action, Math.random()))
       ) playMusicNote();
       await delay(prefersReducedMotion() ? 40 : durationByAction[action]);
     }
@@ -985,11 +954,6 @@ export function PetModeWindowApp() {
   const wakeSleepingPet = useCallback(async () => {
     const token = ++actionTokenRef.current;
     sleepTouchRef.current = 0;
-    const experimentsEnabled = expressiveInteractionsEnabled();
-    if (!experimentsEnabled) {
-      commitPhase(focusRestingRef.current ? "sit" : "idle");
-      return;
-    }
     const guaranteedOutcomes = guaranteedOutcomesEnabled();
     const annoyed = guaranteedOutcomes || Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE;
     if (!annoyed) {
@@ -1771,15 +1735,6 @@ export function PetModeWindowApp() {
       && phaseRef.current !== "happy"
       && phaseRef.current !== "drowsy"
     ) return;
-
-    // OFF preserves the shipped interaction: every awake touch simply plays
-    // the happy response. ON adds the experimental relationship streak.
-    if (!expressiveInteractionsEnabled()) {
-      petStreakRef.current = 0;
-      lastPetAtRef.current = 0;
-      void playLifeAction("pet");
-      return;
-    }
 
     // Continued attention moves through a small relationship: heart, drowsy
     // lids, then sleep. A recognized stroke is a stronger beat, so it advances

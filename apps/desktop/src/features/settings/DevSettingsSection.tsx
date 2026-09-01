@@ -31,7 +31,6 @@ import {
   PET_MODE_FLOOR_HOME_PT,
   PET_MODE_FLOOR_HOME_RANGE,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
-  PET_MODE_EXPERIMENTS_STORAGE_KEY,
   type PetModeLabAction,
   type PetModeLabState,
   type PetModePreviewAction,
@@ -195,9 +194,6 @@ export function DevSettingsSection({
   const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
-  const [petModeExperimentsEnabled, setPetModeExperimentsEnabled] = useState(
-    () => window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY) === "1",
-  );
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
     () => window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1",
   );
@@ -206,10 +202,6 @@ export function DevSettingsSection({
   const updateDriftHuntSettings = (next: PetModeDriftHuntSettings) => {
     setDriftHuntSettings(next);
     persistPetModeDriftHuntSettings(next);
-  };
-  const updatePetModeExperiments = (enabled: boolean) => {
-    setPetModeExperimentsEnabled(enabled);
-    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, enabled ? "1" : "0");
   };
   const updateGuaranteedOutcomes = (enabled: boolean) => {
     setGuaranteedOutcomes(enabled);
@@ -240,12 +232,8 @@ export function DevSettingsSection({
     if (action === "wake") return petModeLabState?.phase !== "sleep";
     if (action === "life_loop" && petModeLabState?.lifeLoopEnabled) return true;
     if (action === "music_note") {
-      if (!petModeExperimentsEnabled) return true;
       return petModeLabState !== null
         && petModeLabState.activeAction !== null;
-    }
-    if (action === "stretch_with_note" || action === "tail_flick_with_note" || action === "sleep_angry_wake") {
-      if (!petModeExperimentsEnabled) return true;
     }
     if (action === "cursor_hunt_single" || action === "cursor_hunt_chase") {
       return petModeLabState !== null
@@ -333,21 +321,6 @@ export function DevSettingsSection({
               lives in its own tooltip, so the Lab is a compact bank of actions
               grouped by what they exercise: the loop, the pet's own behavior,
               and anything that moves the window. */}
-          <div className="pet-mode-lab__row pet-mode-lab__row--experiments">
-            <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Expressive interactions</div>
-              <div className="desc">Dev-only pack for evaluating the new relationship beats together.</div>
-            </div>
-            <div className="pet-mode-lab__experiment-policy" data-active={petModeExperimentsEnabled}>
-              <span>
-                <strong>{petModeExperimentsEnabled ? "Enabled for QA" : "Existing behavior"}</strong>
-                <small>{petModeExperimentsEnabled
-                  ? "Proud returns · pet-to-sleep · angry wake · music notes"
-                  : "No experimental expressions or interaction rules"}</small>
-              </span>
-              <Toggle checked={petModeExperimentsEnabled} onChange={updatePetModeExperiments} ariaLabel="Toggle expressive pet interactions" />
-            </div>
-          </div>
           <div className="pet-mode-lab__row">
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Run</div>
@@ -402,18 +375,14 @@ export function DevSettingsSection({
           <div className="pet-mode-lab__row pet-mode-lab__row--outcome-policy">
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Guaranteed outcomes</div>
-              <div className="desc">Dev-only override for the pack's visible probability rolls.</div>
+              <div className="desc">Dev-only override for production probability rolls.</div>
             </div>
             <div className="pet-mode-lab__outcome-policy">
               <span>
-                <strong>{!petModeExperimentsEnabled ? "Requires interaction pack" : guaranteedOutcomes ? "Always trigger" : "Natural odds"}</strong>
-                <small>{!petModeExperimentsEnabled
-                  ? "Enable Expressive interactions first"
-                  : guaranteedOutcomes
-                    ? "Wake 100% · notes 100%"
-                    : "Wake 25% · notes 5%"}</small>
+                <strong>{guaranteedOutcomes ? "Always trigger" : "Natural odds"}</strong>
+                <small>{guaranteedOutcomes ? "Wake 100% · notes 100%" : "Wake 25% · notes 5%"}</small>
               </span>
-              <Toggle checked={petModeExperimentsEnabled && guaranteedOutcomes} disabled={!petModeExperimentsEnabled} onChange={updateGuaranteedOutcomes} ariaLabel="Toggle guaranteed expressive outcomes" />
+              <Toggle checked={guaranteedOutcomes} onChange={updateGuaranteedOutcomes} ariaLabel="Toggle guaranteed expressive outcomes" />
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--sit-variant">

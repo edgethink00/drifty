@@ -18,10 +18,7 @@ import {
   resolveInitialEnhancedContextSettings,
 } from "./settingsStorage";
 import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
-import {
-  PET_MODE_EXPERIMENTS_STORAGE_KEY,
-  PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
-} from "../pet-mode/petModeData";
+import { PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY } from "../pet-mode/petModeData";
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
@@ -133,23 +130,16 @@ describe("DevSettingsSection", () => {
     const stretchWithNoteButton = screen.getByRole("button", { name: /Stretch \+ note Guaranteed combination/ });
     const tailWithNoteButton = screen.getByRole("button", { name: /Tail \+ note Guaranteed combination/ });
     const sleepAngryButton = screen.getByRole("button", { name: /Sleep → angry Guaranteed wake reaction/ });
-    expect(musicNoteButton.getAttribute("disabled")).toBe("");
-    expect(stretchWithNoteButton.getAttribute("disabled")).toBe("");
-    expect(tailWithNoteButton.getAttribute("disabled")).toBe("");
-    expect(sleepAngryButton.getAttribute("disabled")).toBe("");
-    expect(screen.getByText("Existing behavior")).toBeTruthy();
-    expect(screen.queryByRole("switch", { name: "Toggle drop and life rhythm preview" })).toBeNull();
-    expect(screen.queryByRole("switch", { name: "Toggle shake-to-floor drop" })).toBeNull();
-    const disabledGuaranteedToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
-    expect(disabledGuaranteedToggle.getAttribute("disabled")).toBe("");
-    expect(disabledGuaranteedToggle.getAttribute("aria-checked")).toBe("false");
-    fireEvent.click(screen.getByRole("switch", { name: "Toggle expressive pet interactions" }));
-    expect(screen.getByText("Enabled for QA")).toBeTruthy();
-    expect(window.localStorage.getItem(PET_MODE_EXPERIMENTS_STORAGE_KEY)).toBe("1");
     expect(musicNoteButton.getAttribute("disabled")).toBeNull();
     expect(stretchWithNoteButton.getAttribute("disabled")).toBeNull();
     expect(tailWithNoteButton.getAttribute("disabled")).toBeNull();
     expect(sleepAngryButton.getAttribute("disabled")).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Toggle expressive pet interactions" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Toggle drop and life rhythm preview" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Toggle shake-to-floor drop" })).toBeNull();
+    const naturalOddsToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
+    expect(naturalOddsToggle.getAttribute("disabled")).toBeNull();
+    expect(naturalOddsToggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(musicNoteButton);
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("music_note");
     fireEvent.click(stretchWithNoteButton);
@@ -248,7 +238,6 @@ describe("DevSettingsSection", () => {
 
   it("keeps explicit cursor hunt previews available while the focused cat is sitting", async () => {
     window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
-    window.localStorage.setItem(PET_MODE_EXPERIMENTS_STORAGE_KEY, "1");
     renderProductionDevSettings({ petModeEnabled: true });
     await act(async () => undefined);
 

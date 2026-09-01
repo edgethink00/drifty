@@ -29,6 +29,8 @@ const devSettings = readFileSync("src/features/settings/DevSettingsSection.tsx",
 const notifications = readFileSync("src/features/settings/NotificationsSettingsSection.tsx", "utf8");
 const petModeCatContract = readFileSync("src/features/pet-mode/PetModeCat.tsx", "utf8");
 const petModeCssContract = readFileSync("src/features/pet-mode/petMode.css", "utf8");
+const petModeDataContract = readFileSync("src/features/pet-mode/petModeData.ts", "utf8");
+const petModeWindowContract = readFileSync("src/features/pet-mode/PetModeWindowApp.tsx", "utf8");
 const petModeRustContract = readFileSync("../../src-tauri/src/commands/pet_mode.rs", "utf8");
 
 describe("pet entry motion contract", () => {
@@ -81,6 +83,23 @@ describe("pet entry motion contract", () => {
     expect(petModeCssContract).toContain(
       ".pet-mode-cat.is-entry-landed .pet-mode-cat__motion",
     );
+  });
+});
+
+describe("pet expressive interactions promoted out of Dev", () => {
+  it("retires the preview master switch without weakening Dev-only force controls", () => {
+    expect(petModeDataContract).not.toContain("drifty.dev.petModeExperiments.v1");
+    expect(petModeWindowContract).not.toContain("expressiveInteractionsEnabled");
+    expect(devSettings).not.toContain("Toggle expressive pet interactions");
+    expect(devSettings).toContain("Toggle guaranteed expressive outcomes");
+    expect(petModeWindowContract).toContain('window.localStorage.getItem(DEV_MODE_STORAGE_KEY) !== "1"');
+  });
+
+  it("keeps all four approved beats on the production path", () => {
+    expect(petModeWindowContract).toContain("const proudReturn = contacted && !target.preview;");
+    expect(petModeWindowContract).toContain("shouldShowPetModeMusicNote(action, Math.random())");
+    expect(petModeWindowContract).toContain("Math.random() < PET_MODE_SLEEP_WAKE_ANGER_CHANCE");
+    expect(petModeWindowContract).toContain("petStreakRef.current >= PET_MODE_PET_STREAK_TO_SLEEP");
   });
 });
 

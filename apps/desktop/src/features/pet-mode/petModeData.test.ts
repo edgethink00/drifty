@@ -79,16 +79,14 @@ describe("petModeData", () => {
     expect(PET_MODE_BLINK_INTERVAL_MAX_MS).toBe(7_280);
   });
 
-  it("reserves the five percent music note roll for relaxed life motions", () => {
+  it("ships the five percent music note roll for relaxed life motions", () => {
     expect(PET_MODE_MUSIC_NOTE_CHANCE).toBe(0.05);
-    expect(shouldShowPetModeMusicNote("stretch", 0, true)).toBe(true);
-    expect(shouldShowPetModeMusicNote("tail_flick", 0.049999, true)).toBe(true);
-    expect(shouldShowPetModeMusicNote("stretch", 0.05, true)).toBe(false);
-    expect(shouldShowPetModeMusicNote("pet", 0, true)).toBe(false);
-    expect(shouldShowPetModeMusicNote("blink", 0, true)).toBe(false);
-    expect(shouldShowPetModeMusicNote("music_note", 0, true)).toBe(false);
-    expect(shouldShowPetModeMusicNote("stretch", 0, false)).toBe(false);
-    expect(shouldShowPetModeMusicNote("tail_flick", 0, false)).toBe(false);
+    expect(shouldShowPetModeMusicNote("stretch", 0)).toBe(true);
+    expect(shouldShowPetModeMusicNote("tail_flick", 0.049999)).toBe(true);
+    expect(shouldShowPetModeMusicNote("stretch", 0.05)).toBe(false);
+    expect(shouldShowPetModeMusicNote("pet", 0)).toBe(false);
+    expect(shouldShowPetModeMusicNote("blink", 0)).toBe(false);
+    expect(shouldShowPetModeMusicNote("music_note", 0)).toBe(false);
   });
 
   it("keeps the approved nine-frame pickup and a composite-opaque release", () => {
