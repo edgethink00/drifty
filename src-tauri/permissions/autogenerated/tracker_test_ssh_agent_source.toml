@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-test-ssh-agent-source"
+description = "Enables the tracker_test_ssh_agent_source command without any pre-configured scope."
+commands.allow = ["tracker_test_ssh_agent_source"]
+
+[[permission]]
+identifier = "deny-tracker-test-ssh-agent-source"
+description = "Denies the tracker_test_ssh_agent_source command without any pre-configured scope."
+commands.deny = ["tracker_test_ssh_agent_source"]

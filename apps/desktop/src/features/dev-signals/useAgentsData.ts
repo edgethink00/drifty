@@ -185,7 +185,12 @@ type StoredAgentsDataState = AgentsDataState & {
   readonly rangeKey: string;
 };
 
-export function useAgentsData(startDay: string, endDay: string, startOfDayMinutes = 0): AgentsDataState {
+export function useAgentsData(
+  startDay: string,
+  endDay: string,
+  startOfDayMinutes = 0,
+  refreshKey = 0,
+): AgentsDataState {
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const days = useMemo(() => buildAgentsRangeDays(startDay, endDay), [endDay, startDay]);
   const rangeKey = `${startDay}:${endDay}:${boundaryMinutes}`;
@@ -253,7 +258,7 @@ export function useAgentsData(startDay: string, endDay: string, startOfDayMinute
     return () => {
       cancelled = true;
     };
-  }, [boundaryMinutes, days, endDay, rangeKey, startDay]);
+  }, [boundaryMinutes, days, endDay, rangeKey, refreshKey, startDay]);
 
   if (state.rangeKey !== rangeKey) {
     return { days: buildAgentsLoadingDays(days), loading: true, live: false };

@@ -378,6 +378,41 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_sync_dev_signals", backfillDays === undefined ? {} : { backfillDays });
     return result ?? null;
   },
+  async listSshAgentSources() {
+    const result = await safeInvoke("tracker_list_ssh_agent_sources");
+    return result ?? {
+      ok: true,
+      code: "unavailable",
+      message: "SSH config discovery is available in the Drifty desktop app.",
+      aliases: [],
+    };
+  },
+  async testSshAgentSource(host: string) {
+    const result = await safeInvoke("tracker_test_ssh_agent_source", { host });
+    return result ?? {
+      ok: false,
+      code: "unavailable",
+      message: "SSH collection is available in the Drifty desktop app.",
+      host,
+    };
+  },
+  async collectSshAgentSource(host: string, backfillDays?: number) {
+    const result = await safeInvoke(
+      "tracker_collect_ssh_agent_source",
+      backfillDays === undefined ? { host } : { host, backfillDays },
+    );
+    return result ?? {
+      ok: false,
+      code: "unavailable",
+      message: "SSH collection is available in the Drifty desktop app.",
+      host,
+      providers: [],
+      turnsFound: 0,
+      turnsIngested: 0,
+      filesScanned: 0,
+      truncated: false,
+    };
+  },
   async saveProject(input: ProjectInput) {
     const result = await safeInvoke("tracker_save_project", { query: { input } });
     return result ?? {

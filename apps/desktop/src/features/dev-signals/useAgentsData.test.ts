@@ -151,4 +151,18 @@ describe("Your Agents date ranges", () => {
       tokens: 100,
     });
   });
+
+  it("reloads the current range after a manual SSH collection", async () => {
+    const hook = renderHook(
+      ({ refreshKey }) => useAgentsData("2026-08-28", "2026-08-28", 0, refreshKey),
+      { initialProps: { refreshKey: 0 } },
+    );
+
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(trackerClient.syncDevSignals).toHaveBeenCalledTimes(1);
+
+    hook.rerender({ refreshKey: 1 });
+
+    await waitFor(() => expect(trackerClient.syncDevSignals).toHaveBeenCalledTimes(2));
+  });
 });

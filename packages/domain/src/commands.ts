@@ -37,6 +37,9 @@ export const trackerInvokeCommands = [
   "tracker_get_agent_concurrency_peak",
   "tracker_get_dev_repos",
   "tracker_sync_dev_signals",
+  "tracker_list_ssh_agent_sources",
+  "tracker_test_ssh_agent_source",
+  "tracker_collect_ssh_agent_source",
   "tracker_save_project",
   "tracker_delete_project",
   "tracker_save_project_anchors",
@@ -129,6 +132,9 @@ export type TrackerCommandMap = {
   tracker_get_agent_concurrency_peak: { args: DevSignalsQueryArgs; result: AgentConcurrencyPeakPayload };
   tracker_get_dev_repos: { args: undefined; result: { repos: DevRepoRecord[] } };
   tracker_sync_dev_signals: { args: DevSignalsSyncArgs; result: DevSignalsSyncResult };
+  tracker_list_ssh_agent_sources: { args: undefined; result: SshAgentSourceListResult };
+  tracker_test_ssh_agent_source: { args: SshAgentSourceTestArgs; result: SshAgentSourceTestResult };
+  tracker_collect_ssh_agent_source: { args: SshAgentSourceCollectArgs; result: SshAgentSourceCollectResult };
   tracker_save_project: { args: { query: { input: ProjectInput } }; result: Project };
   tracker_delete_project: { args: { query: { id: string } }; result: { deleted: number } };
   tracker_save_project_anchors: {
@@ -306,6 +312,36 @@ export interface DevSignalsSyncResult {
   agentTurnsIngested: number;
   filesScanned: number;
   skippedFiles: number;
+}
+
+export interface SshAgentSourceTestArgs {
+  host: string;
+}
+
+export interface SshAgentSourceListResult {
+  ok: boolean;
+  code: string;
+  message: string;
+  aliases: string[];
+}
+
+export interface SshAgentSourceCollectArgs extends SshAgentSourceTestArgs {
+  backfillDays?: number;
+}
+
+export interface SshAgentSourceTestResult {
+  ok: boolean;
+  code: string;
+  message: string;
+  host: string;
+}
+
+export interface SshAgentSourceCollectResult extends SshAgentSourceTestResult {
+  providers: string[];
+  turnsFound: number;
+  turnsIngested: number;
+  filesScanned: number;
+  truncated: boolean;
 }
 
 export interface DevRepoRecord {
@@ -836,6 +872,9 @@ export interface TrackerApi {
   getAgentConcurrencyPeak(query: TimelineQuery): Promise<AgentConcurrencyPeakPayload | null>;
   getDevRepos(): Promise<DevRepoRecord[]>;
   syncDevSignals(backfillDays?: number): Promise<DevSignalsSyncResult | null>;
+  listSshAgentSources(): Promise<SshAgentSourceListResult>;
+  testSshAgentSource(host: string): Promise<SshAgentSourceTestResult>;
+  collectSshAgentSource(host: string, backfillDays?: number): Promise<SshAgentSourceCollectResult>;
   saveProject(input: ProjectInput): Promise<Project>;
   deleteProject(id: string): Promise<{ deleted: number }>;
   saveProjectAnchors(projectId: string, anchors: ProjectAnchor[]): Promise<ProjectAnchor[]>;

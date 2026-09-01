@@ -1,6 +1,6 @@
 import { accessSync, chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,6 +12,9 @@ const binariesDir = resolve(repoRoot, "src-tauri/binaries");
 const artifactBaseName = "drifty-tracker";
 const chatgptHelperBaseName = "chatgpt-session-ax";
 const chatgptHelperSource = resolve(trackerPythonRoot, "app/tracker/chatgpt_session_ax.swift");
+const remoteExporterSourceDirectory = resolve(trackerPythonRoot, "app/tracker/dev_signals");
+const remoteExporterDataDestination = "app/tracker/dev_signals/remote_exporter_support";
+const remoteExporterSources = ["agent_sessions.py", "adapters.py"];
 // Tauri resolves a macOS externalBin as `<name>-<triple><exeSuffix>`, so the
 // suffix has to match the host or the build succeeds and then fails at bundle
 // time with a missing resource.
@@ -54,6 +57,13 @@ export function extraPyInstallerArgs(platform = process.platform) {
   return platform === "win32"
     ? ["--collect-data", "tzdata", "--hidden-import", "tzdata"]
     : [];
+}
+
+function remoteExporterPyInstallerArgs() {
+  return remoteExporterSources.flatMap((filename) => [
+    "--add-data",
+    `${resolve(remoteExporterSourceDirectory, filename)}${delimiter}${remoteExporterDataDestination}`,
+  ]);
 }
 
 export function chatgptHelperSwiftTarget(target) {
@@ -391,6 +401,7 @@ async function main() {
         buildPath,
         "--specpath",
         specPath,
+        ...remoteExporterPyInstallerArgs(),
         ...extraPyInstallerArgs(),
         trackerEntry,
       ],

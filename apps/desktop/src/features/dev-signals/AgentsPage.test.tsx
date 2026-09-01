@@ -74,6 +74,21 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(props.onSelectDay).toHaveBeenCalledWith("2026-08-21");
   });
 
+  it("opens SSH collection with local config discovery and a custom-host fallback", async () => {
+    renderAgentsPage();
+
+    const sshButton = screen.getByRole("button", { name: "Add an SSH agent source" });
+    expect(document.querySelector(".dashboard-page-head__primary")?.contains(sshButton)).toBe(true);
+    expect(document.querySelector(".dashboard-page-head__side")?.contains(sshButton)).toBe(false);
+    fireEvent.click(sshButton);
+
+    expect(screen.getByRole("dialog", { name: "Collect from SSH" })).toBeTruthy();
+    expect(screen.getByText(/Hosts are read locally/).textContent).toContain("~/.ssh/config");
+    expect(screen.getByLabelText("Host or alias")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Collect & save" }).hasAttribute("disabled")).toBe(true);
+    expect(await screen.findByText(/SSH config discovery is available in the Drifty desktop app/)).toBeTruthy();
+  });
+
   it("uses the same persisted Flow detail control as Your Day", () => {
     const onFlowIntervalChange = vi.fn();
     renderAgentsPage({ flowIntervalMinutes: 3, onFlowIntervalChange });

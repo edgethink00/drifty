@@ -446,6 +446,32 @@ impl TrackerController {
         self.invoke::<Value>(app, "sync_dev_signals", Value::Object(payload))
     }
 
+    pub fn test_ssh_agent_source(
+        &self,
+        app: &AppHandle,
+        host: String,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "test_ssh_agent_source", json!({ "host": host }))
+    }
+
+    pub fn list_ssh_agent_sources(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "list_ssh_agent_sources", json!({}))
+    }
+
+    pub fn collect_ssh_agent_source(
+        &self,
+        app: &AppHandle,
+        host: String,
+        backfill_days: Option<u32>,
+    ) -> Result<Value, TrackerError> {
+        let mut payload = serde_json::Map::new();
+        payload.insert("host".into(), json!(host));
+        if let Some(days) = backfill_days {
+            payload.insert("backfillDays".into(), json!(days));
+        }
+        self.invoke::<Value>(app, "collect_ssh_agent_source", Value::Object(payload))
+    }
+
     pub fn get_project_assignments(
         &self,
         app: &AppHandle,

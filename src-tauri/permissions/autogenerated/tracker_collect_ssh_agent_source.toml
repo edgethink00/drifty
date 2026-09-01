@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-collect-ssh-agent-source"
+description = "Enables the tracker_collect_ssh_agent_source command without any pre-configured scope."
+commands.allow = ["tracker_collect_ssh_agent_source"]
+
+[[permission]]
+identifier = "deny-tracker-collect-ssh-agent-source"
+description = "Denies the tracker_collect_ssh_agent_source command without any pre-configured scope."
+commands.deny = ["tracker_collect_ssh_agent_source"]

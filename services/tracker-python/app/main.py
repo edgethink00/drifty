@@ -61,6 +61,11 @@ from app.tracker.dev_signals.ingest import (
     register_repo as register_dev_repo,
     run_ingest as run_dev_signals_ingest,
 )
+from app.tracker.dev_signals.ssh_sources import (
+    collect_ssh_agent_source as collect_ssh_agent_source_metadata,
+    list_ssh_agent_sources as list_ssh_agent_source_aliases,
+    test_ssh_agent_source as test_ssh_agent_source_connection,
+)
 
 if TYPE_CHECKING:
     from app.tracker.macos_workspace import Snapshot
@@ -1319,6 +1324,30 @@ def sync_dev_signals(payload: dict):
     )
 
 
+def list_ssh_agent_sources(_payload: dict):
+    return response(True, list_ssh_agent_source_aliases())
+
+
+def test_ssh_agent_source(payload: dict):
+    return response(True, test_ssh_agent_source_connection(payload.get("host")))
+
+
+def collect_ssh_agent_source(payload: dict):
+    raw_days = payload.get("backfillDays", payload.get("backfill_days"))
+    try:
+        backfill_days = int(raw_days) if raw_days is not None else DEV_SIGNALS_BACKFILL_DAYS
+    except (TypeError, ValueError):
+        backfill_days = DEV_SIGNALS_BACKFILL_DAYS
+    return response(
+        True,
+        collect_ssh_agent_source_metadata(
+            database(),
+            payload.get("host"),
+            backfill_days=max(1, backfill_days),
+        ),
+    )
+
+
 def get_dev_signals(payload: dict):
     """Commit markers and agent time for one day.
 
@@ -1846,6 +1875,9 @@ COMMANDS = {
     "save_dev_repo": save_dev_repo,
     "delete_dev_repo": delete_dev_repo,
     "sync_dev_signals": sync_dev_signals,
+    "list_ssh_agent_sources": list_ssh_agent_sources,
+    "test_ssh_agent_source": test_ssh_agent_source,
+    "collect_ssh_agent_source": collect_ssh_agent_source,
     "get_dev_signals": get_dev_signals,
     "get_agent_concurrency_peak": get_agent_concurrency_peak,
     "save_project_anchors": save_project_anchors,

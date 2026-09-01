@@ -74,6 +74,7 @@ import {
   AgentsBreakdownComposed,
 } from "./AgentsBreakdown";
 import { AgentsWeekHoverLayer } from "./AgentsWeekHoverLayer";
+import { SshAgentSourcesModal } from "./SshAgentSourcesModal";
 import "./agents-page.css";
 
 export type AgentsPeriod = "Today" | "Week";
@@ -1055,6 +1056,8 @@ export function AgentsPage({
   const liveMinuteOfDay = useLiveMinuteOfDay();
   const [period, setPeriod] = useState<AgentsPeriod>("Today");
   const [colorMode, setColorMode] = useState<AgentsGridColorMode>("intensity");
+  const [sshModalOpen, setSshModalOpen] = useState(false);
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
   // Same persisted preference as the dashboard: the Breakdown panel is one
   // surface across Day, Week, and Agents.
   const [breakdownOpen, setBreakdownOpen] = useState(resolveInitialDashboardBreakdownOpen);
@@ -1068,7 +1071,12 @@ export function AgentsPage({
     () => getDashboardPeriodRange(selectedDay, period, boundaryMinutes, startOfWeek),
     [boundaryMinutes, period, selectedDay, startOfWeek],
   );
-  const { days, loading, live } = useAgentsData(range.startDay, range.endDay, boundaryMinutes);
+  const { days, loading, live } = useAgentsData(
+    range.startDay,
+    range.endDay,
+    boundaryMinutes,
+    dataRefreshKey,
+  );
   const models = useMemo(() => days.map(buildAgentsDayModel), [days]);
   const visiblePeak = useMemo(
     () => Math.max(0, ...models.map((model) => model.concurrencyPeak)),
@@ -1113,16 +1121,27 @@ export function AgentsPage({
   const pageHead = (
     <div className="pg-head dashboard-page-head dashboard-page-head--focus-summary dashboard-page-head--today">
       <div className="dashboard-page-head__row">
-        <div className="dashboard-page-head__summary">
-          <h1 aria-label={titleAriaLabel} className="dashboard-page-head__title">
-            {loading ? (
-              <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
-            ) : headlineDuration === null ? (
-              <span className="dashboard-page-head__focus-word">No agent activity</span>
-            ) : (
-              <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
-            )}
-          </h1>
+        <div className="dashboard-page-head__primary">
+          <div className="dashboard-page-head__summary">
+            <h1 aria-label={titleAriaLabel} className="dashboard-page-head__title">
+              {loading ? (
+                <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
+              ) : headlineDuration === null ? (
+                <span className="dashboard-page-head__focus-word">No agent activity</span>
+              ) : (
+                <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
+              )}
+            </h1>
+          </div>
+          <button
+            type="button"
+            className="agents-ssh-trigger"
+            aria-label="Add an SSH agent source"
+            onClick={() => setSshModalOpen(true)}
+          >
+            <span>SSH</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+          </button>
         </div>
         <div className="dashboard-page-head__side">
           {/* In-page Day/Week toggle, ported from studyhall's proven treatment. */}
@@ -1194,6 +1213,12 @@ export function AgentsPage({
             {breakdownPanel}
           </div>
         </section>
+        {sshModalOpen ? (
+          <SshAgentSourcesModal
+            onClose={() => setSshModalOpen(false)}
+            onCollected={() => setDataRefreshKey((key) => key + 1)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -1230,6 +1255,12 @@ export function AgentsPage({
         </div>
         {breakdownPanel}
       </div>
+      {sshModalOpen ? (
+        <SshAgentSourcesModal
+          onClose={() => setSshModalOpen(false)}
+          onCollected={() => setDataRefreshKey((key) => key + 1)}
+        />
+      ) : null}
     </div>
   );
 }

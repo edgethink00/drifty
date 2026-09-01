@@ -906,6 +906,54 @@ pub async fn tracker_sync_dev_signals(
 }
 
 #[tauri::command]
+pub async fn tracker_list_ssh_agent_sources(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .list_ssh_agent_sources(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_test_ssh_agent_source(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    host: String,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .test_ssh_agent_source(&app, host)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_collect_ssh_agent_source(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    host: String,
+    backfill_days: Option<u32>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .collect_ssh_agent_source(&app, host, backfill_days)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
 pub async fn tracker_get_dev_repos(
     app: AppHandle,
     controller: State<'_, TrackerController>,
