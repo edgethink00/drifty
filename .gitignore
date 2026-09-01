@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 .DS_Store
+apps/docs/.astro/
 .venv/
 __pycache__/
 *.pyc
@@ -25,6 +26,8 @@ src-tauri/binaries/chatgpt-session-ax-*
 .playwright-mcp/
 onboarding-visual/
 .qa-captures/
+.qa-results/
+playwright-report/
 .codex/
 .codegraph
 .debug-journal.md
