@@ -26,6 +26,7 @@ export type UnifiedShareStoryId =
   | "X5";
 
 export type ShareCardTheme = "light" | "dark";
+export type ShareCardLanguage = "en" | "ko";
 
 /**
  * A privacy-safe, live leaderboard fact. The count is returned with the
@@ -114,6 +115,11 @@ function minutesFromSeconds(seconds: number | null | undefined): number {
   return Math.round(finiteNonNegative(seconds) / 60);
 }
 
+function localizedProductivityLabel(key: "focus" | "neutral" | "drift"): string {
+  if (selectedLanguage !== "ko") return { focus: "Focus", neutral: "Neutral", drift: "Drift" }[key];
+  return { focus: "집중", neutral: "중립", drift: "딴짓" }[key];
+}
+
 function productivityPercentages(data: Pick<ShareCardData | ShareWeekCardData, "productivitySlices" | "totalSeconds" | "focusPercent">) {
   const percentFor = (key: "focus" | "neutral" | "drift") => {
     const slice = data.productivitySlices.find((entry) => entry.key === key);
@@ -140,10 +146,9 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks): 
     pct: Math.min(100, finiteNonNegative(s.ratio) * 100),
     minutes: minutesFromSeconds(s.seconds),
   }));
-  const productivityLabels = { focus: "Focus", neutral: "Neutral", drift: "Drift" } as const;
   const productivitySlices = (data.productivitySlices ?? []).map((slice) => ({
     key: slice.key,
-    label: productivityLabels[slice.key] ?? "Other",
+    label: localizedProductivityLabel(slice.key) ?? (selectedLanguage === "ko" ? "기타" : "Other"),
     pct: Math.min(100, finiteNonNegative(slice.ratio) * 100),
     minutes: minutesFromSeconds(slice.seconds),
   }));
@@ -226,6 +231,7 @@ const TITLE_FONT = { value: "'Iowan Old Style', 'New York', Baskerville, Georgia
 const TITLE_WEIGHT = 500;
 const TITLE_SIZE = 61;
 let selectedSurface = 'ink'; // ink | paper — collapses color-only card variants
+let selectedLanguage: ShareCardLanguage = 'en';
 let categoryOverride = null;
 let productivityOverride = null;
 
@@ -406,10 +412,16 @@ const wrap = (p, id, body, label, h = H) => {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 const wash = (id, h = H) => `<rect width="1200" height="${h}" fill="url(#wash-${id})"/>`;
+const localized = (english, korean) => selectedLanguage === 'ko' ? korean : english;
 const formatDuration = (minutes) => {
   const m = Math.max(0, Math.round(Number(minutes) || 0));
   const h = Math.floor(m / 60);
   const mm = m % 60;
+  if (selectedLanguage === 'ko') {
+    if (h <= 0) return `${mm}분`;
+    if (mm === 0) return `${h}시간`;
+    return `${h}시간 ${mm}분`;
+  }
   if (h <= 0) return `${mm}m`;
   if (mm === 0) return `${h}h`;
   return `${h}h ${String(mm).padStart(2, '0')}m`;
@@ -444,7 +456,7 @@ let PROD_NEUTRAL = 20;
 let PROD_DRIFT = 12;
 let AVG_DAILY_FOCUS_MINUTES = 0;
 const dailyAverageMinutes = () => Math.max(0, Math.round(AVG_DAILY_FOCUS_MINUTES));
-const peakDayLabel = () => 'Tue';
+const peakDayLabel = () => localized('Tue', '화');
 const metric = () => formatDuration(FOCUS_MINUTES);
 const pctLabel = (v) => String(parseFloat(v.toPrecision(2)));
 let TOTAL_USERS = 2858;
@@ -476,28 +488,28 @@ const tag = (p, x, y, text, anchor) => tx(x, y, text, { font: F.mono, size: SIZE
 const youLollipop = (p, x, y, stem = 62, r = 12) => `
   <path d="M${x} ${y - 2} V ${y - stem}" stroke="${p.olive}" stroke-width="3"/>
   <circle cx="${x}" cy="${y - stem - 8}" r="${r}" fill="${p.olive}"/>
-  ${tx(x, y - stem - 48, 'YOU', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.2, anchor: 'middle' })}`;
+  ${tx(x, y - stem - 48, localized('YOU', '나'), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.2, anchor: 'middle' })}`;
 const youPill = (p, x, dotY, pillY, r = 12) => `
   <circle cx="${x}" cy="${dotY}" r="${r}" fill="${p.olive}"/>
   <rect x="${x - 52}" y="${pillY}" width="104" height="46" rx="23" fill="${p.olive}"/>
-  ${tx(x, pillY + 33, 'YOU', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 2.2, anchor: 'middle' })}`;
+  ${tx(x, pillY + 33, localized('YOU', '나'), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 2.2, anchor: 'middle' })}`;
 function curveCard(p, id) { const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055); const pillMode = s.x < 640 && s.y < (652 + RANK_DY); return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, RANK_IS_LIVE ? "Today's focus percentile" : "Estimated focus percentile")}
+  ${chromeTitle(p, RANK_IS_LIVE ? localized("Today's focus percentile", "오늘의 집중 백분위") : localized("Estimated focus percentile", "예상 집중 백분위"))}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(112, 420 + RANK_DY, `${pctLabel(RANK)}%`, { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 540 + RANK_DY, RANK_IS_LIVE ? 'from today’s live leaderboard.' : IS_CURRENT_PERIOD ? 'from your focus pace so far today.' : 'from your focus time that day.', { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
+  ${tx(120, 540 + RANK_DY, RANK_IS_LIVE ? localized('from today’s live leaderboard.', '오늘 실시간 리더보드 기준입니다.') : IS_CURRENT_PERIOD ? localized('from your focus pace so far today.', '지금까지의 오늘 집중 페이스 기준입니다.') : localized('from your focus time that day.', '해당 날짜의 집중 시간 기준입니다.'), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY} L 1080 ${668 + RANK_DY} L 120 ${668 + RANK_DY} Z" fill="${p.pale}" opacity=".55"/>
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY}" fill="none" stroke="${p.olive}" stroke-opacity=".45" stroke-width="3"/>
   ${pillMode ? youPill(p, s.x, s.y - 8, Math.min(s.y + 18, 660 + RANK_DY), 11) : youLollipop(p, s.x, s.y, 50, 11)}
-  ${footer(p)}`, 'Curve Card'); }
+  ${footer(p)}`, localized('Curve Card', '집중 백분위 카드')); }
 
 
 function wideStatement(p, id) { return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, 'Focus time')}
+  ${chromeTitle(p, localized('Focus time', '집중 시간'))}
   ${panel(p, id, 70, 188, 1060, 510, 36)}
   ${tx(600, 480, metric(), { font: F.serif, size: 240, fill: p.ink, spacing: -13, anchor: 'middle' })}
-  ${tx(600, 640, IS_CURRENT_PERIOD ? 'of focused work today.' : `of focused work on ${DATE_LABEL}.`, { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5, anchor: 'middle' })}
-  ${footer(p)}`, 'Wide Statement'); }
+  ${tx(600, 640, IS_CURRENT_PERIOD ? localized('of focused work today.', '오늘 집중한 시간입니다.') : localized(`of focused work on ${DATE_LABEL}.`, `${DATE_LABEL}에 집중한 시간입니다.`), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5, anchor: 'middle' })}
+  ${footer(p)}`, localized('Wide Statement', '집중 시간 카드')); }
 
 
 function dayDots(p, id) {
@@ -521,11 +533,11 @@ function dayDots(p, id) {
 
 
 function rankStatement(p, id) { return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, RANK_IS_LIVE ? "Today's focus percentile" : "Estimated focus percentile")}
+  ${chromeTitle(p, RANK_IS_LIVE ? localized("Today's focus percentile", "오늘의 집중 백분위") : localized("Estimated focus percentile", "예상 집중 백분위"))}
   ${surfacePanel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
-  ${tx(600, 450 + RANK_DY, `Top ${pctLabel(RANK)}%`, { font: F.serif, size: 180, fill: surfaceInk(p), spacing: -8, anchor: 'middle' })}
-  ${tx(600, 600 + RANK_DY, RANK_IS_LIVE ? 'from today’s live leaderboard' : IS_CURRENT_PERIOD ? 'from today’s focus pace' : 'from that day’s focus time', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: surfaceSoft(p), anchor: 'middle', spacing: -.5 })}
-  ${footer(p)}`, 'Rank Statement'); }
+  ${tx(600, 450 + RANK_DY, localized(`Top ${pctLabel(RANK)}%`, `상위 ${pctLabel(RANK)}%`), { font: F.serif, size: 180, fill: surfaceInk(p), spacing: -8, anchor: 'middle' })}
+  ${tx(600, 600 + RANK_DY, RANK_IS_LIVE ? localized('from today’s live leaderboard', '오늘 실시간 리더보드 기준') : IS_CURRENT_PERIOD ? localized('from today’s focus pace', '오늘 집중 페이스 기준') : localized('from that day’s focus time', '해당 날짜의 집중 시간 기준'), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: surfaceSoft(p), anchor: 'middle', spacing: -.5 })}
+  ${footer(p)}`, localized('Rank Statement', '집중 백분위 카드')); }
 
 
 function headCount(p, id) {
@@ -536,25 +548,25 @@ function headCount(p, id) {
   const placeApproxW = Math.max(180, place.length * 92);
   const scopeX = 112 + placeApproxW + 18;
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, "Today's focus rank")}
+  ${chromeTitle(p, localized("Today's focus rank", "오늘의 집중 순위"))}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(112, 430 + RANK_DY, place, { font: F.serif, size: placeSize, fill: p.ink, spacing: -9 })}
   ${tx(scopeX, 430 + RANK_DY, `/ ${total}`, { font: F.sans, size: 42, floor: 42, fill: p.soft, spacing: -0.4 })}
   <rect x="120" y="${486 + RANK_DY}" width="252" height="58" rx="29" fill="${p.olive}"/>
-  ${tx(246, 526 + RANK_DY, `TOP ${pctLabel(LIVE_RANK_PERCENT)}%`, { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 1.6, anchor: 'middle' })}
-  ${tx(120, 620 + RANK_DY, 'in today’s focus ranking.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
-  ${footer(p)}`, 'Head Count');
+  ${tx(246, 526 + RANK_DY, localized(`TOP ${pctLabel(LIVE_RANK_PERCENT)}%`, `상위 ${pctLabel(LIVE_RANK_PERCENT)}%`), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 1.6, anchor: 'middle' })}
+  ${tx(120, 620 + RANK_DY, localized('in today’s focus ranking.', '오늘 집중 순위 기준입니다.'), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
+  ${footer(p)}`, localized('Head Count', '집중 순위 카드'));
 }
 
 
 function weekAverage(p, id) {
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, IS_CURRENT_PERIOD ? 'This week' : WEEK_LABEL)}
+  ${chromeTitle(p, IS_CURRENT_PERIOD ? localized('This week', '이번 주') : WEEK_LABEL)}
   ${panel(p, id, 70, 188, 1060, 510, 36)}
-  ${tx(112, 300, 'TRACKED-DAY AVG', { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.2 })}
+  ${tx(112, 300, localized('TRACKED-DAY AVG', '기록일 평균'), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.2 })}
   ${tx(112, 500, formatDuration(dailyAverageMinutes()), { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 610, IS_CURRENT_PERIOD ? 'focused per tracked day this week.' : 'focused per tracked day that week.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
-  ${footer(p)}`, 'Week Average');
+  ${tx(120, 610, IS_CURRENT_PERIOD ? localized('focused per tracked day this week.', '이번 주 기록이 있는 날의 평균 집중 시간입니다.') : localized('focused per tracked day that week.', '해당 주 기록이 있는 날의 평균 집중 시간입니다.'), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, spacing: -.5 })}
+  ${footer(p)}`, localized('Week Average', '주간 평균 카드'));
 }
 
 function peakDay(p, id) {
@@ -588,32 +600,34 @@ function weeklyCurve(p, id) {
   const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055, WEEK_RANK);
   const pillMode = s.x < 640 && s.y < (652 + RANK_DY);
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, WEEK_RANK_IS_LIVE ? 'This week’s focus percentile' : 'Estimated weekly percentile')}
+  ${chromeTitle(p, WEEK_RANK_IS_LIVE ? localized('This week’s focus percentile', '이번 주 집중 백분위') : localized('Estimated weekly percentile', '예상 주간 백분위'))}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(112, 420 + RANK_DY, `${pctLabel(WEEK_RANK)}%`, { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 540 + RANK_DY, WEEK_RANK_IS_LIVE ? 'from the live weekly leaderboard.' : IS_CURRENT_PERIOD ? 'from your focus pace this week.' : 'from your focus time that week.', { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
+  ${tx(120, 540 + RANK_DY, WEEK_RANK_IS_LIVE ? localized('from the live weekly leaderboard.', '실시간 주간 리더보드 기준입니다.') : IS_CURRENT_PERIOD ? localized('from your focus pace this week.', '이번 주 집중 페이스 기준입니다.') : localized('from your focus time that week.', '해당 주의 집중 시간 기준입니다.'), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY} L 1080 ${668 + RANK_DY} L 120 ${668 + RANK_DY} Z" fill="${p.pale}" opacity=".55"/>
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY}" fill="none" stroke="${p.olive}" stroke-opacity=".45" stroke-width="3"/>
   ${pillMode ? youPill(p, s.x, s.y - 8, Math.min(s.y + 18, 660 + RANK_DY), 11) : youLollipop(p, s.x, s.y, 50, 11)}
-  ${footer(p)}`, 'Weekly Curve Card');
+  ${footer(p)}`, localized('Weekly Curve Card', '주간 집중 백분위 카드'));
 }
 
 
 function comboFocus(p, id) {
   // Hours stay the hero; rank becomes a compact olive seal.
   // Ink/Paper surface is controlled by the global toggle (not a separate card).
-  const chipText = `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`;
+  const chipText = selectedLanguage === 'ko'
+    ? `${RANK_IS_LIVE ? '상위' : '예상 상위'} ${pctLabel(RANK)}%`
+    : `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`;
   const chipW = Math.max(236, 56 + chipText.length * 22);
   const chipX = 140;
   const chipY = 552;
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, 'Focus time')}
+  ${chromeTitle(p, localized('Focus time', '집중 시간'))}
   ${surfacePanel(p, id, 70, 188, 1060, 510, 36)}
-  ${tx(140, 286, IS_CURRENT_PERIOD ? 'TODAY' : DATE_LABEL.toUpperCase(), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.4 })}
+  ${tx(140, 286, IS_CURRENT_PERIOD ? localized('TODAY', '오늘') : DATE_LABEL.toUpperCase(), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: p.olive, weight: 700, spacing: 2.4 })}
   ${tx(140, 488, metric(), { font: F.serif, size: 168, fill: surfaceInk(p), spacing: -8.5 })}
   <rect x="${chipX}" y="${chipY}" width="${chipW}" height="64" rx="32" fill="${p.olive}"/>
   ${tx(chipX + chipW / 2, chipY + 42, chipText, { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 1.8, anchor: 'middle' })}
-  ${footer(p)}`, 'Focus + Rank');
+  ${footer(p)}`, localized('Focus + Rank', '집중 시간과 백분위'));
 }
 
 
@@ -649,7 +663,7 @@ const categoryPalette = (p) => (p === dark ? CATEGORY_COLORS_DARK : CATEGORY_COL
 const productivityPalette = (p) => (p === dark ? PRODUCTIVITY_COLORS_DARK : PRODUCTIVITY_COLORS_LIGHT);
 const formatHoursDecimal = (minutes) => {
   const hours = Math.max(0, Math.round((minutes / 60) * 10) / 10);
-  return `${hours.toFixed(1)}h`;
+  return selectedLanguage === 'ko' ? `${hours.toFixed(1)}시간` : `${hours.toFixed(1)}h`;
 };
 const pointOnCircle = (cx, cy, r, ratio) => {
   const radians = ratio * 360 * (Math.PI / 180);
@@ -682,9 +696,9 @@ const categoryEntries = () => (categoryOverride ?? []).map((entry) => ({
   minutes: entry.minutes,
 }));
 const productivityEntries = () => productivityOverride ?? ([
-  { key: 'focus', label: 'Focus', pct: PROD_FOCUS },
-  { key: 'neutral', label: 'Neutral', pct: PROD_NEUTRAL },
-  { key: 'drift', label: 'Drift', pct: PROD_DRIFT },
+  { key: 'focus', label: localized('Focus', '집중'), pct: PROD_FOCUS },
+  { key: 'neutral', label: localized('Neutral', '중립'), pct: PROD_NEUTRAL },
+  { key: 'drift', label: localized('Drift', '딴짓'), pct: PROD_DRIFT },
 ]);
 const categoryColorsForEntries = (p, entries) => {
   const palette = categoryPalette(p);
@@ -766,12 +780,12 @@ function dashCategory(p, id) {
   const content = entries.length > 0
     ? `${compactStackedBar(p, id, innerX, barY, innerW, barH, entries, colors, (entry) => entry.pct)}
   ${compactLegendRows(p, innerX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatDuration(entry.minutes), rowGap, valueX)}`
-    : `${tx(600, PANEL_MID_Y + 12, 'No categorized activity yet.', { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, anchor: 'middle' })}`;
+    : `${tx(600, PANEL_MID_Y + 12, localized('No categorized activity yet.', '아직 분류된 활동이 없습니다.'), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, anchor: 'middle' })}`;
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, 'Categories')}
+  ${chromeTitle(p, localized('Categories', '카테고리'))}
   ${panel(p, id, 70, PANEL_TOP, 1060, PANEL_H, 36)}
   ${content}
-  ${footer(p)}`, 'Categories');
+  ${footer(p)}`, localized('Categories', '카테고리'));
 }
 function dashProductivity(p, id) {
   const colors = productivityPalette(p);
@@ -791,12 +805,12 @@ function dashProductivity(p, id) {
   const valueX = legendX + legendColW;
   const legendY = dialCy - rowGap;
   return wrap(p, id, `${wash(id)}
-  ${chromeTitle(p, 'Productivity')}
+  ${chromeTitle(p, localized('Productivity', '생산성'))}
   ${panel(p, id, 70, PANEL_TOP, 1060, PANEL_H, 36)}
   ${compactDonut(p, entries, colors, dialCx, dialCy, dialSize)}
   ${tx(dialCx, dialCy + 18, `${PROD_FOCUS}%`, { font: F.mono, size: 58, floor: 58, fill: p.ink, weight: 760, anchor: 'middle' })}
   ${compactLegendRows(p, legendX, legendY, entries, colors, (entry) => entry.pct, (_pct, entry) => formatHoursDecimal(entry.minutes), rowGap, valueX, 48, 44, 14)}
-  ${footer(p)}`, 'Productivity');
+  ${footer(p)}`, localized('Productivity', '생산성'));
 }
 
 
@@ -1179,11 +1193,13 @@ export function renderUnifiedShareCardSvg(options: {
   readonly lookIndex?: number;
   readonly surface?: 'ink' | 'paper';
   readonly liveRanks?: ShareCardLiveRanks;
+  readonly language?: ShareCardLanguage;
 }): string {
   const story = options.story ?? 'R1c';
   const theme = options.theme ?? 'light';
   const lookIndex = options.lookIndex ?? UNIFIED_STORY_OPTIONS.findIndex((entry) => entry.value === story);
   selectedSurface = options.surface ?? 'ink';
+  selectedLanguage = options.language ?? options.data.language ?? 'en';
   applyMetrics(deriveDayMetrics(options.data, options.liveRanks));
   const palette = applyLook(theme, lookIndex < 0 ? 0 : lookIndex);
   const renderer = RENDERERS[story] ?? curveCard;
@@ -1197,11 +1213,13 @@ export function renderUnifiedShareWeekCardSvg(options: {
   readonly lookIndex?: number;
   readonly surface?: 'ink' | 'paper';
   readonly liveRanks?: ShareCardLiveRanks;
+  readonly language?: ShareCardLanguage;
 }): string {
   const story = options.story ?? 'WR1';
   const theme = options.theme ?? 'light';
   const lookIndex = options.lookIndex ?? UNIFIED_STORY_OPTIONS.findIndex((entry) => entry.value === story);
   selectedSurface = options.surface ?? 'ink';
+  selectedLanguage = options.language ?? options.data.language ?? 'en';
   applyMetrics(deriveWeekMetrics(options.data, options.liveRanks));
   const palette = applyLook(theme, lookIndex < 0 ? 0 : lookIndex);
   const renderer = RENDERERS[story] ?? weeklyCurve;
@@ -1213,19 +1231,21 @@ export function renderLockedShareRankSvg(options: {
   readonly theme?: ShareCardTheme;
   readonly period: "daily" | "weekly";
   readonly lookIndex?: number;
+  readonly language?: ShareCardLanguage;
 }): string {
   const theme = options.theme ?? "light";
   const lookIndex = options.lookIndex ?? 0;
+  selectedLanguage = options.language ?? 'en';
   const palette = applyLook(theme, lookIndex);
-  const title = options.period === "daily" ? "Today's focus rank" : "This week's focus rank";
-  const scope = options.period === "daily" ? "today" : "this week";
+  const title = options.period === "daily" ? localized("Today's focus rank", "오늘의 집중 순위") : localized("This week's focus rank", "이번 주 집중 순위");
+  const scope = options.period === "daily" ? localized("today", "오늘") : localized("this week", "이번 주");
   return unwrapSvg(wrap(palette, `locked-rank-${options.period}-${theme}`, `${wash(`locked-rank-${options.period}-${theme}`)}
   ${chromeTitle(palette, title)}
   ${panel(palette, `locked-rank-${options.period}-${theme}`, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   <circle cx="600" cy="380" r="42" fill="${palette.pale}"/>
   <path d="M582 382v-14c0-10 8-18 18-18s18 8 18 18v14" fill="none" stroke="${palette.olive}" stroke-width="7" stroke-linecap="round"/>
   <rect x="576" y="378" width="48" height="42" rx="9" fill="${palette.olive}"/>
-  ${tx(600, 508, 'Join the leaderboard', { font: F.serif, size: 76, fill: palette.ink, spacing: -2.4, anchor: 'middle' })}
-  ${tx(600, 572, `to reveal your live focus rank for ${scope}.`, { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: palette.soft, anchor: 'middle' })}
-  ${footer(palette)}`, 'Locked focus rank'));
+  ${tx(600, 508, localized('Join the leaderboard', '리더보드에 참여하세요'), { font: F.serif, size: 76, fill: palette.ink, spacing: -2.4, anchor: 'middle' })}
+  ${tx(600, 572, localized(`to reveal your live focus rank for ${scope}.`, `${scope}의 실시간 집중 순위를 확인할 수 있습니다.`), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: palette.soft, anchor: 'middle' })}
+  ${footer(palette)}`, localized('Locked focus rank', '잠긴 집중 순위')));
 }

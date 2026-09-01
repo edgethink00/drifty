@@ -3,8 +3,9 @@ import type { CSSProperties, FocusEvent, MouseEvent } from "react";
 import type { AppIconMap } from "@drifty/domain";
 import { EmptyState } from "../../components/EmptyState";
 import { MetricTile } from "../../components/MetricTile";
-import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/formatting";
+import { formatDuration, formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedQuarterHourLabel } from "../../lib/formatting";
 import { FocusDriftHoverCard, formatFocusDriftHoverLabel } from "./FocusDriftHoverCard";
+import { useLocalization } from "../localization/LocalizationContext";
 import {
   FOCUS_DRIFT_BUCKET_MINUTES,
   FOCUS_DRIFT_CHART_BOUNDS,
@@ -22,6 +23,7 @@ import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
 type FocusDriftSectionProps = {
   readonly appIcons: AppIconMap;
   readonly chart: FocusDriftChart;
+  readonly startOfDayMinutes?: number;
 };
 
 type FocusDriftSummaryTilesProps = {
@@ -34,6 +36,7 @@ type FocusDriftSummaryTilesProps = {
   readonly topAppLabel: string;
   readonly totalSeconds: number;
   readonly uniqueAppsCount: number;
+  readonly startOfDayMinutes?: number;
 };
 
 /** KPI tiles that used to sit beside the focus/drift chart; the 2026-07
@@ -48,15 +51,17 @@ export function FocusDriftSummaryTiles({
   topAppLabel,
   totalSeconds,
   uniqueAppsCount,
+  startOfDayMinutes = 0,
 }: FocusDriftSummaryTilesProps) {
+  const { effectiveLanguage, t } = useLocalization();
   return (
-    <div className="kpi-row kpi-row--insights insight-summary" aria-label="Insight summary">
-      <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label="Tracked" value={formatDuration(totalSeconds)} detail={`${activeHourCount}h active`} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label="Sessions" value={String(sessionCount)} detail={averageSessionMinutes > 0 ? `${averageSessionMinutes}m avg` : "No sessions"} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--peak" label="Peak" value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatCompactDurationFromSeconds(peakTrackedSeconds) : "No peak"} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--apps" label="Apps" value={String(uniqueAppsCount)} detail={topAppLabel} />
-      <MetricTile className="insight-summary__tile insight-summary__tile--focus" label="Focus" value={`${chart.focusConsistency}%`} detail="score" />
-      {chart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label="Drift" value={chart.peakDriftPoint.label} detail="peak" /> : null}
+    <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("dashboard.today.insightSummary")}>
+      <MetricTile className="insight-summary__tile insight-summary__tile--tracked" label={t("dashboard.today.tracked")} value={effectiveLanguage === "ko" ? formatLocalizedDuration(totalSeconds, effectiveLanguage) : formatDuration(totalSeconds)} detail={t("dashboard.today.activeHours", { duration: effectiveLanguage === "ko" ? `${activeHourCount}시간` : `${activeHourCount}h` })} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--sessions" label={t("dashboard.today.sessions")} value={String(sessionCount)} detail={averageSessionMinutes > 0 ? t("dashboard.today.averageValue", { duration: effectiveLanguage === "ko" ? `${averageSessionMinutes}분` : `${averageSessionMinutes}m` }) : t("dashboard.today.noSessions")} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--peak" label={t("dashboard.today.peak")} value={peakWindowLabel} detail={peakTrackedSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(peakTrackedSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "—" : "No peak"} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--apps" label={t("dashboard.today.apps")} value={String(uniqueAppsCount)} detail={topAppLabel} />
+      <MetricTile className="insight-summary__tile insight-summary__tile--focus" label={t("dashboard.today.focusScore")} value={`${chart.focusConsistency}%`} detail={t("dashboard.today.score")} />
+      {chart.peakDriftPoint ? <MetricTile className="insight-summary__tile insight-summary__tile--drift" label={t("dashboard.today.driftPeak")} value={effectiveLanguage === "ko" ? formatLocalizedQuarterHourLabel(chart.peakDriftPoint.bucketStartMinute + startOfDayMinutes, effectiveLanguage) : chart.peakDriftPoint.label} detail={t("dashboard.today.peakDetail")} /> : null}
     </div>
   );
 }
@@ -116,7 +121,9 @@ function revealClipWidthForChart(chart: FocusDriftChart): number | null {
 export const FocusDriftSection = memo(function FocusDriftSection({
   appIcons,
   chart,
+  startOfDayMinutes = 0,
 }: FocusDriftSectionProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [hover, setHover] = useState<FocusDriftHoverState | null>(null);
   const hoverPoints = useMemo(
     () => chart.points.filter((point) => point.totalSeconds > 0 && isPointRevealed(point, chart)),
@@ -137,16 +144,28 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     [chart.driftPath, measuredPoints],
   );
   const shouldRenderChart = chart.hasData || chart.isLive || chart.revealX !== null;
-  const sectionAriaLabel = chart.revealX !== null && chart.revealTimeLabel
-    ? `Focus versus drift by 30-minute windows, replaying through ${chart.revealTimeLabel}.`
-    : chart.isLive && chart.currentTimeLabel
-      ? `Focus versus drift by 30-minute windows, in progress through ${chart.currentTimeLabel}. Future windows are pending.`
-      : "Focus versus drift by 30-minute windows";
-  const svgAriaLabel = chart.revealX !== null && chart.revealTimeLabel
-    ? `Focus and drift curves replaying through ${chart.revealTimeLabel}`
-    : chart.isLive && chart.currentTimeLabel
-      ? `Focus and drift curves in progress through ${chart.currentTimeLabel}`
-      : "Focus and drift curves";
+  const sectionAriaLabel = effectiveLanguage === "en"
+    ? chart.revealX !== null && chart.revealTimeLabel
+      ? `Focus versus drift by 30-minute windows, replaying through ${chart.revealTimeLabel}.`
+      : chart.isLive && chart.currentTimeLabel
+        ? `Focus versus drift by 30-minute windows, in progress through ${chart.currentTimeLabel}. Future windows are pending.`
+        : "Focus versus drift by 30-minute windows"
+    : chart.revealX !== null && chart.revealTimeLabel
+      ? t("dashboard.today.focusDriftChartAt", { time: chart.revealTimeLabel })
+      : chart.isLive && chart.currentTimeLabel
+        ? t("dashboard.today.focusDriftChartAt", { time: chart.currentTimeLabel })
+        : t("dashboard.today.focusDriftChart");
+  const svgAriaLabel = effectiveLanguage === "en"
+    ? chart.revealX !== null && chart.revealTimeLabel
+      ? `Focus and drift curves replaying through ${chart.revealTimeLabel}`
+      : chart.isLive && chart.currentTimeLabel
+        ? `Focus and drift curves in progress through ${chart.currentTimeLabel}`
+        : "Focus and drift curves"
+    : chart.revealX !== null && chart.revealTimeLabel
+      ? t("dashboard.today.focusDriftCurvesAt", { time: chart.revealTimeLabel })
+      : chart.isLive && chart.currentTimeLabel
+        ? t("dashboard.today.focusDriftCurvesAt", { time: chart.currentTimeLabel })
+        : t("dashboard.today.focusDriftCurves");
 
   function buildHoverState(
     point: FocusDriftPoint,
@@ -231,10 +250,10 @@ export const FocusDriftSection = memo(function FocusDriftSection({
   return (
     <section className="editorial-panel editorial-panel--soft insight-chart-panel">
         <div className="insight-panel-head">
-          <span className="label-mono">Focus/drift score &middot; 30m windows</span>
+          <span className="label-mono">{t("dashboard.today.focusDriftTitle")}</span>
           <div className="insight-panel-head__legend">
-            <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />Focus</span>
-            <span className="chip warn"><span className="sw" style={{ background: "var(--productivity-drift)" }} />Drift</span>
+            <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />{t("activity.productivity.focus")}</span>
+            <span className="chip warn"><span className="sw" style={{ background: "var(--productivity-drift)" }} />{t("activity.productivity.drift")}</span>
           </div>
         </div>
         {shouldRenderChart ? (
@@ -272,11 +291,11 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                     <path className="focus-drift__line focus-drift__line--drift" d={chart.driftPath} />
                   </g>
                 ) : null}
-                <rect className="focus-drift__line-target" x={FOCUS_DRIFT_CHART_BOUNDS.left} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left} height={100 - FOCUS_DRIFT_CHART_BOUNDS.top} aria-label="Focus and drift curve hover target" onMouseEnter={updateLineHover} onMouseMove={updateLineHover} onMouseLeave={clearHover} />
+                <rect className="focus-drift__line-target" x={FOCUS_DRIFT_CHART_BOUNDS.left} y={FOCUS_DRIFT_CHART_BOUNDS.top} width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left} height={100 - FOCUS_DRIFT_CHART_BOUNDS.top} aria-label={t("dashboard.today.focusDriftHoverTarget")} onMouseEnter={updateLineHover} onMouseMove={updateLineHover} onMouseLeave={clearHover} />
                 {hoverPoints.map((point) => (
                   <g key={point.id}>
-                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus")} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
-                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift")} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--focus" cx={point.x} cy={point.focusY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "focus", effectiveLanguage)} onFocus={(event) => updateKeyboardHover("focus", point, event)} onBlur={clearHover} />
+                    <circle className="focus-drift__target focus-drift__target--drift" cx={point.x} cy={point.driftY} r="3" role="img" tabIndex={0} aria-label={formatFocusDriftHoverLabel(point, "drift", effectiveLanguage)} onFocus={(event) => updateKeyboardHover("drift", point, event)} onBlur={clearHover} />
                   </g>
                 ))}
               </svg>
@@ -304,7 +323,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                 ))}
               </div>
             </div>
-            {hover ? <FocusDriftHoverCard appIcons={appIcons} hover={hover} /> : null}
+            {hover ? <FocusDriftHoverCard appIcons={appIcons} hover={hover} startOfDayMinutes={startOfDayMinutes} /> : null}
             <div className="focus-drift__axis" aria-hidden="true">
               {chart.axisTicks.map((tick, index) => (
                 <span
@@ -312,12 +331,19 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                   className={index > 0 && index < chart.axisTicks.length - 1 && index % 2 === 1 ? "focus-drift__axis-tick--dense" : undefined}
                   style={axisTickStyle(tick.x)}
                 >
-                  {tick.label}
+                  {effectiveLanguage === "ko" ? localizeCompactHourTick(tick.label) : tick.label}
                 </span>
               ))}
             </div>
           </div>
-        ) : <EmptyState title="No focus pattern yet" detail="Focus and drift curves appear after tracked category data is available." />}
+        ) : <EmptyState title={t("dashboard.today.noFocusPattern")} detail={t("dashboard.today.noFocusPatternDetail")} />}
     </section>
   );
 });
+
+function localizeCompactHourTick(label: string): string {
+  const match = /^(\d{1,2})(am|pm)$/iu.exec(label);
+  if (!match) return label;
+  const hour = Number(match[1]) % 12 + (match[2].toLowerCase() === "pm" ? 12 : 0);
+  return `${hour}시`;
+}

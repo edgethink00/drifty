@@ -1,6 +1,7 @@
 import { classifyActivityDetailed, logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import type { DisplayLanguage } from "../localization/languagePreference";
 
 export type HistoryClassification = {
   readonly category: ActivityCategory;
@@ -53,12 +54,6 @@ type MutableHistoryRow = {
   classification: HistoryClassification;
   searchParts: string[];
 };
-
-const historyDayFormatter = new Intl.DateTimeFormat("en-US", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-});
 
 export function buildHistoryRows(segments: readonly ActivitySegment[]): readonly HistoryRow[] {
   const rows: HistoryRow[] = [];
@@ -118,7 +113,7 @@ export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], lim
   };
 }
 
-export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMinutes = 0): readonly HistoryDayGroup[] {
+export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMinutes = 0, language: DisplayLanguage = "en"): readonly HistoryDayGroup[] {
   const groups = new Map<string, HistoryRow[]>();
   for (const row of rows) {
     const dayKey = logicalDayIsoDateForDate(new Date(row.startedAt), startOfDayMinutes);
@@ -126,6 +121,12 @@ export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMin
     dayRows.push(row);
     groups.set(dayKey, dayRows);
   }
+
+  const historyDayFormatter = new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
+    day: "numeric",
+    month: language === "ko" ? "long" : "short",
+    year: "numeric",
+  });
 
   return Array.from(groups.entries()).map(([dayKey, dayRows]) => ({
     dayKey,

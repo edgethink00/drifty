@@ -3,7 +3,7 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import { DONUT_CIRCUMFERENCE, NO_PROJECT_KEY, WEEKLY_BREAKDOWN_WEEKDAYS, buildDonutView, buildWeeklyChartView, formatInsightSourceValue, insightSourceValue } from "./insightData";
 import type { AttentionRhythmCell, DonutCategorySlice, DonutView, InsightSourceLists, ProductivityAnalysisKind, ProductivityInsightReport, WeeklyBreakdownDay, WeeklyChartMode, WeeklyChartProjectSeriesItem, WeeklyChartSegment } from "./insightData";
 import { CATEGORY_COLORS, FLOW_BREAKDOWN_PRODUCTIVITY_ORDER, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { formatCompactDurationFromSeconds, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
+import { formatCompactDurationFromSeconds, formatLocalizedCompactDurationFromSeconds, formatLocalizedHourLabel, localDateKey, weekdayOrderIndex } from "../../lib/formatting";
 import { buildProductivityPersona, classifyActivity, logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationOptions, ProductivityLabel } from "@drifty/domain";
 import { EmptyState } from "../../components/EmptyState";
@@ -13,6 +13,8 @@ import type { CompactClassificationHoverPayload, CompactClassificationHoverState
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export const PERSONA_CONTENT: Record<string, { tags: string; copy: [string, string] }> = {
   deep_diver: {
@@ -62,6 +64,65 @@ export const PERSONA_CONTENT: Record<string, { tags: string; copy: [string, stri
     copy: [
       "Your time is split fairly evenly across focus, neutral, and drift, with a steady daily rhythm.",
       "You adapt well to different kinds of work; nudging a bit more time toward focus compounds quickly.",
+    ],
+  },
+};
+
+const KOREAN_PERSONA_CONTENT: Record<string, { name: string; tags: string; copy: [string, string] }> = {
+  deep_diver: {
+    name: "깊은 몰입형",
+    tags: "긴 집중 세션 · 적은 딴짓 · 안정된 맥락",
+    copy: [
+      "딴짓과 맥락 전환이 적은 긴 집중 세션에서 가장 좋은 흐름을 만듭니다.",
+      "방해받지 않는 작업 시간을 지킬수록 깊이 있는 성과가 선명하게 쌓이는 유형입니다.",
+    ],
+  },
+  deep_focus_deep_drift: {
+    name: "몰입 진폭형",
+    tags: "강한 집중 · 깊은 딴짓 · 큰 진폭",
+    copy: [
+      "깊은 집중과 강한 딴짓 사이를 오가며 중간 상태에 머무는 시간이 적습니다.",
+      "딴짓으로 향하는 강한 에너지를 집중 구간으로 돌리는 것이 가장 큰 개선 지점입니다.",
+    ],
+  },
+  drift_diver: {
+    name: "딴짓 잠수형",
+    tags: "긴 딴짓 구간 · 낮은 집중 · 벗어나기 어려운 흐름",
+    copy: [
+      "한 번 시작한 딴짓이 길게 이어지고 다시 빠져나오기 어려운 흐름이 자주 나타납니다.",
+      "딴짓이 시작되는 순간에 작은 안전장치를 두면 하루에서 가장 많은 시간을 되찾을 수 있습니다.",
+    ],
+  },
+  focus_sprinter: {
+    name: "집중 질주형",
+    tags: "짧은 집중 폭발 · 잦은 전환 · 높은 에너지",
+    copy: [
+      "긴 몰입보다 짧고 힘 있는 집중 구간에서 추진력을 얻습니다.",
+      "몇 번의 집중 질주를 연달아 배치하면 순간의 탄력을 지속적인 진전으로 바꿀 수 있습니다.",
+    ],
+  },
+  reactive_operator: {
+    name: "반응 업무형",
+    tags: "소통 중심 · 잦은 전환 · 빠른 대응",
+    copy: [
+      "소통과 즉각 대응 업무가 많은 비중을 차지해 주의가 자주 이동합니다.",
+      "하루에 한 구간만이라도 보호된 집중 시간을 만들면 깊은 작업이 숨 쉴 공간이 생깁니다.",
+    ],
+  },
+  night_owl: {
+    name: "야간 집중형",
+    tags: "늦은 밤 집중 · 이동된 리듬 · 조용한 시간",
+    copy: [
+      "일반적인 업무 시간이 지난 늦은 밤에 가장 생산적인 흐름이 나타납니다.",
+      "회복 시간을 함께 지키면서 자연스러운 야간 리듬을 활용하면 이 패턴을 오래 유지할 수 있습니다.",
+    ],
+  },
+  balanced_builder: {
+    name: "균형 축적형",
+    tags: "고른 분포 · 안정된 리듬 · 유연한 전환",
+    copy: [
+      "집중, 중립, 딴짓이 비교적 고르게 나뉘고 일상의 리듬도 안정적입니다.",
+      "여러 종류의 업무에 잘 적응하므로 집중 시간을 조금만 늘려도 효과가 빠르게 누적됩니다.",
     ],
   },
 };
@@ -199,6 +260,7 @@ export function WeeklyCategoryRow({
   mode: WeeklyChartMode;
   onModeChange: (mode: WeeklyChartMode) => void;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   // A vanished project set (or an empty range) must not strand the chart in project mode.
   const effectiveMode: WeeklyChartMode = mode === "project" && !projectModeAvailable ? "category" : mode;
   const hoverSegments = effectiveMode === "project" ? projectSegments : segments;
@@ -209,8 +271,23 @@ export function WeeklyCategoryRow({
   );
   const hasData = weekly.some((day) => day.isActive);
   const chart = useMemo(() => buildWeeklyChartView(weekly, effectiveMode, categorySeries, projectSeries), [categorySeries, effectiveMode, projectSeries, weekly]);
-  const productivityDonut = useMemo(() => buildDonutView("productivity", categorySeries, productivityTotals), [categorySeries, productivityTotals]);
-  const categoryDonut = useMemo(() => buildDonutView("category", categorySeries, productivityTotals), [categorySeries, productivityTotals]);
+  const productivityDonut = useMemo(() => {
+    const view = buildDonutView("productivity", categorySeries, productivityTotals);
+    return {
+      ...view,
+      centerLabel: view.rows[0] ? localizedProductivityLabel(view.rows[0].key as ProductivityLabel, t) : view.centerLabel,
+      rows: view.rows.map((row) => ({ ...row, name: localizedProductivityLabel(row.key as ProductivityLabel, t), time: formatLocalizedCompactDurationFromSeconds(productivityTotals[row.key as ProductivityLabel], effectiveLanguage) })),
+    };
+  }, [categorySeries, effectiveLanguage, productivityTotals, t]);
+  const categoryDonut = useMemo(() => {
+    const view = buildDonutView("category", categorySeries, productivityTotals);
+    const secondsByCategory = new Map(categorySeries.map((entry) => [entry.category, entry.seconds]));
+    return {
+      ...view,
+      centerLabel: view.rows[0] ? localizedCategoryLabel(view.rows[0].key as ActivityCategory, t) : view.centerLabel,
+      rows: view.rows.map((row) => ({ ...row, name: localizedCategoryLabel(row.key as ActivityCategory, t), time: formatLocalizedCompactDurationFromSeconds(secondsByCategory.get(row.key as ActivityCategory) ?? 0, effectiveLanguage) })),
+    };
+  }, [categorySeries, effectiveLanguage, productivityTotals, t]);
 
   const hoverPayloads = useMemo(() => {
     const entries = new Map<string, CompactClassificationHoverPayload>();
@@ -223,7 +300,7 @@ export function WeeklyCategoryRow({
       const totalSeconds = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.reduce((sum, productivity) => sum + productivityTotals[productivity], 0);
       const productivityEntries = FLOW_BREAKDOWN_PRODUCTIVITY_ORDER.map((productivity) => ({
         key: productivity,
-        label: productivityLabel(productivity),
+        label: localizedProductivityLabel(productivity, t),
         seconds: productivityTotals[productivity],
         color: PRODUCTIVITY_COLORS[productivity],
         dotClassName: `productivity-dot--${productivity}`,
@@ -233,7 +310,7 @@ export function WeeklyCategoryRow({
         if (entry.seconds <= 0) continue;
         entries.set(entry.key, {
           label: entry.label,
-          durationLabel: formatCompactDurationFromSeconds(entry.seconds),
+          durationLabel: formatLocalizedCompactDurationFromSeconds(entry.seconds, effectiveLanguage),
           shareLabel: `${Math.round((entry.seconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: entry.dotClassName,
           color: entry.color,
@@ -261,8 +338,8 @@ export function WeeklyCategoryRow({
         if (seconds <= 0) continue;
         const meta = projectMeta?.get(item.key);
         entries.set(item.key, {
-          label: meta?.label ?? "Project",
-          durationLabel: formatCompactDurationFromSeconds(seconds),
+          label: meta?.label ?? t("common.project"),
+          durationLabel: formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage),
           shareLabel: `${Math.round((seconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: "",
           color: meta?.color ?? item.color,
@@ -274,8 +351,8 @@ export function WeeklyCategoryRow({
       for (const entry of categoryTotals) {
         if (entry.totalSeconds <= 0) continue;
         entries.set(entry.category, {
-          label: categoryLabel(entry.category),
-          durationLabel: formatCompactDurationFromSeconds(entry.totalSeconds),
+          label: localizedCategoryLabel(entry.category, t),
+          durationLabel: formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, effectiveLanguage),
           shareLabel: `${Math.round((entry.totalSeconds / Math.max(totalSeconds, 1)) * 100)}%`,
           dotClassName: `category-dot--${entry.category}`,
           color: CATEGORY_COLORS[entry.category],
@@ -285,7 +362,7 @@ export function WeeklyCategoryRow({
     }
 
     return entries;
-  }, [categoryTotals, classificationOptions, effectiveMode, hoverSegments, productivityTotals, projectSeries, projectMeta, projectBySegmentId]);
+  }, [categoryTotals, classificationOptions, effectiveLanguage, effectiveMode, hoverSegments, productivityTotals, projectSeries, projectMeta, projectBySegmentId, t]);
 
   function showAggregateHover(key: string, x: number, y: number) {
     const payload = hoverPayloads.get(key);
@@ -314,7 +391,7 @@ export function WeeklyCategoryRow({
     const occurrences = Math.max(weekdayDates.size, 1);
     setHoveredSegment({
       ...payload,
-      durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+      durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
       shareLabel: `${Math.round((segment.seconds / Math.max(columnSeconds, 1)) * 100)}%`,
       appBreakdown: buildCompactActivityBreakdown(bucketSegments, occurrences),
       x,
@@ -338,11 +415,11 @@ export function WeeklyCategoryRow({
         onMoveSegmentHover={moveSegmentHover}
         onShowSegmentHover={showWeeklySegmentHover}
       />
-      <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail weekly-breakdown-analytical is-linked" aria-label="Insight weekly summaries">
+      <section className="editorial-panel editorial-panel--soft insight-section od-cat-rebuilt weekly-summary-rail weekly-breakdown-analytical is-linked" aria-label={t("trends.weeklySummariesAria")}>
         {productivityDonut.rows.length > 0 || categoryDonut.rows.length > 0 ? (
           <div className="weekly-summary-rail__stack weekly-breakdown-analytical__stack">
             <WeeklyDonutSummary
-              ariaLabel="Insight productivity breakdown"
+              ariaLabel={t("trends.productivityBreakdownAria")}
               className="weekly-summary-rail__summary--productivity weekly-breakdown-analytical__productivity productivity-donut-compact"
               view={productivityDonut}
               onShowHover={showAggregateHover}
@@ -350,14 +427,14 @@ export function WeeklyCategoryRow({
               onHideHover={() => setHoveredSegment(null)}
             />
             <WeeklyCategoryBreakdown
-              ariaLabel="Insight category breakdown"
+              ariaLabel={t("trends.categoryBreakdownAria")}
               view={categoryDonut}
               onShowHover={showAggregateHover}
               onMoveHover={moveSegmentHover}
               onHideHover={() => setHoveredSegment(null)}
             />
           </div>
-        ) : <EmptyState title="No weekly split yet" detail="Weekly focus and category totals appear once activity is recorded." />}
+        ) : <EmptyState title={t("trends.noWeeklySplit")} detail={t("trends.noWeeklySplitDetail")} />}
       </section>
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
     </div>
@@ -449,9 +526,10 @@ export function WeeklyCategoryBreakdown({
   onMoveHover: (x: number, y: number) => void;
   onHideHover: () => void;
 }) {
+  const { t } = useLocalization();
   return (
     <div className="weekly-summary-rail__summary weekly-summary-rail__summary--category top-categories-breakdown" role="group" aria-label={ariaLabel}>
-      <span className="weekly-breakdown-analytical__eyebrow">Top categories</span>
+      <span className="weekly-breakdown-analytical__eyebrow">{t("trends.topCategories")}</span>
       <div className="top-categories-breakdown__list">
         {view.rows.map((row) => (
           <div
@@ -486,15 +564,22 @@ export function AttentionRhythmCard({
   classificationOptions: ClassificationOptions;
   segments: ActivitySegment[];
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const hasData = cells.some((cell) => cell.intensity > 0);
   const totalSeconds = segments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
   const weekdayLabels = useMemo(() => {
-    const labels = cells
+    const orderedWeekdayIndexes = cells
       .filter((cell) => cell.hour === 0)
-      .map((cell) => WEEKLY_BREAKDOWN_WEEKDAYS[cell.weekdayIndex] ?? "");
-    return labels.length > 0 ? labels : WEEKLY_BREAKDOWN_WEEKDAYS;
-  }, [cells]);
+      .map((cell) => cell.weekdayIndex);
+    const fallbackIndexes = orderedWeekdayIndexes.length > 0 ? orderedWeekdayIndexes : [0, 1, 2, 3, 4, 5, 6];
+    const koreanWeekdays = ["월", "화", "수", "목", "금", "토", "일"] as const;
+    return fallbackIndexes.map((weekdayIndex) => (
+      effectiveLanguage === "ko"
+        ? koreanWeekdays[weekdayIndex] ?? ""
+        : WEEKLY_BREAKDOWN_WEEKDAYS[weekdayIndex] ?? ""
+    ));
+  }, [cells, effectiveLanguage]);
 
   function showCellHover(cell: AttentionRhythmCell, x: number, y: number) {
     if (cell.intensity <= 0 || cell.state === "neutral") return;
@@ -508,8 +593,8 @@ export function AttentionRhythmCard({
     const cellSeconds = matchingSegments.reduce((sum, segment) => sum + segment.durationSeconds, 0);
     if (cellSeconds <= 0) return;
     setHoveredSegment({
-      label: productivityLabel(cell.state),
-      durationLabel: formatCompactDurationFromSeconds(cellSeconds),
+      label: localizedProductivityLabel(cell.state, t),
+      durationLabel: formatLocalizedCompactDurationFromSeconds(cellSeconds, effectiveLanguage),
       shareLabel: `${Math.round((cellSeconds / Math.max(totalSeconds, 1)) * 100)}%`,
       dotClassName: `productivity-dot--${cell.state}`,
       color: PRODUCTIVITY_COLORS[cell.state],
@@ -524,20 +609,20 @@ export function AttentionRhythmCard({
   }
 
   return (
-    <section id="insights-weekly-attention-rhythm" className="editorial-panel editorial-panel--soft insight-section productivity-rhythm-card productivity-rhythm-card--attention" aria-label="Weekly attention rhythm">
+    <section id="insights-weekly-attention-rhythm" className="editorial-panel editorial-panel--soft insight-section productivity-rhythm-card productivity-rhythm-card--attention" aria-label={t("trends.attentionRhythm")}>
       <div className="productivity-rhythm-card__head productivity-rhythm-card__head--attention">
-        <div><span className="label-mono insight-section__label">Weekly attention rhythm</span></div>
+        <div><span className="label-mono insight-section__label">{t("trends.attentionRhythm")}</span></div>
         <div className="productivity-rhythm-card__legend" aria-hidden="true">
-          <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--focus" /><span>Focus</span></span>
-          <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--drift" /><span>Drift</span></span>
-          <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--neutral" /><span>Neutral</span></span>
+          <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--focus" /><span>{t("activity.productivity.focus")}</span></span>
+          <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--drift" /><span>{t("activity.productivity.drift")}</span></span>
+          <span className="productivity-rhythm-card__legend-item"><span className="productivity-rhythm-card__legend-dot productivity-rhythm-card__legend-dot--neutral" /><span>{t("activity.productivity.neutral")}</span></span>
         </div>
       </div>
       {hasData ? (
-        <div className="productivity-rhythm-card__grid" role="img" aria-label="Weekly attention rhythm dominant focus or drift by weekday and time block">
+        <div className="productivity-rhythm-card__grid" role="img" aria-label={t("trends.attentionRhythmAria")}>
           <div className="productivity-rhythm-card__times">
             <span />
-            {Array.from({ length: 24 }, (_, hour) => <span key={hour}>{formatRhythmHourLabel(hour)}</span>)}
+            {Array.from({ length: 24 }, (_, hour) => <span key={hour}>{effectiveLanguage === "ko" ? formatLocalizedHourLabel(hour, effectiveLanguage) : formatRhythmHourLabel(hour)}</span>)}
           </div>
           <div className="productivity-rhythm-card__body">
             <div className="productivity-rhythm-card__weekdays" aria-hidden="true">
@@ -564,7 +649,7 @@ export function AttentionRhythmCard({
             </div>
           </div>
         </div>
-      ) : <EmptyState title="No rhythm yet" detail="The weekly attention rhythm appears after activity is recorded across the insight window." />}
+      ) : <EmptyState title={t("trends.noRhythm")} detail={t("trends.noRhythmDetail")} />}
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
     </section>
   );
@@ -579,10 +664,12 @@ export function InsightSourceGroup({
   lists: InsightSourceLists;
   appIcons: AppIconMap;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const tone = variant === "drift" ? "var(--warn)" : "var(--accent)";
-  const topicsLabel = variant === "drift" ? "Drift after focus" : "Focus before drift";
-  const transitionsLabel = variant === "drift" ? "Top drift after focus transitions" : "Top focus before drift transitions";
-  const appsLabel = variant === "drift" ? "Drift apps" : "Focus apps";
+  const topicsLabel = t(variant === "drift" ? "trends.driftAfterFocus" : "trends.focusBeforeDrift");
+  const transitionsLabel = t(variant === "drift" ? "trends.driftTransitionsAria" : "trends.focusTransitionsAria");
+  const appsLabel = t(variant === "drift" ? "trends.driftApps" : "trends.focusApps");
+  const kindLabel = t(variant === "drift" ? "activity.productivity.drift" : "activity.productivity.focus");
   const toneStyle = { "--trend-tone": tone } as CSSProperties;
 
   const renderSourceList = (
@@ -607,7 +694,7 @@ export function InsightSourceGroup({
                   : <AppGlyph appName={item.appName} iconSrc={appIcons[item.bundleId ?? item.appName] ?? null} size="sm" />}
               </span>
               <span className="drift-time-trend__sources-name">{item.label}</span>
-              <strong className="drift-time-trend__sources-value">{formatInsightSourceValue(item)}</strong>
+              <strong className="drift-time-trend__sources-value">{item.valueKind === "count" ? (effectiveLanguage === "ko" ? `${item.count}회` : `${item.count}x`) : formatLocalizedCompactDurationFromSeconds(item.seconds, effectiveLanguage)}</strong>
               <div className="drift-source-bar"><div className="drift-source-bar__fill" style={{ width: `${Math.max((insightSourceValue(item) / maxValue) * 100, 3)}%` }} /></div>
             </div>
           ))}
@@ -618,11 +705,11 @@ export function InsightSourceGroup({
   };
 
   return (
-    <section className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${variant}`} aria-label={`${variant === "drift" ? "Drift" : "Focus"} patterns`}>
+    <section className={`editorial-panel editorial-panel--soft insight-section productivity-insight-group productivity-insight-group--${variant}`} aria-label={t(variant === "drift" ? "trends.driftPatternsAria" : "trends.focusPatternsAria")}>
       <section className="editorial-panel editorial-panel--soft insight-section trend-topics-card productivity-insight-group__section" aria-label={transitionsLabel} style={toneStyle}>
         <div className="trend-topics-card__columns">
-          {renderSourceList("apps", appsLabel, `No ${variant} apps yet`, "Apps appear after classified activity is recorded.")}
-          {renderSourceList("topics", topicsLabel, `No ${variant} transitions yet`, "Transitions appear after focus is followed by drift.")}
+          {renderSourceList("apps", appsLabel, t("trends.noApps", { kind: kindLabel }), t("trends.appsEmptyDetail"))}
+          {renderSourceList("topics", topicsLabel, t("trends.noTransitions", { kind: kindLabel }), t("trends.transitionsEmptyDetail"))}
         </div>
       </section>
     </section>
@@ -642,14 +729,29 @@ export function ProductivityPersonaCard({
   segments?: ActivitySegment[];
   variant?: "profile" | "radar";
 }) {
-  const content = PERSONA_CONTENT[report.personaId] ?? PERSONA_CONTENT.balanced_builder;
+  const { effectiveLanguage, t } = useLocalization();
+  const englishContent = PERSONA_CONTENT[report.personaId] ?? PERSONA_CONTENT.balanced_builder;
+  const koreanContent = KOREAN_PERSONA_CONTENT[report.personaId] ?? KOREAN_PERSONA_CONTENT.balanced_builder;
+  const content = effectiveLanguage === "ko" ? koreanContent : englishContent;
+  const personaName = effectiveLanguage === "ko" ? koreanContent.name : report.personaName;
   const activeDays = report.metrics.activeDays;
   const rubricVersionLabel = report.rubricVersion.match(/v\d+$/)?.[0] ?? report.rubricVersion;
-  const fixedRubricLabel = `Scored with Drifty fixed rubric ${rubricVersionLabel}`;
+  const fixedRubricLabel = t("trends.rubric", { version: rubricVersionLabel });
   const tagPills = content.tags.split(" · ");
   const radarCenter = { x: 150, y: 116 };
   const radarRadius = 86;
-  const radarAxes = buildFocusProfileAxes(segments, classificationOptions, report.metrics);
+  const radarAxes = buildFocusProfileAxes(segments, classificationOptions, report.metrics).map((axis) => ({
+    ...axis,
+    label: t(axis.key === "focus_start"
+      ? "trends.axis.focusStart"
+      : axis.key === "focus_endurance"
+        ? "trends.axis.focusEndurance"
+        : axis.key === "short_drifts"
+          ? "trends.axis.shortDrifts"
+          : axis.key === "focus_routine"
+            ? "trends.axis.focusRoutine"
+            : "trends.axis.balancedFocus"),
+  }));
   const pointFor = (index: number, value: number, radius = radarRadius) => {
     const angle = -Math.PI / 2 + (Math.PI * 2 * index) / radarAxes.length;
     return {
@@ -665,7 +767,7 @@ export function ProductivityPersonaCard({
     const point = pointFor(index, axis.value);
     return `${point.x.toFixed(1)},${point.y.toFixed(1)}`;
   }).join(" ");
-  const radarLabel = `${report.personaName} persona radar: ${radarAxes.map((axis) => `${axis.label} ${formatSharePercent(axis.value * 100)}`).join(", ")}`;
+  const radarLabel = t("trends.personaRadarAria", { name: personaName, axes: radarAxes.map((axis) => `${axis.label} ${formatSharePercent(axis.value * 100)}`).join(", ") });
   const renderRadarLabel = (axis: FocusProfileAxis, index: number) => {
     const point = pointFor(index, 1, radarRadius + 22);
     const x = point.x.toFixed(1);
@@ -687,14 +789,14 @@ export function ProductivityPersonaCard({
   ].filter(Boolean).join(" ");
 
   return (
-    <section className={cardClassName} aria-label="Local productivity persona report">
+    <section className={cardClassName} aria-label={t("trends.personaReportAria")}>
       {hasData && variant === "radar" ? (
         <div className="persona-radar-card">
           <div className="persona-radar-card__head">
-            <span className="label-mono insight-section__label">Focus profile</span>
+            <span className="label-mono insight-section__label">{t("trends.focusProfile")}</span>
             <span className="persona-radar-card__help-wrap">
-              <button type="button" className="help-trigger persona-radar-card__help" aria-label="What is the focus profile?" aria-describedby="focus-profile-help-tooltip">?</button>
-              <span className="persona-radar-card__tooltip" id="focus-profile-help-tooltip" role="tooltip">{FOCUS_PROFILE_HELP}</span>
+              <button type="button" className="help-trigger persona-radar-card__help" aria-label={t("trends.focusProfileHelpAria")} aria-describedby="focus-profile-help-tooltip">?</button>
+              <span className="persona-radar-card__tooltip" id="focus-profile-help-tooltip" role="tooltip">{t("trends.focusProfileHelp")}</span>
             </span>
           </div>
           <div className="persona-radar-card__chart">
@@ -717,15 +819,15 @@ export function ProductivityPersonaCard({
         <>
           <div className="persona-profile-card__identity">
             <div className="persona-profile-card__intro">
-              <span className="label-mono insight-section__label">Productivity persona</span>
-              <h2 className="persona-profile-card__title">{report.personaName}</h2>
+              <span className="label-mono insight-section__label">{t("trends.persona")}</span>
+              <h2 className="persona-profile-card__title">{personaName}</h2>
               <p className="persona-profile-card__subtitle productivity-persona-card__copy">{content.copy[0]}</p>
               <p className="productivity-persona-card__copy">{content.copy[1]}</p>
-              <div className="persona-profile-card__tags" aria-label="Persona traits">
+              <div className="persona-profile-card__tags" aria-label={t("trends.personaTraitsAria")}>
                 {tagPills.map((tag) => <span className="persona-profile-card__tag" key={tag}>{tag}</span>)}
               </div>
               <span className="chip green productivity-persona-card__badge">{fixedRubricLabel}</span>
-              <span className="chip productivity-persona-card__badge">Analyzing {activeDays} active {activeDays === 1 ? "day" : "days"} in this window</span>
+              <span className="chip productivity-persona-card__badge">{t("trends.activeDays", { count: activeDays })}</span>
             </div>
           </div>
           <div className="persona-radar-card">
@@ -753,11 +855,11 @@ export function ProductivityPersonaCard({
         <>
           <div className="productivity-persona-card__head">
             <div>
-              <span className="label-mono insight-section__label">Productivity persona</span>
-              <h2>Waiting for local patterns</h2>
+              <span className="label-mono insight-section__label">{t("trends.persona")}</span>
+              <h2>{t("trends.waitingPatterns")}</h2>
             </div>
           </div>
-          <EmptyState title="No persona yet" detail="The local report appears after tracker history exists in this insight window." />
+          <EmptyState title={t("trends.noPersona")} detail={t("trends.noPersonaDetail")} />
         </>
       )}
     </section>

@@ -343,7 +343,7 @@ import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
-import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
+import { describeRelativeDay, filterSegmentsForRange, formatCompactDurationFromSeconds, formatDateRangeLabel, formatDayLabel, formatDuration, formatLocalizedDateRangeLabel, formatLocalizedDayLabel, formatLocalizedQuarterHourLabel, formatQuarterHourLabel, formatRelativeTime, formatTimeLabel, getLogicalDayRange, isoDateFromTimestamp, localDateKey, logicalTodayIsoDate, toErrorMessage } from "./lib/formatting";
 import { DateNavigator } from "./components/DateNavigator";
 import { MainContentShell, NavIcon, WindowThemeToggle } from "./app/AppShell";
 import { activityNav, dashboardPeriodOptions, type NavigationHistoryState, type TabId } from "./app/navigation";
@@ -3907,7 +3907,6 @@ export default function App() {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
     if (effectiveDevModeEnabled) return;
-    if (localization.koreanPreviewEnabled) localization.setKoreanPreviewEnabled(false);
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
     if (profileBetaEnabled) setProfileBetaEnabled(false);
@@ -3921,7 +3920,7 @@ export default function App() {
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, localization.koreanPreviewEnabled, localization.setKoreanPreviewEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
@@ -6115,7 +6114,7 @@ export default function App() {
   const dashboardAppUsage = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 6 }), [effectiveDashboardSegments]);
   const dashboardTopApps = useMemo(() => buildAppUsageSummaries(effectiveDashboardSegments, { limit: 1, groupBy: "app" }), [effectiveDashboardSegments]);
   const dayField = useMemo(() => buildQuarterHourDayField(effectiveSelectedDaySegments, selectedDay, startOfDayMinutes), [effectiveSelectedDaySegments, selectedDay, startOfDayMinutes]);
-  const selectedDayLabel = formatDayLabel(selectedDay);
+  const selectedDayLabel = formatLocalizedDayLabel(selectedDay, localization.effectiveLanguage);
   const aiClassificationUsageDayLabel = formatDayLabel(aiClassificationUsageDay ?? selectedDay);
   const aiClassificationCostProjection = useMemo(
     () => projectAiClassificationCost(aiClassificationUsage, classificationMetrics),
@@ -6220,7 +6219,9 @@ export default function App() {
   const activeHourCount = activeHours.length;
   const peakSlot = dayField.reduce((cur, slot) => (slot.totalSeconds > cur.totalSeconds ? slot : cur), dayField[0]);
   const peakTrackedSeconds = peakSlot?.totalSeconds ?? 0;
-  const peakWindowLabel = peakTrackedSeconds > 0 ? formatQuarterHourLabel(peakSlot.minuteOfDay) : "\u2014";
+  const peakWindowLabel = peakTrackedSeconds > 0
+    ? formatLocalizedQuarterHourLabel(peakSlot.minuteOfDay, localization.effectiveLanguage)
+    : "\u2014";
   const isCurrentClassificationRange = classificationRange === "Week"
     ? classificationWeekRange.startDay <= todayDay && todayDay <= classificationWeekRange.endDay
     : isTodaySelected;
@@ -6228,7 +6229,9 @@ export default function App() {
   const canShiftClassificationForward = classificationRange === "Week"
     ? getDashboardPeriodRange(rawNextClassificationDay, "Week", startOfDayMinutes, startOfWeek).startDay <= todayDay
     : rawNextClassificationDay <= todayDay;
-  const classificationDateLabel = classificationRange === "Week" ? formatDateRangeLabel(classificationWeekRange.startDay, classificationWeekRange.endDay) : selectedDayLabel;
+  const classificationDateLabel = classificationRange === "Week"
+    ? formatLocalizedDateRangeLabel(classificationWeekRange.startDay, classificationWeekRange.endDay, localization.effectiveLanguage)
+    : selectedDayLabel;
   const isCurrentDashboardPeriod = dashPeriod === "Week"
     ? dashboardRange.startDay <= todayDay && todayDay <= dashboardRange.endDay
     : isTodaySelected;
@@ -6238,8 +6241,12 @@ export default function App() {
     : nextDashboardDay <= todayDay;
   const nextInsightDay = shiftInsightPeriodDay(selectedDay, trendsRange, 1);
   const canShiftInsightForward = nextInsightDay <= todayDay;
-  const dashboardDateLabel = dashPeriod === "Week" ? formatDateRangeLabel(dashboardRange.startDay, dashboardRange.endDay) : selectedDayLabel;
-  const insightDateLabel = formatDateRangeLabel(insightRange.startDay, insightRange.endDay);
+  const dashboardDateLabel = dashPeriod === "Week"
+    ? formatLocalizedDateRangeLabel(dashboardRange.startDay, dashboardRange.endDay, localization.effectiveLanguage)
+    : dashPeriod === "Today"
+      ? formatLocalizedDayLabel(selectedDay, localization.effectiveLanguage)
+      : selectedDayLabel;
+  const insightDateLabel = formatLocalizedDateRangeLabel(insightRange.startDay, insightRange.endDay, localization.effectiveLanguage);
   const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && isDevModeActive && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
 
   useEffect(() => {
@@ -7723,16 +7730,19 @@ export default function App() {
 
   const dashboardDateNavigator = (
     <DateNavigator
-      ariaLabel={`${dashPeriod} date selector`}
+      ariaLabel={dashPeriod === "Today" ? localization.t("dashboard.today.dateSelector") : localization.t("dashboard.week.dateSelector")}
       label={dashboardDateLabel}
-      todayLabel={getDashboardCurrentPeriodLabel(dashPeriod)}
+      todayLabel={dashPeriod === "Today" ? localization.t("dashboard.today.today") : localization.t("dashboard.week.current")}
+      todayActionLabel={localization.effectiveLanguage === "ko"
+        ? localization.t(dashPeriod === "Today" ? "dashboard.today.goToday" : "dashboard.week.goCurrent")
+        : undefined}
       isTodayDisabled={isCurrentDashboardPeriod}
       isNextDisabled={!canShiftDashboardForward}
       onPrevious={() => shiftDashboardPeriod(-1)}
       onNext={() => shiftDashboardPeriod(1)}
       onToday={() => selectDay(todayDay)}
-      previousLabel={`Show previous ${dashPeriod.toLowerCase()}`}
-      nextLabel={`Show next ${dashPeriod.toLowerCase()}`}
+      previousLabel={dashPeriod === "Today" ? localization.t("dashboard.today.previousDay") : localization.t("dashboard.week.previous")}
+      nextLabel={dashPeriod === "Today" ? localization.t("dashboard.today.nextDay") : localization.t("dashboard.week.next")}
     />
   );
 
@@ -7740,6 +7750,7 @@ export default function App() {
     <FocusDriftSection
       appIcons={appIcons}
       chart={focusDriftChart}
+      startOfDayMinutes={startOfDayMinutes}
     />
   );
 
@@ -7754,6 +7765,7 @@ export default function App() {
       topAppLabel={topAppLabel}
       totalSeconds={totalSeconds}
       uniqueAppsCount={uniqueAppsCount}
+      startOfDayMinutes={startOfDayMinutes}
     />
   );
 

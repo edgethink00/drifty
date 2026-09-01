@@ -2,9 +2,11 @@ import { memo } from "react";
 import type { AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatCompactDurationFromSeconds, formatTimeLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import { historyRowTitle } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
+import { localizedCategoryLabel } from "../localization/activityTranslations";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type HistoryRowProps = {
   readonly appIcons: AppIconMap;
@@ -19,9 +21,11 @@ export const HistoryRow = memo(function HistoryRow({
   row,
   selected,
 }: HistoryRowProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const title = historyRowTitle(row);
   const iconKey = row.bundleId ?? row.appName;
   const classification = row.classification;
+  const category = localizedCategoryLabel(classification.category, t);
 
   return (
     <label className="history-row" data-selected={selected ? "true" : "false"}>
@@ -29,13 +33,13 @@ export const HistoryRow = memo(function HistoryRow({
         <input
           type="checkbox"
           checked={selected}
-          aria-label={`Select ${title}`}
+          aria-label={t("history.selectAria", { title })}
           onChange={(event) => onSelectedChange(row.segmentIds, event.target.checked)}
         />
       </span>
       <div className="history-row__time">
-        <span>{formatTimeLabel(row.startedAt)} - {formatTimeLabel(row.endedAt)}</span>
-        <strong>{formatCompactDurationFromSeconds(row.durationSeconds)}</strong>
+        <span>{formatLocalizedTimeLabel(row.startedAt, effectiveLanguage)} - {formatLocalizedTimeLabel(row.endedAt, effectiveLanguage)}</span>
+        <strong>{formatLocalizedCompactDurationFromSeconds(row.durationSeconds, effectiveLanguage)}</strong>
       </div>
       <div className="history-row__identity">
         <span className="usage-identity-icon usage-identity-icon--sm history-row__identity-icon">
@@ -50,8 +54,8 @@ export const HistoryRow = memo(function HistoryRow({
           <span>{row.siteDomain ?? row.appName}</span>
         </div>
       </div>
-      <div className="history-row__category" aria-label={`${classification.categoryLabel} category`}>
-        <span>{classification.categoryLabel}</span>
+      <div className="history-row__category" aria-label={t("history.categoryAria", { category })}>
+        <span>{category}</span>
         <span className={`category-dot category-dot--${classification.category}`} aria-hidden="true" />
       </div>
     </label>

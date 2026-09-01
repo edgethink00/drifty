@@ -8,6 +8,7 @@ import {
   buildFocusDriftChart,
   getSmoothPathPointAtX,
 } from "./focusDriftChart";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
 function focusSegment(): ActivitySegment {
   return {
@@ -29,16 +30,27 @@ function focusSegment(): ActivitySegment {
   };
 }
 
-function renderFocusDriftSection(chart: ReturnType<typeof buildFocusDriftChart>) {
+function renderFocusDriftSection(chart: ReturnType<typeof buildFocusDriftChart>, language: DisplayLanguage = "en") {
   return render(
-    <FocusDriftSection
-      appIcons={{}}
-      chart={chart}
-    />,
+    <LocalizationTestProvider language={language}>
+      <FocusDriftSection
+        appIcons={{}}
+        chart={chart}
+      />
+    </LocalizationTestProvider>,
   );
 }
 
 describe("FocusDriftSection", () => {
+  it("renders the chart title and legend in natural Korean", () => {
+    const chart = buildFocusDriftChart([focusSegment()], "2026-06-29");
+    renderFocusDriftSection(chart, "ko");
+
+    expect(screen.getByText("집중/딴짓 점수 · 30분 구간")).toBeTruthy();
+    expect(screen.getByText("집중")).toBeTruthy();
+    expect(screen.getByText("딴짓")).toBeTruthy();
+  });
+
   it("renders a live empty chart frame instead of empty-state copy", () => {
     const chart = buildFocusDriftChart([], "2026-06-29", undefined, 4 * 60, 4 * 60);
 

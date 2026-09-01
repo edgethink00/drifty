@@ -1,5 +1,6 @@
 import { logicalDayEndExclusiveMs, logicalDayIsoDateForDate, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
+import type { DisplayLanguage } from "../features/localization/languagePreference";
 
 export const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -54,8 +55,29 @@ export function formatCompactDurationFromSeconds(totalSeconds: number): string {
   return `${h}h ${m}m`;
 }
 
+export function formatLocalizedDuration(totalSeconds: number, language: DisplayLanguage): string {
+  if (language === "en") return formatRoundedDuration(totalSeconds);
+  const totalMinutes = Math.max(0, Math.round(totalSeconds / 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}분`;
+  if (minutes === 0) return `${hours}시간`;
+  return `${hours}시간 ${minutes}분`;
+}
+
+export function formatLocalizedCompactDurationFromSeconds(totalSeconds: number, language: DisplayLanguage): string {
+  if (language === "en") return formatCompactDurationFromSeconds(totalSeconds);
+  return formatLocalizedDuration(totalSeconds, language);
+}
+
 export function formatTimeLabel(value: string | Date): string {
   return uiTimeFormatter.format(typeof value === "string" ? new Date(value) : value);
+}
+
+export function formatLocalizedTimeLabel(value: string | Date, language: DisplayLanguage): string {
+  if (language === "en") return formatTimeLabel(value);
+  return new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true })
+    .format(typeof value === "string" ? new Date(value) : value);
 }
 
 export function formatRelativeTime(value: string, locale = "en-US"): string {
@@ -83,12 +105,32 @@ export function formatQuarterHourLabel(minuteOfDay: number): string {
   return uiTimeFormatter.format(date);
 }
 
+export function formatLocalizedQuarterHourLabel(minuteOfDay: number, language: DisplayLanguage): string {
+  if (language === "en") return formatQuarterHourLabel(minuteOfDay);
+  const normalized = ((minuteOfDay % (24 * 60)) + (24 * 60)) % (24 * 60);
+  const date = new Date(2026, 0, 1, Math.floor(normalized / 60), normalized % 60, 0, 0);
+  return formatLocalizedTimeLabel(date, language);
+}
+
 export function describeRelativeDay(day: string, startOfDayMinutes = 0): string {
   const today = logicalTodayIsoDate(startOfDayMinutes);
   if (day === today) return "Today";
   if (day === shiftIsoDate(today, -1)) return "Yesterday";
   if (day === shiftIsoDate(today, 1)) return "Tomorrow";
   return "Selected day";
+}
+
+export function describeLocalizedRelativeDay(
+  day: string,
+  language: DisplayLanguage,
+  startOfDayMinutes = 0,
+): string {
+  const label = describeRelativeDay(day, startOfDayMinutes);
+  if (language === "en") return label;
+  if (label === "Today") return "오늘";
+  if (label === "Yesterday") return "어제";
+  if (label === "Tomorrow") return "내일";
+  return "선택한 날짜";
 }
 
 export function buildIsoDayList(startDay: string, endDay: string): string[] {
@@ -105,6 +147,18 @@ export function formatCalendarMinuteLabel(day: string, minuteOfDay: number, star
   return formatTimeLabel(new Date(logicalDayStartMs(day, startOfDayMinutes) + minuteOfDay * 60 * 1000));
 }
 
+export function formatLocalizedCalendarMinuteLabel(
+  day: string,
+  minuteOfDay: number,
+  language: DisplayLanguage,
+  startOfDayMinutes = 0,
+): string {
+  return formatLocalizedTimeLabel(
+    new Date(logicalDayStartMs(day, startOfDayMinutes) + minuteOfDay * 60 * 1000),
+    language,
+  );
+}
+
 export function formatCompactHourLabel(hour: number): string {
   const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
   const period = normalizedHour < 12 ? "am" : "pm";
@@ -112,10 +166,22 @@ export function formatCompactHourLabel(hour: number): string {
   return `${displayHour}${period}`;
 }
 
+export function formatLocalizedCompactHourLabel(hour: number, language: DisplayLanguage): string {
+  if (language === "en") return formatCompactHourLabel(hour);
+  const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
+  return `${normalizedHour}시`;
+}
+
 export function formatHourLabel(hour: number): string {
   if (hour === 0) return "12 AM";
   if (hour === 12) return "12 PM";
   return hour > 12 ? `${hour - 12} PM` : `${hour} AM`;
+}
+
+export function formatLocalizedHourLabel(hour: number, language: DisplayLanguage): string {
+  if (language === "en") return formatHourLabel(hour);
+  const normalizedHour = ((Math.floor(hour) % 24) + 24) % 24;
+  return `${normalizedHour}시`;
 }
 
 export function shiftIsoMonth(day: string, direction: -1 | 1): string {
@@ -190,6 +256,30 @@ export function formatDateRangeLabel(startDay: string, endDay: string): string {
   return `${startLabel}–${endLabel}`;
 }
 
+export function formatLocalizedDateRangeLabel(
+  startDay: string,
+  endDay: string,
+  language: DisplayLanguage,
+): string {
+  if (language === "en") return formatDateRangeLabel(startDay, endDay);
+  if (startDay === endDay) return formatLocalizedDayLabel(endDay, language);
+  const start = parseLocalIsoDay(startDay);
+  const end = parseLocalIsoDay(endDay);
+  if (!start || !end) return `${startDay}–${endDay}`;
+
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  const startLabel = new Intl.DateTimeFormat("ko-KR", sameYear
+    ? { month: "long", day: "numeric" }
+    : { year: "numeric", month: "long", day: "numeric" }).format(start);
+  const endLabel = new Intl.DateTimeFormat("ko-KR", sameMonth
+    ? { day: "numeric" }
+    : sameYear
+      ? { month: "long", day: "numeric" }
+      : { year: "numeric", month: "long", day: "numeric" }).format(end);
+  return `${startLabel}–${endLabel}`;
+}
+
 export function toErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -200,6 +290,13 @@ export function formatDayLabel(day: string): string {
   const parsed = parseLocalIsoDay(day);
   if (!parsed) return day;
   return uiDayFormatter.format(parsed);
+}
+
+export function formatLocalizedDayLabel(day: string, language: DisplayLanguage): string {
+  if (language === "en") return formatDayLabel(day);
+  const parsed = parseLocalIsoDay(day);
+  if (!parsed) return day;
+  return new Intl.DateTimeFormat("ko-KR", { weekday: "short", month: "long", day: "numeric" }).format(parsed);
 }
 
 export function formatHistoryMonthLabel(month: string): string {

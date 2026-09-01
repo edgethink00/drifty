@@ -20,25 +20,37 @@ type BreakdownSidePanelProps = {
   readonly ariaLabel: string;
   /** subject used in the toggle button labels, e.g. "week breakdown" */
   readonly toggleSubject: string;
+  readonly title?: string;
+  readonly showLabel?: string;
+  readonly collapseLabel?: string;
   readonly children: ReactNode;
 };
 
 /** Collapsible Breakdown side panel chrome shared by Your Day and Your Week.
  *  The open/closed layout swap (rail vs content) is CSS-driven off the
  *  `week-v2-grid--side-open` class on the surrounding grid. */
-export function BreakdownSidePanel({ open, onToggle, ariaLabel, toggleSubject, children }: BreakdownSidePanelProps) {
+export function BreakdownSidePanel({
+  open,
+  onToggle,
+  ariaLabel,
+  toggleSubject,
+  title = "Breakdown",
+  showLabel = `Show ${toggleSubject}`,
+  collapseLabel = `Collapse ${toggleSubject}`,
+  children,
+}: BreakdownSidePanelProps) {
   return (
     <aside className="week-v2-side" aria-label={ariaLabel}>
-      <button type="button" className="week-v2-side__rail" onClick={onToggle} aria-label={`Show ${toggleSubject}`} aria-expanded={open}>
+      <button type="button" className="week-v2-side__rail" onClick={onToggle} aria-label={showLabel} aria-expanded={open}>
         <span className="week-v2-side__rail-arrow" aria-hidden="true"><BreakdownPanelChevron direction="left" /></span>
-        <span className="week-v2-side__rail-label" aria-hidden="true">Breakdown</span>
+        <span className="week-v2-side__rail-label" aria-hidden="true">{title}</span>
       </button>
       <div className="week-v2-side__content">
-        <button type="button" className="week-v2-side__head week-v2-side__headbtn" onClick={onToggle} aria-label={`Collapse ${toggleSubject}`} aria-expanded={open}>
+        <button type="button" className="week-v2-side__head week-v2-side__headbtn" onClick={onToggle} aria-label={collapseLabel} aria-expanded={open}>
           <span className="week-v2-side__collapse" aria-hidden="true">
             <BreakdownPanelChevron direction="right" />
           </span>
-          <strong className="week-v2-side__title">Breakdown</strong>
+          <strong className="week-v2-side__title">{title}</strong>
         </button>
         {children}
       </div>

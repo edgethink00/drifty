@@ -1,8 +1,8 @@
 import { getAccountDisplayName } from "./accountDisplay";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, SVGProps } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, SVGProps } from "react";
 import { createPortal } from "react-dom";
-import { useLocalization } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 
 const menuIconProps: SVGProps<SVGSVGElement> = {
@@ -42,6 +42,31 @@ function AiIcon() {
           before the shared CSS icon scale is applied. */}
       <path d="M11.5 2.22 13.33 9.05 20.16 11 13.33 12.95 11.5 19.78 9.67 12.95 2.84 11 9.67 9.05Z" fill="currentColor" stroke="none" />
       <path d="M19.67 13.93 20.28 16.25 22.6 16.86 20.28 17.47 19.67 19.78 19.06 17.47 16.75 16.86 19.06 16.25Z" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function LanguageIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3.6 12h16.8M12 3c2.2 2.4 3.4 5.4 3.4 9s-1.2 6.6-3.4 9M12 3C9.8 5.4 8.6 8.4 8.6 12s1.2 6.6 3.4 9" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <path d="m9 5 7 7-7 7" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg {...menuIconProps}>
+      <path d="m5 12 4.2 4.2L19 6.5" />
     </svg>
   );
 }
@@ -161,10 +186,13 @@ export function AccountMenu({
   onSignIn,
   onSignOut,
 }: AccountMenuProps) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const languageButtonRef = useRef<HTMLButtonElement | null>(null);
+  const languageMenuRef = useRef<HTMLDivElement | null>(null);
   const [popoverStyle, setPopoverStyle] = useState<CSSProperties | null>(null);
+  const [isLanguageMenuOpen, setIsLanguageMenuOpen] = useState(false);
   const isSignedIn = Boolean(userEmail);
   const displayName = isSignedIn ? getAccountDisplayName(userEmail) : t("account.guest");
   const triggerLabel = displayName;
@@ -211,6 +239,18 @@ export function AccountMenu({
   }, [isOpen, updatePopoverPosition]);
 
   useEffect(() => {
+    if (isOpen) return;
+    setIsLanguageMenuOpen(false);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isLanguageMenuOpen) return;
+    languageMenuRef.current
+      ?.querySelector<HTMLElement>(`[role="menuitemradio"][aria-checked="true"]`)
+      ?.focus();
+  }, [isLanguageMenuOpen]);
+
+  useEffect(() => {
     if (!isOpen) return;
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -233,6 +273,41 @@ export function AccountMenu({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [isOpen, onToggle]);
+
+  const selectLanguage = (language: DisplayLanguage) => {
+    setDisplayLanguage(language);
+    setIsLanguageMenuOpen(false);
+    onToggle();
+  };
+
+  const handleLanguageMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      event.stopPropagation();
+      setIsLanguageMenuOpen(false);
+      languageButtonRef.current?.focus();
+      return;
+    }
+
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const options = Array.from(languageMenuRef.current?.querySelectorAll<HTMLElement>(`[role="menuitemradio"]`) ?? []);
+    if (options.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const activeIndex = options.indexOf(document.activeElement as HTMLElement);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : event.key === "ArrowDown"
+          ? (activeIndex + 1 + options.length) % options.length
+          : (activeIndex - 1 + options.length) % options.length;
+    options[nextIndex]?.focus();
+  };
+
+  const currentLanguageLabel = effectiveLanguage === "ko"
+    ? t("settings.general.languageKorean")
+    : t("settings.general.languageEnglish");
 
   const popover = isOpen && popoverStyle ? createPortal(
     <div
@@ -258,6 +333,59 @@ export function AccountMenu({
         <span className="account-menu-icon"><AiIcon /></span>
         <span>{t("account.aiSettings")}</span>
       </button>
+      <div className="account-menu-separator" role="separator" />
+      <div className="account-menu-language">
+        <button
+          ref={languageButtonRef}
+          type="button"
+          className="account-menu-item account-menu-item--language"
+          onClick={() => setIsLanguageMenuOpen((open) => !open)}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowRight") return;
+            event.preventDefault();
+            setIsLanguageMenuOpen(true);
+          }}
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={isLanguageMenuOpen}
+          data-open={isLanguageMenuOpen}
+        >
+          <span className="account-menu-icon"><LanguageIcon /></span>
+          <span>{t("settings.general.language")}</span>
+          <span className="account-menu-language-value">{currentLanguageLabel}</span>
+          <span className="account-menu-language-chevron" aria-hidden="true"><ChevronRightIcon /></span>
+        </button>
+        {isLanguageMenuOpen ? (
+          <div
+            ref={languageMenuRef}
+            className="account-menu-language-submenu"
+            role="menu"
+            aria-label={t("settings.general.language")}
+            onKeyDown={handleLanguageMenuKeyDown}
+          >
+            <button
+              type="button"
+              className="account-menu-item account-menu-language-option"
+              role="menuitemradio"
+              aria-checked={effectiveLanguage === "en"}
+              onClick={() => selectLanguage("en")}
+            >
+              <span>{t("settings.general.languageEnglish")}</span>
+              <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
+            </button>
+            <button
+              type="button"
+              className="account-menu-item account-menu-language-option"
+              role="menuitemradio"
+              aria-checked={effectiveLanguage === "ko"}
+              onClick={() => selectLanguage("ko")}
+            >
+              <span>{t("settings.general.languageKoreanBeta")}</span>
+              <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
+            </button>
+          </div>
+        ) : null}
+      </div>
       <button
         type="button"
         className="account-menu-item"

@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { AppUsagePanel } from "./AppUsagePanel";
 import { SiteIconProvider } from "../../components/SiteIconContext";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 describe("AppUsagePanel", () => {
   it("renders ranked app usage details", () => {
@@ -122,5 +123,41 @@ describe("AppUsagePanel", () => {
     expect(screen.getByText("github.com")).toBeTruthy();
     expect(screen.getByText(/GitHub · via Chrome · Last used/)).toBeTruthy();
     expect(screen.getByRole("presentation").getAttribute("src")).toBe("data:image/png;base64,github");
+  });
+
+  it("uses natural Korean usage grammar and locale formatting", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <AppUsagePanel
+          periodLabel="today"
+          totalSeconds={7200}
+          appIcons={{}}
+          items={[{
+            rank: 1,
+            appName: "Code",
+            bundleId: "com.example.code",
+            usageKind: "app",
+            siteDomain: null,
+            siteTitle: null,
+            browserName: null,
+            totalSeconds: 5400,
+            sessionCount: 3,
+            activeDays: 1,
+            averageSessionSeconds: 1800,
+            shareOfTotal: 0.75,
+            firstStartedAt: "2026-04-06T09:00:00.000Z",
+            lastEndedAt: "2026-04-06T11:00:00.000Z",
+          }]}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    const card = screen.getByLabelText("가장 많이 사용한 앱: Code");
+    expect(within(card).getByText("가장 많이 사용한 앱")).toBeTruthy();
+    expect(within(card).getByText("1시간 30분")).toBeTruthy();
+    expect(within(card).getByText("비중")).toBeTruthy();
+    expect(within(card).getByText("세션")).toBeTruthy();
+    expect(within(card).getByText("평균")).toBeTruthy();
+    expect(within(card).getByText("사용일")).toBeTruthy();
   });
 });

@@ -13,8 +13,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { getViewportSafeHoverPosition } from "../../components/hoverCardPosition";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 const INSPECTOR_WIDTH_PX = 332;
 
@@ -106,19 +108,22 @@ function inspectorPosition(pointer: WeekActivityInspectorProps["pointer"], fallb
 
 function sourceLabel(
   segments: readonly ActivitySegment[],
+  t: LocalizationController["t"],
   deviceLabelById?: ReadonlyMap<string, string>,
 ): string {
   const labels = new Set(segments.map((segment) => (
     isRemoteDeviceSegment(segment)
-      ? deviceLabelById?.get(segment.deviceId ?? "") ?? "Synced Mac"
-      : "This Mac"
+      ? deviceLabelById?.get(segment.deviceId ?? "") ?? t("dashboard.week.inspector.syncedMac")
+      : t("dashboard.week.inspector.thisMac")
   )));
-  if (labels.size === 0) return "Source unavailable";
-  return labels.size === 1 ? Array.from(labels)[0] : `${labels.size} devices`;
+  if (labels.size === 0) return t("dashboard.week.inspector.sourceUnavailable");
+  return labels.size === 1 ? Array.from(labels)[0] : t("dashboard.week.inspector.devices", { count: labels.size });
 }
 
-function recordCountLabel(count: number): string {
-  return `${count} captured ${count === 1 ? "record" : "records"}`;
+function recordCountLabel(count: number, t: LocalizationController["t"]): string {
+  return count === 1
+    ? t("dashboard.week.inspector.record")
+    : t("dashboard.week.inspector.records", { count });
 }
 
 function mixedClassificationLabels(
@@ -158,6 +163,7 @@ export function WeekActivityInspector({
   onClassify,
   onDelete,
 }: WeekActivityInspectorProps) {
+  const { t } = useLocalization();
   const [view, setView] = useState<InspectorView>("overview");
   const [category, setCategory] = useState<ActivityCategory>(event.category);
   const [productivity, setProductivity] = useState<ProductivityLabel>(event.productivity);
@@ -236,7 +242,7 @@ export function WeekActivityInspector({
       await onClassify(segments, category, productivity);
       onClose();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Classification could not be saved.");
+      setError(caught instanceof Error ? caught.message : t("dashboard.week.inspector.saveError"));
       setBusy(false);
     }
   };
@@ -249,15 +255,15 @@ export function WeekActivityInspector({
       await onDelete(event.segmentIds);
       onClose();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Activity could not be deleted.");
+      setError(caught instanceof Error ? caught.message : t("dashboard.week.inspector.deleteError"));
       setBusy(false);
     }
   };
 
   const title = view === "classification"
-    ? "Edit classification"
+    ? t("dashboard.week.inspector.editTitle")
     : view === "delete"
-      ? "Delete activity?"
+      ? t("dashboard.week.inspector.deleteTitle")
       : event.appName;
 
   return createPortal(
@@ -283,7 +289,7 @@ export function WeekActivityInspector({
           <button
             type="button"
             className="week-activity-inspector__icon-button"
-            aria-label="Back to activity details"
+            aria-label={t("dashboard.week.inspector.back")}
             onClick={() => {
               setError(null);
               setView("overview");
@@ -300,7 +306,7 @@ export function WeekActivityInspector({
         <button
           type="button"
           className="week-activity-inspector__icon-button"
-          aria-label="Close activity inspector"
+          aria-label={t("dashboard.week.inspector.close")}
           onClick={close}
           disabled={busy}
         >
@@ -312,20 +318,20 @@ export function WeekActivityInspector({
         <>
           <div className="week-activity-inspector__summary" id="week-activity-inspector-description">
             <div>
-              <span>Category</span>
-              <strong><i style={{ background: CATEGORY_COLORS[event.category] }} />{categoryLabel(event.category)}{mixed.hasMixedCategory ? " (dominant)" : ""}</strong>
+              <span>{t("common.category")}</span>
+              <strong><i style={{ background: CATEGORY_COLORS[event.category] }} />{localizedCategoryLabel(event.category, t)}{mixed.hasMixedCategory ? ` (${t("dashboard.week.inspector.dominant")})` : ""}</strong>
             </div>
             <div>
-              <span>Productivity</span>
-              <strong><i style={{ background: PRODUCTIVITY_COLORS[event.productivity] }} />{productivityLabel(event.productivity)}{mixed.hasMixedProductivity ? " (dominant)" : ""}</strong>
+              <span>{t("common.productivity")}</span>
+              <strong><i style={{ background: PRODUCTIVITY_COLORS[event.productivity] }} />{localizedProductivityLabel(event.productivity, t)}{mixed.hasMixedProductivity ? ` (${t("dashboard.week.inspector.dominant")})` : ""}</strong>
             </div>
             <div>
-              <span>Source</span>
-              <strong>{sourceLabel(segments, deviceLabelById)}</strong>
+              <span>{t("common.source")}</span>
+              <strong>{sourceLabel(segments, t, deviceLabelById)}</strong>
             </div>
             <div>
-              <span>Scope</span>
-              <strong>{recordCountLabel(count)}</strong>
+              <span>{t("common.scope")}</span>
+              <strong>{recordCountLabel(count, t)}</strong>
             </div>
           </div>
 
@@ -341,7 +347,7 @@ export function WeekActivityInspector({
               disabled={!canMutate || !onClassify}
             >
               <span className="week-activity-inspector__action-icon"><EditIcon /></span>
-              <span><strong>Edit classification</strong></span>
+              <span><strong>{t("dashboard.week.inspector.edit")}</strong></span>
               <ChevronIcon />
             </button>
             <button
@@ -351,7 +357,7 @@ export function WeekActivityInspector({
               disabled={!canMutate || !onDelete}
             >
               <span className="week-activity-inspector__action-icon"><TrashIcon /></span>
-              <span><strong>Delete activity…</strong></span>
+              <span><strong>{t("dashboard.week.inspector.delete")}</strong></span>
               <ChevronIcon />
             </button>
           </div>
@@ -361,7 +367,7 @@ export function WeekActivityInspector({
       {view === "classification" ? (
         <div className="week-activity-inspector__editor" id="week-activity-inspector-description">
           <fieldset>
-            <legend>Category</legend>
+            <legend>{t("common.category")}</legend>
             <div className="week-activity-inspector__choice-grid">
               {CATEGORY_ORDER.filter((option) => option !== "unknown").map((option) => (
                 <label key={option} className={category === option ? "is-selected" : undefined}>
@@ -374,13 +380,13 @@ export function WeekActivityInspector({
                     disabled={busy}
                   />
                   <i style={{ background: CATEGORY_COLORS[option] }} />
-                  <span>{categoryLabel(option)}</span>
+                  <span>{localizedCategoryLabel(option, t)}</span>
                 </label>
               ))}
             </div>
           </fieldset>
           <fieldset>
-            <legend>Productivity</legend>
+            <legend>{t("common.productivity")}</legend>
             <div className="week-activity-inspector__choice-grid week-activity-inspector__choice-grid--productivity">
               {PRODUCTIVITY_ORDER.map((option) => (
                 <label key={option} className={productivity === option ? "is-selected" : undefined}>
@@ -393,16 +399,16 @@ export function WeekActivityInspector({
                     disabled={busy}
                   />
                   <i style={{ background: PRODUCTIVITY_COLORS[option] }} />
-                  <span>{productivityLabel(option)}</span>
+                  <span>{localizedProductivityLabel(option, t)}</span>
                 </label>
               ))}
             </div>
           </fieldset>
           {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
           <footer className="week-activity-inspector__footer">
-            <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>Cancel</button>
+            <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
             <button type="button" className="app-btn app-btn--primary" onClick={() => void saveClassification()} disabled={!hasClassificationChange || busy}>
-              {busy ? "Saving…" : "Save"}
+              {busy ? t("common.saving") : t("common.save")}
             </button>
           </footer>
         </div>
@@ -411,12 +417,16 @@ export function WeekActivityInspector({
       {view === "delete" ? (
         <div className="week-activity-inspector__confirmation" id="week-activity-inspector-description">
           <div className="week-activity-inspector__danger-mark" aria-hidden="true"><TrashIcon /></div>
-          <p>Deleting {recordCountLabel(count)} cannot be undone.</p>
+          <p>{t("dashboard.week.inspector.deleteWarning", { records: recordCountLabel(count, t) })}</p>
           {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
           <footer className="week-activity-inspector__footer">
-            <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>Cancel</button>
+            <button type="button" className="app-btn app-btn--secondary" onClick={() => setView("overview")} disabled={busy}>{t("common.cancel")}</button>
             <button type="button" className="app-btn app-btn--danger" onClick={() => void deleteActivity()} disabled={busy}>
-              {busy ? "Deleting…" : `Delete ${count === 1 ? "record" : `${count} records`}`}
+              {busy
+                ? t("common.deleting")
+                : count === 1
+                  ? t("dashboard.week.inspector.deleteRecord")
+                  : t("dashboard.week.inspector.deleteRecords", { count })}
             </button>
           </footer>
         </div>

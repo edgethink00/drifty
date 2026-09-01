@@ -15,6 +15,7 @@ import {
 } from "./InsightCards";
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type TrendsPageBodyProps = {
   readonly appIcons: AppIconMap;
@@ -61,6 +62,7 @@ export function TrendsPageBody({
   weeklyChartMode,
   onWeeklyChartModeChange,
 }: TrendsPageBodyProps) {
+  const { t } = useLocalization();
   return (
     <>
       <WeeklyCategoryRow
@@ -79,7 +81,7 @@ export function TrendsPageBody({
         onModeChange={onWeeklyChartModeChange}
       />
 
-      <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label="Weekly attention and persona analysis">
+      <div className="insight-grid attention-rhythm-radar-row productivity-focus-radar-row" aria-label={t("trends.analysisAria")}>
         <ProductivityPersonaCard
           classificationOptions={classificationOptions}
           hasData={segments.length > 0}
@@ -95,7 +97,7 @@ export function TrendsPageBody({
         />
       </div>
 
-      <div className="insight-grid productivity-insight-groups" aria-label="Productivity trend charts">
+      <div className="insight-grid productivity-insight-groups" aria-label={t("trends.chartsAria")}>
         <InsightSourceGroup variant="drift" lists={driftSourceLists} appIcons={appIcons} />
         <InsightSourceGroup variant="focus" lists={focusSourceLists} appIcons={appIcons} />
       </div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
-import type { ActivitySegment, Project } from "@drifty/domain";
-import { formatCompactDurationFromSeconds, formatDayLabel } from "../../lib/formatting";
+import { shiftIsoDate, type ActivitySegment, type Project } from "@drifty/domain";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDateRangeLabel, formatLocalizedDayLabel } from "../../lib/formatting";
 import {
   buildProjectIntradayTrendView,
   buildProjectTrendView,
@@ -10,6 +10,7 @@ import {
   type ProjectTrendColumn,
 } from "./projectTrendView";
 import "./project-trend-chart.css";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export interface ProjectTrendChartProps {
   readonly segments: readonly ActivitySegment[]; // segments across the trend range
@@ -58,6 +59,7 @@ function axisTickStyle(x: number): AxisTickStyle {
  * language so it stays comparable with Weekly Breakdown.
  */
 export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const days = props.days ?? 14;
   const isOverview = props.variant === "overview";
   const [hover, setHover] = useState<HoverState | null>(null);
@@ -78,30 +80,34 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
       });
 
   const hasData = view.series.length > 0 && view.maxDaySeconds > 0;
-  const overviewRangeLabel = `latest ${days} days`;
+  const localizedSpanLabel = effectiveLanguage === "en"
+    ? view.spanLabel
+    : props.intraday
+      ? formatLocalizedDayLabel(props.endDay, effectiveLanguage)
+      : formatLocalizedDateRangeLabel(shiftIsoDate(props.endDay, -(days - 1)), props.endDay, effectiveLanguage);
   const labelByKey = new Map(view.series.map((item) => [item.key, item.label]));
   const overviewAccessibleSummary = view.columns.map((column) => {
-    const fullDay = formatDayLabel(column.day);
-    if (column.segments.length === 0) return `${fullDay}: no tracked time`;
+    const fullDay = formatLocalizedDayLabel(column.day, effectiveLanguage);
+    if (column.segments.length === 0) return `${fullDay}: ${t("projects.chart.noTrackedTime")}`;
     const segments = column.segments.map((segment) => {
-      const label = labelByKey.get(segment.key) ?? NO_PROJECT_LABEL;
-      return `${label} ${formatCompactDurationFromSeconds(segment.seconds)}`;
+      const label = segment.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : labelByKey.get(segment.key) ?? NO_PROJECT_LABEL;
+      return `${label} ${formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage)}`;
     });
     return `${fullDay}: ${segments.join(", ")}`;
   }).join("; ");
   const { left, right, top, bottom } = view.bounds;
 
   function showHover(column: ProjectTrendColumn, event: MouseEvent<Element>) {
-    const fullDay = column.hoverLabel ?? formatDayLabel(column.day);
+    const fullDay = column.hoverLabel ?? formatLocalizedDayLabel(column.day, effectiveLanguage);
     const rows: HoverRow[] = column.segments.map((segment) => ({
       key: segment.key,
-      label: labelByKey.get(segment.key) ?? NO_PROJECT_LABEL,
+      label: segment.key === NO_PROJECT_KEY ? t("projects.chart.noProject") : labelByKey.get(segment.key) ?? NO_PROJECT_LABEL,
       color: segment.color,
-      durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+      durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
     }));
     setHover({
       dayLabel: fullDay,
-      totalLabel: rows.length === 0 ? "No tracked time" : formatCompactDurationFromSeconds(column.totalSeconds),
+      totalLabel: rows.length === 0 ? t("projects.chart.noTrackedTime") : formatLocalizedCompactDurationFromSeconds(column.totalSeconds, effectiveLanguage),
       rows,
       x: event.clientX,
       y: event.clientY,
@@ -111,10 +117,10 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
   return (
     <section
       className={`editorial-panel editorial-panel--soft insight-chart-panel ptc-panel${isOverview ? " ptc-panel--overview" : ""}`}
-      aria-label={isOverview ? `Latest ${days} days project overview, ${view.spanLabel}` : `Project assignment trend, ${view.spanLabel}`}
+      aria-label={t(isOverview ? "projects.chart.overviewAria" : "projects.chart.trendAria", { count: days, span: localizedSpanLabel })}
     >
       <div className="insight-panel-head">
-        <span className="label-mono">{isOverview ? `Project allocation · ${overviewRangeLabel}` : <>Project time &middot; {view.spanLabel}</>}</span>
+        <span className="label-mono">{isOverview ? t("projects.chart.allocation", { count: days }) : t("projects.chart.time", { span: localizedSpanLabel })}</span>
         <div className="ptc-panel__head-actions">
           {view.series.length > 0 ? (
             <div className="insight-panel-head__legend">
@@ -128,7 +134,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
           ) : null}
           {isOverview && props.onOpenTrends ? (
             <button type="button" className="app-btn app-btn--quiet app-btn--compact ptc-overview__link" onClick={props.onOpenTrends}>
-              Explore in Trends <span aria-hidden="true">&rarr;</span>
+              {t("projects.chart.explore")} <span aria-hidden="true">&rarr;</span>
             </button>
           ) : null}
         </div>
@@ -138,7 +144,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
         <div
           className="ptc-bars"
           role="img"
-          aria-label={`Project and unassigned time by day, ${view.spanLabel}. ${overviewAccessibleSummary}`}
+          aria-label={`${t("projects.chart.trendAria", { span: localizedSpanLabel })}. ${overviewAccessibleSummary}`}
         >
           <div className="ptc-bars__plot">
             <div className="ptc-bars__grid" aria-hidden="true">
@@ -190,7 +196,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
               viewBox="0 0 100 100"
               preserveAspectRatio="none"
               role="img"
-              aria-label={`Project and unassigned time by day, ${view.spanLabel}`}
+              aria-label={t("projects.chart.trendAria", { span: localizedSpanLabel })}
             >
               <path className="ptc-grid" d={view.gridPath} />
               <g className="ptc-areas">
@@ -219,7 +225,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
                   const next = view.columns[index + 1];
                   const x0 = previous ? (previous.x + column.x) / 2 : left;
                   const x1 = next ? (column.x + next.x) / 2 : right;
-                  const fullDay = column.hoverLabel ?? formatDayLabel(column.day);
+                  const fullDay = column.hoverLabel ?? formatLocalizedDayLabel(column.day, effectiveLanguage);
                   return (
                     <rect
                       className="ptc-hit"
@@ -234,8 +240,8 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
                     >
                       <title>
                         {column.segments.length === 0
-                          ? `${fullDay}: no tracked time`
-                          : `${fullDay}: ${formatCompactDurationFromSeconds(column.totalSeconds)} tracked time`}
+                          ? `${fullDay}: ${t("projects.chart.noTrackedTime")}`
+                          : `${fullDay}: ${formatLocalizedCompactDurationFromSeconds(column.totalSeconds, effectiveLanguage)} ${t("common.tracked")}`}
                       </title>
                     </rect>
                   );
@@ -255,7 +261,7 @@ export function ProjectTrendChart(props: ProjectTrendChartProps): JSX.Element {
           </div>
         </div>
       ) : (
-        <div className="ptc-empty" role="status">No project activity in this range yet.</div>
+        <div className="ptc-empty" role="status">{t("projects.chart.noActivity")}</div>
       )}
 
       {hover ? (

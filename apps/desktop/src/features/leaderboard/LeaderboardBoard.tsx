@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { formatRoundedDuration } from "../../lib/formatting";
+import { formatLocalizedDuration } from "../../lib/formatting";
 import { LEADERBOARD_PUBLIC_RESULT_LIMIT } from "./leaderboardConfig";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 import { getDailyAverageSeconds, ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export const LEADERBOARD_PAGE_SIZE = 25;
 
@@ -45,6 +46,7 @@ export function LeaderboardBoard({
   onSearchQueryChange,
   onSelectProfile,
 }: LeaderboardBoardProps) {
+  const { t } = useLocalization();
   const [pageIndex, setPageIndex] = useState(0);
   const listFrameRef = useRef<HTMLDivElement>(null);
   const totalPages = Math.max(1, Math.ceil(filteredLeaderboard.length / LEADERBOARD_PAGE_SIZE));
@@ -71,13 +73,13 @@ export function LeaderboardBoard({
   const hasMoreParticipants = participantCount === null
     ? loadedCount >= LEADERBOARD_PUBLIC_RESULT_LIMIT || (currentUserRank ?? 0) > loadedCount
     : participantCount > loadedCount;
-  const scopeLabel = hasMoreParticipants ? `Top ${loadedCount}` : "All ranked";
+  const scopeLabel = hasMoreParticipants ? t("leaderboard.topCount", { count: loadedCount }) : t("leaderboard.allRanked");
   const firstVisible = filteredLeaderboard.length === 0 ? 0 : safePageIndex * LEADERBOARD_PAGE_SIZE + 1;
   const lastVisible = Math.min((safePageIndex + 1) * LEADERBOARD_PAGE_SIZE, filteredLeaderboard.length);
   const hasPagination = !isLoading && leaderboard.length > 0 && filteredLeaderboard.length > 0;
 
   return (
-    <section className={`leaderboard-board-block${hasPagination ? " leaderboard-board-block--paginated" : ""}`} aria-label="Global leaderboard" aria-busy={isLoading || undefined}>
+    <section className={`leaderboard-board-block${hasPagination ? " leaderboard-board-block--paginated" : ""}`} aria-label={t("leaderboard.globalAria")} aria-busy={isLoading || undefined}>
       <LeaderboardToolbar
         activePeriod={activePeriod}
         isLoading={isLoading}
@@ -97,17 +99,17 @@ export function LeaderboardBoard({
       ) : leaderboard.length === 0 ? (
         <div className="leaderboard-board__state">
           <StateBlock
-            eyebrow="Waiting for entries"
-            title="No ranked participants yet"
-            detail="Once someone opts in, rankings will appear here."
+            eyebrow={t("leaderboard.waitingEntries")}
+            title={t("leaderboard.noParticipants")}
+            detail={t("leaderboard.noParticipantsDetail")}
           />
         </div>
       ) : filteredLeaderboard.length === 0 ? (
         <div className="leaderboard-board__state">
           <StateBlock
-            eyebrow="No match"
-            title="No one matches that search"
-            detail={`Try a name or rank number from the current ${scopeLabel.toLowerCase()}.`}
+            eyebrow={t("leaderboard.noMatch")}
+            title={t("leaderboard.noMatchTitle")}
+            detail={t("leaderboard.noMatchDetail", { scope: scopeLabel })}
           />
         </div>
       ) : (
@@ -120,19 +122,19 @@ export function LeaderboardBoard({
             rows={pageRows}
             onSelectProfile={onSelectProfile}
           />
-          <nav className="leaderboard-pagination" aria-label="Leaderboard pages">
+          <nav className="leaderboard-pagination" aria-label={t("leaderboard.pagesAria")}>
             <span className="leaderboard-pagination__summary" aria-live="polite">
-              Showing <strong>{firstVisible}–{lastVisible}</strong> {searchQuery.trim()
-                ? `of ${filteredLeaderboard.length} matches in ${scopeLabel.toLowerCase()}`
-                : `of ${loadedCount}`}
+              {searchQuery.trim()
+                ? t("leaderboard.showingMatches", { first: firstVisible, last: lastVisible, matches: filteredLeaderboard.length, scope: scopeLabel })
+                : t("leaderboard.showing", { first: firstVisible, last: lastVisible, total: loadedCount })}
             </span>
-            <span className="leaderboard-pagination__position">Page {safePageIndex + 1} of {totalPages}</span>
+            <span className="leaderboard-pagination__position">{t("leaderboard.pagePosition", { current: safePageIndex + 1, total: totalPages })}</span>
             <div className="leaderboard-pagination__actions">
               <button
                 type="button"
                 className="app-btn app-btn--quiet app-btn--compact"
-                aria-label="Previous leaderboard page"
-                title="Previous page"
+                aria-label={t("leaderboard.previousPage")}
+                title={t("leaderboard.previousPage")}
                 disabled={safePageIndex === 0}
                 onClick={() => moveToPage(safePageIndex - 1)}
               >
@@ -141,8 +143,8 @@ export function LeaderboardBoard({
               <button
                 type="button"
                 className="app-btn app-btn--quiet app-btn--compact"
-                aria-label="Next leaderboard page"
-                title="Next page"
+                aria-label={t("leaderboard.nextPage")}
+                title={t("leaderboard.nextPage")}
                 disabled={safePageIndex >= totalPages - 1}
                 onClick={() => moveToPage(safePageIndex + 1)}
               >
@@ -189,11 +191,16 @@ function LeaderboardToolbar({
   readonly onPeriodChange?: (period: LeaderboardPeriod) => void;
   readonly onSearchQueryChange: (query: string) => void;
 }) {
-  const searchScope = scopeLabel === "All ranked" ? "ranked participants" : scopeLabel.toLowerCase();
+  const { effectiveLanguage, t } = useLocalization();
+  const searchScope = scopeLabel === t("leaderboard.allRanked")
+    ? t("leaderboard.rankedParticipants")
+    : effectiveLanguage === "en"
+      ? scopeLabel.toLowerCase()
+      : scopeLabel;
   return (
     <div className="leaderboard-toolbar">
       <div className="leaderboard-toolbar__control-row">
-        <div className="leaderboard-period-control seg" role="group" aria-label="Leaderboard period" aria-hidden={isLoading || undefined}>
+        <div className="leaderboard-period-control seg" role="group" aria-label={t("leaderboard.periodAria")} aria-hidden={isLoading || undefined}>
           {leaderboardPeriodOptions.map((item) => (
             <button
               key={item.period}
@@ -203,14 +210,14 @@ function LeaderboardToolbar({
               disabled={isLoading}
               onClick={() => onPeriodChange?.(item.period)}
             >
-              <span>{item.label}</span>
+              <span>{t(item.period === "daily" ? "leaderboard.daily" : item.period === "weekly" ? "leaderboard.weekly" : "leaderboard.monthly")}</span>
             </button>
           ))}
         </div>
         <div className="leaderboard-toolbar__status-slot">
           {isLoading ? (
             <span className="leaderboard-refresh-status leaderboard-loading-shell__status" role="status" aria-live="polite">
-              Loading latest rankings…
+              {t("leaderboard.loadingLatest")}
             </span>
           ) : statusMessage ? (
             <span className="leaderboard-refresh-status" data-tone={statusTone} role="status" aria-live="polite">
@@ -219,29 +226,29 @@ function LeaderboardToolbar({
           ) : null}
         </div>
       </div>
-      <div className="leaderboard-toolbar__stats" aria-label="Leaderboard scope" aria-hidden={isLoading || undefined}>
+      <div className="leaderboard-toolbar__stats" aria-label={t("leaderboard.scopeAria")} aria-hidden={isLoading || undefined}>
         <div>
-          <span className="label-mono">Participants</span>
+          <span className="label-mono">{t("leaderboard.participants")}</span>
           <strong>{isLoading
             ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value" />
-            : participantCount?.toLocaleString() ?? "—"}</strong>
+            : participantCount?.toLocaleString(effectiveLanguage === "ko" ? "ko-KR" : "en-US") ?? "—"}</strong>
         </div>
         <div>
-          <span className="label-mono">Board</span>
+          <span className="label-mono">{t("leaderboard.board")}</span>
           <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value" /> : scopeLabel}</strong>
         </div>
         <div>
-          <span className="label-mono">{scopeLabel} focus</span>
-          <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value leaderboard-loading-shell__toolbar-value--wide" /> : formatRoundedDuration(topScopeFocusSeconds)}</strong>
+          <span className="label-mono">{t("leaderboard.scopeFocus", { scope: scopeLabel })}</span>
+          <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value leaderboard-loading-shell__toolbar-value--wide" /> : formatLocalizedDuration(topScopeFocusSeconds, effectiveLanguage)}</strong>
         </div>
       </div>
       <label className={`leaderboard-search${isLoading ? " leaderboard-search--loading" : ""}`} aria-hidden={isLoading || undefined}>
-        <span className="sr-only">Search leaderboard</span>
+        <span className="sr-only">{t("leaderboard.searchAria")}</span>
         <input
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           disabled={isLoading}
-          placeholder={`Search ${searchScope}…`}
+          placeholder={t("leaderboard.search", { scope: searchScope })}
           type="search"
         />
       </label>
@@ -276,11 +283,12 @@ function LeaderboardLoadingRankList({ activePeriod }: { readonly activePeriod: L
 }
 
 function LeaderboardListHeader({ activePeriod }: { readonly activePeriod: LeaderboardPeriod }) {
+  const { t } = useLocalization();
   return (
     <div className={`leaderboard-list-head${activePeriod === "daily" ? " leaderboard-list-head--daily" : ""}`} aria-hidden="true">
-      <span>Participant</span>
-      <span>Focus time</span>
-      {activePeriod !== "daily" ? <span>Daily avg</span> : null}
+      <span>{t("leaderboard.participant")}</span>
+      <span>{t("leaderboard.focusTime")}</span>
+      {activePeriod !== "daily" ? <span>{t("leaderboard.dailyAverage")}</span> : null}
     </div>
   );
 }
@@ -300,29 +308,30 @@ function LeaderboardRankList({
   readonly rows: readonly LeaderboardRow[];
   readonly onSelectProfile?: (row: LeaderboardRow) => void;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   return (
     <div className="leaderboard-list-frame" ref={frameRef}>
       <LeaderboardListHeader activePeriod={activePeriod} />
-      <ol className="leaderboard-list" aria-label="Global focus leaderboard rankings">
+      <ol className="leaderboard-list" aria-label={t("leaderboard.rankingsAria")}>
         {rows.map((row) => {
           const isCurrentUser = isOptedIn && row.rank === currentUserRank;
           const rankTone = row.rank <= 3 ? ` leaderboard-row--rank-${row.rank}` : "";
           return (
             <li className={`${isCurrentUser ? "leaderboard-row leaderboard-row--current" : "leaderboard-row"}${rankTone}`} key={`${row.rank}-${row.public_id ?? row.display_name}-${row.updated_at}`}>
-              <button type="button" className="leaderboard-row__profile-button" onClick={() => onSelectProfile?.(row)} aria-label={`View ${row.display_name} profile`}>
+              <button type="button" className="leaderboard-row__profile-button" onClick={() => onSelectProfile?.(row)} aria-label={t("leaderboard.viewProfileAria", { name: row.display_name })}>
                 <div className="leaderboard-row__main">
                   <span className="leaderboard-row__rank">#{row.rank}</span>
                   <ProfileAvatar className="leaderboard-row__avatar" name={row.display_name} src={row.avatar_url} />
                   <div className="leaderboard-row__copy">
                     <strong>{row.display_name}</strong>
-                    {isCurrentUser ? <span className="leaderboard-row__you">You</span> : null}
+                    {isCurrentUser ? <span className="leaderboard-row__you">{t("leaderboard.you")}</span> : null}
                   </div>
                 </div>
                 <div className="leaderboard-row__meta leaderboard-row__meta--compact">
-                  <div className="leaderboard-stat" aria-label={`Focus time ${formatRoundedDuration(row.focus_seconds_7d)}`}><strong>{formatRoundedDuration(row.focus_seconds_7d)}</strong></div>
+                  <div className="leaderboard-stat" aria-label={t("leaderboard.focusTimeAria", { duration: formatLocalizedDuration(row.focus_seconds_7d, effectiveLanguage) })}><strong>{formatLocalizedDuration(row.focus_seconds_7d, effectiveLanguage)}</strong></div>
                   {row.period !== "daily" ? (
-                    <div className="leaderboard-stat" aria-label={`Daily average ${formatRoundedDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period))}`}>
-                      <strong>{formatRoundedDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period))}</strong>
+                    <div className="leaderboard-stat" aria-label={t("leaderboard.dailyAverageAria", { duration: formatLocalizedDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period), effectiveLanguage) })}>
+                      <strong>{formatLocalizedDuration(getDailyAverageSeconds(row.focus_seconds_7d, row.period), effectiveLanguage)}</strong>
                     </div>
                   ) : null}
                 </div>

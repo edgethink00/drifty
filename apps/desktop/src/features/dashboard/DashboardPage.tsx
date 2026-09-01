@@ -6,8 +6,8 @@ import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
 import { FlowChartView } from "../flow-chart/FlowChartView";
 import type { FlowColorMode } from "../flow-chart/FlowChartTypes";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
-import { CATEGORY_COLORS, categoryLabel } from "../../lib/activityLabels";
-import { formatCompactDurationFromSeconds, logicalTodayIsoDate } from "../../lib/formatting";
+import { CATEGORY_COLORS } from "../../lib/activityLabels";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDayLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { CompactRingChart } from "./CompactRingChart";
 import { CompactClassificationBar } from "./CompactClassificationBar";
 import { buildActiveCategoryEntries, buildProductivityCenterPercent, buildProductivityRingEntries } from "./FlowCompactSplitChart";
@@ -28,6 +28,8 @@ import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
 import { DashboardPageHeader } from "./DashboardPageHeader";
+import { useLocalization } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
@@ -154,6 +156,7 @@ export function DashboardPage({
   onClassifyDashboardActivity,
   onDeleteDashboardActivity,
 }: DashboardPageProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [flowColorMode, setFlowColorMode] = useState<FlowColorMode>("category");
   const [shareCardOpen, setShareCardOpen] = useState(false);
   // Shared by the Day view and WeekDashboard: the Breakdown side panel is one
@@ -174,13 +177,20 @@ export function DashboardPage({
   const isDashboardReplayActive = dashboardReplay !== null;
   const hasMeasuredActivity = totalSeconds > 0 || hasTimelineData || isDashboardReplayActive;
   const emptyTimelineDetail = browserHistoryBootstrapNotice?.detail
-    ?? (statusRunning ? `Tracker is live for ${selectedDayLabel}.` : "Tracking is paused or unavailable. Start the tracker, then activity will appear here.");
+    ?? (statusRunning
+      ? t("dashboard.today.trackerLiveDetail", { date: effectiveLanguage === "ko" ? formatLocalizedDayLabel(selectedDay, effectiveLanguage) : selectedDayLabel })
+      : t("dashboard.today.trackerPausedDetail"));
   const focusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const focusDuration = hasMeasuredActivity
-    ? (focusSeconds > 0 ? formatCompactDurationFromSeconds(focusSeconds) : "0m")
+    ? focusSeconds > 0
+      ? formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)
+      : effectiveLanguage === "ko" ? "0분" : "0m"
     : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
-  const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals);
+  const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals).map((entry) => ({
+    ...entry,
+    label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
+  }));
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardEffectiveProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
   // 2026-07 dashboard redesign: on Day/Week the header lives inside the main
@@ -197,12 +207,14 @@ export function DashboardPage({
     : logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes);
   // Share cards are assembled only after the modal opens. The shape is aggregate-only:
   // category/productivity totals and derived hourly/daily rhythm, never raw activity rows.
+  // Exported card content stays English even when the surrounding app chrome is Korean.
   const shareCard = useMemo<ShareCardModalCard | null>(() => {
     if (!shareCardOpen) return null;
     if (dashPeriod === "Week") {
       return {
         kind: "week",
         data: buildShareWeekCardData({
+          language: "en",
           startDay: dashboardRange.startDay,
           endDay: dashboardRange.endDay,
           totalSeconds,
@@ -225,6 +237,7 @@ export function DashboardPage({
     return {
       kind: "day",
       data: buildShareCardData({
+        language: "en",
         day: selectedDay,
         totalSeconds,
         categoryTotals: dashboardCategoryTotals,
@@ -250,7 +263,7 @@ export function DashboardPage({
           onClick={() => setShareCardOpen(true)}
         >
           <ShareIcon />
-          <span>Share</span>
+          <span>{dashPeriod === "Today" ? t("dashboard.today.share") : t("dashboard.week.share")}</span>
         </button>
       ) : null}
     />
@@ -276,20 +289,20 @@ export function DashboardPage({
       <DashboardDemoReplayBanner replay={dashboardReplay} />
 
       {onDeviceTimelineFilterChange && deviceLabelById && deviceLabelById.size > 0 ? (
-        <div className="dashboard-device-filter" role="group" aria-label="Device filter">
+        <div className="dashboard-device-filter" role="group" aria-label={t("dashboard.deviceFilter")}>
           <button
             type="button"
             className={`dashboard-device-filter__option${deviceTimelineFilter === "all" ? " dashboard-device-filter__option--active" : ""}`}
             onClick={() => onDeviceTimelineFilterChange("all")}
           >
-            All devices
+            {t("dashboard.allDevices")}
           </button>
           <button
             type="button"
             className={`dashboard-device-filter__option${deviceTimelineFilter === "local" ? " dashboard-device-filter__option--active" : ""}`}
             onClick={() => onDeviceTimelineFilterChange("local")}
           >
-            This Mac
+            {t("dashboard.thisMac")}
           </button>
           {[...deviceLabelById.entries()].map(([deviceId, label]) => (
             <button
@@ -399,50 +412,56 @@ export function DashboardPage({
           <BreakdownSidePanel
             open={breakdownOpen}
             onToggle={toggleBreakdown}
-            ariaLabel="Day breakdown"
+            ariaLabel={t("dashboard.today.breakdownAria")}
             toggleSubject="day breakdown"
+            title={t("dashboard.today.breakdown")}
+            showLabel={t("dashboard.today.showBreakdown")}
+            collapseLabel={t("dashboard.today.collapseBreakdown")}
           >
             {!hasMeasuredActivity ? (
-              <div className="dashboard-breakdown-empty" role="status" aria-label="Breakdown availability">
+              <div className="dashboard-breakdown-empty" role="status" aria-label={t("dashboard.today.breakdownAvailability")}>
                 <span className="dashboard-breakdown-empty__marker" aria-hidden="true">—</span>
                 <div>
-                  <strong>No activity recorded</strong>
-                  <p>This breakdown will fill in after activity is recorded for this day.</p>
+                  <strong>{t("dashboard.today.noActivity")}</strong>
+                  <p>{t("dashboard.today.noActivityDetail")}</p>
                 </div>
               </div>
             ) : (
               <>
                 {showProjectDonut ? (
                   <CompactRingChart
-                    title="Projects"
+                    title={t("dashboard.today.projects")}
                     entries={flowProjectRingEntries ?? []}
                     totalSeconds={totalSeconds}
                     centerPercent={flowProjectCenterPercent ?? 0}
                     flowBlocks={summaryFlowBlocks}
                     appIcons={appIcons}
+                    language={effectiveLanguage}
                   />
                 ) : (
                   <CompactRingChart
-                    title="Productivity"
+                    title={t("dashboard.today.productivity")}
                     entries={dayProductivityRingEntries}
                     totalSeconds={totalSeconds}
                     centerPercent={dayProductivityCenterPercent}
                     flowBlocks={summaryFlowBlocks}
                     appIcons={appIcons}
+                    language={effectiveLanguage}
                   />
                 )}
                 <CompactClassificationBar<CategoryDuration>
-                  title="Categories"
-                  ariaLabel="Category compact classification"
+                  title={t("dashboard.today.categories")}
+                  ariaLabel={effectiveLanguage === "ko" ? t("dashboard.today.categories") : "Category compact classification"}
                   entries={dayActiveCategoryEntries}
                   totalSeconds={totalSeconds}
                   getKey={(entry) => entry.category}
-                  getLabel={(entry) => categoryLabel(entry.category)}
+                  getLabel={(entry) => localizedCategoryLabel(entry.category, t)}
                   getColor={(entry) => CATEGORY_COLORS[entry.category]}
                   getDotClassName={(entry) => `category-dot--${entry.category}`}
                   getAppBreakdown={(entry) => buildCompactClassificationBreakdown(summaryFlowBlocks, (block) => block.category === entry.category)}
                   appIcons={appIcons}
                   visibleLimit={5}
+                  language={effectiveLanguage}
                 />
                 {dayBreakdownTiles}
               </>

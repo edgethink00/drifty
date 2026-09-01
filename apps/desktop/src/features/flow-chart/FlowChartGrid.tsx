@@ -2,10 +2,12 @@ import { memo, useMemo } from "react";
 import type { CSSProperties } from "react";
 import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
 import type { FlowColorMode } from "./FlowChartTypes";
-import { clockHourForLogicalHour } from "../../lib/formatting";
+import { clockHourForLogicalHour, formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../lib/formatting";
 import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import { NO_PROJECT_COLOR } from "./projectFlowView";
+import { useLocalization } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
 
@@ -39,11 +41,18 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   setFlowGridElement,
   onOpenActivity,
 }: FlowChartGridProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const rowMinuteOffsets = useMemo(
     () => Array.from({ length: 60 / intervalMinutes }, (_, index) => index * intervalMinutes),
     [intervalMinutes],
   );
-  const cellAriaLabelsByMinute = useMemo(() => buildCellGroupAriaLabels(hoverGroupsByCell), [hoverGroupsByCell]);
+  const cellAriaLabelsByMinute = useMemo(() => buildCellGroupAriaLabels(hoverGroupsByCell, {
+    categoryLabel: ({ category }) => localizedCategoryLabel(category, t),
+    productivityLabel: ({ productivity }) => localizedProductivityLabel(productivity, t),
+    durationLabel: (seconds) => formatLocalizedCompactDurationFromSeconds(seconds, effectiveLanguage),
+    timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : "Time block",
+    durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : "Duration",
+  }), [effectiveLanguage, hoverGroupsByCell, t]);
 
   return (
     <>
@@ -53,7 +62,9 @@ export const FlowChartGrid = memo(function FlowChartGrid({
           const clockHour = clockHourForLogicalHour(hour, boundaryMinutes);
           return (
             <span className={hour === currentHourIndex ? "flow-chart-hour--now" : undefined} key={hour}>
-              {hour === currentHourIndex || hour % 3 === 0 ? formatHourLabel(clockHour) : ""}
+              {hour === currentHourIndex || hour % 3 === 0
+                ? effectiveLanguage === "ko" ? formatLocalizedCompactHourLabel(clockHour, effectiveLanguage) : formatHourLabel(clockHour)
+                : ""}
             </span>
           );
         })}

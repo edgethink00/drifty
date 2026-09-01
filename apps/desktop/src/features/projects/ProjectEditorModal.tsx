@@ -4,6 +4,7 @@ import { firstUnusedProjectColor } from "../settings/projectPalette";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export interface ProjectEditorModalProps {
   /** Project being edited, or null to create a new one. */
@@ -23,6 +24,7 @@ export interface ProjectEditorModalProps {
  * named color picker ("Drifty Modals" v1.3 §13).
  */
 export function ProjectEditorModal({ project, projects, busy = false, onSave, onClose }: ProjectEditorModalProps): JSX.Element {
+  const { t } = useLocalization();
   const isEditing = Boolean(project);
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
@@ -86,11 +88,11 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
         aria-labelledby="projects-editor-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label="Close project editor" onClick={requestClose} />
+        <ModalCloseButton label={t("projects.editor.close")} onClick={requestClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
-            <h2 id="projects-editor-title">{isEditing ? "Edit project" : "New project"}</h2>
-            <p>Personal project</p>
+            <h2 id="projects-editor-title">{t(isEditing ? "projects.editor.editTitle" : "projects.editor.newTitle")}</h2>
+            <p>{t("projects.editor.personal")}</p>
           </div>
         </div>
         <ProjectEditorFields
@@ -107,9 +109,9 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
           }}
         />
         <div className="modal-foot">
-          <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>Cancel</button>
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={requestClose} disabled={isBusy}>{t("common.cancel")}</button>
           <button type="button" className="modal-btn modal-btn--primary" onClick={() => void handleSave()} disabled={!canSave}>
-            {saving ? "Saving…" : isEditing ? "Save changes" : "Create project"}
+            {saving ? t("common.saving") : isEditing ? t("projects.editor.saveChanges") : t("projects.create")}
           </button>
         </div>
       </section>

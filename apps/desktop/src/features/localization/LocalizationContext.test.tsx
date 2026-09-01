@@ -3,7 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import {
-  KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
+  DISPLAY_LANGUAGE_STORAGE_KEY,
+  LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
   LocalizationProvider,
   LocalizationTestProvider,
   useLocalization,
@@ -30,17 +31,39 @@ function ControllerHarness() {
 }
 
 function ControllerState() {
-  const { effectiveLanguage, koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
+  const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
   return (
     <div>
       <span>{effectiveLanguage}</span>
       <span>{t("common.settings")}</span>
-      <button type="button" onClick={() => setKoreanPreviewEnabled(!koreanPreviewEnabled)}>Toggle preview</button>
+      <button type="button" onClick={() => setDisplayLanguage(effectiveLanguage === "ko" ? "en" : "ko")}>Toggle language</button>
     </div>
   );
 }
 
-describe("Korean localization preview", () => {
+function GeneralSettingsHarness() {
+  const controller = useLocalizationController();
+  return (
+    <LocalizationProvider controller={controller}>
+      <GeneralSettingsSection
+        backgroundUpdatesEnabled={false}
+        backgroundUpdatesSupported
+        startOfDayValue="04:00"
+        startOfWeek="monday"
+        updaterChecking={false}
+        updaterError={null}
+        updaterInstalling={false}
+        updaterMessage={null}
+        onBackgroundUpdatesEnabledChange={() => undefined}
+        onCheckForUpdates={() => undefined}
+        onStartOfDayChange={() => undefined}
+        onStartOfWeekChange={() => undefined}
+      />
+    </LocalizationProvider>
+  );
+}
+
+describe("display language preference", () => {
   it("defaults every public surface to English", () => {
     render(<ControllerHarness />);
 
@@ -49,19 +72,18 @@ describe("Korean localization preview", () => {
     expect(document.documentElement.lang).toBe("en");
   });
 
-  it("keeps the app in English when the preview was stored but Dev mode is off", () => {
-    window.localStorage.setItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+  it("keeps an explicit Korean preference independently of Dev mode", () => {
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
 
     render(<ControllerHarness />);
 
-    expect(screen.getByText("en")).toBeTruthy();
-    expect(screen.getByText("Settings")).toBeTruthy();
-    expect(document.documentElement.lang).toBe("en");
+    expect(screen.getByText("ko")).toBeTruthy();
+    expect(screen.getByText("설정")).toBeTruthy();
+    expect(document.documentElement.lang).toBe("ko");
   });
 
-  it("activates Korean only when Dev mode and its preview toggle are enabled", () => {
-    window.localStorage.setItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
+  it("migrates the previously enabled Dev preview to the durable language preference", () => {
+    window.localStorage.setItem(LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY, "1");
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
 
     render(<ControllerHarness />);
@@ -69,38 +91,22 @@ describe("Korean localization preview", () => {
     expect(screen.getByText("ko")).toBeTruthy();
     expect(screen.getByText("설정")).toBeTruthy();
     expect(document.documentElement.lang).toBe("ko");
-
-    fireEvent.click(screen.getByRole("button", { name: "Toggle preview" }));
-
-    expect(screen.getByText("en")).toBeTruthy();
-    expect(screen.getByText("Settings")).toBeTruthy();
-    expect(window.localStorage.getItem(KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY)).toBe("0");
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
+    expect(window.localStorage.getItem(LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY)).toBeNull();
   });
 
-  it("does not expose a language control in General settings", () => {
-    render(
-      <LocalizationTestProvider language="ko">
-        <GeneralSettingsSection
-          backgroundUpdatesEnabled={false}
-          backgroundUpdatesSupported
-          startOfDayValue="04:00"
-          startOfWeek="monday"
-          updaterChecking={false}
-          updaterError={null}
-          updaterInstalling={false}
-          updaterMessage={null}
-          onBackgroundUpdatesEnabledChange={() => undefined}
-          onCheckForUpdates={() => undefined}
-          onStartOfDayChange={() => undefined}
-          onStartOfWeekChange={() => undefined}
-        />
-      </LocalizationTestProvider>,
-    );
+  it("changes language immediately from General settings and persists the choice", () => {
+    render(<GeneralSettingsHarness />);
 
-    expect(screen.queryByText("표시 언어")).toBeNull();
-    expect(screen.queryByRole("combobox", { name: "표시 언어" })).toBeNull();
-    expect(screen.queryByText("커뮤니티 및 지원")).toBeNull();
-    expect(screen.queryByText("Drifty 커뮤니티")).toBeNull();
+    const languageSelect = screen.getByRole("combobox", { name: "Language" });
+    expect(languageSelect.textContent).toContain("English");
+    fireEvent.click(languageSelect);
+    fireEvent.click(screen.getByRole("option", { name: "Korean (Beta)" }));
+
+    expect(screen.getByRole("combobox", { name: "언어" }).textContent).toContain("한국어 (베타)");
+    expect(screen.getByText("이 Mac에서 Drifty에 사용할 언어를 선택합니다.")).toBeTruthy();
+    expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
+    expect(document.documentElement.lang).toBe("ko");
   });
 
   it("hides macOS-only background update preparation on unsupported platforms", () => {

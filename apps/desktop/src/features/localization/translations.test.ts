@@ -12,7 +12,9 @@ describe("Korean translations", () => {
     expect(localizedProductivityLabel("focus", koreanT)).toBe("집중");
     expect(localizedProductivityLabel("drift", koreanT)).toBe("딴짓");
     expect(localizedProductivityLabel("neutral", koreanT)).toBe("중립");
-    expect(localizedCategoryLabel("workspace", koreanT)).toBe("업무");
+    expect(localizedCategoryLabel("workspace", koreanT)).toBe("작업");
+    expect(localizedCategoryLabel("communication", koreanT)).toBe("커뮤니케이션");
+    expect(localizedCategoryLabel("utility", koreanT)).toBe("유틸리티");
     expect(localizedCategoryLabel("unknown", koreanT)).toBe("미분류");
   });
 

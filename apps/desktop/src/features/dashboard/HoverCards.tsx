@@ -3,7 +3,9 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import type { FocusDriftPoint } from "./focusDriftChart";
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { formatCompactDurationFromSeconds, formatQuarterHourLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatQuarterHourLabel } from "../../lib/formatting";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
+import { localizedCategoryLabel } from "../localization/activityTranslations";
 import { secondsToLabel } from "@drifty/domain";
 import type { AppIconMap, DayRibbonSegment } from "@drifty/domain";
 import { ClassificationSourceBadge } from "../classification/ClassificationSourceBadge";
@@ -58,7 +60,7 @@ export type WeekCalendarHoverState = {
   y: number;
 };
 
-export function CompactClassificationHoverCard({ hover, appIcons }: { hover: CompactClassificationHoverState; appIcons: AppIconMap }) {
+export function CompactClassificationHoverCard({ hover, appIcons, language = "en" }: { hover: CompactClassificationHoverState; appIcons: AppIconMap; language?: DisplayLanguage }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
 
@@ -84,7 +86,7 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
       </div>
       <div className="category-treemap-hover-card__metric">
         <strong>{hover.durationLabel}</strong>
-        <span>{hover.shareLabel} of tracked time</span>
+        <span>{language === "ko" ? `기록 시간의 ${hover.shareLabel}` : `${hover.shareLabel} of tracked time`}</span>
       </div>
       <div className="category-treemap-hover-card__accent" aria-hidden="true">
         <span style={{ width: hover.shareLabel, background: hover.color }} />
@@ -99,10 +101,10 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
                 {item.siteDomain ? <SiteFavicon domain={item.siteDomain} size={20} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={label} iconSrc={item.siteTitle ? null : iconSrc} size="sm" />}
               </span>
               <span>{label}</span>
-              <strong>{secondsToLabel(item.totalSeconds)}</strong>
+              <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, language)}</strong>
             </div>
           );
-        }) : <span className="category-hover-card__empty">No app breakdown yet.</span>}
+        }) : <span className="category-hover-card__empty">{language === "ko" ? "앱 분석이 아직 없습니다." : "No app breakdown yet."}</span>}
       </div>
     </div>
   );
@@ -111,6 +113,7 @@ export function CompactClassificationHoverCard({ hover, appIcons }: { hover: Com
 }
 
 export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRef }: { hover: WeekCalendarHoverState; appIcons: AppIconMap; cardRef?: RefObject<HTMLDivElement> }) {
+  const { effectiveLanguage, t } = useLocalization();
   const internalCardRef = useRef<HTMLDivElement>(null);
   const cardRef = externalCardRef ?? internalCardRef;
   const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
@@ -133,7 +136,7 @@ export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRe
     <div ref={cardRef} className="flow-hover-card week-calendar-hover-card" style={position}>
       <div className="category-hover-card__head">
         <span className={`category-dot category-dot--${hover.event.category}`} aria-hidden="true" />
-        <strong>{categoryLabel(hover.event.category)}</strong>
+        <strong>{localizedCategoryLabel(hover.event.category, t)}</strong>
       </div>
       <div className="timeline-hover-card__duration">{hover.event.startLabel}–{hover.event.endLabel}</div>
       <ClassificationSourceBadge source={hover.event.classificationSource} ai={hover.event.aiClassification} />
@@ -144,7 +147,7 @@ export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRe
               <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} />
             </span>
             <span>{identity.label}</span>
-            <strong>{formatCompactDurationFromSeconds(identity.seconds)}</strong>
+            <strong>{formatLocalizedCompactDurationFromSeconds(identity.seconds, effectiveLanguage)}</strong>
           </div>
         ))}
       </div>

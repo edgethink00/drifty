@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
-import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ProjectEditorModal } from "./ProjectEditorModal";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
+import { useLocalization } from "../localization/LocalizationContext";
 
 const DEFAULT_PROJECT_COLOR = "#6366f1";
-
-const LAST_ACTIVITY_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 type StatusFilter = "all" | ProjectStatus;
 
@@ -27,18 +26,18 @@ export interface ProjectsManagerProps {
   readonly busy?: boolean;
 }
 
-function truncateDescription(description: string, max = 72): string {
+function truncateDescription(description: string, emptyLabel: string, max = 72): string {
   const trimmed = description.trim();
-  if (!trimmed) return "No description yet";
+  if (!trimmed) return emptyLabel;
   if (trimmed.length <= max) return trimmed;
   return `${trimmed.slice(0, max - 1).trimEnd()}…`;
 }
 
-function formatLastActivity(day: string | undefined): string {
+function formatLastActivity(day: string | undefined, language: "en" | "ko"): string {
   if (!day) return "—";
   const parsed = new Date(`${day}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return "—";
-  return LAST_ACTIVITY_FORMAT.format(parsed);
+  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
 }
 
 /**
@@ -59,6 +58,7 @@ export function ProjectsManager({
   autoAnalysis,
   busy = false,
 }: ProjectsManagerProps): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [menuFor, setMenuFor] = useState<string | null>(null);
@@ -118,74 +118,74 @@ export function ProjectsManager({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 8 4.3-8 4.3-8-4.3L12 3Z" /><path d="m4 12.3 8 4.3 8-4.3M4 17.1l8 4.3 8-4.3" /></svg>
           </div>
           <div className="projects-first-run__copy">
-            <span className="label-mono">Start with a definition</span>
-            <h2 id="projects-first-run-title">Create your first project</h2>
-            <p>Name the outcome, then describe the apps, sites, and work that belong to it. Drifty uses the description when matching activity.</p>
+            <span className="label-mono">{t("projects.firstRun.eyebrow")}</span>
+            <h2 id="projects-first-run-title">{t("projects.firstRun.title")}</h2>
+            <p>{t("projects.firstRun.detail")}</p>
             <ol>
-              <li><span>1</span><strong>Name the work</strong></li>
-              <li><span>2</span><strong>Describe what counts</strong></li>
-              <li><span>3</span><strong>Refresh recent assignments</strong></li>
+              <li><span>1</span><strong>{t("projects.firstRun.stepName")}</strong></li>
+              <li><span>2</span><strong>{t("projects.firstRun.stepDescribe")}</strong></li>
+              <li><span>3</span><strong>{t("projects.firstRun.stepRefresh")}</strong></li>
             </ol>
           </div>
           <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-            Create project
+            {t("projects.create")}
           </button>
         </section>
       ) : (
         <>
-          <div className="projects-toolbar" aria-label="Project filters">
+          <div className="projects-toolbar" aria-label={t("projects.filtersAria")}>
             <span className="projects-search">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
               <input
                 className="settings-input"
                 type="text"
-                aria-label="Search project name"
-                placeholder="Search project name…"
+                aria-label={t("projects.searchAria")}
+                placeholder={t("projects.searchPlaceholder")}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </span>
             <SettingsSelect
-              ariaLabel="Filter by status"
+              ariaLabel={t("projects.filterStatus")}
               className="projects-status-filter"
               value={statusFilter}
               options={[
-                { value: "all", label: "All statuses" },
-                { value: "active", label: "Active" },
-                { value: "archived", label: "Archived" },
+                { value: "all", label: t("projects.allStatuses") },
+                { value: "active", label: t("common.active") },
+                { value: "archived", label: t("common.archived") },
               ]}
               onChange={setStatusFilter}
             />
             <span className="projects-toolbar__spacer" />
             <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-              New project
+              {t("projects.new")}
             </button>
           </div>
 
-          <div className="projects-table" role="region" aria-label="Projects">
+          <div className="projects-table" role="region" aria-label={t("projects.title")}>
             <div className="projects-table__head">
-              <span>Project</span>
-              <span>Last activity</span>
-              <span>Status</span>
-              <span>{`Time · ${totalCaption}`}</span>
-              <span><span className="sr-only">Actions</span></span>
+              <span>{t("common.project")}</span>
+              <span>{t("projects.lastActivity")}</span>
+              <span>{t("projects.status")}</span>
+              <span>{t("projects.timeCaption", { caption: totalCaption })}</span>
+              <span><span className="sr-only">{t("common.actions")}</span></span>
             </div>
         {filtered.map((project) => {
           const isArchived = project.status === "archived";
           const totalSeconds = totalSecondsByProject.get(project.id) ?? 0;
           const autoPhase = projectAutoAnalysisPhase(autoAnalysis, project.id);
           const timeState = autoPhase === "running"
-            ? { label: "Matching…", tone: "running" }
+            ? { label: t("projects.matching.matchingProgress"), tone: "running" }
             : autoPhase === "queued"
-              ? { label: "Matching soon…", tone: "running" }
+              ? { label: t("projects.matchingSoon"), tone: "running" }
               : autoPhase === "waiting_for_model"
-                ? { label: "Setup needed", tone: "attention" }
+                ? { label: t("projects.setupNeeded"), tone: "attention" }
                 : autoPhase === "error"
-                  ? { label: "Retry needed", tone: "error" }
+                  ? { label: t("projects.matching.retryNeeded"), tone: "error" }
                   : autoPhase === "complete" && totalSeconds === 0
-                    ? { label: "No recent match", tone: "muted" }
+                    ? { label: t("projects.noRecentMatch"), tone: "muted" }
                     : null;
           return (
             <div
@@ -198,18 +198,18 @@ export function ProjectsManager({
                   <button
                     type="button"
                     className="projects-table__open"
-                    aria-label={`Open ${project.name} project`}
+                    aria-label={t("projects.openAria", { name: project.name })}
                     onClick={(event) => {
                       event.stopPropagation();
                       onOpenProject(project.id);
                     }}
                   >
                     <strong>{project.name}</strong>
-                    <small>{truncateDescription(project.description)}</small>
+                    <small>{truncateDescription(project.description, t("projects.noDescription"))}</small>
                   </button>
                 </div>
-                <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id))}</span>
-                <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
+                <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id), effectiveLanguage)}</span>
+                <span className={`chip${isArchived ? " gray" : " green"}`}>{t(isArchived ? "common.archived" : "common.active")}</span>
                 <div className="pt-total">
                   {timeState ? (
                     <span
@@ -221,14 +221,14 @@ export function ProjectsManager({
                       {timeState.label}
                     </span>
                   ) : (
-                    <b>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</b>
+                    <b>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "0분" : "0m"}</b>
                   )}
                 </div>
                 <span className="pt-menu-slot">
                   <button
                     type="button"
                     className="pt-more"
-                    aria-label={`Options for ${project.name}`}
+                    aria-label={t("projects.optionsAria", { name: project.name })}
                     aria-haspopup="menu"
                     aria-expanded={menuFor === project.id}
                     onClick={(event) => {
@@ -239,7 +239,7 @@ export function ProjectsManager({
                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.4" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="18.6" r="1.7" /></svg>
                   </button>
                   {menuFor === project.id ? (
-                    <div className="pt-menu" role="menu" aria-label="Project options">
+                    <div className="pt-menu" role="menu" aria-label={t("projects.options")}>
                       <button
                         type="button"
                         role="menuitem"
@@ -250,7 +250,7 @@ export function ProjectsManager({
                         }}
                       >
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M11.2 2.8a1.4 1.4 0 0 1 2 2L5.5 12.5l-2.7.7.7-2.7 7.7-7.7Z" /></svg>
-                        Edit
+                        {t("common.edit")}
                       </button>
                       <button
                         type="button"
@@ -262,7 +262,7 @@ export function ProjectsManager({
                         }}
                       >
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2.2" y="3" width="11.6" height="2.6" rx="0.6" /><path d="M3.2 5.6v6.2a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.6" /><path d="M6.4 8.2h3.2" /></svg>
-                        {isArchived ? "Unarchive" : "Archive"}
+                        {t(isArchived ? "projects.unarchive" : "projects.archive")}
                       </button>
                       <button
                         type="button"
@@ -276,7 +276,7 @@ export function ProjectsManager({
                         }}
                       >
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4.4h10M6.4 4.4V3.2a0.8 0.8 0 0 1 .8-.8h1.6a0.8 0.8 0 0 1 .8.8v1.2" /><path d="M4.3 4.4l.5 8a1 1 0 0 0 1 .9h4.4a1 1 0 0 0 1-.9l.5-8" /><path d="M6.6 7v3.6M9.4 7v3.6" /></svg>
-                        Delete
+                        {t("common.delete")}
                       </button>
                     </div>
                   ) : null}
@@ -287,8 +287,8 @@ export function ProjectsManager({
         })}
             {filtered.length === 0 ? (
               <div className="projects-table__empty">
-                <span>No projects match these filters.</span>
-                <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={() => { setQuery(""); setStatusFilter("all"); }}>Clear filters</button>
+                <span>{t("projects.noFilterMatch")}</span>
+                <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={() => { setQuery(""); setStatusFilter("all"); }}>{t("projects.clearFilters")}</button>
               </div>
             ) : null}
           </div>

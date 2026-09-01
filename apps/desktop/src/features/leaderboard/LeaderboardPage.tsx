@@ -1,6 +1,7 @@
 import { LeaderboardView } from "./LeaderboardView";
 import type { LeaderboardPublicProfileControls } from "./LeaderboardView";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type LeaderboardPageProps = {
   actionError?: string | null;
@@ -55,11 +56,12 @@ export function LeaderboardPage({
   onSelectProfile,
   onSignIn,
 }: LeaderboardPageProps) {
+  const { t } = useLocalization();
   return (
     <div className="page">
       <div className="pg-head">
         <div>
-          <h1>Leaderboard</h1>
+          <h1>{t("leaderboard.title")}</h1>
         </div>
       </div>
 

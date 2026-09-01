@@ -1,5 +1,6 @@
 import { FLOW_INTERVAL_OPTIONS, type FlowIntervalMinutes } from "@drifty/domain";
 import { SettingsSelect } from "../settings/SettingsSelect";
+import { useLocalization } from "../localization/LocalizationContext";
 
 const FLOW_DETAIL_VALUE_BY_INTERVAL = {
   3: "3",
@@ -9,11 +10,6 @@ const FLOW_DETAIL_VALUE_BY_INTERVAL = {
 } as const satisfies Readonly<Record<FlowIntervalMinutes, string>>;
 
 type FlowDetailValue = (typeof FLOW_DETAIL_VALUE_BY_INTERVAL)[FlowIntervalMinutes];
-
-const FLOW_DETAIL_OPTIONS = FLOW_INTERVAL_OPTIONS.map((intervalMinutes) => ({
-  value: FLOW_DETAIL_VALUE_BY_INTERVAL[intervalMinutes],
-  label: `${intervalMinutes}m`,
-}));
 
 function flowIntervalFromDetailValue(value: FlowDetailValue): FlowIntervalMinutes {
   const intervalMinutes = FLOW_INTERVAL_OPTIONS.find(
@@ -31,12 +27,17 @@ export function FlowDetailSelect({
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly onIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
+  const options = FLOW_INTERVAL_OPTIONS.map((optionMinutes) => ({
+    value: FLOW_DETAIL_VALUE_BY_INTERVAL[optionMinutes],
+    label: `${optionMinutes}${effectiveLanguage === "ko" ? "분" : "m"}`,
+  }));
   return (
     <SettingsSelect
-      ariaLabel="Flow detail"
+      ariaLabel={t("dashboard.today.flowDetail")}
       className="flow-detail-select"
       value={FLOW_DETAIL_VALUE_BY_INTERVAL[intervalMinutes]}
-      options={FLOW_DETAIL_OPTIONS}
+      options={options}
       onChange={(value) => onIntervalChange(flowIntervalFromDetailValue(value))}
       triggerVisual={<FlowDetailIcon />}
     />

@@ -1,16 +1,18 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { formatCompactDurationFromSeconds, formatDuration } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedQuarterHourLabel } from "../../lib/formatting";
 import type { AppIconMap } from "@drifty/domain";
 import type { FocusDriftPoint, FocusDriftSourceSummary } from "./focusDriftChart";
 import { getViewportSafeHoverPosition } from "../../components/hoverCardPosition";
 import { formatSharePercent } from "./HoverCards";
 import type { FocusDriftHoverKind, FocusDriftHoverState } from "./HoverCards";
 import { useLayoutEffect, useRef, useState } from "react";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 
 type FocusDriftHoverCardProps = {
   readonly hover: FocusDriftHoverState;
   readonly appIcons: AppIconMap;
+  readonly startOfDayMinutes?: number;
 };
 
 type FocusDriftMetric = {
@@ -29,23 +31,22 @@ const HOVER_KIND_LABELS: Record<FocusDriftHoverKind, string> = {
   drift: "Drift",
 };
 
-const SOURCE_KIND_LABELS: Record<FocusDriftHoverKind, string> = {
-  focus: "Top focus source",
-  drift: "Top drift source",
-};
-
-export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProps) {
+export function FocusDriftHoverCard({ hover, appIcons, startOfDayMinutes = 0 }: FocusDriftHoverCardProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const { point } = hover;
   const cardRef = useRef<HTMLDivElement>(null);
   const [cardSize, setCardSize] = useState<HoverCardSize>({ width: 0, height: 0 });
   const focusPercent = formatSharePercent(point.focusScore);
   const driftPercent = formatSharePercent(point.driftScore);
-  const focusDuration = formatDuration(point.focusSeconds);
-  const driftDuration = formatDuration(point.driftSeconds);
-  const trackedDuration = formatCompactDurationFromSeconds(point.trackedSeconds);
+  const focusDuration = formatLocalizedDuration(point.focusSeconds, effectiveLanguage);
+  const driftDuration = formatLocalizedDuration(point.driftSeconds, effectiveLanguage);
+  const trackedDuration = formatLocalizedCompactDurationFromSeconds(point.trackedSeconds, effectiveLanguage);
   const isFocusHeavy = point.focusScore >= point.driftScore;
-  const verdict = isFocusHeavy ? "Focus-heavy" : "Drift-heavy";
-  const metrics = buildFocusDriftMetrics(focusDuration, driftDuration, focusPercent, driftPercent);
+  const verdict = isFocusHeavy ? t("dashboard.today.focusHeavy") : t("dashboard.today.driftHeavy");
+  const metrics = buildFocusDriftMetrics(focusDuration, driftDuration, focusPercent, driftPercent, effectiveLanguage);
+  const pointLabel = effectiveLanguage === "ko"
+    ? formatLocalizedQuarterHourLabel(point.bucketStartMinute + startOfDayMinutes, effectiveLanguage)
+    : point.label;
   const position = getViewportSafeHoverPosition(hover.x, hover.y, cardSize.width, cardSize.height);
 
   useLayoutEffect(() => {
@@ -91,12 +92,12 @@ export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProp
       <div className="focus-drift-hover-card__head">
         <span className={`productivity-dot productivity-dot--${hover.kind}`} aria-hidden="true" />
         <div className="focus-drift-hover-card__title">
-          <span className="focus-drift-hover-card__eyebrow">{point.label}</span>
+          <span className="focus-drift-hover-card__eyebrow">{pointLabel}</span>
           <strong>{verdict}</strong>
         </div>
-        <span className="focus-drift-hover-card__window">{trackedDuration} tracked</span>
+        <span className="focus-drift-hover-card__window">{t("dashboard.today.trackedAmount", { duration: trackedDuration })}</span>
       </div>
-      <span className="sr-only">{focusDuration} focus · {driftDuration} drift</span>
+      <span className="sr-only">{effectiveLanguage === "ko" ? `${focusDuration} ${t("activity.productivity.focus")} · ${driftDuration} ${t("activity.productivity.drift")}` : `${focusDuration} focus · ${driftDuration} drift`}</span>
       <div className="focus-drift-hover-card__metrics" aria-hidden="true">
         {metrics.map((metric) => (
           <div className={`focus-drift-hover-card__metric${metric.kind === hover.kind ? " is-active" : ""}`} key={metric.kind}>
@@ -106,9 +107,9 @@ export function FocusDriftHoverCard({ hover, appIcons }: FocusDriftHoverCardProp
         ))}
       </div>
       {point.topFocusSource || point.topDriftSource ? (
-        <div className="focus-drift-hover-card__sources" aria-label="Top sources for this window">
-          {point.topFocusSource ? <FocusDriftSourceRow appIcons={appIcons} point={point} source={point.topFocusSource} kind="focus" /> : null}
-          {point.topDriftSource ? <FocusDriftSourceRow appIcons={appIcons} point={point} source={point.topDriftSource} kind="drift" /> : null}
+        <div className="focus-drift-hover-card__sources" aria-label={t("dashboard.today.topSources")}>
+          {point.topFocusSource ? <FocusDriftSourceRow appIcons={appIcons} point={point} source={point.topFocusSource} kind="focus" language={effectiveLanguage} /> : null}
+          {point.topDriftSource ? <FocusDriftSourceRow appIcons={appIcons} point={point} source={point.topDriftSource} kind="drift" language={effectiveLanguage} /> : null}
         </div>
       ) : null}
     </div>
@@ -120,14 +121,17 @@ function FocusDriftSourceRow({
   point,
   source,
   kind,
+  language,
 }: {
   readonly appIcons: AppIconMap;
   readonly point: FocusDriftPoint;
   readonly source: FocusDriftSourceSummary;
   readonly kind: FocusDriftHoverKind;
+  readonly language: DisplayLanguage;
 }) {
+  const { t } = useLocalization();
   const iconSrc = resolveFocusDriftSourceIcon(source, appIcons);
-  const sourceDetail = formatFocusDriftSourceDetail(source);
+  const sourceDetail = formatFocusDriftSourceDetail(source, language, t);
   const sourceShare = formatFocusDriftSourceShare(source, point, kind);
 
   return (
@@ -141,7 +145,7 @@ function FocusDriftSourceRow({
       </span>
       <div className="focus-drift-hover-card__source-body">
         <div className="focus-drift-hover-card__source-heading">
-          <span className="focus-drift-hover-card__source-kind">{SOURCE_KIND_LABELS[kind]}</span>
+          <span className="focus-drift-hover-card__source-kind">{kind === "focus" ? t("dashboard.today.topFocusSource") : t("dashboard.today.topDriftSource")}</span>
           <strong>{source.label}</strong>
         </div>
         <em>{sourceDetail}</em>
@@ -156,10 +160,12 @@ function buildFocusDriftMetrics(
   driftDuration: string,
   focusPercent: string,
   driftPercent: string,
+  language: DisplayLanguage,
 ): readonly FocusDriftMetric[] {
+  const labels = language === "ko" ? { focus: "집중", drift: "딴짓" } : { focus: "focus", drift: "drift" };
   return [
-    { kind: "focus", value: `${focusDuration} focus`, share: focusPercent },
-    { kind: "drift", value: `${driftDuration} drift`, share: driftPercent },
+    { kind: "focus", value: `${focusDuration} ${labels.focus}`, share: focusPercent },
+    { kind: "drift", value: `${driftDuration} ${labels.drift}`, share: driftPercent },
   ];
 }
 
@@ -168,11 +174,17 @@ function resolveFocusDriftSourceIcon(source: FocusDriftSourceSummary, appIcons: 
   return appIcons[primaryKey] ?? appIcons[source.appName] ?? null;
 }
 
-function formatFocusDriftSourceDetail(source: FocusDriftSourceSummary): string {
-  const surface = source.siteDomain ? `${source.detail} via ${source.appName}` : source.detail;
-  const captureLabel = source.captures === 1 ? "capture" : "captures";
-  const captures = `${source.captures} ${captureLabel}`;
-  return `${surface} · ${formatCompactDurationFromSeconds(source.seconds)} · ${captures}`;
+function formatFocusDriftSourceDetail(source: FocusDriftSourceSummary, language: DisplayLanguage, t: ReturnType<typeof useLocalization>["t"]): string {
+  const detail = source.detail === "Desktop app"
+    ? t("dashboard.today.desktopApp")
+    : source.detail === "Website"
+      ? t("dashboard.today.website")
+      : source.detail;
+  const surface = source.siteDomain
+    ? language === "ko" ? `${detail} · ${source.appName}` : `${detail} via ${source.appName}`
+    : detail;
+  const captures = language === "ko" ? `캡처 ${source.captures}개` : `${source.captures} ${source.captures === 1 ? "capture" : "captures"}`;
+  return `${surface} · ${formatLocalizedCompactDurationFromSeconds(source.seconds, language)} · ${captures}`;
 }
 
 function formatFocusDriftSourceShare(
@@ -184,16 +196,19 @@ function formatFocusDriftSourceShare(
   return kindSeconds > 0 ? `${Math.round((source.seconds / kindSeconds) * 100)}%` : "0%";
 }
 
-export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind): string {
-  const kindLabel = HOVER_KIND_LABELS[kind];
+export function formatFocusDriftHoverLabel(point: FocusDriftPoint, kind: FocusDriftHoverKind, language: DisplayLanguage = "en"): string {
+  const kindLabel = language === "ko" ? (kind === "focus" ? "집중" : "딴짓") : HOVER_KIND_LABELS[kind];
   const focusPercent = formatSharePercent(point.focusScore);
   const driftPercent = formatSharePercent(point.driftScore);
-  const focusDuration = formatDuration(point.focusSeconds);
-  const driftDuration = formatDuration(point.driftSeconds);
-  const verdict = point.focusScore >= point.driftScore ? "focus-heavy" : "drift-heavy";
-  const trackedDuration = formatCompactDurationFromSeconds(point.trackedSeconds);
-  const topFocusSource = point.topFocusSource ? ` Top focus source: ${point.topFocusSource.label}, ${formatCompactDurationFromSeconds(point.topFocusSource.seconds)} across ${point.topFocusSource.captures} ${point.topFocusSource.captures === 1 ? "capture" : "captures"}.` : "";
-  const topDriftSource = point.topDriftSource ? ` Top drift source: ${point.topDriftSource.label}, ${formatCompactDurationFromSeconds(point.topDriftSource.seconds)} across ${point.topDriftSource.captures} ${point.topDriftSource.captures === 1 ? "capture" : "captures"}.` : "";
+  const focusDuration = formatLocalizedDuration(point.focusSeconds, language);
+  const driftDuration = formatLocalizedDuration(point.driftSeconds, language);
+  const verdict = point.focusScore >= point.driftScore ? (language === "ko" ? "집중 우세" : "focus-heavy") : (language === "ko" ? "딴짓 우세" : "drift-heavy");
+  const trackedDuration = formatLocalizedCompactDurationFromSeconds(point.trackedSeconds, language);
+  const topFocusSource = point.topFocusSource ? language === "ko" ? ` 주요 집중 활동: ${point.topFocusSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topFocusSource.seconds, language)}, 캡처 ${point.topFocusSource.captures}개.` : ` Top focus source: ${point.topFocusSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topFocusSource.seconds, language)} across ${point.topFocusSource.captures} ${point.topFocusSource.captures === 1 ? "capture" : "captures"}.` : "";
+  const topDriftSource = point.topDriftSource ? language === "ko" ? ` 주요 딴짓 활동: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)}, 캡처 ${point.topDriftSource.captures}개.` : ` Top drift source: ${point.topDriftSource.label}, ${formatLocalizedCompactDurationFromSeconds(point.topDriftSource.seconds, language)} across ${point.topDriftSource.captures} ${point.topDriftSource.captures === 1 ? "capture" : "captures"}.` : "";
 
+  if (language === "ko") {
+    return `${point.label} ${kindLabel} 지점. 집중 ${focusPercent}, ${focusDuration}; 딴짓 ${driftPercent}, ${driftDuration}; 기록 시간 ${trackedDuration}. 이 구간은 ${verdict}입니다.${topFocusSource}${topDriftSource}`;
+  }
   return `${kindLabel} point for ${point.label}. Focus is ${focusPercent}, ${focusDuration}; drift is ${driftPercent}, ${driftDuration}; tracked time is ${trackedDuration}. This ${point.unit} is ${verdict}.${topFocusSource}${topDriftSource}`;
 }

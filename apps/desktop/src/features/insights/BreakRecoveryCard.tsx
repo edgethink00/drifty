@@ -1,5 +1,6 @@
 import { EmptyState } from "../../components/EmptyState";
 import type { BreakRecoveryInsight } from "../companion/driftAlarmRecovery";
+import { useLocalization } from "../localization/LocalizationContext";
 import "./breakRecoveryCard.css";
 
 type BreakRecoveryCardProps = {
@@ -74,67 +75,68 @@ function DistributionGroup({
 }
 
 export function BreakRecoveryCard({ summary }: BreakRecoveryCardProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const hasData = actionTotal(summary) > 0 || summary.totalBreaks > 0;
-  const bestBreakLabel = summary.bestBreak === null ? "—" : `${summary.bestBreak.minutes}m`;
+  const bestBreakLabel = summary.bestBreak === null ? "—" : effectiveLanguage === "ko" ? `${summary.bestBreak.minutes}분` : `${summary.bestBreak.minutes}m`;
   const bestBreakDetail = summary.bestBreak === null
-    ? "No reliable length"
-    : `${formatRate(summary.bestBreak.recoveryRate)} recovered, ${summary.bestBreak.resolvedBreaks} samples`;
+    ? t("trends.noReliableLength")
+    : t("trends.recoveredSamples", { rate: formatRate(summary.bestBreak.recoveryRate), count: summary.bestBreak.resolvedBreaks });
   const totalActions = actionTotal(summary);
   const metricItems = [
     {
-      label: "Recovery rate",
+      label: t("trends.recoveryRate"),
       value: formatRate(summary.recoveryRate),
-      detail: `${summary.resolvedBreaks} of ${summary.totalBreaks} breaks`,
+      detail: t("trends.breakCount", { resolved: summary.resolvedBreaks, total: summary.totalBreaks }),
     },
     {
-      label: "Best break",
+      label: t("trends.bestBreak"),
       value: bestBreakLabel,
       detail: bestBreakDetail,
     },
     {
-      label: "Break starts",
+      label: t("trends.breakStarts"),
       value: String(summary.actionCounts.start_break),
-      detail: `${summary.actionCounts.return_to_focus} return clicks`,
+      detail: t("trends.returnClicks", { count: summary.actionCounts.return_to_focus }),
     },
     {
-      label: "Corrections",
+      label: t("trends.corrections"),
       value: String(summary.actionCounts.manual_correction),
-      detail: `${summary.actionCounts.settings} settings opens`,
+      detail: t("trends.settingsOpens", { count: summary.actionCounts.settings }),
     },
   ] satisfies readonly MetricItem[];
   const outcomeItems = [
-    { label: "Recovered", value: summary.outcomeCounts.recovered, total: summary.totalBreaks, tone: "success" },
-    { label: "Same drift", value: summary.outcomeCounts.same_drift_continued, total: summary.totalBreaks, tone: "warning" },
-    { label: "Shifted", value: summary.outcomeCounts.drift_shifted, total: summary.totalBreaks, tone: "neutral" },
-    { label: "Excluded", value: summary.outcomeCounts.unknown, total: summary.totalBreaks, tone: "muted" },
+    { label: t("trends.outcome.recovered"), value: summary.outcomeCounts.recovered, total: summary.totalBreaks, tone: "success" },
+    { label: t("trends.outcome.sameDrift"), value: summary.outcomeCounts.same_drift_continued, total: summary.totalBreaks, tone: "warning" },
+    { label: t("trends.outcome.shifted"), value: summary.outcomeCounts.drift_shifted, total: summary.totalBreaks, tone: "neutral" },
+    { label: t("trends.outcome.excluded"), value: summary.outcomeCounts.unknown, total: summary.totalBreaks, tone: "muted" },
   ] satisfies readonly DistributionItem[];
   const actionItems = [
-    { label: "Take a break", value: summary.actionCounts.start_break, total: totalActions, tone: "action" },
-    { label: "Return to focus", value: summary.actionCounts.return_to_focus, total: totalActions, tone: "success" },
-    { label: "Manual correction", value: summary.actionCounts.manual_correction, total: totalActions, tone: "neutral" },
-    { label: "Settings", value: summary.actionCounts.settings, total: totalActions, tone: "muted" },
-    { label: "Dismissed", value: summary.actionCounts.dismiss, total: totalActions, tone: "warning" },
+    { label: t("trends.action.takeBreak"), value: summary.actionCounts.start_break, total: totalActions, tone: "action" },
+    { label: t("trends.action.returnFocus"), value: summary.actionCounts.return_to_focus, total: totalActions, tone: "success" },
+    { label: t("trends.action.manualCorrection"), value: summary.actionCounts.manual_correction, total: totalActions, tone: "neutral" },
+    { label: t("trends.action.settings"), value: summary.actionCounts.settings, total: totalActions, tone: "muted" },
+    { label: t("trends.action.dismissed"), value: summary.actionCounts.dismiss, total: totalActions, tone: "warning" },
   ] satisfies readonly DistributionItem[];
 
   return (
-    <section className="break-recovery-card editorial-panel editorial-panel--soft" aria-label="Break recovery">
+    <section className="break-recovery-card editorial-panel editorial-panel--soft" aria-label={t("trends.breakRecovery")}>
       <div className="break-recovery-card__header">
-        <h2>Break recovery</h2>
+        <h2>{t("trends.breakRecovery")}</h2>
         <div className="break-recovery-card__header-stat">
-          <strong>{summary.resolvedBreaks} resolved</strong>
-          <span>{summary.totalBreaks} attempts</span>
-          <span className="break-recovery-card__header-pill">{summary.outcomeCounts.drift_shifted} shifted</span>
-          <span className="break-recovery-card__header-pill">{summary.outcomeCounts.unknown} excluded</span>
+          <strong>{t("trends.breakRecoveryResolved", { count: summary.resolvedBreaks })}</strong>
+          <span>{t("trends.breakRecoveryAttempts", { count: summary.totalBreaks })}</span>
+          <span className="break-recovery-card__header-pill">{t("trends.breakRecoveryShifted", { count: summary.outcomeCounts.drift_shifted })}</span>
+          <span className="break-recovery-card__header-pill">{t("trends.breakRecoveryExcluded", { count: summary.outcomeCounts.unknown })}</span>
         </div>
       </div>
 
       {!hasData ? (
         <EmptyState
-          title="No break recovery yet"
-          detail="Use Take a break from a drift alarm to start building this trend."
+          title={t("trends.breakRecoveryEmpty")}
+          detail={t("trends.breakRecoveryEmptyDetail")}
         />
       ) : (
-        <div className="break-recovery-card__compact-grid" aria-label="Break recovery dense summary">
+        <div className="break-recovery-card__compact-grid" aria-label={t("trends.breakRecoverySummaryAria")}>
           <div className="break-recovery-card__summary-grid">
             {metricItems.map((item) => (
               <div className="break-recovery-card__metric" key={item.label}>
@@ -145,8 +147,8 @@ export function BreakRecoveryCard({ summary }: BreakRecoveryCardProps) {
             ))}
           </div>
 
-          <DistributionGroup title="Attempt outcomes" totalLabel={`${summary.totalBreaks} total`} items={outcomeItems} />
-          <DistributionGroup title="Alarm actions" totalLabel={`${totalActions} presses`} items={actionItems} />
+          <DistributionGroup title={t("trends.attemptOutcomes")} totalLabel={t("trends.totalCount", { count: summary.totalBreaks })} items={outcomeItems} />
+          <DistributionGroup title={t("trends.alarmActions")} totalLabel={t("trends.pressCount", { count: totalActions })} items={actionItems} />
         </div>
       )}
     </section>

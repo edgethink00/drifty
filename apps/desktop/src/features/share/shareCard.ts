@@ -8,7 +8,7 @@
 
 import type { ActivityCategory, CategoryDuration, FlowBlock, ProductivityDuration } from "@drifty/domain";
 import { categoryLabel } from "../../lib/activityLabels";
-import { formatDateRangeLabel, UI_LOCALE } from "../../lib/formatting";
+import { formatDateRangeLabel, formatLocalizedDateRangeLabel, UI_LOCALE } from "../../lib/formatting";
 import type { WeekCalendarEvent, WeekDayRow } from "../dashboard/weekCalendar";
 
 export type ShareCardSliceKey = ActivityCategory | "other";
@@ -36,6 +36,7 @@ export interface ShareCardProductivitySlice {
 }
 
 export interface ShareCardData {
+  readonly language?: "en" | "ko";
   /** ISO day, e.g. "2026-07-18". */
   readonly day: string;
   /** e.g. "Friday". */
@@ -64,6 +65,7 @@ export interface ShareCardData {
 }
 
 export interface BuildShareCardDataInput {
+  readonly language?: "en" | "ko";
   readonly day: string;
   readonly totalSeconds: number;
   readonly categoryTotals: readonly CategoryDuration[];
@@ -80,6 +82,7 @@ const FOCUS_RUN_MAX_GAP_SECONDS = 5 * 60;
 const PEAK_WINDOW_HOURS = 2;
 
 export function buildShareCardData({
+  language = "en",
   day,
   totalSeconds,
   categoryTotals,
@@ -90,8 +93,9 @@ export function buildShareCardData({
   isCurrentPeriod = false,
 }: BuildShareCardDataInput): ShareCardData {
   const parsed = new Date(`${day}T12:00:00`);
-  const weekdayLabel = parsed.toLocaleDateString(UI_LOCALE, { weekday: "long" });
-  const dateLabel = parsed.toLocaleDateString(UI_LOCALE, { month: "short", day: "numeric" });
+  const locale = language === "ko" ? "ko-KR" : UI_LOCALE;
+  const weekdayLabel = parsed.toLocaleDateString(locale, { weekday: "long" });
+  const dateLabel = parsed.toLocaleDateString(locale, { month: "short", day: "numeric" });
 
   const trackedSeconds = Math.max(
     totalSeconds,
@@ -103,6 +107,7 @@ export function buildShareCardData({
   const focusPercent = Math.round((focusEntry?.ratio ?? 0) * 100);
 
   return {
+    language,
     day,
     weekdayLabel,
     dateLabel,
@@ -113,7 +118,7 @@ export function buildShareCardData({
     focusPercent,
     productivitySlices: buildProductivitySlices(productivityTotals),
     deltaSeconds,
-    slices: buildSlices(categoryTotals, trackedSeconds),
+    slices: buildSlices(categoryTotals, trackedSeconds, language),
     hours: buildHours(flowBlocks),
     longestFocusSeconds: buildLongestFocusRunSeconds(flowBlocks),
     peakFocusLabel: buildPeakFocusLabel(flowBlocks),
@@ -136,6 +141,7 @@ function buildProductivitySlices(
 function buildSlices(
   categoryTotals: readonly CategoryDuration[],
   trackedSeconds: number,
+  language: "en" | "ko" = "en",
 ): ShareCardCategorySlice[] {
   const active = categoryTotals.filter((entry) => entry.totalSeconds > 0);
   const named = active
@@ -153,22 +159,39 @@ function buildSlices(
   const ratioOf = (seconds: number) => (trackedSeconds > 0 ? seconds / trackedSeconds : 0);
   const slices: ShareCardCategorySlice[] = top.map((entry) => ({
     key: entry.category,
-    label: categoryLabel(entry.category),
+    label: localizedShareCategoryLabel(entry.category, language),
     seconds: entry.totalSeconds,
     ratio: ratioOf(entry.totalSeconds),
   }));
   if (otherSeconds > 0) {
-    slices.push({ key: "other", label: "Other", seconds: otherSeconds, ratio: ratioOf(otherSeconds) });
+    slices.push({ key: "other", label: language === "ko" ? "기타" : "Other", seconds: otherSeconds, ratio: ratioOf(otherSeconds) });
   }
   if (unknownSeconds > 0) {
     slices.push({
       key: "unknown",
-      label: categoryLabel("unknown"),
+      label: localizedShareCategoryLabel("unknown", language),
       seconds: unknownSeconds,
       ratio: ratioOf(unknownSeconds),
     });
   }
   return slices;
+}
+
+function localizedShareCategoryLabel(category: ActivityCategory, language: "en" | "ko"): string {
+  if (language !== "ko") return categoryLabel(category);
+  const koreanLabels: Partial<Record<ActivityCategory, string>> = {
+    workspace: "작업",
+    learning: "학습",
+    communication: "커뮤니케이션",
+    entertainment: "엔터테인먼트",
+    utility: "유틸리티",
+    music: "음악",
+    game: "게임",
+    social_media: "소셜 미디어",
+    shopping: "쇼핑",
+    unknown: "미분류",
+  };
+  return koreanLabels[category] ?? categoryLabel(category);
 }
 
 function buildHours(flowBlocks: readonly FlowBlock[]): ShareCardHour[] {
@@ -223,6 +246,7 @@ export interface ShareWeekCardDay {
 }
 
 export interface ShareWeekCardData {
+  readonly language?: "en" | "ko";
   readonly startDay: string;
   readonly endDay: string;
   /** e.g. "Week 29". */
@@ -249,6 +273,7 @@ export interface ShareWeekCardData {
 }
 
 export interface BuildShareWeekCardDataInput {
+  readonly language?: "en" | "ko";
   readonly startDay: string;
   readonly endDay: string;
   readonly totalSeconds: number;
@@ -262,6 +287,7 @@ export interface BuildShareWeekCardDataInput {
 }
 
 export function buildShareWeekCardData({
+  language = "en",
   startDay,
   endDay,
   totalSeconds,
@@ -283,9 +309,12 @@ export function buildShareWeekCardData({
     (best, row) => (row.focusSeconds > (best?.focusSeconds ?? 0) ? row : best),
     null,
   );
+  const koreanDayLetters = ["일", "월", "화", "수", "목", "금", "토"] as const;
   const days: ShareWeekCardDay[] = weekRows.map((row) => ({
     day: row.day,
-    letter: (row.dayName.charAt(0) || "·").toUpperCase(),
+    letter: language === "ko"
+      ? koreanDayLetters[new Date(`${row.day}T12:00:00`).getDay()] ?? "·"
+      : (row.dayName.charAt(0) || "·").toUpperCase(),
     focusSeconds: row.focusSeconds,
     isBest: bestRow !== null && row.day === bestRow.day,
   }));
@@ -293,10 +322,11 @@ export function buildShareWeekCardData({
   const dayFocusSum = days.reduce((sum, day) => sum + day.focusSeconds, 0);
 
   return {
+    language,
     startDay,
     endDay,
-    weekLabel: `Week ${isoWeekNumber(startDay)}`,
-    rangeLabel: formatDateRangeLabel(startDay, endDay),
+    weekLabel: language === "ko" ? `${isoWeekNumber(startDay)}주차` : `Week ${isoWeekNumber(startDay)}`,
+    rangeLabel: language === "ko" ? formatLocalizedDateRangeLabel(startDay, endDay, "ko") : formatDateRangeLabel(startDay, endDay),
     totalSeconds: trackedSeconds,
     focusSeconds: focusEntry?.totalSeconds ?? 0,
     isCurrentPeriod,
@@ -307,10 +337,10 @@ export function buildShareWeekCardData({
     deltaSeconds,
     days,
     bestDayLabel: bestRow
-      ? new Date(`${bestRow.day}T12:00:00`).toLocaleDateString(UI_LOCALE, { weekday: "long" })
+      ? new Date(`${bestRow.day}T12:00:00`).toLocaleDateString(language === "ko" ? "ko-KR" : UI_LOCALE, { weekday: "long" })
       : null,
     longestFocusSeconds: buildWeekLongestFocusSeconds(calendarEvents),
-    slices: buildSlices(categoryTotals, trackedSeconds),
+    slices: buildSlices(categoryTotals, trackedSeconds, language),
   };
 }
 

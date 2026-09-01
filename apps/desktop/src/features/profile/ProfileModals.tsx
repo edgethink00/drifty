@@ -1,12 +1,13 @@
 import type { LeaderboardRow } from "../leaderboard/leaderboardService";
 import { getLeaderboardPeriodFocusLabel } from "../leaderboard/leaderboardWindow";
 import type { PublicProfile } from "./profileService";
-import { formatCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
 import { MetricTile } from "../../components/MetricTile";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useRef, type ChangeEvent } from "react";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type ProfileDraft = {
   displayName: string;
@@ -31,33 +32,36 @@ export function ProfileModal({
   error: string | null;
   onClose: () => void;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const displayName = profile?.display_name || row.display_name;
   const bio = profile?.bio?.trim();
   const focusSeconds = row.focus_seconds;
   const rank = row.rank;
-  const periodFocusLabel = getLeaderboardPeriodFocusLabel(row.period);
+  const periodFocusLabel = effectiveLanguage === "ko"
+    ? t(row.period === "daily" ? "leaderboard.embed.focusToday" : row.period === "weekly" ? "leaderboard.embed.focusWeek" : "leaderboard.embed.focusMonth")
+    : getLeaderboardPeriodFocusLabel(row.period);
   useModalDismiss(onClose);
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
-        <ModalCloseButton label="Close profile" onClick={onClose} />
+        <ModalCloseButton label={t("profile.close")} onClick={onClose} />
         <div className="profile-modal__header">
           {profile?.avatar_url ? <img className="profile-modal__avatar" src={profile.avatar_url} alt="" aria-hidden="true" /> : <div className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</div>}
           <div>
             <h2 id="public-profile-title">{displayName}</h2>
           </div>
         </div>
-        {isLoading ? <p className="capture-recency">Loading public profile…</p> : null}
+        {isLoading ? <p className="capture-recency">{t("profile.loading")}</p> : null}
         {error ? <p className="capture-recency capture-recency--error">{error}</p> : null}
-        <p className="profile-modal__bio">{bio || "No public bio yet."}</p>
+        <p className="profile-modal__bio">{bio || t("profile.noBio")}</p>
         <ProfileSocialLinks profile={profile ?? { website_url: null, github_url: null, linkedin_url: null }} />
-        <div className="profile-modal__stats" aria-label={`${displayName} leaderboard stats`}>
-          <MetricTile label="Rank" value={`#${rank}`} detail="Current period board" />
-          <MetricTile label="Focus" value={formatCompactDurationFromSeconds(focusSeconds)} detail={periodFocusLabel} />
-          <MetricTile label="Updated" value={formatRelativeTime(row.updated_at)} />
+        <div className="profile-modal__stats" aria-label={t("profile.statsAria", { name: displayName })}>
+          <MetricTile label={t("profile.rank")} value={`#${rank}`} detail={t("profile.currentBoard")} />
+          <MetricTile label={t("profile.focus")} value={formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)} detail={periodFocusLabel} />
+          <MetricTile label={t("profile.updated")} value={formatRelativeTime(row.updated_at, effectiveLanguage === "ko" ? "ko-KR" : "en-US")} />
         </div>
-        <p className="profile-modal__privacy">Only public profile fields and aggregate leaderboard totals are shown. Raw app, site, window, and session history is not shown on your public profile.</p>
+        <p className="profile-modal__privacy">{t("profile.privacy")}</p>
       </section>
     </div>
   );
@@ -90,6 +94,7 @@ export function EditProfileModal({
   onChange: (updater: Partial<ProfileDraft>) => void;
   onSave: () => void;
 }) {
+  const { t } = useLocalization();
   const dialogRef = useRef<HTMLElement | null>(null);
   const trimmedAvatarUrl = avatarUrl.trim();
   const bioLength = profileDraft.bio.length;
@@ -99,51 +104,51 @@ export function EditProfileModal({
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
       <section ref={dialogRef} className="auth-modal modal-shell profile-modal profile-editor-modal" data-modal-variant="workspace" role="dialog" aria-modal="true" aria-labelledby="edit-profile-dialog-title" tabIndex={-1} onClick={(event) => event.stopPropagation()}>
-        <ModalCloseButton label="Close profile editor" onClick={onClose} />
+        <ModalCloseButton label={t("profile.editor.close")} onClick={onClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
-            <h2 id="edit-profile-dialog-title">Edit profile</h2>
+            <h2 id="edit-profile-dialog-title">{t("profile.editor.title")}</h2>
           </div>
         </div>
 
         <div className="profile-editor-layout">
-          <aside className="profile-editor-preview" aria-label="Public profile preview">
+          <aside className="profile-editor-preview" aria-label={t("profile.editor.previewAria")}>
             <div className="profile-editor-preview__photo">
               <label className="profile-photo-picker">
                 {trimmedAvatarUrl ? <img className="profile-editor-preview__avatar" src={trimmedAvatarUrl} alt="" aria-hidden="true" /> : <span className="profile-editor-preview__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}
                 <span className="profile-photo-picker__badge" aria-hidden="true">
                   <span className="profile-photo-picker__camera" />
                 </span>
-                <input type="file" accept="image/*" aria-label="Choose profile photo" onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
+                <input type="file" accept="image/*" aria-label={t("profile.editor.choosePhoto")} onChange={onPhotoSelected} disabled={profileLoading || profileSaving} />
               </label>
               {trimmedAvatarUrl ? (
                 <button type="button" className="profile-photo-picker__remove" onClick={onRemovePhoto} disabled={profileLoading || profileSaving}>
-                  Remove photo
+                  {t("profile.editor.removePhoto")}
                 </button>
               ) : null}
             </div>
             <div className="profile-editor-preview__copy">
               <div className="profile-editor-preview__heading">
-                <span className="label-mono">Public preview</span>
-                <span className="profile-editor-preview__privacy-badge">Aggregates only</span>
+                <span className="label-mono">{t("profile.editor.publicPreview")}</span>
+                <span className="profile-editor-preview__privacy-badge">{t("profile.editor.aggregatesOnly")}</span>
               </div>
               <strong>{profileDraft.displayName.trim() || displayName}</strong>
-              <p>{profileDraft.bio.trim() || "No public bio yet."}</p>
+              <p>{profileDraft.bio.trim() || t("profile.noBio")}</p>
             </div>
             <ProfileSocialLinks profile={{ website_url: profileDraft.websiteUrl, github_url: profileDraft.githubUrl, linkedin_url: profileDraft.linkedinUrl }} />
-            <p className="profile-editor-preview__privacy">Only this profile card and aggregate leaderboard totals are public.</p>
+            <p className="profile-editor-preview__privacy">{t("profile.editor.previewPrivacy")}</p>
           </aside>
 
           <div className="leaderboard-profile-sidebar__form">
-            <label><span>Display name</span><input className="settings-input" data-modal-initial-focus value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+            <label><span>{t("profile.editor.displayName")}</span><input className="settings-input" data-modal-initial-focus value={profileDraft.displayName} onChange={(event) => onChange({ displayName: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             <label>
-              <span>Bio</span>
+              <span>{t("profile.editor.bio")}</span>
               <textarea className="settings-input settings-textarea" value={profileDraft.bio} onChange={(event) => onChange({ bio: event.target.value })} disabled={profileLoading || profileSaving} maxLength={160} />
-              <small>{bioLength}/160 characters</small>
+              <small>{t("profile.editor.characters", { count: bioLength })}</small>
             </label>
             <fieldset className="profile-editor-links">
-              <legend>Public links</legend>
-              <label><span>Website</span><input className="settings-input modal-code" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
+              <legend>{t("profile.editor.publicLinks")}</legend>
+              <label><span>{t("dashboard.today.website")}</span><input className="settings-input modal-code" value={profileDraft.websiteUrl} onChange={(event) => onChange({ websiteUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
               <label><span>GitHub</span><input className="settings-input modal-code" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
               <label><span>LinkedIn</span><input className="settings-input modal-code" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             </fieldset>
@@ -159,8 +164,8 @@ export function EditProfileModal({
         {profileMessage ? <p className="capture-recency">{profileMessage}</p> : null}
 
         <div className="modal-foot profile-editor-modal__actions">
-          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
-          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving}>{profileSaving ? "Saving…" : "Save profile"}</button>
+          <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}</button>
+          <button type="button" className="modal-btn modal-btn--primary" onClick={onSave} disabled={profileLoading || profileSaving}>{profileSaving ? t("common.saving") : t("profile.editor.save")}</button>
         </div>
       </section>
     </div>
@@ -180,29 +185,28 @@ export function PublicProfileToggle({
   disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
+  const { t } = useLocalization();
   return (
     <label className="profile-visibility-toggle">
       <input
         className="modal-switch"
         type="checkbox"
         role="switch"
-        aria-label="Public profile"
+        aria-label={t("profile.editor.publicAria")}
         checked={checked}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
       <span className="profile-visibility-toggle__copy">
-        <strong>Public profile</strong>
-        <small>
-          Controls your profile page and profile embeds. Leaderboard participation is separate;
-          turning this off does not leave the board.
-        </small>
+        <strong>{t("profile.editor.publicTitle")}</strong>
+        <small>{t("profile.editor.publicDetail")}</small>
       </span>
     </label>
   );
 }
 
 export function ProfileSocialLinks({ profile }: { profile: { website_url?: string | null; github_url?: string | null; linkedin_url?: string | null } }) {
+  const { t } = useLocalization();
   const socialLinks: Array<{ key: string; value?: string | null }> = [
     { key: "website", value: profile.website_url },
     { key: "github", value: profile.github_url },
@@ -217,10 +221,10 @@ export function ProfileSocialLinks({ profile }: { profile: { website_url?: strin
     }
   }
 
-  if (links.length === 0) return <p className="profile-socials profile-socials--empty">No public links added.</p>;
+  if (links.length === 0) return <p className="profile-socials profile-socials--empty">{t("profile.linksEmpty")}</p>;
 
   return (
-    <div className="profile-socials" aria-label="Public profile links">
+    <div className="profile-socials" aria-label={t("profile.linksAria")}>
       {links.map((link) => <a key={link.key} href={link.href} target="_blank" rel="noreferrer">{link.text}</a>)}
     </div>
   );

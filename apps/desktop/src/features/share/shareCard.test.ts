@@ -47,6 +47,15 @@ describe("buildShareCardData", () => {
     expect(data.deltaSeconds).toBeNull();
   });
 
+  it("builds Korean date and category labels for the Korean beta", () => {
+    const data = buildShareCardData({ ...BASE_INPUT, language: "ko" });
+
+    expect(data.language).toBe("ko");
+    expect(data.weekdayLabel).toBe("금요일");
+    expect(data.dateLabel).toBe("7월 17일");
+    expect(data.slices.map((slice) => slice.label)).toEqual(["작업", "커뮤니케이션", "미분류"]);
+  });
+
   it("preserves the classified-time productivity denominator used by the dashboard", () => {
     const data = buildShareCardData(BASE_INPUT);
 
@@ -255,6 +264,16 @@ describe("buildShareWeekCardData", () => {
   it("spans months in the range label", () => {
     const data = buildShareWeekCardData({ ...WEEK_INPUT, startDay: "2026-06-29", endDay: "2026-07-05" });
     expect(data.rangeLabel).toBe("Jun 29–Jul 5");
+  });
+
+  it("builds Korean week labels and weekday initials", () => {
+    const data = buildShareWeekCardData({ ...WEEK_INPUT, language: "ko" });
+
+    expect(data.language).toBe("ko");
+    expect(data.weekLabel).toMatch(/주차$/);
+    expect(data.rangeLabel).toContain("7월");
+    expect(data.days.map((day) => day.letter)).toEqual(["월", "화", "수", "목", "금", "토", "일"]);
+    expect(data.bestDayLabel).toBe("목요일");
   });
 
   it("marks the best day and derives its full name", () => {

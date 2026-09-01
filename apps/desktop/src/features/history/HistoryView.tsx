@@ -6,6 +6,7 @@ import { HistoryRow } from "./HistoryRow";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import "./history.css";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
@@ -35,6 +36,7 @@ type HistoryDeleteConfirmationProps = {
 };
 
 function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm }: HistoryDeleteConfirmationProps) {
+  const { t } = useLocalization();
   const dialogRef = useRef<HTMLDivElement>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-history-confirm-cancel]" });
 
@@ -48,10 +50,8 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
       tabIndex={-1}
     >
       <div className="history-confirm__panel modal-shell" data-modal-variant="compact">
-        <h2 id="history-confirm-title">Delete history records?</h2>
-        <p>
-          This removes {recordCount} local activity {recordCount === 1 ? "record" : "records"} from this computer.
-        </p>
+        <h2 id="history-confirm-title">{t("history.deleteConfirmTitle")}</h2>
+        <p>{t("history.deleteConfirmDetail", { count: recordCount })}</p>
         <div className="history-confirm__actions">
           <button
             type="button"
@@ -60,10 +60,10 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
             disabled={deleting}
             onClick={onCancel}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={onConfirm}>
-            Delete records
+            {t("history.deleteRecords")}
           </button>
         </div>
       </div>
@@ -87,6 +87,7 @@ export function HistoryView({
   segments,
   startOfDayMinutes = 0,
 }: HistoryViewProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [uncontrolledQuery, setUncontrolledQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -156,11 +157,11 @@ export function HistoryView({
     // viewport keeps filling until the sentinel is pushed out of view.
   }, [hasMoreRows, loadMoreError, loadingMore, loadMore, renderedRows.length]);
 
-  const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes), [renderedRows, startOfDayMinutes]);
+  const groups = useMemo(() => buildHistoryDayGroups(renderedRows, startOfDayMinutes, effectiveLanguage), [effectiveLanguage, renderedRows, startOfDayMinutes]);
   const selectedCount = selectedIds.size;
   const hasAnySegments = segments.length > 0;
   const showToolbar = hasAnySegments || isSearching;
-  const deleteLabel = selectedCount === 1 ? "Delete 1 selected" : `Delete ${selectedCount} selected`;
+  const deleteLabel = t("history.deleteSelectedCount", { count: selectedCount });
 
   const toggleRow = useCallback((segmentIds: readonly string[], selected: boolean) => {
     setSelectedIds((current) => {
@@ -181,7 +182,7 @@ export function HistoryView({
   }
 
   return (
-    <section className={`history-view${showToolbar ? "" : " history-view--empty"}`} aria-label="History">
+    <section className={`history-view${showToolbar ? "" : " history-view--empty"}`} aria-label={t("history.label")}>
       {showToolbar ? (
         <div className="history-view__toolbar">
           <label className="history-search">
@@ -191,12 +192,12 @@ export function HistoryView({
             </svg>
             <input
               type="search"
-              aria-label="Search history"
+              aria-label={t("history.search")}
               value={query}
               onChange={(event) => {
                 updateQuery(event.target.value);
               }}
-              placeholder="Search history"
+              placeholder={t("history.search")}
             />
           </label>
           <button
@@ -205,7 +206,7 @@ export function HistoryView({
             disabled={selectedCount === 0 || deleting}
             onClick={() => setConfirmOpen(true)}
           >
-            {selectedCount === 0 ? "Delete selected" : deleteLabel}
+            {selectedCount === 0 ? t("history.deleteSelected") : deleteLabel}
           </button>
           {onOpenDeleteHistory ? (
             <button
@@ -214,7 +215,7 @@ export function HistoryView({
               disabled={!hasAnySegments || deleting}
               onClick={onOpenDeleteHistory}
             >
-              Delete history…
+              {t("history.deleteAll")}
             </button>
           ) : null}
         </div>
@@ -222,13 +223,13 @@ export function HistoryView({
 
       {groups.length === 0 ? (
         <div className="history-empty" role="status">
-          <strong>{initialLoading ? "Loading history records..." : "No history records found."}</strong>
+          <strong>{initialLoading ? t("history.loading") : t("history.empty")}</strong>
           <span>
             {initialLoading
-              ? "Searching local history."
+              ? t("history.searching")
               : query
-                ? "Try another search."
-                : "Activity appears here after the local tracker records segments."}
+                ? t("history.tryAnother")
+                : t("history.emptyDetail")}
           </span>
         </div>
       ) : (
@@ -250,7 +251,7 @@ export function HistoryView({
             </section>
           ))}
           {loadingMore ? (
-            <p className="history-loading-more" role="status">Loading older records...</p>
+            <p className="history-loading-more" role="status">{t("history.loadingOlder")}</p>
           ) : null}
           {loadMoreError ? (
             <>
@@ -261,7 +262,7 @@ export function HistoryView({
                 disabled={loadingMore}
                 onClick={() => loadMore()}
               >
-                Retry
+                {t("common.retry")}
               </button>
             </>
           ) : null}

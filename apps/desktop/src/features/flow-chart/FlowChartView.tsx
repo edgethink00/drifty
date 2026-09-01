@@ -21,6 +21,7 @@ import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHover
 import { FlowHoverLayer } from "./FlowHoverLayer";
 import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
+import { useLocalization } from "../localization/LocalizationContext";
 
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
@@ -67,6 +68,7 @@ export function FlowChartView({
   onDeleteActivity?: (segmentIds: readonly string[]) => Promise<void>;
   classificationOptions?: ClassificationOptions;
 }) {
+  const { t } = useLocalization();
   const [hoveredLegend, setHoveredLegend] = useState<FlowLegendHoverState | null>(null);
   // projectId → legend entry, so the hover card can name a block's project.
   const projectsById = useMemo(() => {
@@ -182,7 +184,7 @@ export function FlowChartView({
   if (blocks.length === 0 && !showEmptyGrid) return null;
 
   return (
-    <section className="flow-chart-card" aria-label={`${intervalMinutes}-minute flow chart`} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} style={chartStyle}>
+    <section className="flow-chart-card" aria-label={t("dashboard.today.flowChart", { interval: intervalMinutes })} data-flow-interval={intervalMinutes} data-flow-color-mode={effectiveColorMode} style={chartStyle}>
       <FlowChartHeader
         blocks={blocks}
         colorMode={effectiveColorMode}

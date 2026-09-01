@@ -82,6 +82,24 @@ describe("renderShareCardSvg", () => {
     expect(svg).toContain("drifty.so");
   });
 
+  it("renders Korean copy inside the exported daily cards", () => {
+    const koreanDay: ShareCardData = {
+      ...DAY,
+      language: "ko",
+      weekdayLabel: "금요일",
+      dateLabel: "7월 17일",
+      slices: DAY.slices.map((slice) => ({ ...slice, label: slice.key === "workspace" ? "작업" : "커뮤니케이션" })),
+    };
+    const percentile = renderShareCardSvg({ data: koreanDay, format: "landscape", theme: "light", story: "R1c" });
+    const productivity = renderShareCardSvg({ data: koreanDay, format: "landscape", theme: "light", story: "X5" });
+
+    expect(percentile).toContain("예상 집중 백분위");
+    expect(percentile).toContain("오늘 집중 페이스");
+    expect(productivity).toContain("생산성");
+    expect(productivity).toContain("집중");
+    expect(productivity).toContain("시간");
+  });
+
   it("keeps the unified lineup as the primary story set", () => {
     expect(UNIFIED_STORY_OPTIONS.map((entry) => entry.value)).toEqual([
       "R1c",
@@ -283,6 +301,22 @@ describe("renderShareWeekCardSvg", () => {
     expect(svg).toContain(`viewBox="0 0 ${SHARE_CARD_UNIFIED_SIZE.width} ${SHARE_CARD_UNIFIED_SIZE.height}"`);
     expect(svg).toContain("Estimated weekly percentile");
     expect(svg).toContain("drifty.so");
+  });
+
+  it("renders Korean copy inside the exported weekly cards", () => {
+    const koreanWeek: ShareWeekCardData = {
+      ...WEEK,
+      language: "ko",
+      weekLabel: "29주차",
+      rangeLabel: "7월 13일–19일",
+    };
+    const percentile = renderShareWeekCardSvg({ data: koreanWeek, format: "landscape", theme: "light", story: "WR1" });
+    const average = renderShareWeekCardSvg({ data: koreanWeek, format: "landscape", theme: "light", story: "W5" });
+
+    expect(percentile).toContain("예상 주간 백분위");
+    expect(percentile).toContain("이번 주 집중 페이스");
+    expect(average).toContain("이번 주");
+    expect(average).toContain("기록일 평균");
   });
 
   it("renders weekly productivity and streak stories", () => {

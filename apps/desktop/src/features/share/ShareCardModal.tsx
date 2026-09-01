@@ -18,6 +18,7 @@ import {
 import { copyShareCardPng, openShareComposer, saveShareCardWithDialog, shareCardSvgDataUrl } from "./shareCardExport";
 import { buildShareCardCaption, buildShareComposerUrl, type ShareCardDestination } from "./shareCardSocial";
 import { useShareCardLiveRanks, type ShareCardLiveRanksState } from "./useShareCardLiveRanks";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 export type ShareCardModalCard =
   | { readonly kind: "day"; readonly data: ShareCardData }
@@ -83,24 +84,26 @@ function rankGateForStory(
   card: ShareCardModalCard,
   story: UnifiedShareStoryId,
   liveRanks: ShareCardLiveRanksState,
+  t: LocalizationController["t"],
 ): RankGate | null {
   const period = EXACT_RANK_STORY_PERIOD[story];
   if (!period) return null;
   const state = liveRanks[period];
   if (rankMatchesCard(card, state)) return null;
   if (state.availability === "loading") {
-    return { detail: "Checking your live leaderboard rank…", action: null };
+    return { detail: t("share.checkingRank"), action: null };
   }
   if (state.availability === "not_joined") {
-    return { detail: "Join the leaderboard to unlock your live rank cards.", action: "join" };
+    return { detail: t("share.joinToUnlock"), action: "join" };
   }
   if (state.availability === "ready") {
-    return { detail: "Live rank cards are available for the current leaderboard window.", action: null };
+    return { detail: t("share.rankCurrentWindow"), action: null };
   }
-  return { detail: "Live rank cards are temporarily unavailable.", action: null };
+  return { detail: t("share.rankUnavailable"), action: null };
 }
 
 export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose }: ShareCardModalProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [selectedStoryId, setSelectedStoryId] = useState<UnifiedShareStoryId | null>(null);
   const [exportState, setExportState] = useState<ExportState>({ kind: "idle" });
   const [joiningLeaderboard, setJoiningLeaderboard] = useState(false);
@@ -112,7 +115,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
   // Rank stories prefer an opted-in aggregate leaderboard fact for the exact
   // matching window. The local elapsed-time model remains the fallback.
   const { state: liveRankState, refresh: refreshLiveRanks } = useShareCardLiveRanks(Boolean(onJoinLeaderboard && liveRankStoryPeriod));
-  const rankGate = rankGateForStory(card, storyOption.value, liveRankState);
+  const rankGate = rankGateForStory(card, storyOption.value, liveRankState, t);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
   const matchingLiveRanks = useMemo<ShareCardLiveRanks>(() => ({
     daily: card.kind === "day" && rankMatchesCard(card, liveRankState.daily) ? liveRankState.daily.rank : null,
@@ -127,6 +130,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
         theme: defaultTheme,
         period: lockedRankPeriod,
         lookIndex: storyIndex,
+        language: "en",
       });
     }
     return card.kind === "week"
@@ -134,8 +138,9 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks });
   }, [card, defaultTheme, matchingLiveRanks, lockedRankPeriod, storyIndex, storyOption.value]);
   const previewAlt = card.kind === "week"
-    ? `Share card preview for ${card.data.weekLabel} (${card.data.rangeLabel})`
-    : `Share card preview for ${card.data.weekdayLabel} ${card.data.dateLabel}`;
+    ? t("share.previewWeekAria", { week: card.data.weekLabel, range: card.data.rangeLabel })
+    : t("share.previewDayAria", { day: `${card.data.weekdayLabel} ${card.data.dateLabel}` });
+  const storyLabel = (index: number, fallback: string) => effectiveLanguage === "ko" ? t("share.storyLabel", { index: index + 1 }) : fallback;
   const fileName = card.kind === "week"
     ? `drifty-week-${card.data.startDay}`
     : `drifty-${card.data.day}`;
@@ -165,7 +170,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       .then(() => refreshLiveRanks())
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not join the leaderboard.",
+        message: error instanceof Error ? error.message : t("share.joinError"),
       }))
       .finally(() => setJoiningLeaderboard(false));
   };
@@ -183,7 +188,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       .then(() => settle({ kind: "copied" }))
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not copy the image.",
+        message: error instanceof Error ? error.message : t("share.copyError"),
       }));
   };
 
@@ -194,7 +199,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       .then((result) => settle(result.cancelled ? { kind: "idle" } : { kind: "saved" }))
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not save the image.",
+        message: error instanceof Error ? error.message : t("share.saveError"),
       }));
   };
 
@@ -208,7 +213,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       .then(() => settle({ kind: "shared", destination }))
       .catch((error: unknown) => settle({
         kind: "error",
-        message: error instanceof Error ? error.message : "Could not prepare this post.",
+        message: error instanceof Error ? error.message : t("share.postError"),
       }));
   };
 
@@ -219,17 +224,17 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
           className="auth-modal profile-modal share-card-modal"
           role="dialog"
           aria-modal="true"
-          aria-label={card.kind === "week" ? "Share your week" : "Share your day"}
+          aria-label={t(card.kind === "week" ? "share.dialog.weekAria" : "share.dialog.dayAria")}
           onClick={(event) => event.stopPropagation()}
         >
-          <ModalCloseButton label="Close share card" onClick={onClose} />
+          <ModalCloseButton label={t("share.close")} onClick={onClose} />
 
           <div className="share-card-modal__body">
             <div className={`share-card-stage share-card-stage--${defaultTheme} share-card-stage--landscape`}>
               <button
                 type="button"
                 className="share-card-stage__arrow share-card-stage__arrow--previous"
-                aria-label="Previous share card"
+                aria-label={t("share.previous")}
                 disabled={working}
                 onClick={() => selectStory(storyIndex - 1)}
               >
@@ -239,12 +244,12 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                 key={storyOption.value}
                 className="share-card-stage__preview"
                 src={previewSrc}
-                alt={`${previewAlt} — ${storyOption.label}`}
+                alt={`${previewAlt} — ${storyLabel(storyIndex, storyOption.label)}`}
               />
               <button
                 type="button"
                 className="share-card-stage__arrow share-card-stage__arrow--next"
-                aria-label="Next share card"
+                aria-label={t("share.next")}
                 disabled={working}
                 onClick={() => selectStory(storyIndex + 1)}
               >
@@ -253,7 +258,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
             </div>
 
             <div className="share-card-gallery-meta">
-              <div className="share-card-gallery-dots" role="radiogroup" aria-label="Share card story">
+              <div className="share-card-gallery-dots" role="radiogroup" aria-label={t("share.storyAria")}>
                 {storyOptions.map((option, index) => (
                   <button
                     key={option.value}
@@ -261,7 +266,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                     className={index === storyIndex ? "is-active" : ""}
                     role="radio"
                     aria-checked={index === storyIndex}
-                    aria-label={option.label}
+                    aria-label={storyLabel(index, option.label)}
                     disabled={working}
                     onClick={() => selectStory(index)}
                   />
@@ -274,13 +279,13 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                 <span>{rankGate.detail}</span>
                 {rankGate.action === "join" ? (
                   <button type="button" disabled={joiningLeaderboard} onClick={handleJoinLeaderboard}>
-                    {joiningLeaderboard ? "Joining…" : "Join leaderboard"}
+                    {joiningLeaderboard ? t("leaderboard.joining") : t("leaderboard.join")}
                   </button>
                 ) : null}
               </div>
             ) : null}
 
-            <div className="share-card-options" aria-label="Share card options">
+            <div className="share-card-options" aria-label={t("share.optionsAria")}>
               <div className="share-card-destinations">
                 <div className="share-card-destinations__grid">
                   <button
@@ -290,7 +295,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                     aria-busy={working}
                     onClick={handleCopy}
                   >
-                    <span>{exportState.kind === "working" && exportState.action === "copy" ? "Copying…" : "Copy image"}</span>
+                    <span>{exportState.kind === "working" && exportState.action === "copy" ? t("share.copying") : t("share.copyImage")}</span>
                     <CopyIcon />
                   </button>
                   <button
@@ -298,8 +303,8 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                     className="share-card-destination share-card-destination--icon share-card-destination--save"
                     disabled={actionsDisabled}
                     aria-busy={working}
-                    aria-label="Save PNG"
-                    title="Save PNG"
+                    aria-label={t("share.savePng")}
+                    title={t("share.savePng")}
                     onClick={handleSave}
                   >
                     <DownloadIcon />
@@ -309,8 +314,8 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                     className="share-card-destination share-card-destination--icon share-card-destination--x"
                     disabled={actionsDisabled}
                     aria-busy={working}
-                    aria-label={exportState.kind === "working" && exportState.action === "x" ? "Copying image for X" : "X"}
-                    title="Copy image, then open X"
+                    aria-label={exportState.kind === "working" && exportState.action === "x" ? t("share.preparingFor", { destination: "X" }) : "X"}
+                    title={t("share.openDestination", { destination: "X" })}
                     onClick={() => handleSocialShare("x")}
                   >
                     <XIcon />
@@ -320,8 +325,8 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                     className="share-card-destination share-card-destination--icon share-card-destination--linkedin"
                     disabled={actionsDisabled}
                     aria-busy={working}
-                    aria-label={exportState.kind === "working" && exportState.action === "linkedin" ? "Copying image for LinkedIn" : "LinkedIn"}
-                    title="Copy image, then open LinkedIn"
+                    aria-label={exportState.kind === "working" && exportState.action === "linkedin" ? t("share.preparingFor", { destination: "LinkedIn" }) : "LinkedIn"}
+                    title={t("share.openDestination", { destination: "LinkedIn" })}
                     onClick={() => handleSocialShare("linkedin")}
                   >
                     <LinkedInIcon />
@@ -338,15 +343,16 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
 }
 
 function ShareCardToast({ state }: { readonly state: ExportState }) {
+  const { t } = useLocalization();
   if (state.kind === "idle" || state.kind === "working") return null;
 
   const copy = state.kind === "copied"
-    ? { title: "Image copied", detail: "Ready to paste with ⌘V.", tone: "success" }
+    ? { title: t("share.toast.copied"), detail: t("share.toast.paste"), tone: "success" }
     : state.kind === "saved"
-      ? { title: "Image saved", detail: "PNG saved to your chosen location.", tone: "success" }
+      ? { title: t("share.toast.saved"), detail: t("share.toast.savedDetail"), tone: "success" }
       : state.kind === "shared"
-        ? { title: "Image copied", detail: `${state.destination === "linkedin" ? "LinkedIn" : "X"} composer opened.`, tone: "success" }
-        : { title: "Share card couldn't be prepared", detail: state.message, tone: "error" };
+        ? { title: t("share.toast.copied"), detail: t("share.toast.composer", { destination: state.destination === "linkedin" ? "LinkedIn" : "X" }), tone: "success" }
+        : { title: t("share.toast.error"), detail: state.message, tone: "error" };
 
   return (
     <div className="share-card-toast" data-tone={copy.tone} role={copy.tone === "error" ? "alert" : "status"}>

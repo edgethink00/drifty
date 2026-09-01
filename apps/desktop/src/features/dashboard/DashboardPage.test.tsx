@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { DashboardPage } from "./DashboardPage";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 
 // Auto-cleanup isn't unmounting between cases here, so broad role/text queries
 // otherwise collide with a prior render's DOM. Tear down explicitly.
@@ -25,10 +26,12 @@ type DashboardPageFixtureOptions = {
   readonly flowBlocks?: FlowBlock[];
   readonly summaryFlowBlocks?: FlowBlock[];
   readonly totalSeconds?: number;
+  readonly language?: DisplayLanguage;
 };
 
 function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
   render(
+    <LocalizationTestProvider language={options.language ?? "en"}>
     <DashboardPage
       appIcons={{}}
       appTheme="light"
@@ -73,7 +76,8 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       onManageCloudBilling={noop}
       onSelectBillingPlan={noop}
       onSelectDay={noop}
-    />,
+    />
+    </LocalizationTestProvider>,
   );
 }
 
@@ -140,9 +144,40 @@ describe("DashboardPage demo replay empty data", () => {
     expect(document.querySelector(".dashboard-page-head__primary")?.contains(shareButton)).toBe(true);
     expect(document.querySelector(".dashboard-page-head__side")?.contains(shareButton)).toBe(false);
   });
+
+  it("keeps Korean share controls localized while the exported card stays English", () => {
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      language: "ko",
+      hasTimelineData: true,
+      totalSeconds: 3_600,
+      dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+      dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
+    });
+
+    expect(screen.getByRole("heading", { name: "1시간 집중했습니다" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "공유" }));
+
+    expect(screen.getByRole("dialog", { name: "오늘 공유" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "이미지 복사" })).toBeTruthy();
+    const preview = screen.getByRole("img", { name: /공유 카드 1/u }) as HTMLImageElement;
+    const svg = decodeURIComponent(preview.src.split(",", 2)[1] ?? "");
+    expect(svg).toContain("Estimated focus percentile");
+    expect(svg).not.toContain("예상 집중 백분위");
+  });
 });
 
 describe("DashboardPage day metrics without measured activity", () => {
+  it("keeps the Korean Today empty state in Korean", () => {
+    renderDashboardWithNoData({ dashboardReplay: null, language: "ko" });
+
+    expect(screen.getByRole("heading", { name: "집중 기록 없음" })).toBeTruthy();
+    expect(screen.getByRole("status", { name: "세부 분석 상태" }).textContent).toContain("기록된 활동 없음");
+    expect(screen.getAllByText("세부 분석").length).toBeGreaterThan(0);
+    expect(screen.getByText("카테고리")).toBeTruthy();
+    expect(screen.getByText("생산성")).toBeTruthy();
+  });
+
   it("uses an unavailable treatment instead of measured zeros", () => {
     renderDashboardWithNoData({ dashboardReplay: null });
 

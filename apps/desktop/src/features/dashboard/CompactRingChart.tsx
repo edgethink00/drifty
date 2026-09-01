@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { MouseEvent } from "react";
 import type { AppIconMap, FlowBlock } from "@drifty/domain";
 import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
-import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import type { DisplayLanguage } from "../localization/LocalizationContext";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { CompactClassificationHoverCard } from "./HoverCards";
 import type { CompactClassificationBreakdownRow, CompactClassificationHoverState } from "./HoverCards";
@@ -29,9 +30,11 @@ export interface CompactRingChartProps {
   readonly flowBlocks: FlowBlock[];
   readonly appIcons: AppIconMap;
   readonly getAppBreakdown?: (entry: CompactRingEntry) => CompactClassificationBreakdownRow[];
+  readonly language?: DisplayLanguage;
 }
 
-function formatCompactRingLegendHours(totalSeconds: number): string {
+function formatCompactRingLegendHours(totalSeconds: number, language: DisplayLanguage): string {
+  if (language === "ko") return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
   const hours = Math.max(0, Math.floor((totalSeconds / 3600) * 10) / 10);
   return `${hours.toFixed(1)}h`;
 }
@@ -44,6 +47,7 @@ export function CompactRingChart({
   flowBlocks,
   appIcons,
   getAppBreakdown,
+  language = "en",
 }: CompactRingChartProps) {
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0 && entry.ratio > 0);
@@ -51,7 +55,7 @@ export function CompactRingChart({
   // Entries carry classified time only; hover shares are a percentage of that
   // classified total (the unclassified remainder is intentionally not shown).
   const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
-  const circleLabel = formatCompactBarLabel(title, entries, (entry) => entry.label);
+  const circleLabel = formatCompactBarLabel(title, entries, (entry) => entry.label, language);
   const gap = activeEntries.length > 1 ? 1.6 : 0;
   // Morph the arcs from the previous render's ratios (keyed by title so the Day
   // and Week productivity donuts share one memory); arcs are built from the
@@ -72,7 +76,7 @@ export function CompactRingChart({
   function showSegmentHover(entry: CompactRingEntry, x: number, y: number) {
     setHoveredSegment({
       label: entry.label,
-      durationLabel: formatCompactDurationFromSeconds(entry.totalSeconds),
+      durationLabel: formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, language),
       shareLabel: `${classifiedSeconds > 0 ? Math.round((entry.totalSeconds / classifiedSeconds) * 100) : 0}%`,
       dotClassName: entry.dotClassName ?? "",
       color: entry.color,
@@ -86,7 +90,7 @@ export function CompactRingChart({
     <div className="flow-compact-split-chart__panel flow-compact-split-chart__panel--circle" aria-label={`${title} compact classification`}>
       <div className="flow-compact-split-chart__head">
         <span className="label-mono">{title}</span>
-        <strong>{formatCompactDurationFromSeconds(totalSeconds)}</strong>
+        <strong>{formatLocalizedCompactDurationFromSeconds(totalSeconds, language)}</strong>
       </div>
       <div className="flow-compact-productivity-circle">
         <div className="flow-compact-productivity-circle__dial-shell">
@@ -113,12 +117,12 @@ export function CompactRingChart({
             <span className="flow-compact-split-chart__legend-item" key={entry.key}>
               <span className="flow-compact-split-chart__swatch" style={{ background: entry.color }} />
               <span className="flow-compact-split-chart__legend-label">{entry.label}</span>
-              <span className="flow-compact-split-chart__legend-value">{formatCompactRingLegendHours(entry.totalSeconds)}</span>
+              <span className="flow-compact-split-chart__legend-value">{formatCompactRingLegendHours(entry.totalSeconds, language)}</span>
             </span>
           ))}
         </div>
       </div>
-      {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}
+      {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} language={language} /> : null}
     </div>
   );
 }

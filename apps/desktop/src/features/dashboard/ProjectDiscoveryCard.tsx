@@ -1,3 +1,5 @@
+import { useLocalization } from "../localization/LocalizationContext";
+
 export interface ProjectCandidate {
   readonly id: string;
   readonly name: string;
@@ -26,6 +28,7 @@ export interface ProjectDiscoveryCardProps {
  * Card layout (never a modal), so it sits inline in the dashboard stack.
  */
 export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Element {
+  const { t } = useLocalization();
   const {
     needsModel,
     candidates,
@@ -46,13 +49,13 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
   return (
     <section
       className={`project-discovery-card project-discovery-card--${variant}`}
-      aria-label="Project discovery"
+      aria-label={t("projects.discovery.aria")}
       role="status"
     >
       <button
         type="button"
         className="project-discovery-card__dismiss"
-        aria-label="Dismiss project discovery"
+        aria-label={t("projects.discovery.dismissAria")}
         onClick={onDismiss}
       >
         ×
@@ -60,12 +63,9 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
 
       {needsModel ? (
         <div className="project-discovery-card__heading">
-          <span className="label-mono">Projects</span>
-          <strong className="project-discovery-card__title">See your time grouped by project</strong>
-          <p className="project-discovery-card__body">
-            Connect an analysis model and Drifty will group the apps, sites, and files you already work in
-            into the projects you actually care about — no manual setup.
-          </p>
+          <span className="label-mono">{t("projects.title")}</span>
+          <strong className="project-discovery-card__title">{t("projects.discovery.connectTitle")}</strong>
+          <p className="project-discovery-card__body">{t("projects.discovery.connectDetail")}</p>
           <div className="project-discovery-card__actions">
             <button
               type="button"
@@ -73,19 +73,16 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
               onClick={onConnectModel}
               disabled={busy}
             >
-              Connect analysis model
+              {t("projects.discovery.connectAction")}
             </button>
           </div>
         </div>
       ) : (
         <>
           <div className="project-discovery-card__heading">
-            <span className="label-mono">Projects</span>
-            <strong className="project-discovery-card__title">Projects we noticed</strong>
-            <p className="project-discovery-card__body">
-              Suggested from the last few days of your activity. Add the ones that match how you think about
-              your work.
-            </p>
+            <span className="label-mono">{t("projects.title")}</span>
+            <strong className="project-discovery-card__title">{t("projects.discovery.candidatesTitle")}</strong>
+            <p className="project-discovery-card__body">{t("projects.discovery.candidatesDetail")}</p>
           </div>
 
           <ul className="project-discovery-card__list">
@@ -100,7 +97,7 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
                   */}
                   <textarea
                     className="project-discovery-card__item-description"
-                    aria-label={`${candidate.name} description`}
+                    aria-label={t("projects.discovery.descriptionAria", { name: candidate.name })}
                     value={candidate.description}
                     rows={2}
                     readOnly
@@ -109,11 +106,11 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
                 <button
                   type="button"
                   className="app-btn app-btn--primary app-btn--compact project-discovery-card__add"
-                  aria-label={`Add ${candidate.name}`}
+                  aria-label={t("projects.discovery.addAria", { name: candidate.name })}
                   onClick={() => onAccept(candidate)}
                   disabled={busy}
                 >
-                  Add
+                  {t("projects.discovery.add")}
                 </button>
               </li>
             ))}
@@ -127,7 +124,7 @@ export function ProjectDiscoveryCard(props: ProjectDiscoveryCardProps): JSX.Elem
                 onClick={onAcceptAll}
                 disabled={busy}
               >
-                Add all
+                {t("projects.discovery.addAll")}
               </button>
             </div>
           ) : null}

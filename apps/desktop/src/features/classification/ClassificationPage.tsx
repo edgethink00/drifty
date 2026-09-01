@@ -11,8 +11,8 @@ import { useEffect, type CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { SiteFavicon } from "../../components/SiteFavicon";
-import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { formatCompactDurationFromSeconds, formatDuration, formatTimeLabel } from "../../lib/formatting";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedTimeLabel } from "../../lib/formatting";
 import type { ClassificationRange } from "../dashboard/dashboardPeriods";
 import {
   CLASSIFICATION_FOCUS_RATE_DESCRIPTION,
@@ -24,14 +24,13 @@ import {
   classificationActivityDetailsId,
   classificationActivityLabel,
   classificationRowSummary,
-  classificationRuleDetailKindLabel,
-  classificationRuleTargetLabel,
   classifySourceKey,
-  formatClassificationSourceProductivityMix,
   type ClassificationActivityRow,
   type ClassificationCategoryBreakdown,
   type ClassificationSourceSummary,
 } from "./classificationViewData";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 type ClassificationPageProps = {
   readonly appIcons: AppIconMap;
@@ -93,6 +92,60 @@ function moveClassificationRadioValue<T>(values: readonly T[], current: T, key: 
   return null;
 }
 
+function localizedCorrectionDetailLabel(
+  detailKind: ClassificationCorrectionDraft["detailKind"],
+  t: LocalizationController["t"],
+): string {
+  switch (detailKind) {
+    case "title": return t("settings.classification.title");
+    case "windowTitle": return t("settings.classification.windowTitle");
+    case "siteTitle": return t("settings.classification.pageTitle");
+    case "youtubeTitle": return t("settings.classification.youtubeTitle");
+    case "siteUrl": return "URL";
+    default: return t("settings.classification.detail");
+  }
+}
+
+function localizeClassificationSummaryValue(value: string, language: "en" | "ko"): string {
+  if (language === "en") return value;
+  const labels: Readonly<Record<string, string>> = {
+    Mixed: "혼합",
+    Workspace: "작업",
+    Learning: "학습",
+    Communication: "커뮤니케이션",
+    Music: "음악",
+    Game: "게임",
+    "Social media": "소셜 미디어",
+    Entertainment: "엔터테인먼트",
+    Shopping: "쇼핑",
+    Utility: "유틸리티",
+    Unclassified: "미분류",
+    Focus: "집중",
+    Drift: "딴짓",
+    Neutral: "중립",
+    "Confidence unavailable": "신뢰도 정보 없음",
+    "Mixed confidence": "신뢰도 혼합",
+    "AI cache": "AI 캐시",
+    Predefined: "기본 규칙",
+    "Keyword rule": "키워드 규칙",
+    Fallback: "기본값",
+    Manual: "수동",
+    "Custom rule": "사용자 규칙",
+    Stored: "저장됨",
+    "Not classified yet": "아직 미분류",
+  };
+  return labels[value] ?? value;
+}
+
+function localizeCaptureSurfaceDetail(value: string, language: "en" | "ko"): string {
+  if (language === "en") return value;
+  return value
+    .replace(/^App:/u, "앱:")
+    .replace(/^Browser:/u, "브라우저:")
+    .replace(/^Domain:/u, "도메인:")
+    .replace(/^Channel:/u, "채널:");
+}
+
 export function ClassificationPage({
   appIcons,
   canShiftClassificationForward,
@@ -134,6 +187,7 @@ export function ClassificationPage({
   onStartClassificationSurfaceCorrection,
   onTodayClassificationRange,
 }: ClassificationPageProps) {
+  const { effectiveLanguage, t } = useLocalization();
   useEffect(() => {
     if (!classificationCorrectionDraft) return;
     const activeGroup = document.activeElement instanceof HTMLElement
@@ -152,13 +206,13 @@ export function ClassificationPage({
     const categoryValues = CATEGORY_ORDER.filter((category) => category !== "unknown");
 
     const isDetailCorrection = classificationCorrectionDraft.scope === "detail";
-    const targetLabel = classificationRuleTargetLabel(classificationCorrectionDraft.targetKind).toLowerCase();
+    const targetLabel = t(classificationCorrectionDraft.targetKind === "site" ? "classification.domain" : "classification.app");
     const scopeDescription = isDetailCorrection
-      ? `Applies to this ${classificationRuleDetailKindLabel(classificationCorrectionDraft.detailKind).toLowerCase()} from now on.`
-      : `Applies to all future ${targetLabel} activity. Existing manual corrections stay.`;
+      ? t("classification.correction.detailScope", { detail: localizedCorrectionDetailLabel(classificationCorrectionDraft.detailKind, t) })
+      : t("classification.correction.surfaceScope", { target: targetLabel });
 
     return (
-      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={classificationCorrectionDraft.scope === "detail" ? "Detail classification correction" : "App or domain classification correction"} style={{ "--correction-tone": CATEGORY_COLORS[classificationCorrectionDraft.category] } as CSSProperties}>
+      <div className={`classification-correction classification-correction--${placement}`} role="group" aria-label={t(classificationCorrectionDraft.scope === "detail" ? "classification.correction.detailAria" : "classification.correction.surfaceAria")} style={{ "--correction-tone": CATEGORY_COLORS[classificationCorrectionDraft.category] } as CSSProperties}>
         <div className="classification-correction__identity">
           <p>{scopeDescription}</p>
           {isDetailCorrection && classificationCorrectionDraft.detailValue && classificationCorrectionDraft.detailValue !== correctionSummaryLabel ? (
@@ -168,7 +222,7 @@ export function ClassificationPage({
         <div
           className="classification-correction__palette"
           role="radiogroup"
-          aria-label="Category"
+          aria-label={t("common.category")}
           onKeyDown={(event) => {
             const next = moveClassificationRadioValue(categoryValues, classificationCorrectionDraft.category, event.key);
             if (!next || next === classificationCorrectionDraft.category) return;
@@ -190,7 +244,7 @@ export function ClassificationPage({
                 style={{ "--chip-tone": CATEGORY_COLORS[category] } as CSSProperties}
                 onClick={() => onClassificationCorrectionCategoryChange(category)}
               >
-                {categoryLabel(category)}
+                {localizedCategoryLabel(category, t)}
               </button>
             );
           })}
@@ -198,7 +252,7 @@ export function ClassificationPage({
         <div
           className="classification-correction__productivity"
           role="radiogroup"
-          aria-label="Productivity"
+          aria-label={t("common.productivity")}
           onKeyDown={(event) => {
             const next = moveClassificationRadioValue(PRODUCTIVITY_ORDER, classificationCorrectionDraft.productivity, event.key);
             if (!next || next === classificationCorrectionDraft.productivity) return;
@@ -220,7 +274,7 @@ export function ClassificationPage({
                 style={{ "--chip-tone": PRODUCTIVITY_COLORS[productivity] } as CSSProperties}
                 onClick={() => onClassificationCorrectionProductivityChange(productivity)}
               >
-                {productivityLabel(productivity)}
+                {localizedProductivityLabel(productivity, t)}
               </button>
             );
           })}
@@ -231,10 +285,10 @@ export function ClassificationPage({
           </div>
         ) : null}
         <div className="classification-correction__actions">
-          <button type="button" className="app-btn app-btn--quiet app-btn--compact classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>Cancel</button>
+          <button type="button" className="app-btn app-btn--quiet app-btn--compact classification-correction__ghost-button" onClick={onCancelClassificationCorrection} disabled={classificationCorrectionSaving}>{t("common.cancel")}</button>
           <button type="button" className="app-btn app-btn--secondary app-btn--compact classification-correction__save-button" onClick={onSaveClassificationCorrection} disabled={classificationCorrectionSaving}>
             {classificationCorrectionSaving ? <span className="classification-correction__spinner" aria-hidden="true" /> : null}
-            {classificationCorrectionSaving ? "Applying" : "Apply"}
+            {classificationCorrectionSaving ? t("classification.correction.applying") : t("classification.correction.apply")}
           </button>
         </div>
       </div>
@@ -254,10 +308,10 @@ export function ClassificationPage({
     <div className="page">
       <div className="pg-head">
         <div>
-          <h1>Activity breakdown</h1>
+          <h1>{t("classification.title")}</h1>
         </div>
         <div className="classification-range-controls">
-          <div className="settings-mode-switch" role="radiogroup" aria-label="Classification range">
+          <div className="settings-mode-switch" role="radiogroup" aria-label={t("classification.rangeAria")}>
             {(["Day", "Week"] as const).map((range) => (
               <button
                 key={range}
@@ -267,30 +321,31 @@ export function ClassificationPage({
                 aria-checked={classificationRange === range}
                 onClick={() => onRangeChange(range)}
               >
-                <span>{range}</span>
+                <span>{t(range === "Day" ? "common.day" : "common.week")}</span>
               </button>
             ))}
           </div>
           <DateNavigator
-            ariaLabel={`Classification ${classificationRange.toLowerCase()} selector`}
+            ariaLabel={t("classification.dateSelector", { range: t(classificationRange === "Day" ? "common.day" : "common.week") })}
             label={classificationDateLabel}
-            todayLabel="Today"
+            todayLabel={t("classification.today")}
+            todayActionLabel={effectiveLanguage === "ko" ? t("classification.goToday") : undefined}
             isTodayDisabled={isCurrentClassificationRange}
             isNextDisabled={!canShiftClassificationForward}
             onPrevious={onPreviousClassificationRange}
             onNext={onNextClassificationRange}
             onToday={onTodayClassificationRange}
-            previousLabel={classificationRange === "Week" ? "Show previous classification week" : "Show previous day"}
-            nextLabel={classificationRange === "Week" ? "Show next classification week" : "Show next day"}
+            previousLabel={t(classificationRange === "Week" ? "classification.previousWeek" : "classification.previousDay")}
+            nextLabel={t(classificationRange === "Week" ? "classification.nextWeek" : "classification.nextDay")}
           />
         </div>
       </div>
 
       <div className="clf-summary">
-        <div className="clf-stat"><span className="eyebrow">Total</span><strong>{formatDuration(classificationTotalSeconds)}</strong></div>
-        <div className="clf-stat"><span className="eyebrow">Sessions</span><strong>{classificationSessionCount}</strong></div>
+        <div className="clf-stat"><span className="eyebrow">{t("common.total")}</span><strong>{formatLocalizedDuration(classificationTotalSeconds, effectiveLanguage)}</strong></div>
+        <div className="clf-stat"><span className="eyebrow">{t("common.sessions")}</span><strong>{classificationSessionCount}</strong></div>
         <div className="clf-stat clf-stat--with-icon">
-          <span className="eyebrow">Top app</span>
+          <span className="eyebrow">{t("classification.topApp")}</span>
           <div className="clf-stat__row">
             <AppGlyph appName={classificationTopAppName} iconSrc={classificationTopAppIconSrc} size="sm" />
             <strong>{classificationTopAppLabel}</strong>
@@ -299,10 +354,10 @@ export function ClassificationPage({
         <div
           className="clf-stat"
           role="group"
-          aria-label={`${CLASSIFICATION_FOCUS_RATE_LABEL}, ${CLASSIFICATION_FOCUS_RATE_DESCRIPTION}`}
-          title={CLASSIFICATION_FOCUS_RATE_DESCRIPTION}
+          aria-label={`${effectiveLanguage === "ko" ? t("classification.focusRate") : CLASSIFICATION_FOCUS_RATE_LABEL}, ${effectiveLanguage === "ko" ? t("classification.focusRateDescription") : CLASSIFICATION_FOCUS_RATE_DESCRIPTION}`}
+          title={effectiveLanguage === "ko" ? t("classification.focusRateDescription") : CLASSIFICATION_FOCUS_RATE_DESCRIPTION}
         >
-          <span className="eyebrow">{CLASSIFICATION_FOCUS_RATE_LABEL}</span>
+          <span className="eyebrow">{effectiveLanguage === "ko" ? t("classification.focusRate") : CLASSIFICATION_FOCUS_RATE_LABEL}</span>
           <strong>{classificationFocusRatePercent}%</strong>
         </div>
       </div>
@@ -310,17 +365,17 @@ export function ClassificationPage({
       {classificationCategoryBreakdowns.length === 0 && !classificationCorrectionDraft ? renderCorrectionNotice() : null}
 
       {classificationCategoryBreakdowns.length > 0 ? (
-        <section className="classification-panel-view" aria-label="Classification panel view" style={classificationPanelStyle}>
+        <section className="classification-panel-view" aria-label={t("classification.panelAria")} style={classificationPanelStyle}>
           <div className="classification-panel-view__grid">
-            <section className="classification-panel-view__panel" aria-label="Categories">
+            <section className="classification-panel-view__panel" aria-label={t("dashboard.today.categories")}>
               <header className="classification-panel-view__panel-header panel-header">
                 <div className="panel-header__left">
-                  <span className="label-mono">Categories</span>
-                  <strong className="panel-header__title">{classificationCategoryBreakdowns.length} tracked</strong>
+                  <span className="label-mono">{t("dashboard.today.categories")}</span>
+                  <strong className="panel-header__title">{t("classification.trackedCount", { count: classificationCategoryBreakdowns.length })}</strong>
                 </div>
                 <div className="panel-header__right">
-                  <span className="panel-header__meta">Total</span>
-                  <strong className="panel-header__value">{formatDuration(classificationTotalSeconds)}</strong>
+                  <span className="panel-header__meta">{t("common.total")}</span>
+                  <strong className="panel-header__value">{formatLocalizedDuration(classificationTotalSeconds, effectiveLanguage)}</strong>
                 </div>
               </header>
               <div className="classification-panel-view__panel-body">
@@ -341,9 +396,9 @@ export function ClassificationPage({
                         <div className="classification-panel-view__row-top">
                           <div className="classification-panel-view__row-title">
                             <span className={`category-dot category-dot--${breakdown.category}`} aria-hidden="true" style={{ width: 8, height: 8, borderRadius: "50%", flexShrink: 0 }} />
-                            <strong>{categoryLabel(breakdown.category)}</strong>
+                            <strong>{localizedCategoryLabel(breakdown.category, t)}</strong>
                           </div>
-                          <span>{formatCompactDurationFromSeconds(breakdown.totalSeconds)}</span>
+                          <span>{formatLocalizedCompactDurationFromSeconds(breakdown.totalSeconds, effectiveLanguage)}</span>
                         </div>
                         <div className="classification-panel-view__bar" aria-hidden="true">
                           <span style={{ width: `${barWidth}%`, background: CATEGORY_COLORS[breakdown.category] }} />
@@ -355,16 +410,16 @@ export function ClassificationPage({
               </div>
             </section>
 
-            <section className="classification-panel-view__panel" aria-label="Apps and sites">
+            <section className="classification-panel-view__panel" aria-label={t("classification.appsSites")}>
               <header className="classification-panel-view__panel-header panel-header">
                 <div className="panel-header__left">
-                  <span className="label-mono">Apps &amp; Sites</span>
+                  <span className="label-mono">{t("classification.appsSites")}</span>
                   <strong className="panel-header__title">
-                    {selectedClassificationBreakdown ? categoryLabel(selectedClassificationBreakdown.category) : "No category"}
+                    {selectedClassificationBreakdown ? localizedCategoryLabel(selectedClassificationBreakdown.category, t) : t("classification.noCategory")}
                   </strong>
                 </div>
                 <div className="panel-header__right">
-                  <span className="panel-header__meta">{classificationSourceSummaries.length === 1 ? "source" : "sources"}</span>
+                  <span className="panel-header__meta">{t("classification.header.source")}</span>
                   <strong className="panel-header__value">{classificationSourceSummaries.length}</strong>
                 </div>
               </header>
@@ -391,8 +446,12 @@ export function ClassificationPage({
                           <div className="classification-panel-view__source-copy">
                             <strong>{item.label}</strong>
                             <div className="classification-panel-view__source-meta">
-                              <span>{item.sessionCount} {item.sessionCount === 1 ? "session" : "sessions"} · {formatCompactDurationFromSeconds(item.averageSessionSeconds)} avg</span>
-                              <span className="classification-panel-view__source-productivity" aria-label={formatClassificationSourceProductivityMix(item.productivityMix)} title={formatClassificationSourceProductivityMix(item.productivityMix)}>
+                              <span>{item.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: item.sessionCount })} · {t("classification.averageValue", { duration: formatLocalizedCompactDurationFromSeconds(item.averageSessionSeconds, effectiveLanguage) })}</span>
+                              <span
+                                className="classification-panel-view__source-productivity"
+                                aria-label={item.productivityMix.map((entry) => `${localizedProductivityLabel(entry.productivity, t)} ${formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, effectiveLanguage)}`).join(", ")}
+                                title={item.productivityMix.map((entry) => `${localizedProductivityLabel(entry.productivity, t)} ${formatLocalizedCompactDurationFromSeconds(entry.totalSeconds, effectiveLanguage)}`).join(", ")}
+                              >
                                 {item.productivityMix.map((entry) => (
                                   <span
                                     key={entry.productivity}
@@ -405,7 +464,7 @@ export function ClassificationPage({
                             </div>
                           </div>
                           <div className="classification-panel-view__source-measure">
-                            <strong>{formatCompactDurationFromSeconds(item.totalSeconds)}</strong>
+                            <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
                             <span>{item.shareOfTotal * 100 >= 10 ? `${Math.round(item.shareOfTotal * 100)}%` : `${(item.shareOfTotal * 100).toFixed(1)}%`}</span>
                           </div>
                         </button>
@@ -414,25 +473,25 @@ export function ClassificationPage({
                   </div>
                 ) : (
                   <div className="classification-panel-view__empty">
-                    <span className="label-mono">Apps &amp; Sites</span>
-                    <strong>No sources in this category yet</strong>
-                    <p>Tracked apps and browser surfaces will appear here once this category has activity in the selected range.</p>
+                    <span className="label-mono">{t("classification.appsSites")}</span>
+                    <strong>{t("classification.noSourcesTitle")}</strong>
+                    <p>{t("classification.noSourcesDetail")}</p>
                     <div className="classification-panel-view__empty-actions">
-                      {!isCurrentClassificationRange ? <button type="button" className="app-btn app-btn--secondary" onClick={onTodayClassificationRange}>Today</button> : null}
-                      <button type="button" className="app-btn app-btn--secondary" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
+                      {!isCurrentClassificationRange ? <button type="button" className="app-btn app-btn--secondary" onClick={onTodayClassificationRange}>{t("classification.today")}</button> : null}
+                      <button type="button" className="app-btn app-btn--secondary" onClick={() => onRangeChange(alternateRange)}>{t("classification.showRange", { range: t(alternateRange === "Day" ? "common.day" : "common.week") })}</button>
                     </div>
                   </div>
                 )}
               </div>
             </section>
 
-            <section className="classification-panel-view__panel classification-panel-view__panel--detail" aria-label="Activity details">
+            <section className="classification-panel-view__panel classification-panel-view__panel--detail" aria-label={t("classification.activityDetails")}>
               {selectedClassificationSourceSummary ? (
                 <>
                   <div className="classification-panel-view__detail-top">
                   <header className="classification-panel-view__panel-header panel-header">
                     <div className="panel-header__left">
-                      <span className="label-mono">Activity details</span>
+                      <span className="label-mono">{t("classification.activityDetails")}</span>
                       <div className="classification-panel-view__detail-title">
                         <span className="classification-panel-view__detail-icon">
                           {selectedClassificationSourceSummary.usageKind === "site" && selectedClassificationSourceSummary.siteDomain
@@ -447,21 +506,21 @@ export function ClassificationPage({
                     <div className="panel-header__right classification-panel-view__detail-header-actions">
                       <div className="classification-panel-view__detail-meta">
                         <span className="panel-header__meta">
-                          {selectedClassificationSourceSummary.sessionCount} {selectedClassificationSourceSummary.sessionCount === 1 ? "session" : "sessions"}
+                          {selectedClassificationSourceSummary.sessionCount === 1 ? t("classification.sessionCountOne") : t("classification.sessionCount", { count: selectedClassificationSourceSummary.sessionCount })}
                         </span>
-                        <strong className="panel-header__value">{formatCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds)}</strong>
+                        <strong className="panel-header__value">{formatLocalizedCompactDurationFromSeconds(selectedClassificationSourceSummary.totalSeconds, effectiveLanguage)}</strong>
                       </div>
                       <button
                         type="button"
                         className="app-btn app-btn--quiet app-btn--compact classification-correction__surface-button"
-                        aria-label={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
-                        title={`Correct ${selectedClassificationSourceSummary.usageKind === "site" ? "domain" : "app"} classification`}
+                        aria-label={t("classification.correctSurface", { surface: t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app") })}
+                        title={t("classification.correctSurface", { surface: t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app") })}
                         aria-expanded={classificationCorrectionDraft?.scope === "surface"}
                         data-active={String(classificationCorrectionDraft?.scope === "surface")}
                         onClick={onStartClassificationSurfaceCorrection}
                       >
                         <ClassificationEditGlyph />
-                        <span className="sr-only">Reclassify</span>
+                        <span className="sr-only">{t("classification.reclassify")}</span>
                       </button>
                     </div>
                   </header>
@@ -471,7 +530,11 @@ export function ClassificationPage({
                   <div className="classification-panel-view__panel-body">
                     <div className="classification-panel-view__list" role="list">
                       {classificationActivityRows.map((row) => {
-                        const rowMeta = `${row.count} ${row.count === 1 ? "activity" : "activities"} · ${row.startedLabel} - ${row.endedLabel}`;
+                        const firstSegment = row.segments[0];
+                        const lastSegment = row.segments[row.segments.length - 1];
+                        const startedLabel = firstSegment ? formatLocalizedTimeLabel(firstSegment.startedAt, effectiveLanguage) : row.startedLabel;
+                        const endedLabel = lastSegment ? formatLocalizedTimeLabel(lastSegment.endedAt, effectiveLanguage) : row.endedLabel;
+                        const rowMeta = `${row.count === 1 ? t("classification.activityCountOne") : t("classification.activityCount", { count: row.count })} · ${startedLabel} - ${endedLabel}`;
                         const isExpanded = row.hasDetails && expandedClassificationActivityRows.has(row.id);
                         const detailsId = classificationActivityDetailsId(row.id);
                         const rowSummary = (
@@ -484,7 +547,7 @@ export function ClassificationPage({
                               <div className="classification-panel-view__bar" aria-hidden="true">
                                 <span style={{ width: `${Math.max((row.totalSeconds / Math.max(classificationActivityPeakSeconds, 1)) * 100, 4)}%`, background: selectedClassificationTone }} />
                               </div>
-                              <strong>{formatCompactDurationFromSeconds(row.totalSeconds)}</strong>
+                              <strong>{formatLocalizedCompactDurationFromSeconds(row.totalSeconds, effectiveLanguage)}</strong>
                             </div>
                           </>
                         );
@@ -500,7 +563,7 @@ export function ClassificationPage({
                                   onClick={() => onActivityRowToggle(row.id)}
                                 >
                                   {rowSummary}
-                                  <span className="sr-only">Capture details {isExpanded ? "expanded" : "collapsed"}</span>
+                                  <span className="sr-only">{t("classification.captureDetailsState", { state: t(isExpanded ? "classification.expanded" : "classification.collapsed") })}</span>
                                   <span className="classification-panel-view__activity-chevron" aria-hidden="true">{isExpanded ? "⌄" : ">"}</span>
                                 </button>
                               ) : (
@@ -511,49 +574,49 @@ export function ClassificationPage({
                               <button
                                 type="button"
                                 className="app-btn app-btn--quiet app-btn--compact classification-correction__detail-button"
-                                aria-label={`Correct this detail: ${row.label}`}
-                                title={`Correct this detail: ${row.label}`}
+                                aria-label={t("classification.correctDetail", { label: row.label })}
+                                title={t("classification.correctDetail", { label: row.label })}
                                 aria-expanded={classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id}
                                 data-active={String(classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id)}
                                 onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
                                 <ClassificationEditGlyph />
-                                <span className="sr-only">Reclassify</span>
+                                <span className="sr-only">{t("classification.reclassify")}</span>
                               </button>
                             </div>
                             {classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id ? renderClassificationCorrection("detail") : null}
                             {isExpanded ? (() => {
-                              const surfaceDetails = captureRowSurfaceDetails(row.segments);
+                              const surfaceDetails = captureRowSurfaceDetails(row.segments).map((detail) => localizeCaptureSurfaceDetail(detail, effectiveLanguage));
                               const summary = classificationRowSummary(row.segments, classificationOptions);
                               return (
-                                <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={`Capture details for ${row.label}`}>
+                                <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={t("classification.captureDetailsFor", { label: row.label })}>
                                   <div className="classification-panel-view__activity-overview">
                                     {surfaceDetails.length > 0 ? (
-                                      <div className="classification-panel-view__activity-surface" aria-label="Capture surface">
-                                        <span className="label-mono">Surface</span>
+                                      <div className="classification-panel-view__activity-surface" aria-label={t("classification.captureSurface")}>
+                                        <span className="label-mono">{t("classification.surface")}</span>
                                         <div className="classification-panel-view__activity-surface-list">
                                           {surfaceDetails.map((detail) => <span key={detail}>{detail}</span>)}
                                         </div>
                                       </div>
                                     ) : null}
                                     {summary ? (
-                                      <dl className="classification-panel-view__activity-classification" aria-label="Classification summary">
-                                        <div><dt>Category</dt><dd>{summary.categoryLabel}</dd></div>
-                                        <div><dt>Productivity</dt><dd>{summary.productivityLabel}</dd></div>
-                                        <div><dt>Source</dt><dd>{summary.sourceLabel}</dd></div>
-                                        <div><dt>Confidence</dt><dd>{summary.confidenceLabel}</dd></div>
+                                      <dl className="classification-panel-view__activity-classification" aria-label={t("classification.summary")}>
+                                        <div><dt>{t("common.category")}</dt><dd>{localizeClassificationSummaryValue(summary.categoryLabel, effectiveLanguage)}</dd></div>
+                                        <div><dt>{t("common.productivity")}</dt><dd>{localizeClassificationSummaryValue(summary.productivityLabel, effectiveLanguage)}</dd></div>
+                                        <div><dt>{t("common.source")}</dt><dd>{localizeClassificationSummaryValue(summary.sourceLabel, effectiveLanguage)}</dd></div>
+                                        <div><dt>{t("classification.confidence")}</dt><dd>{localizeClassificationSummaryValue(summary.confidenceLabel, effectiveLanguage)}</dd></div>
                                       </dl>
                                     ) : null}
                                   </div>
                                   <div className="classification-panel-view__capture-timeline">
-                                    <span className="label-mono">Capture slices</span>
-                                    <div className="classification-panel-view__capture-slice-list" role="list" aria-label={`Capture slices for ${row.label}`}>
+                                    <span className="label-mono">{t("classification.captureSlices")}</span>
+                                    <div className="classification-panel-view__capture-slice-list" role="list" aria-label={t("classification.captureSlicesFor", { label: row.label })}>
                                       {row.segments.map((segment, index) => {
-                                        const segmentRange = `${formatTimeLabel(segment.startedAt)} - ${formatTimeLabel(segment.endedAt)}`;
-                                        const segmentDuration = formatCompactDurationFromSeconds(segment.durationSeconds);
+                                        const segmentRange = `${formatLocalizedTimeLabel(segment.startedAt, effectiveLanguage)} - ${formatLocalizedTimeLabel(segment.endedAt, effectiveLanguage)}`;
+                                        const segmentDuration = formatLocalizedCompactDurationFromSeconds(segment.durationSeconds, effectiveLanguage);
                                         const segmentTitle = classificationActivityLabel(segment);
                                         return (
-                                          <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={`Capture slice ${index + 1}: ${segmentTitle}, ${segmentRange}, ${segmentDuration}`}>
+                                          <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={t("classification.captureSliceAria", { index: index + 1, title: segmentTitle, range: segmentRange, duration: segmentDuration })}>
                                             <div className="classification-panel-view__capture-slice-copy">
                                               <strong className="classification-panel-view__capture-slice-title" title={segmentTitle}>{segmentTitle}</strong>
                                               <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
@@ -575,12 +638,12 @@ export function ClassificationPage({
                 </>
               ) : (
                 <div className="classification-panel-view__empty">
-                  <span className="label-mono">Activity details</span>
-                  <strong>Select an app or site to see activity details.</strong>
-                  <p>Choose a source from the middle panel to inspect its titles, pages, and time distribution.</p>
+                  <span className="label-mono">{t("classification.activityDetails")}</span>
+                  <strong>{t("classification.selectSourceTitle")}</strong>
+                  <p>{t("classification.selectSourceDetail")}</p>
                   {firstSourceKey ? (
                     <div className="classification-panel-view__empty-actions">
-                      <button type="button" className="app-btn app-btn--secondary" onClick={() => onSourceSelect(firstSourceKey)}>Open first source</button>
+                      <button type="button" className="app-btn app-btn--secondary" onClick={() => onSourceSelect(firstSourceKey)}>{t("classification.openFirstSource")}</button>
                     </div>
                   ) : null}
                 </div>
@@ -589,14 +652,14 @@ export function ClassificationPage({
           </div>
         </section>
       ) : (
-        <section className="classification-panel-view classification-panel-view--empty-state" aria-label="Classification panel view">
+        <section className="classification-panel-view classification-panel-view--empty-state" aria-label={t("classification.panelAria")}>
           <div className="classification-panel-view__empty classification-panel-view__empty--full">
-            <span className="label-mono">Classification</span>
-            <strong>No category data yet</strong>
-            <p>Category, source, and activity details will appear here once tracking captures activity for this range.</p>
+            <span className="label-mono">{t("classification.emptyLabel")}</span>
+            <strong>{t("classification.noDataTitle")}</strong>
+            <p>{t("classification.noDataDetail")}</p>
             <div className="classification-panel-view__empty-actions">
-              {!isCurrentClassificationRange ? <button type="button" className="app-btn app-btn--secondary" onClick={onTodayClassificationRange}>Today</button> : null}
-              <button type="button" className="app-btn app-btn--secondary" onClick={() => onRangeChange(alternateRange)}>Show {alternateRange.toLowerCase()}</button>
+              {!isCurrentClassificationRange ? <button type="button" className="app-btn app-btn--secondary" onClick={onTodayClassificationRange}>{t("classification.today")}</button> : null}
+              <button type="button" className="app-btn app-btn--secondary" onClick={() => onRangeChange(alternateRange)}>{t("classification.showRange", { range: t(alternateRange === "Day" ? "common.day" : "common.week") })}</button>
             </div>
           </div>
         </section>

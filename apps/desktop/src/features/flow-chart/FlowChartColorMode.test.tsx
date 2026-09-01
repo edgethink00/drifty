@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { describe, expect, it } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 function makeFlowBlock(overrides: Partial<FlowBlock> = {}): FlowBlock {
   return {
@@ -26,6 +27,20 @@ function makeFlowBlock(overrides: Partial<FlowBlock> = {}): FlowBlock {
 }
 
 describe("FlowChartView color mode", () => {
+  it("localizes the Day chart controls, legend, and cell description in Korean", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByLabelText("3분 단위 활동 흐름")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "카테고리" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "생산성" })).toBeTruthy();
+    expect(screen.getByText("집중")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /작업.*집중.*시간대.*소요 시간/i })).toBeTruthy();
+  });
+
   it("switches flow cells from category color classes to productivity color classes", () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 

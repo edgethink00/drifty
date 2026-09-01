@@ -5,7 +5,7 @@ import type { StartOfWeek } from "./settingsStorage";
 import {
   START_OF_DAY_OPTIONS,
 } from "./settingsStorage";
-import { useLocalization } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
 
@@ -38,7 +38,11 @@ export function GeneralSettingsSection({
   onStartOfDayChange,
   onStartOfWeekChange,
 }: GeneralSettingsSectionProps) {
-  const { effectiveLanguage, t } = useLocalization();
+  const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
+  const languageOptions = [
+    { value: "en", label: t("settings.general.languageEnglish") },
+    { value: "ko", label: t("settings.general.languageKoreanBeta") },
+  ] satisfies ReadonlyArray<{ value: DisplayLanguage; label: string }>;
   const startOfWeekOptions = [
     { value: "monday", label: t("settings.weekday.monday") },
     { value: "sunday", label: t("settings.weekday.sunday") },
@@ -52,6 +56,7 @@ export function GeneralSettingsSection({
   return (
     <div className="settings-section settings-section--general">
       <div className="settings-block"><h3>{t("settings.section.general")}</h3>
+        <div className="settings-row"><div><div className="lbl">{t("settings.general.language")}</div><div className="desc">{t("settings.general.languageDescription")}</div></div><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.language")} value={effectiveLanguage} options={languageOptions} onChange={setDisplayLanguage} /></div></div>
         <div className="settings-row"><label><div className="lbl">{t("settings.general.startOfDay")}</div><div className="desc">{t("settings.general.startOfDayDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfDay")} value={startOfDayValue} options={startOfDayOptions} onChange={onStartOfDayChange} /></div></div>
         <div className="settings-row"><label><div className="lbl">{t("settings.general.startOfWeek")}</div><div className="desc">{t("settings.general.startOfWeekDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfWeek")} value={startOfWeek} options={startOfWeekOptions} onChange={onStartOfWeekChange} /></div></div>
       </div>

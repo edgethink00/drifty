@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { normalizeStartOfDayMinutes } from "@drifty/domain";
 import { buildIsoDayList, formatCompactHourLabel } from "../../lib/formatting";
 import { PROJECT_TREND_CHART_BOUNDS } from "./projectTrendView";
+import { useLocalization } from "../localization/LocalizationContext";
 import "./project-trend-chart.css";
 
 type AxisTickStyle = CSSProperties & { readonly "--ptc-axis-x": string };
@@ -90,16 +91,17 @@ export function ProjectTrendChartSkeleton({
   variant = "detail",
   onOpenTrends,
 }: ProjectTrendChartSkeletonProps): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const ticks = isDayMode ? hourTicks(startOfDayMinutes) : dayTicks(startDay, endDay);
   const isOverview = variant === "overview";
-  const overviewRangeLabel = windowLabel.toLowerCase();
   const overviewTicks = buildIsoDayList(startDay, endDay).map((day) => ({ id: day, label: compactDayLabel(day), x: 0 }));
   const visibleTicks = isOverview ? overviewTicks : ticks;
+  const overviewRangeLabel = effectiveLanguage === "ko" ? windowLabel : windowLabel.toLowerCase();
 
   return (
-    <section className={`editorial-panel editorial-panel--soft insight-chart-panel ptc-panel${isOverview ? " ptc-panel--overview" : ""}`} aria-label={isOverview ? `${windowLabel} project overview loading` : "Project time trend loading"} aria-busy="true">
+    <section className={`editorial-panel editorial-panel--soft insight-chart-panel ptc-panel${isOverview ? " ptc-panel--overview" : ""}`} aria-label={t(isOverview ? "projects.chart.overviewLoading" : "projects.chart.trendLoading", { span: windowLabel })} aria-busy="true">
       <div className="insight-panel-head">
-        <span className="label-mono">{isOverview ? `Project allocation · ${overviewRangeLabel}` : <>Project time &middot; {windowLabel}</>}</span>
+        <span className="label-mono">{isOverview ? t("projects.chart.allocationLabel", { span: overviewRangeLabel }) : t("projects.chart.time", { span: windowLabel })}</span>
         <div className="ptc-panel__head-actions">
           {legendProjects.length > 0 ? (
             <div className="insight-panel-head__legend">
@@ -113,7 +115,7 @@ export function ProjectTrendChartSkeleton({
           ) : null}
           {isOverview && onOpenTrends ? (
             <button type="button" className="app-btn app-btn--quiet app-btn--compact ptc-overview__link" onClick={onOpenTrends}>
-              Explore in Trends <span aria-hidden="true">&rarr;</span>
+              {t("projects.chart.explore")} <span aria-hidden="true">&rarr;</span>
             </button>
           ) : null}
         </div>

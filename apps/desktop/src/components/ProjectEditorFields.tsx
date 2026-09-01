@@ -1,5 +1,6 @@
 import { ProjectColorToken } from "./ProjectColorToken";
 import "./project-editor-fields.css";
+import { useLocalization } from "../features/localization/LocalizationContext";
 
 export const PROJECT_COLOR_SWATCHES = [
   { color: "#6366f1", name: "Indigo" },
@@ -36,6 +37,7 @@ export function ProjectEditorFields({
   onDescriptionChange,
   onColorChange,
 }: ProjectEditorFieldsProps): JSX.Element {
+  const { t } = useLocalization();
   const nameId = `${idPrefix}-name`;
   const descriptionId = `${idPrefix}-description`;
   const colorLabelId = `${idPrefix}-color-label`;
@@ -43,7 +45,7 @@ export function ProjectEditorFields({
   return (
     <div className="project-editor-fields">
       <label className="project-editor-field" htmlFor={nameId}>
-        <span className="label-mono">Name</span>
+        <span className="label-mono">{t("projects.editor.name")}</span>
         <input
           id={nameId}
           className="settings-input"
@@ -51,29 +53,29 @@ export function ProjectEditorFields({
           value={name}
           maxLength={120}
           autoFocus
-          placeholder="e.g. Q3 launch"
+          placeholder={t("projects.editor.namePlaceholder")}
           onChange={(event) => onNameChange(event.target.value)}
         />
       </label>
       <label className="project-editor-field" htmlFor={descriptionId}>
-        <span className="label-mono">Description</span>
+        <span className="label-mono">{t("projects.editor.description")}</span>
         <textarea
           id={descriptionId}
           className="settings-input project-editor-field__textarea"
           value={description}
           rows={4}
           maxLength={2000}
-          placeholder="What belongs to this project? Include the apps, sites, documents, and outcomes that should count."
+          placeholder={t("projects.editor.descriptionPlaceholder")}
           onChange={(event) => onDescriptionChange(event.target.value)}
         />
       </label>
       <div className="project-editor-field">
-        <span className="label-mono" id={colorLabelId}>Color</span>
+        <span className="label-mono" id={colorLabelId}>{t("projects.editor.color")}</span>
         <ProjectColorToken
           value={color}
           swatches={PROJECT_COLOR_SWATCHES}
           usedColors={usedColors}
-          ariaLabel="Project color"
+          ariaLabel={t("projects.editor.colorAria")}
           onPick={onColorChange}
         />
       </div>

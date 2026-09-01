@@ -1,12 +1,13 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { formatRoundedDuration } from "../../lib/formatting";
+import { formatLocalizedDuration } from "../../lib/formatting";
 import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { LeaderboardBoard } from "./LeaderboardBoard";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
-import { formatRank, ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
+import { ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
 import { RankEmbedsModal } from "./RankEmbedsModal";
+import { useLocalization } from "../localization/LocalizationContext";
 
 export type LeaderboardPublicProfileControls = {
   readonly card: FocusCardControls;
@@ -84,9 +85,10 @@ export function LeaderboardView({
   onPeriodChange,
   onSelectProfile,
 }: LeaderboardViewProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [searchQuery, setSearchQuery] = useState("");
   const [rankEmbedOpen, setRankEmbedOpen] = useState(false);
-  const previewName = resolvePublicNamePreview(profileDisplayName, email);
+  const previewName = resolvePublicNamePreview(profileDisplayName, email, effectiveLanguage);
   // Display names are intentionally non-unique. Only the authenticated own-entry
   // RPC rank may associate a public row with this account.
   const matchedOwnRow = ownRank === null
@@ -104,23 +106,23 @@ export function LeaderboardView({
   const last30FocusSeconds = (dailyProductivity ?? []).reduce((sum, point) => sum + Math.max(0, point.focus), 0);
   const localMetricsStatus = publicProfile?.localMetricsStatus ?? "ready";
   const localMetricsStatusMessage = localMetricsStatus === "loading"
-    ? "Calculating your local focus totals…"
+    ? t("leaderboard.calculatingLocal")
     : localMetricsStatus === "error"
-      ? "Local focus totals are unavailable."
+      ? t("leaderboard.localUnavailable")
       : dailyProductivity === null
-        ? "Calculating your 30-day focus total…"
+        ? t("leaderboard.calculatingThirtyDays")
         : null;
-  const socialPills = buildSocialPills(profileDraft);
+  const socialPills = buildSocialPills(profileDraft).map((pill) => pill.key === "website" ? { ...pill, label: t("dashboard.today.website") } : pill);
   const filteredLeaderboard = useMemo(() => {
     if (!trimmedSearchQuery) return leaderboard;
     return leaderboard.filter((row) => row.display_name.toLowerCase().includes(trimmedSearchQuery) || String(row.rank).includes(trimmedSearchQuery));
   }, [leaderboard, trimmedSearchQuery]);
 
   if (!isSupabaseEnabled) {
-    return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Sync required" title="Leaderboard unavailable" detail="Supabase is not configured for this workspace." /></section>;
+    return <section className="leaderboard-panel" aria-label={t("leaderboard.title")}><StateBlock eyebrow={t("leaderboard.syncRequired")} title={t("leaderboard.unavailable")} detail={t("leaderboard.unavailableDetail")} /></section>;
   }
   if (error && !isLoading) {
-    return <section className="leaderboard-panel" aria-label="Leaderboard"><StateBlock eyebrow="Fetch error" title="Unable to load leaderboard" detail={error} /></section>;
+    return <section className="leaderboard-panel" aria-label={t("leaderboard.title")}><StateBlock eyebrow={t("leaderboard.fetchError")} title={t("leaderboard.loadError")} detail={error} /></section>;
   }
 
   const resolvedOwnFocusSeconds = ownFocusSeconds
@@ -130,12 +132,12 @@ export function LeaderboardView({
   const publicRankReady = Boolean(publicProfile?.publicId && publicProfile.draft.isPublic && currentUserRank !== null);
 
   return (
-    <section className="leaderboard-panel" aria-label="Leaderboard" aria-busy={isLoading || undefined}>
+    <section className="leaderboard-panel" aria-label={t("leaderboard.title")} aria-busy={isLoading || undefined}>
       <div className={`leaderboard-panel__stack${isLoading ? " leaderboard-loading-shell" : ""}`}>
-        <section className="leaderboard-profile-block" aria-label="Leaderboard participation" aria-hidden={isLoading || undefined}>
+        <section className="leaderboard-profile-block" aria-label={t("leaderboard.participationAria")} aria-hidden={isLoading || undefined}>
           <section
             className="leaderboard-hero"
-            aria-label="Your leaderboard participation"
+            aria-label={t("leaderboard.yourParticipationAria")}
             style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
           >
             <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
@@ -168,12 +170,12 @@ export function LeaderboardView({
                         style={{ justifySelf: "start" }}
                       >
                         {!isParticipationResolved
-                          ? "Checking your status"
+                          ? t("leaderboard.checkingStatus")
                           : isOptedIn
                             ? currentUserRank !== null
-                              ? formatRank(currentUserRank)
-                              : "On the board"
-                            : "Not on the board yet"}
+                              ? `#${currentUserRank}`
+                              : t("leaderboard.onBoard")
+                            : t("leaderboard.notOnBoard")}
                       </span>
                       <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
                       {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
@@ -182,7 +184,7 @@ export function LeaderboardView({
                       <button
                         type="button"
                         className="leaderboard-profile-edit-button"
-                        aria-label="Edit public profile"
+                        aria-label={t("leaderboard.editProfileAria")}
                         onClick={editProfile}
                         style={{ position: "absolute", top: 0, right: 0, margin: 0 }}
                       >
@@ -195,20 +197,20 @@ export function LeaderboardView({
               {publicProfile || isLoading ? (
                 <>
                   <div
-                    aria-label="Focus totals"
+                    aria-label={t("leaderboard.focusTotalsAria")}
                     style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%" }}
                   >
                     {isLoading ? (
                       <>
-                        <HeroStat label="Focus · this week" value="" accent loading />
-                        <HeroStat label="Daily avg" value="" loading />
-                        <HeroStat label="Last 30 days" value="" loading />
+                        <HeroStat label={t("leaderboard.focusThisWeek")} value="" accent loading />
+                        <HeroStat label={t("leaderboard.dailyAverage")} value="" loading />
+                        <HeroStat label={t("leaderboard.lastThirtyDays")} value="" loading />
                       </>
                     ) : (
                       <>
-                        <HeroStat label="Focus · this week" value={localMetricsStatus === "ready" ? formatRoundedDuration(weekFocusSeconds) : "—"} accent />
-                        <HeroStat label="Daily avg" value={localMetricsStatus === "ready" ? formatRoundedDuration(dailyAverageSeconds) : "—"} />
-                        <HeroStat label="Last 30 days" value={dailyProductivity !== null ? formatRoundedDuration(last30FocusSeconds) : "—"} />
+                        <HeroStat label={t("leaderboard.focusThisWeek")} value={localMetricsStatus === "ready" ? formatLocalizedDuration(weekFocusSeconds, effectiveLanguage) : "—"} accent />
+                        <HeroStat label={t("leaderboard.dailyAverage")} value={localMetricsStatus === "ready" ? formatLocalizedDuration(dailyAverageSeconds, effectiveLanguage) : "—"} />
+                        <HeroStat label={t("leaderboard.lastThirtyDays")} value={dailyProductivity !== null ? formatLocalizedDuration(last30FocusSeconds, effectiveLanguage) : "—"} />
                       </>
                     )}
                   </div>
@@ -231,7 +233,7 @@ export function LeaderboardView({
                     <span
                       className="leaderboard-hero__participation-placeholder"
                       role="status"
-                      aria-label="Checking your leaderboard participation"
+                      aria-label={t("leaderboard.checkingParticipationAria")}
                     />
                   ) : isLoading ? (
                     <button
@@ -242,7 +244,7 @@ export function LeaderboardView({
                       aria-describedby="leaderboard-participation-privacy"
                       disabled
                     >
-                      {isOptedIn ? "Leave leaderboard" : "Join leaderboard"}
+                      {isOptedIn ? t("leaderboard.leave") : t("leaderboard.join")}
                     </button>
                   ) : isOptedIn ? (
                     <button
@@ -252,23 +254,23 @@ export function LeaderboardView({
                       onClick={() => onOptOut?.()}
                       disabled={isActionLoading || !onOptOut}
                     >
-                      {isActionLoading ? "Leaving…" : "Leave leaderboard"}
+                      {isActionLoading ? t("leaderboard.leaving") : t("leaderboard.leave")}
                     </button>
                   ) : (
                     <button
                       type="button"
                       className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
                       aria-describedby="leaderboard-participation-privacy"
-                      title="Publishes rank totals. Profile visibility is separate."
+                      title={t("leaderboard.joinTitle")}
                       onClick={() => (isSignedIn ? onOptIn?.() : onSignIn?.())}
                       disabled={isActionLoading || (isSignedIn ? !onOptIn : !onSignIn)}
                     >
-                      {isActionLoading ? "Joining…" : "Join leaderboard"}
+                      {isActionLoading ? t("leaderboard.joining") : t("leaderboard.join")}
                     </button>
                   )}
                 </div>
                 <p id="leaderboard-participation-privacy" className="leaderboard-hero__privacy-note">
-                  Only your total focus time and public profile details are shared. Activity details stay private.
+                  {t("leaderboard.privacy")}
                 </p>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
@@ -277,14 +279,14 @@ export function LeaderboardView({
                     <>
                       <button type="button" className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono" disabled>
                         <EmbedIcon />
-                        Embed
+                        {t("leaderboard.embed")}
                       </button>
                       {!isParticipationResolved ? (
                         <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
                       ) : isOptedIn ? (
                         <button type="button" className="app-btn app-btn--quiet profile-btn hero-action-btn" disabled>
                           <ShareIcon />
-                          Share
+                          {t("leaderboard.share")}
                         </button>
                       ) : null}
                       {socialPills.map((pill) => (
@@ -301,17 +303,17 @@ export function LeaderboardView({
                       type="button"
                       className="app-btn app-btn--secondary profile-btn hero-action-btn hero-action-btn--mono"
                       onClick={() => setRankEmbedOpen(true)}
-                      title={!publicRankReady ? "Join and make your profile public to activate this embed" : undefined}
+                      title={!publicRankReady ? t("leaderboard.embedDisabledTitle") : undefined}
                     >
                       <EmbedIcon />
-                      Embed
+                      {t("leaderboard.embed")}
                     </button>
                     {!isParticipationResolved ? (
                       <span className="leaderboard-hero__participation-placeholder leaderboard-hero__participation-placeholder--share" aria-hidden="true" />
                     ) : isOptedIn ? (
                       <button type="button" className="app-btn app-btn--quiet profile-btn hero-action-btn" onClick={publicProfile.onCopyProfileLink}>
                         <ShareIcon />
-                        Share
+                        {t("leaderboard.share")}
                       </button>
                     ) : null}
                   </>
@@ -380,11 +382,11 @@ function resolveParticipantCount(rows: readonly LeaderboardRow[], ownParticipant
   return resolved < observedMinimum ? null : resolved;
 }
 
-function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null) {
+function resolvePublicNamePreview(profileDisplayName?: string | null, email?: string | null, language: "en" | "ko" = "en") {
   const trimmedName = profileDisplayName?.trim();
   if (trimmedName) return trimmedName;
   const emailPrefix = email?.split("@")[0]?.trim();
-  return emailPrefix || "member";
+  return emailPrefix || (language === "ko" ? "멤버" : "member");
 }
 
 function resolveProfileHandle(email?: string | null): string | null {

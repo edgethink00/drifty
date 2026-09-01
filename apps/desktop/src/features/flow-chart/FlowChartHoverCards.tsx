@@ -1,13 +1,16 @@
 import type { CSSProperties, Ref } from "react";
-import { secondsToLabel, type FlowBlock } from "@drifty/domain";
+import type { FlowBlock } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { ClassificationSourceBadge } from "../classification/ClassificationSourceBadge";
 import { getViewportSafeHoverPosition, HOVER_CARD_OFFSET } from "../../components/hoverCardPosition";
-import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
-import { blockDetailLabel, blockDisplayName, groupContextLabel } from "./flowChartFormat";
+import { blockDetailLabel, blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { useLocalization } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 export type FlowHoverState = {
   readonly group: FlowBlockHoverGroup;
@@ -72,6 +75,7 @@ export function buildLegendActivityBreakdown(
 }
 
 export function FlowLegendHoverCard({ hover, appIcons, cardRef }: { readonly hover: FlowLegendHoverState; readonly appIcons: Record<string, string | null>; readonly cardRef?: Ref<HTMLDivElement> }) {
+  const { effectiveLanguage, t } = useLocalization();
   return (
     <div ref={cardRef} className="flow-hover-card category-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
       <div className="category-hover-card__head">
@@ -88,10 +92,10 @@ export function FlowLegendHoverCard({ hover, appIcons, cardRef }: { readonly hov
                 {item.siteDomain ? <SiteFavicon domain={item.siteDomain} size={20} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={label} iconSrc={item.siteTitle ? null : iconSrc} size="sm" />}
               </span>
               <span>{label}</span>
-              <strong>{secondsToLabel(item.totalSeconds)}</strong>
+              <strong>{formatLocalizedCompactDurationFromSeconds(item.totalSeconds, effectiveLanguage)}</strong>
             </div>
           );
-        }) : <span className="category-hover-card__empty">No app breakdown yet.</span>}
+        }) : <span className="category-hover-card__empty">{t("dashboard.today.noAppBreakdown")}</span>}
       </div>
     </div>
   );
@@ -117,12 +121,14 @@ export function FlowHoverCard({
   readonly projectsById?: ReadonlyMap<string, ProjectLegendEntry>;
   readonly showClassificationSource?: boolean;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const { block } = hover.group;
   const iconSrc = appIcons[block.bundleId ?? block.appName] ?? null;
   const displayName = blockDisplayName(block);
   const detailLabel = blockDetailLabel(block);
   const deviceLabel = flowDeviceBadgeLabel(block.deviceId, deviceLabelById);
   const project = block.projectId ? projectsById?.get(block.projectId) ?? null : null;
+  const contextLabel = `${block.siteDomain && block.browserName ? `${block.browserName} · ` : ""}${formatGroupTimeRange(hover.group)} · ${formatLocalizedCompactDurationFromSeconds(hover.group.durationSeconds, effectiveLanguage)}`;
 
   return (
     <div ref={cardRef} className="flow-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
@@ -130,15 +136,15 @@ export function FlowHoverCard({
         {block.siteDomain ? <SiteFavicon domain={block.siteDomain} size={24} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={displayName} iconSrc={iconSrc} size="sm" />}
         <div>
           <strong>{displayName}</strong>
-          <span>{groupContextLabel(hover.group)}</span>
+          <span>{contextLabel}</span>
         </div>
       </div>
       <div className="flow-hover-card__identity-row">
-        <FlowIdentityPill color={CATEGORY_COLORS[block.category]} label={categoryLabel(block.category)} />
-        <FlowIdentityPill color={PRODUCTIVITY_COLORS[block.productivity]} label={productivityLabel(block.productivity)} />
+        <FlowIdentityPill color={CATEGORY_COLORS[block.category]} label={localizedCategoryLabel(block.category, t)} />
+        <FlowIdentityPill color={PRODUCTIVITY_COLORS[block.productivity]} label={localizedProductivityLabel(block.productivity, t)} />
         {project ? <FlowIdentityPill color={block.projectColor ?? project.color} label={project.name} /> : null}
-        {deviceLabel ? <span className="flow-hover-card__device-pill">{deviceLabel}</span> : null}
-        {showClassificationSource ? <ClassificationSourceBadge source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} /> : null}
+        {deviceLabel ? <span className="flow-hover-card__device-pill">{effectiveLanguage === "ko" && deviceLabel === "Synced device" ? "동기화 기기" : deviceLabel}</span> : null}
+        {showClassificationSource ? <ClassificationSourceBadge source={block.classificationSource} ai={block.aiClassification} aiCached={block.aiCachedClassification} language={effectiveLanguage} /> : null}
       </div>
       {detailLabel ? <p className="flow-hover-card__detail">{detailLabel}</p> : null}
     </div>

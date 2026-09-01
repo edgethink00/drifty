@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { formatRoundedDuration } from "../../lib/formatting";
+import { formatLocalizedDuration } from "../../lib/formatting";
 import { copyTextToClipboard } from "../profile/ProfileModals";
 import type { BadgeThemeOption } from "../share/embedSnippets";
 import type { LeaderboardPeriod } from "./leaderboardService";
@@ -13,6 +13,7 @@ import {
 } from "./rankEmbedSnippets";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type RankEmbedsModalProps = {
   readonly avatarUrl: string;
@@ -70,6 +71,7 @@ export function RankEmbedsModal({
   rank,
   onClose,
 }: RankEmbedsModalProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [design, setDesign] = useState<RankEmbedDesign>("minimal");
   const [period, setPeriod] = useState<LeaderboardPeriod>(initialPeriod);
   const [theme, setTheme] = useState<BadgeThemeOption>("light");
@@ -92,7 +94,11 @@ export function RankEmbedsModal({
   };
 
   const rankLabel = isRanked && rank !== null ? `#${rank}` : "—";
-  const focusLabel = isRanked ? formatRoundedDuration(focusSeconds) : "—";
+  const focusLabel = isRanked ? formatLocalizedDuration(focusSeconds, effectiveLanguage) : "—";
+  const periodLabel = (value: LeaderboardPeriod) => t(value === "daily" ? "leaderboard.daily" : value === "weekly" ? "leaderboard.weekly" : "leaderboard.monthly");
+  const focusPeriodLabel = (value: LeaderboardPeriod) => t(value === "daily" ? "leaderboard.embed.focusToday" : value === "weekly" ? "leaderboard.embed.focusWeek" : "leaderboard.embed.focusMonth");
+  const designLabel = (value: RankEmbedDesign) => t(value === "minimal" ? "leaderboard.embed.minimal" : value === "compact" ? "leaderboard.embed.compact" : "leaderboard.embed.card");
+  const accentName = (name: string) => effectiveLanguage === "ko" ? ({ Green: "초록", Indigo: "인디고", Blue: "파랑", Pink: "분홍", Amber: "황금", Teal: "청록" }[name] ?? name) : name;
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
@@ -104,11 +110,11 @@ export function RankEmbedsModal({
         aria-labelledby="rank-embeds-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label="Close embed" onClick={onClose} />
+        <ModalCloseButton label={t("leaderboard.embed.close")} onClick={onClose} />
         <div className="profile-modal__header rank-embeds-modal__header">
           <div>
-            <h2 id="rank-embeds-title">Rank embed</h2>
-            <p>Your current rank and period focus. Nothing else.</p>
+            <h2 id="rank-embeds-title">{t("leaderboard.embed.title")}</h2>
+            <p>{t("leaderboard.embed.detail")}</p>
           </div>
         </div>
 
@@ -116,22 +122,22 @@ export function RankEmbedsModal({
           <div className="rank-embeds-modal__main">
             <div className={`rank-embed-stage rank-embed-stage--${theme}`} style={accentStyle(accent)}>
               <div className="rank-embed-stage__group">
-                <span className="rank-embed-stage__caption">Website</span>
+                <span className="rank-embed-stage__caption">{t("leaderboard.embed.website")}</span>
                 {design === "card" ? (
                   <div className="rank-embed-preview">
                     <div className="rank-embed-preview__top">
                       <RankEmbedAvatar avatarUrl={avatarUrl} displayName={displayName} />
                       <span className="rank-embed-preview__name">{displayName}</span>
-                      <span className="rank-embed-preview__rank">{isRanked && rank !== null ? `#${rank} · ${PERIOD_LABEL[period]}` : PERIOD_LABEL[period]}</span>
+                      <span className="rank-embed-preview__rank">{isRanked && rank !== null ? `#${rank} · ${periodLabel(period)}` : periodLabel(period)}</span>
                     </div>
                     <div className="rank-embed-preview__focus">
-                      <span className="rank-embed-preview__label">{FOCUS_LABEL[period]}</span>
+                      <span className="rank-embed-preview__label">{focusPeriodLabel(period)}</span>
                       <strong className="rank-embed-preview__value">{focusLabel}</strong>
                     </div>
                     <div className="rank-embed-preview__foot">
                       <span className="rank-embed-preview__dot" />
-                      <span>live ranking</span>
-                      <span className="rank-embed-preview__brand">powered by <b>drifty</b> ↗</span>
+                      <span>{t("leaderboard.embed.liveRanking")}</span>
+                      <span className="rank-embed-preview__brand">{t("leaderboard.embed.poweredBy")} <b>drifty</b> ↗</span>
                     </div>
                   </div>
                 ) : design === "compact" ? (
@@ -143,18 +149,18 @@ export function RankEmbedsModal({
                   </div>
                 ) : (
                   <div className="rank-embed-preview rank-embed-preview--minimal">
-                    <span className="rank-embed-preview__label">{FOCUS_LABEL[period]}</span>
+                    <span className="rank-embed-preview__label">{focusPeriodLabel(period)}</span>
                     <strong className="rank-embed-preview__value rank-embed-preview__value--lg">{focusLabel}</strong>
                     <span className="rank-embed-preview__minimal-rank">
-                      {isRanked && rank !== null ? `rank #${rank}` : "unranked"} · <b>drifty</b>
+                      {isRanked && rank !== null ? `${t("leaderboard.embed.rank")} #${rank}` : t("leaderboard.embed.unranked")} · <b>drifty</b>
                     </span>
                   </div>
                 )}
               </div>
               <div className="rank-embed-stage__group">
-                <span className="rank-embed-stage__caption">README badge</span>
+                <span className="rank-embed-stage__caption">{t("leaderboard.embed.readmeBadge")}</span>
                 <span className="rank-embed-badge" role="img" aria-label={`rank: ${rankLabel} · ${focusLabel}`}>
-                  <span className="rank-embed-badge__label">rank</span>
+                  <span className="rank-embed-badge__label">{t("leaderboard.embed.rank")}</span>
                   <span className="rank-embed-badge__value">{isRanked ? `${rankLabel} · ${focusLabel}` : "—"}</span>
                 </span>
               </div>
@@ -162,64 +168,64 @@ export function RankEmbedsModal({
 
             <div className="rank-embed-snippets">
               <div className="rank-embed-snippet">
-                <span className="label-mono">Website · HTML</span>
+                <span className="label-mono">{t("leaderboard.embed.website")} · HTML</span>
                 <div className="profile-copy-row profile-embed-card__variant-row">
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={htmlSnippet} onFocus={(event) => event.currentTarget.select()} />
-                  <button type="button" className="modal-btn modal-btn--secondary" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? "Copied" : "Copy"}</button>
+                  <button type="button" className="modal-btn modal-btn--secondary" disabled={!live} onClick={() => void copy("html", htmlSnippet)}>{copied === "html" ? t("leaderboard.embed.copied") : t("leaderboard.embed.copy")}</button>
                 </div>
               </div>
               <div className="rank-embed-snippet">
                 <span className="label-mono">README · Markdown</span>
                 <div className="profile-copy-row profile-embed-card__variant-row">
                   <input className="settings-input profile-field profile-field--code profile-embed-card__code" readOnly disabled={!live} value={markdownSnippet} onFocus={(event) => event.currentTarget.select()} />
-                  <button type="button" className="modal-btn modal-btn--secondary" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? "Copied" : "Copy"}</button>
+                  <button type="button" className="modal-btn modal-btn--secondary" disabled={!live} onClick={() => void copy("markdown", markdownSnippet)}>{copied === "markdown" ? t("leaderboard.embed.copied") : t("leaderboard.embed.copy")}</button>
                 </div>
-                {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">Open live preview ↗</a> : null}
+                {live ? <a className="rank-embed-snippet__preview" href={embedUrl} target="_blank" rel="noreferrer">{t("leaderboard.embed.openPreview")}</a> : null}
               </div>
               {!live ? (
                 <div className="rank-embed-snippets__lock" role="note">
                   <LockIcon />
-                  <strong>Embeds are not public yet</strong>
-                  <p>{!isProfilePublic ? "Turn on your public profile first." : !isRanked ? "Join the leaderboard first." : "Save your profile first."}</p>
+                  <strong>{t("leaderboard.embed.locked")}</strong>
+                  <p>{!isProfilePublic ? t("leaderboard.embed.publicFirst") : !isRanked ? t("leaderboard.embed.joinFirst") : t("leaderboard.embed.saveFirst")}</p>
                 </div>
               ) : null}
             </div>
           </div>
 
-          <div className="rank-embed-options" aria-label="Embed options">
+          <div className="rank-embed-options" aria-label={t("leaderboard.embed.optionsAria")}>
             <div>
-              <span className="label-mono">Design</span>
-              <div className="leaderboard-period-control seg" role="group" aria-label="Embed design">
+              <span className="label-mono">{t("leaderboard.embed.design")}</span>
+              <div className="leaderboard-period-control seg" role="group" aria-label={t("leaderboard.embed.designAria")}>
                 {DESIGN_OPTIONS.map((option) => (
                   <button key={option.value} type="button" className={design === option.value ? "on" : ""} aria-pressed={design === option.value} onClick={() => setDesign(option.value)}>
-                    <span>{option.label}</span>
+                    <span>{designLabel(option.value)}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <span className="label-mono">Period</span>
-              <div className="leaderboard-period-control seg" role="group" aria-label="Embed period">
+              <span className="label-mono">{t("leaderboard.embed.period")}</span>
+              <div className="leaderboard-period-control seg" role="group" aria-label={t("leaderboard.embed.periodAria")}>
                 {(["daily", "weekly", "monthly"] as const).map((option) => (
                   <button key={option} type="button" className={period === option ? "on" : ""} aria-pressed={period === option} onClick={() => setPeriod(option)}>
-                    <span>{PERIOD_LABEL[option]}</span>
+                    <span>{periodLabel(option)}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <span className="label-mono">Theme</span>
-              <div className="leaderboard-period-control seg" role="group" aria-label="Embed theme">
+              <span className="label-mono">{t("leaderboard.embed.theme")}</span>
+              <div className="leaderboard-period-control seg" role="group" aria-label={t("leaderboard.embed.themeAria")}>
                 {(["light", "dark"] as const).map((option) => (
                   <button key={option} type="button" className={theme === option ? "on" : ""} aria-pressed={theme === option} onClick={() => setTheme(option)}>
-                    <span>{option === "light" ? "Light" : "Dark"}</span>
+                    <span>{t(option === "light" ? "settings.appearance.light" : "settings.appearance.dark")}</span>
                   </button>
                 ))}
               </div>
             </div>
             <div>
-              <span className="label-mono">Accent</span>
-              <div className="rank-embed-accents" role="radiogroup" aria-label="Embed accent color">
+              <span className="label-mono">{t("leaderboard.embed.accent")}</span>
+              <div className="rank-embed-accents" role="radiogroup" aria-label={t("leaderboard.embed.accentAria")}>
                 {ACCENT_OPTIONS.map((option) => (
                   <button
                     key={option.color}
@@ -228,8 +234,8 @@ export function RankEmbedsModal({
                     style={{ background: option.color }}
                     role="radio"
                     aria-checked={accent === option.color}
-                    aria-label={`Accent ${option.name}`}
-                    title={option.name}
+                    aria-label={t("leaderboard.embed.accentOptionAria", { name: accentName(option.name) })}
+                    title={accentName(option.name)}
                     onClick={() => setAccent(option.color)}
                   />
                 ))}

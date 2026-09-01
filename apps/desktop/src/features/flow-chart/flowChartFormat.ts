@@ -3,6 +3,22 @@ import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactHourLabel } from "../../lib/formatting";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 
+export type FlowCellLabelFormat = {
+  readonly categoryLabel: (block: FlowBlock) => string;
+  readonly productivityLabel: (block: FlowBlock) => string;
+  readonly durationLabel: (seconds: number) => string;
+  readonly timeBlockPrefix: string;
+  readonly durationPrefix: string;
+};
+
+const DEFAULT_CELL_LABEL_FORMAT: FlowCellLabelFormat = {
+  categoryLabel: (block) => categoryLabel(block.category),
+  productivityLabel: (block) => productivityLabel(block.productivity),
+  durationLabel: secondsToLabel,
+  timeBlockPrefix: "Time block",
+  durationPrefix: "Duration",
+};
+
 const MINUTES_PER_DAY = 24 * 60;
 
 export function formatHourLabel(hour: number): string {
@@ -75,27 +91,27 @@ export function cellTitle(block: FlowBlock, intervalMinutes: FlowIntervalMinutes
   return labels.join("\n");
 }
 
-export function cellGroupTitle(group: FlowBlockHoverGroup): string {
+export function cellGroupTitle(group: FlowBlockHoverGroup, format: FlowCellLabelFormat = DEFAULT_CELL_LABEL_FORMAT): string {
   const { block } = group;
   const detail = blockDetailLabel(block);
   const labels = [
-    `${categoryLabel(block.category)} · ${productivityLabel(block.productivity)}`,
+    `${format.categoryLabel(block)} · ${format.productivityLabel(block)}`,
     blockDisplayName(block),
   ];
 
   if (detail) labels.push(detail);
-  labels.push(`Time block: ${formatGroupTimeRange(group)}`);
-  labels.push(`Duration: ${secondsToLabel(group.durationSeconds)}`);
+  labels.push(`${format.timeBlockPrefix}: ${formatGroupTimeRange(group)}`);
+  labels.push(`${format.durationPrefix}: ${format.durationLabel(group.durationSeconds)}`);
   return labels.join("\n");
 }
 
-export function buildCellGroupAriaLabels(groupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>): Map<number, string> {
+export function buildCellGroupAriaLabels(groupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>, format: FlowCellLabelFormat = DEFAULT_CELL_LABEL_FORMAT): Map<number, string> {
   const labelsByGroup = new Map<FlowBlockHoverGroup, string>();
   const labelsByMinute = new Map<number, string>();
   for (const [minute, group] of groupsByCell) {
     let label = labelsByGroup.get(group);
     if (label === undefined) {
-      label = cellGroupTitle(group).replace(/\n/g, ", ");
+      label = cellGroupTitle(group, format).replace(/\n/g, ", ");
       labelsByGroup.set(group, label);
     }
     labelsByMinute.set(minute, label);

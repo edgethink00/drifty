@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { DashboardPeriod } from "./dashboardPeriods";
 
 type DashboardPageHeaderProps = {
@@ -16,11 +17,13 @@ export function DashboardPageHeader({
   headerAction,
   focusDuration,
 }: DashboardPageHeaderProps) {
+  const { effectiveLanguage, t } = useLocalization();
+  const localizeDashboard = dashPeriod === "Today" || (dashPeriod === "Week" && effectiveLanguage === "ko");
   const titleAriaLabel = initialDataLoading
-    ? "Loading dashboard data"
+    ? (localizeDashboard ? t("dashboard.today.loading") : "Loading dashboard data")
     : focusDuration === null
-      ? "No focus recorded"
-      : `Focused for ${focusDuration}`;
+      ? (localizeDashboard ? t("dashboard.today.noFocus") : "No focus recorded")
+      : (localizeDashboard ? t("dashboard.today.headerAria", { duration: focusDuration }) : `Focused for ${focusDuration}`);
 
   return (
     <div className={`pg-head dashboard-page-head dashboard-page-head--focus-summary${dashPeriod === "Today" || dashPeriod === "Week" ? " dashboard-page-head--today" : ""}`}>
@@ -29,9 +32,11 @@ export function DashboardPageHeader({
           <div className="dashboard-page-head__summary">
             <h1 aria-label={titleAriaLabel} className="dashboard-page-head__title">
               {initialDataLoading ? (
-                <><span className="dashboard-page-head__focus-word">Focused for</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
+                <><span className="dashboard-page-head__focus-word">{localizeDashboard ? t("dashboard.today.loading") : "Focused for"}</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
               ) : focusDuration === null ? (
-                <span className="dashboard-page-head__focus-word">No focus recorded</span>
+                <span className="dashboard-page-head__focus-word">{localizeDashboard ? t("dashboard.today.noFocus") : "No focus recorded"}</span>
+              ) : localizeDashboard && effectiveLanguage === "ko" ? (
+                <><span className="dashboard-page-head__focus-value">{focusDuration}</span><span className="dashboard-page-head__focus-word">집중했습니다</span></>
               ) : (
                 <><span className="dashboard-page-head__focus-word">Focused for</span><span className="dashboard-page-head__focus-value">{focusDuration}</span></>
               )}

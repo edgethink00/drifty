@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ActivitySegment, Project, ProjectAssignmentRecord, ProjectInput } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
 import "./projects.css";
-import { describeRelativeDay, isoDateFromTimestamp } from "../../lib/formatting";
+import { describeLocalizedRelativeDay, isoDateFromTimestamp } from "../../lib/formatting";
 import { DateNavigator } from "../../components/DateNavigator";
 import { ProjectDetailView } from "./ProjectDetailView";
 import { ProjectTrendChart } from "./ProjectTrendChart";
@@ -11,20 +11,13 @@ import { ProjectsManager } from "./ProjectsManager";
 import { analysisModelDisplayLabel, type AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { aggregateProjectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
 import { formatProjectMatchCooldown, NO_PROJECT_MATCH_COOLDOWN, type ProjectMatchCooldown } from "./projectMatchCooldown";
-
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
-
-const LAST_ACTIVITY_FORMAT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+import { useLocalization } from "../localization/LocalizationContext";
 
 const PROJECT_LIBRARY_WINDOW_DAYS = 7;
 
 type TrendRangeMode = "day" | "week" | "month";
 
-const RANGE_MODE_OPTIONS: ReadonlyArray<{ readonly key: TrendRangeMode; readonly label: string }> = [
-  { key: "day", label: "Day" },
-  { key: "week", label: "Week" },
-  { key: "month", label: "Month" },
-];
+const RANGE_MODE_OPTIONS = ["day", "week", "month"] as const satisfies readonly TrendRangeMode[];
 
 // Day is a single day rendered as an intraday (30-minute window) chart;
 // Week/Month are rolling day-bucketed windows.
@@ -34,10 +27,10 @@ function windowDaysFor(mode: TrendRangeMode): number {
   return 7;
 }
 
-function shortDate(iso: string): string {
-  const [, month, day] = iso.split("-").map(Number);
-  if (!Number.isFinite(month) || !Number.isFinite(day)) return iso;
-  return `${MONTH_LABELS[(month! - 1 + 12) % 12]} ${day}`;
+function shortDate(iso: string, language: "en" | "ko"): string {
+  const parsed = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric" }).format(parsed);
 }
 
 function analysisModelLabel(setup: AnalysisAiSetupState): string {
@@ -88,50 +81,51 @@ interface ProjectMatchingCardProps {
 }
 
 function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const modelLabel = analysisModelLabel(props.analysisSetup);
   const autoPhase = aggregateProjectAutoAnalysisPhase(props.autoAnalysis);
   // A queued burst is still pending work, so "Match now" stays clickable even
   // though the previous pass finished moments ago.
   const cooldownActive = props.matchCooldown.active && autoPhase !== "queued" && autoPhase !== "error";
   const readiness = autoPhase === "running"
-    ? "Matching"
+    ? t("projects.matching.matching")
     : autoPhase === "queued"
-      ? "Matching soon"
+      ? t("projects.matching.soon")
       : autoPhase === "error"
-        ? "Retry needed"
+        ? t("projects.matching.retryNeeded")
         : !props.analysisConnected
-          ? "Setup required"
-          : cooldownActive ? "Up to date" : "Ready";
+          ? t("projects.matching.setupRequired")
+          : cooldownActive ? t("projects.matching.upToDate") : t("projects.matching.ready");
   const actionLabel = autoPhase === "running"
-    ? "Matching…"
+    ? t("projects.matching.matchingProgress")
     : autoPhase === "queued"
-      ? "Match now"
+      ? t("projects.matching.matchNow")
       : autoPhase === "error"
-        ? "Retry latest 7 days"
+        ? t("projects.matching.retryLatest")
         : cooldownActive
-          ? `Just matched · ${formatProjectMatchCooldown(props.matchCooldown.remainingSeconds)}`
-          : "Refresh latest 7 days";
+          ? t("projects.matching.justMatched", { remaining: effectiveLanguage === "ko" && props.matchCooldown.remainingSeconds < 60 ? `${props.matchCooldown.remainingSeconds}초` : formatProjectMatchCooldown(props.matchCooldown.remainingSeconds) })
+          : t("projects.matching.refreshLatest");
   return (
     <div
       className={`projects-model-status projects-model-status--${props.layout}${props.analysisConnected ? " is-connected" : " is-disconnected"}`}
       role="group"
-      aria-label="Project matching model"
+      aria-label={t("projects.matching.modelAria")}
     >
       <div className="projects-model-status__info">
-        <span className="projects-model-status__label">Project matching</span>
+        <span className="projects-model-status__label">{t("projects.matching.label")}</span>
         <span className="projects-model-status__value">
           {props.layout === "strip"
-            ? <>Uses {modelLabel} to refresh the latest 7 days. Live activity classification is configured separately.</>
+            ? t("projects.matching.usesModel", { model: modelLabel })
             : autoPhase === "running"
-              ? <>Matching your new project against the latest 7 days.</>
+              ? t("projects.matching.newProject")
               : autoPhase === "queued"
-                ? <>Grouping your new projects into one matching run.</>
-                : <>Refresh project assignments without changing live activity classification.</>}
+                ? t("projects.matching.queuedProjects")
+                : t("projects.matching.refreshAssignments")}
         </span>
         {props.layout !== "strip" ? (
           <dl className="projects-model-status__meta">
-            <div><dt>Model</dt><dd>{modelLabel}</dd></div>
-            <div><dt>Refresh scope</dt><dd>Latest 7 days</dd></div>
+            <div><dt>{t("projects.matching.model")}</dt><dd>{modelLabel}</dd></div>
+            <div><dt>{t("projects.matching.refreshScope")}</dt><dd>{t("projects.matching.latestSeven")}</dd></div>
           </dl>
         ) : null}
       </div>
@@ -142,35 +136,36 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
         </span>
       ) : (
         <span className={`projects-model-status__chip${props.analysisConnected ? " is-connected" : ""}`}>
-          {autoPhase === "running" || autoPhase === "queued" ? "Matching recent activity" : props.analysisConnected ? "Project model ready" : "Project model setup required"}
+          {autoPhase === "running" || autoPhase === "queued" ? t("projects.matching.recentActivity") : props.analysisConnected ? t("projects.matching.modelReady") : t("projects.matching.modelSetupRequired")}
         </span>
       )}
       <div className="projects-model-status__actions">
-        <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>Model settings</button>
+        <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>{t("projects.matching.modelSettings")}</button>
         <button
           type="button"
           className="app-btn app-btn--secondary"
           onClick={props.onRunAnalysis}
           disabled={(props.running && autoPhase !== "queued") || cooldownActive || !props.analysisConnected || props.activeProjectCount === 0}
-          title={cooldownActive ? "This window was just matched. Assignments are already up to date." : undefined}
+          title={cooldownActive ? t("projects.matching.cooldownHint") : undefined}
         >
-          {props.running ? (autoPhase === "running" ? "Matching…" : "Refreshing…") : actionLabel}
+          {props.running ? (autoPhase === "running" ? t("projects.matching.matchingProgress") : t("projects.matching.refreshing")) : actionLabel}
         </button>
       </div>
       {props.activeProjectCount === 0 ? (
-        <p className="projects-model-status__reason">Create at least one active project before refreshing assignments.</p>
+        <p className="projects-model-status__reason">{t("projects.matching.createFirst")}</p>
       ) : autoPhase === "waiting_for_model" || !props.analysisConnected ? (
-        <p className="projects-model-status__reason">Connect a project matching model before refreshing assignments.</p>
+        <p className="projects-model-status__reason">{t("projects.matching.connectFirst")}</p>
       ) : autoPhase === "error" ? (
-        <p className="projects-model-status__reason">Automatic matching paused. Retry when you are ready.</p>
+        <p className="projects-model-status__reason">{t("projects.matching.paused")}</p>
       ) : cooldownActive ? (
-        <p className="projects-model-status__reason">The latest 7 days were just matched, so assignments are already up to date.</p>
+        <p className="projects-model-status__reason">{t("projects.matching.upToDateDetail")}</p>
       ) : null}
     </div>
   );
 }
 
 export function ProjectsPage(props: ProjectsPageProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [rangeMode, setRangeMode] = useState<TrendRangeMode>("week");
   const [windowOffset, setWindowOffset] = useState(0);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -186,10 +181,10 @@ export function ProjectsPage(props: ProjectsPageProps) {
   const endDay = shiftIsoDate(props.selectedDay, -windowOffset * dataWindowDays);
   const startDay = shiftIsoDate(endDay, -(dataWindowDays - 1));
   const atLatestWindow = windowOffset === 0;
-  const relativeDayLabel = describeRelativeDay(endDay, props.startOfDayMinutes);
+  const relativeDayLabel = describeLocalizedRelativeDay(endDay, effectiveLanguage, props.startOfDayMinutes);
   const windowLabel = isDayMode
-    ? relativeDayLabel === "Selected day" ? shortDate(endDay) : relativeDayLabel
-    : `${shortDate(startDay)} – ${shortDate(endDay)}`;
+    ? relativeDayLabel === (effectiveLanguage === "ko" ? "선택한 날짜" : "Selected day") ? shortDate(endDay, effectiveLanguage) : relativeDayLabel
+    : `${shortDate(startDay, effectiveLanguage)} – ${shortDate(endDay, effectiveLanguage)}`;
 
   // Tell the shell which window to load trend segments/assignments for.
   const { onTrendWindowChange } = props;
@@ -228,7 +223,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
     return { libraryTotalSecondsByProject: totals, libraryLastActivityByProject: lastDays };
   }, [endDay, librarySummaryStartDay, props.trendSegments, props.trendProjectBySegmentId]);
 
-  const totalCaption = isDayMode ? windowLabel : atLatestWindow ? `Last ${windowDays} days` : windowLabel;
+  const totalCaption = isDayMode ? windowLabel : atLatestWindow ? t("projects.lastDays", { count: windowDays }) : windowLabel;
   // If the open project gets deleted elsewhere, fall back to the list.
   useEffect(() => {
     if (selectedProjectId && !selectedProject) {
@@ -261,58 +256,58 @@ export function ProjectsPage(props: ProjectsPageProps) {
         {selectedProject ? (
           <div className="projects-page__detail-title">
             <button type="button" className="app-btn app-btn--quiet app-btn--compact projects-page__back" onClick={returnToProjectLibrary}>
-              <span aria-hidden="true">&larr;</span> Projects
+              <span aria-hidden="true">&larr;</span> {t("projects.back")}
             </button>
             <div className="projects-page__project-identity">
               <span className="pt-swatch" style={{ background: selectedProject.color }} aria-hidden="true" />
               <h1>{selectedProject.name}</h1>
               <span className={`chip${selectedProject.status === "archived" ? " gray" : " green"}`}>
-                {selectedProject.status === "archived" ? "Archived" : "Active"}
+                {t(selectedProject.status === "archived" ? "common.archived" : "common.active")}
               </span>
             </div>
           </div>
         ) : (
           <div className="projects-page__heading-copy">
             <div className="projects-page__title">
-              <h1>Projects</h1>
+              <h1>{t("projects.title")}</h1>
               <span className="projects-help">
-                <button type="button" className="help-trigger projects-help__trigger" aria-label="What are projects?" aria-describedby="projects-help-tip">?</button>
-                <span className="projects-help__tip" id="projects-help-tip" role="tooltip">Describe the work that belongs together. Drifty uses that description to group matching activity into a project.</span>
+                <button type="button" className="help-trigger projects-help__trigger" aria-label={t("projects.helpAria")} aria-describedby="projects-help-tip">?</button>
+                <span className="projects-help__tip" id="projects-help-tip" role="tooltip">{t("projects.help")}</span>
               </span>
             </div>
-            <p>Define the work Drifty should group your activity into.</p>
+            <p>{t("projects.description")}</p>
           </div>
         )}
         {selectedProject ? (
           <div className="classification-range-controls trends-range-controls">
-            <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Project detail range">
+            <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("projects.detailRangeAria")}>
               {RANGE_MODE_OPTIONS.map((option) => (
                 <button
                   type="button"
-                  className={rangeMode === option.key ? "settings-mode-option is-active" : "settings-mode-option"}
+                  className={rangeMode === option ? "settings-mode-option is-active" : "settings-mode-option"}
                   role="radio"
-                  aria-checked={rangeMode === option.key}
-                  key={option.key}
+                  aria-checked={rangeMode === option}
+                  key={option}
                   onClick={() => {
-                    setRangeMode(option.key);
+                    setRangeMode(option);
                     setWindowOffset(0);
                   }}
                 >
-                  <span>{option.label}</span>
+                  <span>{t(option === "day" ? "common.day" : option === "week" ? "common.week" : "common.month")}</span>
                 </button>
               ))}
             </div>
             <DateNavigator
-              ariaLabel="Project detail time window"
+              ariaLabel={t("projects.detailWindowAria")}
               label={windowLabel}
-              todayLabel="Latest"
+              todayLabel={t("common.latest")}
               isTodayDisabled={atLatestWindow}
               isNextDisabled={atLatestWindow}
               onPrevious={() => setWindowOffset((offset) => offset + 1)}
               onToday={() => setWindowOffset(0)}
               onNext={() => setWindowOffset((offset) => Math.max(0, offset - 1))}
-              previousLabel="Show previous project window"
-              nextLabel="Show next project window"
+              previousLabel={t("projects.previousWindow")}
+              nextLabel={t("projects.nextWindow")}
             />
           </div>
         ) : null}
@@ -342,7 +337,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             const day = lastActivityByProject.get(selectedProject.id);
             if (!day) return "—";
             const parsed = new Date(`${day}T00:00:00`);
-            return Number.isNaN(parsed.getTime()) ? "—" : LAST_ACTIVITY_FORMAT.format(parsed);
+            return Number.isNaN(parsed.getTime()) ? "—" : new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { month: "short", day: "numeric", year: "numeric" }).format(parsed);
           })()}
           busy={props.running || props.projectsLoading}
           onSave={props.onSaveProject}
@@ -353,7 +348,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
             projects={props.projects}
             totalSecondsByProject={libraryTotalSecondsByProject}
             lastActivityByProject={libraryLastActivityByProject}
-            totalCaption="Latest 7 days"
+            totalCaption={t("projects.latestDays", { count: 7 })}
             autoAnalysis={props.autoAnalysis}
             onSave={props.onSaveProject}
             onDelete={props.onDeleteProject}
@@ -375,7 +370,7 @@ export function ProjectsPage(props: ProjectsPageProps) {
                   />
                 ) : (
                   <ProjectTrendChartSkeleton
-                    windowLabel={`Latest ${PROJECT_LIBRARY_WINDOW_DAYS} days`}
+                    windowLabel={t("projects.latestDays", { count: PROJECT_LIBRARY_WINDOW_DAYS })}
                     legendProjects={activeProjects}
                     isDayMode={false}
                     startDay={startDay}

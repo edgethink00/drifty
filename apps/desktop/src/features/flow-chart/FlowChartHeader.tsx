@@ -5,6 +5,7 @@ import { FlowChartLegend } from "./FlowChartLegend";
 import type { FlowLegendHoverState } from "./FlowChartHoverCards";
 import type { FlowColorMode } from "./FlowChartTypes";
 import type { ProjectLegendEntry } from "./projectFlowView";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type FlowChartHeaderProps = {
   readonly blocks: readonly FlowBlock[];
@@ -18,13 +19,6 @@ type FlowChartHeaderProps = {
   readonly projectLegend?: readonly ProjectLegendEntry[];
 };
 
-const BASE_FLOW_COLOR_MODE_OPTIONS = [
-  { id: "category", label: "Category" },
-  { id: "productivity", label: "Productivity" },
-] as const satisfies readonly { readonly id: FlowColorMode; readonly label: string }[];
-
-const PROJECT_COLOR_MODE_OPTION = { id: "project", label: "Project" } as const satisfies { readonly id: FlowColorMode; readonly label: string };
-
 export function FlowChartHeader({
   blocks,
   colorMode,
@@ -36,9 +30,15 @@ export function FlowChartHeader({
   projectModeAvailable = false,
   projectLegend,
 }: FlowChartHeaderProps) {
+  const { t } = useLocalization();
+  const baseColorModeOptions = [
+    { id: "category", label: t("dashboard.today.category") },
+    { id: "productivity", label: t("dashboard.today.productivity") },
+  ] as const satisfies readonly { readonly id: FlowColorMode; readonly label: string }[];
+  const projectColorModeOption = { id: "project", label: t("dashboard.today.project") } as const satisfies { readonly id: FlowColorMode; readonly label: string };
   const colorModeOptions = projectModeAvailable
-    ? [...BASE_FLOW_COLOR_MODE_OPTIONS, PROJECT_COLOR_MODE_OPTION]
-    : BASE_FLOW_COLOR_MODE_OPTIONS;
+    ? [...baseColorModeOptions, projectColorModeOption]
+    : baseColorModeOptions;
   return (
     <div className="flow-chart-head">
       <div className="flow-chart-head__actions">
@@ -49,7 +49,7 @@ export function FlowChartHeader({
               onIntervalChange={onIntervalChange}
             />
           ) : null}
-          <div className="seg flow-color-mode-control" aria-label="Flow chart color mode">
+          <div className="seg flow-color-mode-control" aria-label={t("dashboard.today.flowColorMode")}>
             {colorModeOptions.map((option) => (
               <button
                 key={option.id}

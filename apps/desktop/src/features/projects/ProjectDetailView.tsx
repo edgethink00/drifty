@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import type { ActivitySegment, Project, ProjectInput } from "@drifty/domain";
-import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ProjectEditorModal } from "./ProjectEditorModal";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
+import { useLocalization } from "../localization/LocalizationContext";
 
 interface SourceRow {
   readonly key: string;
@@ -61,6 +62,7 @@ export function ProjectDetailView({
   busy = false,
   onSave,
 }: ProjectDetailViewProps): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const [editorOpen, setEditorOpen] = useState(false);
   const isArchived = project.status === "archived";
 
@@ -116,32 +118,32 @@ export function ProjectDetailView({
 
   return (
     <div className="project-detail">
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel project-detail__head-panel" aria-label={`Project ${project.name}`}>
+      <section className="editorial-panel editorial-panel--soft insight-chart-panel project-detail__head-panel" aria-label={`${t("common.project")} ${project.name}`}>
         <div className="project-detail__head">
-          <span className="label-mono">Project overview</span>
+          <span className="label-mono">{t("projects.detail.overview")}</span>
           <div className="project-detail__actions">
-            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={() => setEditorOpen(true)}>Edit</button>
+            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={() => setEditorOpen(true)}>{t("common.edit")}</button>
             <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={toggleArchive}>
-              {isArchived ? "Unarchive" : "Archive"}
+              {t(isArchived ? "projects.unarchive" : "projects.archive")}
             </button>
           </div>
         </div>
         {project.description.trim() ? (
           <p className="project-detail__desc">{project.description}</p>
         ) : (
-          <p className="project-detail__desc project-detail__desc--empty">No description yet — the description is what guides the analysis model.</p>
+          <p className="project-detail__desc project-detail__desc--empty">{t("projects.detail.noDescription")}</p>
         )}
-        <div className="project-detail__stats" role="group" aria-label="Project window stats">
+        <div className="project-detail__stats" role="group" aria-label={t("projects.detail.statsAria")}>
           <div className="project-detail__stat">
             <span className="label-mono">{totalCaption}</span>
-            <strong>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</strong>
+            <strong>{totalSeconds > 0 ? formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage) : effectiveLanguage === "ko" ? "0분" : "0m"}</strong>
           </div>
           <div className="project-detail__stat">
-            <span className="label-mono">Share of assigned time</span>
+            <span className="label-mono">{t("projects.detail.assignedShare")}</span>
             <strong>{totalSeconds > 0 ? `${sharePct}%` : "—"}</strong>
           </div>
           <div className="project-detail__stat">
-            <span className="label-mono">Last activity in range</span>
+            <span className="label-mono">{t("projects.detail.lastActivity")}</span>
             <strong>{lastActivityLabel}</strong>
           </div>
         </div>
@@ -168,20 +170,20 @@ export function ProjectDetailView({
         />
       )}
 
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={`Top sources for ${project.name}`}>
+      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("projects.detail.topSourcesAria", { name: project.name })}>
         <div className="insight-panel-head">
-          <span className="label-mono">Where this time went &middot; {totalCaption}</span>
+          <span className="label-mono">{t("projects.detail.whereTimeWent", { caption: totalCaption })}</span>
         </div>
         {sources.length === 0 ? (
-          <p className="project-detail__sources-empty">No attributed activity in this window yet.</p>
+          <p className="project-detail__sources-empty">{t("projects.detail.noSources")}</p>
         ) : (
           <div className="project-detail__sources">
             {sources.map((source) => (
-              <div className="project-detail__source" key={source.key} title={`${source.label} · ${formatCompactDurationFromSeconds(source.seconds)} (${source.sharePct}%)`}>
+              <div className="project-detail__source" key={source.key} title={`${source.label} · ${formatLocalizedCompactDurationFromSeconds(source.seconds, effectiveLanguage)} (${source.sharePct}%)`}>
                 <div className="project-detail__source-meta">
                   <span>{source.label}</span>
                   <span className="project-detail__source-val">
-                    <b>{formatCompactDurationFromSeconds(source.seconds)}</b>
+                    <b>{formatLocalizedCompactDurationFromSeconds(source.seconds, effectiveLanguage)}</b>
                     <span>{source.sharePct}%</span>
                   </span>
                 </div>

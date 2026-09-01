@@ -191,7 +191,7 @@ export function DevSettingsSection({
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
 }: DevSettingsSectionProps) {
-  const { koreanPreviewEnabled, setKoreanPreviewEnabled, t } = useLocalization();
+  const { t } = useLocalization();
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
@@ -286,19 +286,6 @@ export function DevSettingsSection({
           <span>{t("settings.dev.preview")}</span>
           <span className="settings-beta-badge">Beta</span>
         </h3>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.dev.koreanPreviewLabel")}</div>
-            <div className="desc">{t("settings.dev.koreanPreviewDescription")}</div>
-          </div>
-          <div className="ctrl">
-            <Toggle
-              checked={koreanPreviewEnabled}
-              onChange={setKoreanPreviewEnabled}
-              ariaLabel={t("settings.dev.koreanPreviewToggle")}
-            />
-          </div>
-        </div>
         {/* Only the Lab stays here. The pet itself, its coat, and its size are
             production settings and live in Companion & Alerts. */}
         <div className="pet-mode-lab" role="group" aria-label="Pet Mode Lab">

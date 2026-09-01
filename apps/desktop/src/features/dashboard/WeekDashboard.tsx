@@ -1,8 +1,8 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
-import { CATEGORY_COLORS, PRODUCTIVITY_COLORS, categoryLabel, productivityLabel } from "../../lib/activityLabels";
-import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatCompactDurationFromSeconds, formatDuration, formatHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
+import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
+import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
 import { buildAppUsageSummaries, isRemoteDeviceSegment, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
@@ -24,6 +24,8 @@ import { FlowLegendHoverCard } from "../flow-chart/FlowChartHoverCards";
 import type { FlowLegendHoverState } from "../flow-chart/FlowChartHoverCards";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 /* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
 const WEEK_CALENDAR_TIME_RAIL_PX = 40;
@@ -32,10 +34,7 @@ const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
 
 export type WeekDashboardColorMode = "category" | "productivity";
 
-const WEEK_COLOR_MODE_OPTIONS = [
-  { id: "category", label: "Category" },
-  { id: "productivity", label: "Productivity" },
-] as const satisfies readonly { readonly id: WeekDashboardColorMode; readonly label: string }[];
+const WEEK_COLOR_MODE_OPTIONS = ["category", "productivity"] as const satisfies readonly WeekDashboardColorMode[];
 
 type WeekIdentityStripStyle = CSSProperties & {
   "--week-identity-tile": string;
@@ -80,6 +79,8 @@ function buildWeekSummaryMetrics(
   rows: readonly WeekDayRow[],
   segments: readonly ActivitySegment[],
   totalSeconds: number,
+  language: "en" | "ko",
+  t: LocalizationController["t"],
 ): WeekSummaryMetrics {
   const activeRows = rows.filter((row) => row.totalSeconds > 0);
   const peakDay = activeRows.reduce<WeekDayRow | null>(
@@ -93,10 +94,12 @@ function buildWeekSummaryMetrics(
     activeDayCount: activeRows.length,
     averageDailySeconds: activeRows.length > 0 ? Math.round(totalSeconds / activeRows.length) : 0,
     averageSessionMinutes: segments.length > 0 ? Math.round(totalSeconds / 60 / segments.length) : 0,
-    peakDayLabel: peakDay?.dayName ?? "\u2014",
+    peakDayLabel: peakDay
+      ? new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${peakDay.day}T12:00:00`))
+      : "\u2014",
     peakDaySeconds: peakDay?.totalSeconds ?? 0,
     sessionCount: segments.length,
-    topAppLabel: topApp?.appName ?? "No activity",
+    topAppLabel: topApp?.appName ?? t("dashboard.week.noActivity"),
     uniqueAppsCount,
   };
 }
@@ -105,7 +108,12 @@ const WEEK_SIDE_TREND_VLINE_LEFTS = [14.2857, 28.5714, 42.8571, 57.1429, 71.4286
 const WEEK_SIDE_TREND_STEP_CANDIDATES = [0.25, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24];
 
 /** Compact Trends-style stacked bars for the Breakdown side panel. */
-function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardColorMode): WeekSideTrendChart {
+function buildWeekSideTrendChart(
+  rows: WeekDayRow[],
+  colorMode: WeekDashboardColorMode,
+  language: "en" | "ko",
+  t: LocalizationController["t"],
+): WeekSideTrendChart {
   const maxHours = Math.max(...rows.map((row) => row.totalSeconds / 3600), 0);
   const axisMaxHours = maxHours > 0 ? maxHours / 0.93 : 1;
   const stepHours = WEEK_SIDE_TREND_STEP_CANDIDATES.find((candidate) => maxHours / candidate <= 4)
@@ -113,7 +121,9 @@ function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardCol
   const gridlines: { label: string; topPercent: number }[] = [];
   for (let value = stepHours; value <= maxHours + 1e-9; value += stepHours) {
     gridlines.push({
-      label: `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}h`,
+      label: language === "ko"
+        ? `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}시간`
+        : `${Number.isInteger(value) ? String(value) : value.toFixed(1).replace(/\.0$/, "")}h`,
       topPercent: (1 - value / axisMaxHours) * 100,
     });
   }
@@ -126,17 +136,17 @@ function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardCol
           key: slice.productivity,
           seconds: slice.totalSeconds,
           color: PRODUCTIVITY_COLORS[slice.productivity],
-          label: productivityLabel(slice.productivity),
+          label: localizedProductivityLabel(slice.productivity, t),
         }))
       : row.slices.map((slice) => ({
           key: slice.category,
           seconds: slice.totalSeconds,
           color: CATEGORY_COLORS[slice.category],
-          label: categoryLabel(slice.category),
+          label: localizedCategoryLabel(slice.category, t),
         }));
     return {
       day: row.day,
-      dayLabel: row.dayName,
+      dayLabel: new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`)),
       totalSeconds: row.totalSeconds,
       off,
       barHeightPercent: Math.min((row.totalSeconds / (axisMaxHours * 3600)) * 100, 100),
@@ -146,7 +156,7 @@ function buildWeekSideTrendChart(rows: WeekDayRow[], colorMode: WeekDashboardCol
         seconds: slice.seconds,
         heightPercent: off ? 0 : (slice.seconds / row.totalSeconds) * 100,
         color: slice.color,
-        title: `${slice.label} · ${formatCompactDurationFromSeconds(slice.seconds)}`,
+        title: `${slice.label} · ${formatLocalizedCompactDurationFromSeconds(slice.seconds, language)}`,
       })),
     };
   });
@@ -227,6 +237,7 @@ export function WeekDashboard({
   onClassifyActivity,
   onDeleteActivity,
 }: WeekDashboardProps) {
+  const { effectiveLanguage, t } = useLocalization();
   // Controlled by DashboardPage in the app (shared Day/Week preference);
   // standalone renders fall back to local state so the toggle still works.
   const [localSideOpen, setLocalSideOpen] = useState(true);
@@ -247,15 +258,21 @@ export function WeekDashboard({
     setCalendarBodyElement(element);
   }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
-  const refreshStatusLabel = refreshStatus === "loading" ? "Updating" : refreshStatus === "error" ? "Update failed" : null;
+  const refreshStatusLabel = refreshStatus === "loading" ? t("dashboard.week.updating") : refreshStatus === "error" ? t("dashboard.week.updateFailed") : null;
   const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
-  const productivityRingEntries = buildProductivityRingEntries(productivityEntries);
+  const productivityRingEntries = buildProductivityRingEntries(productivityEntries).map((entry) => ({
+    ...entry,
+    label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
+  }));
   const productivityCenterPercent = buildProductivityCenterPercent(productivityEntries);
   const summaryMetrics = useMemo(
-    () => buildWeekSummaryMetrics(rows, segments, totalSeconds),
-    [rows, segments, totalSeconds],
+    () => buildWeekSummaryMetrics(rows, segments, totalSeconds, effectiveLanguage, t),
+    [effectiveLanguage, rows, segments, t, totalSeconds],
   );
-  const sideTrendChart = useMemo(() => buildWeekSideTrendChart(rows, colorMode), [colorMode, rows]);
+  const sideTrendChart = useMemo(
+    () => buildWeekSideTrendChart(rows, colorMode, effectiveLanguage, t),
+    [colorMode, effectiveLanguage, rows, t],
+  );
   const buildHoverRows = useCallback((key: string | readonly string[], mode: WeekDashboardColorMode, day?: string) => (
     buildWeekBreakdownHoverRows({
       segments,
@@ -301,7 +318,9 @@ export function WeekDashboard({
   const currentCalendarOffset = currentCalendarMinute === null
     ? null
     : ((currentCalendarMinute - minCalendarMinute) / 60) * calendarHourHeight;
-  const currentCalendarLabel = currentCalendarMinute === null ? null : formatCalendarMinuteLabel(markerCalendarDay, currentCalendarMinute, startOfDayMinutes);
+  const currentCalendarLabel = currentCalendarMinute === null
+    ? null
+    : formatLocalizedCalendarMinuteLabel(markerCalendarDay, currentCalendarMinute, effectiveLanguage, startOfDayMinutes);
   const currentCalendarLineEnd = String(calendarRows.findIndex((row) => row.day === markerCalendarDay) + 3);
   const currentCalendarMarkerStyle: WeekCalendarNowMarkerStyle | null = currentCalendarOffset === null
     ? null
@@ -322,6 +341,34 @@ export function WeekDashboard({
       ? minCalendarMinute
       : Math.min(maxCalendarMinute, Math.max(minCalendarMinute, minCalendarMinute + earliestEventOffset));
   }, [calendarEvents, calendarRows, currentCalendarDay, maxCalendarMinute, minCalendarMinute, realCurrentCalendarMinute]);
+
+  const displayCalendarEvents = useMemo(() => {
+    if (effectiveLanguage === "en") return calendarEvents;
+
+    return new Map(Array.from(calendarEvents.entries()).map(([day, events]) => [
+      day,
+      events.map((event) => {
+        const startMinute = minCalendarMinute + event.topMinutes;
+        const endMinute = startMinute + event.durationMinutes;
+        const startLabel = formatLocalizedCalendarMinuteLabel(day, startMinute, effectiveLanguage, startOfDayMinutes);
+        const endLabel = formatLocalizedCalendarMinuteLabel(day, endMinute, effectiveLanguage, startOfDayMinutes);
+        const categoryName = localizedCategoryLabel(event.category, t);
+        const recordLabel = event.sessionCount === 1
+          ? t("dashboard.week.inspector.record")
+          : t("dashboard.week.inspector.records", { count: event.sessionCount });
+        const detailSummary = event.isGroupedCluster || event.sessionCount > 1 ? recordLabel : categoryName;
+        const detailTitle = [
+          `${startLabel}–${endLabel} · ${categoryName}`,
+          `${formatLocalizedCompactDurationFromSeconds(event.activeDurationMinutes * 60, effectiveLanguage)} · ${recordLabel}`,
+          ...event.identities.slice(0, 3).map((identity) => (
+            `${identity.label} · ${formatLocalizedCompactDurationFromSeconds(identity.seconds, effectiveLanguage)}`
+          )),
+        ].join("\n");
+
+        return { ...event, startLabel, endLabel, detailSummary, detailTitle };
+      }),
+    ]));
+  }, [calendarEvents, effectiveLanguage, minCalendarMinute, startOfDayMinutes, t]);
 
   // The calendar squishes (no horizontal scroll) while the Breakdown panel is
   // open, so the identity strips must adapt to the live day-column width
@@ -356,11 +403,11 @@ export function WeekDashboard({
 
   const eventsById = useMemo(() => {
     const byId = new Map<string, WeekCalendarEvent>();
-    for (const events of calendarEvents.values()) {
+    for (const events of displayCalendarEvents.values()) {
       for (const event of events) byId.set(event.id, event);
     }
     return byId;
-  }, [calendarEvents]);
+  }, [displayCalendarEvents]);
   const segmentsById = useMemo(
     () => new Map(segments.map((segment) => [segment.id, segment])),
     [segments],
@@ -393,16 +440,16 @@ export function WeekDashboard({
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
     if (inspectedSegments.length !== activityInspector.event.segmentIds.length) {
-      return "Some source records are no longer available. Refresh the week before editing.";
+      return t("dashboard.week.someRecordsMissing");
     }
     if (inspectedSegments.some(isRemoteDeviceSegment)) {
-      return "Synced activity can be viewed here, but must be edited on the Mac that recorded it.";
+      return t("dashboard.week.remoteEditBlocked");
     }
     if (!activityActionsEnabled) {
-      return "Activity editing is unavailable in preview or replay mode.";
+      return t("dashboard.week.previewEditBlocked");
     }
     return null;
-  }, [activityActionsEnabled, activityInspector, inspectedSegments]);
+  }, [activityActionsEnabled, activityInspector, inspectedSegments, t]);
 
   useLayoutEffect(() => {
     const scroller = calendarScrollerRef.current;
@@ -426,31 +473,31 @@ export function WeekDashboard({
   }, [autoScrollTargetMinute, calendarHourHeight, endDay, minCalendarMinute, startDay]);
 
   return (
-    <section className="week-v2" aria-label="Your week overview" data-week-axis-scale-percent={effectiveAxisScalePercent}>
+    <section className="week-v2" aria-label={t("dashboard.week.overviewAria")} data-week-axis-scale-percent={effectiveAxisScalePercent}>
       <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
-        <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label="Week calendar schedule">
+        <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
           {header}
-          <div className="week-v2-calendar__legend" aria-label="Week legend">
+          <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
             <div className="flow-chart-head__actions">
-              <div className="seg flow-color-mode-control" aria-label="Week color mode">
+              <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
                 {WEEK_COLOR_MODE_OPTIONS.map((option) => (
                   <button
-                    key={option.id}
+                    key={option}
                     type="button"
-                    className={option.id === colorMode ? "on" : undefined}
-                    aria-pressed={option.id === colorMode}
+                    className={option === colorMode ? "on" : undefined}
+                    aria-pressed={option === colorMode}
                     onClick={() => {
                       setBreakdownHover(null);
                       setLegendHover(null);
-                      setColorMode(option.id);
+                      setColorMode(option);
                     }}
                   >
-                    {option.label}
+                    {t(option === "category" ? "common.category" : "common.productivity")}
                   </button>
                 ))}
               </div>
               <FlowChartLegend
-                ariaLabel={colorMode === "category" ? "Week category tones" : "Week productivity tones"}
+                ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
                 colorMode={colorMode}
                 getAppBreakdown={buildLegendHoverRows}
                 hasUnclassified={hasUnclassified}
@@ -470,7 +517,7 @@ export function WeekDashboard({
                 const isWeekend = weekday === 0 || weekday === 6;
                 return (
                   <span className={`${isWeekend ? "is-weekend" : ""}${row.day === markerCalendarDay ? " is-today" : ""}`.trim()} key={row.day}>
-                    <strong>{row.dayName}</strong>
+                    <strong>{new Intl.DateTimeFormat(effectiveLanguage === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`))}</strong>
                     <small>{row.dayNumber}</small>
                   </span>
                 );
@@ -479,13 +526,13 @@ export function WeekDashboard({
             <div ref={setCalendarBody} className="week-v2-calendar__body" style={{ height: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}>
               <div className="week-v2-calendar__time-rail">
                 {calendarHours.map((hour) => (
-                  <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes))}</span>
+                  <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }}>{formatLocalizedHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), effectiveLanguage)}</span>
                 ))}
                 <span
                   className="week-v2-calendar__time-rail-endpoint"
                   style={{ top: formatWeekDashboardAxisPixelValue((calendarEndHour - calendarStartHour) * calendarHourHeight) }}
                 >
-                  {formatHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes))}
+                  {formatLocalizedHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes), effectiveLanguage)}
                 </span>
               </div>
               {currentCalendarMarkerStyle && currentCalendarLabel ? (
@@ -499,7 +546,7 @@ export function WeekDashboard({
                 </div>
               ) : null}
               {calendarRows.map((row) => {
-                const events = calendarEvents.get(row.day) ?? [];
+                const events = displayCalendarEvents.get(row.day) ?? [];
                 return (
                   <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} key={row.day}>
                     {calendarHours.map((hour) => (
@@ -539,7 +586,7 @@ export function WeekDashboard({
                           <button
                             type="button"
                             className="week-v2-calendar__event-open"
-                            aria-label={`${event.detailTitle.replace(/\n/g, ", ")}. Open activity details.`}
+                            aria-label={`${event.detailTitle.replace(/\n/g, ", ")}. ${t("dashboard.week.openActivity")}.`}
                             aria-haspopup="dialog"
                             aria-expanded={activityInspector?.event.id === event.id}
                             title={event.detailTitle}
@@ -579,7 +626,7 @@ export function WeekDashboard({
                 <div
                   className="week-v2-calendar__now-marker week-v2-calendar__now-marker--overlay"
                   style={currentCalendarMarkerStyle}
-                  aria-label={`Current time ${currentCalendarLabel}`}
+                  aria-label={t("dashboard.week.currentTime", { time: currentCalendarLabel })}
                 >
                   <span className="week-v2-calendar__now-label">{currentCalendarLabel}</span>
                 </div>
@@ -609,33 +656,38 @@ export function WeekDashboard({
         <BreakdownSidePanel
           open={sideOpen}
           onToggle={toggleSide}
-          ariaLabel="Week time breakdown"
-          toggleSubject="week breakdown"
+          ariaLabel={t("dashboard.week.breakdownAria")}
+          toggleSubject={t("dashboard.week.breakdownSubject")}
+          title={t("dashboard.today.breakdown")}
+          showLabel={t("dashboard.week.showBreakdown")}
+          collapseLabel={t("dashboard.week.collapseBreakdown")}
         >
           <CompactRingChart
-            title="Productivity"
+            title={t("common.productivity")}
             entries={productivityRingEntries}
             totalSeconds={totalSeconds}
             centerPercent={productivityCenterPercent}
             flowBlocks={[]}
             appIcons={appIcons}
             getAppBreakdown={(entry) => buildHoverRows(entry.key, "productivity")}
+            language={effectiveLanguage}
           />
           <CompactClassificationBar<CategoryDuration>
-            title="Categories"
-            ariaLabel="Week category classification"
+            title={t("dashboard.today.categories")}
+            ariaLabel={t("dashboard.week.categoryAria")}
             entries={activeCategoryEntries}
             totalSeconds={totalSeconds}
             getKey={(entry) => entry.category}
-            getLabel={(entry) => categoryLabel(entry.category)}
+            getLabel={(entry) => localizedCategoryLabel(entry.category, t)}
             getColor={(entry) => CATEGORY_COLORS[entry.category]}
             getDotClassName={(entry) => `category-dot--${entry.category}`}
             getAppBreakdown={(entry) => buildHoverRows(entry.category, "category")}
             appIcons={appIcons}
             visibleLimit={5}
+            language={effectiveLanguage}
           />
-          <section className="week-v2-side-card week-v2-side-card--weekly-breakdown" aria-label="Weekly breakdown">
-            <span className="label-mono">Weekly breakdown</span>
+          <section className="week-v2-side-card week-v2-side-card--weekly-breakdown" aria-label={t("dashboard.week.weeklyBreakdown")}>
+            <span className="label-mono">{t("dashboard.week.weeklyBreakdown")}</span>
             <div className="wt-plot">
               <div className="wt-grid">
                 {sideTrendChart.gridlines.map((line) => (
@@ -664,7 +716,7 @@ export function WeekDashboard({
                               aria-label={`${column.dayLabel} ${segment.title}`}
                               onMouseEnter={(event) => setBreakdownHover({
                                 label: segment.label,
-                                durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+                                durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
                                 shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
                                 dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
                                 color: segment.color,
@@ -678,7 +730,7 @@ export function WeekDashboard({
                                 const bounds = event.currentTarget.getBoundingClientRect();
                                 setBreakdownHover({
                                   label: segment.label,
-                                  durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+                                  durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
                                   shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
                                   dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
                                   color: segment.color,
@@ -699,30 +751,30 @@ export function WeekDashboard({
               </div>
             </div>
           </section>
-          <div className="kpi-row kpi-row--insights insight-summary" aria-label="Week summary metrics">
+          <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("dashboard.week.summaryAria")}>
             <MetricTile
               className="insight-summary__tile insight-summary__tile--tracked"
-              label="Tracked"
-              value={formatDuration(totalSeconds)}
+              label={t("common.tracked")}
+              value={formatLocalizedDuration(totalSeconds, effectiveLanguage)}
               detail={summaryMetrics.activeDayCount > 0
-                ? `${formatCompactDurationFromSeconds(summaryMetrics.averageDailySeconds)} avg/day`
-                : "No active days"}
+                ? t("dashboard.week.averagePerDay", { duration: formatLocalizedCompactDurationFromSeconds(summaryMetrics.averageDailySeconds, effectiveLanguage) })
+                : t("dashboard.week.noActiveDays")}
             />
             <MetricTile
               className="insight-summary__tile insight-summary__tile--sessions"
-              label="Sessions"
+              label={t("common.sessions")}
               value={String(summaryMetrics.sessionCount)}
-              detail={summaryMetrics.sessionCount > 0 ? `${summaryMetrics.averageSessionMinutes}m avg` : "No sessions"}
+              detail={summaryMetrics.sessionCount > 0 ? t("dashboard.week.averageValue", { minutes: summaryMetrics.averageSessionMinutes }) : t("dashboard.week.noSessions")}
             />
             <MetricTile
               className="insight-summary__tile insight-summary__tile--peak"
-              label="Peak day"
+              label={t("dashboard.week.peakDay")}
               value={summaryMetrics.peakDayLabel}
-              detail={summaryMetrics.peakDaySeconds > 0 ? formatCompactDurationFromSeconds(summaryMetrics.peakDaySeconds) : "No activity"}
+              detail={summaryMetrics.peakDaySeconds > 0 ? formatLocalizedCompactDurationFromSeconds(summaryMetrics.peakDaySeconds, effectiveLanguage) : t("dashboard.week.noActivity")}
             />
             <MetricTile
               className="insight-summary__tile insight-summary__tile--apps"
-              label="Apps"
+              label={t("common.apps")}
               value={String(summaryMetrics.uniqueAppsCount)}
               detail={summaryMetrics.topAppLabel}
             />

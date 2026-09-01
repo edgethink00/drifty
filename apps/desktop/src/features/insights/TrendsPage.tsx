@@ -5,6 +5,7 @@ import type { BreakRecoveryInsight } from "../companion/driftAlarmRecovery";
 import { INSIGHT_RANGE_OPTIONS, type InsightRange } from "../dashboard/dashboardPeriods";
 import type { AttentionRhythmCell, InsightSourceLists, WeeklyBreakdownDay } from "./insightData";
 import type { WeeklyChartMode, WeeklyChartProjectSeriesItem } from "./weeklyChartView";
+import { useLocalization } from "../localization/LocalizationContext";
 
 const TrendsPageBody = lazy(async () => ({
   default: (await import("./TrendsPageBody")).TrendsPageBody,
@@ -71,6 +72,7 @@ export function TrendsPage({
   onTrendsRangeChange,
   onWeeklyChartModeChange,
 }: TrendsPageProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const productivityTotals = {
     focus: activeInsightProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0,
     neutral: activeInsightProductivityTotals.find((entry) => entry.productivity === "neutral")?.totalSeconds ?? 0,
@@ -81,10 +83,10 @@ export function TrendsPage({
     <div className="page insights-page">
       <div className="pg-head insights-page__head">
         <div>
-          <h1>Patterns and trends</h1>
+          <h1>{t("trends.title")}</h1>
         </div>
         <div className="classification-range-controls trends-range-controls">
-          <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Trends range">
+          <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("trends.rangeAria")}>
             {INSIGHT_RANGE_OPTIONS.map((option) => (
               <button
                 key={option.range}
@@ -94,21 +96,22 @@ export function TrendsPage({
                 aria-checked={trendsRange === option.range}
                 onClick={() => onTrendsRangeChange(option.range)}
               >
-                <span>{option.label}</span>
+                <span>{t(option.range === "Week" ? "trends.range.week" : option.range === "Month" ? "trends.range.month" : "trends.range.ninetyDays")}</span>
               </button>
             ))}
           </div>
           <DateNavigator
-            ariaLabel="Insight window selector"
+            ariaLabel={t("trends.windowAria")}
             label={insightDateLabel}
-            todayLabel="Latest"
+            todayLabel={t("trends.latest")}
             isTodayDisabled={isTodaySelected}
             isNextDisabled={!canShiftInsightForward}
             onPrevious={onPreviousInsightRange}
             onNext={onNextInsightRange}
             onToday={onTodayInsightRange}
-            previousLabel="Show previous insight window"
-            nextLabel="Show next insight window"
+            previousLabel={t("trends.previousWindow")}
+            nextLabel={t("trends.nextWindow")}
+            todayActionLabel={effectiveLanguage === "ko" ? "가장 최근 분석 기간으로 이동" : undefined}
           />
         </div>
       </div>
