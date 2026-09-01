@@ -7,6 +7,7 @@ import {
   buildAgentsTimelineSegments,
   buildAgentsWeekModel,
   agentMinutesByRepo,
+  agentsInsightNumbers,
   gridRepoLegend,
   lockAgentsIntensityPeak,
   visibleAgentsIntensityBands,
@@ -55,6 +56,22 @@ describe("buildAgentsDayModel", () => {
 
   it("collects distinct providers", () => {
     expect(buildAgentsDayModel(source).providers).toEqual(["claude", "codex"]);
+  });
+
+  it("measures the physical midnight-to-6am window after rotating the logical day", () => {
+    const boundarySource: AgentsDaySource = {
+      day: "2026-08-22",
+      attention: [],
+      turns: [
+        [60, 120, "codex"],
+        [360, 420, "codex"],
+        [1_260, 1_320, "codex"],
+      ],
+      commits: [],
+    };
+
+    const numbers = agentsInsightNumbers(boundarySource, buildAgentsDayModel(boundarySource), 4 * 60);
+    expect(numbers.nightSharePercent).toBeCloseTo(200 / 3);
   });
 });
 

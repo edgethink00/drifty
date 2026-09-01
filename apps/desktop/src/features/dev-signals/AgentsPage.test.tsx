@@ -35,6 +35,7 @@ function renderAgentsPage(overrides: Partial<Parameters<typeof AgentsPage>[0]> =
     onFlowIntervalChange: vi.fn(),
     onSelectDay: vi.fn(),
     selectedDay: "2026-08-28",
+    startOfDayMinutes: 0,
     startOfWeek: "monday",
     todayDay: "2026-08-28",
     ...overrides,
@@ -109,6 +110,7 @@ describe("AgentsPage shared dashboard controls", () => {
         onFlowIntervalChange={vi.fn()}
         onSelectDay={vi.fn()}
         selectedDay="2026-08-28"
+        startOfDayMinutes={0}
         startOfWeek="monday"
         todayDay="2026-08-28"
       />,
@@ -127,6 +129,7 @@ describe("AgentsPage shared dashboard controls", () => {
         onFlowIntervalChange={vi.fn()}
         onSelectDay={vi.fn()}
         selectedDay="2026-08-27"
+        startOfDayMinutes={0}
         startOfWeek="monday"
         todayDay="2026-08-28"
       />,
@@ -244,6 +247,37 @@ describe("AgentsPage shared dashboard controls", () => {
     act(() => vi.advanceTimersByTime(60_000));
 
     expect(scroller.scrollTop).toBe(123);
+  });
+
+  it("rotates Day and Week from the configured day start and shows the live time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 28, 9, 17, 0));
+    renderAgentsPage({ startOfDayMinutes: 4 * 60 });
+
+    const dayHourLabels = Array.from(document.querySelectorAll<HTMLElement>(".agents-flow-card .flow-chart-hours > span"));
+    expect(dayHourLabels[1]?.textContent).toMatch(/4\s*am/i);
+    expect(document.querySelector(".agents-flow-card .flow-chart-hour--now")?.textContent).toMatch(/9\s*am/i);
+    expect(document.querySelector(".agents-flow-card .flow-chart-row--now .flow-chart-row-label")?.textContent).toBe(":15");
+
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+
+    const weekHourLabels = Array.from(document.querySelectorAll<HTMLElement>(".agents-week-calendar .week-v2-calendar__time-rail > span"));
+    expect(weekHourLabels[0]?.textContent).toMatch(/4\s*am/i);
+    expect(document.querySelector(".agents-week-calendar .week-v2-calendar__time-rail-endpoint")?.textContent).toMatch(/4\s*am/i);
+    expect(screen.getByLabelText("Current time 9:17 AM")).toBeTruthy();
+    expect(screen.getByLabelText(/Agent run on Fri, 2026-08-28/i).getAttribute("aria-label")).toContain("05:00–06:00");
+  });
+
+  it("keeps an after-midnight current time on the previous logical day", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 29, 2, 17, 0));
+    renderAgentsPage({ startOfDayMinutes: 4 * 60 });
+
+    expect(document.querySelector(".agents-flow-card .flow-chart-hour--now")?.textContent).toMatch(/2\s*am/i);
+    expect(document.querySelector(".agents-flow-card .flow-chart-row--now .flow-chart-row-label")?.textContent).toBe(":15");
+
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+    expect(screen.getByLabelText("Current time 2:17 AM")).toBeTruthy();
   });
 
   it("shares the color mode across Day and Week and expands intensity through 50 concurrent turns", () => {

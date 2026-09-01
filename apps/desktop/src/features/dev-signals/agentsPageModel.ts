@@ -11,6 +11,7 @@
  * shapes the views render.
  */
 
+import { logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
 import {
   mergeSpans,
   overlapMinutes,
@@ -18,7 +19,7 @@ import {
   type MinuteSpan,
 } from "./devSignalsModel";
 
-/** [startMinute, endMinute] */
+/** [startMinute, endMinute], measured from the configured logical day start. */
 export type SpanTuple = readonly [number, number];
 /** [startMinute, endMinute, provider, repo?, model?, totalTokens?] — repo "" when the cwd did not resolve. */
 export type TurnTuple =
@@ -733,7 +734,7 @@ export function agentMinutesByRepo(sources: readonly AgentsDaySource[]): Map<str
 }
 
 export type AgentsHourHistogram = {
-  /** 24 values: agent wall-clock minutes with work in that hour. */
+  /** 24 values: agent wall-clock minutes in each logical-day hour. */
   readonly agentMinutes: readonly number[];
   /** 24 values: commits authored in that hour. */
   readonly commits: readonly number[];
@@ -741,7 +742,7 @@ export type AgentsHourHistogram = {
   readonly peakCommitHour: number;
 };
 
-/** Hour-of-day rhythm across several days: when do agents run, when do commits land. */
+/** Logical-day rhythm across several days: when do agents run, when do commits land. */
 export function agentsHourHistogram(sources: readonly AgentsDaySource[]): AgentsHourHistogram {
   const agentMinutes = new Array<number>(24).fill(0);
   const commits = new Array<number>(24).fill(0);
@@ -789,7 +790,11 @@ export type AgentsInsightNumbers = {
   readonly netLines: number;
 };
 
-export function agentsInsightNumbers(source: AgentsDaySource, model: AgentsDayModel): AgentsInsightNumbers {
+export function agentsInsightNumbers(
+  source: AgentsDaySource,
+  model: AgentsDayModel,
+  startOfDayMinutes = 0,
+): AgentsInsightNumbers {
   const merged = model.agent;
   let longest: MinuteSpan | null = null;
   for (const span of merged) {
@@ -799,9 +804,17 @@ export function agentsInsightNumbers(source: AgentsDaySource, model: AgentsDayMo
   const median = durations.length > 0 ? durations[Math.floor(durations.length / 2)]! : 0;
   const first = merged[0]?.start ?? null;
   const last = merged[merged.length - 1]?.end ?? null;
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
+  const nightStart = logicalMinuteOfDay(0, boundaryMinutes);
+  const nightEnd = logicalMinuteOfDay(6 * 60, boundaryMinutes);
+  const nightWindows: readonly MinuteSpan[] = nightStart < nightEnd
+    ? [{ start: nightStart, end: nightEnd }]
+    : [{ start: nightStart, end: 24 * 60 }, { start: 0, end: nightEnd }];
   let nightMinutes = 0;
   for (const span of merged) {
-    nightMinutes += Math.max(0, Math.min(span.end, 6 * 60) - Math.max(span.start, 0));
+    for (const window of nightWindows) {
+      nightMinutes += Math.max(0, Math.min(span.end, window.end) - Math.max(span.start, window.start));
+    }
   }
   const tokens = source.tokens ?? 0;
   const sessions = source.sessions ?? 0;

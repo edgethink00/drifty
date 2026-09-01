@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { shiftIsoDate } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
+import { getLogicalDayRange } from "../../lib/formatting";
 import {
   AGENTS_INTENSITY_LOOKBACK_DAYS,
   buildAgentsIntensityBands,
@@ -30,6 +31,10 @@ export type AgentsIntensityScale = {
 
 export function agentsIntensityLookbackStart(todayDay: string): string {
   return shiftIsoDate(todayDay, -(AGENTS_INTENSITY_LOOKBACK_DAYS - 1));
+}
+
+export function agentsIntensityLookbackRange(todayDay: string, startOfDayMinutes = 0): { start: string; end: string } {
+  return getLogicalDayRange(agentsIntensityLookbackStart(todayDay), todayDay, startOfDayMinutes);
 }
 
 export function readAgentsIntensityScale(storage?: Pick<Storage, "getItem"> | null): AgentsIntensityScaleState | null {
@@ -91,8 +96,9 @@ export function useAgentsIntensityScale(args: {
   readonly visiblePeak: number;
   readonly todayDay: string;
   readonly live: boolean;
+  readonly startOfDayMinutes?: number;
 }): AgentsIntensityScale {
-  const { visiblePeak, todayDay, live } = args;
+  const { visiblePeak, todayDay, live, startOfDayMinutes = 0 } = args;
   const [stored, setStored] = useState<AgentsIntensityScaleState | null>(() => (
     typeof window === "undefined" ? null : readAgentsIntensityScale(window.localStorage)
   ));
@@ -101,11 +107,10 @@ export function useAgentsIntensityScale(args: {
   useEffect(() => {
     if (!live) return;
     let cancelled = false;
-    const startDay = agentsIntensityLookbackStart(todayDay);
-    void trackerClient.getAgentConcurrencyPeak({
-      start: `${startDay}T00:00:00`,
-      end: `${todayDay}T23:59:59`,
-    }).then((payload) => {
+    void trackerClient.getAgentConcurrencyPeak(agentsIntensityLookbackRange(
+      todayDay,
+      startOfDayMinutes,
+    )).then((payload) => {
       if (cancelled) return;
       if (typeof payload?.peak !== "number" || !Number.isFinite(payload.peak)) return;
       setLookbackPeak(Math.max(0, Math.floor(payload.peak)));
@@ -116,7 +121,7 @@ export function useAgentsIntensityScale(args: {
     return () => {
       cancelled = true;
     };
-  }, [live, todayDay]);
+  }, [live, startOfDayMinutes, todayDay]);
 
   const resolved = useMemo(() => resolveAgentsIntensityScale({
     visiblePeak,

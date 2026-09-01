@@ -8450,6 +8450,7 @@ export default function App() {
             onFlowIntervalChange={handleFlowIntervalChange}
             onSelectDay={selectDay}
             selectedDay={selectedDay}
+            startOfDayMinutes={startOfDayMinutes}
             startOfWeek={startOfWeek}
             todayDay={todayDay}
           />

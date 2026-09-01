@@ -7,14 +7,23 @@
  * the tracker returns nothing at all, the real-week fixture keeps the surface
  * reviewable in a browser.
  *
- * Times land as minutes since local midnight because that is the unit both
- * views draw in; conversion happens here once, not in the components.
+ * Times land as minutes since the configured logical day start because that
+ * is the unit both views draw in; conversion happens here once, not in the
+ * components.
  */
 
 import { useEffect, useMemo, useState } from "react";
 
-import { shiftIsoDate, type DevRepoRecord, type DevSignalsDayPayload } from "@drifty/domain";
+import {
+  logicalDayIsoDateForDate,
+  logicalDayStartMs,
+  normalizeStartOfDayMinutes,
+  shiftIsoDate,
+  type DevRepoRecord,
+  type DevSignalsDayPayload,
+} from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
+import { getLogicalDayRange } from "../../lib/formatting";
 import type { AgentsDaySource, CommitTuple, SpanTuple, TurnTuple } from "./agentsPageModel";
 import { AGENTS_WEEK_FIXTURE } from "./agentsWeekFixture";
 
@@ -86,14 +95,13 @@ export function buildAgentsLoadingDays(days: readonly string[]): readonly Agents
   return days.map((day) => ({ day, attention: [], turns: [], commits: [] }));
 }
 
-/** Minutes since local midnight of `day`, clamped to the day. */
-function minuteOfDay(iso: string, day: string): number | null {
+/** Minutes since the configured start of logical `day`. */
+function minuteOfLogicalDay(iso: string, day: string, startOfDayMinutes: number): number | null {
   const stamp = new Date(iso);
   if (Number.isNaN(stamp.getTime())) return null;
-  const [year, month, dayOfMonth] = day.split("-").map(Number);
-  if (!year || !month || !dayOfMonth) return null;
-  const midnight = new Date(year, month - 1, dayOfMonth);
-  return (stamp.getTime() - midnight.getTime()) / 60000;
+  const dayStart = logicalDayStartMs(day, startOfDayMinutes);
+  if (Number.isNaN(dayStart)) return null;
+  return (stamp.getTime() - dayStart) / 60000;
 }
 
 function clampSpan(start: number | null, end: number | null): SpanTuple | null {
@@ -116,29 +124,38 @@ function toDaySource(
   payload: DevSignalsDayPayload,
   attention: readonly { startedAt: string; endedAt: string }[],
   reposByKey: ReadonlyMap<string, string>,
+  startOfDayMinutes: number,
 ): AgentsDaySource {
   const attentionSpans: SpanTuple[] = [];
   for (const segment of attention) {
-    const span = clampSpan(minuteOfDay(segment.startedAt, day), minuteOfDay(segment.endedAt, day));
+    const span = clampSpan(
+      minuteOfLogicalDay(segment.startedAt, day, startOfDayMinutes),
+      minuteOfLogicalDay(segment.endedAt, day, startOfDayMinutes),
+    );
     if (span) attentionSpans.push(span);
   }
 
   const turns: TurnTuple[] = [];
   const tokensBySession = new Map<string, number>();
   for (const turn of payload.agentTurns) {
-    const span = clampSpan(minuteOfDay(turn.startedAt, day), minuteOfDay(turn.endedAt, day));
+    const span = clampSpan(
+      minuteOfLogicalDay(turn.startedAt, day, startOfDayMinutes),
+      minuteOfLogicalDay(turn.endedAt, day, startOfDayMinutes),
+    );
     // Unlike commits (whose repo is always registered), a turn's cwd may be a
     // deleted worktree or a non-repo directory; those stay unlabelled rather
     // than showing a hash prefix.
     const turnRepo = turn.cwdKey ? reposByKey.get(turn.cwdKey) : undefined;
-    if (span) turns.push([span[0], span[1], turn.provider, turnRepo ? (turnRepo.split("/").filter(Boolean).pop() ?? "") : "", turn.model ?? "", turn.totalTokens ?? 0]);
-    // totalTokens is cumulative within a session; the session's figure is its max.
-    tokensBySession.set(turn.sessionKey, Math.max(tokensBySession.get(turn.sessionKey) ?? 0, turn.totalTokens ?? 0));
+    if (span) {
+      turns.push([span[0], span[1], turn.provider, turnRepo ? (turnRepo.split("/").filter(Boolean).pop() ?? "") : "", turn.model ?? "", turn.totalTokens ?? 0]);
+      // totalTokens is cumulative within a session; the session's figure is its max.
+      tokensBySession.set(turn.sessionKey, Math.max(tokensBySession.get(turn.sessionKey) ?? 0, turn.totalTokens ?? 0));
+    }
   }
 
   const commits: CommitTuple[] = [];
   for (const commit of payload.commits) {
-    const minute = minuteOfDay(commit.authoredAt, day);
+    const minute = minuteOfLogicalDay(commit.authoredAt, day, startOfDayMinutes);
     if (minute === null || minute < 0 || minute >= 24 * 60) continue;
     commits.push([
       Math.round(minute * 10) / 10,
@@ -168,9 +185,10 @@ type StoredAgentsDataState = AgentsDataState & {
   readonly rangeKey: string;
 };
 
-export function useAgentsData(startDay: string, endDay: string): AgentsDataState {
+export function useAgentsData(startDay: string, endDay: string, startOfDayMinutes = 0): AgentsDataState {
+  const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const days = useMemo(() => buildAgentsRangeDays(startDay, endDay), [endDay, startDay]);
-  const rangeKey = `${startDay}:${endDay}`;
+  const rangeKey = `${startDay}:${endDay}:${boundaryMinutes}`;
   const [state, setState] = useState<StoredAgentsDataState>(() => ({
     days: buildAgentsLoadingDays(days),
     loading: true,
@@ -193,15 +211,17 @@ export function useAgentsData(startDay: string, endDay: string): AgentsDataState
         // Fail-soft either way: a sync error must not block reading what is
         // already in the tracker database.
         const sync = trackerClient.syncDevSignals(agentsBackfillDays(startDay)).catch(() => null);
-        if (shouldAwaitBackfill(endDay)) await sync;
+        const logicalToday = logicalDayIsoDateForDate(new Date(), boundaryMinutes);
+        if (shouldAwaitBackfill(endDay, logicalToday)) await sync;
 
         const repos: DevRepoRecord[] = await trackerClient.getDevRepos().catch(() => []);
         const reposByKey = new Map(repos.map((repo) => [repo.repo_key, repo.repo_path]));
 
         const payloads = await Promise.all(days.map(async (day) => {
+          const query = getLogicalDayRange(day, day, boundaryMinutes);
           const [signals, attention] = await Promise.all([
-            trackerClient.getDevSignals({ day }),
-            trackerClient.getTimeline({ day }).catch(() => []),
+            trackerClient.getDevSignals(query),
+            trackerClient.getTimeline(query).catch(() => []),
           ]);
           return { day, signals, attention };
         }));
@@ -221,6 +241,7 @@ export function useAgentsData(startDay: string, endDay: string): AgentsDataState
           signals ?? { commits: [], agentTurns: [], agentSummary: { wallClockSeconds: 0, cumulativeSeconds: 0, concurrencyPeak: 0, parallelFactor: 0, spans: [] } },
           attention,
           reposByKey,
+          boundaryMinutes,
         ));
         setState({ days: sources, loading: false, live: true, rangeKey });
       } catch {
@@ -232,7 +253,7 @@ export function useAgentsData(startDay: string, endDay: string): AgentsDataState
     return () => {
       cancelled = true;
     };
-  }, [days, endDay, rangeKey, startDay]);
+  }, [boundaryMinutes, days, endDay, rangeKey, startDay]);
 
   if (state.rangeKey !== rangeKey) {
     return { days: buildAgentsLoadingDays(days), loading: true, live: false };

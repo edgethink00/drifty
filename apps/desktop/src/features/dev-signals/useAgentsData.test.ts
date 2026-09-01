@@ -105,4 +105,50 @@ describe("Your Agents date ranges", () => {
       live: false,
     });
   });
+
+  it("queries and maps a day from the configured logical start", async () => {
+    trackerClient.getDevSignals.mockResolvedValue({
+      ...emptySignals,
+      agentTurns: [{
+        provider: "codex",
+        sessionKey: "session-1",
+        turnIndex: 0,
+        startedAt: "2026-08-28T04:30:00",
+        endedAt: "2026-08-28T05:30:00",
+        activeSeconds: 3_600,
+        cwdKey: null,
+        model: "gpt-5",
+        totalTokens: 100,
+      }],
+      commits: [{
+        repoKey: "repo-1",
+        commitSha: "abc123",
+        authoredAt: "2026-08-29T03:30:00",
+        insertions: 12,
+        deletions: 3,
+        filesChanged: 2,
+      }],
+    });
+    trackerClient.getTimeline.mockResolvedValue([{
+      startedAt: "2026-08-28T04:15:00",
+      endedAt: "2026-08-28T04:45:00",
+    }]);
+
+    const hook = renderHook(() => useAgentsData("2026-08-28", "2026-08-28", 4 * 60));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    const logicalRange = {
+      start: "2026-08-28T04:00:00",
+      end: "2026-08-29T03:59:59",
+    };
+    expect(trackerClient.getDevSignals).toHaveBeenCalledWith(logicalRange);
+    expect(trackerClient.getTimeline).toHaveBeenCalledWith(logicalRange);
+    expect(hook.result.current.days[0]).toMatchObject({
+      attention: [[15, 45]],
+      turns: [[30, 90, "codex", "", "gpt-5", 100]],
+      commits: [[1_410, 12, 3, 2, "abc123", "repo-1"]],
+      sessions: 1,
+      tokens: 100,
+    });
+  });
 });

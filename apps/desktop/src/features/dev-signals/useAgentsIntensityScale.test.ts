@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildAgentsIntensityBands } from "./agentsPageModel";
 import {
   agentsIntensityBandsForScale,
+  agentsIntensityLookbackRange,
   agentsIntensityLookbackStart,
   readAgentsIntensityScale,
   resolveAgentsIntensityScale,
@@ -11,6 +12,10 @@ import {
 describe("personal intensity scale", () => {
   it("looks back 28 inclusive calendar days from today", () => {
     expect(agentsIntensityLookbackStart("2026-08-31")).toBe("2026-08-04");
+    expect(agentsIntensityLookbackRange("2026-08-31", 4 * 60)).toEqual({
+      start: "2026-08-04T04:00:00",
+      end: "2026-09-01T03:59:59",
+    });
   });
 
   it("keeps a quiet visible day on the locked personal legend", () => {
