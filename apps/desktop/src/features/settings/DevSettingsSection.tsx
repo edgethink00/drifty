@@ -22,6 +22,12 @@ import { SentrySmokeDiagnostics } from "./SentrySmokeDiagnostics";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { listenToNativePetModeLabState, previewNativePetModeFacing, requestNativePetModeLabState } from "../pet-mode/petModeBridge";
 import {
+  PET_MODE_SIT_VARIANT_STORAGE_KEY,
+  PET_MODE_SIT_VARIANT_OPTIONS,
+  resolvePetModeSitVariantSelection,
+  type PetModeSitVariantSelectionId,
+} from "../pet-mode/petModeSitVariant";
+import {
   PET_MODE_FLOOR_HOME_PT,
   PET_MODE_FLOOR_HOME_RANGE,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
@@ -195,6 +201,7 @@ export function DevSettingsSection({
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
     () => window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1",
   );
+  const [sitVariant, setSitVariant] = useState<PetModeSitVariantSelectionId>(resolvePetModeSitVariantSelection);
 
   const updateDriftHuntSettings = (next: PetModeDriftHuntSettings) => {
     setDriftHuntSettings(next);
@@ -407,6 +414,29 @@ export function DevSettingsSection({
                     : "Wake 25% · notes 5%"}</small>
               </span>
               <Toggle checked={petModeExperimentsEnabled && guaranteedOutcomes} disabled={!petModeExperimentsEnabled} onChange={updateGuaranteedOutcomes} ariaLabel="Toggle guaranteed expressive outcomes" />
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--sit-variant">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Sit-pose variant</div>
+              <div className="desc">R0.12 character-bible artwork. “Production default” follows the single release switch; refreshes on next sit.</div>
+            </div>
+            <div className="pet-mode-lab__controls pet-mode-lab__controls--sit-variant" role="radiogroup" aria-label="Sit-pose variant">
+              {PET_MODE_SIT_VARIANT_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`settings-btn pet-mode-lab__action${sitVariant === option.id ? " is-active" : ""}`}
+                  role="radio"
+                  aria-checked={sitVariant === option.id}
+                  onClick={() => {
+                    window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, option.id);
+                    setSitVariant(option.id);
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--target">

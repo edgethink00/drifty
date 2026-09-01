@@ -104,6 +104,16 @@ describe("pet mode coat rendering contract", () => {
     expect(css).toContain("filter: var(--pet-drag-raster-filter);");
   });
 
+  it("keeps live D on the same coat and grounding pipeline as standing", () => {
+    // The exact-reference Dev option may stay source-locked, but the live D
+    // must not special-case ivory: doing so made sit lose the shared ink ramp,
+    // drop shadow, and breathing only in the default coat.
+    expect(css).not.toContain('[data-pet-coat="ivory"] .pet-mode-cat.is-d-live-neutral');
+    expect(css).not.toContain(".pet-mode-cat.is-d-live-neutral {");
+    expect(css).toContain(".pet-mode-cat__raster.pet-mode-cat__sit-live {");
+    expect(css).toContain(".pet-mode-cat__d-live-eyes-art {");
+  });
+
   it("saturates every coat ramp so rasters match that coat's vector fur exactly", () => {
     // A ramp's final table entries must equal its own `--pet-fur`. If they
     // drift, baked frames and the walk/sleep vectors render as two different

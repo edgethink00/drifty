@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PET_MODE_SIT_VARIANT_STORAGE_KEY } from "./petModeSitVariant";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import {
   PET_MODE_SIT_MIN_MS,
@@ -57,6 +58,10 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 describe("pet sit pose", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -64,7 +69,8 @@ describe("pet sit pose", () => {
     bridge.eventHandler = null;
   });
 
-  it("renders the sit silhouette as one connected vector with its own blink", async () => {
+  it("keeps the legacy shipped fallback as one connected vector with its own blink", async () => {
+    window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "shipped");
     vi.useFakeTimers();
     render(<PetModeWindowApp />);
     await act(async () => undefined);
@@ -76,6 +82,7 @@ describe("pet sit pose", () => {
 
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(cat.getAttribute("data-sit-artwork")).toBe("shipped");
 
     // The pose must be vector like sleep, not a raster swap: a bitmap would
     // ignore the coat token and reintroduce the decode flash the walk/paw
@@ -113,6 +120,90 @@ describe("pet sit pose", () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("happy");
+  });
+
+  it("uses the approved D frame unchanged when the Dev lab selects it", async () => {
+    window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "d-lifted-tail");
+    vi.useFakeTimers();
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    const pose = cat.querySelector(".pet-mode-cat__sit-reference");
+    expect(cat.classList.contains("is-source-locked-sit")).toBe(true);
+    expect(pose?.tagName).toBe("IMG");
+    expect(pose?.getAttribute("src")).toBe("/pet-mode/sit-reference/d-lifted-tail.png");
+    expect(pose?.getAttribute("style")).toContain("--pet-sit-reference-offset-y: 3px");
+    expect(pose?.classList.contains("pet-mode-cat__vector")).toBe(false);
+  });
+
+  it("keeps D's approved open eyes as a live, coat-aware layer", async () => {
+    window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "d-lifted-tail-live");
+    vi.useFakeTimers();
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    const pose = cat.querySelector(".pet-mode-cat__d-live-neutral");
+    const body = cat.querySelector(".pet-mode-cat__d-live-body");
+    const eyeLayer = cat.querySelector(".pet-mode-cat__d-live-eyes");
+    const eyes = eyeLayer?.querySelector(".pet-mode-cat__d-live-eyes-art");
+    expect(cat.classList.contains("is-source-locked-sit")).toBe(false);
+    expect(cat.classList.contains("is-d-live-neutral")).toBe(true);
+    expect(cat.getAttribute("data-sit-artwork")).toBe("d-lifted-tail-live");
+    expect(cat.getAttribute("data-region-id")).toBe("sit:d-lifted-tail-live");
+    expect(pose?.getAttribute("src")).toBe("/pet-mode/sit-reference/d-lifted-tail-live.png");
+    expect(body?.getAttribute("src")).toBe("/pet-mode/sit-reference/d-lifted-tail-live-no-eyes.png");
+    expect(eyes?.getAttribute("src")).toBe("/pet-mode/sit-reference/d-lifted-tail-eyes.png");
+    expect(eyeLayer?.getAttribute("style")).toContain("--pet-sit-reference-offset-y: 3px");
+    expect(eyeLayer?.getAttribute("style")).toContain("--pet-d-live-gaze-x: 0.00px");
+    expect(eyeLayer?.querySelectorAll(".pet-mode-cat__d-live-blink-eye")).toHaveLength(2);
+    expect(cat.querySelector(".pet-mode-cat__d-live-closed-eyes")).toBeNull();
+  });
+
+  it("keeps D as one approved bitmap at rest, then switches layers only for a blink", async () => {
+    window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "d-lifted-tail-live");
+    vi.useFakeTimers();
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    const neutral = cat.querySelector(".pet-mode-cat__d-live-neutral");
+    const body = cat.querySelector(".pet-mode-cat__d-live-body");
+    const eyes = cat.querySelector(".pet-mode-cat__d-live-eyes");
+    expect(neutral?.classList.contains("is-hidden")).toBe(false);
+    expect(body?.classList.contains("is-visible")).toBe(false);
+    expect(eyes?.classList.contains("is-visible")).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(6_100);
+    });
+    expect(neutral?.classList.contains("is-hidden")).toBe(true);
+    expect(body?.classList.contains("is-visible")).toBe(true);
+    expect(eyes?.classList.contains("is-visible")).toBe(true);
+    expect(eyes?.classList.contains("is-blinking")).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(180);
+    });
+    expect(neutral?.classList.contains("is-hidden")).toBe(false);
+    expect(body?.classList.contains("is-visible")).toBe(false);
+    expect(eyes?.classList.contains("is-visible")).toBe(false);
   });
 
   it("makes sleep the likely continuation of a sit and unlikely from standing", () => {

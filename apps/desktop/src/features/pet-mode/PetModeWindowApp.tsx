@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { triggerNativeEndOfDayReviewAction } from "../companion/watcherBridge";
-import { PetModeCat, type PetModeCatPhase, type PetModeRestPose } from "./PetModeCat";
+import {
+  PetModeCat,
+  resolvePetModeSitGazeAnchor,
+  type PetModeCatPhase,
+  type PetModeRestPose,
+} from "./PetModeCat";
 import {
   alignNativePetContact,
   beginNativePetDrag,
@@ -1631,6 +1636,7 @@ export function PetModeWindowApp() {
             windowHeight: sample.windowHeight,
             facing: facingRef.current,
             pose,
+            sitGazeAnchor: pose === "sit" ? resolvePetModeSitGazeAnchor() : undefined,
             reducedMotion,
           }, gazeEngagedRef.current);
           gazeEngagedRef.current = next.engaged;

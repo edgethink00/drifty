@@ -2270,7 +2270,7 @@ describe("PetModeWindowApp", () => {
     dispatchPointer(pet, "pointerdown", { pointerId: 34, clientX: 18, clientY: 18 });
     await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
     expect(cat.getAttribute("data-phase")).toBe("drag");
-    expect(cat.getAttribute("data-region-id")).toBe("drag:sit");
+    expect(cat.getAttribute("data-region-id")).toBe("drag:sit:d-lifted-tail-live");
     expect(cat.querySelector(".pet-mode-cat__drag-pending-rest .pet-mode-cat__sit-pose")).toBeTruthy();
     expect(cat.querySelector('.pet-mode-cat__drag-pending-rest img[src="/pet-mode/paw/f001.png"]')).toBeNull();
 
@@ -2561,7 +2561,7 @@ describe("PetModeWindowApp", () => {
     dispatchPointer(pet, "pointerdown", { pointerId: 37, clientX: 18, clientY: 18 });
     await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
     expect(bridge.beginNativePetDrag).toHaveBeenCalledWith(18, 18, 0);
-    expect(cat.getAttribute("data-region-id")).toBe("drag:sit");
+    expect(cat.getAttribute("data-region-id")).toBe("drag:sit:d-lifted-tail-live");
 
     await act(async () => { completeNativeDrag(); await Promise.resolve(); await Promise.resolve(); });
     expect(cat.getAttribute("data-phase")).toBe("sit");

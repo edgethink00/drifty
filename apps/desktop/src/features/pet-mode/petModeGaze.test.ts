@@ -94,6 +94,34 @@ describe("petModeGaze", () => {
     expect(left.offset.x).toBeCloseTo(-right.offset.x, 6);
   });
 
+  it("uses D's measured eye anchor symmetrically in both facing directions", () => {
+    const dAnchor = { x: 126.75 / 150, y: 44.625 / 120 };
+    const vectorWidth = 92.4 * 150 / 120;
+    const vectorLeft = rest.windowX + 11.4 + (121.2 - vectorWidth) / 2;
+    const headY = rest.windowY + 4.2 + 92.4 * dAnchor.y;
+    const rightHeadX = vectorLeft + vectorWidth * dAnchor.x;
+    const leftHeadX = vectorLeft + vectorWidth * (1 - dAnchor.x);
+    const right = resolvePetModeGazeOffset({
+      ...rest,
+      pose: "sit",
+      sitGazeAnchor: dAnchor,
+      cursorX: rightHeadX + 40,
+      cursorY: headY,
+    }, false);
+    const left = resolvePetModeGazeOffset({
+      ...rest,
+      pose: "sit",
+      facing: "left",
+      sitGazeAnchor: dAnchor,
+      cursorX: leftHeadX + 40,
+      cursorY: headY,
+    }, false);
+    expect(right.engaged).toBe(true);
+    expect(left.engaged).toBe(true);
+    expect(left.offset.x).toBeCloseTo(-right.offset.x, 6);
+    expect(left.offset.y).toBeCloseTo(right.offset.y, 6);
+  });
+
   it("does not follow during reduced motion or non-resting poses", () => {
     expect(petModeGazePoseForPhase("idle")).toBe("idle");
     expect(petModeGazePoseForPhase("sit")).toBe("sit");

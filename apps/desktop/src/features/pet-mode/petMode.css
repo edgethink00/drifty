@@ -183,6 +183,13 @@
 }
 
 .pet-mode-cat.is-mirrored { transform: scaleX(-1); }
+/* An exact-reference Dev frame is intentionally a still: filter/shadow and
+   breathing would produce pixels that were not in the approved source frame. */
+.pet-mode-cat.is-source-locked-sit { filter: none; }
+.pet-mode-cat.is-source-locked-sit .pet-mode-cat__motion {
+  animation: none;
+  transform: none;
+}
 
 .pet-mode-cat__motion {
   position: absolute;
@@ -361,6 +368,78 @@
 }
 .pet-mode-cat__sleep-pose { transform: translateY(-1px); }
 .pet-mode-cat__sit-pose { transform: translateY(-1px); }
+/* D/E/B are source-locked R0.12 review frames. Keep their original pixels
+   unfiltered and lower their shorter canvas onto the shipped sit baseline. */
+.pet-mode-cat__raster.pet-mode-cat__sit-reference {
+  filter: none;
+  transform: translateY(var(--pet-sit-reference-offset-y));
+}
+/* D live keeps one complete approved source frame in its no-input state.
+   Its mutable eye/body layers are not composited until a gaze or blink starts,
+   so the first rendered frame remains a single bitmap. Unlike the exact Dev
+   reference, every live state stays on the shared coat, shadow, and breathing
+   pipeline; that keeps sitting aligned with the standing cat in all six coats. */
+.pet-mode-cat__raster.pet-mode-cat__sit-live {
+  transform: translateY(var(--pet-sit-reference-offset-y));
+}
+.pet-mode-cat__d-live-neutral {
+  display: block;
+}
+.pet-mode-cat__d-live-body {
+  display: none;
+}
+.pet-mode-cat__d-live-eyes {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.pet-mode-cat__d-live-eyes {
+  display: none;
+  transform: translate(
+    var(--pet-d-live-gaze-x, 0px),
+    calc(var(--pet-sit-reference-offset-y, 0px) + var(--pet-d-live-gaze-y, 0px))
+  );
+  transition: transform 160ms ease-out;
+}
+.pet-mode-cat__d-live-neutral.is-hidden { display: none; }
+.pet-mode-cat__d-live-body.is-visible,
+.pet-mode-cat__d-live-eyes.is-visible { display: block; }
+.pet-mode-cat__d-live-eyes-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: var(--pet-raster-filter);
+}
+.pet-mode-cat__d-live-blink-eye {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* The approved D source has two independently rasterized eyes. Closing the
+   combined 600 × 480 layer around one shared origin moved one eye and could
+   still read as two dots. Clip each original eye and flatten it around its own
+   measured center so the blink reads as two short lids without redrawing it. */
+.pet-mode-cat__d-live-blink-eye--rear {
+  clip-path: inset(35.8% 19.3% 59.4% 77%);
+  transform-origin: 78.83% 38.23%;
+}
+.pet-mode-cat__d-live-blink-eye--front {
+  clip-path: inset(34.1% 7.8% 61% 88.8%);
+  transform-origin: 90.5% 36.56%;
+}
+.pet-mode-cat__d-live-eyes.is-blinking > .pet-mode-cat__d-live-eyes-art { display: none; }
+.pet-mode-cat__d-live-eyes.is-blinking .pet-mode-cat__d-live-blink-eye {
+  display: block;
+  transform: scale(1.45, 0.26);
+}
 /* The blink scheduler swaps in the standing sprite, so it cannot drive a
    sitting blink without snapping the pose. A sit can be held for minutes,
    which is exactly the "frozen" impression this pose exists to remove, so the
@@ -842,7 +921,8 @@
   .pet-mode-cat__release-held,
   .pet-mode-cat__release-rest,
   .pet-mode-cat__sit-eye-open,
-  .pet-mode-cat__sit-eye-closed {
+  .pet-mode-cat__sit-eye-closed,
+  .pet-mode-cat__d-live-eyes-art {
     animation: none !important;
     transition: none !important;
   }

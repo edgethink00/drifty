@@ -14,6 +14,8 @@ export type PetModeGazeSample = {
   readonly windowHeight: number;
   readonly facing: "left" | "right";
   readonly pose: PetModeGazePose;
+  /** Optional normalized eye midpoint for sit artwork with a distinct face. */
+  readonly sitGazeAnchor?: { readonly x: number; readonly y: number };
   readonly reducedMotion: boolean;
 };
 
@@ -49,7 +51,7 @@ function petModeGazeHead(sample: PetModeGazeSample): { readonly x: number; reado
   const catWidth = PET_CAT.width * scaleX;
   const catHeight = PET_CAT.height * scaleY;
   const head = sample.pose === "sit"
-    ? SIT_HEAD
+    ? sample.sitGazeAnchor ?? SIT_HEAD
     : sample.pose === "walk"
       ? WALK_HEAD
       : IDLE_HEAD;

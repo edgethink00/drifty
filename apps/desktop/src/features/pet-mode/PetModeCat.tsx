@@ -22,6 +22,10 @@ import {
   petModeChaseCycleMs,
   petModeChaseMotionStyle,
 } from "./petModeChaseMotion";
+import {
+  resolvePetModeSitArtworkId,
+  type PetModeSitArtworkId,
+} from "./petModeSitVariant";
 
 type PetModeCatPhase =
   | "idle"
@@ -82,6 +86,7 @@ export function PetModeCat({
   proudWalk = false,
   musicNoteVisible = false,
   quietNotice = false,
+  devForceLiveBlink = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -108,12 +113,16 @@ export function PetModeCat({
   readonly musicNoteVisible?: boolean;
   /** Hides the drift-notice bang when the same pose is reused as a drop greeting. */
   readonly quietNotice?: boolean;
+  /** Deterministic Dev/QA capture hook; production callers leave this false. */
+  readonly devForceLiveBlink?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
   const walkFrameRef = useRef(0);
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
   const renderedEntrySequenceRef = useRef<number | null>(null);
+  const selectedSitVariantId = resolvePetModeSitArtworkId();
+  const selectedSitVariant = PET_MODE_SIT_VARIANTS[selectedSitVariantId];
 
   useEffect(() => {
     if (decorative) return;
@@ -139,6 +148,23 @@ export function PetModeCat({
       });
     return () => { active = false; };
   }, [decorative]);
+
+  useEffect(() => {
+    if (decorative || selectedSitVariant.kind === "vector") return;
+    const sources = selectedSitVariant.kind === "live-raster"
+      ? [selectedSitVariant.neutralSource, selectedSitVariant.source, selectedSitVariant.eyeSource]
+      : [selectedSitVariant.source];
+    const images = sources.map((source) => {
+      const image = new Image();
+      image.src = source;
+      return image;
+    });
+    void Promise.all(images.map((image) => image.decode?.() ?? Promise.resolve()))
+      .catch((error: unknown) => {
+        console.warn("[pet-mode] sit artwork failed to preload", error);
+        captureSentryException(error, { tags: { surface: "pet-mode", asset: "sit-artwork" } });
+      });
+  }, [decorative, selectedSitVariant, selectedSitVariantId]);
 
   useEffect(() => {
     if (decorative) return;
@@ -328,7 +354,12 @@ export function PetModeCat({
     && preserveEntryLanding
     && walkFrames.length > 0
     && renderedEntrySequenceRef.current === entrySequence;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}`;
+  const sitVariant = phase === "sit" ? selectedSitVariant : null;
+  const usesSourceLockedSit = sitVariant?.kind === "reference-raster";
+  const usesLiveD = selectedSitVariant.kind === "live-raster";
+  const hasLiveDSitGaze = phase === "sit" && usesLiveD && (gazeOffset.x !== 0 || gazeOffset.y !== 0);
+  const hasLiveDNeutralSit = phase === "sit" && usesLiveD && !hasLiveDSitGaze;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy"
     || phase === "drowsy";
@@ -411,11 +442,13 @@ export function PetModeCat({
           : phase === "drowsy"
             ? "drowsy"
           : phase === "drag"
-            ? `drag:${dragPickupPose}`
+            ? `drag:${dragPickupPose}${usesLiveD && dragPickupPose === "sit" ? ":d-lifted-tail-live" : ""}`
             : phase === "release"
-              ? `release:${dragReleasePose}`
-              : phase === "sit" || phase === "sleep"
-                ? phase
+              ? `release:${dragReleasePose}${usesLiveD && dragReleasePose === "sit" ? ":d-lifted-tail-live" : ""}`
+              : phase === "sit"
+                ? `sit${usesLiveD ? ":d-lifted-tail-live" : ""}`
+                : phase === "sleep"
+                  ? phase
                 : "idle";
 
   useLayoutEffect(() => {
@@ -431,7 +464,7 @@ export function PetModeCat({
   }, [decorative, hitRegionCommitRevision, hitRegionInteractive, mirrored, publishHitRegion, regionId]);
 
   return (
-    <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} style={motionGeometry}>
+    <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} data-sit-artwork={selectedSitVariantId} style={motionGeometry}>
       <svg className="pet-mode-cat__filters" width="0" height="0" aria-hidden="true">
         {/* The baked frames are effectively two-tone: body pixels sit near
             luminance 226 and facial detail near 20, with only anti-aliasing in
@@ -573,7 +606,7 @@ export function PetModeCat({
         ) : phase === "drag" ? (
           <>
             <span className="pet-mode-cat__drag-pending-rest">
-              <PetModeRestPoseArtwork pose={dragPickupPose} gazeOffset={gazeOffset} />
+              <PetModeRestPoseArtwork pose={dragPickupPose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
             </span>
             <img
               className="pet-mode-cat__raster pet-mode-cat__raster--drag pet-mode-cat__drag-pending-held"
@@ -591,7 +624,7 @@ export function PetModeCat({
               draggable={false}
             />
             <span className="pet-mode-cat__release-rest">
-              <PetModeRestPoseArtwork pose={dragReleasePose} gazeOffset={gazeOffset} />
+              <PetModeRestPoseArtwork pose={dragReleasePose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
             </span>
           </>
         ) : lifeMotionAsset ? (
@@ -604,7 +637,7 @@ export function PetModeCat({
         ) : phase === "sleep" ? (
           <PetModeSleepPose />
         ) : phase === "sit" ? (
-          <PetModeSitPose gazeOffset={gazeOffset} />
+          <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
         ) : holdsRenderedEntryVector ? (
           <svg
             ref={registerWalkVector}
@@ -670,12 +703,18 @@ export function PetModeCat({
 
 function PetModeRestPoseArtwork({
   pose,
+  sitVariantId,
   gazeOffset,
+  reducedMotion = false,
+  devForceLiveBlink = false,
 }: {
   readonly pose: PetModeRestPose;
+  readonly sitVariantId: PetModeSitArtworkId;
   readonly gazeOffset: PetModeGazeOffset;
+  readonly reducedMotion?: boolean;
+  readonly devForceLiveBlink?: boolean;
 }) {
-  if (pose === "sit") return <PetModeSitPose gazeOffset={gazeOffset} />;
+  if (pose === "sit") return <PetModeSitPose sitVariantId={sitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />;
   return (
     <img
       className="pet-mode-cat__raster"
@@ -730,6 +769,92 @@ function PetModeExpression({ phase }: { readonly phase: PetModeCatPhase }) {
 }
 
 const PET_MODE_SIT_FACE_TRANSFORM = "translate(-12.84 -0.3)";
+
+/* ── Sit-pose variant registry (R0.12 character-bible artwork) ──────────────────
+   Live D is the reviewed production sit. The former shipped vector remains an
+   explicit fallback, while D/E/B reference frames stay available in the Dev
+   lab as source-locked raster cutouts. This is deliberate: a
+   traced SVG necessarily changes the source antialiasing and tiny silhouette
+   decisions, while these assets reproduce the reviewed frame pixel-for-pixel
+   when composited on its reference background. */
+
+interface PetModeSitVectorVariant {
+  readonly kind: "vector";
+  readonly label: string;
+  readonly bodyPath: string;
+  readonly faceTransform: string;
+}
+
+interface PetModeSitReferenceRasterVariant {
+  readonly kind: "reference-raster";
+  readonly label: string;
+  /** Exact R0.12 frame, with only its #11110f canvas made transparent. */
+  readonly source: string;
+  /** Original-canvas baseline aligned to the shipped sit pose's feet. */
+  readonly baselineOffsetY: number;
+}
+
+interface PetModeSitLiveRasterVariant {
+  readonly kind: "live-raster";
+  readonly label: string;
+  /** Approved complete D frame; live rendering applies the shared coat ramp. */
+  readonly neutralSource: string;
+  /** Source-derived body without eye pixels for gaze and blink states. */
+  readonly source: string;
+  /** Approved-source open eyes, independently movable for live gaze and blink. */
+  readonly eyeSource: string;
+  readonly baselineOffsetY: number;
+  /** Eye midpoint measured on D's 150 × 120 display coordinate system. */
+  readonly gazeAnchor: { readonly x: number; readonly y: number };
+  /** D's face has less safe eye travel than the shipped vector face. */
+  readonly gazeScale: number;
+}
+
+type PetModeSitVariant = PetModeSitVectorVariant | PetModeSitReferenceRasterVariant | PetModeSitLiveRasterVariant;
+
+const PET_MODE_SIT_VARIANTS: Record<PetModeSitArtworkId, PetModeSitVariant> = {
+  shipped: {
+    kind: "vector",
+    label: "Shipped vector",
+    bodyPath:
+      "M93.3 19.0C94.0 19.3 95.9 19.6 97.2 20.8C98.5 22.0 99.9 24.8 101.1 26.1C102.3 27.5 103.1 28.3 104.3 28.7C105.5 29.0 106.5 29.5 108.2 28.2C110.0 26.9 113.0 22.2 114.6 20.8C116.3 19.5 117.2 20.3 118.1 20.4C119.0 20.4 117.6 18.0 119.7 21.1C121.8 24.2 128.0 34.2 130.3 38.5C132.6 42.9 132.7 43.7 133.3 46.8C133.8 49.9 134.1 53.8 133.7 56.9C133.3 60.0 132.1 62.8 131.0 65.0C129.8 67.2 129.1 67.8 126.8 69.8C124.6 71.7 119.6 74.5 117.6 76.5C115.7 78.4 116.1 77.6 115.3 81.1C114.6 84.5 113.3 92.4 113.0 96.9C112.8 101.4 113.8 105.1 113.7 107.5C113.6 109.8 113.3 109.8 112.3 110.7C111.4 111.6 109.5 112.3 108.2 112.5C106.9 112.8 105.6 112.5 104.5 112.1C103.5 111.7 102.7 111.1 102.0 110.2C101.3 109.3 100.4 106.8 100.4 106.8C100.4 106.8 99.5 109.4 99.0 110.2C98.5 111.1 98.3 111.2 97.6 111.6C96.9 112.0 95.9 112.4 94.9 112.5C93.9 112.7 92.9 112.7 91.9 112.5C90.9 112.4 90.1 112.5 89.1 111.6C88.2 110.8 86.1 107.5 86.1 107.5C86.1 107.5 85.7 109.6 85.0 110.5C84.3 111.3 85.5 112.1 82.0 112.5C78.5 113.0 69.4 113.2 64.5 113.0C59.7 112.8 56.3 112.1 53.5 111.4C50.7 110.6 51.0 109.2 48.0 108.6C44.9 108.0 38.9 108.5 35.6 107.9C32.3 107.4 30.7 106.5 28.7 105.6C26.7 104.7 25.5 104.1 23.9 102.7C22.2 101.2 20.1 99.0 18.8 96.9C17.5 94.8 16.7 92.5 16.3 90.2C15.8 88.0 15.9 85.5 16.0 83.6C16.2 81.7 16.7 80.5 17.4 79.2C18.1 78.0 18.9 76.9 20.2 76.2C21.4 75.6 23.6 75.5 24.8 75.5C25.9 75.6 26.2 76.1 26.9 76.7C27.5 77.3 28.2 77.7 28.5 79.2C28.7 80.7 28.0 83.5 28.2 85.4C28.5 87.3 28.9 89.0 30.1 90.5C31.2 91.9 33.1 93.1 34.9 93.9C36.7 94.7 39.5 96.8 40.4 95.1C41.3 93.4 40.1 86.7 40.2 84.0C40.3 81.4 40.3 81.8 40.9 79.7C41.5 77.5 42.6 73.8 43.6 71.4C44.7 69.0 45.6 67.5 47.1 65.4C48.6 63.4 50.9 61.0 52.6 59.4C54.3 57.9 55.2 57.3 57.2 56.2C59.2 55.1 61.6 54.0 64.3 53.0C67.0 52.1 70.8 51.7 73.0 50.7C75.3 49.8 75.3 51.6 77.4 47.5C79.6 43.4 83.7 31.3 85.7 26.8C87.7 22.4 88.2 22.5 89.1 21.3C90.0 20.1 90.3 20.0 91.0 19.7C91.6 19.3 92.7 19.3 93.0 19.2C93.4 19.1 92.6 18.7 93.3 19.0Z",
+    faceTransform: PET_MODE_SIT_FACE_TRANSFORM,
+  },
+  "d-lifted-tail-live": {
+    kind: "live-raster",
+    label: "D — Lifted Tail (live)",
+    neutralSource: "/pet-mode/sit-reference/d-lifted-tail-live.png",
+    source: "/pet-mode/sit-reference/d-lifted-tail-live-no-eyes.png",
+    eyeSource: "/pet-mode/sit-reference/d-lifted-tail-eyes.png",
+    baselineOffsetY: 3,
+    gazeAnchor: { x: 126.75 / 150, y: 44.625 / 120 },
+    gazeScale: 0.4,
+  },
+  "d-lifted-tail": {
+    kind: "reference-raster",
+    label: "D — Lifted Tail (exact reference)",
+    source: "/pet-mode/sit-reference/d-lifted-tail.png",
+    baselineOffsetY: 3,
+  },
+  "e-clean-front": {
+    kind: "reference-raster",
+    label: "E — Clean Front (exact reference)",
+    source: "/pet-mode/sit-reference/e-clean-front.png",
+    baselineOffsetY: 4.8,
+  },
+  "b-low-rise": {
+    kind: "reference-raster",
+    label: "B — Low Rise (exact reference)",
+    source: "/pet-mode/sit-reference/b-low-rise.png",
+    baselineOffsetY: 7.3,
+  },
+};
+
+/** The live-D raster does not share the former vector fallback's face placement. */
+function resolvePetModeSitGazeAnchor(): { readonly x: number; readonly y: number } | undefined {
+  const variant = PET_MODE_SIT_VARIANTS[resolvePetModeSitArtworkId()];
+  return variant.kind === "live-raster" ? variant.gazeAnchor : undefined;
+}
 
 function PetModeWalkFace({
   transform,
@@ -788,12 +913,104 @@ function PetModeWalkFace({
   );
 }
 
-function PetModeSitPose({ gazeOffset }: { readonly gazeOffset: PetModeGazeOffset }) {
+function PetModeSitPose({
+  sitVariantId,
+  gazeOffset,
+  reducedMotion = false,
+  devForceLiveBlink = false,
+}: {
+  readonly sitVariantId: PetModeSitArtworkId;
+  readonly gazeOffset: PetModeGazeOffset;
+  readonly reducedMotion?: boolean;
+  readonly devForceLiveBlink?: boolean;
+}) {
+  const variant = PET_MODE_SIT_VARIANTS[sitVariantId];
+  const liveVariant = variant.kind === "live-raster";
+  const [liveBlinking, setLiveBlinking] = useState(false);
+
+  useEffect(() => {
+    if (!liveVariant || reducedMotion) {
+      setLiveBlinking(false);
+      return undefined;
+    }
+
+    let closeTimer: number | undefined;
+    let repeatBlink: number | undefined;
+    const startBlink = () => {
+      setLiveBlinking(true);
+      closeTimer = window.setTimeout(() => setLiveBlinking(false), 180);
+    };
+    const firstBlink = window.setTimeout(() => {
+      startBlink();
+      repeatBlink = window.setInterval(startBlink, 6_400);
+    }, 6_100);
+
+    return () => {
+      window.clearTimeout(firstBlink);
+      if (closeTimer !== undefined) window.clearTimeout(closeTimer);
+      if (repeatBlink !== undefined) window.clearInterval(repeatBlink);
+    };
+  }, [liveVariant, reducedMotion]);
+
+  if (variant.kind === "reference-raster") {
+    return (
+      <img
+        className="pet-mode-cat__raster pet-mode-cat__sit-pose pet-mode-cat__sit-reference"
+        src={variant.source}
+        alt=""
+        draggable={false}
+        style={{ "--pet-sit-reference-offset-y": `${variant.baselineOffsetY}px` } as CSSProperties}
+      />
+    );
+  }
+
+  if (variant.kind === "live-raster") {
+    const gazing = gazeOffset.x !== 0 || gazeOffset.y !== 0;
+    const blinking = devForceLiveBlink || liveBlinking;
+    const usesLiveLayers = gazing || blinking;
+    const liveEyeStyle = {
+      "--pet-d-live-gaze-x": `${(gazeOffset.x * variant.gazeScale).toFixed(2)}px`,
+      "--pet-d-live-gaze-y": `${(gazeOffset.y * variant.gazeScale).toFixed(2)}px`,
+      "--pet-sit-reference-offset-y": `${variant.baselineOffsetY}px`,
+    } as CSSProperties;
+    return (
+      <>
+        <img
+          className={`pet-mode-cat__raster pet-mode-cat__sit-pose pet-mode-cat__sit-live pet-mode-cat__d-live-neutral${usesLiveLayers ? " is-hidden" : ""}`}
+          src={variant.neutralSource}
+          alt=""
+          draggable={false}
+          style={{ "--pet-sit-reference-offset-y": `${variant.baselineOffsetY}px` } as CSSProperties}
+        />
+        <img
+          className={`pet-mode-cat__raster pet-mode-cat__sit-pose pet-mode-cat__sit-live pet-mode-cat__d-live-body${usesLiveLayers ? " is-visible" : ""}`}
+          src={variant.source}
+          alt=""
+          draggable={false}
+          style={{ "--pet-sit-reference-offset-y": `${variant.baselineOffsetY}px` } as CSSProperties}
+        />
+        {/* The open eyes are extracted from the approved D still. The complete
+            neutral bitmap carries the approved geometry through the same coat
+            pipeline as every standing frame; the separated layers are exposed
+            only for gaze and blink. */}
+        <span className={`pet-mode-cat__d-live-eyes${gazing ? " pet-mode-cat__vector-eye--gaze" : ""}${blinking ? " is-blinking" : ""}${usesLiveLayers ? " is-visible" : ""}`} aria-hidden="true" style={liveEyeStyle}>
+          <img className="pet-mode-cat__d-live-eyes-art" src={variant.eyeSource} alt="" draggable={false} />
+          <span className="pet-mode-cat__d-live-blink-eye pet-mode-cat__d-live-blink-eye--rear">
+            <img className="pet-mode-cat__d-live-eyes-art" src={variant.eyeSource} alt="" draggable={false} />
+          </span>
+          <span className="pet-mode-cat__d-live-blink-eye pet-mode-cat__d-live-blink-eye--front">
+            <img className="pet-mode-cat__d-live-eyes-art" src={variant.eyeSource} alt="" draggable={false} />
+          </span>
+        </span>
+      </>
+    );
+  }
+
   const gazing = gazeOffset.x !== 0 || gazeOffset.y !== 0;
   return (
     <svg className="pet-mode-cat__vector pet-mode-cat__sit-pose" viewBox="0 0 150 120" aria-hidden="true" style={{ "--pet-gaze-x": `${gazeOffset.x.toFixed(2)}px`, "--pet-gaze-y": `${gazeOffset.y.toFixed(2)}px` } as CSSProperties}>
-      <path fill="currentColor" d="M93.3 19.0C94.0 19.3 95.9 19.6 97.2 20.8C98.5 22.0 99.9 24.8 101.1 26.1C102.3 27.5 103.1 28.3 104.3 28.7C105.5 29.0 106.5 29.5 108.2 28.2C110.0 26.9 113.0 22.2 114.6 20.8C116.3 19.5 117.2 20.3 118.1 20.4C119.0 20.4 117.6 18.0 119.7 21.1C121.8 24.2 128.0 34.2 130.3 38.5C132.6 42.9 132.7 43.7 133.3 46.8C133.8 49.9 134.1 53.8 133.7 56.9C133.3 60.0 132.1 62.8 131.0 65.0C129.8 67.2 129.1 67.8 126.8 69.8C124.6 71.7 119.6 74.5 117.6 76.5C115.7 78.4 116.1 77.6 115.3 81.1C114.6 84.5 113.3 92.4 113.0 96.9C112.8 101.4 113.8 105.1 113.7 107.5C113.6 109.8 113.3 109.8 112.3 110.7C111.4 111.6 109.5 112.3 108.2 112.5C106.9 112.8 105.6 112.5 104.5 112.1C103.5 111.7 102.7 111.1 102.0 110.2C101.3 109.3 100.4 106.8 100.4 106.8C100.4 106.8 99.5 109.4 99.0 110.2C98.5 111.1 98.3 111.2 97.6 111.6C96.9 112.0 95.9 112.4 94.9 112.5C93.9 112.7 92.9 112.7 91.9 112.5C90.9 112.4 90.1 112.5 89.1 111.6C88.2 110.8 86.1 107.5 86.1 107.5C86.1 107.5 85.7 109.6 85.0 110.5C84.3 111.3 85.5 112.1 82.0 112.5C78.5 113.0 69.4 113.2 64.5 113.0C59.7 112.8 56.3 112.1 53.5 111.4C50.7 110.6 51.0 109.2 48.0 108.6C44.9 108.0 38.9 108.5 35.6 107.9C32.3 107.4 30.7 106.5 28.7 105.6C26.7 104.7 25.5 104.1 23.9 102.7C22.2 101.2 20.1 99.0 18.8 96.9C17.5 94.8 16.7 92.5 16.3 90.2C15.8 88.0 15.9 85.5 16.0 83.6C16.2 81.7 16.7 80.5 17.4 79.2C18.1 78.0 18.9 76.9 20.2 76.2C21.4 75.6 23.6 75.5 24.8 75.5C25.9 75.6 26.2 76.1 26.9 76.7C27.5 77.3 28.2 77.7 28.5 79.2C28.7 80.7 28.0 83.5 28.2 85.4C28.5 87.3 28.9 89.0 30.1 90.5C31.2 91.9 33.1 93.1 34.9 93.9C36.7 94.7 39.5 96.8 40.4 95.1C41.3 93.4 40.1 86.7 40.2 84.0C40.3 81.4 40.3 81.8 40.9 79.7C41.5 77.5 42.6 73.8 43.6 71.4C44.7 69.0 45.6 67.5 47.1 65.4C48.6 63.4 50.9 61.0 52.6 59.4C54.3 57.9 55.2 57.3 57.2 56.2C59.2 55.1 61.6 54.0 64.3 53.0C67.0 52.1 70.8 51.7 73.0 50.7C75.3 49.8 75.3 51.6 77.4 47.5C79.6 43.4 83.7 31.3 85.7 26.8C87.7 22.4 88.2 22.5 89.1 21.3C90.0 20.1 90.3 20.0 91.0 19.7C91.6 19.3 92.7 19.3 93.0 19.2C93.4 19.1 92.6 18.7 93.3 19.0Z" />
-      <PetModeWalkFace transform={PET_MODE_SIT_FACE_TRANSFORM} animatedBlink gazing={gazing} />
+      <path fill="currentColor" d={variant.bodyPath} />
+      <PetModeWalkFace transform={variant.faceTransform} animatedBlink gazing={gazing} />
     </svg>
   );
 }
@@ -814,4 +1031,7 @@ function PetModeSleepPose() {
   );
 }
 
+export {
+  resolvePetModeSitGazeAnchor,
+};
 export type { PetModeCatPhase, PetModeRestPose };
