@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentsDaySource } from "./agentsPageModel";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 import { useAgentsData } from "./useAgentsData";
 import { AgentsPage } from "./AgentsPage";
 
@@ -29,7 +30,10 @@ const source: AgentsDaySource = {
   tokens: 1_000,
 };
 
-function renderAgentsPage(overrides: Partial<Parameters<typeof AgentsPage>[0]> = {}) {
+function renderAgentsPage(
+  overrides: Partial<Parameters<typeof AgentsPage>[0]> = {},
+  language: DisplayLanguage = "en",
+) {
   const props: Parameters<typeof AgentsPage>[0] = {
     flowIntervalMinutes: 3,
     onFlowIntervalChange: vi.fn(),
@@ -40,7 +44,11 @@ function renderAgentsPage(overrides: Partial<Parameters<typeof AgentsPage>[0]> =
     todayDay: "2026-08-28",
     ...overrides,
   };
-  render(<AgentsPage {...props} />);
+  render(
+    <LocalizationTestProvider language={language}>
+      <AgentsPage {...props} />
+    </LocalizationTestProvider>,
+  );
   return props;
 }
 
@@ -72,6 +80,25 @@ describe("AgentsPage shared dashboard controls", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show previous agents week" }));
     expect(props.onSelectDay).toHaveBeenCalledWith("2026-08-21");
+  });
+
+  it("renders the Day and Week agent surfaces in Korean", () => {
+    renderAgentsPage({}, "ko");
+
+    expect(screen.getByRole("heading", { name: "에이전트가 1시간 실행됐습니다" }).textContent).toBe("에이전트 실행1시간");
+    expect(screen.getByRole("button", { name: "이전 에이전트 날짜 보기" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "오늘" })).toBeTruthy();
+    expect(screen.getByText("에이전트 리듬 · 시간대별")).toBeTruthy();
+    expect(screen.getByText("가장 활발한 저장소")).toBeTruthy();
+    expect(screen.getByText("순 코드 줄")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "주간" }));
+
+    expect(screen.getByRole("button", { name: "이전 에이전트 주 보기" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "이번 주" })).toBeTruthy();
+    expect(screen.getByLabelText("에이전트 주간 캘린더")).toBeTruthy();
+    expect(screen.getByLabelText(/금 2026-08-28 에이전트 실행/)).toBeTruthy();
+    expect(screen.queryByText("Agent rhythm · by hour")).toBeNull();
   });
 
   it("opens SSH collection with local config discovery and a custom-host fallback", async () => {

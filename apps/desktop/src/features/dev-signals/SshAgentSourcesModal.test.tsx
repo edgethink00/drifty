@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { SSH_AGENT_SOURCES_STORAGE_KEY } from "./sshAgentSourcesStorage";
 import { SshAgentSourcesModal } from "./SshAgentSourcesModal";
 
@@ -61,6 +62,54 @@ describe("SshAgentSourcesModal", () => {
     fireEvent.change(input, { target: { value: "custom-worker" } });
     expect(input.value).toBe("custom-worker");
     expect(screen.getByRole("button", { name: "Test connection" })).not.toHaveProperty("disabled", true);
+  });
+
+  it("renders controls and connection guidance in Korean", async () => {
+    trackerClient.testSshAgentSource.mockResolvedValue({
+      ok: false,
+      code: "host_key",
+      message: "This host is not trusted yet. Connect once in Terminal, verify its fingerprint, then retry.",
+      host: "new-worker",
+    });
+    render(
+      <LocalizationTestProvider language="ko">
+        <SshAgentSourcesModal onClose={vi.fn()} onCollected={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("dialog", { name: "SSH에서 수집" })).toBeTruthy();
+    expect(await screen.findByText("SSH 호스트를 찾지 못했습니다. 호스트를 직접 입력할 수 있습니다.")).toBeTruthy();
+    const input = screen.getByLabelText("호스트 또는 별칭") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "new-worker" } });
+    fireEvent.click(screen.getByRole("button", { name: "연결 테스트" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("아직 신뢰하지 않은 호스트입니다");
+    expect(screen.getByRole("button", { name: "수집 및 저장" })).toHaveProperty("disabled", true);
+  });
+
+  it("localizes the browser-only SSH discovery fallback in Korean", async () => {
+    trackerClient.listSshAgentSources.mockResolvedValue({
+      ok: false,
+      code: "unavailable",
+      message: "SSH config discovery is available in the Drifty desktop app.",
+      aliases: [],
+    });
+    trackerClient.testSshAgentSource.mockResolvedValue({
+      ok: false,
+      code: "unavailable",
+      message: "SSH collection is available in the Drifty desktop app.",
+      host: "worker",
+    });
+    render(
+      <LocalizationTestProvider language="ko">
+        <SshAgentSourcesModal onClose={vi.fn()} onCollected={vi.fn()} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(await screen.findByText("SSH 설정 검색은 Drifty 데스크톱 앱에서 사용할 수 있습니다.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("호스트 또는 별칭"), { target: { value: "worker" } });
+    fireEvent.click(screen.getByRole("button", { name: "연결 테스트" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("SSH 수집은 Drifty 데스크톱 앱에서 사용할 수 있습니다.");
   });
 
   afterEach(() => {

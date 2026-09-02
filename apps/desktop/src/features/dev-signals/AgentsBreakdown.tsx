@@ -14,8 +14,10 @@
 import { useMemo } from "react";
 
 import type { FlowBlock } from "@drifty/domain";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { CompactRingChart, type CompactRingEntry } from "../dashboard/CompactRingChart";
 import { CompactClassificationBar } from "../dashboard/CompactClassificationBar";
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import {
   agentModelRows,
   agentMinutesByRepo,
@@ -48,6 +50,12 @@ type RepoBarEntry = {
   readonly totalSeconds: number;
   readonly ratio: number;
 };
+
+function formatAgentDuration(minutes: number, language: DisplayLanguage): string {
+  return language === "ko"
+    ? formatLocalizedCompactDurationFromSeconds(Math.round(minutes * 60), language)
+    : formatHours(minutes);
+}
 
 function buildModelSlices(sources: readonly AgentsDaySource[], limit = 6): AgentsModelSlice[] {
   return agentModelRows(sources).slice(0, limit).map((row, index) => ({
@@ -122,6 +130,7 @@ function useRepoEntries(
 }
 
 export function AgentsBreakdownComposed({ sources, dayModel, models, period }: AgentsBreakdownProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const week = useMemo(() => buildAgentsWeekModel(models), [models]);
   const agentMinutes = period === "Today" ? dayModel?.agentMinutes ?? 0 : week.agentMinutes;
   const slices = useMemo(() => buildModelSlices(sources), [sources]);
@@ -140,35 +149,40 @@ export function AgentsBreakdownComposed({ sources, dayModel, models, period }: A
   const attentionMinutes = period === "Today" ? dayModel?.attentionMinutes ?? 0 : week.attentionMinutes;
   const unattendedMinutes = period === "Today" ? dayModel?.unattendedMinutes ?? 0 : 0;
   const ratio = attentionMinutes > 0 ? agentMinutes / attentionMinutes : 0;
-  const keyboardLabel = period === "Today" ? "at the keyboard" : "at the keyboard this week";
 
   return (
     <>
       <section className="agents-story agents-story--lead">
-        <span className="label-mono">How much ran</span>
-        <strong className="agents-story__value">{formatHours(agentMinutes)}</strong>
+        <span className="label-mono">{t("agents.breakdown.howMuch")}</span>
+        <strong className="agents-story__value">{formatAgentDuration(agentMinutes, effectiveLanguage)}</strong>
         <p className="agents-story__detail">
-          {ratio > 0 ? `${ratio.toFixed(1)}× your ${formatHours(attentionMinutes)} ${keyboardLabel}` : "No captured attention to compare"}
+          {ratio > 0
+            ? t(period === "Today" ? "agents.breakdown.attentionDay" : "agents.breakdown.attentionWeek", {
+                ratio: ratio.toFixed(1),
+                duration: formatAgentDuration(attentionMinutes, effectiveLanguage),
+              })
+            : t("agents.breakdown.noAttention")}
         </p>
         <div className="agents-story__meter" aria-hidden="true">
           <span style={{ width: `${Math.min(100, (attentionMinutes / Math.max(1, agentMinutes)) * 100)}%` }} />
         </div>
         {unattendedMinutes > 0 ? (
-          <p className="agents-story__detail">{formatHours(unattendedMinutes)} ran with nobody watching</p>
+          <p className="agents-story__detail">{t("agents.breakdown.unattended", { duration: formatAgentDuration(unattendedMinutes, effectiveLanguage) })}</p>
         ) : null}
       </section>
 
       <CompactRingChart
-        title="Models"
+        title={t("agents.breakdown.models")}
         entries={ringEntries}
         totalSeconds={ringSeconds}
         centerPercent={Math.round(slices[0]?.share ?? 0)}
         flowBlocks={[]}
         appIcons={{}}
+        language={effectiveLanguage}
       />
       <CompactClassificationBar
-        title="Repos"
-        ariaLabel="Repository share of agent time"
+        title={t("agents.breakdown.repos")}
+        ariaLabel={t("agents.breakdown.repoShareAria")}
         entries={repoEntries}
         totalSeconds={repoSeconds}
         getKey={(entry) => entry.key}
@@ -178,6 +192,7 @@ export function AgentsBreakdownComposed({ sources, dayModel, models, period }: A
         getAppBreakdown={() => []}
         appIcons={{}}
         visibleLimit={4}
+        language={effectiveLanguage}
       />
     </>
   );

@@ -31,9 +31,16 @@ import {
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { MetricTile } from "../../components/MetricTile";
-import { clockHourForLogicalHour, formatCalendarMinuteLabel, formatDateRangeLabel } from "../../lib/formatting";
+import {
+  clockHourForLogicalHour,
+  formatLocalizedCalendarMinuteLabel,
+  formatLocalizedCompactDurationFromSeconds,
+  formatLocalizedDateRangeLabel,
+  formatLocalizedHourLabel,
+  formatLocalizedQuarterHourLabel,
+} from "../../lib/formatting";
 import { BreakdownSidePanel } from "../dashboard/BreakdownSidePanelChrome";
-import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, shiftDashboardPeriodDay } from "../dashboard/dashboardPeriods";
+import { getDashboardPeriodRange, shiftDashboardPeriodDay } from "../dashboard/dashboardPeriods";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "../dashboard/weekDashboardAxisScale";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type StartOfWeek } from "../settings/settingsStorage";
 import { FlowDetailSelect } from "../flow-chart/FlowDetailSelect";
@@ -42,7 +49,7 @@ import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
 import { FlowHoverLayer } from "../flow-chart/FlowHoverLayer";
 import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
-import { formatHourLabel } from "../flow-chart/flowChartFormat";
+import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import { FOCUS_DRIFT_GRID_PATH } from "../dashboard/focusDriftChart";
 import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath } from "../dashboard/focusDriftGeometry";
 import {
@@ -55,7 +62,6 @@ import {
   agentsIntensityBandFor,
   gridRepoLegend,
   repoDominantProviders,
-  agentModelRows,
   agentsHourHistogram,
   agentsInsightNumbers,
   formatTokens,
@@ -89,8 +95,20 @@ function clockMinuteForLogicalMinute(logicalMinute: number, startOfDayMinutes: n
   return ((roundedMinute + boundaryMinutes) % MINUTES_PER_DAY + MINUTES_PER_DAY) % MINUTES_PER_DAY;
 }
 
-function formatLogicalClock(logicalMinute: number, startOfDayMinutes: number): string {
-  return formatClock(clockMinuteForLogicalMinute(logicalMinute, startOfDayMinutes));
+function formatLogicalClock(logicalMinute: number, startOfDayMinutes: number, language: DisplayLanguage): string {
+  const minuteOfDay = clockMinuteForLogicalMinute(logicalMinute, startOfDayMinutes);
+  return language === "ko" ? formatLocalizedQuarterHourLabel(minuteOfDay, language) : formatClock(minuteOfDay);
+}
+
+function formatAgentDuration(minutes: number, language: DisplayLanguage): string {
+  return language === "ko"
+    ? formatLocalizedCompactDurationFromSeconds(Math.round(minutes * 60), language)
+    : formatHours(minutes);
+}
+
+function localizedWeekday(day: string, language: DisplayLanguage): string {
+  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" })
+    .format(new Date(`${day}T12:00:00`));
 }
 
 /* FlowChartView's cell-height constants, reproduced exactly so the agents grid
@@ -135,12 +153,6 @@ function agentToolName(provider: string): string {
 
 function agentToolColor(provider: string): string {
   return AGENT_TOOLS[provider]?.color ?? AGENTS_UNKNOWN_COLOR;
-}
-
-/** Compact model label: strip vendor prefixes ("anthropic/claude-x" → "claude-x"). */
-function shortModelName(model: string): string {
-  const tail = model.split("/").pop() ?? model;
-  return tail;
 }
 
 /**
@@ -190,6 +202,7 @@ function repoLegendEntries(
   repoOrder: readonly string[],
   repoColors: ReadonlyMap<string, string>,
   hasUnlabelled: boolean,
+  noRepoLabel: string,
 ): ProjectLegendEntry[] {
   const repoLimit = hasUnlabelled ? 4 : 5;
   const entries: ProjectLegendEntry[] = repoOrder.slice(0, repoLimit).map((repo) => ({
@@ -197,7 +210,7 @@ function repoLegendEntries(
     name: repo,
     color: repoColors.get(repo) ?? AGENTS_UNKNOWN_COLOR,
   }));
-  if (hasUnlabelled) entries.push({ projectId: null, name: "No repo", color: AGENTS_UNKNOWN_COLOR });
+  if (hasUnlabelled) entries.push({ projectId: null, name: noRepoLabel, color: AGENTS_UNKNOWN_COLOR });
   return entries;
 }
 
@@ -234,9 +247,10 @@ function AgentsColorModeControl({ colorMode, onColorModeChange }: {
   readonly colorMode: AgentsGridColorMode;
   readonly onColorModeChange: (mode: AgentsGridColorMode) => void;
 }) {
+  const { t } = useLocalization();
   return (
-    <div className="seg flow-color-mode-control" role="group" aria-label="Agents color mode">
-      {([["intensity", "Intensity"], ["repo", "Project"]] as const).map(([id, label]) => (
+    <div className="seg flow-color-mode-control" role="group" aria-label={t("agents.colorMode.aria")}>
+      {(["intensity", "repo"] as const).map((id) => (
         <button
           key={id}
           type="button"
@@ -244,7 +258,7 @@ function AgentsColorModeControl({ colorMode, onColorModeChange }: {
           aria-pressed={colorMode === id}
           onClick={() => onColorModeChange(id)}
         >
-          {label}
+          {t(id === "intensity" ? "agents.colorMode.intensity" : "agents.colorMode.project")}
         </button>
       ))}
     </div>
@@ -299,6 +313,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
   readonly startOfDayMinutes: number;
   readonly currentMinuteOfDay: number | null;
 }) {
+  const { t } = useLocalization();
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const currentLogicalMinute = currentMinuteOfDay === null
@@ -336,8 +351,8 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
         hour: Math.floor(minuteOfDay / 60),
         quarter: 0,
         minuteOfDay,
-        appName: cell.topRepo ?? "Agents",
-        windowTitle: `Peak ×${cell.concurrency}`,
+        appName: cell.topRepo ?? t("agents.generic.agents"),
+        windowTitle: t("agents.generic.peak", { count: cell.concurrency }),
         category: "workspace",
         productivity: "focus",
         durationSeconds: intervalMinutes * 60,
@@ -347,7 +362,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
       } as FlowBlock);
     }
     return byCell;
-  }, [boundaryMinutes, gridCells, colorMode, intensityBands, repoColors, model.day, intervalMinutes]);
+  }, [boundaryMinutes, gridCells, colorMode, intensityBands, repoColors, model.day, intervalMinutes, t]);
   const gridBlockList = useMemo(() => Array.from(gridBlocks.values()), [gridBlocks]);
   const hoverGroupsByCell = useMemo(
     () => buildFlowBlockHoverGroups(gridBlockList, intervalMinutes, boundaryMinutes),
@@ -356,7 +371,12 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
 
   const legendEntries = useMemo<ProjectLegendEntry[]>(() => {
     if (colorMode === "repo") {
-      return repoLegendEntries(repoLegend, repoColors, Array.from(gridCells.values()).some((cell) => cell.topRepo === null));
+      return repoLegendEntries(
+        repoLegend,
+        repoColors,
+        Array.from(gridCells.values()).some((cell) => cell.topRepo === null),
+        t("agents.generic.noRepo"),
+      );
     }
     const peakConcurrency = Math.max(0, ...Array.from(gridCells.values(), (cell) => cell.concurrency));
     return visibleAgentsIntensityBands(peakConcurrency, intensityBands).map((band) => ({
@@ -364,7 +384,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
       name: band.label,
       color: intensityBandColor(band),
     }));
-  }, [colorMode, gridCells, intensityBands, repoLegend, repoColors]);
+  }, [colorMode, gridCells, intensityBands, repoLegend, repoColors, t]);
 
   return (
     /* Same bordered chart box the day view wraps its flow chart in — without
@@ -377,7 +397,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
             unchanged. */}
         <section
           className="flow-chart-card agents-flow-card"
-          aria-label="Agent and attention timeline"
+          aria-label={t("agents.timeline.aria")}
           data-flow-interval={intervalMinutes}
           data-flow-color-mode="project"
           style={{
@@ -432,15 +452,17 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
   readonly repoProviders: ReadonlyMap<string, string>;
   readonly startOfDayMinutes: number;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const [featured, ...rest] = repos;
+  const activityAria = t("agents.repo.activityAria", { period: periodLabel });
 
   if (!featured) {
     return (
-      <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={`Repository activity for ${periodLabel}`}>
+      <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={activityAria}>
         <div className="app-usage-empty empty-state">
-          <span className="eyebrow">No commits</span>
-          <strong>No repository activity</strong>
-          <p>Commits will appear here once repositories with activity are found.</p>
+          <span className="eyebrow">{t("agents.repo.noCommits")}</span>
+          <strong>{t("agents.repo.noActivity")}</strong>
+          <p>{t("agents.repo.noActivityDetail")}</p>
         </div>
       </section>
     );
@@ -449,12 +471,12 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
   const featuredShare = shareOfCommits(featured, totalCommits);
 
   return (
-    <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={`Repository activity for ${periodLabel}`}>
+    <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={activityAria}>
       <div className="app-usage-content">
         <article
           className="app-usage-feature"
           style={{ "--app-usage-share": `${featuredShare}%` } as ShareStyle}
-          aria-label={`Most active repository: ${featured.repo}`}
+          aria-label={t("agents.repo.mostActiveAria", { repo: featured.repo })}
         >
           <div className="app-usage-feature__topline">
             <div className="app-usage-feature__identity">
@@ -462,41 +484,43 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
                 <AgentToolGlyph provider={repoProviders.get(featured.repo)} fallbackName={featured.repo} size="md" />
               </span>
               <div>
-                <span className="app-usage-kicker">Most active repo</span>
+                <span className="app-usage-kicker">{t("agents.repo.mostActive")}</span>
                 <div className="app-usage-feature__title">
-                  <span className="app-usage-rank app-usage-rank--inline" aria-label="Rank 1">#1</span>
+                  <span className="app-usage-rank app-usage-rank--inline" aria-label={t("agents.repo.rank", { rank: 1 })}>#1</span>
                   <strong>{featured.repo}</strong>
                 </div>
-                <p>{showActive ? `Active ${formatLogicalClock(featured.firstCommitMin, startOfDayMinutes)}–${formatLogicalClock(featured.lastCommitMin, startOfDayMinutes)}` : `Across ${periodLabel}`}</p>
+                <p>{showActive
+                  ? t("agents.repo.activeRange", { range: `${formatLogicalClock(featured.firstCommitMin, startOfDayMinutes, effectiveLanguage)}–${formatLogicalClock(featured.lastCommitMin, startOfDayMinutes, effectiveLanguage)}` })
+                  : t("agents.repo.acrossPeriod", { period: periodLabel })}</p>
               </div>
             </div>
             <div className="app-usage-feature__measure">
-              <strong>{featured.commitCount} commits</strong>
+              <strong>{t("agents.repo.commitCount", { count: featured.commitCount })}</strong>
             </div>
           </div>
           <div className="app-usage-feature__meter-block">
             <div className="app-usage-feature__meter-copy">
-              <span>Share</span>
+              <span>{t("agents.repo.share")}</span>
               <strong>{Math.round(featuredShare)}%</strong>
             </div>
-            <div className="app-usage-feature__meter" aria-label={`${featured.repo} accounts for ${Math.round(featuredShare)}% of commits`}>
+            <div className="app-usage-feature__meter" aria-label={t("agents.repo.shareAria", { repo: featured.repo, percent: Math.round(featuredShare) })}>
               <span />
             </div>
           </div>
           <dl className="app-usage-feature__stats">
-            <div><dt>Commits</dt><dd>{featured.commitCount}</dd></div>
-            <div><dt>Added</dt><dd>+{featured.insertions.toLocaleString()}</dd></div>
-            <div><dt>Removed</dt><dd>−{featured.deletions.toLocaleString()}</dd></div>
+            <div><dt>{t("agents.repo.commits")}</dt><dd>{featured.commitCount}</dd></div>
+            <div><dt>{t("agents.repo.added")}</dt><dd>+{featured.insertions.toLocaleString()}</dd></div>
+            <div><dt>{t("agents.repo.removed")}</dt><dd>−{featured.deletions.toLocaleString()}</dd></div>
           </dl>
         </article>
 
         {rest.length > 0 ? (
-          <ol className="app-usage-list" aria-label="Ranked repository activity">
+          <ol className="app-usage-list" aria-label={t("agents.repo.rankedAria")}>
             {rest.map((repo, index) => {
               const share = shareOfCommits(repo, totalCommits);
               return (
                 <li className="app-usage-row" key={repo.repo}>
-                  <div className="app-usage-rank" aria-label={`Rank ${index + 2}`}>
+                  <div className="app-usage-rank" aria-label={t("agents.repo.rank", { rank: index + 2 })}>
                     {String(index + 2).padStart(2, "0")}
                   </div>
                   <div className="app-usage-row__main">
@@ -505,10 +529,12 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
                     </span>
                     <div className="app-usage-row__copy">
                       <div className="app-usage-row__title"><strong>{repo.repo}</strong></div>
-                      <small>{showActive ? `Active ${formatLogicalClock(repo.firstCommitMin, startOfDayMinutes)}–${formatLogicalClock(repo.lastCommitMin, startOfDayMinutes)}` : formatChurn(repo.insertions, repo.deletions)}</small>
+                      <small>{showActive
+                        ? t("agents.repo.activeRange", { range: `${formatLogicalClock(repo.firstCommitMin, startOfDayMinutes, effectiveLanguage)}–${formatLogicalClock(repo.lastCommitMin, startOfDayMinutes, effectiveLanguage)}` })
+                        : formatChurn(repo.insertions, repo.deletions)}</small>
                     </div>
                   </div>
-                  <div className="app-usage-row__bar" aria-label={`${repo.repo} accounts for ${Math.round(share)}% of commits`}>
+                  <div className="app-usage-row__bar" aria-label={t("agents.repo.shareAria", { repo: repo.repo, percent: Math.round(share) })}>
                     <span style={{ "--app-usage-share": `${share}%` } as ShareStyle} />
                   </div>
                   <div className="app-usage-row__figures">
@@ -569,6 +595,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
   readonly startOfDayMinutes: number;
   readonly currentMinuteOfDay: number;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const [calendarBodyElement, setCalendarBodyElement] = useState<HTMLDivElement | null>(null);
   const [activeKeyboardEventId, setActiveKeyboardEventId] = useState<string | null>(null);
@@ -581,7 +608,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
   const hasUnlabelled = useMemo(() => hasUnlabelledAgentTime(sources), [sources]);
   const legendEntries = useMemo<ProjectLegendEntry[]>(() => {
     if (colorMode === "repo") {
-      return repoLegendEntries(repoOrder, repoColors, hasUnlabelled);
+      return repoLegendEntries(repoOrder, repoColors, hasUnlabelled, t("agents.generic.noRepo"));
     }
     const peakConcurrency = Math.max(0, ...models.map((model) => model.concurrencyPeak));
     return visibleAgentsIntensityBands(peakConcurrency, intensityBands).map((band) => ({
@@ -589,7 +616,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
       name: band.label,
       color: intensityBandColor(band),
     }));
-  }, [colorMode, hasUnlabelled, intensityBands, models, repoColors, repoOrder]);
+  }, [colorMode, hasUnlabelled, intensityBands, models, repoColors, repoOrder, t]);
   const { eventsByDay, hoverGroupsById } = useMemo(() => {
     const nextEventsByDay = new Map<string, {
       id: string;
@@ -613,16 +640,16 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
         const id = `${source.day}:${colorMode}:${segment.start}`;
         const providerLabels = segment.providers.map(agentToolName);
         const providerLabel = providerLabels.join(" + ");
-        const label = segment.topRepo ?? (providerLabels.length === 1 ? providerLabels[0]! : "Agents");
+        const label = segment.topRepo ?? (providerLabels.length === 1 ? providerLabels[0]! : t("agents.generic.agents"));
         const hoverStartMinute = clockMinuteForLogicalMinute(segment.start, boundaryMinutes);
         const hoverEndMinute = clockMinuteForLogicalMinute(segment.end, boundaryMinutes);
         const tone = colorMode === "repo"
           ? (segment.topRepo ? repoColors.get(segment.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
           : intensityBandColor(segment.intensityBand);
         const detail = [
-          `Peak ×${segment.peakConcurrency}`,
+          t("agents.generic.peak", { count: segment.peakConcurrency }),
           providerLabel,
-          `${AGENTS_WEEK_BUCKET_MINUTES}m resolution`,
+          t("agents.generic.resolution", { minutes: AGENTS_WEEK_BUCKET_MINUTES }),
         ].filter(Boolean).join(" · ");
         const block: FlowBlock = {
           id: `agent-week-${id}`,
@@ -663,7 +690,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
       nextEventsByDay.set(source.day, events);
     }
     return { eventsByDay: nextEventsByDay, hoverGroupsById: nextGroupsById };
-  }, [boundaryMinutes, colorMode, intensityBands, repoColors, repoOrder, sources]);
+  }, [boundaryMinutes, colorMode, intensityBands, repoColors, repoOrder, sources, t]);
   const orderedEventIds = useMemo(
     () => week.days.flatMap((day) => (eventsByDay.get(day.day) ?? []).map((event) => event.id)),
     [eventsByDay, week.days],
@@ -676,7 +703,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
   const currentLogicalMinute = logicalMinuteOfDay(currentMinuteOfDay, boundaryMinutes);
   const currentCalendarOffset = isCurrentWeek ? (currentLogicalMinute / 60) * AGENTS_WEEK_HOUR_HEIGHT : null;
   const currentCalendarLabel = isCurrentWeek
-    ? formatCalendarMinuteLabel(todayDay, currentLogicalMinute, boundaryMinutes)
+    ? formatLocalizedCalendarMinuteLabel(todayDay, currentLogicalMinute, effectiveLanguage, boundaryMinutes)
     : null;
   const currentMarkerStyle: AgentsWeekNowMarkerStyle | null = currentCalendarOffset === null
     ? null
@@ -710,9 +737,9 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
 
   return (
     <>
-      <section className="week-v2-calendar editorial-panel editorial-panel--soft agents-week-calendar" aria-label="Agent week calendar">
+      <section className="week-v2-calendar editorial-panel editorial-panel--soft agents-week-calendar" aria-label={t("agents.week.calendarAria")}>
         {header}
-        <div className="week-v2-calendar__legend" aria-label="Agents week legend">
+        <div className="week-v2-calendar__legend" aria-label={t("agents.week.legendAria")}>
           <div className="flow-chart-head__actions">
             <div className="flow-chart-head__controls">
               <AgentsColorModeControl colorMode={colorMode} onColorModeChange={onColorModeChange} />
@@ -725,10 +752,11 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
             <span />
             {week.days.map((day) => {
               const [, , dayOfMonth] = day.day.split("-").map(Number);
-              const isWeekend = day.weekdayLabel === "Sun" || day.weekdayLabel === "Sat";
+              const weekday = new Date(`${day.day}T12:00:00`).getDay();
+              const isWeekend = weekday === 0 || weekday === 6;
               return (
                 <span className={`${isWeekend ? "is-weekend" : ""}${day.day === todayDay ? " is-today" : ""}`.trim() || undefined} key={day.day}>
-                  <strong>{day.weekdayLabel}</strong>
+                  <strong>{localizedWeekday(day.day, effectiveLanguage)}</strong>
                   <small>{dayOfMonth}</small>
                 </span>
               );
@@ -737,10 +765,10 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
           <div className="week-v2-calendar__body" ref={setCalendarBodyElement} style={{ height: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
             <div className="week-v2-calendar__time-rail">
               {Array.from({ length: 24 }, (_, hour) => (
-                <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue(hour * AGENTS_WEEK_HOUR_HEIGHT) }}>{formatHourLabel(clockHourForLogicalHour(hour, boundaryMinutes))}</span>
+                <span key={hour} style={{ top: formatWeekDashboardAxisPixelValue(hour * AGENTS_WEEK_HOUR_HEIGHT) }}>{formatLocalizedHourLabel(clockHourForLogicalHour(hour, boundaryMinutes), effectiveLanguage)}</span>
               ))}
               <span className="week-v2-calendar__time-rail-endpoint" style={{ top: formatWeekDashboardAxisPixelValue(24 * AGENTS_WEEK_HOUR_HEIGHT) }}>
-                {formatHourLabel(clockHourForLogicalHour(24, boundaryMinutes))}
+                {formatLocalizedHourLabel(clockHourForLogicalHour(24, boundaryMinutes), effectiveLanguage)}
               </span>
             </div>
             {currentMarkerStyle ? (
@@ -792,9 +820,19 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                           const nextId = orderedEventIds[Math.max(0, Math.min(orderedEventIds.length - 1, nextIndex))];
                           if (nextId) eventElementsRef.current.get(nextId)?.focus();
                         }}
-                        aria-label={`Agent run on ${day.weekdayLabel}, ${day.day}, ${event.label}, ${event.providerLabel || "unknown provider"}, peak ×${event.peakConcurrency}, ${formatLogicalClock(event.start, boundaryMinutes)}–${formatLogicalClock(event.end, boundaryMinutes)}, approximately ${formatHours(event.end - event.start)} at ${AGENTS_WEEK_BUCKET_MINUTES}-minute resolution`}
+                        aria-label={t("agents.week.runAria", {
+                          weekday: localizedWeekday(day.day, effectiveLanguage),
+                          day: day.day,
+                          label: event.label,
+                          provider: event.providerLabel || t("agents.generic.unknownProvider"),
+                          peak: event.peakConcurrency,
+                          start: formatLogicalClock(event.start, boundaryMinutes, effectiveLanguage),
+                          end: formatLogicalClock(event.end, boundaryMinutes, effectiveLanguage),
+                          duration: formatAgentDuration(event.end - event.start, effectiveLanguage),
+                          resolution: AGENTS_WEEK_BUCKET_MINUTES,
+                        })}
                       >
-                        {!isShort ? <strong>≈{formatHours(event.end - event.start)}</strong> : null}
+                        {!isShort ? <strong>≈{formatAgentDuration(event.end - event.start, effectiveLanguage)}</strong> : null}
                       </article>
                     );
                   })}
@@ -805,7 +843,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
               <div
                 className="week-v2-calendar__now-marker week-v2-calendar__now-marker--overlay"
                 style={currentMarkerStyle}
-                aria-label={`Current time ${currentCalendarLabel}`}
+                aria-label={t("agents.week.currentTime", { time: currentCalendarLabel })}
               >
                 <span className="week-v2-calendar__now-label">{currentCalendarLabel}</span>
               </div>
@@ -817,35 +855,6 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
     </>
   );
 }
-
-/** Summary tiles for the Breakdown side panel, like the day breakdown tiles. */
-function AgentsBreakdownTiles({ period, dayModel, models }: {
-  readonly period: AgentsPeriod;
-  readonly dayModel: AgentsDayModel | null;
-  readonly models: readonly AgentsDayModel[];
-}) {
-  if (period === "Today" && dayModel) {
-    return (
-      <div className="kpi-row kpi-row--insights insight-summary" aria-label="Agent summary">
-        <MetricTile label="Agents" value={formatHours(dayModel.agentMinutes)} detail={dayModel.parallelFactor > 1 ? `×${dayModel.parallelFactor} parallel` : "wall-clock"} />
-        <MetricTile label="You" value={formatHours(dayModel.attentionMinutes)} detail="attention" />
-        <MetricTile label="Unattended" value={formatHours(dayModel.unattendedMinutes)} detail="agents ran alone" />
-        <MetricTile label="Commits" value={String(dayModel.commitCount)} detail={`${dayModel.repos.length} repo${dayModel.repos.length === 1 ? "" : "s"}`} />
-      </div>
-    );
-  }
-  const week = buildAgentsWeekModel(models);
-  const peakDay = week.days.reduce((best, day) => (day.agentMinutes > best.agentMinutes ? day : best), week.days[0] ?? { day: "", weekdayLabel: "—", agentMinutes: 0, attentionMinutes: 0, commitCount: 0 });
-  return (
-    <div className="kpi-row kpi-row--insights insight-summary" aria-label="Agent week summary">
-      <MetricTile label="Agents" value={formatHours(week.agentMinutes)} detail="wall-clock" />
-      <MetricTile label="You" value={formatHours(week.attentionMinutes)} detail="attention" />
-      <MetricTile label="Commits" value={String(week.commitCount)} detail={`${week.repos.length} repos`} />
-      <MetricTile label="Peak day" value={formatHours(peakDay.agentMinutes)} detail={peakDay.weekdayLabel} />
-    </div>
-  );
-}
-
 
 /**
  * Proposal panel 2 — headline numbers grid, in the FocusDriftSummaryTiles
@@ -874,8 +883,9 @@ type AgentsStatEntry = {
  * at its own reduced padding and type scale.
  */
 function AgentsStatList({ entries }: { readonly entries: readonly AgentsStatEntry[] }) {
+  const { t } = useLocalization();
   return (
-    <div className="kpi-row kpi-row--insights insight-summary" aria-label="Agent detail statistics">
+    <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("agents.stats.detailAria")}>
       {entries.map((entry) => (
         <MetricTile key={entry.label} label={entry.label} value={entry.value} detail={entry.detail} />
       ))}
@@ -883,19 +893,29 @@ function AgentsStatList({ entries }: { readonly entries: readonly AgentsStatEntr
   );
 }
 
-function agentsDayStatEntries(source: AgentsDaySource, model: AgentsDayModel, startOfDayMinutes: number): AgentsStatEntry[] {
+function repoCountDetail(count: number, t: LocalizationController["t"]): string {
+  return count === 1 ? t("agents.stats.acrossOneRepo") : t("agents.stats.acrossRepos", { count });
+}
+
+function agentsDayStatEntries(
+  source: AgentsDaySource,
+  model: AgentsDayModel,
+  startOfDayMinutes: number,
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): AgentsStatEntry[] {
   const numbers = agentsInsightNumbers(source, model, startOfDayMinutes);
   return [
     // Commits lead: they are the day's output, and the sentence block above
     // deliberately stops at "how much ran" so this grid owns the result side.
-    { label: "Commits", value: String(model.commitCount), detail: `${numbers.commitsPerAgentHour.toFixed(1)}/agent-hour` },
-    { label: "Net lines", value: `${numbers.netLines >= 0 ? "+" : ""}${numbers.netLines.toLocaleString()}`, detail: `across ${model.repos.length} repo${model.repos.length === 1 ? "" : "s"}` },
-    { label: "Sessions", value: String(numbers.sessions), detail: "distinct" },
-    { label: "Tokens", value: formatTokens(numbers.tokens), detail: numbers.sessions > 0 ? `${formatTokens(numbers.tokensPerSession)}/session` : undefined },
-    { label: "Longest run", value: formatHours(numbers.longestStretchMinutes), detail: `from ${formatLogicalClock(numbers.longestStretchStart, startOfDayMinutes)}` },
-    { label: "Median run", value: `${Math.round(numbers.medianStretchMinutes)}m`, detail: "per stretch" },
-    { label: "Active span", value: formatHours(numbers.activeSpanMinutes), detail: numbers.firstActivityMinute !== null && numbers.lastActivityMinute !== null ? `${formatLogicalClock(numbers.firstActivityMinute, startOfDayMinutes)}–${formatLogicalClock(numbers.lastActivityMinute, startOfDayMinutes)}` : undefined },
-    { label: "Night share", value: `${Math.round(numbers.nightSharePercent)}%`, detail: "12am–6am" },
+    { label: t("agents.stats.commits"), value: String(model.commitCount), detail: t("agents.stats.perAgentHour", { value: numbers.commitsPerAgentHour.toFixed(1) }) },
+    { label: t("agents.stats.netLines"), value: `${numbers.netLines >= 0 ? "+" : ""}${numbers.netLines.toLocaleString()}`, detail: repoCountDetail(model.repos.length, t) },
+    { label: t("agents.stats.sessions"), value: String(numbers.sessions), detail: t("agents.stats.distinct") },
+    { label: t("agents.stats.tokens"), value: formatTokens(numbers.tokens), detail: numbers.sessions > 0 ? t("agents.stats.perSession", { value: formatTokens(numbers.tokensPerSession) }) : undefined },
+    { label: t("agents.stats.longestRun"), value: formatAgentDuration(numbers.longestStretchMinutes, language), detail: t("agents.stats.fromTime", { time: formatLogicalClock(numbers.longestStretchStart, startOfDayMinutes, language) }) },
+    { label: t("agents.stats.medianRun"), value: language === "ko" ? `${Math.round(numbers.medianStretchMinutes)}분` : `${Math.round(numbers.medianStretchMinutes)}m`, detail: t("agents.stats.perStretch") },
+    { label: t("agents.stats.activeSpan"), value: formatAgentDuration(numbers.activeSpanMinutes, language), detail: numbers.firstActivityMinute !== null && numbers.lastActivityMinute !== null ? `${formatLogicalClock(numbers.firstActivityMinute, startOfDayMinutes, language)}–${formatLogicalClock(numbers.lastActivityMinute, startOfDayMinutes, language)}` : undefined },
+    { label: t("agents.stats.nightShare"), value: `${Math.round(numbers.nightSharePercent)}%`, detail: t("agents.stats.nightHours") },
   ];
 }
 
@@ -907,7 +927,12 @@ function AgentsRhythmPanel({ sources, startOfDayMinutes }: { readonly sources: r
   return <AgentsRhythmPanelBody sources={sources} startOfDayMinutes={startOfDayMinutes} />;
 }
 
-function agentsWeekStatEntries(sources: readonly AgentsDaySource[], models: readonly AgentsDayModel[]): AgentsStatEntry[] {
+function agentsWeekStatEntries(
+  sources: readonly AgentsDaySource[],
+  models: readonly AgentsDayModel[],
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): AgentsStatEntry[] {
   const week = buildAgentsWeekModel(models);
   const tokens = sources.reduce((sum, source) => sum + (source.tokens ?? 0), 0);
   const sessions = sources.reduce((sum, source) => sum + (source.sessions ?? 0), 0);
@@ -921,14 +946,14 @@ function agentsWeekStatEntries(sources: readonly AgentsDaySource[], models: read
     week.days[0] ?? { day: "", weekdayLabel: "—", agentMinutes: 0, attentionMinutes: 0, commitCount: 0 },
   );
   return [
-    { label: "Commits", value: String(week.commitCount), detail: agentHours > 0 ? `${(week.commitCount / agentHours).toFixed(1)}/agent-hour` : undefined },
-    { label: "Net lines", value: `${netLines >= 0 ? "+" : ""}${netLines.toLocaleString()}`, detail: `across ${week.repos.length} repos` },
-    { label: "Sessions", value: String(sessions), detail: `${activeDays} active days` },
-    { label: "Tokens", value: formatTokens(tokens), detail: sessions > 0 ? `${formatTokens(tokens / sessions)}/session` : undefined },
-    { label: "Daily avg", value: formatHours(activeDays > 0 ? week.agentMinutes / activeDays : 0), detail: "per active day" },
-    { label: "Peak day", value: formatHours(peakDay.agentMinutes), detail: peakDay.weekdayLabel },
-    { label: "Churn", value: `+${formatTokens(week.insertions)}`, detail: `−${formatTokens(week.deletions)} removed` },
-    { label: "Top repo", value: week.repos[0]?.repo ?? "—", detail: week.repos[0] ? `${week.repos[0].commitCount} commits` : undefined },
+    { label: t("agents.stats.commits"), value: String(week.commitCount), detail: agentHours > 0 ? t("agents.stats.perAgentHour", { value: (week.commitCount / agentHours).toFixed(1) }) : undefined },
+    { label: t("agents.stats.netLines"), value: `${netLines >= 0 ? "+" : ""}${netLines.toLocaleString()}`, detail: repoCountDetail(week.repos.length, t) },
+    { label: t("agents.stats.sessions"), value: String(sessions), detail: t("agents.stats.activeDays", { count: activeDays }) },
+    { label: t("agents.stats.tokens"), value: formatTokens(tokens), detail: sessions > 0 ? t("agents.stats.perSession", { value: formatTokens(tokens / sessions) }) : undefined },
+    { label: t("agents.stats.dailyAverage"), value: formatAgentDuration(activeDays > 0 ? week.agentMinutes / activeDays : 0, language), detail: t("agents.stats.perActiveDay") },
+    { label: t("agents.stats.peakDay"), value: formatAgentDuration(peakDay.agentMinutes, language), detail: peakDay.day ? localizedWeekday(peakDay.day, language) : "—" },
+    { label: t("agents.stats.churn"), value: `+${formatTokens(week.insertions)}`, detail: t("agents.stats.removed", { count: formatTokens(week.deletions) }) },
+    { label: t("agents.stats.topRepo"), value: week.repos[0]?.repo ?? "—", detail: week.repos[0] ? t("agents.repo.commitCount", { count: week.repos[0].commitCount }) : undefined },
   ];
 }
 
@@ -939,6 +964,7 @@ function agentsWeekStatEntries(sources: readonly AgentsDaySource[], models: read
  * line treatment in the neutral grey commits already use here).
  */
 function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly sources: readonly AgentsDaySource[]; readonly startOfDayMinutes: number }) {
+  const { effectiveLanguage, t } = useLocalization();
   const histogram = useMemo(() => agentsHourHistogram(sources), [sources]);
   const maxAgent = Math.max(1, ...histogram.agentMinutes);
   const maxCommits = Math.max(1, ...histogram.commits);
@@ -971,30 +997,30 @@ function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly source
       axisTicks: [0, 3, 6, 9, 12, 15, 18, 21].map((hour) => ({
         hour,
         x: FOCUS_DRIFT_CHART_BOUNDS.left + ((hour + 0.5) / 24) * width,
-        label: formatHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes)),
+        label: formatLocalizedHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), effectiveLanguage),
       })),
     };
-  }, [histogram, maxAgent, maxCommits, startOfDayMinutes]);
+  }, [effectiveLanguage, histogram, maxAgent, maxCommits, startOfDayMinutes]);
 
   return (
     <section className="editorial-panel editorial-panel--soft insight-chart-panel">
       <div className="insight-panel-head">
-        <span className="label-mono">Agent rhythm · by hour</span>
+        <span className="label-mono">{t("agents.rhythm.title")}</span>
         <div className="insight-panel-head__legend">
-          <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />Agent time</span>
-          <span className="chip"><span className="sw" style={{ background: "var(--text-soft)" }} />Commits</span>
+          <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />{t("agents.rhythm.agentTime")}</span>
+          <span className="chip"><span className="sw" style={{ background: "var(--text-soft)" }} />{t("agents.rhythm.commits")}</span>
         </div>
       </div>
-      <div className="focus-drift agents-rhythm-chart" aria-label="Agent activity and commits by hour of day">
+      <div className="focus-drift agents-rhythm-chart" aria-label={t("agents.rhythm.aria")}>
         <div className="focus-drift__plot">
-          <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Agent minutes and commit counts per hour">
+          <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={t("agents.rhythm.graphicAria")}>
             <path className="focus-drift__grid" d={FOCUS_DRIFT_GRID_PATH} />
             <path className="focus-drift__area" d={agentAreaPath} />
             <path className="focus-drift__line focus-drift__line--focus" d={agentPath} />
             <path className="focus-drift__line agents-rhythm-chart__commits-line" d={commitsPath} />
           </svg>
           <div className="focus-drift__scale" aria-hidden="true">
-            <span style={{ "--focus-drift-scale-y": `${FOCUS_DRIFT_CHART_BOUNDS.top}%` } as CSSProperties}>{formatHours(maxAgent)}</span>
+            <span style={{ "--focus-drift-scale-y": `${FOCUS_DRIFT_CHART_BOUNDS.top}%` } as CSSProperties}>{formatAgentDuration(maxAgent, effectiveLanguage)}</span>
             <span style={{ "--focus-drift-scale-y": `${FOCUS_DRIFT_CHART_BOUNDS.bottom}%` } as CSSProperties}>0</span>
           </div>
         </div>
@@ -1004,32 +1030,6 @@ function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly source
           ))}
         </div>
       </div>
-    </section>
-  );
-}
-
-/**
- * Proposal panel 4 — models, as a compact ranked list in the insight panel
- * chrome. Which LLMs did the day's work, by cumulative turn time.
- */
-function AgentsModelsPanel({ sources }: { readonly sources: readonly AgentsDaySource[] }) {
-  const rows = useMemo(() => agentModelRows(sources).slice(0, 6), [sources]);
-  if (rows.length === 0) return null;
-  const max = Math.max(1, ...rows.map((row) => row.cumulativeMinutes));
-  return (
-    <section className="editorial-panel editorial-panel--soft insight-chart-panel">
-      <div className="insight-panel-head">
-        <span className="label-mono">Models · by turn time</span>
-      </div>
-      <ol className="agents-models" aria-label="Models ranked by turn time">
-        {rows.map((row) => (
-          <li className="agents-models__row" key={row.model}>
-            <span className="agents-models__name">{shortModelName(row.model)}</span>
-            <span className="agents-models__bar"><span style={{ width: `${(row.cumulativeMinutes / max) * 100}%` }} /></span>
-            <span className="agents-models__figures">{formatHours(row.cumulativeMinutes)} · {Math.round(row.shareOfCumulative)}%</span>
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }
@@ -1051,6 +1051,7 @@ export function AgentsPage({
   readonly startOfWeek: StartOfWeek;
   readonly todayDay: string;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const liveMinuteOfDay = useLiveMinuteOfDay();
   const [period, setPeriod] = useState<AgentsPeriod>("Today");
@@ -1093,13 +1094,13 @@ export function AgentsPage({
   const headlineMinutes = period === "Today"
     ? dayModel?.agentMinutes ?? 0
     : models.reduce((sum, model) => sum + model.agentMinutes, 0);
-  const headlineDuration = headlineMinutes >= 1 ? formatHours(headlineMinutes) : null;
+  const headlineDuration = headlineMinutes >= 1 ? formatAgentDuration(headlineMinutes, effectiveLanguage) : null;
   const titleAriaLabel = loading
-    ? "Loading agent activity"
+    ? t("agents.headline.loadingAria")
     : headlineDuration === null
-      ? "No agent activity"
-      : `Agents ran for ${headlineDuration}`;
-  const dateLabel = formatDateRangeLabel(range.startDay, range.endDay);
+      ? t("agents.headline.noActivity")
+      : t("agents.headline.ranAria", { duration: headlineDuration });
+  const dateLabel = formatLocalizedDateRangeLabel(range.startDay, range.endDay, effectiveLanguage);
   const totalCommits = period === "Today"
     ? dayModel?.commitCount ?? 0
     : models.reduce((sum, model) => sum + model.commitCount, 0);
@@ -1124,18 +1125,18 @@ export function AgentsPage({
           <div className="dashboard-page-head__summary">
             <h1 aria-label={titleAriaLabel} className="dashboard-page-head__title">
               {loading ? (
-                <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
+                <><span className="dashboard-page-head__focus-word">{t("agents.headline.ranLead")}</span><span className="loading-skeleton-line loading-skeleton-line--metric" aria-hidden="true" /></>
               ) : headlineDuration === null ? (
-                <span className="dashboard-page-head__focus-word">No agent activity</span>
+                <span className="dashboard-page-head__focus-word">{t("agents.headline.noActivity")}</span>
               ) : (
-                <><span className="dashboard-page-head__focus-word">Agents ran</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
+                <><span className="dashboard-page-head__focus-word">{t("agents.headline.ranLead")}</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
               )}
             </h1>
           </div>
           <button
             type="button"
             className="agents-ssh-trigger"
-            aria-label="Add an SSH agent source"
+            aria-label={t("agents.ssh.add")}
             onClick={() => setSshModalOpen(true)}
           >
             <span>SSH</span>
@@ -1144,8 +1145,8 @@ export function AgentsPage({
         </div>
         <div className="dashboard-page-head__side">
           {/* In-page Day/Week toggle, ported from studyhall's proven treatment. */}
-          <div className="agents-period-toggle" role="group" aria-label="Agents range">
-            {([["Today", "Day"], ["Week", "Week"]] as const).map(([value, label]) => (
+          <div className="agents-period-toggle" role="group" aria-label={t("agents.range.aria")}>
+            {(["Today", "Week"] as const).map((value) => (
               <button
                 key={value}
                 type="button"
@@ -1153,21 +1154,21 @@ export function AgentsPage({
                 aria-pressed={period === value}
                 onClick={() => setPeriod(value)}
               >
-                {label}
+                {t(value === "Today" ? "agents.range.day" : "agents.range.week")}
               </button>
             ))}
           </div>
           <DateNavigator
-            ariaLabel={`Agents ${period.toLowerCase()} selector`}
-            label={`${dateLabel}${!loading && !live ? " · sample" : ""}`}
-            todayLabel={getDashboardCurrentPeriodLabel(period)}
+            ariaLabel={t(period === "Week" ? "agents.date.weekSelector" : "agents.date.daySelector")}
+            label={`${dateLabel}${!loading && !live ? ` · ${t("agents.date.sample")}` : ""}`}
+            todayLabel={t(period === "Week" ? "agents.date.currentWeek" : "agents.date.currentDay")}
             isTodayDisabled={isCurrentPeriod}
             isNextDisabled={!canShiftForward}
             onPrevious={() => shiftPeriod(-1)}
             onNext={() => shiftPeriod(1)}
             onToday={() => onSelectDay(todayDay)}
-            previousLabel={period === "Week" ? "Show previous agents week" : "Show previous agents day"}
-            nextLabel={period === "Week" ? "Show next agents week" : "Show next agents day"}
+            previousLabel={t(period === "Week" ? "agents.date.previousWeek" : "agents.date.previousDay")}
+            nextLabel={t(period === "Week" ? "agents.date.nextWeek" : "agents.date.nextDay")}
           />
         </div>
       </div>
@@ -1178,16 +1179,19 @@ export function AgentsPage({
     <BreakdownSidePanel
       open={breakdownOpen}
       onToggle={toggleBreakdown}
-      ariaLabel="Agents breakdown"
-      toggleSubject="agents breakdown"
+      ariaLabel={t("agents.breakdown.aria")}
+      toggleSubject={t("agents.breakdown.aria")}
+      title={t("agents.breakdown.title")}
+      showLabel={t("agents.breakdown.show")}
+      collapseLabel={t("agents.breakdown.collapse")}
     >
       {/* The time sentence leads, then the charts (models donut, repo
           share bar) in the day view's compact-chart vocabulary, then the
           reference tiles. */}
       <AgentsBreakdownComposed sources={scopedSources} dayModel={dayModel} models={models} period={period} />
       <AgentsStatList entries={period === "Today" && dayModel && daySource
-        ? agentsDayStatEntries(daySource, dayModel, boundaryMinutes)
-        : agentsWeekStatEntries(scopedSources, models)}
+        ? agentsDayStatEntries(daySource, dayModel, boundaryMinutes, effectiveLanguage, t)
+        : agentsWeekStatEntries(scopedSources, models, effectiveLanguage, t)}
       />
     </BreakdownSidePanel>
   );
@@ -1195,7 +1199,7 @@ export function AgentsPage({
   if (period === "Week") {
     return (
       <div className="page page--agents page--week-dashboard" aria-busy={loading}>
-        <section className="week-v2" aria-label="Your agents week overview">
+        <section className="week-v2" aria-label={t("agents.week.overviewAria")}>
           <div className={`week-v2-grid week-v2-grid--calendar${breakdownOpen ? " week-v2-grid--side-open" : ""}`}>
             <AgentsWeekCalendar
               colorMode={colorMode}
@@ -1247,7 +1251,7 @@ export function AgentsPage({
             repos={repos}
             totalCommits={totalCommits}
             showActive
-            periodLabel="today"
+            periodLabel={t("agents.period.today")}
             repoProviders={repoProviders}
             startOfDayMinutes={boundaryMinutes}
           />

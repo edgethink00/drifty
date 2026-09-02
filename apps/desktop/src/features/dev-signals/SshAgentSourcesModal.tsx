@@ -10,6 +10,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import {
   loadSshAgentSources,
   removeSshAgentSource,
@@ -19,8 +20,48 @@ import {
 } from "./sshAgentSourcesStorage";
 
 type Operation = { readonly kind: "test" | "collect"; readonly host: string } | null;
-type Status = Pick<SshAgentSourceTestResult, "ok" | "message"> | null;
+type Status = (Pick<SshAgentSourceTestResult, "ok" | "code" | "message"> & Partial<Pick<SshAgentSourceCollectResult, "turnsFound">>) | null;
 type Discovery = Pick<SshAgentSourceListResult, "ok" | "code" | "message" | "aliases"> | null;
+
+function localizedDiscoveryMessage(
+  discovery: NonNullable<Discovery>,
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): string {
+  if (language === "en") return discovery.message;
+  if (discovery.code === "unavailable") return t("agents.ssh.discoveryUnavailable");
+  if (discovery.code === "missing") return t("agents.ssh.discoveryMissing");
+  if (discovery.code === "unreadable") return t("agents.ssh.discoveryUnreadable");
+  if (discovery.code === "partial") return t("agents.ssh.discoveryPartial");
+  if (discovery.code === "empty") return t("agents.ssh.discoveryEmpty");
+  return discovery.message;
+}
+
+function localizedStatusMessage(
+  status: NonNullable<Status>,
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): string {
+  if (language === "en") return status.message;
+  switch (status.code) {
+    case "unavailable": return t("agents.ssh.statusUnavailable");
+    case "ready": return t("agents.ssh.statusReady");
+    case "timeout": return t("agents.ssh.statusTimeout");
+    case "host_key": return t("agents.ssh.statusHostKey");
+    case "auth": return t("agents.ssh.statusAuth");
+    case "unknown_host": return t("agents.ssh.statusUnknownHost");
+    case "remote_runtime": return t("agents.ssh.statusRemoteRuntime");
+    case "remote_error": return t("agents.ssh.statusRemoteError");
+    case "invalid_host": return t("agents.ssh.statusInvalidHost");
+    case "ssh_unavailable": return t("agents.ssh.statusSshUnavailable");
+    case "invalid_response": return t("agents.ssh.statusInvalidResponse");
+    case "empty": return t("agents.ssh.statusEmpty");
+    case "collected": return t("agents.ssh.statusCollected", { count: status.turnsFound ?? 0 });
+    case "start_error": return t("agents.ssh.startError");
+    case "collect_error": return t("agents.ssh.collectError");
+    default: return t("agents.ssh.statusDetails", { message: status.message });
+  }
+}
 
 export function SshAgentSourcesModal({
   onClose,
@@ -29,6 +70,7 @@ export function SshAgentSourcesModal({
   readonly onClose: () => void;
   readonly onCollected: () => void;
 }): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const dialogRef = useRef<HTMLElement>(null);
   const [host, setHost] = useState("");
   const [verifiedHost, setVerifiedHost] = useState<string | null>(null);
@@ -82,7 +124,7 @@ export function SshAgentSourcesModal({
       setStatus(result);
       if (result.ok && host.trim() === testedHost) setVerifiedHost(testedHost);
     } catch {
-      setStatus({ ok: false, message: "Drifty could not start the SSH connection. Try again." });
+      setStatus({ ok: false, code: "start_error", message: "Drifty could not start the SSH connection. Try again." });
     } finally {
       setOperation(null);
     }
@@ -107,7 +149,7 @@ export function SshAgentSourcesModal({
         onCollected();
       }
     } catch {
-      setStatus({ ok: false, message: "Drifty could not collect from this host. Check SSH in Terminal, then retry." });
+      setStatus({ ok: false, code: "collect_error", message: "Drifty could not collect from this host. Check SSH in Terminal, then retry." });
     } finally {
       setOperation(null);
     }
@@ -142,11 +184,11 @@ export function SshAgentSourcesModal({
         tabIndex={-1}
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton disabled={isBusy} label="Close SSH collection" onClick={requestClose} />
+        <ModalCloseButton disabled={isBusy} label={t("agents.ssh.close")} onClick={requestClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
-            <h2 id="agents-ssh-title">Collect from SSH</h2>
-            <p>Choose a host you already use</p>
+            <h2 id="agents-ssh-title">{t("agents.ssh.title")}</h2>
+            <p>{t("agents.ssh.subtitle")}</p>
           </div>
         </div>
 
@@ -156,20 +198,19 @@ export function SshAgentSourcesModal({
             <rect x="3" y="4" width="18" height="16" rx="3" />
           </svg>
           <p>
-            Hosts are read locally from <code>~/.ssh/config</code>. Drifty does not open key files
-            or connect until you ask.
+            {t("agents.ssh.privacyBefore")} <code>~/.ssh/config</code>{t("agents.ssh.privacyAfter")}
           </p>
         </div>
 
         <div className="agents-ssh-modal__discovered" aria-busy={discovery === null}>
           <div className="agents-ssh-modal__section-head">
-            <h3>SSH config</h3>
-            <span>Local</span>
+            <h3>{t("agents.ssh.config")}</h3>
+            <span>{t("agents.ssh.local")}</span>
           </div>
           {discovery === null ? (
-            <p className="agents-ssh-modal__discovery-state" role="status">Looking for host aliases…</p>
+            <p className="agents-ssh-modal__discovery-state" role="status">{t("agents.ssh.looking")}</p>
           ) : discoveredAliases.length > 0 ? (
-            <ul aria-label="Hosts from SSH config">
+            <ul aria-label={t("agents.ssh.configHostsAria")}>
               {discoveredAliases.map((alias) => {
                 const selected = normalizedHost === alias;
                 return (
@@ -186,7 +227,7 @@ export function SshAgentSourcesModal({
                       </span>
                       <span className="agents-ssh-modal__host-copy">
                         <strong dir="ltr">{alias}</strong>
-                        <small>From SSH config</small>
+                        <small>{t("agents.ssh.fromConfig")}</small>
                       </span>
                       <svg className="agents-ssh-modal__host-check" viewBox="0 0 20 20" aria-hidden="true">
                         <path d="M4.5 10.2l3.2 3.2 7.8-7.8" />
@@ -199,15 +240,15 @@ export function SshAgentSourcesModal({
           ) : (
             <p className={`agents-ssh-modal__discovery-state ${discovery.ok ? "" : "is-error"}`}>
               {discovery.aliases.length > 0
-                ? "All detected SSH hosts are already saved below."
-                : discovery.message}
+                ? t("agents.ssh.allSaved")
+                : localizedDiscoveryMessage(discovery, effectiveLanguage, t)}
             </p>
           )}
         </div>
 
         <form className="agents-ssh-modal__form" onSubmit={handleSubmit}>
           <label className="auth-modal__field" htmlFor="agents-ssh-host">
-            <span>Host or alias</span>
+            <span>{t("agents.ssh.hostLabel")}</span>
             <input
               id="agents-ssh-host"
               data-ssh-host-input
@@ -219,7 +260,7 @@ export function SshAgentSourcesModal({
               autoCapitalize="none"
               spellCheck={false}
               dir="ltr"
-              placeholder="Select above or enter a host"
+              placeholder={t("agents.ssh.hostPlaceholder")}
               disabled={isBusy}
               onChange={(event) => {
                 setHost(event.target.value);
@@ -229,7 +270,7 @@ export function SshAgentSourcesModal({
             />
           </label>
           <p id="agents-ssh-host-hint" className="agents-ssh-modal__hint">
-            All supported coding agents · last 30 days · key-based SSH only. Trust a new host in Terminal first.
+            {t("agents.ssh.hint")}
           </p>
           <div className="agents-ssh-modal__actions">
             <button
@@ -238,10 +279,10 @@ export function SshAgentSourcesModal({
               disabled={!normalizedHost || isBusy}
               onClick={() => void testConnection()}
             >
-              {operation?.kind === "test" ? "Testing…" : "Test connection"}
+              {operation?.kind === "test" ? t("agents.ssh.testing") : t("agents.ssh.test")}
             </button>
             <button type="submit" className="modal-btn modal-btn--primary" disabled={!canCollectNew}>
-              {operation?.kind === "collect" && operation.host === normalizedHost ? "Collecting…" : "Collect & save"}
+              {operation?.kind === "collect" && operation.host === normalizedHost ? t("agents.ssh.collecting") : t("agents.ssh.collectAndSave")}
             </button>
           </div>
         </form>
@@ -256,15 +297,15 @@ export function SshAgentSourcesModal({
                 ? <path d="M4 10.5l3.4 3.4L16 5.8" />
                 : <><circle cx="10" cy="10" r="7" /><path d="M10 6.5v4.5M10 14h.01" /></>}
             </svg>
-            <span>{status.message}</span>
+            <span>{localizedStatusMessage(status, effectiveLanguage, t)}</span>
           </div>
         ) : null}
 
         {sources.length > 0 ? (
-          <div className="agents-ssh-modal__saved" aria-label="Saved SSH hosts">
+          <div className="agents-ssh-modal__saved" aria-label={t("agents.ssh.savedAria")}>
             <div className="agents-ssh-modal__saved-head">
-              <h3>Saved hosts</h3>
-              <span>Local</span>
+              <h3>{t("agents.ssh.saved")}</h3>
+              <span>{t("agents.ssh.local")}</span>
             </div>
             <ul>
               {sources.map((source) => {
@@ -273,7 +314,7 @@ export function SshAgentSourcesModal({
                   <li key={source.host}>
                     <div className="agents-ssh-modal__source-copy">
                       <strong dir="ltr">{source.host}</strong>
-                      <span>{formatCollectedAt(source.lastCollectedAt)} · {source.turnsFound} turns found</span>
+                      <span>{formatCollectedAt(source.lastCollectedAt, effectiveLanguage, t)} · {t("agents.ssh.turnsFound", { count: source.turnsFound })}</span>
                     </div>
                     <div className="agents-ssh-modal__source-actions">
                       <button
@@ -282,13 +323,13 @@ export function SshAgentSourcesModal({
                         disabled={isBusy}
                         onClick={() => void collect(source.host)}
                       >
-                        {collecting ? "Collecting…" : "Collect"}
+                        {collecting ? t("agents.ssh.collecting") : t("agents.ssh.collect")}
                       </button>
                       <button
                         type="button"
                         className="agents-ssh-modal__remove"
-                        aria-label={`Remove saved SSH host ${source.host}`}
-                        title="Remove saved host only; collected activity stays in Drifty"
+                        aria-label={t("agents.ssh.removeAria", { host: source.host })}
+                        title={t("agents.ssh.removeTitle")}
                         disabled={isBusy}
                         onClick={() => updateSources(removeSshAgentSource(sources, source.host))}
                       >
@@ -299,7 +340,7 @@ export function SshAgentSourcesModal({
                 );
               })}
             </ul>
-            <p className="agents-ssh-modal__saved-foot">Removing a saved host removes only this shortcut. Previously collected activity stays in Your Agents.</p>
+            <p className="agents-ssh-modal__saved-foot">{t("agents.ssh.removeDetail")}</p>
           </div>
         ) : null}
       </section>
@@ -307,10 +348,10 @@ export function SshAgentSourcesModal({
   );
 }
 
-function formatCollectedAt(value: string): string {
+function formatCollectedAt(value: string, language: DisplayLanguage, t: LocalizationController["t"]): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Collected previously";
-  return new Intl.DateTimeFormat(undefined, {
+  if (Number.isNaN(date.getTime())) return t("agents.ssh.collectedPreviously");
+  return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
