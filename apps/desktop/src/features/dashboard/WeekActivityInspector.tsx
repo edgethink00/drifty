@@ -29,6 +29,7 @@ import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import type { DisplayLanguage } from "../localization/languagePreference";
 
 const INSPECTOR_WIDTH_PX = 332;
 const PICKER_VIEWPORT_INSET_PX = 12;
@@ -650,27 +651,51 @@ function DirectAttributePicker({
   );
 }
 
+// Sub-minute shares would round to "0"/"1m"; the breakdown is exactly where those
+// thin runner-ups matter, so keep seconds visible below one minute.
+function formatActivityShareDuration(totalSeconds: number, language: DisplayLanguage): string {
+  if (totalSeconds < 60) {
+    const seconds = Math.max(0, Math.round(totalSeconds));
+    return language === "ko" ? `${seconds}초` : `${seconds}s`;
+  }
+  return formatLocalizedCompactDurationFromSeconds(totalSeconds, language);
+}
+
 function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspectorEvent; readonly appIcons: AppIconMap }) {
   const { effectiveLanguage, t } = useLocalization();
-  if (event.surface !== "week" || event.identities.length === 0) return null;
+  if (event.identities.length === 0) return null;
+  // A flow cell paints one winner; only list its composition when something else shared it.
+  const isFlowComposition = event.surface === "flow";
+  if (isFlowComposition && event.identities.length < 2) return null;
+  if (!isFlowComposition && event.surface !== "week") return null;
   return (
     <div
       className="week-activity-inspector__activity-list"
       role="list"
       aria-label={t("dashboard.week.inspector.constituentActivities", { count: event.identities.length })}
     >
-      {event.identities.map((identity) => {
+      {event.identities.map((identity, index) => {
         const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
+        const isDominant = isFlowComposition && index === 0;
+        const rowLabel = isDominant
+          ? `${identity.label} · ${t("dashboard.week.inspector.dominant")}`
+          : identity.label;
         return (
-          <div className="week-activity-inspector__activity-row" role="listitem" key={identity.id}>
+          <div
+            className={isDominant
+              ? "week-activity-inspector__activity-row week-activity-inspector__activity-row--dominant"
+              : "week-activity-inspector__activity-row"}
+            role="listitem"
+            key={identity.id}
+          >
             <span className="usage-identity-icon usage-identity-icon--sm" aria-hidden="true">
               {identity.siteDomain
                 ? <SiteFavicon domain={identity.siteDomain} size={20} fallbackIconSrc={iconSrc} />
                 : <AppGlyph appName={identity.label} iconSrc={iconSrc} size="sm" />}
             </span>
-            <span title={identity.label}>{identity.label}</span>
+            <span title={rowLabel}>{rowLabel}</span>
             {identity.seconds !== undefined
-              ? <strong>{formatLocalizedCompactDurationFromSeconds(identity.seconds, effectiveLanguage)}</strong>
+              ? <strong>{formatActivityShareDuration(identity.seconds, effectiveLanguage)}</strong>
               : null}
           </div>
         );

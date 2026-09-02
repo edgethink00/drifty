@@ -1,6 +1,21 @@
-import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+import { logicalMinuteOfDay, type FlowBlock, type FlowBlockContribution, type FlowIntervalMinutes } from "@drifty/domain";
 
 const MINUTES_PER_DAY = 24 * 60;
+
+/** One app/site's accumulated share across every cell in a hover group. */
+export type FlowHoverGroupContribution = {
+  readonly id: string;
+  readonly label: string;
+  readonly appName: string;
+  readonly bundleId: string | null;
+  readonly browserName: string | null;
+  readonly siteDomain: string | null;
+  readonly siteTitle: string | null;
+  readonly category: FlowBlockContribution["category"];
+  readonly productivity: FlowBlockContribution["productivity"];
+  readonly durationSeconds: number;
+  readonly isWinner: boolean;
+};
 
 export type FlowBlockHoverGroup = {
   readonly block: FlowBlock;
@@ -22,14 +37,70 @@ type MutableFlowBlockHoverGroup = {
 };
 
 function blockIdentityKey(block: FlowBlock): string {
-  const activityKey = block.siteDomain
+  return `${block.day}|${block.category}|${block.productivity}|${activityIdentityKey(block)}`;
+}
+
+function activityIdentityKey(block: Pick<FlowBlock, "siteDomain" | "siteTitle" | "bundleId" | "appName">): string {
+  return block.siteDomain
     ? `site:${block.siteDomain}`
     : block.siteTitle
       ? `title:${block.siteTitle}`
       : block.bundleId
         ? `bundle:${block.bundleId}`
         : `app:${block.appName}`;
-  return `${block.day}|${block.category}|${block.productivity}|${activityKey}`;
+}
+
+// Sums each cell's composition across the whole hover group so the inspector can list
+// what actually filled the highlighted range: the painted winner first, then every
+// runner-up that shares the cells but never gets its own color.
+export function buildFlowHoverGroupContributions(group: FlowBlockHoverGroup): FlowHoverGroupContribution[] {
+  const winnerKey = activityIdentityKey(group.block);
+  const totals = new Map<string, { contribution: FlowHoverGroupContribution; order: number }>();
+  let order = 0;
+  for (const block of group.blocks) {
+    const composition = block.composition ?? [{
+      colorKey: block.colorKey,
+      appName: block.appName,
+      bundleId: block.bundleId ?? null,
+      browserName: block.browserName ?? null,
+      siteDomain: block.siteDomain ?? null,
+      siteTitle: block.siteTitle ?? null,
+      category: block.category,
+      productivity: block.productivity,
+      durationSeconds: block.durationSeconds,
+      sourceSegmentIds: block.sourceSegmentIds ?? [],
+    }];
+    for (const entry of composition) {
+      const id = activityIdentityKey(entry);
+      const existing = totals.get(id);
+      if (existing) {
+        existing.contribution = { ...existing.contribution, durationSeconds: existing.contribution.durationSeconds + entry.durationSeconds };
+        continue;
+      }
+      totals.set(id, {
+        order: order++,
+        contribution: {
+          id,
+          label: entry.siteDomain ?? entry.siteTitle ?? entry.appName,
+          appName: entry.appName,
+          bundleId: entry.bundleId,
+          browserName: entry.browserName,
+          siteDomain: entry.siteDomain,
+          siteTitle: entry.siteTitle,
+          category: entry.category,
+          productivity: entry.productivity,
+          durationSeconds: entry.durationSeconds,
+          isWinner: id === winnerKey,
+        },
+      });
+    }
+  }
+  return [...totals.values()]
+    .sort((left, right) =>
+      Number(right.contribution.isWinner) - Number(left.contribution.isWinner)
+      || right.contribution.durationSeconds - left.contribution.durationSeconds
+      || left.order - right.order)
+    .map((entry) => entry.contribution);
 }
 
 function blockEndMinute(block: FlowBlock, intervalMinutes: FlowIntervalMinutes): number {

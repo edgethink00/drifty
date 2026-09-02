@@ -832,6 +832,84 @@ describe("WeekDashboard activity inspector", () => {
     }
   });
 
+  it("dismisses the preview as soon as the pointer moves away from the card", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
+      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
+      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
+      if (!body || !event) throw new Error("expected the week calendar surface");
+      setElementRect(event, 80, 100, 120, 40);
+      fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
+      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      if (!preview) throw new Error("expected the anchored activity preview");
+      setElementRect(preview, 212, 100, 332, 320);
+
+      // Leaving the block through empty calendar space, heading left (away from the card).
+      fireEvent.mouseMove(body, { clientX: 176, clientY: 120 });
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+      fireEvent.mouseMove(body, { clientX: 160, clientY: 120 });
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+    } finally {
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the preview while the pointer closes in on the card and dismisses it once it turns back", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
+      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
+      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
+      if (!body || !event) throw new Error("expected the week calendar surface");
+      setElementRect(event, 80, 100, 120, 40);
+      fireEvent.mouseMove(event, { clientX: 150, clientY: 120 });
+      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      if (!preview) throw new Error("expected the anchored activity preview");
+      setElementRect(preview, 212, 100, 332, 320);
+
+      // A slow diagonal approach that cuts across empty space below the block.
+      fireEvent.mouseMove(body, { clientX: 170, clientY: 150 });
+      fireEvent.mouseMove(body, { clientX: 190, clientY: 160 });
+      act(() => vi.advanceTimersByTime(120));
+      fireEvent.mouseMove(body, { clientX: 205, clientY: 170 });
+      act(() => vi.advanceTimersByTime(120));
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+
+      // Turning back and wandering off dismisses it without waiting out the grace window.
+      fireEvent.mouseMove(body, { clientX: 190, clientY: 180 });
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+    } finally {
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("still caps a pointer that stalls beside the card at the shared grace window", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
+      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
+      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
+      if (!body || !event) throw new Error("expected the week calendar surface");
+      setElementRect(event, 80, 100, 120, 40);
+      fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
+      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      if (!preview) throw new Error("expected the anchored activity preview");
+      setElementRect(preview, 212, 100, 332, 320);
+
+      fireEvent.mouseMove(body, { clientX: 200, clientY: 150 });
+      act(() => vi.advanceTimersByTime(200));
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+      act(() => vi.advanceTimersByTime(100));
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+    } finally {
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("bridges the full height of a tall week block so an adjacent block cannot steal the card crossing", () => {
     const tallEvent = makeWeekCalendarEvent({
       id: "event-tall-source",

@@ -3170,6 +3170,11 @@
   white-space: nowrap;
 }
 
+.week-activity-inspector__activity-row--dominant > span:nth-child(2) {
+  color: var(--text);
+  font-weight: 620;
+}
+
 .week-activity-inspector__confirmation > strong {
   display: block;
   font-size: 0.8125rem;

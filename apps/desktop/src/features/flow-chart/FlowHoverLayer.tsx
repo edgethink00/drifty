@@ -10,7 +10,7 @@ import {
   type ActivityInspectorView,
 } from "../dashboard/WeekActivityInspector";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
-import type { FlowBlockHoverGroup } from "./flowHoverGroups";
+import { buildFlowHoverGroupContributions, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { blockDetailLabel, blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
 import { useFlowChartHoverDelegation, type AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
@@ -54,6 +54,10 @@ export function buildFlowActivityInspectorEvent(
   const displayName = blockDisplayName(block);
   const [startLabel = "", endLabel = ""] = formatGroupTimeRange(group).split("–");
   const identityId = block.siteDomain ?? block.bundleId ?? block.appName;
+  // Every app/site that shared the highlighted cells, painted winner first. The cell
+  // only shows the winner's color, so the inspector lists the rest to explain what
+  // else filled the range and what surfaces if the winner's records are removed.
+  const contributions = buildFlowHoverGroupContributions(group);
   const projectWeights = new Map<string, { readonly projectId: string | null; seconds: number; order: number }>();
   const projectBySegmentId = new Map<string, string | null>();
   for (const [order, groupedBlock] of group.blocks.entries()) {
@@ -92,13 +96,16 @@ export function buildFlowActivityInspectorEvent(
     productivity: block.productivity,
     startLabel,
     endLabel,
-    identities: [{
-      id: identityId,
-      label: displayName,
-      appName: block.appName,
-      bundleId: block.bundleId ?? null,
-      siteDomain: block.siteDomain ?? null,
-    }],
+    identities: contributions.map((contribution, index) => ({
+      id: index === 0 ? identityId : contribution.id,
+      label: index === 0 ? displayName : contribution.label,
+      appName: contribution.appName,
+      bundleId: contribution.bundleId,
+      siteDomain: contribution.siteDomain,
+      seconds: contribution.durationSeconds,
+    })),
+    // Category/productivity edits and delete only target the painted winner's records
+    // (segmentIds), so the chips stay winner-only instead of flagging runner-ups as mixed.
     hasMixedCategory: false,
     hasMixedProductivity: false,
     hasMixedProject: projectWeights.size > 1,

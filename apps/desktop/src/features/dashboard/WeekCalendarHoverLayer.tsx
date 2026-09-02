@@ -7,7 +7,14 @@ import {
   type ActivityInspectorProjectOption,
   type ActivityInspectorView,
 } from "./WeekActivityInspector";
-import { ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS } from "../../components/anchoredCardPosition";
+import {
+  ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS,
+  ANCHORED_PREVIEW_CARD_SELECTOR,
+  ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR,
+  readAnchoredPreviewCardRect,
+  trackAnchoredHoverIntent,
+  type AnchoredHoverIntent,
+} from "../../components/anchoredCardPosition";
 import type { WeekCalendarEvent } from "./weekCalendar";
 import { buildWeekActivityInspectorEvent } from "./weekActivityInspectorEvent";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -16,7 +23,6 @@ const HOVERED_WEEK_CALENDAR_EVENT_Z_INDEX = "29";
 // Retargeting only waits long enough for the current portal geometry to settle.
 // The longer shared delay remains reserved for crossing empty space into a card.
 const WEEK_HOVER_RETARGET_SETTLE_DELAY_MS = 16;
-const WEEK_PREVIEW_POINTER_SURFACE_SELECTOR = ".week-activity-inspector--preview, .week-activity-inspector__hover-bridge";
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
 
@@ -79,8 +85,9 @@ function dropLiftedEventElement(lifted: LiftedEventElement | null, remainingLift
 }
 
 // Pointer and keyboard focus are tracked independently so a focused block keeps
-// its preview after the pointer leaves. The shared grace delay supplements the
-// portaled card's transparent hit target for slower or diagonal movement.
+// its preview after the pointer leaves. Once the pointer leaves a block, its
+// travel decides the card's fate: closing in on the card keeps it (with the
+// shared delay as a cap), while moving anywhere else dismisses it right away.
 export function WeekCalendarHoverLayer({
   bodyElement,
   eventsById,
@@ -112,6 +119,7 @@ export function WeekCalendarHoverLayer({
   const retargetTimerRef = useRef<number | null>(null);
   const pendingPointerHoverRef = useRef<AnchoredWeekHover | null>(null);
   const pointerPositionRef = useRef<PointerPosition | null>(null);
+  const pointerClearIntentRef = useRef<AnchoredHoverIntent | null>(null);
 
   const isPointerInsideCurrentPreview = useCallback(() => {
     const pointerPosition = pointerPositionRef.current;
@@ -119,8 +127,8 @@ export function WeekCalendarHoverLayer({
     const hitElement = typeof document.elementFromPoint === "function"
       ? document.elementFromPoint(pointerPosition.x, pointerPosition.y)
       : null;
-    if (hitElement?.closest(WEEK_PREVIEW_POINTER_SURFACE_SELECTOR)) return true;
-    return Array.from(document.querySelectorAll<HTMLElement>(WEEK_PREVIEW_POINTER_SURFACE_SELECTOR)).some((element) => {
+    if (hitElement?.closest(ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR)) return true;
+    return Array.from(document.querySelectorAll<HTMLElement>(ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR)).some((element) => {
       const rect = element.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) return false;
       return pointerPosition.x >= rect.left
@@ -131,6 +139,7 @@ export function WeekCalendarHoverLayer({
   }, []);
 
   const cancelPointerClear = useCallback(() => {
+    pointerClearIntentRef.current = null;
     if (clearTimerRef.current === null) return;
     window.clearTimeout(clearTimerRef.current);
     clearTimerRef.current = null;
@@ -162,12 +171,29 @@ export function WeekCalendarHoverLayer({
   const schedulePointerClear = useCallback(() => {
     cancelPointerRetarget();
     if (clearTimerRef.current !== null) return;
+    // Measure travel from where the pointer last was, so the first sample
+    // outside the block already counts toward abandoning the card.
+    const origin = pointerPositionRef.current;
+    const cardRect = origin && pointerEventIdRef.current !== null ? readAnchoredPreviewCardRect() : null;
+    pointerClearIntentRef.current = origin && cardRect
+      ? trackAnchoredHoverIntent(null, origin.x, origin.y, cardRect).intent
+      : null;
     clearTimerRef.current = window.setTimeout(() => {
       clearTimerRef.current = null;
+      pointerClearIntentRef.current = null;
       if (isPointerInsideCurrentPreview()) return;
       clearPointerHover();
     }, ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS);
   }, [cancelPointerRetarget, clearPointerHover, isPointerInsideCurrentPreview]);
+
+  const trackPointerClearIntent = useCallback((x: number, y: number) => {
+    if (clearTimerRef.current === null || pointerEventIdRef.current === null) return;
+    const cardRect = readAnchoredPreviewCardRect();
+    if (!cardRect) return;
+    const step = trackAnchoredHoverIntent(pointerClearIntentRef.current, x, y, cardRect);
+    pointerClearIntentRef.current = step.intent;
+    if (step.verdict === "abandoned") clearPointerHover();
+  }, [clearPointerHover]);
 
   const schedulePointerRetarget = useCallback((nextHover: AnchoredWeekHover) => {
     cancelPointerClear();
@@ -246,8 +272,11 @@ export function WeekCalendarHoverLayer({
     };
     const handleDocumentMouseMove = (moveEvent: MouseEvent) => {
       pointerPositionRef.current = { x: moveEvent.clientX, y: moveEvent.clientY };
-      if (!(moveEvent.target instanceof Element)) return;
-      if (moveEvent.target.closest(WEEK_PREVIEW_POINTER_SURFACE_SELECTOR)) holdPointerHover();
+      if (moveEvent.target instanceof Element && moveEvent.target.closest(ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR)) {
+        holdPointerHover();
+        return;
+      }
+      trackPointerClearIntent(moveEvent.clientX, moveEvent.clientY);
     };
     const handlePointerWindowExit = () => clearPointerHover();
     const handleFocusIn = (focusEvent: FocusEvent) => {
@@ -269,7 +298,7 @@ export function WeekCalendarHoverLayer({
       setFocusHover(nextHover);
     };
     const handleFocusOut = (focusEvent: FocusEvent) => {
-      if (focusEvent.relatedTarget instanceof Element && focusEvent.relatedTarget.closest(".week-activity-inspector--preview")) return;
+      if (focusEvent.relatedTarget instanceof Element && focusEvent.relatedTarget.closest(ANCHORED_PREVIEW_CARD_SELECTOR)) return;
       const nextEventElement = eventElementFromTarget(focusEvent.relatedTarget, bodyElement);
       if (nextEventElement) return;
       focusLiftRef.current = dropLiftedEventElement(focusLiftRef.current, pointerLiftRef.current);
@@ -303,6 +332,7 @@ export function WeekCalendarHoverLayer({
     holdPointerHover,
     schedulePointerClear,
     schedulePointerRetarget,
+    trackPointerClearIntent,
   ]);
 
   const hover = focusHover ?? pointerHover;

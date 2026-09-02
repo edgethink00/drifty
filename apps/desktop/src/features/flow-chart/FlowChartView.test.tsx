@@ -497,6 +497,58 @@ describe("FlowChartView", () => {
     }
   });
 
+  it("dismisses the flow preview as soon as the pointer moves away from the card", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+      const grid = container.querySelector<HTMLElement>(".flow-chart-grid");
+      const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+      if (!grid) throw new Error("expected the flow chart grid");
+      setElementRect(cell, 120, 80, 20, 12);
+      fireNativePointerMove(cell, 130, 86);
+      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      if (!preview) throw new Error("expected the anchored activity preview");
+      setElementRect(preview, 152, 80, 332, 280);
+
+      // Rolling onto empty grid space to the left, away from the card.
+      fireNativePointerMove(grid, 126, 86);
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+      fireNativePointerMove(grid, 110, 86);
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+    } finally {
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the flow preview while the pointer closes in on the card across empty cells", () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+      const grid = container.querySelector<HTMLElement>(".flow-chart-grid");
+      const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+      if (!grid) throw new Error("expected the flow chart grid");
+      setElementRect(cell, 120, 80, 20, 12);
+      fireNativePointerMove(cell, 130, 86);
+      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      if (!preview) throw new Error("expected the anchored activity preview");
+      setElementRect(preview, 152, 80, 332, 280);
+
+      fireNativePointerMove(grid, 134, 100);
+      fireNativePointerMove(grid, 142, 110);
+      act(() => vi.advanceTimersByTime(150));
+      fireNativePointerMove(grid, 150, 120);
+      act(() => vi.advanceTimersByTime(100));
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+
+      fireNativePointerMove(grid, 136, 128);
+      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+    } finally {
+      vi.runOnlyPendingTimers();
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the rendered flow hover card inside a narrow viewport", async () => {
     const originalInnerWidth = window.innerWidth;
     const originalInnerHeight = window.innerHeight;

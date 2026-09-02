@@ -215,6 +215,11 @@ export interface FlowBlock {
   /** Full captured records contributing to the winning visual bucket. The same
    *  record can contribute to adjacent buckets, so grouped UI must de-duplicate. */
   sourceSegmentIds?: readonly string[];
+  /** Every app/site that contributed tracked seconds to this bucket, winner first
+   *  and then by descending seconds. The cell only paints the winner, so grouped UI
+   *  uses this to explain what else filled the cell (and what would surface if the
+   *  winner's records were removed). */
+  composition?: readonly FlowBlockContribution[];
   day: string;
   hour: number;
   quarter: number;
@@ -255,6 +260,22 @@ export interface FlowBlock {
   deviceId?: string | null;
   colorKey: string;
   durationSeconds: number;
+}
+
+/** One app/site's accumulated share of a single flow-chart bucket. */
+export interface FlowBlockContribution {
+  /** `siteDomain || appName` — the same key the bucket winner rule groups by. */
+  colorKey: string;
+  appName: string;
+  bundleId: string | null;
+  browserName: string | null;
+  siteDomain: string | null;
+  siteTitle: string | null;
+  category: ActivityCategory;
+  productivity: ProductivityLabel;
+  durationSeconds: number;
+  /** Captured records behind this contribution within the bucket. */
+  sourceSegmentIds: readonly string[];
 }
 
 export function todayIsoDate(): string {

@@ -1660,4 +1660,54 @@ describe('domain helpers', () => {
     expect(firstBucket?.sourceSegmentIds).toEqual(['code-short', 'mail-long']);
   });
 
+  it('records every runner-up behind the painted flow winner and surfaces the next one after the winner is removed', () => {
+    const instagram = classifiedSegment({
+      id: 'instagram',
+      startHour: 14,
+      startMinute: 8,
+      durationMinutes: 3,
+      appName: 'Arc',
+      bundleId: 'company.thebrowser.Browser',
+      browserName: 'Arc',
+      siteDomain: 'instagram.com',
+      category: 'social_media',
+      productivity: 'drift',
+    });
+    const slack = classifiedSegment({
+      id: 'slack',
+      startHour: 14,
+      startMinute: 11,
+      durationMinutes: 1,
+      appName: 'Slack',
+      bundleId: 'com.tinyspeck.slackmacgap',
+      category: 'communication',
+      productivity: 'neutral',
+    });
+
+    const [block] = buildFlowBlocks([instagram, slack], '2026-04-06', 4);
+    expect(block.colorKey).toBe('instagram.com');
+    expect(block.category).toBe('social_media');
+    expect(block.durationSeconds).toBe(180);
+    expect(block.sourceSegmentIds).toEqual(['instagram']);
+    expect(block.composition?.map((entry) => [entry.colorKey, entry.durationSeconds, entry.category, entry.sourceSegmentIds])).toEqual([
+      ['instagram.com', 180, 'social_media', ['instagram']],
+      ['Slack', 60, 'communication', ['slack']],
+    ]);
+
+    const [afterDelete] = buildFlowBlocks([slack], '2026-04-06', 4);
+    expect(afterDelete.colorKey).toBe('Slack');
+    expect(afterDelete.category).toBe('communication');
+    expect(afterDelete.durationSeconds).toBe(60);
+    expect(afterDelete.composition?.map((entry) => [entry.colorKey, entry.durationSeconds])).toEqual([['Slack', 60]]);
+  });
+
+  it('keeps the first-seen candidate as the flow winner on a tie and lists the other as a runner-up', () => {
+    const [block] = buildFlowBlocks([
+      segment({ id: 'code', start: localIso(9, 0), end: localIso(9, 2), appName: 'Code', bundleId: 'com.microsoft.VSCode' }),
+      segment({ id: 'mail', start: localIso(9, 2), end: localIso(9, 4), appName: 'Mail', bundleId: 'com.apple.mail' }),
+    ], '2026-04-06', 4);
+
+    expect(block.appName).toBe('Code');
+    expect(block.composition?.map((entry) => entry.colorKey)).toEqual(['Code', 'Mail']);
+  });
 });

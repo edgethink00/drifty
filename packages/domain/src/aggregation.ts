@@ -6,6 +6,7 @@ import type {
   ClassificationRuleOption,
   FlowIntervalMinutes,
   FlowBlock,
+  FlowBlockContribution,
   HourBucket,
   HourlyBucket,
   ProductivityBasis,
@@ -409,6 +410,24 @@ type FlowBlockCandidate = {
   strongestOverlapSeconds: number;
 };
 
+// The per-bucket share one candidate (colorKey) accumulated. The winner's block carries the
+// whole list so the UI can explain a flat cell whose color hides its runner-ups.
+function flowBlockContributionFromCandidate(candidate: FlowBlockCandidate): FlowBlockContribution {
+  const { block } = candidate;
+  return {
+    colorKey: block.colorKey,
+    appName: block.appName,
+    bundleId: block.bundleId ?? null,
+    browserName: block.browserName ?? null,
+    siteDomain: block.siteDomain ?? null,
+    siteTitle: block.siteTitle ?? null,
+    category: block.category,
+    productivity: block.productivity,
+    durationSeconds: block.durationSeconds,
+    sourceSegmentIds: block.sourceSegmentIds ?? [],
+  };
+}
+
 type FlowBlockBuildContext = {
   readonly classificationBySegmentId: ReadonlyMap<string, ActivityClassificationDetail>;
   readonly effectiveProductivityBySegmentId: ReadonlyMap<string, EffectiveProductivityResolution>;
@@ -605,6 +624,7 @@ function buildFlowBlocksWithContext(
   projectSegments?: readonly ActivitySegment[],
 ): FlowBlock[] {
   const candidates = new Map<string, FlowBlockCandidate>();
+  const candidatesByBucket = new Map<string, FlowBlockCandidate[]>();
   const { classificationBySegmentId, effectiveProductivityBySegmentId } = context;
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const classificationFor = (segment: ActivitySegment): ActivityClassificationDetail => {
@@ -613,7 +633,7 @@ function buildFlowBlocksWithContext(
     return classification;
   };
 
-  forEachFlowBucketContribution(segments, day, intervalMinutes, boundaryMinutes, ({ segment, candidateKey, minuteOfDay, hour, quarter, colorKey, overlapSeconds }) => {
+  forEachFlowBucketContribution(segments, day, intervalMinutes, boundaryMinutes, ({ segment, candidateKey, bucketKey, minuteOfDay, hour, quarter, colorKey, overlapSeconds }) => {
     const classification = classificationFor(segment);
     const effectiveProductivity = effectiveProductivityBySegmentId.get(segment.id) ?? directProductivity(classification.productivity);
     const projectColor = projectColorBySegment?.get(segment.id) ?? null;
@@ -622,7 +642,7 @@ function buildFlowBlocksWithContext(
     const existing = candidates.get(candidateKey);
 
     if (!existing) {
-      candidates.set(candidateKey, {
+      const candidate: FlowBlockCandidate = {
         block: {
           id: `${day}-${minuteOfDay}`,
           sourceSegmentIds: [segment.id],
@@ -634,7 +654,11 @@ function buildFlowBlocksWithContext(
           durationSeconds: overlapSeconds,
         },
         strongestOverlapSeconds: overlapSeconds,
-      });
+      };
+      candidates.set(candidateKey, candidate);
+      const bucketCandidates = candidatesByBucket.get(bucketKey);
+      if (bucketCandidates) bucketCandidates.push(candidate);
+      else candidatesByBucket.set(bucketKey, [candidate]);
       return;
     }
 
@@ -657,12 +681,19 @@ function buildFlowBlocksWithContext(
   });
 
   const blocks = new Map<string, FlowBlock>();
-  for (const candidate of candidates.values()) {
-    const key = `${candidate.block.day}-${candidate.block.minuteOfDay}`;
-    const existing = blocks.get(key);
-    if (!existing || existing.durationSeconds < candidate.block.durationSeconds) {
-      blocks.set(key, candidate.block);
+  for (const [bucketKey, bucketCandidates] of candidatesByBucket) {
+    // Strict `<` keeps the first-seen candidate on ties (selectFlowVisibleSegmentIds mirrors this).
+    let winner = bucketCandidates[0];
+    for (const candidate of bucketCandidates) {
+      if (winner.block.durationSeconds < candidate.block.durationSeconds) winner = candidate;
     }
+    const runnerUps = bucketCandidates
+      .filter((candidate) => candidate !== winner)
+      .sort((left, right) => right.block.durationSeconds - left.block.durationSeconds);
+    blocks.set(bucketKey, {
+      ...winner.block,
+      composition: [winner, ...runnerUps].map(flowBlockContributionFromCandidate),
+    });
   }
 
   const projectByBucket = projectSegments

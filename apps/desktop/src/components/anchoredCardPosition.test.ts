@@ -2,9 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ANCHORED_CARD_GAP,
+  ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX,
   ANCHORED_CARD_VIEWPORT_PADDING,
+  distanceToCardRect,
   getViewportSafeAnchoredPosition,
   isAnchorOutsideViewport,
+  trackAnchoredHoverIntent,
 } from "./anchoredCardPosition";
 
 describe("getViewportSafeAnchoredPosition", () => {
@@ -50,5 +53,41 @@ describe("isAnchorOutsideViewport", () => {
   it("distinguishes an offscreen block from an unresolved zero-size block", () => {
     expect(isAnchorOutsideViewport({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 })).toBe(false);
     expect(isAnchorOutsideViewport({ left: 20, top: -80, right: 100, bottom: -20, width: 80, height: 60 })).toBe(true);
+  });
+});
+
+describe("trackAnchoredHoverIntent", () => {
+  const card = { left: 220, top: 100, right: 552, bottom: 420, width: 332, height: 320 };
+
+  it("measures the gap to the card edge and reads zero inside it", () => {
+    expect(distanceToCardRect(180, 140, card)).toBe(40);
+    expect(distanceToCardRect(300, 60, card)).toBe(40);
+    expect(distanceToCardRect(190, 60, card)).toBe(50);
+    expect(distanceToCardRect(300, 200, card)).toBe(0);
+  });
+
+  it("keeps waiting while each sample closes in on the card", () => {
+    const first = trackAnchoredHoverIntent(null, 180, 140, card);
+    expect(first.verdict).toBe("approaching");
+    const closer = trackAnchoredHoverIntent(first.intent, 200, 150, card);
+    expect(closer.verdict).toBe("approaching");
+    // Diagonal travel that lands farther from the card, but within the allowance, is jitter.
+    const jitter = trackAnchoredHoverIntent(closer.intent, 196, 156, card);
+    expect(jitter.verdict).toBe("drifting");
+    expect(jitter.intent).toBe(closer.intent);
+    const inside = trackAnchoredHoverIntent(jitter.intent, 240, 160, card);
+    expect(inside.verdict).toBe("approaching");
+    expect(inside.intent.closestDistance).toBe(0);
+  });
+
+  it("abandons the card once the pointer travels past the allowance without closing in", () => {
+    const start = trackAnchoredHoverIntent(null, 180, 140, card);
+    const nearby = trackAnchoredHoverIntent(start.intent, 180 - ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX, 140, card);
+    expect(nearby.verdict).toBe("drifting");
+    const away = trackAnchoredHoverIntent(nearby.intent, 180 - ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX - 1, 140, card);
+    expect(away.verdict).toBe("abandoned");
+    // Travel is measured from the closest point so far, not from the last sample.
+    const sideways = trackAnchoredHoverIntent(start.intent, 180, 140 + ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX + 2, card);
+    expect(sideways.verdict).toBe("abandoned");
   });
 });

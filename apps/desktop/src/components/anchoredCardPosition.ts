@@ -2,15 +2,73 @@ import { clampHoverCoordinate, type FixedHoverPosition } from "./hoverCardPositi
 
 export const ANCHORED_CARD_GAP = 12;
 export const ANCHORED_CARD_VIEWPORT_PADDING = 16;
-// The transparent gap bridge handles the normal route; this grace window also
-// absorbs deliberate diagonal movement and portal event-ordering differences.
+// The transparent gap bridge handles the normal route into the card. While a
+// dismissal is pending, pointer travel decides early (see
+// trackAnchoredHoverIntent); this window only caps a pointer that stalls
+// outside the card, and it absorbs portal event-ordering differences.
 export const ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS = 280;
+// Travel without getting any closer to the card that dismisses it right away.
+// Roughly one or two pointer samples at ordinary speeds, so a move away from
+// the card reads as immediate while jitter along an approach path is ignored.
+export const ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX = 10;
+export const ANCHORED_PREVIEW_CARD_SELECTOR = ".week-activity-inspector--preview";
+export const ANCHORED_PREVIEW_HOVER_BRIDGE_SELECTOR = ".week-activity-inspector__hover-bridge";
+// Everything the pointer may rest on without giving up the card.
+export const ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR = `${ANCHORED_PREVIEW_CARD_SELECTOR}, ${ANCHORED_PREVIEW_HOVER_BRIDGE_SELECTOR}`;
 
 export type CardAnchorRect = Pick<DOMRectReadOnly, "left" | "top" | "right" | "bottom" | "width" | "height">;
 
 export type AnchoredCardPosition = FixedHoverPosition & {
   readonly side: "left" | "right";
 };
+
+export type AnchoredHoverIntent = {
+  readonly closestDistance: number;
+  readonly closestX: number;
+  readonly closestY: number;
+};
+
+export type AnchoredHoverIntentStep = {
+  readonly intent: AnchoredHoverIntent;
+  // approaching: keep waiting (the pointer is inside or closing in).
+  // drifting: no progress yet, still within the travel allowance.
+  // abandoned: moved on without closing in; dismiss now.
+  readonly verdict: "approaching" | "drifting" | "abandoned";
+};
+
+export function distanceToCardRect(x: number, y: number, card: CardAnchorRect): number {
+  const dx = Math.max(card.left - x, 0, x - card.right);
+  const dy = Math.max(card.top - y, 0, y - card.bottom);
+  return Math.hypot(dx, dy);
+}
+
+// Tracks whether a pointer that left the block is heading for the card. Each
+// sample that lands closer than any earlier one resets the travel allowance,
+// so an approach with a little jitter keeps the card while a move in any
+// other direction gives it up after ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX.
+export function trackAnchoredHoverIntent(
+  previous: AnchoredHoverIntent | null,
+  x: number,
+  y: number,
+  card: CardAnchorRect,
+): AnchoredHoverIntentStep {
+  const distance = distanceToCardRect(x, y, card);
+  if (!previous || distance === 0 || distance < previous.closestDistance) {
+    return { intent: { closestDistance: distance, closestX: x, closestY: y }, verdict: "approaching" };
+  }
+  const travel = Math.hypot(x - previous.closestX, y - previous.closestY);
+  return { intent: previous, verdict: travel > ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX ? "abandoned" : "drifting" };
+}
+
+// The rendered preview card, or null while it is absent or not yet laid out.
+export function readAnchoredPreviewCardRect(): CardAnchorRect | null {
+  if (typeof document === "undefined") return null;
+  const card = document.querySelector<HTMLElement>(ANCHORED_PREVIEW_CARD_SELECTOR);
+  if (!card) return null;
+  const rect = card.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return null;
+  return rect;
+}
 
 export function getViewportSafeAnchoredPosition(
   anchor: CardAnchorRect,
