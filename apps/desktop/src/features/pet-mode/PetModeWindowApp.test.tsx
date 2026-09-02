@@ -2149,6 +2149,70 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
+  it("absorbs rapid extra taps before the angry wake reaction paints and until it finishes", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "0");
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    let finishAngerTransition!: () => void;
+    bridge.stagePetModeHitRegionTransition.mockImplementation(async ({ regionId }) => {
+      if (regionId !== "transition:anger") return;
+      await new Promise<void>((resolve) => {
+        finishAngerTransition = resolve;
+      });
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 41, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 41, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    dispatchPointer(pet, "pointerdown", { pointerId: 42, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 42, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    // The logical phase changes synchronously, but native hit-region staging
+    // can delay the visible React commit. This is the exact pre-paint window in
+    // which a rapid third tap previously cancelled anger and produced a heart.
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(2);
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 43, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 43, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerdown", { pointerId: 44, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 44, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    expect(bridge.beginNativePetDrag).toHaveBeenCalledTimes(2);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+
+    await act(async () => {
+      finishAngerTransition();
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("anger");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS);
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+
+    dispatchPointer(pet, "pointerdown", { pointerId: 45, clientX: 12, clientY: 12 });
+    dispatchPointer(pet, "pointerup", { pointerId: 45, clientX: 12, clientY: 12 });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("happy");
+  });
+
   it("guarantees the angry wake reaction when guaranteed outcomes is enabled", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");

@@ -1630,6 +1630,11 @@ export function PetModeWindowApp() {
     event.stopPropagation();
     void reportNativePetPointer().catch(() => undefined);
     if (typeof event.button === "number" && event.button > 0) return;
+    // The annoyed wake-up is one complete relationship beat. A rapid follow-up
+    // press must still be consumed by this overlay, but it cannot claim action
+    // ownership: incrementing the token here would cancel the anger timer, and
+    // the resolved tap would immediately replace the mark with a happy heart.
+    if (phaseRef.current === "anger") return;
     if (manualDragRef.current) return;
     if (automaticInterventionRef.current && activeLabActionRef.current === "intervention") {
       userInterceptedInterventionTokenRef.current = actionTokenRef.current;
