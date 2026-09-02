@@ -20,10 +20,13 @@ import {
   listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest,
   moveNativePetToTarget,
+  probeNativePetAxSeat,
+  reconcileNativePetPosition,
   rememberNativePetPosition,
   resolveNativePetDrop,
   type PetDropPlan,
   type PetModeNativeDragResult,
+  type PetModeSeatResolution,
   reportNativePetContact,
   reportNativePetDragError,
   reportNativePetModeLabState,
@@ -65,6 +68,8 @@ import {
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
+  PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
+  PET_MODE_SEAT_CLEAR_CONFIRM_MS,
   PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_SIT_MAX_MS,
   PET_MODE_SIT_MIN_MS,
@@ -113,7 +118,16 @@ import {
 import "./petMode.css";
 
 const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
+// The native drag loop reports at pointer-tracking cadence. AX window walks
+// are much heavier, and a 4 Hz diagnostic is still comfortably live to a
+// person deciding where to drop the cat.
+const PET_MODE_AX_PROBE_INTERVAL_MS = 250;
 type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase"> | "drowsy";
+type PetModeAxProbeKind = "scanning" | "free" | "overlap" | "blocked" | "unknown" | "off";
+type PetModeAxProbeDisplay = {
+  readonly kind: PetModeAxProbeKind;
+  readonly label: string;
+};
 
 function guaranteedOutcomesEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
@@ -163,6 +177,7 @@ export function PetModeWindowApp() {
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const [dragProbe, setDragProbe] = useState<PetDropPlan | null>(null);
+  const [axSeatProbe, setAxSeatProbe] = useState<PetModeAxProbeDisplay | null>(null);
   // A right-click menu is anchored to the cat's current position, so the cat
   // has to stand still for as long as the menu is up.
   const [menuHolding, setMenuHolding] = useState(false);
@@ -177,6 +192,7 @@ export function PetModeWindowApp() {
       return false;
     }
   });
+  const guidesEnabledRef = useRef(guidesEnabled);
   const actionTokenRef = useRef(0);
   const musicNoteTimerRef = useRef<number | null>(null);
   const phaseRef = useRef<PetModeCatPhase>(initialPhase);
@@ -212,8 +228,22 @@ export function PetModeWindowApp() {
   // `null` means the pet has not completed an autonomous action yet.
   const previousAutonomousActionRef = useRef<PetModeLifeAction | null>(null);
   const manualDragRef = useRef(false);
+  const lastSurfaceRevisionRef = useRef<number | null>(null);
+  const seatReconcilePendingRef = useRef(false);
+  const seatReconcileInFlightRef = useRef(false);
+  const seatReconcileDisposedRef = useRef(false);
+  const seatReconcileTimerRef = useRef<number | null>(null);
+  const seatReconcileRetryTimerRef = useRef<number | null>(null);
+  const flushSeatReconcileRef = useRef<() => void>(() => undefined);
+  const axSeatProbeInFlightRef = useRef(false);
+  const axSeatProbeLastStartedAtRef = useRef(Number.NEGATIVE_INFINITY);
+  const axSeatProbeRevisionRef = useRef(0);
   const strokeHoldRef = useRef(false);
   const manualReleaseTokenRef = useRef<number | null>(null);
+  // A remembered manual drop cannot adopt a seated focus pose until native AX
+  // has verified that the user's landing is safe. Otherwise a focus boundary
+  // in the final release frames can briefly produce sit -> stand -> walk.
+  const manualReleaseSeatCheckPendingRef = useRef(false);
   const manualDropReactionRef = useRef<PetModePostDropReaction | null>(null);
   const previousPostDropReactionRef = useRef<PetModePostDropReaction | null>(null);
   const dragReleasePoseRef = useRef<PetModeRestPose>("idle");
@@ -379,8 +409,11 @@ export function PetModeWindowApp() {
     ) return;
     manualDragRef.current = false;
     setDragProbe(null);
+    axSeatProbeRevisionRef.current += 1;
+    setAxSeatProbe(null);
     const releaseToken = ++actionTokenRef.current;
     manualReleaseTokenRef.current = releaseToken;
+    manualReleaseSeatCheckPendingRef.current = rememberPosition;
     const reducedMotion = prefersReducedMotion();
     const forceFloorDrop = !reducedMotion
       && result?.shakeDetected === true;
@@ -403,7 +436,9 @@ export function PetModeWindowApp() {
             commitPhase("release");
           });
           // Native owns the fall. Keep the standing silhouette until that
-          // travel returns, then sit if focus wants the resting pose.
+          // travel returns. A remembered drop must also stay standing while
+          // AX decides whether the landing is safe: sitting before a corrective
+          // walk reads as an accidental sit -> stand -> walk interruption.
           const dropPlan = await resolveNativePetDrop(forceFloorDrop).catch(() => null);
           if (releaseToken !== actionTokenRef.current) return;
           const dropDurationMs = dropPlan?.durationMs ?? 0;
@@ -412,7 +447,9 @@ export function PetModeWindowApp() {
           if (remainingSettleMs > sitLeadMs) await delay(remainingSettleMs - sitLeadMs);
           if (releaseToken !== actionTokenRef.current) return;
           releaseLandingRef.current = true;
-          const landedPose: PetModeRestPose = focusRestingRef.current && reaction === "stay"
+          const landedPose: PetModeRestPose = !rememberPosition
+            && focusRestingRef.current
+            && reaction === "stay"
             ? "sit"
             : "idle";
           if (landedPose !== airbornePose) updateDragReleasePose(landedPose);
@@ -421,15 +458,31 @@ export function PetModeWindowApp() {
 
         if (releaseToken !== actionTokenRef.current) return;
         commitPhase(dragReleasePoseRef.current);
+        let seatResolution = null;
         if (rememberPosition) {
           // Capture the user's chosen home before a reaction walk changes the
-          // native panel position. The rest pose is already painted, so waiting
-          // for this bookkeeping cannot strand the held/release silhouette.
-          await rememberNativePetPosition().catch((error) => {
+          // native panel position. AX avoidance is part of that settlement:
+          // the durable anchor remains the user's drop, while the visible cat
+          // immediately walks off any control under it.
+          seatResolution = await rememberNativePetPosition(
+            reducedMotion,
+          ).catch((error) => {
             void reportNativePetDragError(error).catch(() => undefined);
+            return null;
           });
         }
         if (releaseToken !== actionTokenRef.current) return;
+        if (seatResolution?.moved) {
+          // The corrective walk is already the visible post-drop reaction.
+          // Stacking the random 84pt walk would carry the cat away from the
+          // safe seat that AX just selected.
+          previousPostDropReactionRef.current = "stay";
+          const finalPose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
+          focusRestAppliedRef.current = finalPose === "sit";
+          commitPhase(finalPose);
+          restartAutonomousCycle();
+          return;
+        }
         // Only a reaction that reached its settled starting pose participates
         // in the next-drop repeat guard. A cancelled fall was never seen.
         previousPostDropReactionRef.current = reaction;
@@ -475,6 +528,7 @@ export function PetModeWindowApp() {
         if (manualReleaseTokenRef.current === releaseToken) {
           setManualGazeActive(false);
           manualReleaseTokenRef.current = null;
+          manualReleaseSeatCheckPendingRef.current = false;
           manualDropReactionRef.current = null;
           releaseLandingRef.current = false;
         }
@@ -482,12 +536,157 @@ export function PetModeWindowApp() {
     })();
   }, [commitFacing, commitPhase, restartAutonomousCycle, updateDragReleasePose]);
 
+  const flushSeatReconcile = useCallback(() => {
+    if (
+      seatReconcileDisposedRef.current
+      || !seatReconcilePendingRef.current
+      || seatReconcileInFlightRef.current
+    ) return;
+    const startingPhase = phaseRef.current;
+    const resting = startingPhase === "idle" || startingPhase === "sit" || startingPhase === "sleep";
+    if (
+      !petModeEnabledRef.current
+      || !visibleRef.current
+      || !resting
+      || manualDragRef.current
+      || manualReleaseTokenRef.current !== null
+      || menuOpenRef.current
+      || activeLabActionRef.current !== null
+    ) return;
+
+    seatReconcilePendingRef.current = false;
+    seatReconcileInFlightRef.current = true;
+    const token = actionTokenRef.current;
+    void reconcileNativePetPosition(
+      prefersReducedMotion(),
+    )
+      .then((resolution) => {
+        if (
+          seatReconcileDisposedRef.current
+          || token !== actionTokenRef.current
+        ) return;
+        if (resolution.reason === "anchor_clear_pending") {
+          if (seatReconcileRetryTimerRef.current === null) {
+            seatReconcileRetryTimerRef.current = window.setTimeout(() => {
+              seatReconcileRetryTimerRef.current = null;
+              seatReconcilePendingRef.current = true;
+              flushSeatReconcileRef.current();
+            }, PET_MODE_SEAT_CLEAR_CONFIRM_MS);
+          }
+          return;
+        }
+        if (!resolution.moved) return;
+        if (startingPhase === "sleep" && phaseRef.current === "sleep") return;
+        const finalPose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
+        focusRestAppliedRef.current = finalPose === "sit";
+        commitPhase(finalPose);
+      })
+      .catch((error) => {
+        void reportNativePetDragError(error).catch(() => undefined);
+      })
+      .finally(() => {
+        seatReconcileInFlightRef.current = false;
+        if (
+          !seatReconcileDisposedRef.current
+          && seatReconcilePendingRef.current
+          && seatReconcileRetryTimerRef.current === null
+        ) {
+          seatReconcileRetryTimerRef.current = window.setTimeout(() => {
+            seatReconcileRetryTimerRef.current = null;
+            flushSeatReconcileRef.current();
+          }, 0);
+        }
+      });
+  }, [commitPhase]);
+
+  useEffect(() => {
+    flushSeatReconcileRef.current = flushSeatReconcile;
+  }, [flushSeatReconcile]);
+
+  const requestSeatReconcile = useCallback(() => {
+    seatReconcilePendingRef.current = true;
+    if (seatReconcileTimerRef.current !== null) {
+      window.clearTimeout(seatReconcileTimerRef.current);
+    }
+    // Let the snapshot's focus transition settle before native movement starts
+    // and coalesce title churn from one app/window transition into one AX scan.
+    seatReconcileTimerRef.current = window.setTimeout(() => {
+      seatReconcileTimerRef.current = null;
+      flushSeatReconcileRef.current();
+    }, 120);
+  }, []);
+
+  useEffect(() => {
+    if (seatReconcilePendingRef.current) requestSeatReconcile();
+  }, [menuHolding, petModeEnabled, petVisible, phase, requestSeatReconcile]);
+
+  useEffect(() => {
+    if (!petModeEnabled) return undefined;
+    const intervalId = window.setInterval(
+      requestSeatReconcile,
+      PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
+    );
+    return () => window.clearInterval(intervalId);
+  }, [petModeEnabled, requestSeatReconcile]);
+
+  useEffect(() => {
+    seatReconcileDisposedRef.current = false;
+    return () => {
+      seatReconcileDisposedRef.current = true;
+      seatReconcilePendingRef.current = false;
+      if (seatReconcileTimerRef.current !== null) {
+        window.clearTimeout(seatReconcileTimerRef.current);
+      }
+      if (seatReconcileRetryTimerRef.current !== null) {
+        window.clearTimeout(seatReconcileRetryTimerRef.current);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetDragProbe((probe) => {
       if (disposed) return;
       setDragProbe(probe);
+      if (
+        !probe
+        || !guidesEnabledRef.current
+        || !manualDragRef.current
+        || axSeatProbeInFlightRef.current
+      ) return;
+
+      const now = Date.now();
+      if (now - axSeatProbeLastStartedAtRef.current < PET_MODE_AX_PROBE_INTERVAL_MS) return;
+      axSeatProbeLastStartedAtRef.current = now;
+      axSeatProbeInFlightRef.current = true;
+      const revision = ++axSeatProbeRevisionRef.current;
+      // Keep the last resolved status visible while the next bounded scan is
+      // running. Replacing it with SCANNING on every probe makes the badge
+      // flicker even when the seat classification is stable.
+      setAxSeatProbe((current) => current ?? { kind: "scanning", label: "AX SCANNING" });
+      void probeNativePetAxSeat()
+        .then((resolution) => {
+          if (
+            disposed
+            || revision !== axSeatProbeRevisionRef.current
+            || !guidesEnabledRef.current
+            || !manualDragRef.current
+          ) return;
+          setAxSeatProbe(getAxProbeDisplay(resolution));
+        })
+        .catch(() => {
+          if (
+            disposed
+            || revision !== axSeatProbeRevisionRef.current
+            || !guidesEnabledRef.current
+            || !manualDragRef.current
+          ) return;
+          setAxSeatProbe({ kind: "unknown", label: "AX UNKNOWN" });
+        })
+        .finally(() => {
+          axSeatProbeInFlightRef.current = false;
+        });
     }).then((nextUnlisten) => {
       if (disposed) {
         cleanupTauriEventListener(nextUnlisten);
@@ -1034,9 +1233,25 @@ export function PetModeWindowApp() {
     void listenToNativePetModeEvent((event) => {
       if (event.kind === "snapshot") {
         setSnapshot(event.snapshot);
+        const nextSurfaceRevision = event.snapshot.surfaceRevision;
+        if (typeof nextSurfaceRevision === "number") {
+          const previousSurfaceRevision = lastSurfaceRevisionRef.current;
+          lastSurfaceRevisionRef.current = nextSurfaceRevision;
+          if (
+            previousSurfaceRevision !== null
+            && previousSurfaceRevision !== nextSurfaceRevision
+          ) {
+            requestSeatReconcile();
+          }
+        }
         return;
       }
       if (event.kind === "guides") {
+        guidesEnabledRef.current = event.enabled;
+        if (!event.enabled) {
+          axSeatProbeRevisionRef.current += 1;
+          setAxSeatProbe(null);
+        }
         setGuidesEnabled(event.enabled);
         return;
       }
@@ -1080,12 +1295,16 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "motion") {
+        const isSeatCorrection = event.purpose === "seat_correction";
         if (
           manualDragRef.current
           || phaseRef.current === "drag"
           || phaseRef.current === "release"
         ) return;
-        if (focusRestingRef.current) return;
+        // Focus mode blocks autonomous wandering, but an AX safety correction
+        // still needs to look like the cat noticed the obstruction and walked
+        // away. Native marks only that bounded move with `seat_correction`.
+        if (focusRestingRef.current && !isSeatCorrection) return;
         if (event.motion === "entry") {
           // Native cancellation normally prevents stale entry events after the
           // toggle turns off. Re-check the shared setting here as a webview-side
@@ -1243,7 +1462,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [clearActiveLabAction, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, restartAutonomousCycle, setActiveLabAction]);
+  }, [clearActiveLabAction, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, setActiveLabAction]);
 
   useEffect(() => {
     const resting = snapshot?.productivity === "focus";
@@ -1263,9 +1482,14 @@ export function PetModeWindowApp() {
       // will settle into the newly correct final pose when it finishes.
       const reaction = manualDropReactionRef.current ?? "stay";
       // Sit only during the last landing frames. A focus boundary during the
-      // airborne stretch must not fold the cat up in mid-air.
+      // airborne stretch must not fold the cat up in mid-air. A remembered
+      // landing also remains standing until AX has ruled out a corrective walk.
       if (phaseRef.current === "release" && releaseLandingRef.current) {
-        updateDragReleasePose(resting && reaction === "stay" ? "sit" : "idle");
+        updateDragReleasePose(
+          !manualReleaseSeatCheckPendingRef.current && resting && reaction === "stay"
+            ? "sit"
+            : "idle",
+        );
       }
       focusRestAppliedRef.current = resting && reaction === "stay";
       if (resting || wasResting) restartAutonomousCycle();
@@ -1641,6 +1865,7 @@ export function PetModeWindowApp() {
     }
     const dragToken = ++actionTokenRef.current;
     manualDragRef.current = true;
+    axSeatProbeLastStartedAtRef.current = Number.NEGATIVE_INFINITY;
     strokeHoldRef.current = false;
     void cancelNativePetMotion().catch(() => undefined);
     void (async () => {
@@ -1665,6 +1890,8 @@ export function PetModeWindowApp() {
           return;
         }
         manualDragRef.current = false;
+        axSeatProbeRevisionRef.current += 1;
+        setAxSeatProbe(null);
         // Native movement never crossed the drag threshold, so this entire
         // gesture is a normal petting tap. Cancel any interrupted life pose
         // before playing the existing happy reaction, while preserving the
@@ -1678,6 +1905,8 @@ export function PetModeWindowApp() {
       } catch (error) {
         void reportNativePetDragError(error).catch(() => undefined);
         manualDragRef.current = false;
+        axSeatProbeRevisionRef.current += 1;
+        setAxSeatProbe(null);
         if (dragToken === actionTokenRef.current) {
           commitPhase(focusRestingRef.current ? "sit" : "idle");
         }
@@ -1816,6 +2045,15 @@ export function PetModeWindowApp() {
               <span className="pet-mode-drag-probe-text">{getDragProbeLabel(dragProbe)}</span>
             </div>
           ) : null}
+          {guidesEnabled && (phase === "drag" || manualDragRef.current) && axSeatProbe ? (
+            <div
+              className={`pet-mode-ax-probe pet-mode-ax-probe--${axSeatProbe.kind}`}
+              data-ax-status={axSeatProbe.kind}
+              aria-hidden="true"
+            >
+              <span className="pet-mode-ax-probe-badge">{axSeatProbe.label}</span>
+            </div>
+          ) : null}
           {guidesEnabled ? (
             <div className="pet-mode-guides" aria-hidden="true">
               <div className="pet-mode-guide-line pet-mode-guide-line--feet">
@@ -1874,5 +2112,28 @@ function getDragProbeLabel(probe: PetDropPlan): string {
     case "hop":
     default:
       return "일반 낙하 (4pt 홉)";
+  }
+}
+
+function getAxProbeDisplay(resolution: PetModeSeatResolution): PetModeAxProbeDisplay {
+  switch (resolution.reason) {
+    case "no_control_overlap":
+    case "no_candidate_window":
+      return { kind: "free", label: "AX FREE" };
+    case "control_overlap":
+      return { kind: "overlap", label: "BUTTON OVERLAP" };
+    case "dense_control_strip":
+    case "no_horizontal_gap":
+      return { kind: "blocked", label: "NO SAFE GAP" };
+    case "pet_disabled":
+    case "pet_hidden":
+      return { kind: "off", label: "AX OFF" };
+    case "anchor_clear_pending":
+    case "accessibility_unavailable":
+    case "window_list_unavailable":
+    case "scan_truncated":
+    case "unsupported_platform":
+    default:
+      return { kind: "unknown", label: "AX UNKNOWN" };
   }
 }

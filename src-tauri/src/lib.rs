@@ -36,6 +36,7 @@ use commands::{
     pet_mode_cursor_inside, pet_mode_cursor_sample, pet_mode_exit_screen, pet_mode_input_bounds,
     pet_mode_intervene, pet_mode_lab_apply_target, pet_mode_lab_place_center,
     pet_mode_move_to_target, pet_mode_preview_action, pet_mode_preview_intervention,
+    pet_mode_probe_ax_seat, pet_mode_reconcile_position,
     pet_mode_remember_position, pet_mode_report_contact, pet_mode_report_drag_error,
     pet_mode_report_pointer, pet_mode_resolve_drop, pet_mode_return_from_outing,
     pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
@@ -751,6 +752,8 @@ pub fn run() {
             pet_mode_roam,
             pet_mode_exit_screen,
             pet_mode_return_from_outing,
+            pet_mode_probe_ax_seat,
+            pet_mode_reconcile_position,
             pet_mode_remember_position,
             pet_mode_resolve_drop,
         ])

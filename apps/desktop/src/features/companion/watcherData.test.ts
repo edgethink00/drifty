@@ -1,6 +1,7 @@
 import type { ActivitySegment, CurrentActivitySnapshot } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
 import {
+  buildActivitySurfaceRevision,
   buildLiveWatcherSnapshot,
   buildWatcherSnapshot,
   buildWatcherSnapshotFromCurrent,
@@ -62,6 +63,25 @@ describe("buildLiveWatcherSnapshot", () => {
       productivity: "focus",
       category: "workspace",
     });
+  });
+
+  it("changes only the opaque surface revision when app or window identity changes", () => {
+    const first = {
+      ...liveYouTube,
+      windowTitle: "Video A",
+    };
+    const laterObservation = {
+      ...first,
+      observedAt: "2026-08-30T19:07:13.000Z",
+    };
+    const anotherWindow = {
+      ...laterObservation,
+      windowTitle: "Video B",
+    };
+
+    expect(buildActivitySurfaceRevision(first)).toBe(buildActivitySurfaceRevision(laterObservation));
+    expect(buildActivitySurfaceRevision(anotherWindow)).not.toBe(buildActivitySurfaceRevision(first));
+    expect(buildLiveWatcherSnapshot(first, []).surfaceRevision).toBe(buildActivitySurfaceRevision(first));
   });
 });
 

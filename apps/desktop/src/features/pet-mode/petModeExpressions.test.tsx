@@ -48,6 +48,7 @@ vi.mock("./petModeBridge", () => ({
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   sampleNativePetCursor: vi.fn().mockResolvedValue(null),
+  reconcileNativePetPosition: vi.fn().mockResolvedValue({ x: 0, y: 0, moved: false, reason: "no_control_overlap" }),
   rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
   resolveNativePetDrop: vi.fn().mockResolvedValue(null),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),

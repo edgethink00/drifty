@@ -73,6 +73,28 @@ export type PetModeCursorReturnResult = {
   readonly movedDistance: number;
 };
 
+export type PetModeSeatResolutionReason =
+  | "control_overlap"
+  | "no_control_overlap"
+  | "anchor_clear_pending"
+  | "accessibility_unavailable"
+  | "window_list_unavailable"
+  | "no_candidate_window"
+  | "scan_truncated"
+  | "dense_control_strip"
+  | "no_horizontal_gap"
+  | "pet_disabled"
+  | "pet_hidden"
+  | "unsupported_platform";
+
+export type PetModeSeatResolution = {
+  readonly x: number;
+  readonly y: number;
+  /** True when the resolved safe seat differs from the sampled seat. */
+  readonly moved: boolean;
+  readonly reason: PetModeSeatResolutionReason;
+};
+
 // Native travel can legitimately use the full six-second cap before the paw
 // reaches its reviewed contact frame. Keep the listener alive through both.
 const PET_MODE_CONTACT_TIMEOUT_MS = 8_000;
@@ -472,8 +494,20 @@ export async function returnNativePetFromOuting(ticket: PetModeOutingTicket): Pr
   });
 }
 
-export async function rememberNativePetPosition(): Promise<void> {
-  await invoke("pet_mode_remember_position");
+export async function rememberNativePetPosition(
+  reducedMotion = false,
+): Promise<PetModeSeatResolution> {
+  return invoke<PetModeSeatResolution>("pet_mode_remember_position", { reducedMotion });
+}
+
+export async function reconcileNativePetPosition(
+  reducedMotion = false,
+): Promise<PetModeSeatResolution> {
+  return invoke<PetModeSeatResolution>("pet_mode_reconcile_position", { reducedMotion });
+}
+
+export async function probeNativePetAxSeat(): Promise<PetModeSeatResolution> {
+  return invoke<PetModeSeatResolution>("pet_mode_probe_ax_seat");
 }
 
 export type PetDropKind = "hold" | "stay_top" | "stay_floor" | "already_on" | "catch" | "hop";

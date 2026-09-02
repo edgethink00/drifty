@@ -135,7 +135,9 @@ fn main() {
             "pet_mode_roam",
             "pet_mode_exit_screen",
             "pet_mode_return_from_outing",
+            "pet_mode_reconcile_position",
             "pet_mode_remember_position",
+            "pet_mode_probe_ax_seat",
         ]),
     ))
     .unwrap_or_else(|error| panic!("failed to build tauri app manifest: {error:#?}"));

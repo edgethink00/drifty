@@ -15,8 +15,11 @@ import {
   PET_MODE_LIFE_MOTION_DURATION_MS,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
+  PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_PRESENT_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
+  PET_MODE_SEAT_CLEAR_CONFIRM_MS,
+  PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
@@ -120,7 +123,24 @@ const bridge = vi.hoisted(() => ({
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   sampleNativePetCursor: vi.fn().mockResolvedValue(null),
-  rememberNativePetPosition: vi.fn().mockResolvedValue(undefined),
+  rememberNativePetPosition: vi.fn().mockResolvedValue({
+    x: 120,
+    y: 80,
+    moved: false,
+    reason: "no_control_overlap",
+  }),
+  reconcileNativePetPosition: vi.fn().mockResolvedValue({
+    x: 120,
+    y: 80,
+    moved: false,
+    reason: "no_control_overlap",
+  }),
+  probeNativePetAxSeat: vi.fn().mockResolvedValue({
+    x: 120,
+    y: 80,
+    moved: false,
+    reason: "no_control_overlap",
+  }),
   resolveNativePetDrop: vi.fn().mockResolvedValue({ kind: "hop", distance: 4, durationMs: 16, targetY: 0, ledge: "hop" }),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
   stalkNativePetCursor: vi.fn().mockResolvedValue({
@@ -160,7 +180,9 @@ vi.mock("./petModeBridge", () => ({
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
   roamNativePet: bridge.roamNativePet,
   sampleNativePetCursor: bridge.sampleNativePetCursor,
+  reconcileNativePetPosition: bridge.reconcileNativePetPosition,
   rememberNativePetPosition: bridge.rememberNativePetPosition,
+  probeNativePetAxSeat: bridge.probeNativePetAxSeat,
   resolveNativePetDrop: bridge.resolveNativePetDrop,
   setNativePetPresence: bridge.setNativePetPresence,
   stalkNativePetCursor: bridge.stalkNativePetCursor,
@@ -203,6 +225,229 @@ describe("PetModeWindowApp", () => {
     delete document.documentElement.dataset.surface;
   });
 
+  it("rechecks the resident seat when the opaque app/window revision changes", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: {
+          productivity: "neutral",
+          contextLabel: "editor",
+          durationSeconds: 1,
+          surfaceRevision: 101,
+        },
+      });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    expect(bridge.reconcileNativePetPosition).not.toHaveBeenCalled();
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: {
+          productivity: "neutral",
+          contextLabel: "browser",
+          durationSeconds: 1,
+          surfaceRevision: 202,
+        },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(150);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false);
+  });
+
+  it("periodically rechecks a still cat when controls change without a new window title", async () => {
+    // Keep the first random blink (4.42-7.28s) beyond this assertion. If a
+    // blink overlaps the 6s interval, production deliberately waits for the
+    // short pose to finish before moving the pet, which is a different case.
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    expect(bridge.eventHandler).not.toBeNull();
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SEAT_RECONCILE_INTERVAL_MS);
+      // The interval callback schedules a short coalescing debounce.
+      await vi.advanceTimersByTimeAsync(150);
+      await Promise.resolve();
+    });
+
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false);
+  });
+
+  it("quickly confirms a clear anchor without trusting one transient AX miss", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.reconcileNativePetPosition
+      .mockResolvedValueOnce({ x: 1440, y: 47, moved: false, reason: "anchor_clear_pending" })
+      .mockResolvedValueOnce({ x: 1560, y: 47, moved: true, reason: "no_control_overlap" });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SEAT_RECONCILE_INTERVAL_MS + 120);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SEAT_CLEAR_CONFIRM_MS - 1);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the clear-confirm delay when a surface change arrives during an AX scan", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeFirstScan!: () => void;
+    bridge.reconcileNativePetPosition
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        completeFirstScan = () => resolve({
+          x: 1440,
+          y: 47,
+          moved: false,
+          reason: "anchor_clear_pending",
+        });
+      }))
+      .mockResolvedValueOnce({
+        x: 1560,
+        y: 47,
+        moved: true,
+        reason: "no_control_overlap",
+      });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: {
+          productivity: "neutral",
+          contextLabel: "browser",
+          durationSeconds: 1,
+          surfaceRevision: 101,
+        },
+      });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SEAT_RECONCILE_INTERVAL_MS + 120);
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: {
+          productivity: "neutral",
+          contextLabel: "browser",
+          durationSeconds: 1,
+          surfaceRevision: 202,
+        },
+      });
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(120); });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      completeFirstScan();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SEAT_CLEAR_CONFIRM_MS - 1);
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a periodic AX recheck after a blink temporarily blocks movement", async () => {
+    // 0.517 schedules the first blink at about 5.9s, so the 6s AX interval
+    // lands during the pose and must be retried after the 228ms blink settles.
+    vi.spyOn(Math, "random").mockReturnValue(0.517);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => { await Promise.resolve(); });
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_900); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("blink");
+
+    // The 6s interval and its 120ms debounce both fire before this clock turn
+    // ends, while the blink still owns the pose.
+    await act(async () => { await vi.advanceTimersByTimeAsync(220); });
+    expect(bridge.reconcileNativePetPosition).not.toHaveBeenCalled();
+
+    // Let the blink finish in its own turn, as it does with real timers, so
+    // the phase effect can reschedule the pending AX request.
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false);
+  });
+
   it("hard-stops automatic motion and gaze while focus is active", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
@@ -235,6 +480,38 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("sit");
     expect(bridge.roamNativePet).not.toHaveBeenCalled();
     expect(bridge.sampleNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("lets a bounded AX seat correction walk during focus", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    await act(async () => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "walk",
+        purpose: "seat_correction",
+      });
+      await Promise.resolve();
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("walk");
   });
 
   it("enters the focus rest pose when the pet is enabled during an active focus episode", async () => {
@@ -2337,8 +2614,161 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS); });
     expect(cat.getAttribute("data-phase")).toBe("sit");
     expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledWith(false);
     expect(bridge.roamNativePet).not.toHaveBeenCalled();
     expect(bridge.sampleNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("stays on four paws until a focused AX corrective walk begins", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    let completeSeatCorrection!: () => void;
+    bridge.rememberNativePetPosition.mockImplementationOnce(() => new Promise((resolve) => {
+      completeSeatCorrection = () => resolve({
+        x: 84,
+        y: 14,
+        moved: true,
+        reason: "control_overlap",
+      });
+    }));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 42 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 48, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS);
+      await Promise.resolve();
+    });
+
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledWith(false);
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "walk",
+        purpose: "seat_correction",
+      });
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("walk");
+
+    await act(async () => {
+      completeSeatCorrection();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+  });
+
+  it("does not sit when focus starts during the final frames of an unsafe landing", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    let completeSeatCorrection!: () => void;
+    bridge.rememberNativePetPosition.mockImplementationOnce(() => new Promise((resolve) => {
+      completeSeatCorrection = () => resolve({
+        x: 84,
+        y: 14,
+        moved: true,
+        reason: "control_overlap",
+      });
+    }));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    dispatchPointer(pet, "pointerdown", { pointerId: 49, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+
+    // The mocked native drop lasts 16ms, leaving a 48ms final landing window.
+    // Enter that window before focus begins so this covers the previous race.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS - 60);
+    });
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-region-id")).toBe("release:idle");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60);
+      await Promise.resolve();
+    });
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledWith(false);
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "walk",
+        purpose: "seat_correction",
+      });
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("walk");
+
+    await act(async () => {
+      completeSeatCorrection();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sit");
   });
 
   it("uses the 30 percent manual-drop walk even when Dev mode is off", async () => {
@@ -2377,6 +2807,49 @@ describe("PetModeWindowApp", () => {
     });
     expect(bridge.roamNativePet).toHaveBeenCalledWith(true);
     expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("uses an AX corrective walk as the complete post-drop reaction", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.7);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.rememberNativePetPosition.mockResolvedValueOnce({
+      x: 84,
+      y: 14,
+      moved: true,
+      reason: "control_overlap",
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeNativeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise((resolve) => {
+      completeNativeDrag = () => resolve({
+        moved: true,
+        startX: 120,
+        startY: 80,
+        endX: 180,
+        endY: 96,
+      });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 47, clientX: 18, clientY: 18 });
+    await act(async () => { bridge.dragStartHandler?.(); await Promise.resolve(); });
+    await act(async () => { completeNativeDrag(); await Promise.resolve(); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_SETTLE_MS);
+      await Promise.resolve();
+    });
+
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledWith(false);
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
   it("uses the 30 percent manual-drop branch for a short same-level walk", async () => {
@@ -3113,22 +3586,114 @@ describe("PetModeWindowApp", () => {
       probeHandler?.({ kind: "catch", distance: 52, durationMs: 140, targetY: 210, ledge: "Safari" });
     });
     expect(screen.queryByText("낙하: Safari (52pt)")).toBeNull();
+    expect(bridge.probeNativePetAxSeat).not.toHaveBeenCalled();
 
-    act(() => {
+    await act(async () => {
       guidesHandler?.({ kind: "guides", enabled: true });
       probeHandler?.({ kind: "catch", distance: 52, durationMs: 140, targetY: 210, ledge: "Safari" });
+      await Promise.resolve();
     });
     expect(screen.getByText("낙하: Safari (52pt)")).toBeDefined();
+    expect(screen.getByText("AX FREE")).toBeDefined();
+    expect(bridge.probeNativePetAxSeat).toHaveBeenCalledTimes(1);
 
-    act(() => {
+    bridge.probeNativePetAxSeat.mockResolvedValueOnce({
+      x: 172,
+      y: 80,
+      moved: true,
+      reason: "control_overlap",
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
       probeHandler?.({ kind: "stay_top", distance: 0, durationMs: 0, targetY: 40, ledge: "menubar" });
+      await Promise.resolve();
     });
     expect(screen.getByText("상단 집 (안 떨어짐)")).toBeDefined();
+    expect(screen.getByText("BUTTON OVERLAP")).toBeDefined();
+
+    await act(async () => {
+      probeHandler?.({ kind: "hop", distance: 4, durationMs: 29, targetY: 300, ledge: "hop" });
+      await Promise.resolve();
+    });
+    expect(screen.getByText("일반 낙하 (4pt 홉)")).toBeDefined();
+
+    act(() => guidesHandler?.({ kind: "guides", enabled: false }));
+    expect(screen.queryByText("AX FREE")).toBeNull();
+    expect(screen.queryByText("BUTTON OVERLAP")).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("keeps the live AX drag probe single-flight and surfaces an unknown result", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_GUIDES_STORAGE_KEY, "1");
+    let probeHandler: ((probe: any) => void) | null = null;
+    let finishProbe!: (value: {
+      x: number;
+      y: number;
+      moved: boolean;
+      reason: "accessibility_unavailable";
+    }) => void;
+    bridge.listenToNativePetDragProbe.mockImplementationOnce(async (handler) => {
+      probeHandler = handler;
+      return vi.fn();
+    });
+    bridge.probeNativePetAxSeat.mockImplementationOnce(() => new Promise((resolve) => {
+      finishProbe = resolve;
+    }));
+    bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    dispatchPointer(pet, "pointerdown", { pointerId: 24, clientX: 18, clientY: 18 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
+    act(() => { bridge.dragStartHandler?.(); });
 
     act(() => {
       probeHandler?.({ kind: "hop", distance: 4, durationMs: 29, targetY: 300, ledge: "hop" });
+      probeHandler?.({ kind: "hop", distance: 4, durationMs: 29, targetY: 300, ledge: "hop" });
     });
-    expect(screen.getByText("일반 낙하 (4pt 홉)")).toBeDefined();
+    expect(bridge.probeNativePetAxSeat).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("AX SCANNING")).toBeDefined();
+
+    await act(async () => {
+      finishProbe({
+        x: 120,
+        y: 80,
+        moved: false,
+        reason: "accessibility_unavailable",
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText("AX UNKNOWN")).toBeDefined();
+
+    let finishRefresh!: (value: {
+      x: number;
+      y: number;
+      moved: boolean;
+      reason: "no_control_overlap";
+    }) => void;
+    bridge.probeNativePetAxSeat.mockImplementationOnce(() => new Promise((resolve) => {
+      finishRefresh = resolve;
+    }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+      probeHandler?.({ kind: "hop", distance: 4, durationMs: 29, targetY: 300, ledge: "hop" });
+    });
+    expect(bridge.probeNativePetAxSeat).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("AX UNKNOWN")).toBeDefined();
+    expect(screen.queryByText("AX SCANNING")).toBeNull();
+
+    await act(async () => {
+      finishRefresh({
+        x: 120,
+        y: 80,
+        moved: false,
+        reason: "no_control_overlap",
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText("AX FREE")).toBeDefined();
     vi.useRealTimers();
   });
 });

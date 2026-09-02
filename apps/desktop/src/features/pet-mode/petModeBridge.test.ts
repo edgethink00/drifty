@@ -174,6 +174,32 @@ describe("pet mode enabled bridge", () => {
     expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_resolve_drop", { forceFloor: false });
   });
 
+  it("forwards resident-seat commands and keeps the AX probe non-mutating", async () => {
+    tauri.invoke.mockResolvedValue({
+      x: 240,
+      y: 14,
+      moved: true,
+      reason: "control_overlap",
+    });
+    const {
+      probeNativePetAxSeat,
+      reconcileNativePetPosition,
+      rememberNativePetPosition,
+    } = await import("./petModeBridge");
+
+    await rememberNativePetPosition(true);
+    await reconcileNativePetPosition(false);
+    await probeNativePetAxSeat();
+
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "pet_mode_remember_position", {
+      reducedMotion: true,
+    });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "pet_mode_reconcile_position", {
+      reducedMotion: false,
+    });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(3, "pet_mode_probe_ax_seat");
+  });
+
   it("publishes the versioned frame region to the native controller", async () => {
     tauri.invoke.mockResolvedValueOnce(undefined);
     const { updateNativePetHitRegion } = await import("./petModeBridge");

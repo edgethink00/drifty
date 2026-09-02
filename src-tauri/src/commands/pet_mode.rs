@@ -50,6 +50,8 @@ const PET_MODE_HOME_EDGE_INSET: f64 = 24.0;
 // Manual placement stays completely free, but only a drop inside this upper
 // screen band redefines the pet's long-term home. A lower drop is temporary:
 // the next autonomous walk still targets the remembered upper resident lane.
+// This band defines which manual drops become the remembered long-term home.
+// AX obstacle safety is intentionally evaluated across the full work area.
 const PET_MODE_RESIDENT_BAND_RATIO: f64 = 0.32;
 const PET_MODE_RUN_SPEED: f64 = 300.0;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
@@ -118,6 +120,10 @@ const PET_MODE_ENTRY_HIDDEN_SAFETY_PX: f64 = 1.0;
 // accessibility action is still unwinding. The WebView paints during this
 // short hold, but every opaque cat pixel remains outside the display.
 const PET_MODE_ENTRY_PAINT_DELAY_MS: u64 = 120;
+// Web/document AX trees can briefly omit a control between otherwise stable
+// scans. Keep the displaced safe seat until the original anchor has remained
+// clear for two seconds; obstacle hits still move away immediately.
+const PET_MODE_ANCHOR_CLEAR_MIN_CONFIRM_MS: u64 = 2_000;
 // F12 source contact point (162.8751 / 150) scaled to the fixed 121.2-point
 // cat viewport and centered in the 144-point native panel.
 const PET_MODE_CONTACT_X_RIGHT: f64 = 143.0;
@@ -146,6 +152,8 @@ static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
 static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
+static PET_MODE_ANCHOR_CLEAR_CONFIRMATION: Mutex<Option<PetModeAnchorClearConfirmation>> =
+    Mutex::new(None);
 /// The pet panel's current logical size. Every placement calculation needs the
 /// real footprint: with a user-selectable size, treating the panel as a fixed
 /// 144x99 would let a 125% pet clamp to a right edge computed for a smaller
@@ -153,6 +161,66 @@ static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex:
 static PET_MODE_SIZE: Mutex<(f64, f64)> = Mutex::new((PET_MODE_WIDTH, PET_MODE_HEIGHT));
 static PET_MODE_FLOOR_HOME_PT: Mutex<f64> = Mutex::new(PET_DROP_FLOOR_HOME_PT);
 static PET_MODE_PREVIEW_RETURN_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PetModeAnchorClearConfirmation {
+    target: LogicalPosition<f64>,
+    visible: LogicalPosition<f64>,
+    first_seen: Instant,
+}
+
+fn positions_match(a: LogicalPosition<f64>, b: LogicalPosition<f64>) -> bool {
+    (a.x - b.x).abs() < 1.0 && (a.y - b.y).abs() < 1.0
+}
+
+fn confirm_anchor_clear_return(
+    pending: &mut Option<PetModeAnchorClearConfirmation>,
+    visible: LogicalPosition<f64>,
+    resolution: super::pet_mode_ax_control_veto::SeatResolution,
+    observed_at: Instant,
+) -> super::pet_mode_ax_control_veto::SeatResolution {
+    use super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
+
+    let target = LogicalPosition::new(resolution.x, resolution.y);
+    let returning_to_anchor = !positions_match(target, visible)
+        && matches!(
+            resolution.reason,
+            SeatDecisionReason::NoControlOverlap | SeatDecisionReason::NoCandidateWindow
+        );
+    if !returning_to_anchor {
+        *pending = None;
+        return resolution;
+    }
+
+    let confirmed = pending.is_some_and(|previous| {
+        positions_match(previous.target, target)
+            && positions_match(previous.visible, visible)
+            && observed_at.saturating_duration_since(previous.first_seen)
+                >= Duration::from_millis(PET_MODE_ANCHOR_CLEAR_MIN_CONFIRM_MS)
+    });
+    if confirmed {
+        *pending = None;
+        return resolution;
+    }
+
+    let same_candidate = pending.is_some_and(|previous| {
+        positions_match(previous.target, target) && positions_match(previous.visible, visible)
+    });
+    if !same_candidate {
+        *pending = Some(PetModeAnchorClearConfirmation {
+            target,
+            visible,
+            first_seen: observed_at,
+        });
+    }
+    SeatResolution::unchanged(visible.x, visible.y, SeatDecisionReason::AnchorClearPending)
+}
+
+fn reset_anchor_clear_confirmation() {
+    if let Ok(mut pending) = PET_MODE_ANCHOR_CLEAR_CONFIRMATION.lock() {
+        *pending = None;
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -598,6 +666,7 @@ pub fn pet_mode_set_enabled(
     // to both WebViews. Keep native visibility transitions transactional even
     // if two callers arrive concurrently.
     let _visibility_transition = begin_pet_visibility_transition()?;
+    reset_anchor_clear_confirmation();
 
     if !enabled {
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
@@ -900,6 +969,7 @@ fn validate_pet_visibility_action(action: &str) -> Result<(), String> {
 pub fn pet_mode_visibility_action(app: AppHandle, action: String) -> Result<(), String> {
     validate_pet_visibility_action(&action)?;
     let _visibility_transition = begin_pet_visibility_transition()?;
+    reset_anchor_clear_confirmation();
 
     if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
@@ -1208,6 +1278,7 @@ pub fn pet_mode_set_presence(
     let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
         return Ok(());
     };
+    reset_anchor_clear_confirmation();
     let command_generation = if visible {
         let generation = PET_MODE_VISIBILITY_GENERATION.load(Ordering::SeqCst);
         if !pet_outing_is_current(generation) {
@@ -1525,7 +1596,7 @@ pub fn pet_mode_lab_place_center(app: AppHandle) -> Result<PetModeInputBounds, S
         .map_err(|error| error.to_string())?;
     // Exercise the same resident-home policy as a completed manual drag. The
     // center drop must remain temporary rather than replacing the upper lane.
-    pet_mode_remember_position(app.clone())?;
+    let _ = remember_and_resolve_pet_position(&app, true)?;
     pet_mode_input_bounds(app)
 }
 
@@ -1880,7 +1951,43 @@ fn macos_window_number(window: &WebviewWindow) -> i64 {
 }
 
 #[tauri::command]
-pub fn pet_mode_remember_position(app: AppHandle) -> Result<(), String> {
+pub async fn pet_mode_remember_position(
+    app: AppHandle,
+    reduced_motion: Option<bool>,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    async_runtime::spawn_blocking(move || {
+        remember_and_resolve_pet_position(&app, reduced_motion.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| format!("Pet Mode seat task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn pet_mode_reconcile_position(
+    app: AppHandle,
+    reduced_motion: Option<bool>,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    async_runtime::spawn_blocking(move || {
+        reconcile_resident_pet_position(&app, reduced_motion.unwrap_or(false))
+    })
+    .await
+    .map_err(|error| format!("Pet Mode seat reconcile task failed: {error}"))?
+}
+
+#[tauri::command]
+pub async fn pet_mode_probe_ax_seat(
+    app: AppHandle,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    async_runtime::spawn_blocking(move || probe_current_pet_ax_seat(&app))
+        .await
+        .map_err(|error| format!("Pet Mode AX seat probe failed: {error}"))?
+}
+
+fn remember_and_resolve_pet_position(
+    app: &AppHandle,
+    reduced_motion: bool,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    reset_anchor_clear_confirmation();
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
@@ -1894,30 +2001,133 @@ pub fn pet_mode_remember_position(app: AppHandle) -> Result<(), String> {
     let work_area = monitor.work_area();
     let work_position = work_area.position.to_logical::<f64>(scale_factor);
     let work_size = work_area.size.to_logical::<f64>(scale_factor);
-    let mut preferred = PET_MODE_PREFERRED_POSITION
-        .lock()
-        .map_err(|_| "Pet Mode position lock is unavailable".to_string())?;
-    let candidate_center_y = position.y + pet_height() / 2.0;
-    let resident_band_bottom = work_position.y + work_size.height * PET_MODE_RESIDENT_BAND_RATIO;
-    let candidate = if candidate_center_y <= resident_band_bottom {
-        nudge_resident_seat(
-            &app,
-            position,
+    // AX safety applies to every manual drop on the work area. Only the durable
+    // home preference is restricted to the upper resident band: a lower drop
+    // stays temporary, but it must still walk off a control immediately.
+    let anchor = clamp_pet_position(position, work_position, work_size.width, work_size.height);
+    {
+        let mut preferred = PET_MODE_PREFERRED_POSITION
+            .lock()
+            .map_err(|_| "Pet Mode position lock is unavailable".to_string())?;
+        *preferred = preferred_pet_position_after_drop(
+            *preferred,
+            anchor,
             work_position,
             work_size.width,
             work_size.height,
-        )
-    } else {
-        position
-    };
-    *preferred = preferred_pet_position_after_drop(
-        *preferred,
-        candidate,
+        );
+    }
+    let resolution = resolve_resident_seat(
+        app,
+        anchor,
+        position,
         work_position,
         work_size.width,
         work_size.height,
     );
-    Ok(())
+    apply_pet_seat_resolution(&window, position, resolution, reduced_motion)
+}
+
+fn reconcile_resident_pet_position(
+    app: &AppHandle,
+    reduced_motion: bool,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    use super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
+
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    let current = current_pet_logical_position(&window)?;
+    if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+        return Ok(SeatResolution::unchanged(
+            current.x,
+            current.y,
+            SeatDecisionReason::PetDisabled,
+        ));
+    }
+    if !window.is_visible().unwrap_or(false) {
+        return Ok(SeatResolution::unchanged(
+            current.x,
+            current.y,
+            SeatDecisionReason::PetHidden,
+        ));
+    }
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| resolve_pet_home_monitor(app))
+        .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+    let scale_factor = monitor.scale_factor();
+    let work_area = monitor.work_area();
+    let work_position = work_area.position.to_logical::<f64>(scale_factor);
+    let work_size = work_area.size.to_logical::<f64>(scale_factor);
+    let resident_home = calculate_pet_home_position_with_nudge(None, &monitor);
+    // In the upper resident band we continue checking whether the remembered
+    // home has become clear. Elsewhere, the current temporary seat is the AX
+    // target so a surface change can move the cat off a new button without
+    // pulling it vertically back to its long-term home.
+    let anchor = resident_seat_anchor_for_current_position(
+        current,
+        resident_home,
+        work_position,
+        work_size.width,
+        work_size.height,
+    );
+    let resolution = resolve_resident_seat(
+        app,
+        anchor,
+        current,
+        work_position,
+        work_size.width,
+        work_size.height,
+    );
+    apply_pet_seat_resolution(&window, current, resolution, reduced_motion)
+}
+
+fn probe_current_pet_ax_seat(
+    app: &AppHandle,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    use super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
+
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    let current = current_pet_logical_position(&window)?;
+    if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
+        return Ok(SeatResolution::unchanged(
+            current.x,
+            current.y,
+            SeatDecisionReason::PetDisabled,
+        ));
+    }
+    if !window.is_visible().unwrap_or(false) {
+        return Ok(SeatResolution::unchanged(
+            current.x,
+            current.y,
+            SeatDecisionReason::PetHidden,
+        ));
+    }
+    let monitor = window
+        .current_monitor()
+        .map_err(|error| error.to_string())?
+        .or_else(|| resolve_pet_home_monitor(app))
+        .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+    let scale_factor = monitor.scale_factor();
+    let work_area = monitor.work_area();
+    let work_position = work_area.position.to_logical::<f64>(scale_factor);
+    let work_size = work_area.size.to_logical::<f64>(scale_factor);
+    let target = clamp_pet_position(current, work_position, work_size.width, work_size.height);
+
+    // Diagnostic only: share the production AX resolver, but never mutate the
+    // window or the anchor-clear confirmation state while the pointer is down.
+    Ok(resolve_resident_seat(
+        app,
+        target,
+        current,
+        work_position,
+        work_size.width,
+        work_size.height,
+    ))
 }
 
 fn move_pet_to_target(
@@ -2420,7 +2630,9 @@ fn position_pet_home(
 
 fn pet_excluded_window_ids(app: &AppHandle) -> Vec<i64> {
     [
-        "main",
+        // Exclude only transparent/auxiliary surfaces that belong to the pet
+        // itself. The Drifty main window remains eligible so its controls are
+        // protected exactly like controls in every other app.
         PET_MODE_WINDOW_LABEL,
         "watcher-peek",
         "companion-pill",
@@ -2438,8 +2650,20 @@ fn nudge_resident_seat(
     work_width: f64,
     work_height: f64,
 ) -> LogicalPosition<f64> {
+    let resolution = resolve_resident_seat(app, seat, seat, work_position, work_width, work_height);
+    LogicalPosition::new(resolution.x, resolution.y)
+}
+
+fn resolve_resident_seat(
+    app: &AppHandle,
+    seat: LogicalPosition<f64>,
+    visible_seat: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_width: f64,
+    work_height: f64,
+) -> super::pet_mode_ax_control_veto::SeatResolution {
     let (width, height) = pet_size();
-    let (x, y) = super::pet_mode_ax_control_veto::nudge_seat_off_ax_controls(
+    let mut resolution = super::pet_mode_ax_control_veto::resolve_seat_off_ax_controls(
         pet_excluded_window_ids(app),
         seat.x,
         seat.y,
@@ -2447,13 +2671,63 @@ fn nudge_resident_seat(
         height,
         work_position.x,
         work_width,
+        visible_seat.x,
+        visible_seat.y,
     );
-    clamp_pet_position(
-        LogicalPosition::new(x, y),
+    let clamped = clamp_pet_position(
+        LogicalPosition::new(resolution.x, resolution.y),
         work_position,
         work_width,
         work_height,
-    )
+    );
+    resolution.x = clamped.x;
+    resolution.y = clamped.y;
+    resolution
+}
+
+fn apply_pet_seat_resolution(
+    window: &WebviewWindow,
+    visible_origin: LogicalPosition<f64>,
+    resolution: super::pet_mode_ax_control_veto::SeatResolution,
+    reduced_motion: bool,
+) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    let resolution = {
+        let mut pending = PET_MODE_ANCHOR_CLEAR_CONFIRMATION
+            .lock()
+            .map_err(|_| "Pet Mode anchor-clear confirmation lock is unavailable".to_string())?;
+        confirm_anchor_clear_return(&mut pending, visible_origin, resolution, Instant::now())
+    };
+    let resolution = resolution.with_visible_origin(visible_origin.x, visible_origin.y);
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[pet-mode-seat] reason={:?} moved={} visible=({:.1},{:.1}) resolved=({:.1},{:.1})",
+        resolution.reason,
+        resolution.moved,
+        visible_origin.x,
+        visible_origin.y,
+        resolution.x,
+        resolution.y,
+    );
+    if !resolution.moved {
+        return Ok(resolution);
+    }
+    let target = LogicalPosition::new(resolution.x, resolution.y);
+    cancel_pet_motion();
+    if reduced_motion {
+        window
+            .set_position(target)
+            .map_err(|error| error.to_string())?;
+    } else {
+        animate_pet_window_toward_with_purpose(
+            window,
+            target,
+            PET_MODE_WALK_SPEED,
+            PET_MODE_WALK_MAX_SECONDS,
+            "walk",
+            "seat_correction",
+        )?;
+    }
+    Ok(resolution)
 }
 
 fn calculate_pet_home_position(monitor: &Monitor) -> LogicalPosition<f64> {
@@ -2691,10 +2965,33 @@ fn preferred_pet_position_after_drop(
     work_height: f64,
 ) -> Option<LogicalPosition<f64>> {
     let candidate = clamp_pet_position(candidate, work_position, work_width, work_height);
-    let candidate_center_y = candidate.y + pet_height() / 2.0;
-    let resident_band_bottom = work_position.y + work_height * PET_MODE_RESIDENT_BAND_RATIO;
-    if candidate_center_y <= resident_band_bottom {
+    if is_pet_position_in_resident_band(candidate, work_position, work_height) {
         Some(candidate)
+    } else {
+        current
+    }
+}
+
+fn is_pet_position_in_resident_band(
+    position: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_height: f64,
+) -> bool {
+    let center_y = position.y + pet_height() / 2.0;
+    let resident_band_bottom = work_position.y + work_height * PET_MODE_RESIDENT_BAND_RATIO;
+    center_y <= resident_band_bottom
+}
+
+fn resident_seat_anchor_for_current_position(
+    current: LogicalPosition<f64>,
+    resident_home: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_width: f64,
+    work_height: f64,
+) -> LogicalPosition<f64> {
+    let current = clamp_pet_position(current, work_position, work_width, work_height);
+    if is_pet_position_in_resident_band(current, work_position, work_height) {
+        clamp_pet_position(resident_home, work_position, work_width, work_height)
     } else {
         current
     }
@@ -3450,6 +3747,29 @@ fn animate_pet_window_toward(
     animate_pet_window_with_facing(window, target, facing, speed, max_duration_seconds, motion)
 }
 
+fn animate_pet_window_toward_with_purpose(
+    window: &WebviewWindow,
+    target: LogicalPosition<f64>,
+    speed: f64,
+    max_duration_seconds: f64,
+    motion: &'static str,
+    purpose: &'static str,
+) -> Result<(), String> {
+    let start = current_pet_logical_position(window)?;
+    let facing = if target.x >= start.x { "right" } else { "left" };
+    animate_pet_window_with_facing_guarded_and_purpose(
+        window,
+        target,
+        facing,
+        speed,
+        max_duration_seconds,
+        motion,
+        None,
+        Some(purpose),
+    )
+    .map(|_| ())
+}
+
 fn animate_pet_window_with_facing(
     window: &WebviewWindow,
     target: LogicalPosition<f64>,
@@ -3479,12 +3799,40 @@ fn animate_pet_window_with_facing_guarded(
     motion: &'static str,
     outing_generation: Option<u64>,
 ) -> Result<bool, String> {
+    animate_pet_window_with_facing_guarded_and_purpose(
+        window,
+        target,
+        facing,
+        speed,
+        max_duration_seconds,
+        motion,
+        outing_generation,
+        None,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn animate_pet_window_with_facing_guarded_and_purpose(
+    window: &WebviewWindow,
+    target: LogicalPosition<f64>,
+    facing: &'static str,
+    speed: f64,
+    max_duration_seconds: f64,
+    motion: &'static str,
+    outing_generation: Option<u64>,
+    purpose: Option<&'static str>,
+) -> Result<bool, String> {
     if outing_generation.is_some_and(|generation| !pet_outing_is_current(generation)) {
         return Ok(false);
     }
     let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
     emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
-    emit_pet_event(window, json!({ "kind": "motion", "motion": motion }))?;
+    let motion_event = if let Some(purpose) = purpose {
+        json!({ "kind": "motion", "motion": motion, "purpose": purpose })
+    } else {
+        json!({ "kind": "motion", "motion": motion })
+    };
+    emit_pet_event(window, motion_event)?;
     // Give the webview one paint boundary to flip before the native window moves.
     thread::sleep(Duration::from_millis(34));
     animate_pet_window(
@@ -3748,6 +4096,77 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn requires_two_matching_clear_scans_before_returning_to_the_anchor() {
+        use super::super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
+
+        let visible = LogicalPosition::new(1032.0, 14.0);
+        let clear = SeatResolution::unchanged(1272.0, 14.0, SeatDecisionReason::NoControlOverlap);
+        let mut pending = None;
+        let first_seen = Instant::now();
+
+        let first = confirm_anchor_clear_return(&mut pending, visible, clear, first_seen);
+        assert_eq!((first.x, first.y), (visible.x, visible.y));
+        assert!(!first.moved);
+        assert_eq!(first.reason, SeatDecisionReason::AnchorClearPending);
+
+        let too_soon = confirm_anchor_clear_return(
+            &mut pending,
+            visible,
+            clear,
+            first_seen + Duration::from_millis(PET_MODE_ANCHOR_CLEAR_MIN_CONFIRM_MS - 1),
+        );
+        assert_eq!(too_soon.reason, SeatDecisionReason::AnchorClearPending);
+
+        let second = confirm_anchor_clear_return(
+            &mut pending,
+            visible,
+            clear,
+            first_seen + Duration::from_millis(PET_MODE_ANCHOR_CLEAR_MIN_CONFIRM_MS),
+        );
+        assert_eq!((second.x, second.y), (1272.0, 14.0));
+        assert_eq!(second.reason, SeatDecisionReason::NoControlOverlap);
+        assert!(pending.is_none());
+    }
+
+    #[test]
+    fn an_overlap_resets_a_pending_anchor_return() {
+        use super::super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
+
+        let visible = LogicalPosition::new(1032.0, 14.0);
+        let clear = SeatResolution::unchanged(1272.0, 14.0, SeatDecisionReason::NoCandidateWindow);
+        let overlap =
+            SeatResolution::unchanged(visible.x, visible.y, SeatDecisionReason::ControlOverlap);
+        let mut pending = None;
+        let first_seen = Instant::now();
+
+        assert_eq!(
+            confirm_anchor_clear_return(&mut pending, visible, clear, first_seen).reason,
+            SeatDecisionReason::AnchorClearPending
+        );
+        assert_eq!(
+            confirm_anchor_clear_return(
+                &mut pending,
+                visible,
+                overlap,
+                first_seen + Duration::from_millis(PET_MODE_ANCHOR_CLEAR_MIN_CONFIRM_MS),
+            )
+            .reason,
+            SeatDecisionReason::ControlOverlap
+        );
+        assert!(pending.is_none());
+        assert_eq!(
+            confirm_anchor_clear_return(
+                &mut pending,
+                visible,
+                clear,
+                first_seen + Duration::from_millis(PET_MODE_ANCHOR_CLEAR_MIN_CONFIRM_MS + 1),
+            )
+            .reason,
+            SeatDecisionReason::AnchorClearPending
+        );
+    }
 
     /// The command hides the pet before anything validates intent, so an
     /// unrecognised action must be rejected outright rather than treated as a
@@ -4322,6 +4741,35 @@ mod tests {
         assert_eq!(
             preferred_pet_position_after_drop(original_home, center, work_position, 1440.0, 775.0,),
             original_home,
+        );
+    }
+
+    #[test]
+    fn lower_temporary_seats_are_checked_in_place_instead_of_returning_home() {
+        let work_position = LogicalPosition::new(0.0, 25.0);
+        let resident_home = LogicalPosition::new(320.0, 60.0);
+        let upper_visible_seat = LogicalPosition::new(560.0, 120.0);
+        let lower_temporary_seat = LogicalPosition::new(700.0, 410.0);
+
+        assert_eq!(
+            resident_seat_anchor_for_current_position(
+                upper_visible_seat,
+                resident_home,
+                work_position,
+                1440.0,
+                775.0,
+            ),
+            resident_home,
+        );
+        assert_eq!(
+            resident_seat_anchor_for_current_position(
+                lower_temporary_seat,
+                resident_home,
+                work_position,
+                1440.0,
+                775.0,
+            ),
+            lower_temporary_seat,
         );
     }
 

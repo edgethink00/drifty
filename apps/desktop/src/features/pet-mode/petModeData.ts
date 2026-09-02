@@ -20,6 +20,14 @@ export const PET_MODE_LIFE_ACTION_INTERVAL_MS = 4 * 60 * 1000;
 // flat interval: after a settled pose the pet should consider its next move
 // sooner than it would after standing around.
 export const PET_MODE_SETTLED_ACTION_INTERVAL_MS = 100 * 1000;
+// Re-evaluate a stationary resident seat even when an app changes controls
+// without changing its title. Native AX work remains single-flight and is
+// skipped while the pet owns an active motion.
+export const PET_MODE_SEAT_RECONCILE_INTERVAL_MS = 6_000;
+// A displaced cat returns to its preferred anchor only after two matching AX
+// clear scans. Retry quickly enough to feel responsive when a button genuinely
+// disappears, while filtering one-frame AX omissions that would cause a bounce.
+export const PET_MODE_SEAT_CLEAR_CONFIRM_MS = 650;
 export const PET_MODE_SIT_MIN_MS = 2.5 * 60 * 1000;
 export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
 export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
@@ -227,6 +235,8 @@ export type PetModeSnapshot = {
   readonly productivity: ProductivityLabel;
   readonly contextLabel: string;
   readonly durationSeconds: number;
+  /** Opaque change token; raw activity identity never enters the pet window. */
+  readonly surfaceRevision?: number;
 };
 
 export type PetModeInterventionTarget = {
@@ -244,6 +254,7 @@ export type PetModeWindowEvent =
   | {
     readonly kind: "motion";
     readonly motion: PetModeMotionKind;
+    readonly purpose?: "seat_correction";
     readonly travelDistance?: number;
     readonly durationMs?: number;
   }
@@ -692,6 +703,7 @@ export function buildPetModeSnapshot(snapshot: WatcherSnapshot): PetModeSnapshot
     productivity: snapshot.productivity,
     contextLabel: snapshot.contextLabel,
     durationSeconds: snapshot.durationSeconds,
+    surfaceRevision: snapshot.surfaceRevision ?? 0,
   };
 }
 

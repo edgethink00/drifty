@@ -30,6 +30,7 @@ import {
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
   PET_MODE_SETTLED_ACTION_INTERVAL_MS,
+  PET_MODE_SEAT_CLEAR_CONFIRM_MS,
   PET_MODE_STORAGE_KEY,
   PET_MODE_STALK_SPEED,
   PET_MODE_TAIL_FLICK_DURATION_MS,
@@ -77,6 +78,10 @@ describe("petModeData", () => {
     expect(PET_MODE_BLINK_DURATION_MS).toBe(228);
     expect(PET_MODE_BLINK_INTERVAL_MIN_MS).toBe(4_420);
     expect(PET_MODE_BLINK_INTERVAL_MAX_MS).toBe(7_280);
+  });
+
+  it("confirms a clear AX anchor quickly without trusting a single scan", () => {
+    expect(PET_MODE_SEAT_CLEAR_CONFIRM_MS).toBe(650);
   });
 
   it("ships the five percent music note roll for relaxed life motions", () => {
@@ -227,6 +232,7 @@ describe("petModeData", () => {
       productivity: "drift",
       contextLabel: "youtube.com",
       durationSeconds: 480,
+      surfaceRevision: 0,
     });
     expect(snapshot).not.toHaveProperty("siteUrl");
     expect(snapshot).not.toHaveProperty("windowTitle");

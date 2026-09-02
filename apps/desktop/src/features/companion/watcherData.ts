@@ -6,7 +6,31 @@ import { isProductivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 
-export type WatcherSnapshot = Omit<WatcherPeekEvent, "id" | "slotIndex">;
+export type WatcherSnapshot = Omit<WatcherPeekEvent, "id" | "slotIndex"> & {
+  /** Opaque local revision; it contains no raw app, site, or title text. */
+  readonly surfaceRevision?: number;
+};
+
+/**
+ * Produces a local-only change token for the visible app/window surface. The
+ * pet webview needs to know that AX geometry may have changed, but it does not
+ * need the raw bundle id, window title, or site metadata that produced it.
+ */
+export function buildActivitySurfaceRevision(current: CurrentActivitySnapshot): number {
+  const identity = [
+    current.bundleId ?? "",
+    current.appName,
+    current.windowTitle ?? "",
+    current.browserName ?? "",
+    current.siteDomain ?? "",
+  ].join("\u001f");
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < identity.length; index += 1) {
+    hash ^= identity.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
 
 export type WatcherDelayRange = {
   minMs: number;
@@ -130,16 +154,19 @@ export function buildLiveWatcherSnapshot(
   driftReminderElapsedSeconds: number | null = null,
 ): WatcherSnapshot {
   const liveIdentity = currentSnapshotToSegment(current, 0);
-  return buildWatcherSnapshotFromCurrent(
-    current,
-    todaySegments,
-    driftReminderElapsedSeconds,
-    {
-      includeAiClassifications: classificationOptions?.includeAiClassifications,
-      rules: classificationOptions?.rules,
-      fallbackCandidates: [liveIdentity],
-    },
-  );
+  return {
+    ...buildWatcherSnapshotFromCurrent(
+      current,
+      todaySegments,
+      driftReminderElapsedSeconds,
+      {
+        includeAiClassifications: classificationOptions?.includeAiClassifications,
+        rules: classificationOptions?.rules,
+        fallbackCandidates: [liveIdentity],
+      },
+    ),
+    surfaceRevision: buildActivitySurfaceRevision(current),
+  };
 }
 
 export function snapshotObservedAtMs(snapshot: { readonly observedAt?: string | null } | null | undefined): number | null {

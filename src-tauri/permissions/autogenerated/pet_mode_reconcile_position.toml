@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-reconcile-position"
+description = "Enables the pet_mode_reconcile_position command without any pre-configured scope."
+commands.allow = ["pet_mode_reconcile_position"]
+
+[[permission]]
+identifier = "deny-pet-mode-reconcile-position"
+description = "Denies the pet_mode_reconcile_position command without any pre-configured scope."
+commands.deny = ["pet_mode_reconcile_position"]
