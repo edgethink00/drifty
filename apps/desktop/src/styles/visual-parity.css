@@ -249,6 +249,9 @@
     width: 100%;
     padding: 12px 10px 4px;
     overflow: hidden;
+    /* CJK labels can break between every character inside the narrow rail.
+       Keep the invisible placeholder to one line so nav groups do not move. */
+    white-space: nowrap;
     color: transparent;
   }
 

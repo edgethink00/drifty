@@ -193,6 +193,14 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavLabelBlock).toContain("color: transparent;");
   });
 
+  it("keeps collapsed section labels from wrapping in the narrow rail", () => {
+    const styles = readStyles();
+    const collapsedNavLabelBlock = cssBlock(styles, ".sidebar--collapsed .nav-label");
+
+    expect(collapsedNavLabelBlock).toContain("overflow: hidden;");
+    expect(collapsedNavLabelBlock).toContain("white-space: nowrap;");
+    expect(collapsedNavLabelBlock).toContain("color: transparent;");
+  });
 
   it("hides collapsed copy immediately instead of squeezing it through the shrinking rail", () => {
     const styles = readStyles();
