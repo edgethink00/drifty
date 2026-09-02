@@ -122,6 +122,15 @@ button.flow-cell:focus {
   animation: flow-hover-group-in 160ms var(--ease-out-quart) both;
 }
 
+.flow-hover-group-highlight.is-pinned {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--surface));
+  background: color-mix(in srgb, var(--accent-soft) 34%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--surface) 58%, transparent),
+    0 8px 18px color-mix(in srgb, var(--text) 13%, transparent);
+  animation: none;
+}
+
 .timeline-hover-card,
 .flow-hover-card,
 .focus-drift-hover-card {

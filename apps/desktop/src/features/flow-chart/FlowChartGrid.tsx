@@ -20,7 +20,8 @@ type FlowChartGridProps = {
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly setFlowGridElement: (element: HTMLDivElement | null) => void;
-  readonly onOpenActivity?: (group: FlowBlockHoverGroup, target: HTMLButtonElement, pointer: { readonly x: number; readonly y: number }) => void;
+  readonly onOpenActivity?: (group: FlowBlockHoverGroup, target: HTMLButtonElement) => void;
+  readonly inspectedGroup?: FlowBlockHoverGroup | null;
 };
 
 type FlowCurrentHourStyle = CSSProperties & Record<"--flow-current-hour", number>;
@@ -40,6 +41,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   intervalMinutes,
   setFlowGridElement,
   onOpenActivity,
+  inspectedGroup = null,
 }: FlowChartGridProps) {
   const { effectiveLanguage, t } = useLocalization();
   const rowMinuteOffsets = useMemo(
@@ -121,17 +123,20 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
                     data-flow-minute={block.minuteOfDay}
+                    data-activity-inspector-trigger="true"
+                    aria-haspopup={onOpenActivity ? "dialog" : undefined}
+                    aria-expanded={onOpenActivity ? inspectedGroup === hoverGroupsByCell.get(block.minuteOfDay) : undefined}
                     style={cellStyle}
                     onClick={(event) => {
                       const group = hoverGroupsByCell.get(block.minuteOfDay);
                       if (!group || !onOpenActivity) return;
-                      onOpenActivity(group, event.currentTarget, { x: event.clientX, y: event.clientY });
+                      onOpenActivity(group, event.currentTarget);
                     }}
                     onContextMenu={(event) => {
                       const group = hoverGroupsByCell.get(block.minuteOfDay);
                       if (!group || !onOpenActivity) return;
                       event.preventDefault();
-                      onOpenActivity(group, event.currentTarget, { x: event.clientX, y: event.clientY });
+                      onOpenActivity(group, event.currentTarget);
                     }}
                   >
                     <span className="flow-cell__mark" aria-hidden="true" />

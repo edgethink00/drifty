@@ -28,8 +28,12 @@ import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import { DashboardDemoReplayBanner, type DashboardDemoReplayBannerState } from "./DashboardDemoReplayBanner";
 import { BrowserHistoryBootstrapNotice, type BrowserHistoryBootstrapNoticeModel } from "./BrowserHistoryBootstrapPrompt";
 import { DashboardPageHeader } from "./DashboardPageHeader";
+import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+
+const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
+const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
 
 type DashboardPageProps = {
   readonly appIcons: AppIconMap;
@@ -59,6 +63,8 @@ type DashboardPageProps = {
   readonly flowIntervalMinutes: FlowIntervalMinutes;
   readonly projectModeAvailable?: boolean;
   readonly projectLegend?: readonly ProjectLegendEntry[];
+  readonly activityInspectorProjectOptions?: readonly ActivityInspectorProjectOption[];
+  readonly activityInspectorProjectBySegmentId?: ReadonlyMap<string, string | null>;
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly deviceTimelineFilter?: DeviceTimelineFilter;
   readonly onDeviceTimelineFilterChange?: (filter: DeviceTimelineFilter) => void;
@@ -90,10 +96,15 @@ type DashboardPageProps = {
   readonly onManageCloudBilling?: () => void;
   readonly onSelectBillingPlan: (billingInterval: BillingInterval) => void;
   readonly onSelectDay: (day: string) => void;
+  readonly onSaveDashboardActivityValues?: ActivityInspectorSaveHandler;
   readonly onClassifyDashboardActivity?: (
     segments: readonly ActivitySegment[],
     category: ActivityCategory,
     productivity: ProductivityLabel,
+  ) => Promise<void>;
+  readonly onAssignDashboardProject?: (
+    segments: readonly ActivitySegment[],
+    projectId: string | null,
   ) => Promise<void>;
   readonly onDeleteDashboardActivity?: (segmentIds: readonly string[]) => Promise<void>;
 };
@@ -122,6 +133,8 @@ export function DashboardPage({
   flowIntervalMinutes,
   projectModeAvailable,
   projectLegend,
+  activityInspectorProjectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
+  activityInspectorProjectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
   deviceLabelById,
   deviceTimelineFilter = "all",
   onDeviceTimelineFilterChange,
@@ -153,6 +166,8 @@ export function DashboardPage({
   onManageCloudBilling,
   onSelectBillingPlan,
   onSelectDay,
+  onSaveDashboardActivityValues,
+  onAssignDashboardProject,
   onClassifyDashboardActivity,
   onDeleteDashboardActivity,
 }: DashboardPageProps) {
@@ -341,6 +356,10 @@ export function DashboardPage({
           onToggleSide={toggleBreakdown}
           deviceLabelById={deviceLabelById}
           activityActionsEnabled={dashboardActivityActionsEnabled && !isDashboardReplayActive}
+          projectOptions={activityInspectorProjectOptions}
+          projectBySegmentId={activityInspectorProjectBySegmentId}
+          onSaveActivityValues={onSaveDashboardActivityValues}
+          onAssignProject={onAssignDashboardProject}
           onClassifyActivity={onClassifyDashboardActivity}
           onDeleteActivity={onDeleteDashboardActivity}
         />
@@ -376,11 +395,14 @@ export function DashboardPage({
                   showEmptyGrid={flowBlocks.length === 0 || isDashboardReplayActive}
                   projectModeAvailable={projectModeAvailable}
                   projectLegend={projectLegend}
+                  projectOptions={activityInspectorProjectOptions}
                   colorMode={flowColorMode}
                   onColorModeChange={setFlowColorMode}
                   deviceLabelById={deviceLabelById}
                   segments={dashboardSegments}
                   activityActionsEnabled={dashboardActivityActionsEnabled && !isDashboardReplayActive}
+                  onSaveActivityValues={onSaveDashboardActivityValues}
+                  onAssignProject={onAssignDashboardProject}
                   onClassifyActivity={onClassifyDashboardActivity}
                   onDeleteActivity={onDeleteDashboardActivity}
                   classificationOptions={dashboardClassificationOptions}

@@ -79,7 +79,13 @@ describe("FlowChartView color mode", () => {
     expect(within(screen.getByLabelText("Flow chart tones")).getByText("Unclassified")).toBeTruthy();
 
     fireEvent(cell, new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
-    await waitFor(() => expect(screen.getByText("Not classified yet")).toBeTruthy());
+    const preview = await waitFor(() => {
+      const card = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      if (!card) throw new Error("expected activity preview");
+      return card;
+    });
+    expect(within(preview).getByText("Unclassified")).toBeTruthy();
+    expect(screen.queryByText("Not classified yet")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Productivity" }));
     expect(cell.classList.contains("flow-cell--unclassified")).toBe(true);
@@ -173,24 +179,24 @@ describe("FlowChartView color mode", () => {
     expect(within(chart).getByText("No project")).toBeTruthy();
   });
 
-  it("shows readable identity chips before the hover detail and avoids repeated site pills", async () => {
+  it("shows the three shared direct attributes without a classification-source badge", async () => {
     render(<FlowChartView blocks={[makeFlowBlock({ classificationSource: "domain-db" })]} appIcons={{}} intervalMinutes={3} />);
 
     fireEvent(screen.getByRole("button", { name: /^workspace.*focus/i }), new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
-    await waitFor(() => expect(document.querySelector(".flow-hover-card")).toBeTruthy());
-    const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
-    const identityRow = hoverCard.querySelector(".flow-hover-card__identity-row") as HTMLElement;
-    const detail = hoverCard.querySelector(".flow-hover-card__detail") as HTMLElement;
+    await waitFor(() => expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy());
+    const hoverCard = document.querySelector('.week-activity-inspector[data-mode="peek"]') as HTMLElement;
+    const attributes = hoverCard.querySelector(".week-activity-inspector__attributes") as HTMLElement;
+    const detail = hoverCard.querySelector(".week-activity-inspector__context") as HTMLElement;
 
     expect(hoverCard).toBeTruthy();
-    expect(identityRow.querySelectorAll(".flow-hover-card__identity-dot")).toHaveLength(2);
-    expect(identityRow.querySelectorAll(".flow-hover-card__identity-label")).toHaveLength(2);
-    expect(identityRow.querySelectorAll(".hover-metadata-chip")).toHaveLength(3);
-    expect(within(identityRow).getByText("Workspace")).toBeTruthy();
-    expect(within(identityRow).getByText("Focus")).toBeTruthy();
-    expect(within(identityRow).getByText("Predefined")).toBeTruthy();
+    expect(hoverCard.textContent).toContain("docs.example.com");
+    expect(within(attributes).getByText("No project")).toBeTruthy();
+    expect(within(attributes).getByText("Workspace")).toBeTruthy();
+    expect(within(attributes).getByText("Focus")).toBeTruthy();
+    expect(attributes.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    expect(hoverCard.textContent).not.toContain("Predefined");
     expect(detail.textContent).toBe("Docs");
-    expect(identityRow.compareDocumentPosition(detail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(hoverCard.querySelector(".flow-hover-card__site")).toBeNull();
+    expect(detail.compareDocumentPosition(attributes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(hoverCard.querySelectorAll(".week-activity-inspector__heading strong")).toHaveLength(1);
   });
 });

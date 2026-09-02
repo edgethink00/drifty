@@ -8,11 +8,12 @@ type FlowHoverGroupHighlightsProps = {
   readonly group: FlowBlockHoverGroup;
   readonly intervalMinutes: FlowIntervalMinutes;
   readonly boundaryMinutes: number;
+  readonly variant?: "hover" | "pinned";
 };
 
 type FlowHoverHighlightStyle = CSSProperties & Record<"--flow-hover-hour" | "--flow-hover-row" | "--flow-hover-row-span", number>;
 
-export function FlowHoverGroupHighlights({ group, intervalMinutes, boundaryMinutes }: FlowHoverGroupHighlightsProps) {
+export function FlowHoverGroupHighlights({ group, intervalMinutes, boundaryMinutes, variant = "hover" }: FlowHoverGroupHighlightsProps) {
   const segments = useMemo(
     () => buildFlowHoverOverlaySegments(group, intervalMinutes, boundaryMinutes),
     [boundaryMinutes, group, intervalMinutes],
@@ -29,7 +30,7 @@ export function FlowHoverGroupHighlights({ group, intervalMinutes, boundaryMinut
         return (
           <span
             aria-hidden="true"
-            className="flow-hover-group-highlight"
+            className={`flow-hover-group-highlight${variant === "pinned" ? " is-pinned" : ""}`}
             key={`${segment.hourIndex}-${segment.rowIndex}-${segment.rowSpan}`}
             style={style}
           />

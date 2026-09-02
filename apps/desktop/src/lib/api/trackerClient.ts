@@ -61,7 +61,21 @@ import type {
   TrayDisplayMode,
   TrayIconStyle,
 } from "@drifty/domain";
-import { previewAppIcons, previewHourlySummary, previewStatus, previewTimeline, previewTimelinePage, previewTimelineSearch, previewTopSites, shouldUsePreviewData } from "./previewData";
+import {
+  previewAppIcons,
+  previewDeleteActivitySegments,
+  previewHourlySummary,
+  previewProjectAssignments,
+  previewProjects,
+  previewSaveClassifications,
+  previewSaveProjectAssignments,
+  previewStatus,
+  previewTimeline,
+  previewTimelinePage,
+  previewTimelineSearch,
+  previewTopSites,
+  shouldUsePreviewData,
+} from "./previewData";
 
 function isTauriRuntime() {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -319,6 +333,7 @@ export const trackerClient: TrackerApi = {
     return result ?? { deleted: 0 };
   },
   async deleteActivitySegments(ids: readonly string[]) {
+    if (shouldUsePreviewData()) return previewDeleteActivitySegments(ids);
     const result = await safeInvoke("tracker_delete_activity_segments", { query: { ids } });
     return result ?? { deleted: 0 };
   },
@@ -340,6 +355,7 @@ export const trackerClient: TrackerApi = {
     return result ?? { matchedCount: 0, appliedCount: 0, skippedCount: 0 };
   },
   async saveClassifications(classifications: ActivityClassificationRecord[]) {
+    if (shouldUsePreviewData()) return previewSaveClassifications(classifications);
     const result = await safeInvoke("tracker_save_classifications", { query: { classifications } });
     return result ?? { saved: 0 };
   },
@@ -358,6 +374,7 @@ export const trackerClient: TrackerApi = {
     };
   },
   async getProjects() {
+    if (shouldUsePreviewData()) return previewProjects();
     const result = await safeInvoke("tracker_get_projects");
     return result ?? [];
   },
@@ -439,10 +456,12 @@ export const trackerClient: TrackerApi = {
     return result ?? { deleted: 0 };
   },
   async saveProjectAssignments(assignments: ProjectAssignmentRecord[]) {
+    if (shouldUsePreviewData()) return previewSaveProjectAssignments(assignments);
     const result = await safeInvoke("tracker_save_project_assignments", { query: { assignments } });
     return result ?? { saved: 0, skippedManual: 0 };
   },
   async getProjectAssignments(query: TimelineQuery) {
+    if (shouldUsePreviewData()) return previewProjectAssignments(query);
     const result = await safeInvoke("tracker_get_project_assignments", { query });
     return result ?? [];
   },
@@ -451,6 +470,7 @@ export const trackerClient: TrackerApi = {
     return result ?? { saved: 0, skippedManual: 0 };
   },
   async getProjectWindowAssignments(query: TimelineQuery) {
+    if (shouldUsePreviewData()) return [];
     const result = await safeInvoke("tracker_get_project_window_assignments", { query });
     return result ?? [];
   },

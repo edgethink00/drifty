@@ -1,7 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
-  isRemoteDeviceSegment,
   logicalMinuteOfDay,
   normalizeStartOfDayMinutes,
   type ActivityCategory,
@@ -11,14 +10,19 @@ import {
   type FlowIntervalMinutes,
   type ProductivityLabel,
 } from "@drifty/domain";
-import { WeekActivityInspector, type ActivityInspectorEvent } from "../dashboard/WeekActivityInspector";
-import { formatCalendarMinuteLabel } from "../../lib/formatting";
+import {
+  WeekActivityInspector,
+  resolveActivityActionsDisabledReason,
+  type ActivityInspectorEvent,
+  type ActivityInspectorProjectOption,
+  type ActivityInspectorSaveHandler,
+  type ActivityInspectorView,
+} from "../dashboard/WeekActivityInspector";
 import { FlowChartGrid } from "./FlowChartGrid";
 import { FlowChartHeader } from "./FlowChartHeader";
-import { blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
-import { FlowHoverLayer } from "./FlowHoverLayer";
+import { buildFlowActivityInspectorEvent, FlowHoverLayer } from "./FlowHoverLayer";
 import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -26,6 +30,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 const BASE_FLOW_CELL_INTERVAL_MINUTES = 3;
 const FLOW_CELL_BASE_MIN_HEIGHT_REM = 0.5;
 const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
+const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 
 export function FlowChartView({
   blocks,
@@ -37,11 +42,14 @@ export function FlowChartView({
   startOfDayMinutes = 0,
   projectModeAvailable = false,
   projectLegend,
+  projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   colorMode: controlledColorMode,
   onColorModeChange,
   deviceLabelById,
   segments = [],
   activityActionsEnabled = false,
+  onSaveActivityValues,
+  onAssignProject,
   onClassifyActivity,
   onDeleteActivity,
   classificationOptions,
@@ -55,11 +63,17 @@ export function FlowChartView({
   startOfDayMinutes?: number;
   projectModeAvailable?: boolean;
   projectLegend?: readonly ProjectLegendEntry[];
+  projectOptions?: readonly ActivityInspectorProjectOption[];
   colorMode?: FlowColorMode;
   onColorModeChange?: (mode: FlowColorMode) => void;
   deviceLabelById?: ReadonlyMap<string, string>;
   segments?: readonly ActivitySegment[];
   activityActionsEnabled?: boolean;
+  onSaveActivityValues?: ActivityInspectorSaveHandler;
+  onAssignProject?: (
+    nextSegments: readonly ActivitySegment[],
+    projectId: string | null,
+  ) => Promise<void>;
   onClassifyActivity?: (
     nextSegments: readonly ActivitySegment[],
     category: ActivityCategory,
@@ -73,23 +87,32 @@ export function FlowChartView({
   // projectId → legend entry, so the hover card can name a block's project.
   const projectsById = useMemo(() => {
     const next = new Map<string, ProjectLegendEntry>();
+    for (const project of projectOptions) {
+      if (project.id) next.set(project.id, { projectId: project.id, name: project.name, color: project.color });
+    }
     for (const entry of projectLegend ?? []) {
       if (entry.projectId) next.set(entry.projectId, entry);
     }
     return next;
-  }, [projectLegend]);
+  }, [projectLegend, projectOptions]);
   const [internalColorMode, setInternalColorMode] = useState<FlowColorMode>("category");
   const colorMode = controlledColorMode ?? internalColorMode;
   const setColorMode = onColorModeChange ?? setInternalColorMode;
   const effectiveColorMode: FlowColorMode = colorMode === "project" && !projectModeAvailable ? "category" : colorMode;
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
   const [activityInspector, setActivityInspector] = useState<{
+    readonly sessionId: number;
     readonly event: ActivityInspectorEvent;
     readonly group: FlowBlockHoverGroup;
-    readonly pointer: { readonly x: number; readonly y: number };
-    readonly fallbackRect: Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">;
+    readonly sourceSegmentIds: readonly string[];
+    readonly regroupedBlockCount: number;
+    readonly anchorElement: HTMLElement;
     readonly restoreFocusTarget: HTMLElement | null;
+    readonly initialView: ActivityInspectorView;
   } | null>(null);
+  const activityInspectorSessionIdRef = useRef(0);
+  const activityInspectorRef = useRef(activityInspector);
+  activityInspectorRef.current = activityInspector;
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const currentLogicalMinute = currentMinuteOfDay !== null && currentMinuteOfDay !== undefined ? logicalMinuteOfDay(currentMinuteOfDay, boundaryMinutes) : null;
@@ -116,59 +139,93 @@ export function FlowChartView({
       return segment ? [segment] : [];
     }) ?? []
   ), [activityInspector, segmentsById]);
-  const closeActivityInspector = useCallback(() => {
-    setActivityInspector((current) => {
-      const restoreFocusTarget = current?.restoreFocusTarget ?? null;
-      window.setTimeout(() => {
-        if (restoreFocusTarget?.isConnected) restoreFocusTarget.focus();
-      }, 0);
-      return null;
-    });
+  const closeActivityInspector = useCallback((restoreFocus = true) => {
+    const restoreFocusTarget = activityInspectorRef.current?.restoreFocusTarget ?? null;
+    setActivityInspector(null);
+    if (!restoreFocus) return;
+    window.setTimeout(() => {
+      if (restoreFocusTarget?.isConnected) {
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement !== document.body && activeElement !== restoreFocusTarget && activeElement.isConnected) return;
+        restoreFocusTarget.dataset.activityPreviewFocusSuppressed = "true";
+        restoreFocusTarget.focus();
+        if (restoreFocusTarget.dataset.activityPreviewFocusSuppressed === "true") {
+          delete restoreFocusTarget.dataset.activityPreviewFocusSuppressed;
+        }
+      }
+    }, 0);
   }, []);
-  const openActivityInspector = useCallback((group: FlowBlockHoverGroup, target: HTMLElement, pointer: { readonly x: number; readonly y: number }) => {
-    const block = group.block;
-    const displayName = blockDisplayName(block);
-    const [startLabel, endLabel] = formatGroupTimeRange(group).split("–");
-    const identityId = block.siteDomain ?? block.bundleId ?? block.appName;
-    const rect = target.getBoundingClientRect();
+  const openActivityInspector = useCallback((
+    group: FlowBlockHoverGroup,
+    target: HTMLButtonElement,
+    initialView: ActivityInspectorView = "overview",
+  ) => {
+    activityInspectorSessionIdRef.current += 1;
     setActivityInspector({
+      sessionId: activityInspectorSessionIdRef.current,
       group,
-      event: {
-        id: `${block.day}-${group.startMinuteOfDay}-${group.endMinuteOfDay}-${identityId}`,
-        segmentIds: group.segmentIds,
-        appName: displayName,
-        category: block.category,
-        productivity: block.productivity,
-        startLabel: startLabel || formatCalendarMinuteLabel(block.day, group.startMinuteOfDay, boundaryMinutes),
-        endLabel: endLabel || formatCalendarMinuteLabel(block.day, group.endMinuteOfDay, boundaryMinutes),
-        identities: [{
-          id: identityId,
-          label: displayName,
-          appName: block.appName,
-          bundleId: block.bundleId ?? null,
-          siteDomain: block.siteDomain ?? null,
-        }],
-        hasMixedCategory: false,
-        hasMixedProductivity: false,
-      },
-      pointer,
-      fallbackRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+      event: buildFlowActivityInspectorEvent(group, { projectsById }),
+      sourceSegmentIds: [...new Set(group.segmentIds)],
+      regroupedBlockCount: 1,
+      anchorElement: target,
       restoreFocusTarget: target,
+      initialView,
     });
-  }, [boundaryMinutes]);
+  }, [projectsById]);
+  // Keep a pinned Inspector bound to the exact source records selected when it
+  // opened. A refresh may split or merge the rendered Flow group, so only move
+  // the visual anchor/highlight to the group with the greatest source overlap;
+  // the Inspector's snapshot and mutation target must not silently change.
+  useLayoutEffect(() => {
+    setActivityInspector((current) => {
+      if (!current) return current;
+      const sourceSegmentIds = new Set(current.sourceSegmentIds);
+      const groups = [...new Set(hoverGroupsByCell.values())];
+      const candidates = groups
+        .map((group) => ({
+          group,
+          overlap: group.segmentIds.reduce(
+            (count, segmentId) => count + (sourceSegmentIds.has(segmentId) ? 1 : 0),
+            0,
+          ),
+        }))
+        .filter((candidate) => candidate.overlap > 0);
+      const nextCandidate = candidates.reduce<(typeof candidates)[number] | null>((best, candidate) => {
+        if (!best || candidate.overlap > best.overlap) return candidate;
+        if (candidate.overlap < best.overlap) return best;
+        if (candidate.group === current.group) return candidate;
+        return best;
+      }, null);
+      if (!nextCandidate) return null;
+
+      const nextGroup = nextCandidate.group;
+      const nextAnchor = flowGridElement?.querySelector<HTMLElement>(
+        `[data-flow-minute="${nextGroup.startMinuteOfDay}"]`,
+      ) ?? null;
+      if (!nextAnchor) return current;
+      if (
+        nextGroup === current.group
+        && nextAnchor === current.anchorElement
+        && candidates.length === current.regroupedBlockCount
+      ) return current;
+      return {
+        ...current,
+        group: nextGroup,
+        regroupedBlockCount: candidates.length,
+        anchorElement: nextAnchor,
+        restoreFocusTarget: nextAnchor,
+      };
+    });
+  }, [flowGridElement, hoverGroupsByCell]);
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
-    if (inspectedSegments.length !== activityInspector.event.segmentIds.length) {
-      return "Some source records are no longer available. Refresh the day before editing.";
-    }
-    if (inspectedSegments.some(isRemoteDeviceSegment)) {
-      return "Synced activity can be viewed here, but must be edited on the Mac that recorded it.";
-    }
-    if (!activityActionsEnabled) {
-      return "Activity editing is unavailable in preview or replay mode.";
-    }
-    return null;
-  }, [activityActionsEnabled, activityInspector, inspectedSegments]);
+    return resolveActivityActionsDisabledReason(
+      activityInspector.event,
+      inspectedSegments,
+      activityActionsEnabled,
+      t,
+    );
+  }, [activityActionsEnabled, activityInspector, inspectedSegments, t]);
   // The minute axis sits a hair under the shared 11px floor. It is the densest
   // repeated label in the app (up to 20 marks per hour), so at the full floor it
   // read heavier than everything around it; 3% back keeps it legible without
@@ -207,6 +264,7 @@ export function FlowChartView({
         intervalMinutes={intervalMinutes}
         setFlowGridElement={setFlowGridElement}
         onOpenActivity={openActivityInspector}
+        inspectedGroup={activityInspector?.group ?? null}
       />
 
       <FlowHoverLayer
@@ -215,22 +273,35 @@ export function FlowChartView({
         intervalMinutes={intervalMinutes}
         boundaryMinutes={boundaryMinutes}
         appIcons={appIcons}
+        segmentsById={segmentsById}
         deviceLabelById={deviceLabelById}
         projectsById={projectsById}
+        projectOptions={projectOptions}
+        activityActionsEnabled={activityActionsEnabled}
+        classificationOptions={classificationOptions}
+        hasAssignProjectAction={Boolean(onSaveActivityValues || onAssignProject)}
+        hasClassifyAction={Boolean(onSaveActivityValues || onClassifyActivity)}
+        hasDeleteAction={Boolean(onDeleteActivity)}
+        onOpenActivity={openActivityInspector}
         disabled={activityInspector !== null}
+        pinnedGroup={activityInspector?.group ?? null}
       />
       {hoveredLegend && !activityInspector ? <FlowLegendHoverCard hover={hoveredLegend} appIcons={appIcons} cardRef={hoveredLegendCardRef} /> : null}
       {activityInspector ? (
         <WeekActivityInspector
-          key={activityInspector.event.id}
+          key={activityInspector.sessionId}
           event={activityInspector.event}
           segments={inspectedSegments}
           appIcons={appIcons}
           deviceLabelById={deviceLabelById}
-          pointer={activityInspector.pointer}
-          fallbackRect={activityInspector.fallbackRect}
+          anchorElement={activityInspector.anchorElement}
           actionsDisabledReason={activityActionsDisabledReason}
+          projectOptions={projectOptions}
+          initialView={activityInspector.initialView}
+          regroupedBlockCount={activityInspector.regroupedBlockCount}
           onClose={closeActivityInspector}
+          onSaveValues={onSaveActivityValues}
+          onAssignProject={onAssignProject}
           onClassify={onClassifyActivity}
           onDelete={onDeleteActivity}
           classificationOptions={classificationOptions}

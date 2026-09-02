@@ -3,10 +3,18 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { clockHourForLogicalHour, formatLocalizedCalendarMinuteLabel, formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedHourLabel, logicalTodayIsoDate } from "../../lib/formatting";
-import { buildAppUsageSummaries, isRemoteDeviceSegment, logicalMinuteOfDay } from "@drifty/domain";
+import { buildAppUsageSummaries, logicalMinuteOfDay } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import { WeekCalendarHoverLayer } from "./WeekCalendarHoverLayer";
-import { WeekActivityInspector } from "./WeekActivityInspector";
+import {
+  WeekActivityInspector,
+  resolveActivityActionsDisabledReason,
+  type ActivityInspectorEvent,
+  type ActivityInspectorProjectOption,
+  type ActivityInspectorSaveHandler,
+  type ActivityInspectorView,
+} from "./WeekActivityInspector";
+import { buildWeekActivityInspectorEvent } from "./weekActivityInspectorEvent";
 import { buildWeekCalendarEventLayout, planWeekIdentityStrip } from "./weekCalendarEventLayout";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT, formatWeekDashboardAxisPixelValue, weekDashboardAxisScalePercentToHourHeight } from "./weekDashboardAxisScale";
 import { useDeferredWeekIdentityIcons } from "./useDeferredWeekIdentityIcons";
@@ -31,6 +39,8 @@ import { localizedCategoryLabel, localizedProductivityLabel } from "../localizat
 const WEEK_CALENDAR_TIME_RAIL_PX = 40;
 /* Longer than one animation frame, well under the 340ms panel transition. */
 const WEEK_CALENDAR_RESIZE_SETTLE_MS = 120;
+const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
+const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
 
 export type WeekDashboardColorMode = "category" | "productivity";
 
@@ -189,6 +199,13 @@ type WeekDashboardProps = {
   readonly onToggleSide?: () => void;
   readonly deviceLabelById?: ReadonlyMap<string, string>;
   readonly activityActionsEnabled?: boolean;
+  readonly projectOptions?: readonly ActivityInspectorProjectOption[];
+  readonly projectBySegmentId?: ReadonlyMap<string, string | null>;
+  readonly onSaveActivityValues?: ActivityInspectorSaveHandler;
+  readonly onAssignProject?: (
+    segments: readonly ActivitySegment[],
+    projectId: string | null,
+  ) => Promise<void>;
   readonly onClassifyActivity?: (
     segments: readonly ActivitySegment[],
     category: ActivityCategory,
@@ -198,10 +215,15 @@ type WeekDashboardProps = {
 };
 
 type WeekActivityInspectorState = {
-  readonly event: WeekCalendarEvent;
-  readonly pointer: { readonly x: number; readonly y: number };
-  readonly fallbackRect: Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">;
+  readonly sessionId: number;
+  readonly event: ActivityInspectorEvent;
+  readonly sourceEventId: string;
+  readonly sourceDay: string;
+  readonly sourceSegmentIds: readonly string[];
+  readonly regroupedBlockCount: number;
+  readonly anchorElement: HTMLElement;
   readonly restoreFocusTarget: HTMLElement | null;
+  readonly initialView: ActivityInspectorView;
 };
 
 export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: WeekCalendarEventIdentity; appIcons: AppIconMap }) {
@@ -234,6 +256,10 @@ export function WeekDashboard({
   onToggleSide,
   deviceLabelById,
   activityActionsEnabled = false,
+  projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
+  projectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
+  onSaveActivityValues,
+  onAssignProject,
   onClassifyActivity,
   onDeleteActivity,
 }: WeekDashboardProps) {
@@ -247,6 +273,9 @@ export function WeekDashboard({
   const [legendHover, setLegendHover] = useState<FlowLegendHoverState | null>(null);
   const [breakdownHover, setBreakdownHover] = useState<CompactClassificationHoverState | null>(null);
   const [activityInspector, setActivityInspector] = useState<WeekActivityInspectorState | null>(null);
+  const activityInspectorSessionIdRef = useRef(0);
+  const activityInspectorRef = useRef(activityInspector);
+  activityInspectorRef.current = activityInspector;
   const legendHoverCardRef = useRef<HTMLDivElement>(null);
   // Element state (not just a ref) so the hover layer's delegation effect can
   // re-subscribe when the calendar body mounts.
@@ -412,43 +441,103 @@ export function WeekDashboard({
     () => new Map(segments.map((segment) => [segment.id, segment])),
     [segments],
   );
+  const projectsById = useMemo(
+    () => new Map(projectOptions.flatMap((project) => project.id ? [[project.id, project] as const] : [])),
+    [projectOptions],
+  );
   const inspectedSegments = useMemo(() => (
     activityInspector?.event.segmentIds.flatMap((segmentId) => {
       const segment = segmentsById.get(segmentId);
       return segment ? [segment] : [];
     }) ?? []
   ), [activityInspector, segmentsById]);
-  const closeActivityInspector = useCallback(() => {
-    setActivityInspector((current) => {
-      const restoreFocusTarget = current?.restoreFocusTarget ?? null;
-      window.setTimeout(() => {
-        if (restoreFocusTarget?.isConnected) restoreFocusTarget.focus();
-      }, 0);
-      return null;
-    });
+  const closeActivityInspector = useCallback((restoreFocus = true) => {
+    const restoreFocusTarget = activityInspectorRef.current?.restoreFocusTarget ?? null;
+    setActivityInspector(null);
+    if (!restoreFocus) return;
+    window.setTimeout(() => {
+      if (restoreFocusTarget?.isConnected) {
+        const activeElement = document.activeElement;
+        if (activeElement && activeElement !== document.body && activeElement !== restoreFocusTarget && activeElement.isConnected) return;
+        restoreFocusTarget.dataset.activityPreviewFocusSuppressed = "true";
+        restoreFocusTarget.focus();
+        if (restoreFocusTarget.dataset.activityPreviewFocusSuppressed === "true") {
+          delete restoreFocusTarget.dataset.activityPreviewFocusSuppressed;
+        }
+      }
+    }, 0);
   }, []);
-  const openActivityInspector = useCallback((event: WeekCalendarEvent, target: HTMLElement, pointer: { readonly x: number; readonly y: number }) => {
+  const openActivityInspector = useCallback((
+    event: WeekCalendarEvent,
+    target: HTMLElement,
+    initialView: ActivityInspectorView = "overview",
+  ) => {
     const eventElement = target.closest<HTMLElement>(".week-v2-calendar__event") ?? target;
-    const rect = eventElement.getBoundingClientRect();
+    const sourceDay = eventElement.closest<HTMLElement>(".week-v2-calendar__day-column")?.dataset.weekDay;
+    if (!sourceDay) return;
+    const restoreFocusTarget = eventElement.querySelector<HTMLElement>(".week-v2-calendar__event-open") ?? target;
+    activityInspectorSessionIdRef.current += 1;
     setActivityInspector({
-      event,
-      pointer,
-      fallbackRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
-      restoreFocusTarget: target,
+      sessionId: activityInspectorSessionIdRef.current,
+      event: buildWeekActivityInspectorEvent(event, segmentsById, projectBySegmentId, projectsById),
+      sourceEventId: event.id,
+      sourceDay,
+      sourceSegmentIds: [...new Set(event.segmentIds)],
+      regroupedBlockCount: 1,
+      anchorElement: eventElement,
+      restoreFocusTarget,
+      initialView,
     });
-  }, []);
+  }, [projectBySegmentId, projectsById, segmentsById]);
+
+  // A direct classification can regroup the calendar event and therefore
+  // change its generated id. Keep the pinned inspector on the event that still
+  // contains the greatest number of its source records, and update the anchor
+  // before the detached-element observer gets a chance to close it.
+  useLayoutEffect(() => {
+    setActivityInspector((current) => {
+      if (!current) return current;
+      const sourceIds = new Set(current.sourceSegmentIds);
+      const candidates = (displayCalendarEvents.get(current.sourceDay) ?? [])
+        .map((candidate) => ({
+          event: candidate,
+          overlap: candidate.segmentIds.reduce((count, segmentId) => count + (sourceIds.has(segmentId) ? 1 : 0), 0),
+        }))
+        .filter((candidate) => candidate.overlap > 0);
+      const nextCandidate = candidates.reduce<(typeof candidates)[number] | null>((best, candidate) => {
+        if (!best || candidate.overlap > best.overlap) return candidate;
+        if (candidate.overlap < best.overlap) return best;
+        if (candidate.event.id === current.sourceEventId) return candidate;
+        return best;
+      }, null);
+      const nextEvent = nextCandidate?.event ?? null;
+      if (!nextEvent) return null;
+
+      const nextAnchor = Array.from(calendarBodyRef.current?.querySelectorAll<HTMLElement>(".week-v2-calendar__event[data-event-id]") ?? [])
+        .find((element) => element.dataset.eventId === nextEvent?.id) ?? null;
+      if (!nextAnchor) return current;
+      const regroupedBlockCount = candidates.length;
+      return {
+        ...current,
+        // The rendered block is only the moving anchor. The inspector and Undo
+        // continue to own the exact records selected when this session opened,
+        // even if the timeline later splits or merges them with other records.
+        event: { ...current.event, id: nextEvent.id, segmentIds: current.sourceSegmentIds },
+        sourceEventId: nextEvent.id,
+        regroupedBlockCount,
+        anchorElement: nextAnchor,
+        restoreFocusTarget: nextAnchor.querySelector<HTMLElement>(".week-v2-calendar__event-open"),
+      };
+    });
+  }, [displayCalendarEvents, projectBySegmentId, projectsById, segmentsById]);
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
-    if (inspectedSegments.length !== activityInspector.event.segmentIds.length) {
-      return t("dashboard.week.someRecordsMissing");
-    }
-    if (inspectedSegments.some(isRemoteDeviceSegment)) {
-      return t("dashboard.week.remoteEditBlocked");
-    }
-    if (!activityActionsEnabled) {
-      return t("dashboard.week.previewEditBlocked");
-    }
-    return null;
+    return resolveActivityActionsDisabledReason(
+      activityInspector.event,
+      inspectedSegments,
+      activityActionsEnabled,
+      t,
+    );
   }, [activityActionsEnabled, activityInspector, inspectedSegments, t]);
 
   useLayoutEffect(() => {
@@ -548,7 +637,7 @@ export function WeekDashboard({
               {calendarRows.map((row) => {
                 const events = displayCalendarEvents.get(row.day) ?? [];
                 return (
-                  <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} key={row.day}>
+                  <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} data-week-day={row.day} key={row.day}>
                     {calendarHours.map((hour) => (
                       <span className="week-v2-calendar__line" key={`${row.day}-${hour}`} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }} />
                     ))}
@@ -570,7 +659,7 @@ export function WeekDashboard({
                       };
                       return (
                         <article
-                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}`}
+                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}${activityInspector?.event.id === event.id ? " is-inspected" : ""}`}
                           data-event-id={event.id}
                           key={event.id}
                           onContextMenu={(contextMenuEvent) => {
@@ -578,7 +667,6 @@ export function WeekDashboard({
                             openActivityInspector(
                               event,
                               contextMenuEvent.target instanceof HTMLElement ? contextMenuEvent.target : contextMenuEvent.currentTarget,
-                              { x: contextMenuEvent.clientX, y: contextMenuEvent.clientY },
                             );
                           }}
                           style={eventStyle}
@@ -589,8 +677,9 @@ export function WeekDashboard({
                             aria-label={`${event.detailTitle.replace(/\n/g, ", ")}. ${t("dashboard.week.openActivity")}.`}
                             aria-haspopup="dialog"
                             aria-expanded={activityInspector?.event.id === event.id}
+                            data-activity-inspector-trigger="true"
                             title={event.detailTitle}
-                            onClick={(clickEvent) => openActivityInspector(event, clickEvent.currentTarget, { x: clickEvent.clientX, y: clickEvent.clientY })}
+                            onClick={(clickEvent) => openActivityInspector(event, clickEvent.currentTarget)}
                           >
                             <span className={`category-dot category-dot--${event.category}`} aria-hidden="true" />
                             {eventLayout.showsIdentityStrip ? (
@@ -634,18 +723,37 @@ export function WeekDashboard({
             </div>
           </div>
         </section>
-        <WeekCalendarHoverLayer appIcons={appIcons} bodyElement={calendarBodyElement} eventsById={eventsById} disabled={activityInspector !== null} />
+        <WeekCalendarHoverLayer
+          appIcons={appIcons}
+          bodyElement={calendarBodyElement}
+          eventsById={eventsById}
+          segmentsById={segmentsById}
+          deviceLabelById={deviceLabelById}
+          activityActionsEnabled={activityActionsEnabled}
+          classificationOptions={classificationOptions}
+          projectOptions={projectOptions}
+          projectBySegmentId={projectBySegmentId}
+          hasAssignProjectAction={Boolean(onSaveActivityValues || onAssignProject)}
+          hasClassifyAction={Boolean(onSaveActivityValues || onClassifyActivity)}
+          hasDeleteAction={Boolean(onDeleteActivity)}
+          onOpenActivity={openActivityInspector}
+          disabled={activityInspector !== null}
+        />
         {activityInspector ? (
           <WeekActivityInspector
-            key={activityInspector.event.id}
+            key={activityInspector.sessionId}
             event={activityInspector.event}
             segments={inspectedSegments}
             appIcons={appIcons}
             deviceLabelById={deviceLabelById}
-            pointer={activityInspector.pointer}
-            fallbackRect={activityInspector.fallbackRect}
+            anchorElement={activityInspector.anchorElement}
             actionsDisabledReason={activityActionsDisabledReason}
+            projectOptions={projectOptions}
+            initialView={activityInspector.initialView}
+            regroupedBlockCount={activityInspector.regroupedBlockCount}
             onClose={closeActivityInspector}
+            onSaveValues={onSaveActivityValues}
+            onAssignProject={onAssignProject}
             onClassify={onClassifyActivity}
             onDelete={onDeleteActivity}
             classificationOptions={classificationOptions}

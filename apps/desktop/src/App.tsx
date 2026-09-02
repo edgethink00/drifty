@@ -363,6 +363,12 @@ import type { ClassificationPanelStyle } from "./features/classification/Classif
 import { FocusDriftSection, FocusDriftSummaryTiles } from "./features/dashboard/FocusDriftSection";
 import type { TimelineHoverState } from "./features/dashboard/HoverCards";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { buildDashboardProjectBySegmentId } from "./features/dashboard/dashboardActivityProjects";
+import type {
+  ActivityInspectorAttribute,
+  ActivityInspectorProjectOption,
+  ActivityInspectorSegmentValues,
+} from "./features/dashboard/WeekActivityInspector";
 import { useStickyDuringLoad } from "./features/dashboard/useStickyDuringLoad";
 import type { CompactRingEntry } from "./features/dashboard/CompactRingChart";
 import { selectDashboardSegments, type DashboardHistoryRange, type DashboardSegmentSource } from "./features/dashboard/dashboardWeekData";
@@ -6407,6 +6413,80 @@ export default function App() {
     analysisConnected: analysisModel.analysisConnected,
     onClassificationChanged: () => { void refreshHistoryData(); },
   });
+  const dashboardProjectRange = useMemo(
+    () => getLogicalDayRange(effectiveDashboardRange.startDay, effectiveDashboardRange.endDay, startOfDayMinutes),
+    [effectiveDashboardRange.endDay, effectiveDashboardRange.startDay, startOfDayMinutes],
+  );
+  const dashboardProjectRangeKey = `${dashboardProjectRange.start}:${dashboardProjectRange.end}`;
+  const [dashboardProjectAssignmentLoad, setDashboardProjectAssignmentLoad] = useState<{
+    readonly key: string;
+    readonly assignments: ProjectAssignmentRecord[];
+    readonly windowAssignments: ProjectWindowAssignmentRecord[];
+  }>({ key: "", assignments: [], windowAssignments: [] });
+
+  useEffect(() => {
+    if (activeTab !== "dashboard" || dashPeriod !== "Week") return undefined;
+    if (isDashboardDemoReplayActive || (!isPreviewSurface && shouldBlockLocalTrackerAccess)) {
+      setDashboardProjectAssignmentLoad({
+        key: dashboardProjectRangeKey,
+        assignments: [],
+        windowAssignments: [],
+      });
+      return undefined;
+    }
+
+    let cancelled = false;
+    void Promise.all([
+      trackerClient.getProjectAssignments?.(dashboardProjectRange) ?? Promise.resolve<ProjectAssignmentRecord[]>([]),
+      trackerClient.getProjectWindowAssignments?.(dashboardProjectRange) ?? Promise.resolve([]),
+    ]).then(([assignments, windowAssignments]) => {
+      if (cancelled) return;
+      setDashboardProjectAssignmentLoad({
+        key: dashboardProjectRangeKey,
+        assignments: assignments ?? [],
+        windowAssignments,
+      });
+    }).catch(() => {
+      if (cancelled) return;
+      setDashboardProjectAssignmentLoad({
+        key: dashboardProjectRangeKey,
+        assignments: [],
+        windowAssignments: [],
+      });
+    });
+    return () => { cancelled = true; };
+  }, [
+    activeTab,
+    dashPeriod,
+    dashboardProjectRange,
+    dashboardProjectRangeKey,
+    isDashboardDemoReplayActive,
+    isPreviewSurface,
+    projectClassification.lastSuccessfulPassAtMs,
+    shouldBlockLocalTrackerAccess,
+  ]);
+
+  const activityInspectorProjectOptions = useMemo<readonly ActivityInspectorProjectOption[]>(
+    () => projectClassification.projects
+      .filter((project) => project.status === "active")
+      .map((project) => ({ id: project.id, name: project.name, color: project.color })),
+    [projectClassification.projects],
+  );
+  const dashboardInspectorProjectBySegmentId = useMemo(() => {
+    const usesWeekAssignments = dashPeriod === "Week" && dashboardProjectAssignmentLoad.key === dashboardProjectRangeKey;
+    return buildDashboardProjectBySegmentId(
+      effectiveDashboardSegments,
+      usesWeekAssignments ? dashboardProjectAssignmentLoad.assignments : projectClassification.assignments,
+      usesWeekAssignments ? dashboardProjectAssignmentLoad.windowAssignments : projectClassification.windowAssignments,
+    );
+  }, [
+    dashPeriod,
+    dashboardProjectAssignmentLoad,
+    dashboardProjectRangeKey,
+    effectiveDashboardSegments,
+    projectClassification.assignments,
+    projectClassification.windowAssignments,
+  ]);
   // Preserve the fixed 3-minute decisions as virtual activity slices. Legacy
   // segment rows remain as fallback for days that have not been re-analyzed yet,
   // and manual segment assignments override every overlapping AI slice.
@@ -6847,24 +6927,48 @@ export default function App() {
     startOfDayMinutes,
   ]);
 
-  const dashboardActivityActionsEnabled = !isPreviewSurface
-    && !isDashboardDemoReplayActive
-    && !shouldBlockLocalTrackerAccess;
+  const dashboardActivityActionsEnabled = !isDashboardDemoReplayActive
+    && (isPreviewSurface || !shouldBlockLocalTrackerAccess);
 
-  const handleClassifyDashboardActivity = useCallback(async (
-    targetSegments: readonly ActivitySegment[],
-    category: ActivityCategory,
-    productivity: ProductivityLabel,
+  const handleSaveDashboardActivityValues = useCallback(async (
+    field: ActivityInspectorAttribute,
+    targetValues: readonly ActivityInspectorSegmentValues[],
   ) => {
-    if (targetSegments.length === 0) throw new Error("No source activity records are available.");
-    if (isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess) {
+    if (targetValues.length === 0) throw new Error("No source activity records are available.");
+    if (isDashboardDemoReplayActive || (!isPreviewSurface && shouldBlockLocalTrackerAccess)) {
       throw new Error("Activity editing is unavailable on this dashboard surface.");
     }
 
     setError(null);
     try {
+      if (field === "project") {
+        const assignedAt = new Date().toISOString();
+        const assignments: ProjectAssignmentRecord[] = targetValues.map(({ projectId, segment }) => ({
+          segmentId: segment.id,
+          projectId,
+          source: "manual",
+          confidence: 1,
+          reason: "Manual project correction.",
+          assignedAt,
+        }));
+        await trackerClient.saveProjectAssignments(assignments);
+        const changedIds = new Set(assignments.map((assignment) => assignment.segmentId));
+        setDashboardProjectAssignmentLoad((current) => {
+          if (current.key !== dashboardProjectRangeKey) return current;
+          return {
+            ...current,
+            assignments: [
+              ...current.assignments.filter((assignment) => !changedIds.has(assignment.segmentId)),
+              ...assignments,
+            ],
+          };
+        });
+        await projectClassification.reload();
+        return;
+      }
+
       const classifiedAt = new Date().toISOString();
-      await trackerClient.saveClassifications(targetSegments.map((segment) => buildClassificationCorrectionRecord({
+      await trackerClient.saveClassifications(targetValues.map(({ category, productivity, segment }) => buildClassificationCorrectionRecord({
         category,
         classifiedAt,
         productivity,
@@ -6876,11 +6980,19 @@ export default function App() {
       setError(toErrorMessage(caught));
       throw caught;
     }
-  }, [clearLocalActivityCaches, isDashboardDemoReplayActive, isPreviewSurface, refresh, shouldBlockLocalTrackerAccess]);
+  }, [
+    clearLocalActivityCaches,
+    dashboardProjectRangeKey,
+    isDashboardDemoReplayActive,
+    isPreviewSurface,
+    projectClassification.reload,
+    refresh,
+    shouldBlockLocalTrackerAccess,
+  ]);
 
   const handleDeleteDashboardActivity = useCallback(async (ids: readonly string[]) => {
     if (ids.length === 0) throw new Error("No source activity records are available.");
-    if (isPreviewSurface || isDashboardDemoReplayActive || shouldBlockLocalTrackerAccess) {
+    if (isDashboardDemoReplayActive || (!isPreviewSurface && shouldBlockLocalTrackerAccess)) {
       throw new Error("Activity editing is unavailable on this dashboard surface.");
     }
 
@@ -8447,6 +8559,8 @@ export default function App() {
             onDeviceTimelineFilterChange={setDeviceTimelineFilter}
             projectModeAvailable={projectClassification.projectModeAvailable}
             projectLegend={flowProjectLegend}
+            activityInspectorProjectOptions={activityInspectorProjectOptions}
+            activityInspectorProjectBySegmentId={dashboardInspectorProjectBySegmentId}
             flowProjectRingEntries={dashboardProjectRing.entries}
             flowProjectCenterPercent={dashboardProjectRing.centerPercent}
             focusDriftSection={focusDriftSection}
@@ -8483,7 +8597,7 @@ export default function App() {
               if (dashboardAiUnavailablePreview) return;
               void startCloudCheckout(billingInterval);
             }}
-            onClassifyDashboardActivity={handleClassifyDashboardActivity}
+            onSaveDashboardActivityValues={handleSaveDashboardActivityValues}
             onDeleteDashboardActivity={handleDeleteDashboardActivity}
             onSelectDay={selectDay}
           />

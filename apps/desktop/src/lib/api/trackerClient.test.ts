@@ -5,21 +5,27 @@ import { trackerClientInvokeCommands, type TrackerClientCommand } from "@drifty/
 const { invoke } = vi.hoisted(() => ({
   invoke: vi.fn(),
 }));
-
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke,
-  isTauri: () => false,
-}));
-vi.mock("./previewData", () => ({
+const previewDataMocks = vi.hoisted(() => ({
   previewAppIcons: vi.fn(),
+  previewDeleteActivitySegments: vi.fn(),
   previewHourlySummary: vi.fn(),
+  previewProjectAssignments: vi.fn(),
+  previewProjects: vi.fn(),
+  previewSaveClassifications: vi.fn(),
+  previewSaveProjectAssignments: vi.fn(),
   previewStatus: vi.fn(),
   previewTimeline: vi.fn(),
   previewTopSites: vi.fn(),
   previewTimelinePage: vi.fn(),
   previewTimelineSearch: vi.fn(),
-  shouldUsePreviewData: () => false,
+  shouldUsePreviewData: vi.fn(() => false),
 }));
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke,
+  isTauri: () => false,
+}));
+vi.mock("./previewData", () => previewDataMocks);
 
 const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tracker_get_status",
@@ -101,6 +107,7 @@ describe("trackerClient command registry", () => {
 describe("trackerClient", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    previewDataMocks.shouldUsePreviewData.mockReturnValue(false);
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
       value: {},
@@ -133,6 +140,36 @@ describe("trackerClient", () => {
     expect(invoke).toHaveBeenCalledWith("tracker_delete_activity_segments", {
       query: { ids: ["42", "43"] },
     });
+  });
+
+  it("routes review edits to preview memory without invoking native commands", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    const assignments = [{ segmentId: "preview-t1", projectId: "preview-project-drifty", source: "manual" as const }];
+    const classifications = [{
+      segmentId: "preview-t1",
+      category: "workspace" as const,
+      productivity: "focus" as const,
+      source: "manual" as const,
+      confidence: 1,
+      inputFingerprint: "preview-review-test",
+    }];
+    previewDataMocks.shouldUsePreviewData.mockReturnValue(true);
+    previewDataMocks.previewProjects.mockReturnValue([{ id: "preview-project-drifty" }]);
+    previewDataMocks.previewProjectAssignments.mockReturnValue(assignments);
+    previewDataMocks.previewSaveProjectAssignments.mockReturnValue({ saved: 1, skippedManual: 0 });
+    previewDataMocks.previewSaveClassifications.mockReturnValue({ saved: 1 });
+    previewDataMocks.previewDeleteActivitySegments.mockReturnValue({ deleted: 1 });
+
+    await expect(trackerClient.getProjects()).resolves.toEqual([{ id: "preview-project-drifty" }]);
+    await expect(trackerClient.getProjectAssignments({ day: "2026-09-02" })).resolves.toEqual(assignments);
+    await expect(trackerClient.saveProjectAssignments(assignments)).resolves.toEqual({ saved: 1, skippedManual: 0 });
+    await expect(trackerClient.saveClassifications(classifications)).resolves.toEqual({ saved: 1 });
+    await expect(trackerClient.deleteActivitySegments(["preview-t1"])).resolves.toEqual({ deleted: 1 });
+
+    expect(previewDataMocks.previewSaveProjectAssignments).toHaveBeenCalledWith(assignments);
+    expect(previewDataMocks.previewSaveClassifications).toHaveBeenCalledWith(classifications);
+    expect(previewDataMocks.previewDeleteActivitySegments).toHaveBeenCalledWith(["preview-t1"]);
+    expect(invoke).not.toHaveBeenCalled();
   });
 
   it("preserves passive engagement evidence from the native timeline response", async () => {

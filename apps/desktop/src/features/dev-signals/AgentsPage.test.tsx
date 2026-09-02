@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentsDaySource } from "./agentsPageModel";
 import { useAgentsData } from "./useAgentsData";
@@ -176,30 +176,30 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(heading.querySelector(".dashboard-page-head__focus-value")).toBeNull();
   });
 
-  it("shows shared hover details for Day cells and Week runs", () => {
+  it("shows shared hover details for Day cells and Week runs", async () => {
     renderAgentsPage();
 
     const dayCell = screen.getAllByRole("button", { name: /drifty_mac/i })[0];
     fireEvent(dayCell, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac");
+    await waitFor(() => expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')?.textContent).toContain("drifty_mac"));
 
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     const weekRun = screen.getByLabelText(/Agent run on Fri, 2026-08-28, drifty_mac, Codex/i);
     fireEvent(weekRun, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac");
+    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
     expect(document.querySelector(".flow-hover-card")?.textContent).not.toContain("Not classified yet");
     expect(weekRun.getAttribute("aria-label")).toContain("approximately 1.0h at 5-minute resolution");
 
     fireEvent.focus(weekRun);
     fireEvent.blur(weekRun);
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac");
+    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
 
     const calendarBody = document.querySelector(".week-v2-calendar__body");
     if (!calendarBody) throw new Error("Expected the week calendar body");
     fireEvent.pointerLeave(calendarBody);
-    expect(document.querySelector(".flow-hover-card")).toBeNull();
+    await waitFor(() => expect(document.querySelector(".flow-hover-card")).toBeNull());
     fireEvent.focus(weekRun);
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac");
+    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
     fireEvent.pointerLeave(calendarBody);
     expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac");
     expect(document.querySelectorAll('.agents-week-calendar__event[tabindex="0"]')).toHaveLength(1);

@@ -1,5 +1,22 @@
 import { buildHourlySummary, topSites as buildTopSites } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, HourBucket, ProductivityLabel, SiteDuration, TimelinePage, TimelinePageQuery, TimelineQuery, TimelineSearchQuery, TrackerStatus } from "@drifty/domain";
+import type {
+  ActivityCategory,
+  ActivityClassificationRecord,
+  ActivitySegment,
+  AppIconMap,
+  AppIdentity,
+  HourBucket,
+  ProductivityLabel,
+  Project,
+  ProjectAssignmentRecord,
+  ProjectAssignmentsSaveResult,
+  SiteDuration,
+  TimelinePage,
+  TimelinePageQuery,
+  TimelineQuery,
+  TimelineSearchQuery,
+  TrackerStatus,
+} from "@drifty/domain";
 import { localDateKey } from "../formatting";
 
 type PreviewActivitySegment = ActivitySegment & { category: ActivityCategory; productivity: ProductivityLabel };
@@ -40,6 +57,43 @@ const PREVIEW_APP_ICON_SOURCES: Readonly<Record<string, string>> = {
   "com.tinyspeck.slackmacgap": "./assets/slack-BKg3hZEm.png",
   "notion.id": "./assets/notion-CceIbM-j.png",
 };
+
+const PREVIEW_PROJECTS: readonly Project[] = [
+  {
+    id: "preview-project-drifty",
+    name: "Drifty",
+    description: "Desktop product and dashboard work",
+    color: "#688c35",
+    status: "active",
+    anchors: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    id: "preview-project-research",
+    name: "Research",
+    description: "Documentation and technical exploration",
+    color: "#2f8b83",
+    status: "active",
+    anchors: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    id: "preview-project-launch",
+    name: "Launch",
+    description: "Launch coordination and communication",
+    color: "#c45f49",
+    status: "active",
+    anchors: [],
+    createdAt: "2026-08-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  },
+];
+
+const previewClassificationOverrides = new Map<string, Pick<ActivityClassificationRecord, "category" | "productivity">>();
+const previewProjectOverrides = new Map<string, string | null>();
+const previewDeletedSegmentIds = new Set<string>();
 
 function todayIsoDate() {
   return localDateKey(new Date());
@@ -220,8 +274,103 @@ function historySegments(today: string): PreviewActivitySegment[] {
   return segments;
 }
 
+function basePreviewProjectId(segment: ActivitySegment): string | null {
+  if (
+    segment.siteDomain === "docs.rs"
+    || segment.siteDomain === "react.dev"
+    || segment.siteDomain === "developer.apple.com"
+    || segment.siteDomain === "stackoverflow.com"
+  ) return "preview-project-research";
+  if (segment.appName === "Mail" || segment.appName === "Messages" || segment.appName === "Slack") {
+    return "preview-project-launch";
+  }
+  if (
+    segment.appName === "Visual Studio Code"
+    || segment.appName === "Figma"
+    || segment.appName === "Linear"
+    || segment.appName === "Notion"
+    || segment.siteDomain === "github.com"
+    || segment.siteDomain === "drifty.so"
+  ) return "preview-project-drifty";
+  return null;
+}
+
+function applyPreviewOverrides(segment: PreviewActivitySegment): PreviewActivitySegment {
+  const classification = previewClassificationOverrides.get(segment.id);
+  if (!classification) return segment;
+  return {
+    ...segment,
+    category: classification.category,
+    productivity: classification.productivity,
+    classification: {
+      ...segment.classification!,
+      category: classification.category,
+      productivity: classification.productivity,
+      source: "manual",
+      confidence: 1,
+      reason: "Preview-only manual correction",
+      classifiedAt: new Date().toISOString(),
+    },
+  };
+}
+
 function previewSegments(today = todayIsoDate()) {
-  return [...todaySegments(today), ...weekSegments(today), ...historySegments(today)];
+  return [...todaySegments(today), ...weekSegments(today), ...historySegments(today)]
+    .filter((segment) => !previewDeletedSegmentIds.has(segment.id))
+    .map(applyPreviewOverrides);
+}
+
+export function previewProjects(): Project[] {
+  return PREVIEW_PROJECTS.map((project) => ({ ...project, anchors: [...project.anchors] }));
+}
+
+export function previewProjectAssignments(query: TimelineQuery): ProjectAssignmentRecord[] {
+  return previewTimeline(query).map((segment) => ({
+    segmentId: segment.id,
+    projectId: previewProjectOverrides.has(segment.id)
+      ? previewProjectOverrides.get(segment.id) ?? null
+      : basePreviewProjectId(segment),
+    source: previewProjectOverrides.has(segment.id) ? "manual" : "ai",
+    confidence: previewProjectOverrides.has(segment.id) ? 1 : 0.9,
+    reason: previewProjectOverrides.has(segment.id) ? "Preview-only manual project correction" : "Preview fixture project",
+    assignedAt: segment.endedAt,
+  }));
+}
+
+export function previewSaveProjectAssignments(
+  assignments: readonly ProjectAssignmentRecord[],
+): ProjectAssignmentsSaveResult {
+  for (const assignment of assignments) previewProjectOverrides.set(assignment.segmentId, assignment.projectId);
+  return { saved: assignments.length, skippedManual: 0 };
+}
+
+export function previewSaveClassifications(
+  classifications: readonly ActivityClassificationRecord[],
+): { saved: number } {
+  for (const classification of classifications) {
+    previewClassificationOverrides.set(classification.segmentId, {
+      category: classification.category,
+      productivity: classification.productivity,
+    });
+  }
+  return { saved: classifications.length };
+}
+
+export function previewDeleteActivitySegments(ids: readonly string[]): { deleted: number } {
+  const availableIds = new Set(previewSegments().map((segment) => segment.id));
+  let deleted = 0;
+  for (const id of ids) {
+    if (!availableIds.has(id) || previewDeletedSegmentIds.has(id)) continue;
+    previewDeletedSegmentIds.add(id);
+    deleted += 1;
+  }
+  return { deleted };
+}
+
+export function resetPreviewMutations(): void {
+  previewClassificationOverrides.clear();
+  previewProjectOverrides.clear();
+  previewDeletedSegmentIds.clear();
 }
 
 function inRange(segment: PreviewActivitySegment, query: TimelineQuery) {

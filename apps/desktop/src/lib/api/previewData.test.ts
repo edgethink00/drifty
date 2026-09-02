@@ -1,7 +1,18 @@
 // @vitest-environment jsdom
 import { classifyActivity } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { previewAppIcons, previewTimeline, previewTimelineSearch, shouldUsePreviewData } from "./previewData";
+import {
+  previewAppIcons,
+  previewDeleteActivitySegments,
+  previewProjectAssignments,
+  previewProjects,
+  previewSaveClassifications,
+  previewSaveProjectAssignments,
+  previewTimeline,
+  previewTimelineSearch,
+  resetPreviewMutations,
+  shouldUsePreviewData,
+} from "./previewData";
 
 describe("previewData", () => {
   const previewHistoryRange = {
@@ -11,6 +22,7 @@ describe("previewData", () => {
   afterEach(() => {
     window.history.replaceState(null, "", "/");
     window.localStorage.clear();
+    resetPreviewMutations();
     vi.useRealTimers();
     vi.unstubAllEnvs();
   });
@@ -51,6 +63,45 @@ describe("previewData", () => {
 
     expect(oldRepeatedBlocks.length).toBeLessThan(2);
     expect(weekdayPlans.size).toBeGreaterThan(12);
+  });
+
+  it("keeps review-only classification, project, and deletion edits in memory", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-08T20:30:00"));
+    const query = { day: "2026-05-08" } as const;
+    const segment = previewTimeline(query)[0]!;
+
+    expect(previewProjects().map((project) => project.name)).toEqual(["Drifty", "Research", "Launch"]);
+    previewSaveClassifications([{
+      segmentId: segment.id,
+      category: "learning",
+      productivity: "focus",
+      source: "manual",
+      confidence: 1,
+      inputFingerprint: "preview-test",
+    }]);
+    previewSaveProjectAssignments([{
+      segmentId: segment.id,
+      projectId: "preview-project-research",
+      source: "manual",
+    }]);
+
+    const edited = previewTimeline(query).find((item) => item.id === segment.id)!;
+    expect(edited.classification).toMatchObject({ category: "learning", productivity: "focus", source: "manual" });
+    expect(previewProjectAssignments(query).find((assignment) => assignment.segmentId === segment.id)).toMatchObject({
+      projectId: "preview-project-research",
+      source: "manual",
+    });
+
+    expect(previewDeleteActivitySegments(["missing-preview-segment"])).toEqual({ deleted: 0 });
+    expect(previewDeleteActivitySegments([segment.id, segment.id])).toEqual({ deleted: 1 });
+    expect(previewTimeline(query).some((item) => item.id === segment.id)).toBe(false);
+
+    resetPreviewMutations();
+    expect(previewTimeline(query).some((item) => item.id === segment.id)).toBe(true);
+    expect(previewProjectAssignments(query).find((assignment) => assignment.segmentId === segment.id)).toMatchObject({
+      source: "ai",
+    });
   });
 
   it("shapes today preview as a human day: long focus streaks, varied blocks, real breaks", () => {

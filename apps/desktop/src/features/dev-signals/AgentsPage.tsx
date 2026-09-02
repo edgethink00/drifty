@@ -410,7 +410,6 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
             intervalMinutes={intervalMinutes}
             boundaryMinutes={boundaryMinutes}
             appIcons={{}}
-            showClassificationSource={false}
           />
         </section>
       </div>

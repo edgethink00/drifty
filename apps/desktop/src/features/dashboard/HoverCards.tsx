@@ -1,19 +1,15 @@
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { FocusDriftPoint } from "./focusDriftChart";
-import type { WeekCalendarEvent } from "./weekCalendar";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds, formatQuarterHourLabel } from "../../lib/formatting";
-import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
-import { localizedCategoryLabel } from "../localization/activityTranslations";
+import type { DisplayLanguage } from "../localization/LocalizationContext";
 import { secondsToLabel } from "@drifty/domain";
 import type { AppIconMap, DayRibbonSegment } from "@drifty/domain";
 import { ClassificationSourceBadge } from "../classification/ClassificationSourceBadge";
 import { getViewportSafeHoverPosition, type FixedHoverPosition } from "../../components/hoverCardPosition";
-import { WeekCalendarIdentityIcon } from "./WeekDashboard";
 import { createPortal } from "react-dom";
 import { useLayoutEffect, useRef, useState } from "react";
-import type { RefObject } from "react";
 
 export type TimelineHoverState = {
   segment: DayRibbonSegment;
@@ -52,12 +48,6 @@ export type CompactClassificationBreakdownRow = {
   siteDomain?: string | null;
   siteTitle?: string | null;
   totalSeconds: number;
-};
-
-export type WeekCalendarHoverState = {
-  event: WeekCalendarEvent;
-  x: number;
-  y: number;
 };
 
 export function CompactClassificationHoverCard({ hover, appIcons, language = "en" }: { hover: CompactClassificationHoverState; appIcons: AppIconMap; language?: DisplayLanguage }) {
@@ -110,49 +100,6 @@ export function CompactClassificationHoverCard({ hover, appIcons, language = "en
   );
 
   return createPortal(card, document.body);
-}
-
-export function WeekCalendarHoverCard({ hover, appIcons, cardRef: externalCardRef }: { hover: WeekCalendarHoverState; appIcons: AppIconMap; cardRef?: RefObject<HTMLDivElement> }) {
-  const { effectiveLanguage, t } = useLocalization();
-  const internalCardRef = useRef<HTMLDivElement>(null);
-  const cardRef = externalCardRef ?? internalCardRef;
-  const [position, setPosition] = useState<FixedHoverPosition>(() => getViewportSafeHoverPosition(hover.x, hover.y, 0, 0));
-
-  useLayoutEffect(() => {
-    function updatePosition() {
-      const bounds = cardRef.current?.getBoundingClientRect();
-      const nextPosition = getViewportSafeHoverPosition(hover.x, hover.y, bounds?.width ?? 0, bounds?.height ?? 0);
-      setPosition((currentPosition) => (
-        currentPosition.left === nextPosition.left && currentPosition.top === nextPosition.top ? currentPosition : nextPosition
-      ));
-    }
-
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
-    return () => window.removeEventListener("resize", updatePosition);
-  }, [hover.event.id, hover.x, hover.y]);
-
-  return (
-    <div ref={cardRef} className="flow-hover-card week-calendar-hover-card" style={position}>
-      <div className="category-hover-card__head">
-        <span className={`category-dot category-dot--${hover.event.category}`} aria-hidden="true" />
-        <strong>{localizedCategoryLabel(hover.event.category, t)}</strong>
-      </div>
-      <div className="timeline-hover-card__duration">{hover.event.startLabel}–{hover.event.endLabel}</div>
-      <ClassificationSourceBadge source={hover.event.classificationSource} ai={hover.event.aiClassification} />
-      <div className="category-hover-card__apps">
-        {hover.event.identities.map((identity) => (
-          <div className="category-hover-card__app" key={identity.id}>
-            <span className="usage-identity-icon usage-identity-icon--sm">
-              <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} />
-            </span>
-            <span>{identity.label}</span>
-            <strong>{formatLocalizedCompactDurationFromSeconds(identity.seconds, effectiveLanguage)}</strong>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 export function formatSharePercent(value: number): string {

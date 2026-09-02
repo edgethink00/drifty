@@ -68,7 +68,7 @@ describe("flow hover groups", () => {
 
     fireNativePointerMove(groupedCells[4], 120, 80);
 
-    const hoverCard = document.querySelector(".flow-hover-card");
+    const hoverCard = document.querySelector(".week-activity-inspector--preview");
     expect(hoverCard?.textContent).toContain("01:00–01:30");
     expect(hoverCard?.textContent).toContain("30m");
     // The whole run is highlighted by a single overlay segment rather than per-cell
@@ -106,6 +106,6 @@ describe("flow hover groups", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /time block: 01:00–01:12/i })[0]);
     expect(screen.getByRole("dialog", { name: "cmux" })).toBeTruthy();
-    expect(screen.getByText("0 captured records")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "cmux" }).querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
   });
 });
