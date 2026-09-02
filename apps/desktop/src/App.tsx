@@ -9076,7 +9076,12 @@ export default function App() {
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
           billingEntitlement={effectiveBillingEntitlement}
           billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || isSidebarCtaPreviewActive}
+          localAiConfigured={sidebarCtaPreviewInput?.localAiConfigured ?? localAiConnectionFingerprint !== null}
           onClose={() => setUpgradePlanModalOpen(false)}
+          onContinueLocal={() => {
+            setUpgradePlanModalOpen(false);
+            openAiSetupSettings();
+          }}
           onSelectBillingPlan={(billingInterval) => {
             if (isSidebarCtaPreviewActive) return;
             void startCloudCheckout(billingInterval);

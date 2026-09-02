@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { BillingInterval } from "../billing/billingService";
 import { IndividualPlanCards } from "../billing/IndividualPlanCards";
+import { UpgradeDecisionPanel } from "../billing/UpgradeDecisionPanel";
 import {
   type DashboardAiUnavailableState,
 } from "./dashboardAiUnavailableState";
@@ -35,13 +36,21 @@ export function DashboardAiRecoveryOverlay({
   useModalDismiss(onClose);
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
   const recoversExistingSubscription = state.variant === "cloud-billing";
+  const showsTrialEndedDecision = state.variant === "trial-ended";
+
   return (
-    <div className={"dashboard-ai-recovery dashboard-ai-recovery--" + state.variant}>
-      <section ref={dialogRef} className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace" role="dialog" aria-modal="true" aria-label={t("dashboard.aiRecovery.panelAria")} tabIndex={-1}>
+    <div className={`dashboard-ai-recovery dashboard-ai-recovery--${state.variant}`}>
+      <section
+        ref={dialogRef}
+        className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"
+        data-decision-layout={showsTrialEndedDecision ? "equal-airy" : undefined}
+        role="dialog" aria-modal="true" aria-label={t("dashboard.aiRecovery.panelAria")}
+        tabIndex={-1}
+      >
         <ModalCloseButton label={t("dashboard.aiRecovery.dismiss")} onClick={onClose} />
         <div className="dashboard-ai-recovery__copy">
           <h2>{t(state.titleKey)}</h2>
-          <p>{t(state.bodyKey)}</p>
+          <p>{t(showsTrialEndedDecision ? "billing.upgradeModal.endedDescription" : state.bodyKey)}</p>
         </div>
         {recoversExistingSubscription ? (
           <div className="dashboard-ai-recovery__actions">
@@ -56,6 +65,16 @@ export function DashboardAiRecoveryOverlay({
             <button type="button" className="modal-btn modal-btn--ghost" onClick={onOpenAiSetup}>
               {t("dashboard.aiRecovery.continueLocal")}
             </button>
+          </div>
+        ) : showsTrialEndedDecision ? (
+          <div className="dashboard-ai-recovery__plans">
+            <UpgradeDecisionPanel
+              context="trial-ended"
+              disabled={billingPlansDisabled}
+              loadingInterval={billingCheckoutLoadingInterval}
+              onContinueLocal={onOpenAiSetup}
+              onSelectPlan={onSelectBillingPlan}
+            />
           </div>
         ) : (
           <div className="dashboard-ai-recovery__plans">
