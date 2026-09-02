@@ -345,7 +345,9 @@ describe("WeekDashboard activity inspector", () => {
     const inspector = screen.getByRole("dialog", { name: "Design review" });
     expect(within(inspector).queryByText("Shared attributes for 2 activities")).toBeNull();
     expect(within(inspector).queryByText("Selection saves immediately")).toBeNull();
-    expect(within(inspector).getByText("Focus · dominant")).toBeTruthy();
+    expect(within(inspector).getByText("Focus")).toBeTruthy();
+    expect(within(inspector).getByText(/Mixed values · showing dominant/)).toBeTruthy();
+    expect(within(inspector).queryByText("Focus · dominant")).toBeNull();
     expect(within(inspector).queryByText("Workspace · dominant")).toBeNull();
     expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
     expect(inspector.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(2);
@@ -354,13 +356,43 @@ describe("WeekDashboard activity inspector", () => {
     expect(inspector).not.toBe(within(inspector).getByRole("button", { name: "Close activity inspector" }));
     expect(inspector.style.left).toBe("212px");
     expect(inspector.style.top).toBe("90px");
+    expect(inspector.style.width).toBe("304px");
     expect(styles).toMatch(/\.week-activity-inspector\s*\{[^}]*max-width:\s*calc\(100vw - 32px\)/);
     expect(styles).toMatch(/\.week-activity-inspector\s*\{[^}]*max-height:\s*calc\(100vh - 32px\)/);
-    expect(styles).toMatch(/\.week-activity-inspector__attribute-trigger\s*\{[^}]*min-height:\s*33px/);
+    expect(styles).toMatch(/\.week-activity-inspector__attribute-trigger\s*\{[^}]*min-height:\s*34px/);
     expect(styles).toMatch(/\.week-activity-inspector__chip\s*\{[^}]*border-radius:\s*var\(--radius-pill\)/);
     expect(styles).toMatch(/\.week-activity-inspector__hover-bridge\s*\{[^}]*pointer-events:\s*auto/);
     expect(styles).toMatch(/\.week-activity-inspector__picker-options\s*\{[^}]*overflow-y:\s*hidden/);
     expect(styles).toMatch(/\.week-activity-inspector__picker\[data-scrollable="true"\] \.week-activity-inspector__picker-options\s*\{[^}]*overflow-y:\s*auto/);
+  });
+
+  it("summarizes dense activity groups without growing the inspector", () => {
+    const denseIdentities = Array.from({ length: 6 }, (_, index) => ({
+      id: `dense-${index}`,
+      label: ["Visual Studio Code", "Figma", "github.com", "Notion", "Slack", "Linear"][index]!,
+      appName: ["Visual Studio Code", "Figma", "Safari", "Notion", "Slack", "Linear"][index]!,
+      bundleId: null,
+      browserName: null,
+      siteDomain: index === 2 ? "github.com" : null,
+      siteTitle: null,
+      seconds: 600 - index * 60,
+      firstStartMinute: index * 10,
+    }));
+    renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent({
+        appName: "Visual Studio Code, Figma, github.com",
+        identities: denseIdentities,
+        isGroupedCluster: true,
+      })]]]),
+      activityActionsEnabled: true,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+
+    const inspector = screen.getByRole("dialog", { name: "Visual Studio Code + 5 more" });
+    expect(inspector.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(4);
+    expect(within(inspector).getByText("2 more activities")).toBeTruthy();
+    expect(within(inspector).queryByText("Slack")).toBeNull();
   });
 
   it("keeps compact grouped icon-only blocks body-clickable without a more-actions control", () => {
@@ -574,7 +606,8 @@ describe("WeekDashboard activity inspector", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
-    expect(screen.getByText("Drifty · dominant")).toBeTruthy();
+    expect(screen.getByText("Drifty")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Current value: Drifty · dominant/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Change Project/ }));
     fireEvent.click(screen.getByRole("option", { name: "Research" }));
 
@@ -844,7 +877,7 @@ describe("WeekDashboard activity inspector", () => {
       fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
       const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
       if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 212, 100, 332, 320);
+      setElementRect(preview, 212, 100, 304, 320);
 
       // Leaving the block through empty calendar space, heading left (away from the card).
       fireEvent.mouseMove(body, { clientX: 176, clientY: 120 });
@@ -868,7 +901,7 @@ describe("WeekDashboard activity inspector", () => {
       fireEvent.mouseMove(event, { clientX: 150, clientY: 120 });
       const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
       if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 212, 100, 332, 320);
+      setElementRect(preview, 212, 100, 304, 320);
 
       // A slow diagonal approach that cuts across empty space below the block.
       fireEvent.mouseMove(body, { clientX: 170, clientY: 150 });
@@ -898,7 +931,7 @@ describe("WeekDashboard activity inspector", () => {
       fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
       const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
       if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 212, 100, 332, 320);
+      setElementRect(preview, 212, 100, 304, 320);
 
       fireEvent.mouseMove(body, { clientX: 200, clientY: 150 });
       act(() => vi.advanceTimersByTime(219));

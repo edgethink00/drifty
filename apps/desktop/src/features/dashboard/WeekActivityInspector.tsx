@@ -31,7 +31,8 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
-const INSPECTOR_WIDTH_PX = 332;
+const INSPECTOR_WIDTH_PX = 304;
+const MAX_VISIBLE_ACTIVITY_ROWS = 4;
 const PICKER_VIEWPORT_INSET_PX = 12;
 const PICKER_TRIGGER_GAP_PX = 4;
 
@@ -80,6 +81,7 @@ export type ActivityInspectorEvent = {
     readonly siteDomain: string | null;
     readonly seconds?: number;
   }[];
+  readonly hiddenIdentityCount?: number;
   readonly hasMixedProject?: boolean;
   readonly hasMixedCategory: boolean;
   readonly hasMixedProductivity: boolean;
@@ -454,13 +456,21 @@ function ActivityInspectorHeader({
   readonly onClose: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
+  const identityCount = event.identities.length + (event.hiddenIdentityCount ?? 0);
+  const primaryIdentity = event.identities[0] ?? null;
+  const title = event.surface === "week" && primaryIdentity && identityCount >= 3
+    ? t("dashboard.week.inspector.activitySummaryTitle", {
+        activity: primaryIdentity.label,
+        count: identityCount - 1,
+      })
+    : event.appName;
   return (
     <header className="week-activity-inspector__header">
       <span className="week-activity-inspector__identity" aria-hidden="true">
         <InspectorIdentityIcon event={event} appIcons={appIcons} />
       </span>
       <div className="week-activity-inspector__heading">
-        <strong id={titleId}>{event.appName}</strong>
+        <strong id={titleId} title={event.appName}>{title}</strong>
         {event.detailLabel ? (
           <span className="week-activity-inspector__context" title={event.detailLabel}>{event.detailLabel}</span>
         ) : null}
@@ -540,7 +550,7 @@ function DirectAttributeRow({
         onClick={(clickEvent) => onToggle?.(field, clickEvent.currentTarget)}
       >
         <span className="week-activity-inspector__attribute-label">{label}</span>
-        <AttributeChip color={color} label={displayedValue} />
+        <AttributeChip color={color} label={valueLabel} />
         <span className="week-activity-inspector__attribute-chevron" aria-hidden="true"><ChevronIcon direction="down" /></span>
       </button>
     </div>
@@ -668,13 +678,17 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
   const isFlowComposition = event.surface === "flow";
   if (isFlowComposition && event.identities.length < 2) return null;
   if (!isFlowComposition && event.surface !== "week") return null;
+  const visibleIdentities = event.identities.slice(0, MAX_VISIBLE_ACTIVITY_ROWS);
+  const additionalIdentityCount = Math.max(0, event.identities.length - visibleIdentities.length)
+    + Math.max(0, event.hiddenIdentityCount ?? 0);
+  const totalIdentityCount = visibleIdentities.length + additionalIdentityCount;
   return (
     <div
       className="week-activity-inspector__activity-list"
       role="list"
-      aria-label={t("dashboard.week.inspector.constituentActivities", { count: event.identities.length })}
+      aria-label={t("dashboard.week.inspector.constituentActivities", { count: totalIdentityCount })}
     >
-      {event.identities.map((identity, index) => {
+      {visibleIdentities.map((identity, index) => {
         const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
         const isDominant = isFlowComposition && index === 0;
         const rowLabel = isDominant
@@ -690,7 +704,7 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
           >
             <span className="usage-identity-icon usage-identity-icon--sm" aria-hidden="true">
               {identity.siteDomain
-                ? <SiteFavicon domain={identity.siteDomain} size={20} fallbackIconSrc={iconSrc} />
+                ? <SiteFavicon domain={identity.siteDomain} size={18} fallbackIconSrc={iconSrc} />
                 : <AppGlyph appName={identity.label} iconSrc={iconSrc} size="sm" />}
             </span>
             <span title={rowLabel}>{rowLabel}</span>
@@ -700,6 +714,11 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
           </div>
         );
       })}
+      {additionalIdentityCount > 0 ? (
+        <div className="week-activity-inspector__activity-more" role="listitem">
+          {t("dashboard.week.inspector.additionalActivities", { count: additionalIdentityCount })}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -808,6 +827,7 @@ function ActivityInspectorBody({
       mixed: mixed.hasMixedProductivity && values.productivity === event.productivity,
     },
   ];
+  const hasMixedValues = rows.some((row) => row.mixed);
 
   return (
     <>
@@ -817,6 +837,11 @@ function ActivityInspectorBody({
         </div>
       ) : null}
       <div className="week-activity-inspector__attributes" id={descriptionId}>
+        {hasMixedValues ? (
+          <p className="week-activity-inspector__mixed-summary">
+            {t("dashboard.week.inspector.dominantValuesSummary")}
+          </p>
+        ) : null}
         {rows.map((row) => (
           <DirectAttributeRow
             key={row.field}
@@ -1105,6 +1130,15 @@ export function WeekActivityInspector({
   const canMutate = !actionsDisabledReason && count > 0;
   const expandedAttribute = view === "project" || view === "category" || view === "productivity" ? view : null;
   const selectedProject = projectOptions.find((project) => project.id === values.projectId) ?? null;
+  const displayedEvent: ActivityInspectorEvent = {
+    ...event,
+    projectId: values.projectId,
+    projectName: values.projectId === null ? null : selectedProject?.name ?? event.projectName,
+    projectColor: values.projectId === null ? null : selectedProject?.color ?? event.projectColor,
+    hasMixedProject: new Set(segmentValues.map((item) => item.projectId ?? "__no_project__")).size > 1,
+    hasMixedCategory: new Set(segmentValues.map((item) => item.category)).size > 1,
+    hasMixedProductivity: new Set(segmentValues.map((item) => item.productivity)).size > 1,
+  };
 
   const pickerOptions = useMemo<readonly PickerOption[]>(() => {
     if (expandedAttribute === "project") {
@@ -1387,7 +1421,7 @@ export function WeekActivityInspector({
     >
       {view !== "delete" ? (
         <ActivityInspectorHeader
-          event={event}
+          event={displayedEvent}
           appIcons={appIcons}
           titleId="week-activity-inspector-title"
           closeDisabled={busy}
@@ -1419,13 +1453,7 @@ export function WeekActivityInspector({
 
       {view !== "delete" ? (
         <ActivityInspectorBody
-          event={{
-            ...event,
-            projectId: values.projectId,
-            projectName: values.projectId === null ? null : selectedProject?.name ?? event.projectName,
-            projectColor: values.projectId === null ? null : selectedProject?.color ?? event.projectColor,
-            hasMixedProject: new Set(segmentValues.map((item) => item.projectId ?? "__no_project__")).size > 1,
-          }}
+          event={displayedEvent}
           values={values}
           segments={targetSegments}
           appIcons={appIcons}

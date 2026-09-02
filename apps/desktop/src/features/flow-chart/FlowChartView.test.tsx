@@ -677,7 +677,7 @@ describe("FlowChartView", () => {
 });
 
 describe("FlowChartView activity inspector", () => {
-  it("labels mixed source records as dominant", () => {
+  it("summarizes mixed source records while keeping dominant values accessible", () => {
     const block = makeFlowBlock({
       sourceSegmentIds: ["seg-a", "seg-b"],
       category: "workspace",
@@ -725,8 +725,13 @@ describe("FlowChartView activity inspector", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: /time block: 14:00–14:03/i }));
-    expect(screen.getByText("Workspace · dominant")).toBeTruthy();
-    expect(screen.getByText("Focus · dominant")).toBeTruthy();
+    const inspector = screen.getByRole("dialog", { name: "docs.example.com" });
+    expect(inspector.style.width).toBe("304px");
+    expect(within(inspector).getByText("Mixed values · showing dominant")).toBeTruthy();
+    expect(within(inspector).getByText("Workspace")).toBeTruthy();
+    expect(within(inspector).getByText("Focus")).toBeTruthy();
+    expect(within(inspector).getByRole("button", { name: /Current value: Workspace · dominant/ })).toBeTruthy();
+    expect(within(inspector).getByRole("button", { name: /Current value: Focus · dominant/ })).toBeTruthy();
   });
 
   it("opens the activity inspector from a flow cell", () => {

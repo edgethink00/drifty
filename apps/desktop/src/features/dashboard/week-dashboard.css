@@ -2828,8 +2828,8 @@
    Category, and Productivity. Its listbox is portaled to document.body, so the
    card can stay viewport-clamped without clipping the menu. */
 .week-activity-inspector {
-  --inspector-attribute-label-width: 60px;
-  --inspector-attribute-column-gap: 7px;
+  --inspector-attribute-label-width: 56px;
+  --inspector-attribute-column-gap: 8px;
 }
 
 .week-activity-inspector__heading span {
@@ -2852,7 +2852,15 @@
 .week-activity-inspector__attributes {
   display: grid;
   gap: 1px;
-  padding: 5px 0 7px;
+  padding: 4px 0 6px;
+}
+
+.week-activity-inspector__mixed-summary {
+  margin: 1px 6px 2px;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  font-weight: 560;
+  line-height: 1.3;
 }
 
 .week-activity-inspector__attribute {
@@ -2866,8 +2874,8 @@
   align-items: center;
   column-gap: var(--inspector-attribute-column-gap);
   width: 100%;
-  min-height: 33px;
-  padding: 3px 7px;
+  min-height: 34px;
+  padding: 3px 6px;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -3146,18 +3154,27 @@
 .week-activity-inspector__activity-list {
   display: grid;
   gap: 1px;
-  margin: 0 7px 9px;
-  padding: 5px 0 3px;
+  margin: 0 6px 8px;
+  padding: 4px 0 2px;
   border-top: 1px solid var(--week-inspector-divider);
 }
 
 .week-activity-inspector__activity-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  min-height: 34px;
-  padding: 3px 2px;
+  min-height: 31px;
+  padding: 2px 1px;
+}
+
+.week-activity-inspector__activity-row .usage-identity-icon--sm,
+.week-activity-inspector__activity-row .app-glyph--sm,
+.week-activity-inspector__activity-row .app-icon--sm,
+.week-activity-inspector__activity-row .site-favicon {
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
 }
 
 .week-activity-inspector__activity-row > span:nth-child(2) {
@@ -3181,6 +3198,15 @@
 .week-activity-inspector__activity-row--dominant > span:nth-child(2) {
   color: var(--text);
   font-weight: 620;
+}
+
+.week-activity-inspector__activity-more {
+  min-height: 22px;
+  padding: 3px 1px 2px 31px;
+  color: var(--text-soft);
+  font-size: var(--type-caption-size);
+  font-weight: 580;
+  line-height: 1.3;
 }
 
 .week-activity-inspector__confirmation > strong {
