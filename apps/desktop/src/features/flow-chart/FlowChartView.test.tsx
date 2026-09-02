@@ -108,6 +108,9 @@ describe("FlowChartView", () => {
     // Collapsed rather than display:none so the chip keeps the height of the
     // Focus/Neutral/Drift chips it sits beside.
     expect(foldedLabelRule).not.toContain("display: none;");
+    // Korean "미분류" wraps per character at width:0; keep the folded label
+    // on one line so the chip does not stretch into a tall capsule.
+    expect(foldedLabelRule).toContain("white-space: nowrap;");
     const foldBreakpoint = styles.indexOf("@container (max-width: 820px)");
     const stackBreakpoint = styles.indexOf("@container (max-width: 660px)");
     expect(foldBreakpoint).toBeGreaterThan(-1);

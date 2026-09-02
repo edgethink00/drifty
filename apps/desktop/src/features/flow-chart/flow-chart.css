@@ -460,6 +460,9 @@ button.flow-cell:focus {
     display: inline-block;
     width: 0;
     overflow: hidden;
+    /* Korean "미분류" wraps per character at width:0 and stretches the chip
+       into a tall capsule; English "Unclassified" does not. Keep one line. */
+    white-space: nowrap;
   }
 
   .flow-chart-legend__group--unclassified .flow-chart-legend__parent {
