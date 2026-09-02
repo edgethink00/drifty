@@ -3,12 +3,19 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ANCHORED_CARD_GAP,
   ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX,
+  ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS,
   ANCHORED_CARD_VIEWPORT_PADDING,
   distanceToCardRect,
   getViewportSafeAnchoredPosition,
   isAnchorOutsideViewport,
   trackAnchoredHoverIntent,
 } from "./anchoredCardPosition";
+
+describe("anchored card hover timing", () => {
+  it("caps pointer-bridge stalls at the shared 220ms motion token", () => {
+    expect(ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS).toBe(220);
+  });
+});
 
 describe("getViewportSafeAnchoredPosition", () => {
   const originalInnerWidth = window.innerWidth;

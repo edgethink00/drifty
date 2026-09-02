@@ -873,9 +873,9 @@ describe("WeekDashboard activity inspector", () => {
       // A slow diagonal approach that cuts across empty space below the block.
       fireEvent.mouseMove(body, { clientX: 170, clientY: 150 });
       fireEvent.mouseMove(body, { clientX: 190, clientY: 160 });
-      act(() => vi.advanceTimersByTime(120));
+      act(() => vi.advanceTimersByTime(100));
       fireEvent.mouseMove(body, { clientX: 205, clientY: 170 });
-      act(() => vi.advanceTimersByTime(120));
+      act(() => vi.advanceTimersByTime(100));
       expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
 
       // Turning back and wandering off dismisses it without waiting out the grace window.
@@ -901,9 +901,9 @@ describe("WeekDashboard activity inspector", () => {
       setElementRect(preview, 212, 100, 332, 320);
 
       fireEvent.mouseMove(body, { clientX: 200, clientY: 150 });
-      act(() => vi.advanceTimersByTime(200));
+      act(() => vi.advanceTimersByTime(219));
       expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-      act(() => vi.advanceTimersByTime(100));
+      act(() => vi.advanceTimersByTime(1));
       expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
     } finally {
       vi.runOnlyPendingTimers();

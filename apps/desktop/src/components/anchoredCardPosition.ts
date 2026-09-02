@@ -6,7 +6,7 @@ export const ANCHORED_CARD_VIEWPORT_PADDING = 16;
 // dismissal is pending, pointer travel decides early (see
 // trackAnchoredHoverIntent); this window only caps a pointer that stalls
 // outside the card, and it absorbs portal event-ordering differences.
-export const ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS = 280;
+export const ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS = 220;
 // Travel without getting any closer to the card that dismisses it right away.
 // Roughly one or two pointer samples at ordinary speeds, so a move away from
 // the card reads as immediate while jitter along an approach path is ignored.

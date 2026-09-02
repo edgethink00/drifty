@@ -48,7 +48,7 @@ describe("FlowChartView lifecycle", () => {
 
     const { rerender } = render(<FlowChartView blocks={firstDayBlocks} appIcons={{}} intervalMinutes={3} />);
     fireNativePointerMove(firstElement(screen.getAllByRole("button", { name: /time block: 01:00–01:06/i })), 120, 80);
-    expect(document.querySelector(".week-activity-inspector--preview")?.textContent).toContain("01:00–01:06");
+    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("01:00–01:06");
 
     rerender(<FlowChartView blocks={[]} appIcons={{}} intervalMinutes={3} />);
     expect(document.querySelector(".flow-chart-grid")).toBeNull();
@@ -58,7 +58,7 @@ describe("FlowChartView lifecycle", () => {
 
     fireNativePointerMove(firstElement(nextDayCells), 160, 120);
 
-    expect(document.querySelector(".week-activity-inspector--preview")?.textContent).toContain("02:00–02:06");
+    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("02:00–02:06");
     const highlights = document.querySelectorAll(".flow-hover-group-highlight");
     expect(highlights).toHaveLength(1);
     // Both remounted cells belong to the reattached hover group (row span 2).

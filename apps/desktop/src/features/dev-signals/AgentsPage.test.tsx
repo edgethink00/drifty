@@ -208,7 +208,7 @@ describe("AgentsPage shared dashboard controls", () => {
 
     const dayCell = screen.getAllByRole("button", { name: /drifty_mac/i })[0];
     fireEvent(dayCell, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
-    await waitFor(() => expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')?.textContent).toContain("drifty_mac"));
+    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
 
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     const weekRun = screen.getByLabelText(/Agent run on Fri, 2026-08-28, drifty_mac, Codex/i);

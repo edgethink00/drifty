@@ -131,7 +131,7 @@ export function FlowHoverCard({
   const contextLabel = `${block.siteDomain && block.browserName ? `${block.browserName} · ` : ""}${formatGroupTimeRange(hover.group)} · ${formatLocalizedCompactDurationFromSeconds(hover.group.durationSeconds, effectiveLanguage)}`;
 
   return (
-    <div ref={cardRef} className="flow-hover-card" style={flowHoverCardPosition(hover.x, hover.y)}>
+    <div ref={cardRef} className="flow-hover-card" style={flowHoverCardPosition(hover.x, hover.y)} aria-hidden="true">
       <div className="flow-hover-card__top">
         {block.siteDomain ? <SiteFavicon domain={block.siteDomain} size={24} fallbackIconSrc={iconSrc} /> : <AppGlyph appName={displayName} iconSrc={iconSrc} size="sm" />}
         <div>

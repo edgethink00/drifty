@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { ActivitySegment, ClassificationOptions, FlowIntervalMinutes } from "@drifty/domain";
 import {
@@ -10,6 +10,7 @@ import {
   type ActivityInspectorView,
 } from "../dashboard/WeekActivityInspector";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
+import { FlowHoverCard, moveFlowHoverCardToPointer } from "./FlowChartHoverCards";
 import { buildFlowHoverGroupContributions, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { blockDetailLabel, blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
@@ -114,9 +115,9 @@ export function buildFlowActivityInspectorEvent(
   };
 }
 
-// Main activity previews and their pinned inspector share the same block anchor
-// and card surface. While pinned, the hover state is disabled but the selected
-// group highlight remains in the grid as the visual tether to the card.
+// Pointer inspection stays lightweight and non-interactive so it cannot cover
+// neighboring Flow cells. Keyboard focus keeps the accessible anchored preview;
+// clicking either path opens the full pinned inspector for editing.
 export function FlowHoverLayer({
   gridElement,
   hoverGroupsByCell,
@@ -138,15 +139,25 @@ export function FlowHoverLayer({
 }: FlowHoverLayerProps) {
   const { t } = useLocalization();
   const [hoveredBlock, setHoveredBlock] = useState<AnchoredFlowHoverState | null>(null);
-  const { cancelPointerClear, schedulePointerClear, clearFocusHover, dismissHover } = useFlowChartHoverDelegation({
+  const cardRef = useRef<HTMLDivElement>(null);
+  const { clearFocusHover, dismissHover } = useFlowChartHoverDelegation({
     gridElement,
+    cardRef,
     hoverGroupsByCell,
     setHoveredBlock,
     disabled,
   });
+  const pointerHover = hoveredBlock?.trigger === "pointer" ? hoveredBlock : null;
+  const focusHover = hoveredBlock?.trigger === "focus" ? hoveredBlock : null;
+
+  useLayoutEffect(() => {
+    if (!pointerHover) return;
+    moveFlowHoverCardToPointer(cardRef.current, pointerHover.x, pointerHover.y);
+  }, [pointerHover]);
+
   const highlightedGroup = disabled ? pinnedGroup : hoveredBlock?.group ?? null;
-  const previewEvent = hoveredBlock
-    ? buildFlowActivityInspectorEvent(hoveredBlock.group, { projectsById })
+  const previewEvent = focusHover
+    ? buildFlowActivityInspectorEvent(focusHover.group, { projectsById })
     : null;
   const previewSegments = previewEvent?.segmentIds.flatMap((segmentId) => {
     const segment = segmentsById.get(segmentId);
@@ -169,15 +180,25 @@ export function FlowHoverLayer({
             gridElement,
           )
         : null}
-      {!disabled && hoveredBlock ? (
+      {!disabled && pointerHover ? (
+        <FlowHoverCard
+          hover={pointerHover}
+          appIcons={appIcons}
+          cardRef={cardRef}
+          deviceLabelById={deviceLabelById}
+          projectsById={projectsById}
+          showClassificationSource={false}
+        />
+      ) : null}
+      {!disabled && focusHover ? (
         <ActivityInspectorPreview
           event={previewEvent!}
           segments={previewSegments}
           appIcons={appIcons}
           deviceLabelById={deviceLabelById}
-          anchorElement={hoveredBlock.anchorElement}
-          descriptionTarget={hoveredBlock.triggerElement}
-          restoreFocusOnDismiss={hoveredBlock.trigger === "focus"}
+          anchorElement={focusHover.anchorElement}
+          descriptionTarget={focusHover.triggerElement}
+          restoreFocusOnDismiss
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
           projectOptions={projectOptions}
@@ -187,15 +208,12 @@ export function FlowHoverLayer({
           onOpenAttribute={onOpenActivity
             ? (field: ActivityInspectorAttribute) => {
                 if (field === "project" ? !hasAssignProjectAction : !hasClassifyAction) return;
-                onOpenActivity(hoveredBlock.group, hoveredBlock.triggerElement, field);
+                onOpenActivity(focusHover.group, focusHover.triggerElement, field);
               }
             : undefined}
           onRequestDelete={hasDeleteAction && onOpenActivity
-            ? () => onOpenActivity(hoveredBlock.group, hoveredBlock.triggerElement, "delete")
+            ? () => onOpenActivity(focusHover.group, focusHover.triggerElement, "delete")
             : undefined}
-          onPointerEnter={cancelPointerClear}
-          onPointerLeave={schedulePointerClear}
-          onFocusEnter={cancelPointerClear}
           onFocusLeave={clearFocusHover}
         />
       ) : null}

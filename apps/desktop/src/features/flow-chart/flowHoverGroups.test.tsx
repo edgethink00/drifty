@@ -68,7 +68,7 @@ describe("flow hover groups", () => {
 
     fireNativePointerMove(groupedCells[4], 120, 80);
 
-    const hoverCard = document.querySelector(".week-activity-inspector--preview");
+    const hoverCard = document.querySelector(".flow-hover-card");
     expect(hoverCard?.textContent).toContain("01:00–01:30");
     expect(hoverCard?.textContent).toContain("30m");
     // The whole run is highlighted by a single overlay segment rather than per-cell
@@ -212,9 +212,9 @@ describe("flow hover groups", () => {
 
     render(<FlowChartView blocks={[block]} appIcons={{}} intervalMinutes={4} />);
 
-    fireNativePointerMove(screen.getByRole("button", { name: /time block: 14:08–14:12/i }), 120, 80);
+    fireEvent.click(screen.getByRole("button", { name: /time block: 14:08–14:12/i }));
 
-    const preview = document.querySelector(".week-activity-inspector--preview") as HTMLElement;
+    const preview = document.querySelector('.week-activity-inspector[data-mode="pinned"]') as HTMLElement;
     const rows = Array.from(preview.querySelectorAll<HTMLElement>(".week-activity-inspector__activity-row"));
     expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.children[1]?.textContent)).toEqual(["instagram.com · dominant", "Slack"]);
@@ -243,8 +243,9 @@ describe("flow hover groups", () => {
     });
 
     render(<FlowChartView blocks={[block]} appIcons={{}} intervalMinutes={4} />);
-    fireNativePointerMove(screen.getByRole("button", { name: /time block: 14:08–14:12/i }), 120, 80);
+    fireEvent.click(screen.getByRole("button", { name: /time block: 14:08–14:12/i }));
 
-    expect(document.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(0);
+    const inspector = document.querySelector('.week-activity-inspector[data-mode="pinned"]');
+    expect(inspector?.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(0);
   });
 });

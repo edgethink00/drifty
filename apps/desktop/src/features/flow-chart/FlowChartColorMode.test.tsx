@@ -80,7 +80,7 @@ describe("FlowChartView color mode", () => {
 
     fireEvent(cell, new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
     const preview = await waitFor(() => {
-      const card = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+      const card = document.querySelector<HTMLElement>(".flow-hover-card");
       if (!card) throw new Error("expected activity preview");
       return card;
     });
@@ -182,7 +182,7 @@ describe("FlowChartView color mode", () => {
   it("shows the three shared direct attributes without a classification-source badge", async () => {
     render(<FlowChartView blocks={[makeFlowBlock({ classificationSource: "domain-db" })]} appIcons={{}} intervalMinutes={3} />);
 
-    fireEvent(screen.getByRole("button", { name: /^workspace.*focus/i }), new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
+    fireEvent.focus(screen.getByRole("button", { name: /^workspace.*focus/i }));
     await waitFor(() => expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy());
     const hoverCard = document.querySelector('.week-activity-inspector[data-mode="peek"]') as HTMLElement;
     const attributes = hoverCard.querySelector(".week-activity-inspector__attributes") as HTMLElement;

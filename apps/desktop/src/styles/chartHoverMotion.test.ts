@@ -32,7 +32,8 @@ describe("chart hover motion", () => {
     expect(flowHoverGroupHighlightRule).toContain("position: absolute;");
     expect(flowHoverGroupHighlightRule).toContain("height: calc((100% / var(--flow-row-count)) * var(--flow-hover-row-span));");
     expect(flowHoverGroupHighlightRule).toContain("background: color-mix(in srgb, var(--surface) 26%, transparent);");
-    expect(flowHoverGroupHighlightRule).toContain("animation: flow-hover-group-in 160ms var(--ease-out-quart) both;");
+    expect(flowHoverGroupHighlightRule).not.toContain("animation:");
+    expect(motionStyles).not.toContain("@keyframes flow-hover-group-in");
     expect(flowMarkRule).toContain("transition: opacity 160ms var(--ease-out-quart), background 160ms var(--ease-out-quart), box-shadow 160ms var(--ease-out-quart);");
   });
 

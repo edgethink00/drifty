@@ -409,7 +409,7 @@ describe("FlowChartView", () => {
 
     fireNativePointerMove(cell, 120, 80);
 
-    expect(document.querySelector(".week-activity-inspector--preview")?.textContent).toContain("14:08–14:12");
+    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("14:08–14:12");
   });
 
   it("uses site identity instead of the browser app in hover labels", () => {
@@ -446,107 +446,104 @@ describe("FlowChartView", () => {
     expect(screen.queryByText("Google Chrome")).toBeNull();
   });
 
-  it("keeps the flow preview anchored to its block while the pointer moves", async () => {
+  it("moves the lightweight flow preview with the pointer", async () => {
     render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 
     const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-    setElementRect(cell, 120, 80, 20, 12);
     fireNativePointerMove(cell, 120, 80);
-    const hoverCard = document.querySelector(".week-activity-inspector--preview") as HTMLElement;
+    const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
 
-    expect(hoverCard.style.left).toBe("152px");
-    expect(hoverCard.style.top).toBe("80px");
+    expect(hoverCard.style.left).toBe("136px");
+    expect(hoverCard.style.top).toBe("96px");
+    expect(hoverCard.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
 
     fireNativePointerMove(cell, 320, 190);
 
     await waitFor(() => {
-      expect(hoverCard.style.left).toBe("152px");
-      expect(hoverCard.style.top).toBe("80px");
+      expect(hoverCard.style.left).toBe("336px");
+      expect(hoverCard.style.top).toBe("206px");
     });
   });
 
-  it("keeps the flow preview open during a deliberate pointer crossing into the card", () => {
+  it("keeps pointer scanning non-blocking and dismisses it on the first empty cell", () => {
+    const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+    const grid = container.querySelector<HTMLElement>(".flow-chart-grid");
+    const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
+    if (!grid) throw new Error("expected the flow chart grid");
+
+    fireNativePointerMove(cell, 120, 80);
+    expect(document.querySelector(".flow-hover-card")).toBeTruthy();
+    expect(styles).toMatch(/\.timeline-hover-card,\s*\.flow-hover-card,\s*\.focus-drift-hover-card\s*\{[^}]*pointer-events:\s*none;/);
+
+    fireNativePointerMove(grid, 126, 86);
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
+  });
+
+  it("coalesces rapid flow retargeting into one settled inspector update", () => {
     vi.useFakeTimers();
     try {
-      const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
-      const grid = container.querySelector<HTMLElement>(".flow-chart-grid");
-      const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-      if (!grid) throw new Error("expected the flow chart grid");
-      fireNativePointerMove(cell, 120, 80);
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      const bridge = document.querySelector<HTMLElement>(".week-activity-inspector__hover-bridge");
-      if (!preview || !bridge) throw new Error("expected the anchored activity preview and pointer bridge");
-      expect(bridge.style.width).toBe("12px");
+      const blocks = [
+        makeFlowBlock(),
+        makeFlowBlock({
+          id: "flow-mail",
+          minuteOfDay: 14 * 60 + 3,
+          siteDomain: "mail.example.com",
+          siteTitle: "Mail",
+          windowTitle: "Mail / Inbox",
+          colorKey: "mail.example.com",
+        }),
+        makeFlowBlock({
+          id: "flow-tasks",
+          minuteOfDay: 14 * 60 + 6,
+          siteDomain: "tasks.example.com",
+          siteTitle: "Tasks",
+          windowTitle: "Tasks / Today",
+          colorKey: "tasks.example.com",
+        }),
+      ];
+      const { container } = render(<FlowChartView blocks={blocks} appIcons={{}} intervalMinutes={3} />);
+      const firstCell = container.querySelector<HTMLElement>('button.flow-cell[data-flow-minute="840"]');
+      const secondCell = container.querySelector<HTMLElement>('button.flow-cell[data-flow-minute="843"]');
+      const thirdCell = container.querySelector<HTMLElement>('button.flow-cell[data-flow-minute="846"]');
+      if (!firstCell || !secondCell || !thirdCell) throw new Error("expected three adjacent flow cells");
 
-      fireEvent.pointerLeave(grid);
-      act(() => vi.advanceTimersByTime(180));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+      fireNativePointerMove(firstCell, 120, 80);
+      expect(document.querySelector(".flow-hover-card")?.textContent).toContain("docs.example.com");
 
-      fireEvent.pointerEnter(bridge);
-      fireEvent.pointerLeave(bridge);
-      fireEvent.pointerEnter(preview);
-      act(() => vi.advanceTimersByTime(180));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+      fireNativePointerMove(secondCell, 140, 80);
+      fireNativePointerMove(thirdCell, 160, 80);
+      expect(document.querySelector(".flow-hover-card")?.textContent).toContain("docs.example.com");
 
-      fireEvent.pointerLeave(preview);
-      act(() => vi.advanceTimersByTime(300));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
+      act(() => vi.advanceTimersByTime(15));
+      expect(document.querySelector(".flow-hover-card")?.textContent).toContain("docs.example.com");
+
+      act(() => vi.advanceTimersByTime(1));
+      const settledPreview = document.querySelector(".flow-hover-card");
+      expect(settledPreview?.textContent).toContain("tasks.example.com");
+      expect(settledPreview?.textContent).not.toContain("mail.example.com");
     } finally {
       vi.runOnlyPendingTimers();
       vi.useRealTimers();
     }
   });
 
-  it("dismisses the flow preview as soon as the pointer moves away from the card", () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
-      const grid = container.querySelector<HTMLElement>(".flow-chart-grid");
-      const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-      if (!grid) throw new Error("expected the flow chart grid");
-      setElementRect(cell, 120, 80, 20, 12);
-      fireNativePointerMove(cell, 130, 86);
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 152, 80, 332, 280);
+  it("dismisses a pointer-opened flow preview immediately when the pointer leaves the app", () => {
+    const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
+    const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
 
-      // Rolling onto empty grid space to the left, away from the card.
-      fireNativePointerMove(grid, 126, 86);
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-      fireNativePointerMove(grid, 110, 86);
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
-  });
+    fireNativePointerMove(cell, 120, 80);
+    expect(document.querySelector(".flow-hover-card")).toBeTruthy();
 
-  it("keeps the flow preview while the pointer closes in on the card across empty cells", () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
-      const grid = container.querySelector<HTMLElement>(".flow-chart-grid");
-      const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-      if (!grid) throw new Error("expected the flow chart grid");
-      setElementRect(cell, 120, 80, 20, 12);
-      fireNativePointerMove(cell, 130, 86);
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 152, 80, 332, 280);
+    fireEvent(document, new MouseEvent("mouseleave"));
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
 
-      fireNativePointerMove(grid, 134, 100);
-      fireNativePointerMove(grid, 142, 110);
-      act(() => vi.advanceTimersByTime(150));
-      fireNativePointerMove(grid, 150, 120);
-      act(() => vi.advanceTimersByTime(100));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+    fireNativePointerMove(cell, 120, 80);
+    expect(document.querySelector(".flow-hover-card")).toBeTruthy();
 
-      fireNativePointerMove(grid, 136, 128);
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
+    fireEvent(window, new Event("blur"));
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
+    expect(container.querySelector(".flow-hover-group-highlight")).toBeNull();
   });
 
   it("keeps the rendered flow hover card inside a narrow viewport", async () => {
@@ -559,16 +556,15 @@ describe("FlowChartView", () => {
       render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
 
       const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-      setElementRect(cell, 340, 420, 20, 12);
       fireNativePointerMove(cell, 120, 80);
-      const card = document.querySelector(".week-activity-inspector--preview") as HTMLElement;
+      const card = document.querySelector(".flow-hover-card") as HTMLElement;
       setElementRect(card, 0, 0, 332, 120);
 
-      fireEvent(window, new Event("resize"));
+      fireNativePointerMove(cell, 370, 450);
 
       await waitFor(() => {
-        expect(card.style.left).toBe("16px");
-        expect(card.style.top).toBe("344px");
+        expect(card.style.left).toBe("22px");
+        expect(card.style.top).toBe("314px");
       });
     } finally {
       Object.defineProperty(window, "innerWidth", { configurable: true, value: originalInnerWidth });
@@ -576,7 +572,7 @@ describe("FlowChartView", () => {
     }
   });
 
-  it("uses the entry block as a stable anchor while moving through the same flow group", async () => {
+  it("keeps following the pointer while moving through the same flow group", async () => {
     const firstBlock = makeFlowBlock();
     const nextBlock = makeFlowBlock({
       id: "flow-block-next",
@@ -585,19 +581,17 @@ describe("FlowChartView", () => {
     render(<FlowChartView blocks={[firstBlock, nextBlock]} appIcons={{}} intervalMinutes={3} />);
 
     const [firstCell, nextCell] = screen.getAllByRole("button", { name: /time block: 14:00–14:06/i });
-    setElementRect(firstCell, 120, 80, 20, 12);
-    setElementRect(nextCell, 320, 190, 20, 12);
     fireNativePointerMove(nextCell, 320, 190);
-    const hoverCard = document.querySelector(".week-activity-inspector--preview") as HTMLElement;
+    const hoverCard = document.querySelector(".flow-hover-card") as HTMLElement;
 
-    expect(hoverCard.style.left).toBe("352px");
-    expect(hoverCard.style.top).toBe("190px");
+    expect(hoverCard.style.left).toBe("336px");
+    expect(hoverCard.style.top).toBe("206px");
 
     fireNativePointerMove(firstCell, 120, 80);
 
     await waitFor(() => {
-      expect(hoverCard.style.left).toBe("352px");
-      expect(hoverCard.style.top).toBe("190px");
+      expect(hoverCard.style.left).toBe("136px");
+      expect(hoverCard.style.top).toBe("96px");
     });
   });
 
@@ -753,7 +747,7 @@ describe("FlowChartView activity inspector", () => {
     expect(screen.getByRole("button", { name: /Delete activity/ })).toBeTruthy();
   });
 
-  it("pins the same flow card surface and keeps the group highlighted", () => {
+  it("opens the full pinned inspector from the lightweight pointer preview", () => {
     const block = makeFlowBlock({ sourceSegmentIds: ["seg-docs"] });
     render(
       <FlowChartView
@@ -765,17 +759,17 @@ describe("FlowChartView activity inspector", () => {
     );
     const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
     fireNativePointerMove(cell, 180, 120);
-    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+    const preview = document.querySelector<HTMLElement>(".flow-hover-card");
     expect(preview).toBeTruthy();
-    expect(within(preview!).getByRole("button", { name: /Change Category/ })).toBeTruthy();
-    expect(within(preview!).getByRole("button", { name: /Delete activity/ })).toBeTruthy();
-    expect(preview?.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
-    const previewText = preview?.textContent;
+    expect(preview?.textContent).toContain("docs.example.com");
+    expect(preview?.getAttribute("aria-hidden")).toBe("true");
+    expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
     fireEvent.click(cell);
     const inspector = screen.getByRole("dialog", { name: "docs.example.com" });
-    expect(inspector.textContent).toBe(previewText);
-    expect(inspector.style.left).toBe(preview?.style.left);
-    expect(inspector.style.top).toBe(preview?.style.top);
+    expect(within(inspector).getByRole("button", { name: /Change Category/ })).toBeTruthy();
+    expect(within(inspector).getByRole("button", { name: /Delete activity/ })).toBeTruthy();
+    expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
     expect(document.querySelector(".flow-hover-group-highlight.is-pinned")).toBeTruthy();
     expect(cell.getAttribute("aria-expanded")).toBe("true");
@@ -869,25 +863,12 @@ describe("FlowChartView activity inspector", () => {
     const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
     act(() => unrelatedControl.focus());
     fireNativePointerMove(cell, 180, 120);
-    expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
+    expect(document.querySelector(".flow-hover-card")).toBeTruthy();
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(screen.queryByRole("dialog", { name: "docs.example.com" })).toBeNull();
+    expect(document.querySelector(".flow-hover-card")).toBeNull();
     expect(document.activeElement).toBe(unrelatedControl);
-  });
-
-  it("restores the source block after keyboard focus enters a pointer preview", async () => {
-    render(<FlowChartView blocks={[makeFlowBlock()]} appIcons={{}} intervalMinutes={3} />);
-    const cell = screen.getByRole("button", { name: /time block: 14:00–14:03/i });
-    fireNativePointerMove(cell, 180, 120);
-    const preview = screen.getByRole("dialog", { name: "docs.example.com" });
-    const closeButton = within(preview).getByRole("button", { name: "Close activity inspector" });
-    act(() => closeButton.focus());
-
-    fireEvent.click(closeButton);
-
-    await waitFor(() => expect(document.activeElement).toBe(cell));
   });
 
   it("leaves a pointer preview open when another control consumes Escape", () => {
@@ -904,7 +885,7 @@ describe("FlowChartView activity inspector", () => {
 
     fireEvent.keyDown(escapeOwner, { key: "Escape" });
 
-    expect(screen.getByRole("dialog", { name: "docs.example.com" })).toBeTruthy();
+    expect(document.querySelector(".flow-hover-card")).toBeTruthy();
     expect(document.activeElement).toBe(escapeOwner);
   });
 
