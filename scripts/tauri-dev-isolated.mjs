@@ -7,6 +7,7 @@
 //     the next free port in range when the derived one is taken)
 //   - bundle identifier: so.drifty.mac.wt-<slug>  (separate single-instance
 //     socket AND separate Application Support data dir / tracker DB)
+//   - auth Keychain:    service scoped to the isolated bundle identifier
 //   - devUrl + devCsp:  rewritten to the isolated port so HMR works
 //
 // The base tauri.conf.json is never modified; overrides go through the Tauri
@@ -85,6 +86,13 @@ export function parseForcedPort(value) {
     throw new RangeError(`must be 1024-65535 and not ${BASE_PORT}`);
   }
   return port;
+}
+
+export function isolatedAuthSessionKeychainService(identifier) {
+  if (typeof identifier !== "string" || !identifier.startsWith("so.drifty.mac.wt-")) {
+    throw new Error("isolated auth session service requires a worktree bundle identifier");
+  }
+  return `so.drifty.auth-session.${identifier}`;
 }
 
 export function parsePortOwnershipResult(result) {
@@ -339,6 +347,7 @@ function run() {
   writeFileSync(patchPath, JSON.stringify(patch, null, 2));
 
   const childEnv = buildChildEnv();
+  childEnv.DRIFTY_AUTH_SESSION_KEYCHAIN_SERVICE = isolatedAuthSessionKeychainService(identifier);
   const runnerKey = cargoRunnerEnvKey();
   if (runnerKey) {
     childEnv[runnerKey] = path.join(repoRoot, "scripts", "tauri-dev-macos-runner.sh");

@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager};
 const AUTH_SESSION_FILE_NAME: &str = "auth-session.json";
 const AUTH_SESSION_KEYCHAIN_SERVICE: &str = "so.drifty.auth-session";
 const AUTH_SESSION_KEYCHAIN_ACCOUNT: &str = "desktop";
+const AUTH_SESSION_KEYCHAIN_SERVICE_OVERRIDE: &str = "DRIFTY_AUTH_SESSION_KEYCHAIN_SERVICE";
 
 fn auth_session_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
@@ -16,8 +17,33 @@ fn auth_session_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join(AUTH_SESSION_FILE_NAME))
 }
 
+fn resolve_keychain_service(override_value: Option<&str>, debug_build: bool) -> String {
+    if debug_build {
+        if let Some(value) = override_value.map(str::trim).filter(|value| {
+            value.starts_with("so.drifty.auth-session.")
+                && value.len() <= 255
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-'))
+        }) {
+            return value.to_string();
+        }
+    }
+
+    AUTH_SESSION_KEYCHAIN_SERVICE.to_string()
+}
+
+fn keychain_service() -> String {
+    resolve_keychain_service(
+        std::env::var(AUTH_SESSION_KEYCHAIN_SERVICE_OVERRIDE)
+            .ok()
+            .as_deref(),
+        cfg!(debug_assertions),
+    )
+}
+
 fn keychain_entry() -> Result<Entry, String> {
-    Entry::new(AUTH_SESSION_KEYCHAIN_SERVICE, AUTH_SESSION_KEYCHAIN_ACCOUNT)
+    Entry::new(&keychain_service(), AUTH_SESSION_KEYCHAIN_ACCOUNT)
         .map_err(|error| format!("Unable to open auth session credential: {error}"))
 }
 
@@ -73,4 +99,29 @@ pub fn clear_saved_session(app: &AppHandle) -> Result<(), String> {
 
     keychain_result?;
     legacy_result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_keychain_service, AUTH_SESSION_KEYCHAIN_SERVICE};
+
+    #[test]
+    fn isolates_debug_auth_sessions_without_changing_release_storage() {
+        let isolated = "so.drifty.auth-session.so.drifty.mac.wt-calendar-qa";
+        assert_eq!(resolve_keychain_service(Some(isolated), true), isolated);
+        assert_eq!(
+            resolve_keychain_service(Some(isolated), false),
+            AUTH_SESSION_KEYCHAIN_SERVICE
+        );
+    }
+
+    #[test]
+    fn rejects_unscoped_or_malformed_debug_auth_session_overrides() {
+        for value in ["other.service", "so.drifty.auth-session.bad/value", ""] {
+            assert_eq!(
+                resolve_keychain_service(Some(value), true),
+                AUTH_SESSION_KEYCHAIN_SERVICE
+            );
+        }
+    }
 }

@@ -26,6 +26,7 @@ const GOOGLE_CALENDAR_EVENTS_ENDPOINT: &str =
 const GOOGLE_CALENDAR_READ_SCOPE: &str =
     "https://www.googleapis.com/auth/calendar.events.owned.readonly";
 const GOOGLE_CALENDAR_KEYCHAIN_SERVICE: &str = "so.drifty.google-calendar";
+const PRODUCTION_APP_IDENTIFIER: &str = "so.drifty.mac";
 const OAUTH_CALLBACK_PATH: &str = "/oauth2/callback";
 const OAUTH_CALLBACK_TIMEOUT: Duration = Duration::from_secs(120);
 const OAUTH_HTTP_READ_TIMEOUT: Duration = Duration::from_secs(2);
@@ -463,17 +464,33 @@ fn validate_user_id(user_id: &str) -> Result<String, String> {
     Ok(parsed.to_string())
 }
 
-fn keychain_entry(user_id: &str) -> Result<Entry, String> {
+fn keychain_service_for_identifier(identifier: &str) -> String {
+    let identifier = identifier.trim();
+    if identifier == PRODUCTION_APP_IDENTIFIER {
+        return GOOGLE_CALENDAR_KEYCHAIN_SERVICE.to_string();
+    }
+
+    // Keep production credentials on the original service for upgrade
+    // compatibility, while isolating worktree and staging builds. Ad-hoc dev
+    // signatures otherwise collide with an existing item's Keychain ACL and
+    // can neither read nor update it without an interactive prompt.
+    format!("{GOOGLE_CALENDAR_KEYCHAIN_SERVICE}.{identifier}")
+}
+
+fn keychain_entry(app: &AppHandle, user_id: &str) -> Result<Entry, String> {
     let normalized = validate_user_id(user_id)?;
     Entry::new(
-        GOOGLE_CALENDAR_KEYCHAIN_SERVICE,
+        &keychain_service_for_identifier(&app.config().identifier),
         &format!("supabase-user:{normalized}"),
     )
     .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_STORE_UNAVAILABLE".to_string())
 }
 
-fn load_credential(user_id: &str) -> Result<Option<GoogleCalendarCredential>, String> {
-    match keychain_entry(user_id)?.get_password() {
+fn load_credential(
+    app: &AppHandle,
+    user_id: &str,
+) -> Result<Option<GoogleCalendarCredential>, String> {
+    match keychain_entry(app, user_id)?.get_password() {
         Ok(value) => serde_json::from_str(&value)
             .map(Some)
             .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_INVALID".to_string()),
@@ -482,16 +499,20 @@ fn load_credential(user_id: &str) -> Result<Option<GoogleCalendarCredential>, St
     }
 }
 
-fn save_credential(user_id: &str, credential: &GoogleCalendarCredential) -> Result<(), String> {
+fn save_credential(
+    app: &AppHandle,
+    user_id: &str,
+    credential: &GoogleCalendarCredential,
+) -> Result<(), String> {
     let value = serde_json::to_string(credential)
         .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_INVALID".to_string())?;
-    keychain_entry(user_id)?
+    keychain_entry(app, user_id)?
         .set_password(&value)
         .map_err(|_| "GOOGLE_CALENDAR_CREDENTIAL_SAVE_FAILED".to_string())
 }
 
-fn delete_credential(user_id: &str) -> Result<(), String> {
-    match keychain_entry(user_id)?.delete_credential() {
+fn delete_credential(app: &AppHandle, user_id: &str) -> Result<(), String> {
+    match keychain_entry(app, user_id)?.delete_credential() {
         Ok(()) | Err(KeyringError::NoEntry) => Ok(()),
         Err(_) => Err("GOOGLE_CALENDAR_CREDENTIAL_DELETE_FAILED".to_string()),
     }
@@ -824,6 +845,7 @@ pub async fn google_calendar_authorize(
 
 #[tauri::command]
 pub fn google_calendar_finalize(
+    app: AppHandle,
     state: State<'_, GoogleCalendarState>,
     user_id: String,
     attempt_id: String,
@@ -842,7 +864,7 @@ pub fn google_calendar_finalize(
 
     validate_pending_purpose(pending.purpose, purpose)?;
     if let Some(credential) = pending.credential {
-        save_credential(&normalized_user_id, &credential)?;
+        save_credential(&app, &normalized_user_id, &credential)?;
         return Ok(status_from_credential(Some(credential)));
     }
     Ok(disconnected_status())
@@ -863,19 +885,23 @@ pub fn google_calendar_discard_pending(
 }
 
 #[tauri::command]
-pub fn google_calendar_status(user_id: String) -> Result<GoogleCalendarStatus, String> {
-    Ok(status_from_credential(load_credential(&user_id)?))
+pub fn google_calendar_status(
+    app: AppHandle,
+    user_id: String,
+) -> Result<GoogleCalendarStatus, String> {
+    Ok(status_from_credential(load_credential(&app, &user_id)?))
 }
 
 #[tauri::command]
 pub async fn google_calendar_events(
+    app: AppHandle,
     user_id: String,
     start: String,
     end: String,
 ) -> Result<Vec<GoogleCalendarEvent>, String> {
     validate_calendar_range(&start, &end)?;
-    let credential =
-        load_credential(&user_id)?.ok_or_else(|| "GOOGLE_CALENDAR_NOT_CONNECTED".to_string())?;
+    let credential = load_credential(&app, &user_id)?
+        .ok_or_else(|| "GOOGLE_CALENDAR_NOT_CONNECTED".to_string())?;
     let client_id = configured_client_id()
         .ok_or_else(|| "GOOGLE_CALENDAR_NOT_CONFIGURED".to_string())?
         .to_string();
@@ -898,19 +924,35 @@ pub async fn google_calendar_events(
 }
 
 #[tauri::command]
-pub fn google_calendar_disconnect(user_id: String) -> Result<GoogleCalendarStatus, String> {
-    delete_credential(&user_id)?;
+pub fn google_calendar_disconnect(
+    app: AppHandle,
+    user_id: String,
+) -> Result<GoogleCalendarStatus, String> {
+    delete_credential(&app, &user_id)?;
     Ok(disconnected_status())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        authorization_url, granted_scope_set, is_valid_google_client_id, normalize_calendar_event,
-        parse_loopback_request, pkce_challenge, validate_calendar_range, validate_pending_purpose,
+        authorization_url, granted_scope_set, is_valid_google_client_id,
+        keychain_service_for_identifier, normalize_calendar_event, parse_loopback_request,
+        pkce_challenge, validate_calendar_range, validate_pending_purpose,
         GoogleCalendarAuthPurpose, GoogleCalendarEventTimeWire, GoogleCalendarEventWire,
-        OAuthCallback, GOOGLE_CALENDAR_READ_SCOPE,
+        OAuthCallback, GOOGLE_CALENDAR_KEYCHAIN_SERVICE, GOOGLE_CALENDAR_READ_SCOPE,
     };
+
+    #[test]
+    fn preserves_production_keychain_service_and_isolates_non_production_bundles() {
+        assert_eq!(
+            keychain_service_for_identifier("so.drifty.mac"),
+            GOOGLE_CALENDAR_KEYCHAIN_SERVICE
+        );
+        assert_eq!(
+            keychain_service_for_identifier("so.drifty.mac.wt-calendar-qa"),
+            "so.drifty.google-calendar.so.drifty.mac.wt-calendar-qa"
+        );
+    }
 
     #[test]
     fn validates_google_desktop_client_ids() {
