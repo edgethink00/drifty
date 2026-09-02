@@ -526,32 +526,38 @@ pub(crate) fn toggle_tracking(app: &AppHandle) {
 }
 
 pub(crate) fn pause_tracking_forever(app: &AppHandle) {
+    let worker_app = app.clone();
+    let _ = tauri::async_runtime::spawn_blocking(move || {
+        if let Err(error) = pause_tracking_forever_blocking(&worker_app) {
+            eprintln!("[tracking-pause] Could not pause tracking: {error}");
+        }
+    });
+}
+
+pub(crate) fn pause_tracking_forever_blocking(app: &AppHandle) -> Result<(), String> {
     let pause_state = app.state::<TrackingPauseState>();
     let _operation = pause_state.lock_operation();
+    if pause_state.snapshot().is_active() {
+        return Ok(());
+    }
     let controller = app.state::<TrackerController>();
-    let is_running = controller
-        .get_status(app)
-        .map(|status| status.running)
-        .unwrap_or(false);
-    if !is_running {
-        return;
-    }
-    if let Err(error) = tracking_pause::prepare_indefinite_pause(app) {
-        eprintln!("[tracking-pause] Refusing an unpersisted indefinite pause: {error}");
-        return;
-    }
+    tracking_pause::prepare_indefinite_pause(app)
+        .map_err(|error| format!("Could not save the pause before stopping tracking: {error}"))?;
     match tracking_pause::finish_indefinite_pause_stop(app, &controller, controller.stop(app)) {
         tracking_pause::IndefinitePauseStopOutcome::Paused(_status) => {
-            refresh_tracking_controls(app, Some(false));
+            queue_tracking_controls_refresh(app, Some(false));
+            Ok(())
         }
         tracking_pause::IndefinitePauseStopOutcome::StillRunning(status) => {
-            refresh_tracking_controls(app, Some(status.running));
+            queue_tracking_controls_refresh(app, Some(status.running));
+            Err("The tracker still reports that it is running.".to_string())
         }
         tracking_pause::IndefinitePauseStopOutcome::Ambiguous(error) => {
             eprintln!(
-                "[tracking-pause] Preserving timed-menu pause after an ambiguous stop: {error}"
+                "[tracking-pause] Preserving indefinite pause after an ambiguous stop: {error}"
             );
-            refresh_tracking_controls(app, Some(false));
+            queue_tracking_controls_refresh(app, Some(false));
+            Ok(())
         }
     }
 }
@@ -577,6 +583,10 @@ fn update_cached_tracker_running(app: &AppHandle, running: Option<bool>) {
             latest.set_tracker_running(running);
         }
     }
+}
+
+pub(crate) fn cached_tracker_running(app: &AppHandle) -> Option<bool> {
+    latest_tray_drift_alarm_status(app).tracker_running()
 }
 
 /// Equality key over everything that feeds the tray icon rasterizer. The 60s

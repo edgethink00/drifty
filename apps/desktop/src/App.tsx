@@ -3988,6 +3988,16 @@ export default function App() {
   }, [devModeEnabled]);
 
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void invoke("quit_confirmation_set_language", {
+      language: localization.effectiveLanguage,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : toErrorMessage(error);
+      console.warn("Failed to sync quit confirmation language", message);
+    });
+  }, [localization.effectiveLanguage]);
+
+  useEffect(() => {
     const forceChromiumAxCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxCaptureEnabled;
     const forceFrontmostFallbackCapture = DEV_SETTINGS_ENABLED && devModeEnabled && forceFrontmostFallbackCaptureEnabled;
     const forceBrowserHistoryUrlFallback = DEV_SETTINGS_ENABLED && devModeEnabled && forceBrowserHistoryUrlFallbackEnabled;

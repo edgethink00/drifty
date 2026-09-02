@@ -20,6 +20,7 @@ fn main() {
             "accessibility_get_status",
             "accessibility_request_access",
             "app_menu_set_dev_mode_checked",
+            "quit_confirmation_set_language",
             "app_restart_after_update",
             "developer_check_pre_release_update",
             "developer_install_pre_release_update",

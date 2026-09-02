@@ -10,6 +10,7 @@ pub(crate) mod app_menu_id {
     pub(crate) const DEV_MODE: &str = "drifty-app-menu-dev-mode";
     pub(crate) const CHECK_LATEST_BUILD: &str = "drifty-app-menu-check-latest-build";
     pub(crate) const BUILD_INFO: &str = "drifty-app-menu-build-info";
+    pub(crate) const QUIT: &str = "drifty-app-menu-quit";
 }
 
 pub(crate) mod tray_menu_id {
@@ -49,6 +50,7 @@ impl ShellAction {
             app_menu_id::SETTINGS => Some(Self::Settings),
             app_menu_id::DEV_MODE => Some(Self::ToggleDevMode),
             app_menu_id::CHECK_LATEST_BUILD => Some(Self::CheckLatestBuild),
+            app_menu_id::QUIT => Some(Self::Quit),
             _ => None,
         }
     }
@@ -81,7 +83,7 @@ enum ShellActionEffect {
     PauseTrackingFor(u64),
     PauseTrackingForever,
     EmitMainWindowEvent(&'static str),
-    ExitApp(i32),
+    RequestQuit,
 }
 
 impl ShellAction {
@@ -109,7 +111,7 @@ impl ShellAction {
                 ShellActionEffect::RevealMainWindow,
                 ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_LATEST_BUILD),
             ],
-            Self::Quit => &[ShellActionEffect::ExitApp(0)],
+            Self::Quit => &[ShellActionEffect::RequestQuit],
         }
     }
 }
@@ -120,7 +122,7 @@ trait ShellActionTarget {
     fn pause_tracking_for(&mut self, minutes: u64);
     fn pause_tracking_forever(&mut self);
     fn emit_main_window_event(&mut self, event: &'static str);
-    fn exit_app(&mut self, exit_code: i32);
+    fn request_quit(&mut self);
 }
 
 pub(crate) fn dispatch(app: &AppHandle, action: ShellAction) {
@@ -136,7 +138,7 @@ fn dispatch_to_target(action: ShellAction, target: &mut impl ShellActionTarget) 
             ShellActionEffect::PauseTrackingFor(minutes) => target.pause_tracking_for(minutes),
             ShellActionEffect::PauseTrackingForever => target.pause_tracking_forever(),
             ShellActionEffect::EmitMainWindowEvent(event) => target.emit_main_window_event(event),
-            ShellActionEffect::ExitApp(exit_code) => target.exit_app(exit_code),
+            ShellActionEffect::RequestQuit => target.request_quit(),
         }
     }
 }
@@ -168,8 +170,8 @@ impl ShellActionTarget for TauriShellActionTarget<'_> {
         }
     }
 
-    fn exit_app(&mut self, exit_code: i32) {
-        self.app.exit(exit_code);
+    fn request_quit(&mut self) {
+        crate::quit_confirmation::request_quit(self.app);
     }
 }
 
@@ -205,8 +207,8 @@ mod tests {
                 .push(ShellActionEffect::EmitMainWindowEvent(event));
         }
 
-        fn exit_app(&mut self, exit_code: i32) {
-            self.effects.push(ShellActionEffect::ExitApp(exit_code));
+        fn request_quit(&mut self) {
+            self.effects.push(ShellActionEffect::RequestQuit);
         }
     }
 
@@ -220,6 +222,10 @@ mod tests {
             ShellAction::from_app_menu_id(app_menu_id::CHECK_FOR_UPDATES),
             ShellAction::from_tray_menu_id(tray_menu_id::UPDATE_STATUS),
         );
+        assert_eq!(
+            ShellAction::from_app_menu_id(app_menu_id::QUIT),
+            ShellAction::from_tray_menu_id(tray_menu_id::QUIT),
+        );
     }
 
     #[test]
@@ -232,6 +238,7 @@ mod tests {
                 app_menu_id::CHECK_LATEST_BUILD,
                 ShellAction::CheckLatestBuild,
             ),
+            (app_menu_id::QUIT, ShellAction::Quit),
         ] {
             assert_eq!(ShellAction::from_app_menu_id(id), Some(action));
         }
@@ -270,6 +277,7 @@ mod tests {
             app_menu_id::SETTINGS,
             app_menu_id::DEV_MODE,
             app_menu_id::CHECK_LATEST_BUILD,
+            app_menu_id::QUIT,
         ] {
             assert_eq!(ShellAction::from_tray_menu_id(id), None, "{id}");
         }
@@ -299,6 +307,7 @@ mod tests {
                 app_menu_id::CHECK_LATEST_BUILD,
                 ShellAction::CheckLatestBuild,
             ),
+            (app_menu_id::QUIT, ShellAction::Quit),
             (tray_menu_id::OPEN_DASHBOARD, ShellAction::OpenDashboard),
             (tray_menu_id::TRACKING_TOGGLE, ShellAction::ToggleTracking),
             (
@@ -439,7 +448,7 @@ mod tests {
                     ShellActionEffect::EmitMainWindowEvent(EVENT_CHECK_LATEST_BUILD),
                 ][..],
             ),
-            (ShellAction::Quit, &[ShellActionEffect::ExitApp(0)][..]),
+            (ShellAction::Quit, &[ShellActionEffect::RequestQuit][..]),
         ];
 
         for (action, expected_effects) in cases {

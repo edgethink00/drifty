@@ -8,6 +8,7 @@ mod donut_icon;
 mod living_soul_store;
 mod observability;
 mod openrouter_key_store;
+mod quit_confirmation;
 mod shell_action;
 mod site_icons;
 mod tracker;
@@ -21,6 +22,7 @@ use std::{
 };
 
 use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_menu};
+use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
     ai_classification_openai_chat, cloud_sync_http_post,
@@ -432,6 +434,7 @@ pub fn run() {
         .manage(TrayRefreshWorker::default())
         .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
+        .manage(QuitConfirmationState::default())
         .manage(AppExitCoordinator::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
@@ -594,6 +597,7 @@ pub fn run() {
             ai_classification_anthropic_chat,
             ai_classification_openai_chat,
             app_menu_set_dev_mode_checked,
+            quit_confirmation_set_language,
             app_restart_after_update,
             developer_check_pre_release_update,
             developer_install_pre_release_update,

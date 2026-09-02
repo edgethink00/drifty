@@ -123,7 +123,13 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let hide = PredefinedMenuItem::hide(app, Some("Hide Drifty"))?;
     let hide_others = PredefinedMenuItem::hide_others(app, Some("Hide Others"))?;
     let show_all = PredefinedMenuItem::show_all(app, Some("Show All"))?;
-    let quit = PredefinedMenuItem::quit(app, Some("Quit Drifty"))?;
+    let quit = MenuItem::with_id(
+        app,
+        app_menu_id::QUIT,
+        "Quit Drifty",
+        true,
+        Some("CmdOrCtrl+Q"),
+    )?;
 
     Submenu::with_id_and_items(
         app,
