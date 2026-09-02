@@ -2231,7 +2231,7 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "dashboard.week.noActiveDays": "활동한 날 없음",
   "dashboard.week.averageValue": "평균 {{minutes}}분",
   "dashboard.week.noSessions": "세션 없음",
-  "dashboard.week.peakDay": "가장 많이 기록한 날",
+  "dashboard.week.peakDay": "최다 기록일",
   "dashboard.week.categoryAria": "주간 카테고리 분류",
   "dashboard.week.noActivity": "활동 없음",
   "dashboard.week.someRecordsMissing": "일부 원본 기록을 더 이상 찾을 수 없습니다. 수정하려면 주간 화면을 새로고침하세요.",

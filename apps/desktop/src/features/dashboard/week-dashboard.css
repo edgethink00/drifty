@@ -2354,6 +2354,14 @@
   padding: 6px 5px 7px;
 }
 
+.page--week-dashboard .week-v2-side__content .metric-tile .eyebrow {
+  /* Korean metric labels should wrap as short phrases, never as orphaned
+     syllables at the edge of the two-column summary grid. */
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
 /* Week calendar = one rounded white bordered inner block that includes the
    legend (control row) AND the grid, like Day's flow-chart card. */
 .page--week-dashboard .week-v2-calendar__legend {

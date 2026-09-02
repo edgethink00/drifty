@@ -7,6 +7,7 @@ import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } fro
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { readAppStyles } from "../../test/readStyles";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 const styles = readAppStyles();
 
@@ -1287,6 +1288,26 @@ describe("WeekDashboard breakdown panel", () => {
     expect(within(tiles[3]).getByText("Apps")).toBeTruthy();
     expect(within(tiles[3]).getByText("2")).toBeTruthy();
     expect(within(tiles[3]).getByText("Visual Studio Code")).toBeTruthy();
+  });
+
+  it("keeps the Korean peak-day label compact and wraps metric labels by phrase", () => {
+    const { container } = render(
+      <LocalizationTestProvider language="ko">
+        {weekDashboardElement()}
+      </LocalizationTestProvider>,
+    );
+    const summary = container.querySelector<HTMLElement>('[aria-label="주간 요약 지표"]');
+    const peakTile = summary?.querySelector<HTMLElement>(".insight-summary__tile--peak");
+    const eyebrowRule = styles.match(
+      /\.page--week-dashboard \.week-v2-side__content \.metric-tile \.eyebrow\s*\{(?<body>[^}]*)}/,
+    )?.groups?.body ?? "";
+
+    expect(peakTile).toBeTruthy();
+    expect(within(peakTile!).getByText("최다 기록일")).toBeTruthy();
+    expect(within(peakTile!).queryByText("가장 많이 기록한 날")).toBeNull();
+    expect(eyebrowRule).toContain("overflow-wrap: anywhere;");
+    expect(eyebrowRule).toContain("word-break: keep-all;");
+    expect(eyebrowRule).toContain("text-wrap: balance;");
   });
 
   it("keeps empty and tied weekly summary states deterministic", () => {
