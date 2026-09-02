@@ -352,14 +352,24 @@ export function lockAgentsIntensityPeak(args: {
 
 export type AgentsTimelineColorMode = "intensity" | "repo";
 
-export const AGENTS_WEEK_BUCKET_MINUTES = 5;
+/**
+ * Small gaps between adjacent turns belong to the same visible run. Agent logs
+ * are message-shaped, so requiring exact overlap turns one working session
+ * into a barcode. The gap is fixed for Day and Week and does not depend on the
+ * selected colour mode.
+ */
+export const AGENTS_RUN_GAP_MINUTES = 5;
 
-export type AgentsTimelineSegment = {
+export type AgentsRunStretch = {
   readonly start: number;
   readonly end: number;
+  /** Overlap-merged wall-clock minutes with an agent actually running. */
+  readonly activeMinutes: number;
   readonly peakConcurrency: number;
   readonly topRepo: string | null;
   readonly providers: readonly string[];
+  readonly models: readonly string[];
+  readonly commitCount: number;
   readonly intensityBand: AgentsIntensityBand;
 };
 
@@ -368,16 +378,7 @@ type TimelineTurn = {
   readonly end: number;
   readonly provider: string;
   readonly repo: string;
-};
-
-type MutableTimelineSegment = {
-  start: number;
-  end: number;
-  peakConcurrency: number;
-  providers: Set<string>;
-  repoMinutes: Map<string, number>;
-  intensityBand: AgentsIntensityBand;
-  visualKey: string;
+  readonly model: string;
 };
 
 function rankedRepo(
@@ -394,98 +395,75 @@ function rankedRepo(
 }
 
 /**
- * Build Week calendar stretches from bounded five-minute buckets.
+ * Build the stable run stretches used by both Day and Week.
  *
- * Raw agent logs can contain thousands of sub-minute turn boundaries. Drawing
- * each one creates an unreadable barcode and an unnecessarily large DOM. Each
- * bucket therefore records its real peak concurrency and turn-minute-weighted
- * repository, then adjacent buckets coalesce only when their visible state is
- * unchanged: intensity band in Intensity mode, dominant repo in Project mode.
+ * Colour is deliberately absent from this contract. Intensity and Project are
+ * two views of the same run, so switching modes must never change its time
+ * range or keyboard target. Repository and model values are summaries of the
+ * original turns inside the run, not boundaries that split it.
  */
-export function buildAgentsTimelineSegments(
+export function buildAgentsRunStretches(
   source: AgentsDaySource,
-  colorMode: AgentsTimelineColorMode,
   repoOrder: readonly string[] = [],
-  bucketMinutes: number = AGENTS_WEEK_BUCKET_MINUTES,
+  gapMinutes: number = AGENTS_RUN_GAP_MINUTES,
   bands: readonly AgentsIntensityBand[] = AGENTS_INTENSITY_BANDS,
-): AgentsTimelineSegment[] {
+): AgentsRunStretch[] {
   const turns: TimelineTurn[] = source.turns
     .map((turn) => {
-      const [rawStart, rawEnd, provider, repo] = turn as readonly [number, number, string, string?];
+      const [rawStart, rawEnd, provider, repo, model] = turn as readonly [number, number, string, string?, string?];
       return {
         start: Math.max(0, Math.min(24 * 60, rawStart)),
         end: Math.max(0, Math.min(24 * 60, rawEnd)),
         provider,
         repo: (repo ?? "").trim(),
+        model: (model ?? "").trim(),
       };
     })
-    .filter((turn) => turn.end > turn.start);
+    .filter((turn) => turn.end > turn.start)
+    .sort((left, right) => left.start - right.start || left.end - right.end);
   if (turns.length === 0) return [];
 
-  const safeBucketMinutes = Number.isFinite(bucketMinutes)
-    ? Math.max(1, Math.min(60, Math.floor(bucketMinutes)))
-    : AGENTS_WEEK_BUCKET_MINUTES;
+  const safeGapMinutes = Number.isFinite(gapMinutes)
+    ? Math.max(0, Math.min(60, gapMinutes))
+    : AGENTS_RUN_GAP_MINUTES;
   const repoPriority = new Map(repoOrder.map((repo, index) => [repo, index]));
-  const segments: AgentsTimelineSegment[] = [];
-  let current: MutableTimelineSegment | null = null;
+  const groupedTurns: TimelineTurn[][] = [];
+  let current: TimelineTurn[] = [];
+  let currentEnd = 0;
 
-  const finishCurrent = () => {
-    if (!current) return;
-    segments.push({
-      start: current.start,
-      end: current.end,
-      peakConcurrency: current.peakConcurrency,
-      topRepo: rankedRepo(current.repoMinutes, repoPriority),
-      providers: [...current.providers].sort(),
-      intensityBand: current.intensityBand,
-    });
-    current = null;
-  };
-
-  for (let start = 0; start < 24 * 60; start += safeBucketMinutes) {
-    const end = Math.min(24 * 60, start + safeBucketMinutes);
-    const activeTurns = turns.filter((turn) => turn.start < end && turn.end > start);
-    if (activeTurns.length === 0) {
-      finishCurrent();
+  for (const turn of turns) {
+    if (current.length === 0 || turn.start <= currentEnd + safeGapMinutes) {
+      current.push(turn);
+      currentEnd = Math.max(currentEnd, turn.end);
       continue;
     }
-
-    const atomRepoMinutes = new Map<string, number>();
-    for (const turn of activeTurns) {
-      const overlap = Math.max(0, Math.min(turn.end, end) - Math.max(turn.start, start));
-      if (overlap > 0) atomRepoMinutes.set(turn.repo, (atomRepoMinutes.get(turn.repo) ?? 0) + overlap);
-    }
-    const atomTopRepo = rankedRepo(atomRepoMinutes, repoPriority);
-    const atomPeakConcurrency = peakConcurrency(activeTurns.map((turn) => ({
-      start: Math.max(turn.start, start),
-      end: Math.min(turn.end, end),
-    })));
-    const intensityBand = agentsIntensityBandFor(atomPeakConcurrency, bands);
-    const visualKey = colorMode === "repo" ? `repo:${atomTopRepo ?? "__unknown__"}` : `intensity:${intensityBand.id}`;
-
-    if (!current || current.end !== start || current.visualKey !== visualKey) {
-      finishCurrent();
-      current = {
-        start,
-        end,
-        peakConcurrency: atomPeakConcurrency,
-        providers: new Set(activeTurns.map((turn) => turn.provider)),
-        repoMinutes: atomRepoMinutes,
-        intensityBand,
-        visualKey,
-      };
-      continue;
-    }
-
-    current.end = end;
-    current.peakConcurrency = Math.max(current.peakConcurrency, atomPeakConcurrency);
-    activeTurns.forEach((turn) => current?.providers.add(turn.provider));
-    for (const [repo, minutes] of atomRepoMinutes) {
-      current.repoMinutes.set(repo, (current.repoMinutes.get(repo) ?? 0) + minutes);
-    }
+    groupedTurns.push(current);
+    current = [turn];
+    currentEnd = turn.end;
   }
-  finishCurrent();
-  return segments;
+  if (current.length > 0) groupedTurns.push(current);
+
+  return groupedTurns.map((group) => {
+    const start = Math.min(...group.map((turn) => turn.start));
+    const end = Math.max(...group.map((turn) => turn.end));
+    const spans = group.map((turn) => ({ start: turn.start, end: turn.end }));
+    const repoMinutes = new Map<string, number>();
+    for (const turn of group) {
+      repoMinutes.set(turn.repo, (repoMinutes.get(turn.repo) ?? 0) + (turn.end - turn.start));
+    }
+    const peak = peakConcurrency(spans);
+    return {
+      start,
+      end,
+      activeMinutes: total(mergeSpans(spans)),
+      peakConcurrency: peak,
+      topRepo: rankedRepo(repoMinutes, repoPriority),
+      providers: [...new Set(group.map((turn) => turn.provider))].sort(),
+      models: [...new Set(group.map((turn) => turn.model).filter(Boolean))].sort(),
+      commitCount: source.commits.filter(([minute]) => minute >= start && minute < end).length,
+      intensityBand: agentsIntensityBandFor(peak, bands),
+    };
+  });
 }
 
 /**

@@ -46,8 +46,7 @@ import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, ty
 import { FlowDetailSelect } from "../flow-chart/FlowDetailSelect";
 import { FlowChartGrid } from "../flow-chart/FlowChartGrid";
 import { FlowChartLegend } from "../flow-chart/FlowChartLegend";
-import { FlowHoverLayer } from "../flow-chart/FlowHoverLayer";
-import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
+import type { FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import { FOCUS_DRIFT_GRID_PATH } from "../dashboard/focusDriftChart";
@@ -55,9 +54,8 @@ import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath } from "../dashboard/focusDri
 import {
   buildAgentsDayModel,
   buildAgentsGridCells,
-  buildAgentsTimelineSegments,
+  buildAgentsRunStretches,
   buildAgentsWeekModel,
-  AGENTS_WEEK_BUCKET_MINUTES,
   agentMinutesByRepo,
   agentsIntensityBandFor,
   gridRepoLegend,
@@ -69,6 +67,7 @@ import {
   type AgentsDayModel,
   type AgentsIntensityBand,
   type AgentsRepoRow,
+  type AgentsRunStretch,
   type AgentsTimelineColorMode,
 } from "./agentsPageModel";
 import type { AgentsDaySource } from "./agentsPageModel";
@@ -79,7 +78,7 @@ import { AGENTS_UNKNOWN_COLOR, agentsSeriesColors } from "./agentsPalette";
 import {
   AgentsBreakdownComposed,
 } from "./AgentsBreakdown";
-import { AgentsWeekHoverLayer } from "./AgentsWeekHoverLayer";
+import { AgentsHoverLayer, type AgentsHoverDetails } from "./AgentsHoverLayer";
 import { SshAgentSourcesModal } from "./SshAgentSourcesModal";
 import "./agents-page.css";
 
@@ -109,6 +108,22 @@ function formatAgentDuration(minutes: number, language: DisplayLanguage): string
 function localizedWeekday(day: string, language: DisplayLanguage): string {
   return new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" })
     .format(new Date(`${day}T12:00:00`));
+}
+
+function formatAgentRunTimeRange(
+  start: number,
+  end: number,
+  startOfDayMinutes: number,
+  language: DisplayLanguage,
+): string {
+  // Agent turns can be shorter than a minute. Floor the opening edge and ceil
+  // the closing edge so a real run never reads as a zero-length clock range.
+  return `${formatLogicalClock(Math.floor(start), startOfDayMinutes, language)}–${formatLogicalClock(Math.ceil(end), startOfDayMinutes, language)}`;
+}
+
+function formatAgentRunDuration(activeMinutes: number, language: DisplayLanguage): string {
+  if (activeMinutes > 0 && activeMinutes < 1) return language === "ko" ? "1분 미만" : "<1m";
+  return formatAgentDuration(activeMinutes, language);
 }
 
 /* FlowChartView's cell-height constants, reproduced exactly so the agents grid
@@ -155,6 +170,45 @@ function agentToolColor(provider: string): string {
   return AGENT_TOOLS[provider]?.color ?? AGENTS_UNKNOWN_COLOR;
 }
 
+/** Compact model label: strip vendor prefixes ("anthropic/claude-x" → "claude-x"). */
+function shortModelName(model: string): string {
+  const tail = model.split("/").pop() ?? model;
+  return tail;
+}
+
+function buildAgentsHoverDetails(
+  stretch: AgentsRunStretch,
+  id: string,
+  boundaryMinutes: number,
+  tone: string,
+  language: DisplayLanguage,
+  flowGroup?: FlowBlockHoverGroup,
+): AgentsHoverDetails {
+  return {
+    id,
+    repo: stretch.topRepo,
+    timeRangeLabel: formatAgentRunTimeRange(stretch.start, stretch.end, boundaryMinutes, language),
+    activeSeconds: Math.round(stretch.activeMinutes * 60),
+    peakConcurrency: stretch.peakConcurrency,
+    providerLabels: stretch.providers.map(agentToolName),
+    modelLabels: stretch.models.map(shortModelName),
+    commitCount: stretch.commitCount,
+    tone,
+    ...(flowGroup ? { flowGroup } : {}),
+  };
+}
+
+function agentsHoverAriaLabel(details: AgentsHoverDetails, language: DisplayLanguage, t: LocalizationController["t"]): string {
+  const repo = details.repo ?? t("agents.generic.noRepo");
+  const tools = details.providerLabels.join(" + ") || t("agents.generic.unknownProvider");
+  return t("agents.hover.runAria", {
+    repo,
+    range: details.timeRangeLabel,
+    duration: formatAgentRunDuration(details.activeSeconds / 60, language),
+    peak: details.peakConcurrency,
+    tools,
+  });
+}
 /**
  * The identity icon for a repo row: the agent tool that worked that repo.
  * Repos have no icon asset of their own (unlike apps), and the agent that ran
@@ -313,7 +367,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
   readonly startOfDayMinutes: number;
   readonly currentMinuteOfDay: number | null;
 }) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const currentLogicalMinute = currentMinuteOfDay === null
@@ -363,11 +417,53 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
     }
     return byCell;
   }, [boundaryMinutes, gridCells, colorMode, intensityBands, repoColors, model.day, intervalMinutes, t]);
-  const gridBlockList = useMemo(() => Array.from(gridBlocks.values()), [gridBlocks]);
-  const hoverGroupsByCell = useMemo(
-    () => buildFlowBlockHoverGroups(gridBlockList, intervalMinutes, boundaryMinutes),
-    [boundaryMinutes, gridBlockList, intervalMinutes],
+  const runStretches = useMemo(
+    () => buildAgentsRunStretches(source, repoOrder, undefined, intensityBands),
+    [intensityBands, repoOrder, source],
   );
+  const dayHover = useMemo(() => {
+    const groupsByCell = new Map<number, FlowBlockHoverGroup>();
+    const detailsById = new Map<string, AgentsHoverDetails>();
+    const idsByCell = new Map<number, string>();
+    const ariaLabelsById = new Map<string, string>();
+    const orderedCells = [...gridCells.values()].sort((left, right) => left.minuteOfDay - right.minuteOfDay);
+
+    for (const stretch of runStretches) {
+      const blocks = orderedCells
+        .filter((cell) => cell.minuteOfDay < stretch.end && cell.minuteOfDay + intervalMinutes > stretch.start)
+        .flatMap((cell) => {
+          const block = gridBlocks.get(`${clockMinuteForLogicalMinute(cell.minuteOfDay, boundaryMinutes)}`);
+          return block ? [block] : [];
+        });
+      const block = blocks[0];
+      if (!block) continue;
+      const id = `${model.day}:run:${stretch.start}`;
+      const flowGroup: FlowBlockHoverGroup = {
+        block,
+        blocks,
+        segmentIds: [],
+        startMinuteOfDay: clockMinuteForLogicalMinute(stretch.start, boundaryMinutes),
+        endMinuteOfDay: clockMinuteForLogicalMinute(stretch.end, boundaryMinutes),
+        durationSeconds: Math.round(stretch.activeMinutes * 60),
+      };
+      const tone = colorMode === "repo"
+        ? (stretch.topRepo ? repoColors.get(stretch.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
+        : intensityBandColor(stretch.intensityBand);
+      const details = buildAgentsHoverDetails(stretch, id, boundaryMinutes, tone, effectiveLanguage, flowGroup);
+      detailsById.set(id, details);
+      ariaLabelsById.set(id, agentsHoverAriaLabel(details, effectiveLanguage, t));
+      for (const groupedBlock of blocks) {
+        groupsByCell.set(groupedBlock.minuteOfDay, flowGroup);
+        idsByCell.set(groupedBlock.minuteOfDay, id);
+      }
+    }
+
+    return {
+      groupsByCell,
+      detailsById,
+      readOnlyPreview: { idsByCell, ariaLabelsById },
+    };
+  }, [boundaryMinutes, colorMode, effectiveLanguage, gridBlocks, gridCells, intervalMinutes, model.day, repoColors, runStretches, t]);
 
   const legendEntries = useMemo<ProjectLegendEntry[]>(() => {
     if (colorMode === "repo") {
@@ -420,16 +516,15 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
             colorMode="project"
             currentHourIndex={currentHourIndex}
             currentMinuteOffset={currentMinuteOffset}
-            hoverGroupsByCell={hoverGroupsByCell}
+            hoverGroupsByCell={dayHover.groupsByCell}
             intervalMinutes={intervalMinutes}
+            readOnlyPreview={dayHover.readOnlyPreview}
             setFlowGridElement={setFlowGridElement}
           />
-          <FlowHoverLayer
-            gridElement={flowGridElement}
-            hoverGroupsByCell={hoverGroupsByCell}
-            intervalMinutes={intervalMinutes}
-            boundaryMinutes={boundaryMinutes}
-            appIcons={{}}
+          <AgentsHoverLayer
+            bodyElement={flowGridElement}
+            detailsById={dayHover.detailsById}
+            highlight={{ gridElement: flowGridElement, intervalMinutes, boundaryMinutes }}
           />
         </section>
       </div>
@@ -617,11 +712,12 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
       color: intensityBandColor(band),
     }));
   }, [colorMode, hasUnlabelled, intensityBands, models, repoColors, repoOrder, t]);
-  const { eventsByDay, hoverGroupsById } = useMemo(() => {
+  const { eventsByDay, hoverDetailsById } = useMemo(() => {
     const nextEventsByDay = new Map<string, {
       id: string;
       start: number;
       end: number;
+      activeMinutes: number;
       label: string;
       peakConcurrency: number;
       providerLabel: string;
@@ -630,72 +726,49 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
       tone: string;
       foreground?: string;
     }[]>();
-    const nextGroupsById = new Map<string, FlowBlockHoverGroup>();
+    const nextHoverDetailsById = new Map<string, AgentsHoverDetails>();
     for (const source of sources) {
-      const segments = buildAgentsTimelineSegments(source, colorMode, repoOrder, AGENTS_WEEK_BUCKET_MINUTES, intensityBands);
-      const events = segments.map((segment) => {
-        // Start bucket is the segment's durable identity. Live refreshes may
-        // extend the end or change its dominant tone without replacing the
-        // focused DOM node and resetting roving keyboard navigation.
-        const id = `${source.day}:${colorMode}:${segment.start}`;
-        const providerLabels = segment.providers.map(agentToolName);
+      const stretches = buildAgentsRunStretches(source, repoOrder, undefined, intensityBands);
+      const events = stretches.map((stretch) => {
+        // A run keeps the same identity across Intensity and Project. Colour
+        // changes presentation only; it never replaces the focused node.
+        const id = `${source.day}:run:${stretch.start}`;
+        const providerLabels = stretch.providers.map(agentToolName);
         const providerLabel = providerLabels.join(" + ");
-        const label = segment.topRepo ?? (providerLabels.length === 1 ? providerLabels[0]! : t("agents.generic.agents"));
-        const hoverStartMinute = clockMinuteForLogicalMinute(segment.start, boundaryMinutes);
-        const hoverEndMinute = clockMinuteForLogicalMinute(segment.end, boundaryMinutes);
+        const label = stretch.topRepo ?? (providerLabels.length === 1 ? providerLabels[0]! : t("agents.hover.agentRun"));
         const tone = colorMode === "repo"
-          ? (segment.topRepo ? repoColors.get(segment.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
-          : intensityBandColor(segment.intensityBand);
-        const detail = [
-          t("agents.generic.peak", { count: segment.peakConcurrency }),
-          providerLabel,
-          t("agents.generic.resolution", { minutes: AGENTS_WEEK_BUCKET_MINUTES }),
-        ].filter(Boolean).join(" · ");
-        const block: FlowBlock = {
-          id: `agent-week-${id}`,
-          day: source.day,
-          hour: Math.floor(hoverStartMinute / 60),
-          quarter: 0,
-          minuteOfDay: hoverStartMinute,
-          appName: label,
-          windowTitle: detail,
-          category: "workspace",
-          productivity: "focus",
-          projectId: segment.topRepo,
-          projectColor: tone,
-          colorKey: segment.topRepo ?? "agents",
-          durationSeconds: Math.round((segment.end - segment.start) * 60),
-        };
-        nextGroupsById.set(id, {
-          block,
-          blocks: [block],
-          segmentIds: [],
-          startMinuteOfDay: hoverStartMinute,
-          endMinuteOfDay: hoverEndMinute,
-          durationSeconds: block.durationSeconds,
-        });
+          ? (stretch.topRepo ? repoColors.get(stretch.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
+          : intensityBandColor(stretch.intensityBand);
+        nextHoverDetailsById.set(id, buildAgentsHoverDetails(
+          stretch,
+          id,
+          boundaryMinutes,
+          tone,
+          effectiveLanguage,
+        ));
         return {
           id,
-          start: segment.start,
-          end: segment.end,
+          start: stretch.start,
+          end: stretch.end,
+          activeMinutes: stretch.activeMinutes,
           label,
-          peakConcurrency: segment.peakConcurrency,
+          peakConcurrency: stretch.peakConcurrency,
           providerLabel,
-          intensityBandId: segment.intensityBand.id,
-          intensityBand: segment.intensityBand,
+          intensityBandId: stretch.intensityBand.id,
+          intensityBand: stretch.intensityBand,
           tone,
           ...(colorMode === "repo" ? { foreground: readableForeground(tone) } : {}),
         };
       });
       nextEventsByDay.set(source.day, events);
     }
-    return { eventsByDay: nextEventsByDay, hoverGroupsById: nextGroupsById };
-  }, [boundaryMinutes, colorMode, intensityBands, repoColors, repoOrder, sources, t]);
+    return { eventsByDay: nextEventsByDay, hoverDetailsById: nextHoverDetailsById };
+  }, [boundaryMinutes, colorMode, effectiveLanguage, intensityBands, repoColors, repoOrder, sources, t]);
   const orderedEventIds = useMemo(
     () => week.days.flatMap((day) => (eventsByDay.get(day.day) ?? []).map((event) => event.id)),
     [eventsByDay, week.days],
   );
-  const keyboardTabStopId = activeKeyboardEventId && hoverGroupsById.has(activeKeyboardEventId)
+  const keyboardTabStopId = activeKeyboardEventId && hoverDetailsById.has(activeKeyboardEventId)
     ? activeKeyboardEventId
     : (orderedEventIds[0] ?? null);
   const todayIndex = week.days.findIndex((day) => day.day === todayDay);
@@ -826,13 +899,11 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                           label: event.label,
                           provider: event.providerLabel || t("agents.generic.unknownProvider"),
                           peak: event.peakConcurrency,
-                          start: formatLogicalClock(event.start, boundaryMinutes, effectiveLanguage),
-                          end: formatLogicalClock(event.end, boundaryMinutes, effectiveLanguage),
-                          duration: formatAgentDuration(event.end - event.start, effectiveLanguage),
-                          resolution: AGENTS_WEEK_BUCKET_MINUTES,
+                          range: formatAgentRunTimeRange(event.start, event.end, boundaryMinutes, effectiveLanguage),
+                          duration: formatAgentRunDuration(event.activeMinutes, effectiveLanguage),
                         })}
                       >
-                        {!isShort ? <strong>≈{formatAgentDuration(event.end - event.start, effectiveLanguage)}</strong> : null}
+                        {!isShort ? <strong>{formatAgentRunDuration(event.activeMinutes, effectiveLanguage)}</strong> : null}
                       </article>
                     );
                   })}
@@ -851,7 +922,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
           </div>
         </div>
       </section>
-      <AgentsWeekHoverLayer bodyElement={calendarBodyElement} groupsById={hoverGroupsById} />
+      <AgentsHoverLayer bodyElement={calendarBodyElement} detailsById={hoverDetailsById} />
     </>
   );
 }

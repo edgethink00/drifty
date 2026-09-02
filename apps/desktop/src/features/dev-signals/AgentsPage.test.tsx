@@ -92,12 +92,22 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(screen.getByText("가장 활발한 저장소")).toBeTruthy();
     expect(screen.getByText("순 코드 줄")).toBeTruthy();
 
+    const dayRun = screen.getByRole("img", { name: /에이전트 실행, drifty_mac/i });
+    fireEvent(dayRun, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("최대×1");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("도구Codex");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("모델gpt-5");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("커밋1");
+
     fireEvent.click(screen.getByRole("button", { name: "주간" }));
 
     expect(screen.getByRole("button", { name: "이전 에이전트 주 보기" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "이번 주" })).toBeTruthy();
     expect(screen.getByLabelText("에이전트 주간 캘린더")).toBeTruthy();
-    expect(screen.getByLabelText(/금 2026-08-28 에이전트 실행/)).toBeTruthy();
+    const weekRun = screen.getByLabelText(/금 2026-08-28 에이전트 실행/);
+    expect(weekRun.getAttribute("aria-label")).toContain("활성 1시간");
+    fireEvent(weekRun, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("활성 1시간");
     expect(screen.queryByText("Agent rhythm · by hour")).toBeNull();
   });
 
@@ -201,34 +211,51 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(heading).toBeTruthy();
     expect(heading.textContent).toBe("No agent activity");
     expect(heading.querySelector(".dashboard-page-head__focus-value")).toBeNull();
+
+    const dayRun = screen.getByRole("img", { name: /Agent run, drifty_mac/i });
+    expect(dayRun.getAttribute("aria-label")).toContain("01:00–01:01, <1m active");
+    fireEvent(dayRun, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("<1m active");
+
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+    expect(screen.getByLabelText(/Agent run on Fri, 2026-08-28/i).getAttribute("aria-label"))
+      .toContain("01:00–01:01, <1m active");
   });
 
-  it("shows shared hover details for Day cells and Week runs", async () => {
+  it("shows the same read-only run hover for Day cells and Week runs", async () => {
     renderAgentsPage();
 
-    const dayCell = screen.getAllByRole("button", { name: /drifty_mac/i })[0];
+    const dayCell = screen.getByRole("img", { name: /Agent run, drifty_mac/i });
     fireEvent(dayCell, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
-    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac"));
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("Peak×1");
+    expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Workspace");
+    expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Delete activity");
+    expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     const weekRun = screen.getByLabelText(/Agent run on Fri, 2026-08-28, drifty_mac, Codex/i);
     fireEvent(weekRun, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
-    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
-    expect(document.querySelector(".flow-hover-card")?.textContent).not.toContain("Not classified yet");
-    expect(weekRun.getAttribute("aria-label")).toContain("approximately 1.0h at 5-minute resolution");
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac"));
+    expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Not classified yet");
+    expect(weekRun.getAttribute("aria-label")).toContain("1.0h active");
 
     fireEvent.focus(weekRun);
     fireEvent.blur(weekRun);
-    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")).toBeNull());
 
     const calendarBody = document.querySelector(".week-v2-calendar__body");
     if (!calendarBody) throw new Error("Expected the week calendar body");
+    fireEvent(weekRun, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac"));
     fireEvent.pointerLeave(calendarBody);
-    await waitFor(() => expect(document.querySelector(".flow-hover-card")).toBeNull());
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")).toBeNull());
     fireEvent.focus(weekRun);
-    await waitFor(() => expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac"));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac"));
     fireEvent.pointerLeave(calendarBody);
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("drifty_mac");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac");
+    fireEvent.keyDown(weekRun, { key: "Escape" });
+    expect(document.querySelector(".agents-hover-card")).toBeNull();
     expect(document.querySelectorAll('.agents-week-calendar__event[tabindex="0"]')).toHaveLength(1);
   });
 
@@ -273,7 +300,7 @@ describe("AgentsPage shared dashboard controls", () => {
 
     expect(document.activeElement).toBe(runs[1]);
     expect(runs.map((run) => run.getAttribute("tabindex"))).toEqual(["-1", "0"]);
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("other_repo");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("other_repo");
   });
 
   it("updates the current-time marker without taking back a user's calendar scroll", () => {
@@ -343,12 +370,17 @@ describe("AgentsPage shared dashboard controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
     expect(screen.getByRole("button", { name: "Project" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getAllByText("drifty_mac").length).toBeGreaterThan(0);
+    const projectEvent = screen.getByLabelText(/Agent run on Fri, 2026-08-28, drifty_mac/i);
+    const projectEventId = projectEvent.getAttribute("data-agent-hover-id");
+    const projectEventLabel = projectEvent.getAttribute("aria-label");
 
     fireEvent.click(screen.getByRole("button", { name: "Intensity" }));
     expect(screen.getByText("×30–50")).toBeTruthy();
     const event = screen.getByLabelText(/Agent run on Fri, 2026-08-28, drifty_mac/i);
+    expect(event.getAttribute("data-agent-hover-id")).toBe(projectEventId);
+    expect(event.getAttribute("aria-label")).toBe(projectEventLabel);
     expect(event.getAttribute("aria-label")).toContain("Claude Code + Codex, peak ×50");
     fireEvent(event, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
-    expect(document.querySelector(".flow-hover-card")?.textContent).toContain("Peak ×50");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("Peak×50");
   });
 });

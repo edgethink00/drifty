@@ -471,7 +471,7 @@
    than assuming every event color is dark. */
 .agents-week-calendar__event {
   outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), filter var(--transition-fast);
 }
 
 .agents-week-calendar__event strong,
@@ -486,6 +486,87 @@
     0 8px 16px color-mix(in srgb, var(--canvas) 48%, transparent),
     0 0 0 2px var(--surface),
     0 0 0 4px var(--accent);
+}
+
+.agents-week-calendar__event:hover {
+  border-color: color-mix(in srgb, var(--text) 26%, transparent);
+  filter: brightness(1.04);
+}
+
+.agents-flow-card .flow-cell[data-agent-hover-id] {
+  cursor: default;
+}
+
+.agents-flow-card .flow-cell[data-agent-hover-id]:focus-visible {
+  z-index: 2;
+  outline: none;
+  filter: brightness(1.08);
+  box-shadow: inset 0 0 0 1px var(--surface), 0 0 0 2px var(--text);
+}
+
+.agents-hover-card {
+  width: min(19rem, calc(100vw - 2rem));
+  gap: 0.55rem;
+  padding: 0.68rem 0.72rem;
+}
+
+.agents-hover-card__head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.agents-hover-card__head > div {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.agents-hover-card__tone {
+  width: 0.58rem;
+  height: 0.58rem;
+  border-radius: 999px;
+  background: var(--agents-hover-tone);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface) 82%, transparent);
+}
+
+.agents-hover-card__facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.24rem var(--space-3);
+  margin: 0;
+  padding-top: 0.46rem;
+  border-top: 1px solid var(--line);
+}
+
+.agents-hover-card__facts > div {
+  display: contents;
+}
+
+.agents-hover-card__facts dt {
+  color: var(--text-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.agents-hover-card__facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .agents-week-calendar__event[data-agent-intensity-contrast="light"] {

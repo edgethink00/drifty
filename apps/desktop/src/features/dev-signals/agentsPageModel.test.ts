@@ -4,7 +4,7 @@ import {
   buildAgentsDayModel,
   buildAgentsGridCells,
   buildAgentsIntensityBands,
-  buildAgentsTimelineSegments,
+  buildAgentsRunStretches,
   buildAgentsWeekModel,
   agentMinutesByRepo,
   agentsInsightNumbers,
@@ -285,7 +285,7 @@ describe("agent intensity bands", () => {
   });
 });
 
-describe("buildAgentsTimelineSegments", () => {
+describe("buildAgentsRunStretches", () => {
   const segmentedSource: AgentsDaySource = {
     day: "2026-08-22",
     attention: [],
@@ -299,29 +299,34 @@ describe("buildAgentsTimelineSegments", () => {
     commits: [],
   };
 
-  it("coalesces adjacent concurrency atoms only while their intensity band matches", () => {
-    const segments = buildAgentsTimelineSegments(segmentedSource, "intensity", ["beta", "alpha"]);
-    expect(segments.map(({ start, end, peakConcurrency, intensityBand }) => ({
+  it("keeps run boundaries stable across repo and concurrency changes", () => {
+    const stretches = buildAgentsRunStretches(segmentedSource, ["beta", "alpha"]);
+    expect(stretches.map(({ start, end, peakConcurrency, topRepo, intensityBand }) => ({
       start,
       end,
       peakConcurrency,
+      topRepo,
       band: intensityBand.label,
     }))).toEqual([
-      { start: 60, end: 70, peakConcurrency: 1, band: "×1" },
-      { start: 70, end: 110, peakConcurrency: 4, band: "×2–4" },
-      { start: 110, end: 120, peakConcurrency: 1, band: "×1" },
-      { start: 130, end: 140, peakConcurrency: 1, band: "×1" },
+      { start: 60, end: 120, peakConcurrency: 4, topRepo: "alpha", band: "×2–4" },
+      { start: 130, end: 140, peakConcurrency: 1, topRepo: "alpha", band: "×1" },
     ]);
-    expect(segments[1]?.providers).toEqual(["claude", "codex", "gemini", "opencode"]);
+    expect(stretches[0]?.providers).toEqual(["claude", "codex", "gemini", "opencode"]);
   });
 
-  it("splits Project mode whenever the dominant repository changes and preserves gaps", () => {
-    const segments = buildAgentsTimelineSegments(segmentedSource, "repo", ["beta", "alpha"]);
-    expect(segments.map(({ start, end, topRepo }) => ({ start, end, topRepo }))).toEqual([
-      { start: 60, end: 90, topRepo: "alpha" },
-      { start: 90, end: 110, topRepo: "beta" },
-      { start: 110, end: 120, topRepo: "alpha" },
-      { start: 130, end: 140, topRepo: "alpha" },
+  it("merges message-shaped turns across the fixed small-gap threshold", () => {
+    const stretches = buildAgentsRunStretches({
+      ...segmentedSource,
+      turns: [
+        [60, 62, "codex", "alpha", "gpt-5", 0],
+        [67, 70, "codex", "alpha", "gpt-5", 0],
+        [76, 80, "claude", "beta", "claude-opus", 0],
+      ],
+      commits: [[68, 1, 0, 1, "abc", "alpha"]],
+    });
+    expect(stretches).toMatchObject([
+      { start: 60, end: 70, activeMinutes: 5, models: ["gpt-5"], commitCount: 1 },
+      { start: 76, end: 80, activeMinutes: 4, models: ["claude-opus"], commitCount: 0 },
     ]);
   });
 
@@ -332,12 +337,11 @@ describe("buildAgentsTimelineSegments", () => {
       turns: Array.from({ length: 50 }, (_, index) => [200, 210, `agent-${index}`, "alpha"] as const),
       commits: [],
     };
-    expect(buildAgentsTimelineSegments(highConcurrencySource, "intensity")).toMatchObject([
+    expect(buildAgentsRunStretches(highConcurrencySource)).toMatchObject([
       { start: 200, end: 210, peakConcurrency: 50, intensityBand: { label: "×30–50" } },
     ]);
-    expect(buildAgentsTimelineSegments(
+    expect(buildAgentsRunStretches(
       highConcurrencySource,
-      "intensity",
       [],
       5,
       buildAgentsIntensityBands(9),
@@ -356,8 +360,8 @@ describe("buildAgentsTimelineSegments", () => {
       ],
       commits: [],
     };
-    expect(buildAgentsTimelineSegments(serialSource, "intensity")).toMatchObject([
-      { start: 200, end: 205, peakConcurrency: 1, intensityBand: { label: "×1" } },
+    expect(buildAgentsRunStretches(serialSource)).toMatchObject([
+      { start: 200, end: 205, activeMinutes: 4, peakConcurrency: 1, intensityBand: { label: "×1" } },
     ]);
   });
 
@@ -372,7 +376,7 @@ describe("buildAgentsTimelineSegments", () => {
       commits: [],
     };
 
-    expect(buildAgentsTimelineSegments(mostlyUnlabelledSource, "repo", ["alpha"])).toMatchObject([
+    expect(buildAgentsRunStretches(mostlyUnlabelledSource, ["alpha"])).toMatchObject([
       { start: 200, end: 205, topRepo: null },
     ]);
   });

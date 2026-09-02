@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import type { CSSProperties } from "react";
-import type { FlowBlock, FlowIntervalMinutes } from "@drifty/domain";
+import { logicalMinuteOfDay, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
 import type { FlowColorMode } from "./FlowChartTypes";
 import { clockHourForLogicalHour, formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../lib/formatting";
 import { buildCellGroupAriaLabels, formatHourLabel, minuteOfDayForCell } from "./flowChartFormat";
@@ -10,6 +10,11 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 
 type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", string>;
+
+export type FlowChartReadOnlyPreview = {
+  readonly idsByCell: ReadonlyMap<number, string>;
+  readonly ariaLabelsById: ReadonlyMap<string, string>;
+};
 
 type FlowChartGridProps = {
   readonly blockByCell: ReadonlyMap<string, FlowBlock>;
@@ -22,6 +27,12 @@ type FlowChartGridProps = {
   readonly setFlowGridElement: (element: HTMLDivElement | null) => void;
   readonly onOpenActivity?: (group: FlowBlockHoverGroup, target: HTMLButtonElement) => void;
   readonly inspectedGroup?: FlowBlockHoverGroup | null;
+  /**
+   * Dashboard-only cells stay pointer-readable without pretending to open an
+   * editor. One focusable image represents each visual group; the remaining
+   * painted cells are hidden from the accessibility tree.
+   */
+  readonly readOnlyPreview?: FlowChartReadOnlyPreview;
 };
 
 type FlowCurrentHourStyle = CSSProperties & Record<"--flow-current-hour", number>;
@@ -42,6 +53,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
   setFlowGridElement,
   onOpenActivity,
   inspectedGroup = null,
+  readOnlyPreview,
 }: FlowChartGridProps) {
   const { effectiveLanguage, t } = useLocalization();
   const rowMinuteOffsets = useMemo(
@@ -55,6 +67,17 @@ export const FlowChartGrid = memo(function FlowChartGrid({
     timeBlockPrefix: effectiveLanguage === "ko" ? "시간대" : "Time block",
     durationPrefix: effectiveLanguage === "ko" ? "소요 시간" : "Duration",
   }), [effectiveLanguage, hoverGroupsByCell, t]);
+  const firstPreviewMinuteById = useMemo(() => {
+    if (!readOnlyPreview) return new Map<string, number>();
+    const firstById = new Map<string, number>();
+    const entries = [...readOnlyPreview.idsByCell.entries()].sort((left, right) => (
+      logicalMinuteOfDay(left[0], boundaryMinutes) - logicalMinuteOfDay(right[0], boundaryMinutes)
+    ));
+    for (const [minute, id] of entries) {
+      if (!firstById.has(id)) firstById.set(id, minute);
+    }
+    return firstById;
+  }, [boundaryMinutes, readOnlyPreview]);
 
   return (
     <>
@@ -115,6 +138,26 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                 const cellStyle: FlowProjectCellStyle | undefined = isProjectMode
                   ? { "--flow-project-color": block.projectColor ?? NO_PROJECT_COLOR }
                   : undefined;
+                const previewId = readOnlyPreview?.idsByCell.get(block.minuteOfDay);
+                const isPreviewAnchor = previewId !== undefined && firstPreviewMinuteById.get(previewId) === block.minuteOfDay;
+
+                if (readOnlyPreview && previewId) {
+                  return (
+                    <span
+                      className={`flow-cell ${colorClass}${unclassifiedClass}${remoteDeviceClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
+                      key={block.minuteOfDay}
+                      role={isPreviewAnchor ? "img" : undefined}
+                      tabIndex={isPreviewAnchor ? 0 : undefined}
+                      aria-label={isPreviewAnchor ? readOnlyPreview.ariaLabelsById.get(previewId) : undefined}
+                      aria-hidden={isPreviewAnchor ? undefined : true}
+                      data-flow-minute={block.minuteOfDay}
+                      data-agent-hover-id={previewId}
+                      style={cellStyle}
+                    >
+                      <span className="flow-cell__mark" aria-hidden="true" />
+                    </span>
+                  );
+                }
 
                 return (
                   <button
