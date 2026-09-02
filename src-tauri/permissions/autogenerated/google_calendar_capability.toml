@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-google-calendar-capability"
+description = "Enables the google_calendar_capability command without any pre-configured scope."
+commands.allow = ["google_calendar_capability"]
+
+[[permission]]
+identifier = "deny-google-calendar-capability"
+description = "Denies the google_calendar_capability command without any pre-configured scope."
+commands.deny = ["google_calendar_capability"]

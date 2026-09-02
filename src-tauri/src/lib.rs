@@ -32,6 +32,9 @@ use commands::{
     developer_tools_install_skill, developer_tools_uninstall_cli,
     developer_tools_uninstall_codex_skill, developer_tools_uninstall_skill, extreme_nudge_apply,
     focus_target_activate_browser_tab, focus_target_browser_tab_exists, focus_target_open_app,
+    google_calendar_authorize, google_calendar_capability, google_calendar_discard_pending,
+    google_calendar_disconnect, google_calendar_events, google_calendar_finalize,
+    google_calendar_status, GoogleCalendarState,
     living_soul_read, living_soul_write, managed_ai_catalog, managed_ai_delete, managed_ai_install,
     managed_ai_start, managed_ai_status, managed_ai_stop_runtime_for_app_exit,
     pet_mode_align_contact, pet_mode_begin_drag, pet_mode_cancel_motion, pet_mode_carry_cursor,
@@ -436,6 +439,7 @@ pub fn run() {
         .manage(TrackingPauseState::default())
         .manage(QuitConfirmationState::default())
         .manage(AppExitCoordinator::default())
+        .manage(GoogleCalendarState::default())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("auth-deep-link-cache")
                 .on_event(|app, event| match event {
@@ -693,6 +697,13 @@ pub fn run() {
             focus_target_activate_browser_tab,
             focus_target_browser_tab_exists,
             focus_target_open_app,
+            google_calendar_capability,
+            google_calendar_authorize,
+            google_calendar_finalize,
+            google_calendar_discard_pending,
+            google_calendar_status,
+            google_calendar_events,
+            google_calendar_disconnect,
             managed_ai_catalog,
             managed_ai_status,
             managed_ai_install,

@@ -7,6 +7,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AccountSettingsSection, type AccountSettingsSectionProps } from "./AccountSettingsSection";
 
+vi.mock("../auth/AuthContext", () => ({
+  useAuth: () => ({ hasRequiredAccountAuth: false, user: null }),
+}));
+
 function cssRule(styles: string, selector: string): string {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return styles.match(new RegExp(`${escapedSelector}\\s*\\{[\\s\\S]*?\\n\\}`))?.[0] ?? "";

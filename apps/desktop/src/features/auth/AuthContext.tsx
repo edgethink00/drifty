@@ -39,6 +39,15 @@ import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./aut
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { dispatchTeamInviteDeepLink } from "../team/teamInviteDeepLinks";
 import { readBillingSuccessDeepLink, storePendingPromoHandoff } from "../billing/promoHandoff";
+import {
+  authorizeGoogleCalendar,
+  discardPendingGoogleCalendarConnection,
+  finalizeGoogleCalendarConnection,
+  getGoogleCalendarCapability,
+  isGoogleCalendarAuthorizationCancelled,
+  isGoogleCalendarOnboardingEnabled,
+  notifyGoogleCalendarConnectionChanged,
+} from "../calendar/googleCalendarClient";
 import type { User, Session } from "@supabase/supabase-js";
 
 const DESKTOP_LOGIN_URL = "https://drifty.so/auth/login/";
@@ -51,6 +60,11 @@ const GOOGLE_OAUTH_REQUEST_TIMEOUT_MESSAGE = "Google sign-in took too long. Try 
 const GOOGLE_OAUTH_REQUEST_FAILED_MESSAGE = "Unable to start Google sign-in. Try again, or continue with email.";
 const GOOGLE_OAUTH_CALLBACK_FAILED_MESSAGE = "Google sign-in could not be completed. Try again.";
 const GOOGLE_OAUTH_CALLBACK_CANCELLED_MESSAGE = "That Google sign-in attempt expired or was cancelled. Start Google sign-in again.";
+const GOOGLE_CALENDAR_CANCELLED_MESSAGE = "Google sign-in was cancelled. You can try again or continue with email.";
+const GOOGLE_CALENDAR_CONNECTED_MESSAGE = "Signed in. Google Calendar is connected.";
+const GOOGLE_CALENDAR_SKIPPED_MESSAGE = "Signed in. Google Calendar was skipped and can be connected later.";
+const GOOGLE_CALENDAR_FALLBACK_MESSAGE = "Calendar setup is unavailable. Opening standard Google sign-in...";
+const GOOGLE_CALENDAR_IDENTITY_MISMATCH_MESSAGE = "Google sign-in could not be verified. Please try again.";
 const GOOGLE_SIGN_IN_EXPIRED_MESSAGE = "Google sign-in expired after 5 minutes. Try again.";
 const GOOGLE_OAUTH_URL_MAX_LENGTH = 8_192;
 const GOOGLE_OAUTH_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
@@ -63,6 +77,10 @@ export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 export type OAuthCallbackPhase = "waiting" | "received" | "exchanging" | "completed" | "failed";
 export type OAuthCallbackMethod = "google" | "website";
 export type GoogleSignInAction = "opening" | "reopen" | "retry";
+
+export interface GoogleSignInOptions {
+  readonly requestCalendar?: boolean;
+}
 
 export interface OAuthCallbackStatus {
   phase: OAuthCallbackPhase;
@@ -93,6 +111,13 @@ class GoogleOAuthOperationCancelledError extends Error {
   constructor() {
     super("Google OAuth operation cancelled");
     this.name = "GoogleOAuthOperationCancelledError";
+  }
+}
+
+class GoogleCalendarIdentityMismatchError extends Error {
+  constructor() {
+    super(GOOGLE_CALENDAR_IDENTITY_MISMATCH_MESSAGE);
+    this.name = "GoogleCalendarIdentityMismatchError";
   }
 }
 
@@ -180,7 +205,7 @@ export interface AuthState {
   hasRequiredAccountAuth: boolean;
   hasBlockingAuthConfigurationError: boolean;
   signInWithWebsite: () => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signInWithGoogle: (options?: GoogleSignInOptions) => Promise<{ error: Error | null }>;
   signInAnonymously: () => Promise<{ error: Error | null; user: User | null }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null; needsEmailConfirmation: boolean }>;
@@ -236,6 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const googleOAuthExpiryTimeoutRef = useRef<number | null>(null);
   const googleOAuthOperationSequenceRef = useRef(0);
   const googleOAuthActiveOperationRef = useRef<GoogleOAuthOperationHandle | null>(null);
+  const googleCalendarOAuthInFlightRef = useRef(false);
 
   function cancelPendingGoogleOAuthOperation() {
     googleOAuthActiveOperationRef.current?.cancel();
@@ -1103,7 +1129,166 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }
 
-  async function signInWithGoogle() {
+  async function signInWithGoogleAndCalendar() {
+    if (!supabase) {
+      return { error: new Error("Supabase is not configured") };
+    }
+    if (googleCalendarOAuthInFlightRef.current) {
+      return { error: null };
+    }
+
+    googleCalendarOAuthInFlightRef.current = true;
+    clearGoogleOAuthAttempt();
+    setCallbackStatus({
+      phase: "waiting",
+      message: "Opening Google sign-in and optional Calendar access...",
+      method: "google",
+      googleAction: "opening",
+    });
+
+    let attemptId: string | null = null;
+    try {
+      const capability = await getGoogleCalendarCapability();
+      if (!capability.configured) {
+        setCallbackStatus({
+          phase: "waiting",
+          message: GOOGLE_CALENDAR_FALLBACK_MESSAGE,
+          method: "google",
+          googleAction: "opening",
+        });
+        return await signInWithGoogleLegacy();
+      }
+
+      const authorization = await authorizeGoogleCalendar("signIn");
+      attemptId = authorization.attemptId;
+      if (!authorization.idToken || !authorization.accessToken) {
+        await discardPendingGoogleCalendarConnection(authorization.attemptId);
+        attemptId = null;
+        throw new Error("Google identity tokens were missing from the authorization result.");
+      }
+
+      setCallbackStatus({
+        phase: "exchanging",
+        message: "Completing Google sign-in...",
+        method: "google",
+      });
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: authorization.idToken,
+        access_token: authorization.accessToken,
+      });
+      if (error || !data.session) {
+        throw error ?? new Error("Google sign-in did not return a session.");
+      }
+
+      const googleIdentitySubject = data.user?.identities
+        ?.find((identity) => identity.provider === "google")
+        ?.identity_data?.sub;
+      if (
+        authorization.googleSubject
+        && typeof googleIdentitySubject === "string"
+        && googleIdentitySubject !== authorization.googleSubject
+      ) {
+        await discardPendingGoogleCalendarConnection(authorization.attemptId);
+        attemptId = null;
+        try {
+          const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+          if (signOutError) {
+            recordAuthDiagnostic("auth.google_calendar.identity_cleanup.error", getAuthDiagnosticError(signOutError));
+          }
+        } catch (signOutError) {
+          recordAuthDiagnostic("auth.google_calendar.identity_cleanup.error", getAuthDiagnosticError(signOutError));
+        }
+        applySessionState(null);
+        await saveDesktopSession(null);
+        throw new GoogleCalendarIdentityMismatchError();
+      }
+
+      applySessionState(data.session);
+      await saveDesktopSession(data.session);
+
+      let calendarConnected = false;
+      try {
+        const calendarStatus = await finalizeGoogleCalendarConnection(
+          data.session.user.id,
+          authorization.attemptId,
+          "signIn",
+        );
+        attemptId = null;
+        calendarConnected = calendarStatus.connected;
+        notifyGoogleCalendarConnectionChanged();
+      } catch (calendarError) {
+        recordAuthDiagnostic("auth.google_calendar.finalize.error", getAuthDiagnosticError(calendarError));
+        if (attemptId) {
+          try {
+            await discardPendingGoogleCalendarConnection(attemptId);
+          } catch {
+          }
+          attemptId = null;
+        }
+      }
+
+      setCallbackStatus({
+        phase: "completed",
+        message: calendarConnected ? GOOGLE_CALENDAR_CONNECTED_MESSAGE : GOOGLE_CALENDAR_SKIPPED_MESSAGE,
+        method: "google",
+      });
+      capturePostHogEvent("cloud_auth_action", {
+        action: "sign_in_completed",
+        method: "oauth",
+        result: "success",
+      });
+      return { error: null };
+    } catch (error) {
+      if (attemptId) {
+        try {
+          await discardPendingGoogleCalendarConnection(attemptId);
+        } catch {
+        }
+      }
+      if (isGoogleCalendarAuthorizationCancelled(error)) {
+        const cancelledError = new Error(GOOGLE_CALENDAR_CANCELLED_MESSAGE);
+        setCallbackStatus({
+          phase: "failed",
+          message: cancelledError.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        return { error: cancelledError };
+      }
+
+      if (error instanceof GoogleCalendarIdentityMismatchError) {
+        setCallbackStatus({
+          phase: "failed",
+          message: error.message,
+          method: "google",
+          googleAction: "retry",
+        });
+        recordAuthDiagnostic("auth.google_calendar.identity_mismatch", getAuthDiagnosticError(error));
+        return { error };
+      }
+
+      recordAuthDiagnostic("auth.google_calendar.authorization.error", getAuthDiagnosticError(error));
+      setCallbackStatus({
+        phase: "waiting",
+        message: GOOGLE_CALENDAR_FALLBACK_MESSAGE,
+        method: "google",
+        googleAction: "opening",
+      });
+      return await signInWithGoogleLegacy();
+    } finally {
+      googleCalendarOAuthInFlightRef.current = false;
+    }
+  }
+
+  async function signInWithGoogle(options: GoogleSignInOptions = {}) {
+    if (options.requestCalendar && isGoogleCalendarOnboardingEnabled()) {
+      return signInWithGoogleAndCalendar();
+    }
+    return signInWithGoogleLegacy();
+  }
+
+  async function signInWithGoogleLegacy() {
     if (!supabase) {
       const error = new Error("Supabase is not configured");
       capturePostHogEvent("cloud_auth_action", {

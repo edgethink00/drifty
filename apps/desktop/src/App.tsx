@@ -106,6 +106,11 @@ import {
 } from "./features/billing/promoHandoff";
 import { AccountDeletionModal } from "./features/auth/AccountDeletionModal";
 import { deleteDriftyAccount, type AccountDeletionResult } from "./features/auth/accountDeletionService";
+import {
+  disconnectGoogleCalendar,
+  hasLocalGoogleCalendarConnectionMarker,
+} from "./features/calendar/googleCalendarClient";
+import { useGoogleCalendarWeek } from "./features/calendar/useGoogleCalendarWeek";
 import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
@@ -1667,6 +1672,26 @@ export default function App() {
         stage: "not_started",
         error: resetError instanceof Error ? resetError.message : "Unable to reset local sync identity.",
       };
+    }
+
+    if (
+      deletedUserId
+      && isTauriRuntime()
+      && hasLocalGoogleCalendarConnectionMarker(deletedUserId)
+    ) {
+      try {
+        await disconnectGoogleCalendar(deletedUserId);
+      } catch (calendarError) {
+        console.warn("Unable to remove the local Google Calendar credential before account deletion.", calendarError);
+        return {
+          success: false,
+          code: "local_calendar_disconnect_failed",
+          stage: "not_started",
+          error: calendarError instanceof Error
+            ? calendarError.message
+            : "Unable to remove the local Google Calendar credential.",
+        };
+      }
     }
 
     const result = await deleteDriftyAccount(confirmation);
@@ -5481,6 +5506,18 @@ export default function App() {
     selectedDaySegments: segments,
     todayDayForWeekModel: todayDay,
   }), [currentMinuteOfDay, dashboardDemoReplayState, dashboardRange, dashboardSegments, segments, todayDay]);
+  const googleCalendarWeek = useGoogleCalendarWeek({
+    enabled: activeTab === "dashboard"
+      && dashPeriod === "Week"
+      && !isPreviewSurface
+      && !isDashboardDemoReplayActive
+      && authStatus === "authenticated"
+      && hasRequiredAccountAuth,
+    userId: user?.id ?? null,
+    startDay: effectiveDashboardRange.startDay,
+    endDay: effectiveDashboardRange.endDay,
+    startOfDayMinutes,
+  });
   // Device filter choke point: every dashboard view model (day flow, week,
   // stats) derives from these two arrays, so filtering here covers them all.
   const effectiveSelectedDaySegments = useMemo(
@@ -8013,7 +8050,7 @@ export default function App() {
       billingEntitlementLoading={billingEntitlementLoading}
       expectsPromotion={promoHandoffPending}
       authCallbackStatus={callbackStatus}
-      onStartCloudTrialWithGoogle={() => void signInWithGoogle()}
+      onStartCloudTrialWithGoogle={() => void signInWithGoogle({ requestCalendar: true })}
       onStartCloudTrialWithEmail={openOnboardingEmailAuthModal}
       onStartCloudTrialWithWebsite={promoHandoffPending ? () => void signInWithWebsite() : undefined}
       onDeleteAnonymousAccount={user?.is_anonymous === true
@@ -8576,6 +8613,8 @@ export default function App() {
             statusRunning={status?.running === true}
             totalSeconds={stickyTotalSeconds}
             weekCalendarEvents={weekCalendarEvents}
+            googleCalendarWeekEvents={googleCalendarWeek.events}
+            googleCalendarWeekStatus={googleCalendarWeek.status}
             weekFocusDeltaSeconds={isPreviewSurface ? 3 * 3600 + 5 * 60 : weekFocusDeltaSeconds}
             weekRefreshStatus={weekRefreshStatus}
             weekRows={weekRows}

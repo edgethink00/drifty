@@ -26,6 +26,7 @@ const {
   exchangeGoogleOAuthCodeForSession,
   setSession,
   signInAnonymously,
+  signInWithIdToken,
   signInWithOAuth,
   activateGoogleOAuthVerifier,
   clearGoogleOAuthVerifier,
@@ -56,6 +57,7 @@ const {
     exchangeGoogleOAuthCodeForSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     setSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
     signInAnonymously: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
+    signInWithIdToken: vi.fn().mockResolvedValue({ data: { session: null, user: null }, error: null }),
     signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: "https://project.supabase.co/auth/v1/authorize?provider=google" }, error: null }),
     activateGoogleOAuthVerifier: vi.fn(),
     clearGoogleOAuthVerifier: vi.fn(() => true),
@@ -117,6 +119,7 @@ vi.mock("../../lib/supabase/client", () => ({
       exchangeCodeForSession,
       setSession,
       signInAnonymously,
+      signInWithIdToken,
       signInWithOAuth,
       signOut,
       signInWithPassword,
@@ -191,6 +194,7 @@ describe("AuthContext", () => {
     exchangeGoogleOAuthCodeForSession.mockResolvedValue({ data: { session: null }, error: null });
     setSession.mockResolvedValue({ data: { session: null }, error: null });
     signInWithOAuth.mockResolvedValue({ data: { url: googleOAuthUrl() }, error: null });
+    signInWithIdToken.mockResolvedValue({ data: { session: null, user: null }, error: null });
     clearGoogleOAuthVerifier.mockReturnValue(true);
     hasUsableGoogleOAuthVerifier.mockReturnValue(true);
     signInWithPassword.mockResolvedValue({ data: {}, error: null });
@@ -208,6 +212,7 @@ describe("AuthContext", () => {
     clearAuthDiagnostics({ mirrorToConsole: false });
     window.history.replaceState({}, "", "/");
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    vi.unstubAllEnvs();
   });
 
   afterEach(() => {
@@ -216,6 +221,7 @@ describe("AuthContext", () => {
     clearAuthDiagnostics({ mirrorToConsole: false });
     window.history.replaceState({}, "", "/");
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    vi.unstubAllEnvs();
   });
 
   it("identifies Supabase anonymous users as insufficient for required account auth", () => {
@@ -322,6 +328,177 @@ describe("AuthContext", () => {
       expect(authApi?.callbackStatus?.message).toBe("Browser opened. Waiting for sign-in to return to Drifty.");
     });
     expect(requireCapturedAuth(authApi).callbackStatus?.googleAction).toBe("reopen");
+  });
+
+  it("uses the isolated native Calendar flow only for opted-in onboarding", async () => {
+    vi.stubEnv("VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED", "1");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    session.user.identities = [{
+      id: "identity-id",
+      identity_id: "identity-id",
+      user_id: session.user.id,
+      identity_data: { sub: "google-subject" },
+      provider: "google",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_sign_in_at: new Date().toISOString(),
+    }];
+    signInWithIdToken.mockResolvedValue({ data: { session, user: session.user }, error: null });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "google_calendar_capability") return { configured: true };
+      if (command === "google_calendar_authorize") {
+        return {
+          attemptId: "attempt-id",
+          purpose: "signIn",
+          calendarGranted: true,
+          calendarCredentialReady: true,
+          connectedEmail: "person@example.com",
+          googleSubject: "google-subject",
+          idToken: "google-id-token",
+          accessToken: "google-access-token",
+        };
+      }
+      if (command === "google_calendar_finalize") {
+        return {
+          configured: true,
+          connected: true,
+          connectedEmail: "person@example.com",
+          grantedScopes: ["openid", "https://www.googleapis.com/auth/calendar.events.owned.readonly"],
+        };
+      }
+      return command === "auth_load_saved_session" ? null : [];
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(authApi).not.toBeNull());
+
+    let result: { error: Error | null } | undefined;
+    await act(async () => {
+      result = await authApi!.signInWithGoogle({ requestCalendar: true });
+    });
+
+    expect(result?.error).toBeNull();
+    expect(signInWithIdToken).toHaveBeenCalledWith({
+      provider: "google",
+      token: "google-id-token",
+      access_token: "google-access-token",
+    });
+    expect(signInWithOAuth).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("google_calendar_finalize", {
+      userId: "user-id",
+      attemptId: "attempt-id",
+      purpose: "signIn",
+    });
+    expect(requireCapturedAuth(authApi).callbackStatus?.message).toBe(
+      "Signed in. Google Calendar is connected.",
+    );
+  });
+
+  it("fails closed instead of opening another OAuth flow when Google identities do not match", async () => {
+    vi.stubEnv("VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED", "1");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const session = createSession();
+    session.user.identities = [{
+      id: "identity-id",
+      identity_id: "identity-id",
+      user_id: session.user.id,
+      identity_data: { sub: "different-google-subject" },
+      provider: "google",
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      last_sign_in_at: new Date().toISOString(),
+    }];
+    signInWithIdToken.mockResolvedValue({ data: { session, user: session.user }, error: null });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "auth_load_saved_session") return null;
+      if (command === "google_calendar_capability") return { configured: true };
+      if (command === "google_calendar_authorize") {
+        return {
+          attemptId: "attempt-id",
+          purpose: "signIn",
+          calendarGranted: true,
+          calendarCredentialReady: true,
+          connectedEmail: "person@example.com",
+          googleSubject: "expected-google-subject",
+          idToken: "google-id-token",
+          accessToken: "google-access-token",
+        };
+      }
+      return [];
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(authApi).not.toBeNull());
+
+    let result: { error: Error | null } | undefined;
+    await act(async () => {
+      result = await authApi!.signInWithGoogle({ requestCalendar: true });
+    });
+
+    expect(result?.error?.message).toBe("Google sign-in could not be verified. Please try again.");
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(signInWithOAuth).not.toHaveBeenCalled();
+    expect(invoke).toHaveBeenCalledWith("google_calendar_discard_pending", {
+      attemptId: "attempt-id",
+    });
+    expect(requireCapturedAuth(authApi)).toMatchObject({
+      status: "unauthenticated",
+      user: null,
+      callbackStatus: {
+        phase: "failed",
+        googleAction: "retry",
+      },
+    });
+  });
+
+  it("keeps Calendar cancellation from opening a second Google consent flow", async () => {
+    vi.stubEnv("VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED", "1");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "google_calendar_capability") return { configured: true };
+      if (command === "google_calendar_authorize") {
+        throw new Error("GOOGLE_CALENDAR_AUTHORIZATION_CANCELLED");
+      }
+      return command === "auth_load_saved_session" ? null : [];
+    });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(authApi).not.toBeNull());
+
+    let result: { error: Error | null } | undefined;
+    await act(async () => {
+      result = await authApi!.signInWithGoogle({ requestCalendar: true });
+    });
+
+    expect(result?.error?.message).toMatch(/cancelled/i);
+    expect(signInWithIdToken).not.toHaveBeenCalled();
+    expect(signInWithOAuth).not.toHaveBeenCalled();
+    expect(requireCapturedAuth(authApi).callbackStatus).toMatchObject({
+      phase: "failed",
+      googleAction: "retry",
+    });
   });
 
   it("reopens the active Google OAuth URL without creating a second PKCE flow", async () => {

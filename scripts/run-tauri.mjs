@@ -7,12 +7,16 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const FULL_COMMIT_PATTERN = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/iu;
+const GOOGLE_DESKTOP_CLIENT_ID_PATTERN = /^[A-Za-z0-9.-]{1,256}\.apps\.googleusercontent\.com$/u;
+const GOOGLE_DESKTOP_CLIENT_SECRET_PATTERN = /^[A-Za-z0-9_-]{1,256}$/u;
 const PRODUCTION_POSTHOG_HOST = "https://us.i.posthog.com";
 
-function parsePublicViteEnvironment(contents) {
+function parseBuildEnvironment(contents) {
   const parsed = {};
   for (const line of contents.split(/\r?\n/u)) {
-    const match = line.match(/^\s*(VITE_[A-Z0-9_]+)\s*=\s*(.*?)\s*$/u);
+    const match = line.match(
+      /^\s*(VITE_[A-Z0-9_]+|GOOGLE_CALENDAR_DESKTOP_CLIENT_(?:ID|SECRET))\s*=\s*(.*?)\s*$/u,
+    );
     if (!match) continue;
     let value = match[2];
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
@@ -25,7 +29,7 @@ function parsePublicViteEnvironment(contents) {
   return parsed;
 }
 
-export function loadVitePublicEnvironment(
+export function loadBuildEnvironment(
   baseEnvironment = process.env,
   mode = "production",
   envDirectory = resolve(repoRoot, "apps/desktop"),
@@ -35,7 +39,7 @@ export function loadVitePublicEnvironment(
   for (const fileName of [".env", ".env.local", `.env.${mode}`, `.env.${mode}.local`]) {
     const filePath = resolve(envDirectory, fileName);
     if (!fileSystem.existsSync(filePath)) continue;
-    Object.assign(loaded, parsePublicViteEnvironment(fileSystem.readFileSync(filePath, "utf8")));
+    Object.assign(loaded, parseBuildEnvironment(fileSystem.readFileSync(filePath, "utf8")));
   }
   return { ...loaded, ...baseEnvironment };
 }
@@ -69,6 +73,30 @@ export function productionPostHogConfig(environment) {
     VITE_POSTHOG_KEY: projectKey,
     VITE_POSTHOG_HOST: host,
   };
+}
+
+export function validateGoogleCalendarBuildConfig(environment) {
+  const enabled = (environment.VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED ?? "").trim();
+  if (!["", "0", "1"].includes(enabled)) {
+    throw new Error("VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED must be 0 or 1.");
+  }
+  if (enabled !== "1") return;
+
+  const clientId = (environment.GOOGLE_CALENDAR_DESKTOP_CLIENT_ID ?? "").trim();
+  if (!GOOGLE_DESKTOP_CLIENT_ID_PATTERN.test(clientId) || clientId.startsWith("your-")) {
+    throw new Error(
+      "Enabled Google Calendar onboarding requires a valid public GOOGLE_CALENDAR_DESKTOP_CLIENT_ID.",
+    );
+  }
+
+  // Google's installed-application token endpoint rejects the exchange without
+  // the client secret, so an enabled build must carry both halves.
+  const clientSecret = (environment.GOOGLE_CALENDAR_DESKTOP_CLIENT_SECRET ?? "").trim();
+  if (!GOOGLE_DESKTOP_CLIENT_SECRET_PATTERN.test(clientSecret) || clientSecret.startsWith("your-")) {
+    throw new Error(
+      "Enabled Google Calendar onboarding requires a valid GOOGLE_CALENDAR_DESKTOP_CLIENT_SECRET.",
+    );
+  }
 }
 
 function run(executable, executableArgs, env = process.env) {
@@ -174,9 +202,15 @@ function main(argv = process.argv.slice(2)) {
     throw new Error("--windows-release requires a production build running on Windows.");
   }
 
-  const buildEnvironment = production
-    ? loadVitePublicEnvironment(process.env)
-    : process.env;
+  // Vite reads these files for the renderer, but Cargo is a sibling process.
+  // Load the allowlisted Desktop OAuth build values here as well so dev and
+  // release builds compile the same capability. Installed-app client secrets
+  // are distributed identifiers rather than confidential server credentials.
+  const buildEnvironment = loadBuildEnvironment(
+    process.env,
+    production ? "production" : "development",
+  );
+  validateGoogleCalendarBuildConfig(buildEnvironment);
   const buildCommit = resolveBuildCommit(buildEnvironment, gitCheckoutState, production);
 
   const releaseEnvironment = {

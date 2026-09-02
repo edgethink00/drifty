@@ -10,6 +10,9 @@ fn main() {
     println!("cargo:rerun-if-env-changed=VITE_DRIFTY_CHANNEL");
     println!("cargo:rerun-if-env-changed=VITE_DRIFTY_BUILD_COMMIT");
     println!("cargo:rerun-if-env-changed=GITHUB_SHA");
+    println!("cargo:rerun-if-env-changed=VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED");
+    println!("cargo:rerun-if-env-changed=GOOGLE_CALENDAR_DESKTOP_CLIENT_ID");
+    println!("cargo:rerun-if-env-changed=GOOGLE_CALENDAR_DESKTOP_CLIENT_SECRET");
     println!(
         "cargo:rustc-env=DRIFTY_BUILD_COMMIT={}",
         resolve_build_commit()
@@ -98,6 +101,13 @@ fn main() {
             "focus_target_activate_browser_tab",
             "focus_target_browser_tab_exists",
             "focus_target_open_app",
+            "google_calendar_capability",
+            "google_calendar_authorize",
+            "google_calendar_finalize",
+            "google_calendar_discard_pending",
+            "google_calendar_status",
+            "google_calendar_events",
+            "google_calendar_disconnect",
             "startup_get_open_at_login_status",
             "startup_set_open_at_login_enabled",
             "system_open_settings_pane",

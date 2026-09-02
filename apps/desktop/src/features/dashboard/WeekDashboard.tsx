@@ -34,6 +34,8 @@ import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
+import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 
 /* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
 const WEEK_CALENDAR_TIME_RAIL_PX = 40;
@@ -180,6 +182,8 @@ type WeekDashboardProps = {
   readonly header?: ReactNode;
   readonly rows: WeekDayRow[];
   readonly calendarEvents: Map<string, WeekCalendarEvent[]>;
+  readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
+  readonly googleCalendarStatus?: GoogleCalendarWeekStatus;
   readonly segments: readonly ActivitySegment[];
   readonly classificationOptions: ClassificationOptions;
   readonly appIcons: AppIconMap;
@@ -239,6 +243,8 @@ export function WeekDashboard({
   header,
   rows,
   calendarEvents,
+  googleCalendarEvents = new Map(),
+  googleCalendarStatus = "disabled",
   segments,
   classificationOptions,
   appIcons,
@@ -288,6 +294,13 @@ export function WeekDashboard({
   }, []);
   const autoScrollKeyRef = useRef<string | null>(null);
   const refreshStatusLabel = refreshStatus === "loading" ? t("dashboard.week.updating") : refreshStatus === "error" ? t("dashboard.week.updateFailed") : null;
+  const googleCalendarStatusLabel = googleCalendarStatus === "ready"
+    ? t("dashboard.week.googleCalendarPlanned")
+    : googleCalendarStatus === "loading"
+      ? t("dashboard.week.googleCalendarLoading")
+      : googleCalendarStatus === "error"
+        ? t("dashboard.week.googleCalendarError")
+        : null;
   const activeCategoryEntries = buildActiveCategoryEntries(categoryEntries);
   const productivityRingEntries = buildProductivityRingEntries(productivityEntries).map((entry) => ({
     ...entry,
@@ -593,6 +606,12 @@ export function WeekDashboard({
                 hoveredLegendCardRef={legendHoverCardRef}
                 setHoveredLegend={setLegendHover}
               />
+              {googleCalendarStatusLabel ? (
+                <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
+                  <span aria-hidden="true" />
+                  {googleCalendarStatusLabel}
+                </span>
+              ) : null}
             </div>
             {refreshStatusLabel ? (
               <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
@@ -636,11 +655,42 @@ export function WeekDashboard({
               ) : null}
               {calendarRows.map((row) => {
                 const events = displayCalendarEvents.get(row.day) ?? [];
+                const plannedEvents = googleCalendarEvents.get(row.day) ?? [];
                 return (
                   <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} data-week-day={row.day} key={row.day}>
                     {calendarHours.map((hour) => (
                       <span className="week-v2-calendar__line" key={`${row.day}-${hour}`} style={{ top: formatWeekDashboardAxisPixelValue((hour - calendarStartHour) * calendarHourHeight) }} />
                     ))}
+                    {plannedEvents.map((event) => {
+                      const allDayIndex = event.allDay
+                        ? plannedEvents.filter((candidate) => candidate.allDay).findIndex((candidate) => candidate.id === event.id)
+                        : -1;
+                      const eventHeight = event.allDay
+                        ? 18
+                        : Math.max(12, (event.durationMinutes / 60) * calendarHourHeight);
+                      const eventTop = event.allDay
+                        ? 2 + Math.max(0, allDayIndex) * 20
+                        : (event.startMinute / 60) * calendarHourHeight;
+                      const timeLabel = event.allDay
+                        ? t("dashboard.week.googleCalendarAllDay")
+                        : `${formatLocalizedCalendarMinuteLabel(row.day, event.startMinute, effectiveLanguage, startOfDayMinutes)}–${formatLocalizedCalendarMinuteLabel(row.day, event.startMinute + event.durationMinutes, effectiveLanguage, startOfDayMinutes)}`;
+                      return (
+                        <article
+                          className={`week-v2-calendar__scheduled-event${event.allDay ? " week-v2-calendar__scheduled-event--all-day" : ""}`}
+                          key={event.id}
+                          role="note"
+                          aria-label={t("dashboard.week.googleCalendarEvent", { title: event.title, time: timeLabel })}
+                          title={`${event.title}\n${timeLabel}`}
+                          style={{
+                            top: formatWeekDashboardAxisPixelValue(eventTop),
+                            height: formatWeekDashboardAxisPixelValue(eventHeight),
+                          }}
+                        >
+                          <strong>{event.title}</strong>
+                          {!event.allDay && eventHeight >= 30 ? <small>{timeLabel}</small> : null}
+                        </article>
+                      );
+                    })}
                     {events.map((event) => {
                       const eventLayout = buildWeekCalendarEventLayout(event, calendarHourHeight);
                       const identityStrip = planWeekIdentityStrip(

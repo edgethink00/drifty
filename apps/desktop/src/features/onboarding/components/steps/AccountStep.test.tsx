@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../../../localization/LocalizationContext";
 import { AccountStep } from "./AccountStep";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+  Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+});
 
 const baseProps: ComponentProps<typeof AccountStep> = {
   accountConnected: false,
@@ -53,6 +57,21 @@ describe("AccountStep", () => {
     expect(screen.queryByRole("button", { name: /drifty\.so account/i })).toBeNull();
     expect(screen.getByRole("button", { name: /continue with google/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /continue with email/i })).toBeTruthy();
+  });
+
+  it("leaves Calendar consent to Google's own permission screen instead of restating it in onboarding", () => {
+    vi.stubEnv("VITE_GOOGLE_CALENDAR_ONBOARDING_ENABLED", "1");
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const onStartCloudTrialWithGoogle = vi.fn();
+
+    renderAccountStep({ onStartCloudTrialWithGoogle });
+
+    expect(screen.queryByText(/calendar/i)).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    const googleButton = screen.getByRole("button", { name: /continue with google/i });
+    fireEvent.click(googleButton);
+    expect(onStartCloudTrialWithGoogle).toHaveBeenCalledTimes(1);
   });
 
   it("shows a busy verification state before confirming promotional access", () => {

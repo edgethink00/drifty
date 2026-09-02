@@ -138,6 +138,7 @@ function localizeDeletionFailure(
   t: ReturnType<typeof useLocalization>["t"],
 ): string {
   if (result.code === "local_sync_reset_failed") return t("settings.account.deleteErrorLocalSync");
+  if (result.code === "local_calendar_disconnect_failed") return t("settings.account.deleteErrorLocalCalendar");
   if (result.code === "shared_team_owner" && result.stage === "billing_stopped") {
     return t("settings.account.deleteErrorSharedTeamAfterBilling");
   }

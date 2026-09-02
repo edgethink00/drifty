@@ -16,6 +16,7 @@ export type AccountDeletionFailureCode =
   | "account_state_unknown"
   | "transport_unknown"
   | "local_sync_reset_failed"
+  | "local_calendar_disconnect_failed"
   | "invalid_response";
 
 export type AccountDeletionResult =
@@ -129,6 +130,7 @@ const ACCOUNT_DELETION_FAILURE_CODES = new Set<AccountDeletionFailureCode>([
   "account_state_unknown",
   "transport_unknown",
   "local_sync_reset_failed",
+  "local_calendar_disconnect_failed",
   "invalid_response",
 ]);
 

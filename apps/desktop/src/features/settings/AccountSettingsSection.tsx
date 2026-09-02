@@ -12,6 +12,7 @@ import type {
 import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
+import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import "./AccountSettingsSection.css";
 
 export type AccountSettingsSectionProps = {
@@ -188,6 +189,7 @@ export function AccountSettingsSection({
             </div>
           ) : null}
         </div>
+        <GoogleCalendarSettings />
         {shouldShowDeviceManagement ? (
           <div className="settings-row settings-row--cloud-devices">
             <CloudDeviceManagementPanel

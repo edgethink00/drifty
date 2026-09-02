@@ -6,6 +6,7 @@ import { WeekDashboard } from "./WeekDashboard";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
 import type { WeekCalendarEvent, WeekDayRow } from "./weekCalendar";
 import { readAppStyles } from "../../test/readStyles";
+import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 
 const styles = readAppStyles();
 
@@ -125,6 +126,8 @@ type WeekDashboardRenderOverrides = {
   readonly activityActionsEnabled?: boolean;
   readonly axisScalePercent?: number;
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
+  readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
+  readonly googleCalendarStatus?: "disabled" | "disconnected" | "loading" | "ready" | "error";
   readonly categoryEntries?: CategoryDuration[];
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
@@ -206,6 +209,33 @@ describe("WeekDashboard virtual current marker", () => {
 });
 
 describe("WeekDashboard axis scale", () => {
+  it("renders planned Calendar time as an outlined layer separate from captured activity", () => {
+    const googleCalendarEvents = new Map<string, GoogleCalendarWeekEvent[]>([[
+      "2024-01-03",
+      [{
+        id: "meeting:2024-01-03",
+        sourceId: "meeting",
+        day: "2024-01-03",
+        title: "Planning",
+        startMinute: 9 * 60,
+        durationMinutes: 60,
+        allDay: false,
+      }],
+    ]]);
+
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent()]]]),
+      googleCalendarEvents,
+      googleCalendarStatus: "ready",
+    });
+
+    expect(screen.getByText("Google Calendar · planned")).toBeTruthy();
+    expect(screen.getByRole("note", { name: /Planned event: Planning, 9:00 AM–10:00 AM/ })).toBeTruthy();
+    expect(container.querySelectorAll(".week-v2-calendar__scheduled-event")).toHaveLength(1);
+    expect(container.querySelectorAll(".week-v2-calendar__event")).toHaveLength(1);
+    expect(styles).toMatch(/\.week-v2-calendar__scheduled-event\s*\{[^}]*border:\s*1px dashed/);
+  });
+
   it("uses the compressed 75 percent calendar y-axis by default", () => {
     const { container } = renderWeekDashboard();
 

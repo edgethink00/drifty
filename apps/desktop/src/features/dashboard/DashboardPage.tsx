@@ -31,6 +31,8 @@ import { DashboardPageHeader } from "./DashboardPageHeader";
 import type { ActivityInspectorProjectOption, ActivityInspectorSaveHandler } from "./WeekActivityInspector";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
+import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
@@ -84,6 +86,8 @@ type DashboardPageProps = {
   readonly statusRunning: boolean;
   readonly totalSeconds: number;
   readonly weekCalendarEvents: Map<string, WeekCalendarEvent[]>;
+  readonly googleCalendarWeekEvents?: Map<string, GoogleCalendarWeekEvent[]>;
+  readonly googleCalendarWeekStatus?: GoogleCalendarWeekStatus;
   readonly weekFocusDeltaSeconds: number | null;
   readonly weekRefreshStatus: "idle" | "loading" | "error";
   readonly weekRows: WeekDayRow[];
@@ -154,6 +158,8 @@ export function DashboardPage({
   statusRunning,
   totalSeconds,
   weekCalendarEvents,
+  googleCalendarWeekEvents,
+  googleCalendarWeekStatus,
   weekFocusDeltaSeconds,
   weekRefreshStatus,
   weekRows,
@@ -339,6 +345,8 @@ export function DashboardPage({
           header={headInsideBlock ? pageHead : null}
           rows={weekRows}
           calendarEvents={weekCalendarEvents}
+          googleCalendarEvents={googleCalendarWeekEvents}
+          googleCalendarStatus={googleCalendarWeekStatus}
           segments={dashboardSegments}
           classificationOptions={dashboardClassificationOptions}
           appIcons={appIcons}
