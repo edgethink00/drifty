@@ -1,17 +1,11 @@
-import type { ReactNode } from "react";
 import type { DashboardPeriod } from "./dashboardPeriods";
-import { MonthDashboardLoadingSkeleton, WeekDashboardLoadingSkeleton } from "./DashboardPeriodLoadingSkeletons";
+import { MonthDashboardLoadingSkeleton } from "./DashboardPeriodLoadingSkeletons";
 
 type DashboardLoadingSkeletonProps = {
-  readonly dashPeriod: DashboardPeriod;
-  readonly dateNavigator: ReactNode;
+  readonly dashPeriod: Exclude<DashboardPeriod, "Week">;
 };
 
-export function DashboardLoadingSkeleton({ dashPeriod, dateNavigator }: DashboardLoadingSkeletonProps) {
-  if (dashPeriod === "Week") {
-    return <WeekDashboardLoadingSkeleton dateNavigator={dateNavigator} />;
-  }
-
+export function DashboardLoadingSkeleton({ dashPeriod }: DashboardLoadingSkeletonProps) {
   if (dashPeriod === "Month") {
     return <MonthDashboardLoadingSkeleton />;
   }

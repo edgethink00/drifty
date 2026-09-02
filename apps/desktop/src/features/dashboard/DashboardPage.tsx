@@ -214,10 +214,10 @@ export function DashboardPage({
   }));
   const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardEffectiveProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
-  // 2026-07 dashboard redesign: on Day/Week the header lives inside the main
-  // content column (day-split__main / week-v2-calendar) instead of on top of
-  // the page. Loading and Month keep the classic top placement.
-  const headInsideBlock = !initialDataLoading && (dashPeriod === "Today" || dashPeriod === "Week");
+  // Week keeps the same integrated calendar header while loading so the shell
+  // does not jump between the legacy top placement and the populated frame.
+  // Day still uses its compact standalone loading composition.
+  const headInsideBlock = dashPeriod === "Week" || (!initialDataLoading && dashPeriod === "Today");
   const showShareButton = !initialDataLoading && !isDashboardReplayActive && (
     (dashPeriod === "Today" && hasMeasuredActivity)
     || (dashPeriod === "Week" && totalSeconds > 0)
@@ -338,11 +338,10 @@ export function DashboardPage({
         </div>
       ) : null}
 
-      {initialDataLoading ? (
-        <DashboardLoadingSkeleton dashPeriod={dashPeriod} dateNavigator={null} />
-      ) : dashPeriod === "Week" ? (
+      {dashPeriod === "Week" ? (
         <WeekDashboard
           header={headInsideBlock ? pageHead : null}
+          initialDataLoading={initialDataLoading}
           rows={weekRows}
           calendarEvents={weekCalendarEvents}
           googleCalendarEvents={googleCalendarWeekEvents}
@@ -371,6 +370,8 @@ export function DashboardPage({
           onClassifyActivity={onClassifyDashboardActivity}
           onDeleteActivity={onDeleteDashboardActivity}
         />
+      ) : initialDataLoading ? (
+        <DashboardLoadingSkeleton dashPeriod={dashPeriod} />
       ) : dashPeriod === "Month" ? (
         <HistoryCalendarPanel
           segments={historySegments}

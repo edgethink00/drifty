@@ -36,6 +36,7 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
+import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./WeekDashboardLoadingState";
 
 /* Width of .week-v2-calendar__time-rail (2.5rem at the 16px root font size). */
 const WEEK_CALENDAR_TIME_RAIL_PX = 40;
@@ -180,6 +181,7 @@ type WeekDashboardProps = {
   /** Page header (title + date navigator) rendered inside the calendar block
    *  for the 2026-07 dashboard redesign. */
   readonly header?: ReactNode;
+  readonly initialDataLoading?: boolean;
   readonly rows: WeekDayRow[];
   readonly calendarEvents: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
@@ -241,6 +243,7 @@ export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: Wee
 
 export function WeekDashboard({
   header,
+  initialDataLoading = false,
   rows,
   calendarEvents,
   googleCalendarEvents = new Map(),
@@ -575,44 +578,55 @@ export function WeekDashboard({
   }, [autoScrollTargetMinute, calendarHourHeight, endDay, minCalendarMinute, startDay]);
 
   return (
-    <section className="week-v2" aria-label={t("dashboard.week.overviewAria")} data-week-axis-scale-percent={effectiveAxisScalePercent}>
+    <section
+      className={`week-v2${initialDataLoading ? " dashboard-loading-skeleton dashboard-loading-skeleton--week" : ""}`}
+      aria-label={initialDataLoading ? "Loading dashboard data" : t("dashboard.week.overviewAria")}
+      aria-busy={initialDataLoading || undefined}
+      aria-live={initialDataLoading ? "polite" : undefined}
+      role={initialDataLoading ? "status" : undefined}
+      data-week-axis-scale-percent={effectiveAxisScalePercent}
+    >
       <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
         <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
           {header}
           <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
-            <div className="flow-chart-head__actions">
-              <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
-                {WEEK_COLOR_MODE_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={option === colorMode ? "on" : undefined}
-                    aria-pressed={option === colorMode}
-                    onClick={() => {
-                      setBreakdownHover(null);
-                      setLegendHover(null);
-                      setColorMode(option);
-                    }}
-                  >
-                    {t(option === "category" ? "common.category" : "common.productivity")}
-                  </button>
-                ))}
+            {initialDataLoading ? (
+              <WeekDashboardLoadingLegend />
+            ) : (
+              <div className="flow-chart-head__actions">
+                <div className="seg flow-color-mode-control" aria-label={t("dashboard.week.colorModeAria")}>
+                  {WEEK_COLOR_MODE_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      className={option === colorMode ? "on" : undefined}
+                      aria-pressed={option === colorMode}
+                      onClick={() => {
+                        setBreakdownHover(null);
+                        setLegendHover(null);
+                        setColorMode(option);
+                      }}
+                    >
+                      {t(option === "category" ? "common.category" : "common.productivity")}
+                    </button>
+                  ))}
+                </div>
+                <FlowChartLegend
+                  ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
+                  colorMode={colorMode}
+                  getAppBreakdown={buildLegendHoverRows}
+                  hasUnclassified={hasUnclassified}
+                  hoveredLegendCardRef={legendHoverCardRef}
+                  setHoveredLegend={setLegendHover}
+                />
+                {googleCalendarStatusLabel ? (
+                  <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
+                    <span aria-hidden="true" />
+                    {googleCalendarStatusLabel}
+                  </span>
+                ) : null}
               </div>
-              <FlowChartLegend
-                ariaLabel={t(colorMode === "category" ? "dashboard.week.categoryTones" : "dashboard.week.productivityTones")}
-                colorMode={colorMode}
-                getAppBreakdown={buildLegendHoverRows}
-                hasUnclassified={hasUnclassified}
-                hoveredLegendCardRef={legendHoverCardRef}
-                setHoveredLegend={setLegendHover}
-              />
-              {googleCalendarStatusLabel ? (
-                <span className={`week-v2-calendar__calendar-key week-v2-calendar__calendar-key--${googleCalendarStatus}`} aria-live="polite">
-                  <span aria-hidden="true" />
-                  {googleCalendarStatusLabel}
-                </span>
-              ) : null}
-            </div>
+            )}
             {refreshStatusLabel ? (
               <span className={`week-v2-summary__refresh week-v2-summary__refresh--${refreshStatus}`} aria-live="polite">{refreshStatusLabel}</span>
             ) : null}
@@ -643,7 +657,7 @@ export function WeekDashboard({
                   {formatLocalizedHourLabel(clockHourForLogicalHour(calendarEndHour, startOfDayMinutes), effectiveLanguage)}
                 </span>
               </div>
-              {currentCalendarMarkerStyle && currentCalendarLabel ? (
+              {!initialDataLoading && currentCalendarMarkerStyle && currentCalendarLabel ? (
                 <div
                   className="week-v2-calendar__now-marker week-v2-calendar__now-marker--line"
                   style={currentCalendarMarkerStyle}
@@ -654,8 +668,8 @@ export function WeekDashboard({
                 </div>
               ) : null}
               {calendarRows.map((row) => {
-                const events = displayCalendarEvents.get(row.day) ?? [];
-                const plannedEvents = googleCalendarEvents.get(row.day) ?? [];
+                const events = initialDataLoading ? [] : displayCalendarEvents.get(row.day) ?? [];
+                const plannedEvents = initialDataLoading ? [] : googleCalendarEvents.get(row.day) ?? [];
                 return (
                   <div className={`week-v2-calendar__day-column${row.day === markerCalendarDay ? " is-today" : ""}`} data-week-day={row.day} key={row.day}>
                     {calendarHours.map((hour) => (
@@ -761,7 +775,7 @@ export function WeekDashboard({
                   </div>
                 );
               })}
-              {currentCalendarMarkerStyle && currentCalendarLabel ? (
+              {!initialDataLoading && currentCalendarMarkerStyle && currentCalendarLabel ? (
                 <div
                   className="week-v2-calendar__now-marker week-v2-calendar__now-marker--overlay"
                   style={currentCalendarMarkerStyle}
@@ -787,7 +801,7 @@ export function WeekDashboard({
           hasClassifyAction={Boolean(onSaveActivityValues || onClassifyActivity)}
           hasDeleteAction={Boolean(onDeleteActivity)}
           onOpenActivity={openActivityInspector}
-          disabled={activityInspector !== null}
+          disabled={initialDataLoading || activityInspector !== null}
         />
         {activityInspector ? (
           <WeekActivityInspector
@@ -809,7 +823,7 @@ export function WeekDashboard({
             classificationOptions={classificationOptions}
           />
         ) : null}
-        {legendHover && !activityInspector ? <FlowLegendHoverCard hover={legendHover} appIcons={appIcons} cardRef={legendHoverCardRef} /> : null}
+        {!initialDataLoading && legendHover && !activityInspector ? <FlowLegendHoverCard hover={legendHover} appIcons={appIcons} cardRef={legendHoverCardRef} /> : null}
 
         <BreakdownSidePanel
           open={sideOpen}
@@ -820,125 +834,131 @@ export function WeekDashboard({
           showLabel={t("dashboard.week.showBreakdown")}
           collapseLabel={t("dashboard.week.collapseBreakdown")}
         >
-          <CompactRingChart
-            title={t("common.productivity")}
-            entries={productivityRingEntries}
-            totalSeconds={totalSeconds}
-            centerPercent={productivityCenterPercent}
-            flowBlocks={[]}
-            appIcons={appIcons}
-            getAppBreakdown={(entry) => buildHoverRows(entry.key, "productivity")}
-            language={effectiveLanguage}
-          />
-          <CompactClassificationBar<CategoryDuration>
-            title={t("dashboard.today.categories")}
-            ariaLabel={t("dashboard.week.categoryAria")}
-            entries={activeCategoryEntries}
-            totalSeconds={totalSeconds}
-            getKey={(entry) => entry.category}
-            getLabel={(entry) => localizedCategoryLabel(entry.category, t)}
-            getColor={(entry) => CATEGORY_COLORS[entry.category]}
-            getDotClassName={(entry) => `category-dot--${entry.category}`}
-            getAppBreakdown={(entry) => buildHoverRows(entry.category, "category")}
-            appIcons={appIcons}
-            visibleLimit={5}
-            language={effectiveLanguage}
-          />
-          <section className="week-v2-side-card week-v2-side-card--weekly-breakdown" aria-label={t("dashboard.week.weeklyBreakdown")}>
-            <span className="label-mono">{t("dashboard.week.weeklyBreakdown")}</span>
-            <div className="wt-plot">
-              <div className="wt-grid">
-                {sideTrendChart.gridlines.map((line) => (
-                  <div className="wt-gridline" style={{ top: `${line.topPercent.toFixed(2)}%` }} key={`gl-${line.label}`}>
-                    <span className="wt-gridlabel">{line.label}</span>
+          {initialDataLoading ? (
+            <WeekDashboardLoadingBreakdown />
+          ) : (
+            <>
+              <CompactRingChart
+                title={t("common.productivity")}
+                entries={productivityRingEntries}
+                totalSeconds={totalSeconds}
+                centerPercent={productivityCenterPercent}
+                flowBlocks={[]}
+                appIcons={appIcons}
+                getAppBreakdown={(entry) => buildHoverRows(entry.key, "productivity")}
+                language={effectiveLanguage}
+              />
+              <CompactClassificationBar<CategoryDuration>
+                title={t("dashboard.today.categories")}
+                ariaLabel={t("dashboard.week.categoryAria")}
+                entries={activeCategoryEntries}
+                totalSeconds={totalSeconds}
+                getKey={(entry) => entry.category}
+                getLabel={(entry) => localizedCategoryLabel(entry.category, t)}
+                getColor={(entry) => CATEGORY_COLORS[entry.category]}
+                getDotClassName={(entry) => `category-dot--${entry.category}`}
+                getAppBreakdown={(entry) => buildHoverRows(entry.category, "category")}
+                appIcons={appIcons}
+                visibleLimit={5}
+                language={effectiveLanguage}
+              />
+              <section className="week-v2-side-card week-v2-side-card--weekly-breakdown" aria-label={t("dashboard.week.weeklyBreakdown")}>
+                <span className="label-mono">{t("dashboard.week.weeklyBreakdown")}</span>
+                <div className="wt-plot">
+                  <div className="wt-grid">
+                    {sideTrendChart.gridlines.map((line) => (
+                      <div className="wt-gridline" style={{ top: `${line.topPercent.toFixed(2)}%` }} key={`gl-${line.label}`}>
+                        <span className="wt-gridlabel">{line.label}</span>
+                      </div>
+                    ))}
+                    {WEEK_SIDE_TREND_VLINE_LEFTS.map((left) => (
+                      <div className="wt-vline" style={{ left: `${left}%` }} key={`vl-${left}`} />
+                    ))}
                   </div>
-                ))}
-                {WEEK_SIDE_TREND_VLINE_LEFTS.map((left) => (
-                  <div className="wt-vline" style={{ left: `${left}%` }} key={`vl-${left}`} />
-                ))}
-              </div>
-              <div className="wt-cols">
-                {sideTrendChart.columns.map((column) => (
-                  <div className={`wt-col${column.off ? " wt-col--off" : ""}`} key={column.day}>
-                    <div className="wt-bars-zone">
-                      {column.off ? null : (
-                        <div className="wt-bar" style={{ height: `${column.barHeightPercent.toFixed(2)}%` }}>
-                          {column.segments.map((segment) => (
-                            <div
-                              className="wt-seg"
-                              style={{ height: `${segment.heightPercent.toFixed(2)}%`, background: segment.color }}
-                              key={segment.key}
-                              title={segment.title}
-                              tabIndex={0}
-                              role="img"
-                              aria-label={`${column.dayLabel} ${segment.title}`}
-                              onMouseEnter={(event) => setBreakdownHover({
-                                label: segment.label,
-                                durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
-                                shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
-                                dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
-                                color: segment.color,
-                                appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
-                                x: event.clientX,
-                                y: event.clientY,
-                              })}
-                              onMouseMove={(event) => setBreakdownHover((current) => current ? { ...current, x: event.clientX, y: event.clientY } : current)}
-                              onMouseLeave={() => setBreakdownHover(null)}
-                              onFocus={(event) => {
-                                const bounds = event.currentTarget.getBoundingClientRect();
-                                setBreakdownHover({
-                                  label: segment.label,
-                                  durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
-                                  shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
-                                  dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
-                                  color: segment.color,
-                                  appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
-                                  x: bounds.left + bounds.width / 2,
-                                  y: bounds.top + bounds.height / 2,
-                                });
-                              }}
-                              onBlur={() => setBreakdownHover(null)}
-                            />
-                          ))}
+                  <div className="wt-cols">
+                    {sideTrendChart.columns.map((column) => (
+                      <div className={`wt-col${column.off ? " wt-col--off" : ""}`} key={column.day}>
+                        <div className="wt-bars-zone">
+                          {column.off ? null : (
+                            <div className="wt-bar" style={{ height: `${column.barHeightPercent.toFixed(2)}%` }}>
+                              {column.segments.map((segment) => (
+                                <div
+                                  className="wt-seg"
+                                  style={{ height: `${segment.heightPercent.toFixed(2)}%`, background: segment.color }}
+                                  key={segment.key}
+                                  title={segment.title}
+                                  tabIndex={0}
+                                  role="img"
+                                  aria-label={`${column.dayLabel} ${segment.title}`}
+                                  onMouseEnter={(event) => setBreakdownHover({
+                                    label: segment.label,
+                                    durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
+                                    shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
+                                    dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
+                                    color: segment.color,
+                                    appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
+                                    x: event.clientX,
+                                    y: event.clientY,
+                                  })}
+                                  onMouseMove={(event) => setBreakdownHover((current) => current ? { ...current, x: event.clientX, y: event.clientY } : current)}
+                                  onMouseLeave={() => setBreakdownHover(null)}
+                                  onFocus={(event) => {
+                                    const bounds = event.currentTarget.getBoundingClientRect();
+                                    setBreakdownHover({
+                                      label: segment.label,
+                                      durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
+                                      shareLabel: `${Math.round((segment.seconds / Math.max(column.totalSeconds, 1)) * 100)}%`,
+                                      dotClassName: colorMode === "productivity" ? `productivity-dot--${segment.key}` : `category-dot--${segment.key}`,
+                                      color: segment.color,
+                                      appBreakdown: buildHoverRows(segment.key, colorMode, column.day),
+                                      x: bounds.left + bounds.width / 2,
+                                      y: bounds.top + bounds.height / 2,
+                                    });
+                                  }}
+                                  onBlur={() => setBreakdownHover(null)}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="wt-daylabel">{column.dayLabel}</div>
+                        <div className="wt-daylabel">{column.dayLabel}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
+              </section>
+              <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("dashboard.week.summaryAria")}>
+                <MetricTile
+                  className="insight-summary__tile insight-summary__tile--tracked"
+                  label={t("common.tracked")}
+                  value={formatLocalizedDuration(totalSeconds, effectiveLanguage)}
+                  detail={summaryMetrics.activeDayCount > 0
+                    ? t("dashboard.week.averagePerDay", { duration: formatLocalizedCompactDurationFromSeconds(summaryMetrics.averageDailySeconds, effectiveLanguage) })
+                    : t("dashboard.week.noActiveDays")}
+                />
+                <MetricTile
+                  className="insight-summary__tile insight-summary__tile--sessions"
+                  label={t("common.sessions")}
+                  value={String(summaryMetrics.sessionCount)}
+                  detail={summaryMetrics.sessionCount > 0 ? t("dashboard.week.averageValue", { minutes: summaryMetrics.averageSessionMinutes }) : t("dashboard.week.noSessions")}
+                />
+                <MetricTile
+                  className="insight-summary__tile insight-summary__tile--peak"
+                  label={t("dashboard.week.peakDay")}
+                  value={summaryMetrics.peakDayLabel}
+                  detail={summaryMetrics.peakDaySeconds > 0 ? formatLocalizedCompactDurationFromSeconds(summaryMetrics.peakDaySeconds, effectiveLanguage) : t("dashboard.week.noActivity")}
+                />
+                <MetricTile
+                  className="insight-summary__tile insight-summary__tile--apps"
+                  label={t("common.apps")}
+                  value={String(summaryMetrics.uniqueAppsCount)}
+                  detail={summaryMetrics.topAppLabel}
+                />
               </div>
-            </div>
-          </section>
-          <div className="kpi-row kpi-row--insights insight-summary" aria-label={t("dashboard.week.summaryAria")}>
-            <MetricTile
-              className="insight-summary__tile insight-summary__tile--tracked"
-              label={t("common.tracked")}
-              value={formatLocalizedDuration(totalSeconds, effectiveLanguage)}
-              detail={summaryMetrics.activeDayCount > 0
-                ? t("dashboard.week.averagePerDay", { duration: formatLocalizedCompactDurationFromSeconds(summaryMetrics.averageDailySeconds, effectiveLanguage) })
-                : t("dashboard.week.noActiveDays")}
-            />
-            <MetricTile
-              className="insight-summary__tile insight-summary__tile--sessions"
-              label={t("common.sessions")}
-              value={String(summaryMetrics.sessionCount)}
-              detail={summaryMetrics.sessionCount > 0 ? t("dashboard.week.averageValue", { minutes: summaryMetrics.averageSessionMinutes }) : t("dashboard.week.noSessions")}
-            />
-            <MetricTile
-              className="insight-summary__tile insight-summary__tile--peak"
-              label={t("dashboard.week.peakDay")}
-              value={summaryMetrics.peakDayLabel}
-              detail={summaryMetrics.peakDaySeconds > 0 ? formatLocalizedCompactDurationFromSeconds(summaryMetrics.peakDaySeconds, effectiveLanguage) : t("dashboard.week.noActivity")}
-            />
-            <MetricTile
-              className="insight-summary__tile insight-summary__tile--apps"
-              label={t("common.apps")}
-              value={String(summaryMetrics.uniqueAppsCount)}
-              detail={summaryMetrics.topAppLabel}
-            />
-          </div>
+            </>
+          )}
         </BreakdownSidePanel>
-        {breakdownHover && !activityInspector ? <CompactClassificationHoverCard hover={breakdownHover} appIcons={appIcons} /> : null}
+        {!initialDataLoading && breakdownHover && !activityInspector ? <CompactClassificationHoverCard hover={breakdownHover} appIcons={appIcons} /> : null}
       </div>
     </section>
   );

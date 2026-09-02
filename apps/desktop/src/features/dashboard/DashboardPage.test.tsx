@@ -101,6 +101,28 @@ describe("DashboardPage date navigator", () => {
 
     expect(onNavigate).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps the finished Week frame without mock activity while loading", () => {
+    renderDashboardWithNoData({
+      dashPeriod: "Week",
+      initialDataLoading: true,
+      dashboardDateNavigator: <button type="button">Previous week</button>,
+    });
+
+    const calendar = document.querySelector(".week-v2-calendar");
+    expect(calendar?.querySelector(".dashboard-page-head")).toBeTruthy();
+    expect(document.querySelectorAll(".dashboard-page-head")).toHaveLength(1);
+    expect(calendar?.querySelector(".week-v2-calendar__day-head")).toBeTruthy();
+    expect(calendar?.querySelector(".week-v2-calendar__time-rail")).toBeTruthy();
+    expect(calendar?.querySelector(".week-v2-calendar__legend .flow-chart-legend")).toBeTruthy();
+    expect(calendar?.querySelector(".week-v2-calendar__legend .dashboard-skeleton-week-mode")).toBeTruthy();
+    expect(calendar?.querySelector(".week-v2-summary")).toBeNull();
+    expect(calendar?.querySelector(".week-v2-calendar__event")).toBeNull();
+    expect(document.querySelector(".week-v2-side")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse week breakdown" }));
+    expect(document.querySelector(".week-v2-grid")?.classList.contains("week-v2-grid--side-open")).toBe(false);
+  });
 });
 describe("DashboardPage demo replay empty data", () => {
   it("keeps blank chart frames visible instead of empty-state copy while replay is active", () => {

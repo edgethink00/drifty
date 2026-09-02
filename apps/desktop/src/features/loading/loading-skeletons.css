@@ -193,18 +193,42 @@
   background: color-mix(in srgb, var(--text-soft) 14%, var(--surface));
 }
 
-.dashboard-loading-skeleton--week .week-v2-calendar__body {
-  min-height: 39rem;
+.dashboard-loading-skeleton--week .week-v2-calendar__scroller {
+  pointer-events: none;
 }
 
-.dashboard-skeleton-week-event {
+.dashboard-skeleton-week-mode {
+  width: 8.2rem;
+}
+
+.dashboard-skeleton-week-legend,
+.dashboard-skeleton-week-legend__item {
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-skeleton-week-legend {
+  gap: var(--space-3);
+}
+
+.dashboard-skeleton-week-legend__item {
+  gap: var(--space-1);
+  min-width: 4.6rem;
+}
+
+.dashboard-skeleton-week-legend__item .loading-skeleton-line {
+  width: 3.5rem;
+}
+
+.dashboard-skeleton-panel-bed--week-chart {
   display: block;
-  left: 7%;
-  right: 7%;
-  width: auto;
-  min-height: 1.35rem;
-  opacity: 0.72;
-  pointer-events: none;
+  min-height: 7.5rem;
+  margin-top: var(--space-2);
+}
+
+.dashboard-skeleton-week-kpis .metric-tile {
+  display: flex;
+  min-height: 3.3rem;
 }
 
 .dashboard-skeleton-month-cell {

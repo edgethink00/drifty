@@ -128,6 +128,7 @@ type WeekDashboardRenderOverrides = {
   readonly calendarEvents?: Map<string, WeekCalendarEvent[]>;
   readonly googleCalendarEvents?: Map<string, GoogleCalendarWeekEvent[]>;
   readonly googleCalendarStatus?: "disabled" | "disconnected" | "loading" | "ready" | "error";
+  readonly initialDataLoading?: boolean;
   readonly categoryEntries?: CategoryDuration[];
   readonly currentCalendarDay?: string;
   readonly currentMinuteOfDay?: number;
@@ -234,6 +235,33 @@ describe("WeekDashboard axis scale", () => {
     expect(container.querySelectorAll(".week-v2-calendar__scheduled-event")).toHaveLength(1);
     expect(container.querySelectorAll(".week-v2-calendar__event")).toHaveLength(1);
     expect(styles).toMatch(/\.week-v2-calendar__scheduled-event\s*\{[^}]*border:\s*1px dashed/);
+  });
+
+  it("keeps both captured and planned events out of the initial loading frame", () => {
+    const googleCalendarEvents = new Map<string, GoogleCalendarWeekEvent[]>([[
+      "2024-01-03",
+      [{
+        id: "meeting:2024-01-03",
+        sourceId: "meeting",
+        day: "2024-01-03",
+        title: "Planning",
+        startMinute: 9 * 60,
+        durationMinutes: 60,
+        allDay: false,
+      }],
+    ]]);
+
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent()]]]),
+      googleCalendarEvents,
+      googleCalendarStatus: "ready",
+      initialDataLoading: true,
+    });
+
+    expect(screen.getByRole("status", { name: "Loading dashboard data" })).toBeTruthy();
+    expect(screen.queryByText("Google Calendar · planned")).toBeNull();
+    expect(container.querySelector(".week-v2-calendar__scheduled-event")).toBeNull();
+    expect(container.querySelector(".week-v2-calendar__event")).toBeNull();
   });
 
   it("uses the compressed 75 percent calendar y-axis by default", () => {
