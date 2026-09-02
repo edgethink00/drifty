@@ -44,6 +44,8 @@ const RUNTIME_ARCHIVES: &[RuntimeArchive] = &[
         // The upstream b9690 arm64 artifact is built with a macOS 26.0
         // deployment target. This rebuild uses the exact b9690 source commit
         // with a macOS 13.0 target so it can honor Drifty's supported OS range.
+        // Runtime archives are versioned independently from app releases; keep
+        // reusing these hash- and size-pinned bytes until the runtime changes.
         url: "https://github.com/edgethink00/drifty_releases/releases/download/1.9.4/llama-b9690-drifty-bin-macos-arm64-macos13.tar.gz",
         sha256: "ed5c2580fbd32be0878db83d3a6fe5364fcce26cdc7ed48db71e1f83642308ce",
         expected_size_bytes: 7_334_981,
@@ -340,12 +342,13 @@ mod tests {
     }
 
     #[test]
-    fn macos_arm_runtime_uses_the_current_release_tag_and_compatibility_marker() {
+    fn macos_arm_runtime_uses_a_drifty_owned_pinned_release_and_compatibility_marker() {
         let archive = runtime_archive_for("macos", "aarch64").expect("arm64 runtime archive");
 
         assert!(archive
             .url
-            .contains(&format!("/download/{}/", env!("CARGO_PKG_VERSION"))));
+            .starts_with("https://github.com/edgethink00/drifty_releases/releases/download/"));
+        assert!(!archive.url.contains("/releases/latest/"));
         assert!(archive.required_files.contains(&"DRIFTY_RUNTIME_MACOS13"));
     }
 
