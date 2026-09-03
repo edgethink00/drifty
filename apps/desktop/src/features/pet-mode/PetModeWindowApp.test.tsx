@@ -109,6 +109,7 @@ const bridge = vi.hoisted(() => ({
   moveNativePetToTarget: vi.fn().mockResolvedValue({
     facing: "right",
     targetKind: "browser_tab_close",
+    motionOutcome: "completed",
     confidence: "high",
     diagnostic: "ax_selected_tab_close",
     targetX: 640,
@@ -412,6 +413,68 @@ describe("PetModeWindowApp", () => {
     expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(2);
   });
 
+  it("rechecks the final seat when an intervention supersedes an in-flight AX scan", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(1);
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let completeFirstScan!: () => void;
+    bridge.reconcileNativePetPosition
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        completeFirstScan = () => resolve({
+          x: 120,
+          y: 80,
+          moved: false,
+          reason: "motion_superseded",
+        });
+      }))
+      .mockResolvedValueOnce({
+        x: 120,
+        y: 80,
+        moved: false,
+        reason: "no_control_overlap",
+      });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_SEAT_RECONCILE_INTERVAL_MS + 120);
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-seat-race",
+          appName: "Aside",
+          browserName: "Aside",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("paw");
+
+    await act(async () => {
+      completeFirstScan();
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+    });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledTimes(2);
+  });
+
   it("retries a periodic AX recheck after a blink temporarily blocks movement", async () => {
     // 0.517 schedules the first blink at about 5.9s, so the 6s AX interval
     // lands during the pose and must be retried after the 228ms blink settles.
@@ -556,6 +619,7 @@ describe("PetModeWindowApp", () => {
       finishMove = () => resolve({
         facing: "right",
         targetKind: "browser_tab_close",
+        motionOutcome: "completed",
         confidence: "high",
         diagnostic: "ax_selected_tab_close",
         targetX: 640,
@@ -622,6 +686,7 @@ describe("PetModeWindowApp", () => {
       finishMove = () => resolve({
         facing: "right",
         targetKind: "browser_tab_close",
+        motionOutcome: "completed",
         confidence: "high",
         diagnostic: "ax_selected_tab_close",
         targetX: 640,
@@ -2106,6 +2171,54 @@ describe("PetModeWindowApp", () => {
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-1");
   });
 
+  it("never reports paw contact when native target travel was cancelled", async () => {
+    vi.useFakeTimers();
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockResolvedValueOnce({
+      facing: "right",
+      targetKind: "browser_tab_close",
+      confidence: "high",
+      diagnostic: "ax_selected_tab_close",
+      targetX: 640,
+      targetY: 48,
+      motionOutcome: "cancelled",
+    });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: true }),
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-cancelled-travel",
+          appName: "Aside",
+          browserName: "Aside",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(240);
+    });
+
+    expect(bridge.alignNativePetContact).not.toHaveBeenCalled();
+    expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "drift-cancelled-travel",
+      false,
+      "native_motion_cancelled",
+    );
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("drift-cancelled-travel");
+  });
+
   it("skips pretend paw choreography when native X geometry is unavailable", async () => {
     bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
       bridge.eventHandler = handler;
@@ -2114,6 +2227,7 @@ describe("PetModeWindowApp", () => {
     bridge.moveNativePetToTarget.mockResolvedValueOnce({
       facing: "right",
       targetKind: "fallback",
+      motionOutcome: "not_attempted",
       confidence: "low",
       diagnostic: "accessibility_target_unavailable",
       targetX: 1400,
@@ -2182,6 +2296,7 @@ describe("PetModeWindowApp", () => {
     bridge.moveNativePetToTarget.mockResolvedValueOnce({
       facing: "right",
       targetKind: "fallback",
+      motionOutcome: "not_attempted",
       confidence: "low",
       diagnostic: "accessibility_target_unavailable",
       targetX: 1400,

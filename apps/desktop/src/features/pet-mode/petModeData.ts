@@ -267,6 +267,7 @@ export type PetModeWindowEvent =
 export type PetModeResolvedTarget = {
   readonly facing: "left" | "right";
   readonly targetKind: "browser_tab_close" | "window_close" | "fallback";
+  readonly motionOutcome: "completed" | "cancelled" | "not_attempted";
   readonly confidence: "high" | "medium" | "low";
   readonly diagnostic: string;
   readonly targetX: number;

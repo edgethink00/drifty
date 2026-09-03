@@ -387,6 +387,15 @@ describe("pet mode intervention outcome classification", () => {
     await expect(result).resolves.toMatchObject({ outcome: "rejected", reason: "renderer_focus_resting" });
   });
 
+  it("classifies cancelled native travel as a technical rejection, not a catch", async () => {
+    const { result, sendContact } = await startIntervention();
+    sendContact({ id: "alert:1", contacted: false, reason: "native_motion_cancelled" });
+    await expect(result).resolves.toMatchObject({
+      outcome: "rejected",
+      reason: "native_motion_cancelled",
+    });
+  });
+
   it("keeps an activity-context cancellation distinct from a user catch", async () => {
     const { result, sendContact } = await startIntervention();
     sendContact({ id: "alert:1", contacted: false, reason: "activity_context_changed" });

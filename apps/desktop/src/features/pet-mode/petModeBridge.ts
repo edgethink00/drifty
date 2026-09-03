@@ -77,6 +77,7 @@ export type PetModeSeatResolutionReason =
   | "control_overlap"
   | "no_control_overlap"
   | "anchor_clear_pending"
+  | "motion_superseded"
   | "accessibility_unavailable"
   | "window_list_unavailable"
   | "no_candidate_window"

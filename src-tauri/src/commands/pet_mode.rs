@@ -150,6 +150,11 @@ static PET_MODE_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_SETTLED_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
+// Motion starts are tiny critical sections: claim a revision and emit the
+// matching renderer pose as one ordered operation. This prevents a stale
+// background seat scan from publishing `walk` after a newer intervention has
+// already published `run`.
+static PET_MODE_MOTION_START: Mutex<()> = Mutex::new(());
 static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
 static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 static PET_MODE_ANCHOR_CLEAR_CONFIRMATION: Mutex<Option<PetModeAnchorClearConfirmation>> =
@@ -293,11 +298,20 @@ pub enum PetModeTargetConfidence {
     Low,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PetModeTargetMotionOutcome {
+    Completed,
+    Cancelled,
+    NotAttempted,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PetModeResolvedTarget {
     pub facing: &'static str,
     pub target_kind: PetModeTargetKind,
+    pub motion_outcome: PetModeTargetMotionOutcome,
     pub confidence: PetModeTargetConfidence,
     pub diagnostic: String,
     pub target_x: f64,
@@ -2025,7 +2039,7 @@ fn remember_and_resolve_pet_position(
         work_size.width,
         work_size.height,
     );
-    apply_pet_seat_resolution(&window, position, resolution, reduced_motion)
+    apply_pet_seat_resolution(&window, position, resolution, reduced_motion, None)
 }
 
 fn reconcile_resident_pet_position(
@@ -2034,6 +2048,9 @@ fn reconcile_resident_pet_position(
 ) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
     use super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
 
+    // Capture before sampling geometry. Any foreground motion that starts
+    // while AX is scanning invalidates both that sample and its correction.
+    let observed_motion_revision = PET_MODE_MOTION_REVISION.load(Ordering::Relaxed);
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
@@ -2081,7 +2098,13 @@ fn reconcile_resident_pet_position(
         work_size.width,
         work_size.height,
     );
-    apply_pet_seat_resolution(&window, current, resolution, reduced_motion)
+    apply_pet_seat_resolution(
+        &window,
+        current,
+        resolution,
+        reduced_motion,
+        Some(observed_motion_revision),
+    )
 }
 
 fn probe_current_pet_ax_seat(
@@ -2155,6 +2178,7 @@ fn move_pet_to_target(
         return Ok(PetModeResolvedTarget {
             facing: "right",
             target_kind: point.kind,
+            motion_outcome: PetModeTargetMotionOutcome::NotAttempted,
             confidence: point.confidence,
             diagnostic: point.diagnostic,
             target_x: point.x,
@@ -2181,18 +2205,24 @@ fn move_pet_to_target(
     // while it runs. The actual close action is performed by the native nudge
     // bridge after the contact frame, so the pet never needs to pass a user's
     // click into Drifty's main dashboard while crossing the target.
-    animate_pet_window_with_facing(
+    let motion_completed = animate_pet_window_with_facing_guarded(
         &window,
         target_position,
         facing,
         PET_MODE_RUN_SPEED,
         PET_MODE_RUN_MAX_SECONDS,
         "run",
+        None,
     )?;
 
     Ok(PetModeResolvedTarget {
         facing,
         target_kind: point.kind,
+        motion_outcome: if motion_completed {
+            PetModeTargetMotionOutcome::Completed
+        } else {
+            PetModeTargetMotionOutcome::Cancelled
+        },
         confidence: point.confidence,
         diagnostic: point.diagnostic,
         target_x: point.x,
@@ -2230,17 +2260,23 @@ fn move_pet_to_preview_target(
         work_size.width,
         work_size.height,
     );
-    animate_pet_window_with_facing(
+    let motion_completed = animate_pet_window_with_facing_guarded(
         window,
         target_position,
         facing,
         PET_MODE_RUN_SPEED,
         0.8,
         "run",
+        None,
     )?;
     Ok(PetModeResolvedTarget {
         facing,
         target_kind: PetModeTargetKind::Fallback,
+        motion_outcome: if motion_completed {
+            PetModeTargetMotionOutcome::Completed
+        } else {
+            PetModeTargetMotionOutcome::Cancelled
+        },
         confidence: PetModeTargetConfidence::Low,
         diagnostic: "preview_nearby_target".to_string(),
         target_x: target_position.x + pet_contact_offsets(facing).0,
@@ -2690,7 +2726,13 @@ fn apply_pet_seat_resolution(
     visible_origin: LogicalPosition<f64>,
     resolution: super::pet_mode_ax_control_veto::SeatResolution,
     reduced_motion: bool,
+    expected_motion_revision: Option<u64>,
 ) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
+    if expected_motion_revision
+        .is_some_and(|expected| PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != expected)
+    {
+        return Ok(motion_superseded_seat_resolution(window, visible_origin));
+    }
     let resolution = {
         let mut pending = PET_MODE_ANCHOR_CLEAR_CONFIRMATION
             .lock()
@@ -2698,6 +2740,11 @@ fn apply_pet_seat_resolution(
         confirm_anchor_clear_return(&mut pending, visible_origin, resolution, Instant::now())
     };
     let resolution = resolution.with_visible_origin(visible_origin.x, visible_origin.y);
+    if expected_motion_revision
+        .is_some_and(|expected| PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != expected)
+    {
+        return Ok(motion_superseded_seat_resolution(window, visible_origin));
+    }
     #[cfg(debug_assertions)]
     eprintln!(
         "[pet-mode-seat] reason={:?} moved={} visible=({:.1},{:.1}) resolved=({:.1},{:.1})",
@@ -2712,6 +2759,26 @@ fn apply_pet_seat_resolution(
         return Ok(resolution);
     }
     let target = LogicalPosition::new(resolution.x, resolution.y);
+    if let Some(expected) = expected_motion_revision {
+        let completed = if reduced_motion {
+            set_pet_window_position_if_motion_current(window, target, expected)?
+        } else {
+            animate_pet_window_toward_with_purpose_if_current(
+                window,
+                target,
+                PET_MODE_WALK_SPEED,
+                PET_MODE_WALK_MAX_SECONDS,
+                "walk",
+                "seat_correction",
+                expected,
+            )?
+        };
+        return if completed {
+            Ok(resolution)
+        } else {
+            Ok(motion_superseded_seat_resolution(window, visible_origin))
+        };
+    }
     cancel_pet_motion();
     if reduced_motion {
         window
@@ -2728,6 +2795,17 @@ fn apply_pet_seat_resolution(
         )?;
     }
     Ok(resolution)
+}
+
+fn motion_superseded_seat_resolution(
+    window: &WebviewWindow,
+    fallback: LogicalPosition<f64>,
+) -> super::pet_mode_ax_control_veto::SeatResolution {
+    use super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
+
+    reset_anchor_clear_confirmation();
+    let current = current_pet_logical_position(window).unwrap_or(fallback);
+    SeatResolution::unchanged(current.x, current.y, SeatDecisionReason::MotionSuperseded)
 }
 
 fn calculate_pet_home_position(monitor: &Monitor) -> LogicalPosition<f64> {
@@ -3766,8 +3844,33 @@ fn animate_pet_window_toward_with_purpose(
         motion,
         None,
         Some(purpose),
+        None,
     )
     .map(|_| ())
+}
+
+fn animate_pet_window_toward_with_purpose_if_current(
+    window: &WebviewWindow,
+    target: LogicalPosition<f64>,
+    speed: f64,
+    max_duration_seconds: f64,
+    motion: &'static str,
+    purpose: &'static str,
+    expected_motion_revision: u64,
+) -> Result<bool, String> {
+    let start = current_pet_logical_position(window)?;
+    let facing = if target.x >= start.x { "right" } else { "left" };
+    animate_pet_window_with_facing_guarded_and_purpose(
+        window,
+        target,
+        facing,
+        speed,
+        max_duration_seconds,
+        motion,
+        None,
+        Some(purpose),
+        Some(expected_motion_revision),
+    )
 }
 
 fn animate_pet_window_with_facing(
@@ -3808,6 +3911,7 @@ fn animate_pet_window_with_facing_guarded(
         motion,
         outing_generation,
         None,
+        None,
     )
 }
 
@@ -3821,18 +3925,19 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
     motion: &'static str,
     outing_generation: Option<u64>,
     purpose: Option<&'static str>,
+    expected_motion_revision: Option<u64>,
 ) -> Result<bool, String> {
-    if outing_generation.is_some_and(|generation| !pet_outing_is_current(generation)) {
+    let Some(motion_revision) = begin_pet_window_motion(
+        window,
+        facing,
+        motion,
+        purpose,
+        outing_generation,
+        expected_motion_revision,
+    )?
+    else {
         return Ok(false);
-    }
-    let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
-    emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
-    let motion_event = if let Some(purpose) = purpose {
-        json!({ "kind": "motion", "motion": motion, "purpose": purpose })
-    } else {
-        json!({ "kind": "motion", "motion": motion })
     };
-    emit_pet_event(window, motion_event)?;
     // Give the webview one paint boundary to flip before the native window moves.
     thread::sleep(Duration::from_millis(34));
     animate_pet_window(
@@ -3843,6 +3948,70 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
         motion_revision,
         outing_generation,
     )
+}
+
+fn begin_pet_window_motion(
+    window: &WebviewWindow,
+    facing: &'static str,
+    motion: &'static str,
+    purpose: Option<&'static str>,
+    outing_generation: Option<u64>,
+    expected_motion_revision: Option<u64>,
+) -> Result<Option<u64>, String> {
+    let _start_guard = PET_MODE_MOTION_START
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if outing_generation.is_some_and(|generation| !pet_outing_is_current(generation)) {
+        return Ok(None);
+    }
+    let Some(motion_revision) =
+        claim_pet_motion_revision(&PET_MODE_MOTION_REVISION, expected_motion_revision)
+    else {
+        return Ok(None);
+    };
+    emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
+    let motion_event = if let Some(purpose) = purpose {
+        json!({ "kind": "motion", "motion": motion, "purpose": purpose })
+    } else {
+        json!({ "kind": "motion", "motion": motion })
+    };
+    emit_pet_event(window, motion_event)?;
+    Ok(Some(motion_revision))
+}
+
+fn claim_pet_motion_revision(
+    revision: &AtomicU64,
+    expected_motion_revision: Option<u64>,
+) -> Option<u64> {
+    match expected_motion_revision {
+        Some(expected) => {
+            let claimed = expected.wrapping_add(1);
+            revision
+                .compare_exchange(expected, claimed, Ordering::Relaxed, Ordering::Relaxed)
+                .ok()
+                .map(|_| claimed)
+        }
+        None => Some(revision.fetch_add(1, Ordering::Relaxed).wrapping_add(1)),
+    }
+}
+
+fn set_pet_window_position_if_motion_current(
+    window: &WebviewWindow,
+    target: LogicalPosition<f64>,
+    expected_motion_revision: u64,
+) -> Result<bool, String> {
+    let _start_guard = PET_MODE_MOTION_START
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(motion_revision) =
+        claim_pet_motion_revision(&PET_MODE_MOTION_REVISION, Some(expected_motion_revision))
+    else {
+        return Ok(false);
+    };
+    window
+        .set_position(target)
+        .map_err(|error| error.to_string())?;
+    Ok(pet_window_motion_is_current(motion_revision, None))
 }
 
 fn animate_pet_window(
@@ -3900,6 +4069,9 @@ fn pet_window_motion_is_current(motion_revision: u64, outing_generation: Option<
 }
 
 fn cancel_pet_motion() -> bool {
+    let _start_guard = PET_MODE_MOTION_START
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let entry_was_active = PET_MODE_ENTRY_ACTIVE.swap(false, Ordering::Relaxed);
     PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed);
     entry_was_active
@@ -4096,6 +4268,24 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_background_motion_claim_advances_exactly_once() {
+        let revision = AtomicU64::new(41);
+
+        assert_eq!(claim_pet_motion_revision(&revision, Some(41)), Some(42));
+        assert_eq!(revision.load(Ordering::Relaxed), 42);
+    }
+
+    #[test]
+    fn stale_background_motion_cannot_cancel_a_newer_foreground_motion() {
+        let revision = AtomicU64::new(41);
+        let observed = revision.load(Ordering::Relaxed);
+        assert_eq!(claim_pet_motion_revision(&revision, None), Some(42));
+
+        assert_eq!(claim_pet_motion_revision(&revision, Some(observed)), None);
+        assert_eq!(revision.load(Ordering::Relaxed), 42);
+    }
 
     #[test]
     fn requires_two_matching_clear_scans_before_returning_to_the_anchor() {

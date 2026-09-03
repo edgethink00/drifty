@@ -17,6 +17,7 @@ const bridge = vi.hoisted(() => ({
   moveNativePetToTarget: vi.fn().mockResolvedValue({
     facing: "right",
     targetKind: "window_close",
+    motionOutcome: "completed",
     confidence: "high",
     diagnostic: "test",
     targetX: 0,
@@ -102,6 +103,7 @@ describe("pet expressions", () => {
     bridge.moveNativePetToTarget.mockResolvedValue({
       facing: "right",
       targetKind: "window_close",
+      motionOutcome: "completed",
       confidence: "high",
       diagnostic: "test",
       targetX: 0,
@@ -155,6 +157,7 @@ describe("pet expressions", () => {
       finishMove = () => resolve({
         facing: "right",
         targetKind: "window_close",
+        motionOutcome: "completed",
         confidence: "high",
         diagnostic: "test",
         targetX: 0,

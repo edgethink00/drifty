@@ -561,10 +561,15 @@ export function PetModeWindowApp() {
       prefersReducedMotion(),
     )
       .then((resolution) => {
-        if (
-          seatReconcileDisposedRef.current
-          || token !== actionTokenRef.current
-        ) return;
+        if (seatReconcileDisposedRef.current) return;
+        if (resolution.reason === "motion_superseded") {
+          // The AX answer belongs to an older resting pose. Keep the request
+          // pending, but let the foreground action finish before checking its
+          // final seat.
+          seatReconcilePendingRef.current = true;
+          return;
+        }
+        if (token !== actionTokenRef.current) return;
         if (resolution.reason === "anchor_clear_pending") {
           if (seatReconcileRetryTimerRef.current === null) {
             seatReconcileRetryTimerRef.current = window.setTimeout(() => {
@@ -926,6 +931,14 @@ export function PetModeWindowApp() {
         // Not a user catch: the AX scan never produced a real X to point at.
         await reportNativePetContact(target.id, false, "target_unavailable");
         terminalContactReported = true;
+        return;
+      }
+      if (resolved.motionOutcome !== "completed") {
+        commitPhase(focusRestingRef.current ? "sit" : "idle");
+        if (!target.preview) {
+          await reportNativePetContact(target.id, false, "native_motion_cancelled");
+          terminalContactReported = true;
+        }
         return;
       }
       movedToTarget = true;
@@ -1431,6 +1444,9 @@ export function PetModeWindowApp() {
       }
       void (async () => {
         automaticInterventionRef.current = !isLabTarget && !event.target.preview;
+        if (seatReconcileInFlightRef.current) {
+          seatReconcilePendingRef.current = true;
+        }
         const actionRevision = setActiveLabAction("intervention");
         try {
           await playIntervention(event.target);
@@ -1440,6 +1456,7 @@ export function PetModeWindowApp() {
         } finally {
           automaticInterventionRef.current = false;
           clearActiveLabAction(actionRevision);
+          if (seatReconcilePendingRef.current) requestSeatReconcile();
           // Focus may have ended while a cancelled native move was still
           // resolving. The focus-exit effect deliberately waits for action
           // ownership to clear, so finish that deferred sit -> idle handoff

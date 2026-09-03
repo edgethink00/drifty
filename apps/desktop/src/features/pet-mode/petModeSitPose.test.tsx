@@ -29,6 +29,7 @@ vi.mock("./petModeBridge", () => ({
   moveNativePetToTarget: vi.fn().mockResolvedValue({
     facing: "right",
     targetKind: "browser_tab_close",
+    motionOutcome: "completed",
     confidence: "high",
     diagnostic: "test",
     targetX: 0,

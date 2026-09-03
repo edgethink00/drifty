@@ -26,6 +26,7 @@ pub enum SeatDecisionReason {
     ControlOverlap,
     NoControlOverlap,
     AnchorClearPending,
+    MotionSuperseded,
     AccessibilityUnavailable,
     WindowListUnavailable,
     NoCandidateWindow,
