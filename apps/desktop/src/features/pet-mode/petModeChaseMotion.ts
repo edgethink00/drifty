@@ -5,8 +5,8 @@
  * captured a treadmill. Measured across all 30 frames of walk-frames-v2.json:
  * the muzzle tip does not move a single viewBox unit horizontally, the skull
  * top travels 1.6 units, and the rear-leg span travels 17.9. Only the legs
- * cycle. When native then slides the window at 220-300 px/s, the result reads
- * as a drawing being dragged rather than an animal running.
+ * cycle. When native slides that vector gait across the desktop, the result
+ * reads as a drawing being dragged rather than an animal moving.
  *
  * This module adds the missing whole-body motion. Nothing here redraws or
  * interpolates the approved contours, which MOTION_REDESIGN.md AP-01 forbids:
@@ -72,6 +72,8 @@ export const PET_MODE_LEAN_PIVOT_Y = 96;
  */
 const PROFILES: Record<PetModeChaseMotionKind, PetModeChaseProfile> = {
   walk: { leanDeg: 0.6, bounceUnits: 0.35, headSwingDeg: 0.9, headLeadUnits: 0.35 },
+  // Used only by the vector default/fallback. The authored beta run carries
+  // this motion inside its raster frames and PetModeCat suppresses this layer.
   run: { leanDeg: 3.2, bounceUnits: 1.5, headSwingDeg: 2.4, headLeadUnits: 1.15 },
   stalk: { leanDeg: 2.1, bounceUnits: 0.9, headSwingDeg: 1.5, headLeadUnits: 0.8 },
   return: { leanDeg: 1.6, bounceUnits: 1, headSwingDeg: 1.2, headLeadUnits: 0.6 },

@@ -12,8 +12,10 @@ import {
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
   PET_MODE_PAW_CONTACT_FRAME,
+  PET_MODE_RUN_FRAME_COUNT,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   getPetModeGaitFramesPerSecond,
+  getPetModeRunFrameIndex,
 } from "./petModeData";
 import { publishPetModeHitRegion, stagePetModeHitRegionTransition } from "./petModeHitRegions";
 import { PET_MODE_GAZE_BODY_MAX_PX, type PetModeGazeOffset } from "./petModeGaze";
@@ -27,6 +29,7 @@ import {
   resolvePetModeSitArtworkId,
   type PetModeSitArtworkId,
 } from "./petModeSitVariant";
+import { getPetModeRunFrameSource, PET_MODE_RUN_FRAME_SOURCES } from "./petModeRunFrames";
 
 type PetModeCatPhase =
   | "idle"
@@ -68,6 +71,7 @@ export function PetModeCat({
   phase,
   facing,
   pawFrame,
+  fastRunBetaEnabled = false,
   entrySequence = 0,
   preserveEntryLanding = false,
   entryTravelDistance,
@@ -92,6 +96,7 @@ export function PetModeCat({
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
   readonly pawFrame: number;
+  readonly fastRunBetaEnabled?: boolean;
   readonly entrySequence?: number;
   readonly preserveEntryLanding?: boolean;
   readonly entryTravelDistance?: number;
@@ -120,10 +125,24 @@ export function PetModeCat({
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
   const walkFrameRef = useRef(0);
+  const [runFrame, setRunFrame] = useState(0);
+  const [runFramesFailed, setRunFramesFailed] = useState(false);
+  const [runFramesReady, setRunFramesReady] = useState(false);
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
   const renderedEntrySequenceRef = useRef<number | null>(null);
   const selectedSitVariantId = resolvePetModeSitArtworkId();
   const selectedSitVariant = PET_MODE_SIT_VARIANTS[selectedSitVariantId];
+  // The stylesheet already stops secondary CSS animations under reduced
+  // motion. The authored run is frame-driven, so its renderer clock needs the
+  // same preference explicitly and holds the approved first frame instead.
+  const reducedMotion = typeof window !== "undefined"
+    && typeof window.matchMedia === "function"
+    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const usesRunRaster = phase === "run"
+    && fastRunBetaEnabled
+    && (decorative || runFramesReady)
+    && !runFramesFailed;
+  const runUsesVectorFallback = phase === "run" && !usesRunRaster;
 
   useEffect(() => {
     if (decorative) return;
@@ -149,6 +168,32 @@ export function PetModeCat({
       });
     return () => { active = false; };
   }, [decorative]);
+
+  useEffect(() => {
+    if (decorative || !fastRunBetaEnabled) {
+      setRunFramesReady(false);
+      return;
+    }
+    let active = true;
+    setRunFramesFailed(false);
+    setRunFramesReady(false);
+    const images = PET_MODE_RUN_FRAME_SOURCES.map((source) => {
+      const image = new Image();
+      image.src = source;
+      return image;
+    });
+    void Promise.all(images.map((image) => image.decode?.() ?? Promise.resolve()))
+      .then(() => {
+        if (active) setRunFramesReady(true);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setRunFramesFailed(true);
+        console.warn("[pet-mode] run frames failed to preload; falling back to vector gait", error);
+        captureSentryException(error, { tags: { surface: "pet-mode", asset: "run-frames" } });
+      });
+    return () => { active = false; };
+  }, [decorative, fastRunBetaEnabled]);
 
   useEffect(() => {
     if (decorative || selectedSitVariant.kind === "vector") return;
@@ -201,7 +246,11 @@ export function PetModeCat({
   }, [decorative]);
 
   useEffect(() => {
-    const moving = phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "return";
+    const moving = phase === "entry"
+      || phase === "walk"
+      || runUsesVectorFallback
+      || phase === "stalk"
+      || phase === "return";
     if (!moving || walkFrames.length === 0) return undefined;
     // Native emits `motion: entry` before its one-frame WebView handoff, and
     // entrySequence restarts this renderer clock on that event. Both sides then
@@ -286,7 +335,62 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, sizeScale, walkFrames.length]);
+  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, fastRunBetaEnabled, hitRegionInteractive, phase, runFramesFailed, runFramesReady, sizeScale, walkFrames.length]);
+
+  useEffect(() => {
+    if (
+      phase !== "run"
+      || !fastRunBetaEnabled
+      || !runFramesReady
+      || runFramesFailed
+      || frameOverride !== undefined
+      || reducedMotion
+    ) {
+      if (phase === "run") setRunFrame(0);
+      return undefined;
+    }
+    setRunFrame(0);
+    const startedAt = performance.now();
+    let displayedFrame = 0;
+    let animationFrameId = 0;
+    let stagingReleaseFrameId = 0;
+    let stagingFrame = false;
+    let disposed = false;
+    const render = (now: number) => {
+      const nextFrame = getPetModeRunFrameIndex(now - startedAt);
+      if (nextFrame !== displayedFrame && !stagingFrame) {
+        const commitFrame = () => {
+          if (disposed) return;
+          displayedFrame = nextFrame;
+          setRunFrame(nextFrame);
+          stagingReleaseFrameId = window.requestAnimationFrame(() => {
+            stagingFrame = false;
+          });
+        };
+        if (hitRegionInteractive) {
+          stagingFrame = true;
+          void stagePetModeHitRegionTransition({
+            regionId: `transition:run-gait:${nextFrame}`,
+            mirrored: facing === "left",
+          }).then(commitFrame, () => {
+            if (disposed) return;
+            stagingReleaseFrameId = window.requestAnimationFrame(() => {
+              stagingFrame = false;
+            });
+          });
+        } else {
+          commitFrame();
+        }
+      }
+      animationFrameId = window.requestAnimationFrame(render);
+    };
+    animationFrameId = window.requestAnimationFrame(render);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(animationFrameId);
+      window.cancelAnimationFrame(stagingReleaseFrameId);
+    };
+  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runFramesFailed, runFramesReady]);
 
   useEffect(() => {
     if (!isLifeMotionPhase(phase)) return undefined;
@@ -339,12 +443,6 @@ export function PetModeCat({
   }, [facing, hitRegionInteractive, phase]);
 
   const mirrored = facing === "left";
-  // The stylesheet already stops these animations under reduced motion. Zeroing
-  // the amplitudes as well means the hit-region bake and any non-media-query
-  // consumer see a genuinely static pose rather than a stopped-mid-swing one.
-  const reducedMotion = typeof window !== "undefined"
-    && typeof window.matchMedia === "function"
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const registerWalkVector = useCallback((node: SVGSVGElement | null) => {
     if (node && phase === "entry") renderedEntrySequenceRef.current = entrySequence;
   }, [entrySequence, phase]);
@@ -370,6 +468,10 @@ export function PetModeCat({
   const lifeMotionAsset = isLifeMotionPhase(phase)
     ? LIFE_MOTION_ASSET_BY_PHASE[phase]
     : null;
+  const chaseMotionPhase = isPetModeChaseMotionKind(phase)
+    && (phase !== "run" || runUsesVectorFallback)
+    ? phase
+    : null;
   const motionGeometry = {
     "--pet-drag-pickup-duration": `${PET_MODE_DRAG_PICKUP_MS}ms`,
     "--pet-drag-release-duration": `${PET_MODE_DRAG_SETTLE_MS}ms`,
@@ -383,14 +485,14 @@ export function PetModeCat({
     "--pet-gaze-body-x": `${(gazeOffset.x * (PET_MODE_GAZE_BODY_MAX_PX / 1.52)).toFixed(2)}px`,
     "--pet-gaze-body-y": `${(gazeOffset.y * ((PET_MODE_GAZE_BODY_MAX_PX * 0.35) / (1.52 * 0.78))).toFixed(2)}px`,
     ...petModeChaseMotionStyle(
-      isPetModeChaseMotionKind(phase) ? phase : null,
+      chaseMotionPhase,
       {
         // Share the leg cycle's duration so the body drops on the frames where
         // a diagonal pair actually lands. A free-running body clock drifts
         // against the legs and the cat ends up bouncing while airborne.
-        cycleMs: isPetModeChaseMotionKind(phase) && phase !== "bite"
+        cycleMs: chaseMotionPhase && chaseMotionPhase !== "bite"
           ? petModeChaseCycleMs(
-            getPetModeGaitFramesPerSecond(phase),
+            getPetModeGaitFramesPerSecond(chaseMotionPhase),
             PET_MODE_GAIT_FRAME_COUNT,
           )
           : 0,
@@ -402,8 +504,14 @@ export function PetModeCat({
     ),
   } as CSSProperties;
   const renderedWalkFrame = frameOverride ?? walkFrame;
+  const runFrameCandidate = frameOverride ?? runFrame;
+  const requestedRunFrame = Number.isFinite(runFrameCandidate) ? runFrameCandidate : 0;
+  const renderedRunFrame = (
+    (Math.trunc(requestedRunFrame) % PET_MODE_RUN_FRAME_COUNT) + PET_MODE_RUN_FRAME_COUNT
+  ) % PET_MODE_RUN_FRAME_COUNT;
   const renderedLifeMotionFrame = frameOverride ?? lifeMotionFrame;
   const walkFramePath = walkFrames[renderedWalkFrame];
+  const runFramePath = getPetModeRunFrameSource(renderedRunFrame);
   // The head is drawn a second time on top of the complete body rather than
   // cut out of it. The silhouette has no waist to seam on - a scanline sweep
   // falls monotonically from 94 units at x=100 to 17 at the muzzle - so the
@@ -433,7 +541,9 @@ export function PetModeCat({
       </g>
     </>
   );
-  const regionId = holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
+  const regionId = usesRunRaster
+    ? `run-gait:${renderedRunFrame}`
+    : holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
     ? (walkFrames.length > 0 ? `gait:${renderedWalkFrame}` : "idle")
     : phase === "paw"
       ? `paw:${pawFrame}`
@@ -640,6 +750,13 @@ export function PetModeCat({
           <PetModeSleepPose />
         ) : phase === "sit" ? (
           <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
+        ) : usesRunRaster ? (
+          <img
+            className="pet-mode-cat__raster pet-mode-cat__raster--run"
+            src={runFramePath}
+            alt=""
+            draggable={false}
+          />
         ) : holdsRenderedEntryVector ? (
           <svg
             ref={registerWalkVector}

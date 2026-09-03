@@ -65,6 +65,7 @@ import {
   PET_MODE_PAW_FPS,
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
+  PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
@@ -84,6 +85,7 @@ import {
   pickPetModePostDropReaction,
   resolveInitialPetModeCoat,
   resolveInitialPetModeHiddenUntil,
+  resolveInitialPetModeRunBetaEnabled,
   resolveInitialPetModeSize,
   resolvePetModePresent,
   shouldShowPetModeMusicNote,
@@ -163,6 +165,7 @@ export function PetModeWindowApp() {
     return resolvePetModeEntryDurationMs(getPetModeDefaultEntryTravelDistance(width));
   });
   const [petModeSize, setPetModeSize] = useState(resolveInitialPetModeSize);
+  const [fastRunBetaEnabled, setFastRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
   const [preserveEntryLanding, setPreserveEntryLanding] = useState(false);
   const [petModeEnabled, setPetModeEnabled] = useState(initialAppearance.enabled);
   const [petVisible, setPetVisible] = useState(true);
@@ -833,6 +836,22 @@ export function PetModeWindowApp() {
       window.removeEventListener("storage", handleStorage);
       document.documentElement.style.removeProperty("--pet-size-scale");
     };
+  }, []);
+
+  // Fast run is an opt-in visual beta. Keep the pet webview synchronized with
+  // the user-facing settings window without adding a new native command; both
+  // webviews already share localStorage for coat and size preferences.
+  useEffect(() => {
+    const applyFastRunBeta = () => {
+      setFastRunBetaEnabled(resolveInitialPetModeRunBetaEnabled());
+    };
+    applyFastRunBeta();
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_RUN_BETA_STORAGE_KEY) return;
+      applyFastRunBeta();
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   // Cursor hunt is owned by the Dev settings webview. Turning it off is a
@@ -2028,6 +2047,7 @@ export function PetModeWindowApp() {
             phase={phase}
             facing={facing}
             pawFrame={pawFrame}
+            fastRunBetaEnabled={fastRunBetaEnabled}
             entrySequence={entrySequence}
             entryTravelDistance={entryTravelDistance}
             entryDurationMs={entryDurationMs}

@@ -25,10 +25,12 @@ import {
 } from "./watcherData";
 import {
   PET_MODE_COAT_STORAGE_KEY,
+  PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
   resolveInitialPetModeCoat,
   resolveInitialPetModeEnabled,
+  resolveInitialPetModeRunBetaEnabled,
   resolveInitialPetModeSize,
   type PetModeCoat,
   type PetModeSize,
@@ -41,6 +43,7 @@ type UseCompanionSettingsControllerResult = {
   readonly extremeNudgeEnabled: boolean;
   readonly petModeEnabled: boolean;
   readonly petModeCoat: PetModeCoat;
+  readonly petModeRunBetaEnabled: boolean;
   readonly petModeSize: PetModeSize;
   readonly handleWatcherPeriodicMaxChange: (event: ChangeEvent<HTMLInputElement>) => void;
   readonly handleWatcherPeriodicMinChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -50,6 +53,7 @@ type UseCompanionSettingsControllerResult = {
   readonly setExtremeNudgeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeCoat: Dispatch<SetStateAction<PetModeCoat>>;
+  readonly setPetModeRunBetaEnabled: Dispatch<SetStateAction<boolean>>;
   readonly setPetModeSize: Dispatch<SetStateAction<PetModeSize>>;
   readonly setWatcherMode: Dispatch<SetStateAction<WatcherMode>>;
   readonly setWatcherPeekEnabled: Dispatch<SetStateAction<boolean>>;
@@ -66,6 +70,7 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
   const [extremeNudgeEnabled, setExtremeNudgeEnabled] = useState(() => resolveInitialDriftAlertsEnabled() && resolveInitialExtremeNudgeEnabled());
   const [petModeEnabled, setPetModeEnabled] = useState(resolveInitialPetModeEnabled);
   const [petModeCoat, setPetModeCoat] = useState<PetModeCoat>(resolveInitialPetModeCoat);
+  const [petModeRunBetaEnabled, setPetModeRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
   const [petModeSize, setPetModeSize] = useState<PetModeSize>(resolveInitialPetModeSize);
   const [watcherPeekEnabled, setWatcherPeekEnabled] = useState(resolveInitialWatcherPeekEnabled);
   const [watcherMode, setWatcherMode] = useState<WatcherMode>(resolveInitialWatcherMode);
@@ -115,6 +120,10 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
   }, [petModeCoat]);
 
   useEffect(() => {
+    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, petModeRunBetaEnabled ? "1" : "0");
+  }, [petModeRunBetaEnabled]);
+
+  useEffect(() => {
     window.localStorage.setItem(PET_MODE_SIZE_STORAGE_KEY, String(petModeSize));
   }, [petModeSize]);
 
@@ -145,6 +154,7 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     extremeNudgeEnabled,
     petModeEnabled,
     petModeCoat,
+    petModeRunBetaEnabled,
     petModeSize,
     handleWatcherPeriodicMaxChange,
     handleWatcherPeriodicMinChange,
@@ -154,6 +164,7 @@ export function useCompanionSettingsController(): UseCompanionSettingsController
     setExtremeNudgeEnabled,
     setPetModeEnabled,
     setPetModeCoat,
+    setPetModeRunBetaEnabled,
     setPetModeSize,
     setWatcherMode,
     setWatcherPeekEnabled,

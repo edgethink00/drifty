@@ -18,6 +18,7 @@ import {
   PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_PRESENT_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
+  PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_SEAT_CLEAR_CONFIRM_MS,
   PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
@@ -1403,6 +1404,7 @@ describe("PetModeWindowApp", () => {
 
   it("keeps input closed until overlapping pose and facing transitions both settle", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: true }));
     const releases: Array<() => void> = [];
     bridge.stagePetModeHitRegionTransition.mockImplementation(() => new Promise<void>((resolve) => {
@@ -1427,7 +1429,7 @@ describe("PetModeWindowApp", () => {
     });
     const publishCallsWhilePending = bridge.publishPetModeHitRegion.mock.calls;
     expect(publishCallsWhilePending[publishCallsWhilePending.length - 1]?.[0]).toMatchObject({
-      regionId: "idle",
+      regionId: "run-gait:0",
       interactive: false,
     });
 
@@ -1437,10 +1439,48 @@ describe("PetModeWindowApp", () => {
     });
     const publishCallsAfterSettled = bridge.publishPetModeHitRegion.mock.calls;
     expect(publishCallsAfterSettled[publishCallsAfterSettled.length - 1]?.[0]).toMatchObject({
-      regionId: "idle",
+      regionId: "run-gait:0",
       mirrored: true,
       interactive: true,
     });
+  });
+
+  it("switches between the default vector run and beta raster run on storage updates", async () => {
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: vi.fn().mockResolvedValue({ frames: walkFrames, cycleSeconds: 1 }),
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.eventHandler?.({ kind: "motion", motion: "run" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("gait:0");
+
+    await act(async () => {
+      window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_RUN_BETA_STORAGE_KEY,
+        newValue: "1",
+      }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("run-gait:0");
+
+    act(() => {
+      window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "0");
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_RUN_BETA_STORAGE_KEY,
+        newValue: "0",
+      }));
+    });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("gait:0");
   });
 
   it("holds the exact rendered entry SVG when native reports landing", async () => {

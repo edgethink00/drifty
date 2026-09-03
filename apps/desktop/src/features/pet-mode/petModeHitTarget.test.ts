@@ -20,8 +20,8 @@ const artifact = JSON.parse(readFileSync("public/pet-mode/hit-regions-v1.json", 
 describe("pet mode hit target", () => {
   it("uses a versioned pose/frame artifact instead of one hand-maintained idle polygon", () => {
     expect(artifact.version).toBe(1);
-    expect(Object.keys(artifact.regions)).toHaveLength(133);
-    for (const region of ["idle", "happy", "drowsy", "sit", "sit:d-lifted-tail-live", "sleep", "drag:idle", "drag:sit", "drag:sit:d-lifted-tail-live", "release:idle", "release:sit", "release:sit:d-lifted-tail-live", "gait:29", "paw:16", "stretch:36", "tail:36"]) {
+    expect(Object.keys(artifact.regions)).toHaveLength(150);
+    for (const region of ["idle", "happy", "drowsy", "sit", "sit:d-lifted-tail-live", "sleep", "drag:idle", "drag:sit", "drag:sit:d-lifted-tail-live", "release:idle", "release:sit", "release:sit:d-lifted-tail-live", "gait:29", "run-gait:16", "paw:16", "stretch:36", "tail:36"]) {
       expect(artifact.regions[region]?.length, `${region} region`).toBeGreaterThan(0);
     }
     for (const [regionId, spans] of Object.entries(artifact.regions)) {

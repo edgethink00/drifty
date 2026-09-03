@@ -7,6 +7,7 @@ import type { WatcherSnapshot } from "../companion/watcherData";
 // their chosen coat instead of silently reverting to the defaults.
 export const PET_MODE_STORAGE_KEY = "drifty.pet.enabled";
 export const PET_MODE_COAT_STORAGE_KEY = "drifty.pet.coat";
+export const PET_MODE_RUN_BETA_STORAGE_KEY = "drifty.pet.fastRunBeta.v1";
 export const PET_MODE_LEGACY_STORAGE_KEY = "drifty.dev.petMode";
 export const PET_MODE_LEGACY_COAT_STORAGE_KEY = "drifty.dev.petModeCoat";
 /** A timestamp keeps a temporary hide reliable across an app restart. */
@@ -71,6 +72,13 @@ export const PET_MODE_RETURN_SPEED = 96 / 0.92;
 export const PET_MODE_RETURN_STRIDE = 48;
 export const PET_MODE_GAIT_CADENCE = 0.9;
 export const PET_MODE_GAIT_FRAME_COUNT = 30;
+// The reviewed Loop 5 take is one complete forward gait: gather, front-paw
+// contact, rear-paw follow-through, extension, and return to the gather pose.
+// Keep all 17 authored frames and play its 24 fps source at the approved 1.15x
+// review speed (708.33ms / 1.15 = 615.94ms) so native translation reads as a
+// run rather than a vertical hop or a dragged still.
+export const PET_MODE_RUN_FRAME_COUNT = 17;
+export const PET_MODE_RUN_CYCLE_DURATION_MS = 616;
 export const PET_MODE_HOME_EDGE_INSET = 24;
 // Native translation duration only. The hidden pre-paint hold and renderer
 // handoff happen before this clock starts. Default-home travel at 100% size is
@@ -419,6 +427,17 @@ export function getPetModeGaitFrameIndex(
   return rawFrame % frameCount;
 }
 
+export function getPetModeRunFrameIndex(
+  elapsedMilliseconds: number,
+  frameCount = PET_MODE_RUN_FRAME_COUNT,
+): number {
+  if (!Number.isInteger(frameCount) || frameCount < 1) return 0;
+  if (!Number.isFinite(elapsedMilliseconds)) return 0;
+  const elapsed = Math.max(0, elapsedMilliseconds);
+  const rawFrame = Math.floor(elapsed / PET_MODE_RUN_CYCLE_DURATION_MS * frameCount);
+  return rawFrame % frameCount;
+}
+
 export function getPetModeLifeActionInterval(
   productivity: ProductivityLabel | null,
 ): number {
@@ -516,6 +535,20 @@ export function resolveInitialPetModeEnabled(): boolean {
   const stored = window.localStorage.getItem(PET_MODE_STORAGE_KEY);
   if (stored !== null) return stored === "1";
   return window.localStorage.getItem(PET_MODE_LEGACY_STORAGE_KEY) === "1";
+}
+
+/**
+ * The authored run remains an explicit beta. Missing, unreadable, and legacy
+ * storage all resolve to the shipped vector gait so an app update cannot
+ * silently change the pet's movement.
+ */
+export function resolveInitialPetModeRunBetaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(PET_MODE_RUN_BETA_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
 /**

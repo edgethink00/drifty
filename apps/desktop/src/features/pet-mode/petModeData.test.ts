@@ -4,6 +4,9 @@ import {
   PET_MODE_AWAY_MS,
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_RETURN_SPEED,
+  PET_MODE_RUN_CYCLE_DURATION_MS,
+  PET_MODE_RUN_BETA_STORAGE_KEY,
+  PET_MODE_RUN_FRAME_COUNT,
   PET_MODE_BLINK_INTERVAL_MAX_MS,
   PET_MODE_BLINK_INTERVAL_MIN_MS,
   PET_MODE_DRAG_PICKUP_MS,
@@ -38,6 +41,7 @@ import {
   getPetModeEntryDurationMs,
   getPetModeGaitFramesPerSecond,
   getPetModeGaitFrameIndex,
+  getPetModeRunFrameIndex,
   getPetModeGaitStride,
   getPetModeEntryProgress,
   getPetModeLifeActionInterval,
@@ -49,6 +53,7 @@ import {
   buildPetModePreviewInterventionTarget,
   buildPetModeSnapshot,
   resolveInitialPetModeEnabled,
+  resolveInitialPetModeRunBetaEnabled,
   persistPetModeHiddenUntil,
   persistPetModeFloorHomePt,
   PET_MODE_FLOOR_HOME_PT,
@@ -67,6 +72,14 @@ describe("petModeData", () => {
     expect(resolveInitialPetModeEnabled()).toBe(false);
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     expect(resolveInitialPetModeEnabled()).toBe(true);
+  });
+
+  it("keeps the authored fast run off until its beta is explicitly enabled", () => {
+    expect(resolveInitialPetModeRunBetaEnabled()).toBe(false);
+    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+    expect(resolveInitialPetModeRunBetaEnabled()).toBe(true);
+    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "0");
+    expect(resolveInitialPetModeRunBetaEnabled()).toBe(false);
   });
 
   it("implements the agreed 60 percent resident loop", () => {
@@ -122,6 +135,18 @@ describe("petModeData", () => {
     expect(PET_MODE_LIFE_MOTION_FRAME_COUNT).toBe(37);
     expect(PET_MODE_LIFE_MOTION_DURATION_MS).toBeCloseTo(3_083.333, 2);
     expect(PET_MODE_TAIL_FLICK_DURATION_MS).toBe(PET_MODE_LIFE_MOTION_DURATION_MS);
+  });
+
+  it("loops the reviewed run cycle on its own authored frame clock", () => {
+    expect(PET_MODE_RUN_FRAME_COUNT).toBe(17);
+    expect(PET_MODE_RUN_CYCLE_DURATION_MS).toBe(616);
+    expect(getPetModeRunFrameIndex(0)).toBe(0);
+    expect(getPetModeRunFrameIndex(PET_MODE_RUN_CYCLE_DURATION_MS / 2)).toBe(8);
+    expect(getPetModeRunFrameIndex(PET_MODE_RUN_CYCLE_DURATION_MS - 1)).toBe(16);
+    expect(getPetModeRunFrameIndex(PET_MODE_RUN_CYCLE_DURATION_MS)).toBe(0);
+    expect(getPetModeRunFrameIndex(PET_MODE_RUN_CYCLE_DURATION_MS * 5 + 1)).toBe(0);
+    expect(getPetModeRunFrameIndex(Number.NaN)).toBe(0);
+    expect(getPetModeRunFrameIndex(100, 0)).toBe(0);
   });
 
   it("keeps the authored entry a short distance-based run", () => {

@@ -172,6 +172,20 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("button", { name: /Play Flow/ })).toBeNull();
   });
 
+  it("keeps the fast-run beta opt-in in Dev and dependent on the pet", () => {
+    const offProps = renderProductionDevSettings({ petModeEnabled: false, petModeRunBetaEnabled: false });
+    const disabledToggle = screen.getByRole("switch", { name: "Toggle the beta fast-run animation" });
+    expect(disabledToggle.getAttribute("aria-checked")).toBe("false");
+    expect(disabledToggle.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(disabledToggle);
+    expect(offProps.onPetModeRunBetaEnabledChange).not.toHaveBeenCalled();
+
+    cleanup();
+    const onProps = renderProductionDevSettings({ petModeEnabled: true, petModeRunBetaEnabled: false });
+    fireEvent.click(screen.getByRole("switch", { name: "Toggle the beta fast-run animation" }));
+    expect(onProps.onPetModeRunBetaEnabledChange).toHaveBeenCalledWith(true);
+  });
+
   it("shows the real pet phase and prevents overlapping Lab actions", async () => {
     renderProductionDevSettings({ petModeEnabled: true });
     await act(async () => undefined);

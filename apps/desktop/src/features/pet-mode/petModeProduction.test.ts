@@ -5,6 +5,7 @@ import {
   PET_MODE_COAT_STORAGE_KEY,
   PET_MODE_LEGACY_COAT_STORAGE_KEY,
   PET_MODE_LEGACY_STORAGE_KEY,
+  PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_ENTRY_DURATION_MS,
   PET_MODE_ENTRY_ACCELERATION_RATIO,
   PET_MODE_ENTRY_DECELERATION_RATIO,
@@ -20,6 +21,7 @@ import {
   isPetModeSize,
   resolveInitialPetModeCoat,
   resolveInitialPetModeEnabled,
+  resolveInitialPetModeRunBetaEnabled,
   resolveInitialPetModeSize,
 } from "./petModeData";
 
@@ -71,11 +73,16 @@ describe("pet entry motion contract", () => {
     expect(petModeCssContract).toContain(
       ".pet-mode-cat.is-mirrored { transform: scaleX(-1); }",
     );
-    for (const phase of ["entry", "walk", "run"]) {
+    for (const phase of ["entry", "walk"]) {
       expect(petModeCssContract).toContain(
         `.pet-mode-cat--${phase} .pet-mode-cat__vector`,
       );
     }
+    expect(petModeCatContract).toContain('className="pet-mode-cat__raster pet-mode-cat__raster--run"');
+    expect(petModeCatContract).toContain("getPetModeRunFrameSource(renderedRunFrame)");
+    expect(petModeCatContract).toContain("fastRunBetaEnabled = false");
+    expect(petModeCatContract).toContain("const runUsesVectorFallback = phase === \"run\"");
+    expect(petModeWindowContract).toContain("resolveInitialPetModeRunBetaEnabled");
     expect(petModeCssContract).toContain(".pet-mode-cat__landed-vector");
     expect(petModeCssContract).toContain("@keyframes pet-mode-entry-shadow");
     expect(petModeCatContract).toContain('fetch("/pet-mode/walk-frames-v2.json")');
@@ -131,6 +138,15 @@ describe("pet promoted out of Dev", () => {
     const resetBlock = app.slice(app.indexOf("if (settingsSection === \"dev\") setSettingsSection(\"general\");"));
     const block = resetBlock.slice(0, resetBlock.indexOf("}, ["));
     expect(block).not.toContain("setPetModeEnabled");
+  });
+
+  it("keeps the authored fast run behind a persisted beta that defaults off", () => {
+    expect(resolveInitialPetModeRunBetaEnabled()).toBe(false);
+    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+    expect(resolveInitialPetModeRunBetaEnabled()).toBe(true);
+    expect(devSettings).toContain("petModeRunBetaEnabled");
+    expect(notifications).not.toContain("petModeRunBetaEnabled");
+    expect(petModeWindowContract).toContain("PET_MODE_RUN_BETA_STORAGE_KEY");
   });
 
   it("is not gated behind Dev mode when deciding to show the pet", () => {

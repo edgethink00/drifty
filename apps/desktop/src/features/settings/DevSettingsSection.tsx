@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useId, useState, type CSSProperties } from "react";
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
@@ -66,6 +66,7 @@ type DevSettingsSectionProps = {
   readonly projectClassificationCorrectionsBusy: boolean;
   readonly projectPassRuns: readonly ProjectPassRun[];
   readonly petModeEnabled: boolean;
+  readonly petModeRunBetaEnabled: boolean;
   readonly petModeLabPointerStatus: string | null;
   readonly petModeLabInputBounds: string | null;
   readonly floatingCompanionDevEnabled: boolean;
@@ -94,6 +95,7 @@ type DevSettingsSectionProps = {
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
+  readonly onPetModeRunBetaEnabledChange: (enabled: boolean) => void;
   readonly onPreviewPetModeIntervention: () => void;
   readonly onRehearsePetModeIntercept: () => void;
   readonly onPreviewPetModeBrowserTabClose: () => void;
@@ -137,6 +139,7 @@ export function DevSettingsSection({
   projectClassificationCorrectionsBusy,
   projectPassRuns,
   petModeEnabled,
+  petModeRunBetaEnabled,
   petModeLabPointerStatus,
   petModeLabInputBounds,
   floatingCompanionDevEnabled,
@@ -165,6 +168,7 @@ export function DevSettingsSection({
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
+  onPetModeRunBetaEnabledChange,
   onPreviewPetModeIntervention,
   onRehearsePetModeIntercept,
   onPreviewPetModeBrowserTabClose,
@@ -192,6 +196,9 @@ export function DevSettingsSection({
   onResetDemoDashboardReplaySettings,
 }: DevSettingsSectionProps) {
   const { t } = useLocalization();
+  const fastRunId = useId().replace(/:/g, "");
+  const fastRunLabelId = `pet-run-beta-label-${fastRunId}`;
+  const fastRunDescriptionId = `pet-run-beta-desc-${fastRunId}`;
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
@@ -308,6 +315,27 @@ export function DevSettingsSection({
               lives in its own tooltip, so the Lab is a compact bank of actions
               grouped by what they exercise: the loop, the pet's own behavior,
               and anything that moves the window. */}
+          <div className="pet-mode-lab__row">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Motion</div>
+              <div className="desc">Choose the experimental renderer used by fast intervention travel.</div>
+            </div>
+            <div className="pet-mode-lab__experiment-policy" data-active={petModeRunBetaEnabled}>
+              <span>
+                <strong className="settings-label-with-badge" id={fastRunLabelId}>
+                  {t("settings.pet.fastRun")} <span className="status-badge status-badge--beta">{t("common.beta")}</span>
+                </strong>
+                <small id={fastRunDescriptionId}>{t("settings.pet.fastRunDescription")}</small>
+              </span>
+              <Toggle
+                checked={petModeRunBetaEnabled}
+                disabled={!petModeEnabled}
+                onChange={onPetModeRunBetaEnabledChange}
+                ariaLabel={t("settings.pet.toggleFastRun")}
+                ariaDescribedBy={`${fastRunLabelId} ${fastRunDescriptionId}`}
+              />
+            </div>
+          </div>
           <div className="pet-mode-lab__row">
             <div className="pet-mode-lab__row-copy">
               <div className="lbl">Run</div>

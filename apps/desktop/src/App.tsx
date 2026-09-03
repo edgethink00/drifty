@@ -739,6 +739,7 @@ export default function App() {
     extremeNudgeEnabled,
     petModeEnabled,
     petModeCoat,
+    petModeRunBetaEnabled,
     petModeSize,
     setDriftAlertDelaySeconds,
     setDriftAlarmCopy,
@@ -746,6 +747,7 @@ export default function App() {
     setExtremeNudgeEnabled,
     setPetModeEnabled,
     setPetModeCoat,
+    setPetModeRunBetaEnabled,
     setPetModeSize,
     watcherMode,
     watcherPeekEnabled,
@@ -9188,6 +9190,7 @@ export default function App() {
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
                     petModeEnabled={petModeEnabled}
+                    petModeRunBetaEnabled={petModeRunBetaEnabled}
                     petModeLabPointerStatus={petModeLabPointerStatus}
                     petModeLabInputBounds={petModeLabInputBounds}
                     floatingCompanionDevEnabled={floatingCompanionDevEnabled}
@@ -9218,6 +9221,7 @@ export default function App() {
                     onCheckLatestBuild={() => void developerPreReleaseUpdateController.checkLatestBuild()}
                     onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
+                    onPetModeRunBetaEnabledChange={setPetModeRunBetaEnabled}
                     onPreviewPetModeIntervention={() => {
                       const target = buildPetModePreviewInterventionTarget(segments);
                       if (target) {

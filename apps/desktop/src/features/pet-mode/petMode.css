@@ -236,7 +236,6 @@
    hit-region generator sweep them with document.getAnimations() and bake the
    union, so the grabbable area follows the motion instead of drifting off it. */
 .pet-mode-cat--walk .pet-mode-cat__body-motion,
-.pet-mode-cat--run .pet-mode-cat__body-motion,
 .pet-mode-cat--stalk .pet-mode-cat__body-motion,
 .pet-mode-cat--return .pet-mode-cat__body-motion {
   animation: pet-mode-chase-body var(--pet-chase-cycle, 0ms) linear infinite;
@@ -275,7 +274,6 @@
 }
 
 .pet-mode-cat--walk .pet-mode-cat__head-motion,
-.pet-mode-cat--run .pet-mode-cat__head-motion,
 .pet-mode-cat--stalk .pet-mode-cat__head-motion,
 .pet-mode-cat--return .pet-mode-cat__head-motion {
   animation: pet-mode-chase-head var(--pet-chase-cycle, 0ms) linear infinite;
@@ -332,6 +330,24 @@
    ivory bitmap mid-animation. */
 .pet-mode-cat__raster { filter: var(--pet-raster-filter); }
 
+/* Run frames are normalized to the native panel's exact 144x99 canvas, while
+   `.pet-mode-cat` is the smaller 121.2x92.4 approved idle-art box inset by
+   11.4x4.2 points. Register the run canvas back onto the panel instead of
+   containing it inside that box; otherwise the cat shrinks about 15% exactly
+   when the chase begins. The parent size scale still scales both together. */
+.pet-mode-cat__raster--run {
+  inset: auto;
+  left: -11.4px;
+  top: -4.2px;
+  width: 144px;
+  height: 99px;
+  object-fit: fill;
+  /* Loop 5 faces left, while app-native poses use right as the unmirrored
+     baseline. Normalize only this layer so the parent's `is-mirrored`
+     transform continues to own leftward travel for every gait. */
+  transform: scaleX(-1);
+}
+
 .pet-mode-cat__vector { color: var(--pet-fur); }
 .pet-mode-cat__face { color: var(--pet-ink); }
 /* Contact no longer squashes the mouth.
@@ -356,7 +372,6 @@
    canvases. The parent facing mirror reverses the local X shift automatically. */
 .pet-mode-cat--entry .pet-mode-cat__vector,
 .pet-mode-cat--walk .pet-mode-cat__vector,
-.pet-mode-cat--run .pet-mode-cat__vector,
 .pet-mode-cat--stalk .pet-mode-cat__vector,
 .pet-mode-cat--bite .pet-mode-cat__vector,
 .pet-mode-cat--return .pet-mode-cat__vector,
@@ -666,7 +681,7 @@
   animation: pet-mode-entry-shadow var(--pet-entry-duration, 482ms) ease-in-out 1 both;
 }
 .pet-mode-cat--walk .pet-mode-cat__shadow { animation: pet-mode-shadow 480ms ease-in-out infinite; }
-.pet-mode-cat--run .pet-mode-cat__shadow { animation: pet-mode-shadow 240ms ease-in-out infinite; }
+.pet-mode-cat--run .pet-mode-cat__shadow { animation: none; scale: .94 .9; opacity: .58; }
 .pet-mode-cat--stalk .pet-mode-cat__shadow { animation: pet-mode-shadow 320ms ease-in-out infinite; }
 .pet-mode-cat--bite .pet-mode-cat__shadow { scale: .96 .9; opacity: .7; }
 .pet-mode-cat--return .pet-mode-cat__shadow { animation: pet-mode-shadow 460ms ease-in-out infinite; }
