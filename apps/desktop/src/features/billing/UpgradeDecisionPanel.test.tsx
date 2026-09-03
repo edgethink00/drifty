@@ -22,11 +22,14 @@ describe("UpgradeDecisionPanel", () => {
     const panel = screen.getByLabelText(/drifty pro subscription choice/i);
     const ratioGrid = document.querySelector('[data-choice-ratio="1:1"]');
     expect(ratioGrid?.children).toHaveLength(2);
-    expect(within(panel).getByText("$5")).toBeTruthy();
+    expect(within(panel).getByText("$7")).toBeTruthy();
     expect(within(panel).queryByText("$0")).toBeNull();
     expect(within(panel).queryByText(/^Free$/)).toBeNull();
 
     fireEvent.click(within(panel).getByRole("radio", { name: /yearly/i }));
+    expect(within(panel).getByText("$5")).toBeTruthy();
+    expect(within(panel).getByText("/ month · $60 billed yearly")).toBeTruthy();
+    expect(within(panel).getByText("Save $24/year")).toBeTruthy();
     fireEvent.click(within(panel).getByRole("button", { name: /continue with pro/i }));
     expect(onSelectPlan).toHaveBeenCalledWith("yearly");
   });

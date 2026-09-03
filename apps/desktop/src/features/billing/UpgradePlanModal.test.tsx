@@ -61,6 +61,25 @@ describe("UpgradePlanModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("offers the updater when checkout rejects an old pricing revision", () => {
+    const onCheckForUpdates = vi.fn();
+    render(
+      <UpgradePlanModal
+        billingActionError="Update Drifty to confirm the current price."
+        billingActionErrorCode="pricing_revision_mismatch"
+        billingCheckoutLoadingInterval={null}
+        onCheckForUpdates={onCheckForUpdates}
+        onClose={vi.fn()}
+        onSelectBillingPlan={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /^upgrade to pro$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /check for updates/i }));
+
+    expect(onCheckForUpdates).toHaveBeenCalledTimes(1);
+  });
+
   it("closes from the backdrop but not from the decision panel", () => {
     const onClose = vi.fn();
     const { container } = render(

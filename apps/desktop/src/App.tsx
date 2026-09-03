@@ -1352,6 +1352,7 @@ export default function App() {
   const requestCloudBillingAuth = openDefaultAuthModal;
   const {
     billingActionError,
+    billingActionErrorCode,
     billingCheckoutAwaitingConfirmation,
     billingCheckoutLoadingInterval,
     billingEntitlement,
@@ -9226,6 +9227,7 @@ export default function App() {
       {shouldRenderUpgradePlanModal ? (
         <UpgradePlanModal
           billingActionError={billingActionError}
+          billingActionErrorCode={billingActionErrorCode}
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
           billingEntitlement={effectiveBillingEntitlement}
           billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || isSidebarCtaPreviewActive}
@@ -9235,6 +9237,7 @@ export default function App() {
             setUpgradePlanModalOpen(false);
             openAiSetupSettings();
           }}
+          onCheckForUpdates={handleManualCheckForUpdates}
           onSelectBillingPlan={(billingInterval) => {
             if (isSidebarCtaPreviewActive) return;
             void startCloudCheckout(billingInterval);

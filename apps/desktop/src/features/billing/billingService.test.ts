@@ -25,7 +25,28 @@ describe("billingService", () => {
 
     expect(result).toEqual({ success: true, data: { url: "https://checkout.example.test" } });
     expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
-      body: { plan: "individual", billingInterval },
+      body: { plan: "individual", billingInterval, pricingRevision: "pro-usd-2026-09" },
+    });
+  });
+
+  it("preserves a structured pricing revision failure", async () => {
+    const invoke = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        context: {
+          json: () => Promise.resolve({
+            code: "pricing_revision_mismatch",
+            error: "Update Drifty to confirm the current price before checkout.",
+          }),
+        },
+      },
+    });
+    const client: MockBillingClient = { functions: { invoke } };
+
+    await expect(createIndividualCheckout("monthly", client)).resolves.toEqual({
+      success: false,
+      code: "pricing_revision_mismatch",
+      error: "Update Drifty to confirm the current price before checkout.",
     });
   });
 

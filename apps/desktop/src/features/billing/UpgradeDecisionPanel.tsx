@@ -1,21 +1,16 @@
 import { useState } from "react";
 
 import type { BillingInterval } from "./billingService";
+import {
+  INDIVIDUAL_PRICING,
+  individualMonthlyDisplayAmount,
+  type VisibleBillingInterval,
+} from "./individualPricing";
 import { useLocalization } from "../localization/LocalizationContext";
 
 import "./UpgradeDecisionPanel.css";
 
 export type UpgradeDecisionContext = "trial-active" | "trial-ended" | "upgrade" | "upgrade-local";
-
-type VisibleBillingInterval = Extract<BillingInterval, "monthly" | "yearly">;
-
-const PRICE_BY_INTERVAL: Record<
-  VisibleBillingInterval,
-  { readonly price: string; readonly cadenceKey: "billing.plan.cadenceMonthly" | "billing.plan.cadenceYearly" }
-> = {
-  monthly: { price: "$5", cadenceKey: "billing.plan.cadenceMonthly" },
-  yearly: { price: "$4", cadenceKey: "billing.plan.cadenceYearly" },
-};
 
 export function UpgradeDecisionPanel({
   context,
@@ -32,7 +27,10 @@ export function UpgradeDecisionPanel({
 }) {
   const { t } = useLocalization();
   const [billingInterval, setBillingInterval] = useState<VisibleBillingInterval>("monthly");
-  const price = PRICE_BY_INTERVAL[billingInterval];
+  const price = `$${individualMonthlyDisplayAmount(billingInterval)}`;
+  const cadence = billingInterval === "monthly"
+    ? t("billing.plan.cadenceMonthly")
+    : t("billing.plan.cadenceYearly", { amount: INDIVIDUAL_PRICING.yearly.amount });
   const checkoutOpening = loadingInterval !== null;
   const badgeKey = context === "trial-active"
     ? "billing.decision.activeBadge"
@@ -76,7 +74,7 @@ export function UpgradeDecisionPanel({
           onClick={() => setBillingInterval("yearly")}
         >
           <span>{t("billing.plan.intervalYearly")}</span>
-          <small>{t("billing.plan.intervalSavings")}</small>
+          <small>{t("billing.plan.intervalSavings", { amount: INDIVIDUAL_PRICING.yearly.annualSavings })}</small>
         </button>
       </div>
 
@@ -91,9 +89,9 @@ export function UpgradeDecisionPanel({
               <h3>{t("billing.plan.proNote")}</h3>
               <p>{t(bodyKey)}</p>
             </div>
-            <div className="upgrade-decision__price" aria-label={`${price.price} ${t(price.cadenceKey)}`}>
-              <strong>{price.price}</strong>
-              <span>{t(price.cadenceKey)}</span>
+            <div className="upgrade-decision__price" aria-label={`${price} ${cadence}`}>
+              <strong>{price}</strong>
+              <span>{cadence}</span>
             </div>
           </div>
           <ul className="upgrade-decision__benefits">

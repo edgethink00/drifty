@@ -588,10 +588,31 @@
 }
 
 .dashboard-ai-recovery__error {
+  align-items: center;
   color: var(--warn);
+  display: flex;
+  flex-wrap: wrap;
   font-size: 0.78rem;
+  gap: var(--space-2);
   line-height: 1.45;
   margin: 0;
+}
+
+.dashboard-ai-recovery__error-action {
+  background: transparent;
+  border: 0;
+  color: currentColor;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
+.dashboard-ai-recovery__error-action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
 }
 
 /* 24h timeline */

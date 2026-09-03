@@ -7,19 +7,22 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { UpgradeDecisionPanel, type UpgradeDecisionContext } from "./UpgradeDecisionPanel";
 import { resolvePlanCardState } from "./planCardState";
 import { useLocalization } from "../localization/LocalizationContext";
-import type { BillingEntitlement, BillingInterval } from "./billingService";
+import type { BillingEntitlement, BillingInterval, CheckoutFailureCode } from "./billingService";
 
 export function UpgradePlanModal({
   billingActionError,
+  billingActionErrorCode = null,
   billingCheckoutLoadingInterval,
   billingEntitlement = null,
   billingPlansDisabled = false,
   localAiConfigured = false,
   onClose,
   onContinueLocal,
+  onCheckForUpdates,
   onSelectBillingPlan,
 }: {
   readonly billingActionError: string | null;
+  readonly billingActionErrorCode?: CheckoutFailureCode | null;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   /** The account's live entitlement; a trial must not be described as Free. */
   readonly billingEntitlement?: BillingEntitlement | null;
@@ -28,6 +31,7 @@ export function UpgradePlanModal({
   readonly localAiConfigured?: boolean;
   readonly onClose: () => void;
   readonly onContinueLocal?: () => void;
+  readonly onCheckForUpdates?: () => void;
   readonly onSelectBillingPlan: (interval: BillingInterval) => void;
 }) {
   const { t } = useLocalization();
@@ -99,9 +103,14 @@ export function UpgradePlanModal({
             }}
           />
           {checkoutRequested && billingActionError ? (
-            <p className="dashboard-ai-recovery__error" role="alert">
-              {billingActionError}
-            </p>
+            <div className="dashboard-ai-recovery__error" role="alert">
+              <span>{billingActionError}</span>
+              {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
+                <button type="button" className="dashboard-ai-recovery__error-action" onClick={onCheckForUpdates}>
+                  {t("billing.checkout.checkForUpdates")}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </section>

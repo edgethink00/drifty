@@ -1,6 +1,7 @@
 import { supabase } from "../../lib/supabase/client";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import type { CloudDeviceAccess, CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
+import { INDIVIDUAL_PRICING } from "./individualPricing";
 
 export type BillingEntitlement = {
   plan: "individual";
@@ -17,6 +18,12 @@ export type BillingEntitlement = {
 export type BillingResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
+
+export type CheckoutFailureCode = "checkout_maintenance" | "pricing_revision_mismatch";
+
+export type CheckoutResult<T> =
+  | { success: true; data: T }
+  | { success: false; error: string; code?: CheckoutFailureCode };
 
 export type CouponRedemption = {
   readonly status: "redeemed" | "already_redeemed";
@@ -52,6 +59,7 @@ type BillingEntitlementResponse = {
 
 type CheckoutResponse = {
   url?: string;
+  code?: unknown;
   error?: string;
 };
 
@@ -111,22 +119,41 @@ export async function fetchBillingEntitlement(client: BillingClient = supabase):
 export async function createIndividualCheckout(
   billingInterval: BillingInterval,
   client: BillingClient = supabase,
-): Promise<BillingResult<{ url: string }>> {
+): Promise<CheckoutResult<{ url: string }>> {
   if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
 
   try {
     const { data, error } = await client.functions.invoke<CheckoutResponse>("create-polar-checkout", {
-      body: { plan: "individual", billingInterval },
+      body: {
+        plan: "individual",
+        billingInterval,
+        pricingRevision: INDIVIDUAL_PRICING.revision,
+      },
     });
 
-    if (error) return { success: false, error: await readFunctionError(error, "Unable to create checkout.") };
-    if (data?.error) return { success: false, error: data.error };
+    if (error) {
+      const body = await readFunctionErrorBody(error);
+      const code = readCheckoutFailureCode(isRecord(body) ? body.code : undefined);
+      return {
+        success: false,
+        error: readErrorMessage(body) ?? "Unable to create checkout.",
+        ...(code ? { code } : {}),
+      };
+    }
+    if (data?.error) {
+      const code = readCheckoutFailureCode(data.code);
+      return { success: false, error: data.error, ...(code ? { code } : {}) };
+    }
     if (!data?.url) return { success: false, error: "Checkout did not return a redirect URL." };
 
     return { success: true, data: { url: data.url } };
   } catch (error) {
     return { success: false, error: error instanceof Error && error.message ? error.message : "Unable to create checkout." };
   }
+}
+
+function readCheckoutFailureCode(value: unknown): CheckoutFailureCode | null {
+  return value === "checkout_maintenance" || value === "pricing_revision_mismatch" ? value : null;
 }
 
 export async function createBillingPortalSession(client: BillingClient = supabase): Promise<BillingResult<{ url: string }>> {

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AuthState } from "../auth/AuthContext";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 import type { BillingEntitlement } from "./billingService";
 import {
   CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS,
@@ -185,6 +187,47 @@ describe("useCloudBillingController", () => {
 
     expect(result.current.billingActionError).toBe("Checkout is temporarily unavailable.");
     expect(result.current.billingEntitlementError).toBeNull();
+  });
+
+  it.each([
+    ["en", "checkout_maintenance", "We're updating pricing. Please try again shortly."],
+    ["ko", "checkout_maintenance", "가격 정보를 업데이트하고 있어요. 잠시 후 다시 시도해 주세요."],
+    ["en", "pricing_revision_mismatch", "Update Drifty to confirm the current price."],
+    ["ko", "pricing_revision_mismatch", "현재 가격을 확인하려면 Drifty를 업데이트해 주세요."],
+  ] as const)("localizes the %s %s checkout failure", async (language, code, expected) => {
+    const trialExpiredEntitlement: BillingEntitlement = {
+      plan: "individual",
+      status: "locked",
+      canUseApp: false,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      lockedReason: "trial_expired",
+    };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: trialExpiredEntitlement });
+    billingMocks.createIndividualCheckout.mockResolvedValue({
+      success: false,
+      code,
+      error: "Server fallback that should not reach the UI.",
+    });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <LocalizationTestProvider language={language as DisplayLanguage}>{children}</LocalizationTestProvider>
+    );
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      onOpenAiSetup: vi.fn(),
+    }), { wrapper });
+
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
+    await act(async () => {
+      await result.current.startCloudCheckout("monthly");
+    });
+
+    expect(result.current.billingActionError).toBe(expected);
   });
 
   it("opens the billing portal instead of a second checkout when payment is blocked", async () => {

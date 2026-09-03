@@ -8,6 +8,7 @@ import {
   redeemTrialCoupon,
   type BillingEntitlement,
   type BillingInterval,
+  type CheckoutFailureCode,
   type CouponRedemption,
   type CouponRedemptionFailureCode,
 } from "./billingService";
@@ -18,6 +19,7 @@ import {
 import { toErrorMessage } from "../../lib/formatting";
 import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthogClient";
 import { canStartIndividualCheckout } from "./billingEligibility";
+import { useLocalization } from "../localization/LocalizationContext";
 
 type UseCloudBillingControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
@@ -31,6 +33,7 @@ type UseCloudBillingControllerInput = {
 type UseCloudBillingControllerResult = {
   /** Errors from an explicit checkout/portal action; shown locally, never used as global Cloud health. */
   readonly billingActionError: string | null;
+  readonly billingActionErrorCode: CheckoutFailureCode | null;
   readonly billingCheckoutAwaitingConfirmation: boolean;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingEntitlement: BillingEntitlement | null;
@@ -78,10 +81,12 @@ export function useCloudBillingController({
   onAuthRequired,
   onOpenAiSetup,
 }: UseCloudBillingControllerInput): UseCloudBillingControllerResult {
+  const { t } = useLocalization();
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
   const [billingEntitlementLoading, setBillingEntitlementLoading] = useState(false);
   const [billingEntitlementError, setBillingEntitlementError] = useState<string | null>(null);
   const [billingActionError, setBillingActionError] = useState<string | null>(null);
+  const [billingActionErrorCode, setBillingActionErrorCode] = useState<CheckoutFailureCode | null>(null);
   const [billingCheckoutLoadingInterval, setBillingCheckoutLoadingInterval] = useState<BillingInterval | null>(null);
   const [billingPortalLoading, setBillingPortalLoading] = useState(false);
   const [couponRedemption, setCouponRedemption] = useState<CouponRedemption | null>(null);
@@ -102,6 +107,7 @@ export function useCloudBillingController({
       setBillingEntitlementLoading(false);
       setBillingEntitlementError(null);
       setBillingActionError(null);
+      setBillingActionErrorCode(null);
       setCloudDeviceActionError(null);
       return null;
     }
@@ -163,6 +169,7 @@ export function useCloudBillingController({
     }
 
     setBillingActionError(null);
+    setBillingActionErrorCode(null);
     // `payment_required` reaches the portal too: the subscription exists and only
     // its payment is blocked, so recovery belongs in the portal, not a checkout.
     const canOpenBillingPortal = billingEntitlement?.status === "active"
@@ -178,6 +185,7 @@ export function useCloudBillingController({
       const portalResult = await createBillingPortalSession();
       if (!portalResult.success) {
         setBillingActionError(portalResult.error);
+        setBillingActionErrorCode(null);
         capturePostHogEvent("billing_action", {
           action: "portal_created",
           result: "error",
@@ -203,6 +211,7 @@ export function useCloudBillingController({
       });
     } catch (error) {
       setBillingActionError(toErrorMessage(error));
+      setBillingActionErrorCode(null);
       capturePostHogEvent("billing_action", {
         action: "portal_opened",
         result: "error",
@@ -235,18 +244,29 @@ export function useCloudBillingController({
     }
 
     setBillingActionError(null);
+    setBillingActionErrorCode(null);
     cloudCheckoutPendingRef.current = true;
     let openedCheckout = false;
     setBillingCheckoutLoadingInterval(billingInterval);
     try {
       const checkoutResult = await createIndividualCheckout(billingInterval);
       if (!checkoutResult.success) {
-        setBillingActionError(checkoutResult.error);
+        const checkoutError = checkoutResult.code === "checkout_maintenance"
+          ? t("billing.checkout.maintenance")
+          : checkoutResult.code === "pricing_revision_mismatch"
+            ? t("billing.checkout.updateRequired")
+            : checkoutResult.error;
+        setBillingActionError(checkoutError);
+        setBillingActionErrorCode(checkoutResult.code ?? null);
         capturePostHogEvent("billing_action", {
           action: "checkout_created",
           result: "error",
           billing_interval: billingInterval,
-          error_kind: toAnalyticsErrorKind(checkoutResult.error),
+          error_kind: checkoutResult.code === "checkout_maintenance"
+            ? "unavailable"
+            : checkoutResult.code === "pricing_revision_mismatch"
+              ? "validation"
+              : toAnalyticsErrorKind(checkoutResult.error),
         });
         return;
       }
@@ -268,6 +288,7 @@ export function useCloudBillingController({
       });
     } catch (error) {
       setBillingActionError(toErrorMessage(error));
+      setBillingActionErrorCode(null);
       capturePostHogEvent("billing_action", {
         action: "checkout_opened",
         result: "error",
@@ -286,6 +307,7 @@ export function useCloudBillingController({
     isSupabaseConfigured,
     onAuthRequired,
     refreshBillingEntitlement,
+    t,
     user,
   ]);
 
@@ -381,6 +403,7 @@ export function useCloudBillingController({
       setBillingEntitlementLoading(false);
       setBillingEntitlementError(null);
       setBillingActionError(null);
+      setBillingActionErrorCode(null);
       setCloudDeviceActionError(null);
       return undefined;
     }
@@ -497,6 +520,7 @@ export function useCloudBillingController({
 
   return {
     billingActionError,
+    billingActionErrorCode,
     billingCheckoutAwaitingConfirmation: cloudCheckoutAwaitingBrowser,
     billingCheckoutLoadingInterval,
     billingEntitlement,

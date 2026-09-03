@@ -1,14 +1,17 @@
 import { useState } from "react";
 
 import type { BillingInterval } from "./billingService";
+import {
+  INDIVIDUAL_PRICING,
+  individualMonthlyDisplayAmount,
+  type VisibleBillingInterval,
+} from "./individualPricing";
 import type { PlanCardState } from "./planCardState";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 
 // `individual` remains the billing wire id; Pro is its customer-facing name.
 export type BillingPlanId = "free" | "individual";
-
-type VisibleBillingInterval = Extract<BillingInterval, "monthly" | "yearly">;
 
 const INTERVAL_OPTIONS: readonly {
   readonly id: VisibleBillingInterval;
@@ -18,12 +21,6 @@ const INTERVAL_OPTIONS: readonly {
   { id: "monthly", labelKey: "billing.plan.intervalMonthly" },
   { id: "yearly", labelKey: "billing.plan.intervalYearly", savingsKey: "billing.plan.intervalSavings" },
 ];
-
-/** Cadence is localized at render time; only the price literal is fixed. */
-const INDIVIDUAL_PRICE_BY_INTERVAL: Record<VisibleBillingInterval, { readonly price: string; readonly cadenceKey: TranslationKey }> = {
-  monthly: { price: "$5", cadenceKey: "billing.plan.cadenceMonthly" },
-  yearly: { price: "$4", cadenceKey: "billing.plan.cadenceYearly" },
-};
 
 const FREE_PLAN_FEATURE_KEYS = [
   "billing.plan.freeFeature1",
@@ -91,7 +88,10 @@ export function IndividualPlanCards({
   const { t } = useLocalization();
   const [internalBillingInterval, setInternalBillingInterval] = useState<VisibleBillingInterval>("monthly");
   const selectedInterval = billingInterval ?? internalBillingInterval;
-  const individualPrice = INDIVIDUAL_PRICE_BY_INTERVAL[selectedInterval];
+  const individualPrice = `$${individualMonthlyDisplayAmount(selectedInterval)}`;
+  const individualCadence = selectedInterval === "monthly"
+    ? t("billing.plan.cadenceMonthly")
+    : t("billing.plan.cadenceYearly", { amount: INDIVIDUAL_PRICING.yearly.amount });
   const isTrialing = planState === "pro_trial";
   const individualIsCurrent = currentPlan === "individual";
   const canSelectIndividual = Boolean(onSelectPlan) && !individualIsCurrent;
@@ -120,9 +120,9 @@ export function IndividualPlanCards({
         <span className="individual-plan-card__price-row">
           <span className="individual-plan-card__price-stack">
             <span className="individual-plan-card__price-line">
-              <strong>{individualPrice.price}</strong>
+              <strong>{individualPrice}</strong>
             </span>
-            <span className="individual-plan-card__price-cadence">{t(individualPrice.cadenceKey)}</span>
+            <span className="individual-plan-card__price-cadence">{individualCadence}</span>
           </span>
         </span>
       </span>
@@ -178,7 +178,11 @@ export function IndividualPlanCards({
           onClick={() => handleIntervalChange(option.id)}
         >
           <span>{t(option.labelKey)}</span>
-          {option.savingsKey ? <small className="individual-plan-interval__save">{t(option.savingsKey)}</small> : null}
+          {option.savingsKey ? (
+            <small className="individual-plan-interval__save">
+              {t(option.savingsKey, { amount: INDIVIDUAL_PRICING.yearly.annualSavings })}
+            </small>
+          ) : null}
         </button>
       ))}
     </div>

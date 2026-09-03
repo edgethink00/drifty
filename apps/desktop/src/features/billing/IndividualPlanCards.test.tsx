@@ -17,7 +17,7 @@ describe("IndividualPlanCards", () => {
 
     expect(screen.getByRole("radio", { name: /monthly/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /yearly/i })).toBeTruthy();
-    expect(screen.getByText("Save 20%")).toBeTruthy();
+    expect(screen.getByText("Save $24/year")).toBeTruthy();
     expect(screen.queryByRole("radio", { name: /quarterly/i })).toBeNull();
     expect(screen.queryByRole("article", { name: /business plan/i })).toBeNull();
     expect(screen.queryByText(/every 3 months|\$4\.33/i)).toBeNull();
@@ -32,7 +32,7 @@ describe("IndividualPlanCards", () => {
     expect(within(freePlan).queryByText(/^Local-first$/i)).toBeNull();
 
     expect(within(proPlan).getByText("Drifty Pro")).toBeTruthy();
-    expect(within(proPlan).getByText("$5")).toBeTruthy();
+    expect(within(proPlan).getByText("$7")).toBeTruthy();
     expect(within(proPlan).getByText("/ month")).toBeTruthy();
     expect(within(proPlan).getByText("Recommended")).toBeTruthy();
     expect(within(proPlan).getByText("More accurate AI, ready to use")).toBeTruthy();
@@ -93,9 +93,9 @@ describe("IndividualPlanCards", () => {
     const proPlan = screen.getByRole("article", { name: /pro plan/i });
 
     expect(within(proPlan).getAllByText("Current plan").length).toBeGreaterThan(0);
-    expect(within(proPlan).getByText("$4")).toBeTruthy();
-    expect(within(proPlan).queryByText("$5")).toBeNull();
-    expect(within(proPlan).getByText("/ month · $48 billed yearly")).toBeTruthy();
+    expect(within(proPlan).getByText("$5")).toBeTruthy();
+    expect(within(proPlan).queryByText("$7")).toBeNull();
+    expect(within(proPlan).getByText("/ month · $60 billed yearly")).toBeTruthy();
   });
 
   it("starts Pro setup from the card when shown in display mode with a select handler", () => {
