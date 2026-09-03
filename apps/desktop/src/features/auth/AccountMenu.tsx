@@ -313,6 +313,7 @@ export function AccountMenu({
     <div
       ref={menuRef}
       className={isSidebarCollapsed ? "account-popover account-popover--collapsed" : "account-popover"}
+      data-sidebar-guide-anchor="account"
       style={popoverStyle}
       role="menu"
       aria-label={t("account.menu")}

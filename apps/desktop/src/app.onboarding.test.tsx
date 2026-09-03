@@ -4,6 +4,10 @@ import type { TrackerStatus } from "@drifty/domain";
 import { StrictMode, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
+import {
+  parsePostOnboardingSidebarGuideRecord,
+  postOnboardingSidebarGuideStorageKey,
+} from "./features/onboarding/postOnboardingSidebarGuide";
 import { DISPLAY_LANGUAGE_STORAGE_KEY } from "./features/localization/LocalizationContext";
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
@@ -1068,6 +1072,9 @@ describe("App onboarding", () => {
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: /you're ready to go/i })).toBeNull();
     });
+    expect(parsePostOnboardingSidebarGuideRecord(
+      window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
+    )).toMatchObject({ status: "active", step: "dashboard" });
 
     const storedValue = window.localStorage.getItem(getUserOnboardingStorageKey("user-1"));
     expect(storedValue).toBeTruthy();

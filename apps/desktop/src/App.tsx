@@ -149,6 +149,9 @@ import {
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
 import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
 import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
+import { PostOnboardingSidebarGuide } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
+import { isPostOnboardingSidebarGuideReviewEnabled } from "./features/onboarding/postOnboardingSidebarGuide";
+import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import {
   WatcherPeek,
   type WatcherPeekEvent,
@@ -1332,6 +1335,65 @@ export default function App() {
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
   } = useAuth();
+  const postOnboardingSidebarGuideReviewEnabled = isPostOnboardingSidebarGuideReviewEnabled(
+    window.location.search,
+    import.meta.env.DEV,
+  );
+  const {
+    isActive: postOnboardingSidebarGuideActive,
+    step: postOnboardingSidebarGuideStep,
+    begin: beginPostOnboardingSidebarGuide,
+    restart: restartPostOnboardingSidebarGuide,
+    advance: advancePostOnboardingSidebarGuide,
+    retreat: retreatPostOnboardingSidebarGuide,
+    dismiss: dismissPostOnboardingSidebarGuide,
+  } = usePostOnboardingSidebarGuide(
+    postOnboardingSidebarGuideReviewEnabled ? "review" : user?.id ?? "local",
+  );
+  const postOnboardingAccountGuideActive = postOnboardingSidebarGuideActive
+    && postOnboardingSidebarGuideStep === "account";
+  const postOnboardingAccountGuideWasActiveRef = useRef(false);
+  useEffect(() => {
+    if (postOnboardingAccountGuideActive) {
+      postOnboardingAccountGuideWasActiveRef.current = true;
+      if (
+        activeTab !== "settings"
+        && !onboardingOpen
+        && !preparingFirstDay
+        && !authModalOpen
+        && !feedbackModalOpen
+        && !upgradePlanModalOpen
+        && !accountDeletionModalOpen
+        && !cmdOpen
+      ) setAccountMenuOpen(true);
+      return;
+    }
+    if (!postOnboardingAccountGuideWasActiveRef.current) return;
+    postOnboardingAccountGuideWasActiveRef.current = false;
+    setAccountMenuOpen(false);
+  }, [
+    accountDeletionModalOpen,
+    activeTab,
+    authModalOpen,
+    cmdOpen,
+    feedbackModalOpen,
+    onboardingOpen,
+    postOnboardingAccountGuideActive,
+    preparingFirstDay,
+    upgradePlanModalOpen,
+  ]);
+  const toggleAccountMenu = useCallback(() => {
+    setAccountMenuOpen((open) => (postOnboardingAccountGuideActive ? true : !open));
+  }, [postOnboardingAccountGuideActive]);
+  const postOnboardingSidebarGuideReviewStartedRef = useRef(false);
+  useEffect(() => {
+    if (!postOnboardingSidebarGuideReviewEnabled || postOnboardingSidebarGuideReviewStartedRef.current) return;
+    postOnboardingSidebarGuideReviewStartedRef.current = true;
+    setSidebarCollapsed(false);
+    selectDay(logicalTodayIsoDate(startOfDayMinutes));
+    navigateToTab("dashboard", "Today");
+    restartPostOnboardingSidebarGuide();
+  }, [navigateToTab, postOnboardingSidebarGuideReviewEnabled, restartPostOnboardingSidebarGuide, startOfDayMinutes]);
   const deviceSyncAccountId = authStatus === "authenticated" && hasRequiredAccountAuth && user?.id
     ? user.id
     : null;
@@ -7387,6 +7449,8 @@ export default function App() {
     resetBrowserHistoryBootstrap();
     selectDay(logicalTodayIsoDate(startOfDayMinutes));
     navigateToTab("dashboard", "Today");
+    setSidebarCollapsed(false);
+    beginPostOnboardingSidebarGuide();
     setOnboardingOpen(false);
     const shouldPrepareFirstDay = !shouldBlockLocalTrackerAccess && (
       state.browserHistoryBootstrapEnabled
@@ -8014,6 +8078,16 @@ export default function App() {
   const displayedHistoryLoadMoreError = isHistorySearchActive ? historySearchError : historyLoadMoreError;
   const displayedHistoryLoadMore = isHistorySearchActive ? loadMoreHistorySearchSegments : loadMoreHistorySegments;
   const historyInitialLoading = isHistorySearchActive && historySearchLoading && historySearchSegments.length === 0;
+  const shouldShowPostOnboardingSidebarGuide = postOnboardingSidebarGuideActive
+    && postOnboardingSidebarGuideStep !== null
+    && !onboardingOpen
+    && !preparingFirstDay
+    && !isSettingsTab
+    && !authModalOpen
+    && !feedbackModalOpen
+    && !upgradePlanModalOpen
+    && !accountDeletionModalOpen
+    && !cmdOpen;
   const onboardingModal = onboardingOpen ? (
     <OnboardingModal
       userId={user?.id ?? "local"}
@@ -8071,6 +8145,7 @@ export default function App() {
     "app-shell",
     isSettingsTab ? "app-shell--settings" : null,
     isSidebarVisuallyCollapsed ? "app-shell--sidebar-collapsed" : null,
+    shouldShowPostOnboardingSidebarGuide ? "app-shell--sidebar-guide" : null,
   ].filter(Boolean).join(" ");
 
   if (onboardingOpen) {
@@ -8209,50 +8284,54 @@ export default function App() {
         </div>
 
         <div className="sidebar-scroll">
-        <div className="nav-label">{localization.t("nav.group.dashboard")}</div>
-        <nav className="sidebar-nav sidebar-nav--periods" aria-label={localization.t("nav.dashboardViews")}>
-          {dashboardPeriodOptions.map((item) => {
-            const itemLabel = localization.t(item.period === "Week" ? "nav.yourWeek" : "nav.yourDay");
-            return (
-            <button
-              key={item.period}
-              type="button"
-              className={activeTab === "dashboard" && dashPeriod === item.period ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
-              aria-current={activeTab === "dashboard" && dashPeriod === item.period ? "page" : undefined}
-              onClick={() => navigateToTab("dashboard", item.period)}
-            >
-              <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
-              <span>{itemLabel}</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
-            </button>
-            );
-          })}
-          {canOpenAgentsBeta ? (
-            <button
-              type="button"
-              className={activeTab === "agents" ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
-              aria-current={activeTab === "agents" ? "page" : undefined}
-              onClick={() => navigateToTab("agents")}
-            >
-              <NavIcon type="agents" />
-              <span>{localization.t("nav.yourAgents")}</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.yourAgents")}</span> : null}
-            </button>
-          ) : null}
-        </nav>
+          <div className="sidebar-guide-section" data-sidebar-guide-anchor="dashboard">
+            <div className="nav-label">{localization.t("nav.group.dashboard")}</div>
+            <nav className="sidebar-nav sidebar-nav--periods" aria-label={localization.t("nav.dashboardViews")}>
+              {dashboardPeriodOptions.map((item) => {
+                const itemLabel = localization.t(item.period === "Week" ? "nav.yourWeek" : "nav.yourDay");
+                return (
+                  <button
+                    key={item.period}
+                    type="button"
+                    className={activeTab === "dashboard" && dashPeriod === item.period ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
+                    aria-current={activeTab === "dashboard" && dashPeriod === item.period ? "page" : undefined}
+                    onClick={() => navigateToTab("dashboard", item.period)}
+                  >
+                    <NavIcon type={item.period === "Week" ? "calendar" : "home"} />
+                    <span>{itemLabel}</span>
+                    {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
+                  </button>
+                );
+              })}
+              {canOpenAgentsBeta ? (
+                <button
+                  type="button"
+                  className={activeTab === "agents" ? "nav-item nav-item--period active" : "nav-item nav-item--period"}
+                  aria-current={activeTab === "agents" ? "page" : undefined}
+                  onClick={() => navigateToTab("agents")}
+                >
+                  <NavIcon type="agents" />
+                  <span>{localization.t("nav.yourAgents")}</span>
+                  {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("nav.yourAgents")}</span> : null}
+                </button>
+              ) : null}
+            </nav>
+          </div>
 
-        <div className="nav-label">{localization.t("nav.group.activity")}</div>
-        <nav className="sidebar-nav" aria-label={localization.t("nav.primaryNavigation")}>
-          {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => {
-            const itemLabel = localization.t(item.labelKey);
-            return (
-            <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} aria-current={activeTab === item.id ? "page" : undefined} onClick={() => navigateToTab(item.id)}>
-              <NavIcon type={item.icon} /><span>{itemLabel}</span>
-              {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
-            </button>
-            );
-          })}
-        </nav>
+          <div className="sidebar-guide-section" data-sidebar-guide-anchor="activity">
+            <div className="nav-label">{localization.t("nav.group.activity")}</div>
+            <nav className="sidebar-nav" aria-label={localization.t("nav.primaryNavigation")}>
+              {activityNav.filter((item) => projectClassificationFeatureEnabled || item.id !== "projects").map((item) => {
+                const itemLabel = localization.t(item.labelKey);
+                return (
+                  <button key={item.id} type="button" className={activeTab === item.id ? "nav-item active" : "nav-item"} aria-current={activeTab === item.id ? "page" : undefined} onClick={() => navigateToTab(item.id)}>
+                    <NavIcon type={item.icon} /><span>{itemLabel}</span>
+                    {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{itemLabel}</span> : null}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
 
         <div className="nav-label">{localization.t("nav.group.social")}</div>
         <nav className="sidebar-nav sidebar-nav--social" aria-label={localization.t("nav.socialNavigation")}>
@@ -8461,6 +8540,7 @@ export default function App() {
           ) : null}
           <div
             className="tracker-control"
+            data-sidebar-guide-anchor="tracking"
             role="group"
             data-state={sidebarTrackerControlState}
             aria-label={[
@@ -8524,7 +8604,7 @@ export default function App() {
             isDarkMode={theme === "dark"}
             isPetVisible={petModeEnabled}
             showPetNewBadge={featureNewBadges.showPet}
-            onToggle={() => setAccountMenuOpen((open) => !open)}
+            onToggle={toggleAccountMenu}
             showProfile={canOpenProfileBeta}
             onProfile={() => {
               navigateToTab("profile");
@@ -8562,6 +8642,15 @@ export default function App() {
         </div>
         </aside>
       )}
+
+      {shouldShowPostOnboardingSidebarGuide && postOnboardingSidebarGuideStep ? (
+        <PostOnboardingSidebarGuide
+          step={postOnboardingSidebarGuideStep}
+          onAdvance={advancePostOnboardingSidebarGuide}
+          onBack={retreatPostOnboardingSidebarGuide}
+          onDismiss={dismissPostOnboardingSidebarGuide}
+        />
+      ) : null}
 
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>
