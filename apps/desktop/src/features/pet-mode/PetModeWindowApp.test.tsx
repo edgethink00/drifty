@@ -2453,7 +2453,7 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).not.toBe("drag");
 
     await act(async () => { completeNativeDrag(); await Promise.resolve(); await Promise.resolve(); });
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("drowsy");
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("happy");
   });
 
   it("turns a tap during motion into petting without flashing the held pose", async () => {

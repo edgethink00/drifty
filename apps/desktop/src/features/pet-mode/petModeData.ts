@@ -33,12 +33,12 @@ export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
 export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
 export const PET_MODE_SLEEP_MAX_MS = 14 * 60 * 1000;
 // Petting in a streak reads as sustained attention rather than repeated taps.
-// The first beat is the shipped happy heart. Continued attention lowers the
-// lids, then a longer run settles into sleep. A recognized stroke counts as
-// one stronger beat instead of skipping straight to the nap.
+// The first three beats keep the shipped happy heart. Continued attention
+// lowers the lids on the fourth, then the fifth settles into sleep. A tap and
+// a recognized stroke each count as one interaction.
 export const PET_MODE_PET_STREAK_WINDOW_MS = 6 * 1000;
-export const PET_MODE_PET_STREAK_TO_DROWSY = 2;
-export const PET_MODE_PET_STREAK_TO_SLEEP = 4;
+export const PET_MODE_PET_STREAK_TO_DROWSY = 4;
+export const PET_MODE_PET_STREAK_TO_SLEEP = 5;
 // Dev-only override for repeatedly QAing the production pack's visible
 // probability outcomes. It affects only angry wake and music-note rolls, not
 // life-action selection or timing. The renderer also checks Dev mode itself,

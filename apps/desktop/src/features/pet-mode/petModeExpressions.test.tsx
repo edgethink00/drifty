@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import {
-  PET_MODE_PET_STREAK_TO_DROWSY,
   PET_MODE_PET_STREAK_TO_SLEEP,
   PET_MODE_PET_STREAK_WINDOW_MS,
   PET_MODE_STORAGE_KEY,
@@ -190,68 +189,29 @@ describe("pet expressions", () => {
     expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
   });
 
-  it("settles the cat into sleep after a run of pets", async () => {
+  it("stays happy for three pets, gets drowsy on the fourth, then sleeps on the fifth", async () => {
     vi.useFakeTimers();
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    for (let i = 0; i < PET_MODE_PET_STREAK_TO_SLEEP; i += 1) {
+    for (let interaction = 1; interaction <= 3; interaction += 1) {
       petOnce();
       await act(async () => { await Promise.resolve(); });
+      expect(phase(), `interaction ${interaction}`).toBe("happy");
     }
 
-    expect(phase()).toBe("sleep");
-  });
-
-  it("lowers the lids after continued petting, then sleeps", async () => {
-    vi.useFakeTimers();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+    expect(phase(), "interaction 4").toBe("drowsy");
 
     petOnce();
     await act(async () => { await Promise.resolve(); });
-    expect(phase()).toBe("happy");
-
-    petOnce();
-    await act(async () => { await Promise.resolve(); });
-    expect(phase()).toBe("drowsy");
-
-    for (let i = PET_MODE_PET_STREAK_TO_DROWSY; i < PET_MODE_PET_STREAK_TO_SLEEP; i += 1) {
-      petOnce();
-      await act(async () => { await Promise.resolve(); });
-    }
-    expect(phase()).toBe("sleep");
+    expect(phase(), "interaction 5").toBe("sleep");
   });
 
-  it("advances one stage for a back-and-forth stroke instead of skipping to sleep", async () => {
-    bridge.beginNativePetDrag.mockResolvedValueOnce({
-      moved: false,
-      strokeDetected: true,
-      startX: 0,
-      startY: 0,
-      endX: 0,
-      endY: 0,
-    });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-
-    petOnce();
-    await act(async () => { await Promise.resolve(); });
-
-    expect(phase()).toBe("drowsy");
-  });
-
-  it("settles into sleep after a second back-and-forth stroke", async () => {
-    bridge.beginNativePetDrag
-      .mockResolvedValueOnce({
-        moved: false,
-        strokeDetected: true,
-        startX: 0,
-        startY: 0,
-        endX: 0,
-        endY: 0,
-      })
-      .mockResolvedValueOnce({
+  it("counts each recognized stroke as one interaction", async () => {
+    for (let interaction = 1; interaction <= 5; interaction += 1) {
+      bridge.beginNativePetDrag.mockResolvedValueOnce({
         moved: false,
         strokeDetected: true,
         startX: 0,
@@ -259,16 +219,23 @@ describe("pet expressions", () => {
         endX: 0,
         endY: 0,
       });
+    }
     render(<PetModeWindowApp />);
     await act(async () => undefined);
 
-    petOnce();
-    await act(async () => { await Promise.resolve(); });
-    expect(phase()).toBe("drowsy");
+    for (let interaction = 1; interaction <= 3; interaction += 1) {
+      petOnce();
+      await act(async () => { await Promise.resolve(); });
+      expect(phase(), `stroke ${interaction}`).toBe("happy");
+    }
 
     petOnce();
     await act(async () => { await Promise.resolve(); });
-    expect(phase()).toBe("sleep");
+    expect(phase(), "stroke 4").toBe("drowsy");
+
+    petOnce();
+    await act(async () => { await Promise.resolve(); });
+    expect(phase(), "stroke 5").toBe("sleep");
   });
 
   it("does not settle when the pets are spaced beyond the streak window", async () => {

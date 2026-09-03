@@ -1918,7 +1918,7 @@ export function PetModeWindowApp() {
         if (phaseRef.current !== "sleep") {
           commitPhase(focusRestingRef.current ? "sit" : "idle");
         }
-        handlePet(result.strokeDetected === true ? "stroke" : "tap");
+        handlePet();
       } catch (error) {
         void reportNativePetDragError(error).catch(() => undefined);
         manualDragRef.current = false;
@@ -1965,7 +1965,7 @@ export function PetModeWindowApp() {
     });
   };
 
-  const handlePet = (gesture: "tap" | "stroke" = "tap") => {
+  const handlePet = () => {
     if (manualDragRef.current) return;
     if (phaseRef.current === "sleep") {
       if (sleepTouchRef.current === 0) {
@@ -1987,13 +1987,12 @@ export function PetModeWindowApp() {
       && phaseRef.current !== "drowsy"
     ) return;
 
-    // Continued attention moves through a small relationship: heart, drowsy
-    // lids, then sleep. A recognized stroke is a stronger beat, so it advances
-    // one stage instead of jumping straight to the nap.
+    // Continued attention moves through a small relationship: three happy
+    // hearts, drowsy lids, then sleep. Native gesture classification must not
+    // change the pace: a resolved tap or stroke is one interaction either way.
     const now = Date.now();
     const continuing = now - lastPetAtRef.current <= PET_MODE_PET_STREAK_WINDOW_MS;
-    const increment = gesture === "stroke" ? 2 : 1;
-    petStreakRef.current = continuing ? petStreakRef.current + increment : increment;
+    petStreakRef.current = continuing ? petStreakRef.current + 1 : 1;
     lastPetAtRef.current = now;
 
     if (petStreakRef.current >= PET_MODE_PET_STREAK_TO_SLEEP) {
