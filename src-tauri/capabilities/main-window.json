@@ -165,6 +165,8 @@
     "allow-watcher-companion-set-surface-policy",
     "allow-watcher-companion-update",
     "core:event:allow-listen",
-    "allow-pet-mode-resolve-drop"
+    "allow-pet-mode-resolve-drop",
+    "allow-pet-quick-controls-sync-state",
+    "allow-pet-quick-controls-set-visible"
   ]
 }

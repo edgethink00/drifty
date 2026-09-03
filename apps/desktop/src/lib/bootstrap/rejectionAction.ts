@@ -4,7 +4,7 @@
  * replace the boot root; runtime rejections on the main app preserve its UI.
  */
 
-export type BootstrapSurface = "app" | "watcher" | "companion" | "pet-mode";
+export type BootstrapSurface = "app" | "watcher" | "companion" | "pet-mode" | "pet-quick-controls";
 export type ResolvedBootstrapSurface = BootstrapSurface | "privacy-review-concepts";
 
 export type RejectionPhase = "startup" | "runtime";
@@ -49,6 +49,7 @@ export function resolveRejectionAction(input: RejectionDecisionInput): Rejection
     input.surface === "watcher"
     || input.surface === "companion"
     || input.surface === "pet-mode"
+    || input.surface === "pet-quick-controls"
   ) return "late-diagnostic";
   return "preserve";
 }

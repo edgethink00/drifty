@@ -558,3 +558,142 @@ export async function listenToNativePetDragProbe(
   if (!isTauriRuntime()) return null;
   return listen<PetDropPlan | null>("pet-mode-drag-probe", ({ payload }) => onProbe(payload));
 }
+
+export type PetQuickControlsAction =
+  | "hideOneHour"
+  | "turnOff"
+  | "openDashboard"
+  | "openSettings"
+  | "toggleAutomaticClose"
+  | "automaticClosePause15"
+  | "automaticClosePause60"
+  | "automaticClosePauseToday"
+  | "automaticClosePauseForever"
+  | "automaticCloseEnable15"
+  | "automaticCloseEnable60"
+  | "automaticCloseEnableToday"
+  | "automaticCloseEnableForever"
+  | "automaticCloseRestore"
+  | "automaticCloseExtend60"
+  | "automaticCloseExtendToday";
+
+export type PetQuickControlsAutomaticCloseOverridePayload = {
+  readonly enabled: boolean;
+  readonly kind: "15" | "60" | "today" | "forever";
+  readonly endsAtMs: number | null;
+};
+
+export type PetQuickControlsStatePayload = {
+  readonly automaticCloseEnabled: boolean;
+  readonly automaticCloseSavedEnabled: boolean;
+  readonly automaticCloseOverride: PetQuickControlsAutomaticCloseOverridePayload | null;
+  readonly language: "en" | "ko";
+  readonly theme: "light" | "dark";
+};
+
+function isPetQuickControlsAutomaticCloseOverridePayload(
+  value: unknown,
+): value is PetQuickControlsAutomaticCloseOverridePayload {
+  if (!value || typeof value !== "object") return false;
+  const override = value as Record<string, unknown>;
+  const kind = override.kind;
+  if (
+    typeof override.enabled !== "boolean"
+    || (kind !== "15" && kind !== "60" && kind !== "today" && kind !== "forever")
+  ) return false;
+  return kind === "forever"
+    ? override.endsAtMs === null
+    : typeof override.endsAtMs === "number" && Number.isFinite(override.endsAtMs);
+}
+
+function isPetQuickControlsStatePayload(value: unknown): value is PetQuickControlsStatePayload {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Record<string, unknown>;
+  return typeof payload.automaticCloseEnabled === "boolean"
+    && typeof payload.automaticCloseSavedEnabled === "boolean"
+    && (payload.automaticCloseOverride === null
+      || isPetQuickControlsAutomaticCloseOverridePayload(payload.automaticCloseOverride))
+    && (payload.language === "en" || payload.language === "ko")
+    && (payload.theme === "light" || payload.theme === "dark");
+}
+
+function isPetQuickControlsAction(value: unknown): value is PetQuickControlsAction {
+  return value === "hideOneHour"
+    || value === "turnOff"
+    || value === "openDashboard"
+    || value === "openSettings"
+    || value === "toggleAutomaticClose"
+    || value === "automaticClosePause15"
+    || value === "automaticClosePause60"
+    || value === "automaticClosePauseToday"
+    || value === "automaticClosePauseForever"
+    || value === "automaticCloseEnable15"
+    || value === "automaticCloseEnable60"
+    || value === "automaticCloseEnableToday"
+    || value === "automaticCloseEnableForever"
+    || value === "automaticCloseRestore"
+    || value === "automaticCloseExtend60"
+    || value === "automaticCloseExtendToday";
+}
+
+export async function setNativePetQuickControlsVisible(visible: boolean): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_quick_controls_set_visible", { visible });
+}
+
+export async function syncNativePetQuickControlsState(
+  state: PetQuickControlsStatePayload,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_quick_controls_sync_state", { state });
+}
+
+export async function isNativePetQuickControlsCursorInside(): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  try {
+    return await invoke<boolean>("pet_quick_controls_cursor_inside");
+  } catch {
+    return false;
+  }
+}
+
+export async function triggerNativePetQuickControlsAction(
+  action: PetQuickControlsAction,
+): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_quick_controls_action", { action });
+}
+
+export async function setNativePetQuickControlsMenuOpen(open: boolean): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_quick_controls_action", {
+    action: open ? "menuOpened" : "menuClosed",
+  });
+}
+
+export async function listenToNativePetQuickControlsAction(
+  onAction: (action: PetQuickControlsAction) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<{ action?: unknown }>("pet-quick-controls-action", ({ payload }) => {
+    if (isPetQuickControlsAction(payload.action)) onAction(payload.action);
+  });
+}
+
+export async function listenToNativePetQuickControlsMenuState(
+  onOpenChange: (open: boolean) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<{ open?: unknown }>("pet-quick-controls-menu-state", ({ payload }) => {
+    onOpenChange(payload?.open === true);
+  });
+}
+
+export async function listenToNativePetQuickControlsState(
+  onState: (state: PetQuickControlsStatePayload) => void,
+): Promise<UnlistenFn | null> {
+  if (!isTauriRuntime()) return null;
+  return listen<unknown>("pet-quick-controls-state", ({ payload }) => {
+    if (isPetQuickControlsStatePayload(payload)) onState(payload);
+  });
+}

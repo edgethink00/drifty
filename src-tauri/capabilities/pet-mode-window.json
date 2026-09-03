@@ -38,6 +38,8 @@
     "allow-pet-mode-preview-action",
     "allow-pet-mode-resolve-drop",
     "allow-pet-mode-visibility-action",
-    "allow-watcher-peek-end-of-day-review-action"
+    "allow-pet-quick-controls-set-visible",
+    "allow-pet-quick-controls-cursor-inside",
+    "allow-pet-quick-controls-action"
   ]
 }

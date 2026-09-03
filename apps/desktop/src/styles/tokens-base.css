@@ -174,6 +174,7 @@ html {
   --shell-glass-control-strong: #fafaf8;
   --shell-floating-surface: rgba(250,250,248,.62);
   --shell-floating-surface-strong: rgba(250,250,248,.78);
+  --pet-quick-controls-surface: rgba(250,250,248,.86);
   --accent: #5f7f31;
   --accent-mid: #789645;
   --accent-soft: #e1ead5;
@@ -251,6 +252,7 @@ html {
   --shell-glass-control-strong: #171715;
   --shell-floating-surface: rgba(21,21,19,.62);
   --shell-floating-surface-strong: rgba(23,23,21,.78);
+  --pet-quick-controls-surface: rgba(23,23,21,.88);
   --accent: #9bbf5a;
   --accent-mid: #abc96d;
   --accent-soft: #26321d;

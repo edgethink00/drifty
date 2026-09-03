@@ -114,6 +114,14 @@ function BootstrapLoader() {
           return;
         }
 
+        if (nextSurface === "pet-quick-controls") {
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Importing Pet controls module…");
+          const mod = await import("./features/pet-mode/PetModeQuickControlsWindowApp");
+          window.__DRIFTY_SET_BOOT_STATUS__?.("Pet controls module imported");
+          setLoadedApp(() => mod.PetModeQuickControlsWindowApp);
+          return;
+        }
+
         if (import.meta.env.DEV && nextSurface === "privacy-review-concepts") {
           window.__DRIFTY_SET_BOOT_STATUS__?.("Importing privacy review concepts…");
           const mod = await import("./features/settings/AiPrivacyReviewConceptsApp");
@@ -180,11 +188,13 @@ function resolveLocationSurface(location: Pick<Location, "pathname" | "search">)
     requestedSurface === "watcher"
     || requestedSurface === "companion"
     || requestedSurface === "pet-mode"
+    || requestedSurface === "pet-quick-controls"
   ) return requestedSurface;
   if (import.meta.env.DEV && requestedSurface === "privacy-review-concepts") return requestedSurface;
   if (location.pathname === "/watcher") return "watcher";
   if (location.pathname === "/companion") return "companion";
   if (location.pathname === "/pet-mode") return "pet-mode";
+  if (location.pathname === "/pet-quick-controls") return "pet-quick-controls";
   return "app";
 }
 
@@ -199,6 +209,7 @@ async function resolveBootstrapSurface(): Promise<ResolvedBootstrapSurface> {
     if (label === "watcher-peek") return "watcher";
     if (label === "companion-pill") return "companion";
     if (label === "pet-mode") return "pet-mode";
+    if (label === "pet-quick-controls") return "pet-quick-controls";
     return "app";
   } catch {
     return "app";
@@ -211,6 +222,7 @@ function resolveCurrentSurface(): ResolvedBootstrapSurface {
     documentSurface === "watcher"
     || documentSurface === "companion"
     || documentSurface === "pet-mode"
+    || documentSurface === "pet-quick-controls"
   ) {
     return documentSurface;
   }

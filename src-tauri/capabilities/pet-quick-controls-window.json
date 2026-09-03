@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "pet-quick-controls-window",
+  "description": "Least-privilege capability for the pet hover quick-controls overlay.",
+  "windows": [
+    "pet-quick-controls"
+  ],
+  "platforms": [
+    "macOS",
+    "windows"
+  ],
+  "permissions": [
+    "core:default",
+    "core:event:allow-listen",
+    "allow-pet-quick-controls-action",
+    "allow-pet-quick-controls-cursor-inside",
+    "allow-pet-mode-visibility-action"
+  ]
+}

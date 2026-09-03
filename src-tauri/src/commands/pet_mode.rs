@@ -690,6 +690,7 @@ pub fn pet_mode_set_enabled(
         let _ = window.set_min_size(Some(LogicalSize::new(width, height)));
         reset_pet_hit_region();
         let _ = set_pet_window_interactive(&window, false);
+        let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
         return window.hide().map_err(|error| error.to_string());
     }
 
@@ -993,6 +994,7 @@ pub fn pet_mode_visibility_action(app: AppHandle, action: String) -> Result<(), 
         let _ = set_pet_window_interactive(&window, false);
         window.hide().map_err(|error| error.to_string())?;
     }
+    let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit("pet-visibility-action", json!({ "action": action }))
@@ -2670,6 +2672,7 @@ fn pet_excluded_window_ids(app: &AppHandle) -> Vec<i64> {
         // itself. The Drifty main window remains eligible so its controls are
         // protected exactly like controls in every other app.
         PET_MODE_WINDOW_LABEL,
+        "pet-quick-controls",
         "watcher-peek",
         "companion-pill",
     ]

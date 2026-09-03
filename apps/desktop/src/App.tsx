@@ -291,6 +291,9 @@ import {
   getNativePetInputBounds,
   listenToNativePetAlignment,
   listenToNativePetPointer,
+  listenToNativePetQuickControlsAction,
+  setNativePetQuickControlsVisible,
+  syncNativePetQuickControlsState,
   listenToNativePetVisibilityAction,
   placeNativePetModeAtCenterForLab,
   playNativePetModeIntervention,
@@ -320,6 +323,16 @@ import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TR
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
+import {
+  automaticCloseOverrideIsExpired,
+  buildAutomaticCloseOverride,
+  extendAutomaticCloseOverride,
+  persistAutomaticCloseOverride,
+  resolveEffectiveAutomaticCloseEnabled,
+  resolveInitialAutomaticCloseOverride,
+  sendAutomaticCloseOverrideExpiredNotification,
+  type AutomaticCloseOverrideKind,
+} from "./features/companion/automaticCloseOverride";
 import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
@@ -754,6 +767,60 @@ export default function App() {
     watcherPeriodicMaxMinutes,
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController();
+  const [automaticCloseOverride, setAutomaticCloseOverride] = useState(resolveInitialAutomaticCloseOverride);
+  const activeAutomaticCloseOverride = automaticCloseOverride
+    && !automaticCloseOverrideIsExpired(automaticCloseOverride)
+    ? automaticCloseOverride
+    : null;
+  const automaticCloseSavedEnabled = extremeNudgeEnabled && driftAlertsEnabled;
+  const automaticCloseEnabled = resolveEffectiveAutomaticCloseEnabled(
+    automaticCloseSavedEnabled,
+    activeAutomaticCloseOverride,
+  );
+  const driftAlertsRuntimeEnabled = driftAlertsEnabled || automaticCloseEnabled;
+  const automaticCloseExpiryHandledRef = useRef<string | null>(null);
+  const setTemporaryAutomaticClose = useCallback((enabled: boolean, kind: AutomaticCloseOverrideKind) => {
+    const next = persistAutomaticCloseOverride(buildAutomaticCloseOverride(enabled, kind));
+    automaticCloseExpiryHandledRef.current = null;
+    setAutomaticCloseOverride(next);
+  }, []);
+  const restoreSavedAutomaticClose = useCallback(() => {
+    automaticCloseExpiryHandledRef.current = null;
+    setAutomaticCloseOverride(persistAutomaticCloseOverride(null));
+  }, []);
+  const extendTemporaryAutomaticClose = useCallback((extension: "60" | "today") => {
+    setAutomaticCloseOverride((current) => {
+      if (!current) return current;
+      automaticCloseExpiryHandledRef.current = null;
+      return persistAutomaticCloseOverride(extendAutomaticCloseOverride(current, extension));
+    });
+  }, []);
+  useEffect(() => {
+    if (!automaticCloseOverride || automaticCloseOverride.endsAtMs === null) return undefined;
+    const expiryKey = `${automaticCloseOverride.startedAtMs}:${automaticCloseOverride.enabled}:${automaticCloseOverride.kind}`;
+    const expireIfDue = () => {
+      if (!automaticCloseOverrideIsExpired(automaticCloseOverride)) return;
+      if (automaticCloseExpiryHandledRef.current === expiryKey) return;
+      automaticCloseExpiryHandledRef.current = expiryKey;
+      persistAutomaticCloseOverride(null);
+      setAutomaticCloseOverride(null);
+      void sendAutomaticCloseOverrideExpiredNotification(
+        automaticCloseOverride,
+        automaticCloseSavedEnabled,
+        localization.effectiveLanguage,
+      );
+    };
+    const remainingMs = Math.max(0, automaticCloseOverride.endsAtMs - Date.now());
+    const timer = window.setTimeout(expireIfDue, remainingMs);
+    window.addEventListener("focus", expireIfDue);
+    document.addEventListener("visibilitychange", expireIfDue);
+    expireIfDue();
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", expireIfDue);
+      document.removeEventListener("visibilitychange", expireIfDue);
+    };
+  }, [automaticCloseOverride, automaticCloseSavedEnabled, localization.effectiveLanguage]);
   // No Dev gate: the pet ships as a production surface and is controlled from
   // the account menu and Companion settings.
   const [petModeHiddenUntil, setPetModeHiddenUntil] = useState(resolveInitialPetModeHiddenUntil);
@@ -843,7 +910,7 @@ export default function App() {
   }, []);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
-    const enabled = driftAlertsEnabled;
+    const enabled = driftAlertsRuntimeEnabled;
     return buildDriftAlarmTrayStatus({
       enabled,
       checkedAt: null,
@@ -2334,7 +2401,7 @@ export default function App() {
 
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
     const nextStatus = buildDriftAlarmTrayStatus({
-      enabled: driftAlertsEnabled,
+      enabled: driftAlertsRuntimeEnabled,
       checkedAt,
       result,
     });
@@ -2354,7 +2421,7 @@ export default function App() {
     }
 
     setDriftAlarmTrayStatus(nextStatus);
-  }, [driftAlertsEnabled, isDevModeActive, publishNativeDriftAlarmTrayStatus, status?.running]);
+  }, [driftAlertsRuntimeEnabled, isDevModeActive, publishNativeDriftAlarmTrayStatus, status?.running]);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const petModeBrowserXRuntimeRef = useRef({ busy: false, lastTriggeredAt: 0 });
@@ -3862,7 +3929,7 @@ export default function App() {
     // no tracker to watch (previewStatus() reports running=true), so skip the
     // recurring snapshot poll there.
     if (isPreviewSurface) return undefined;
-    if (!driftAlertsEnabled) return undefined;
+    if (!driftAlertsRuntimeEnabled) return undefined;
     if (status?.running !== true) return undefined;
 
     const intervalId = setInterval(() => {
@@ -3872,7 +3939,7 @@ export default function App() {
       void refreshLiveDriftAlarmActivity(currentDriftAlarmDay());
     }, DRIFT_ALARM_POLL_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [driftAlertsEnabled, isPreviewSurface, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
+  }, [driftAlertsRuntimeEnabled, isPreviewSurface, refreshLiveDriftAlarmActivity, selectTodayAfterDateRollover, shouldBlockLocalTrackerAccess, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;
@@ -4431,7 +4498,7 @@ export default function App() {
         void refreshLiveDriftAlarmActivity(alarmDay);
       }, Math.max(0, delayMs));
     };
-    if (!driftAlertsEnabled) {
+    if (!driftAlertsRuntimeEnabled) {
       recordDriftAlarmDebugEvent({
         kind: "evaluation_skipped",
         reason: "disabled",
@@ -5156,7 +5223,7 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      const shouldApplyExtremeNudge = extremeNudgeEnabled && canApplyExtremeNudgeToSurface({
+      const shouldApplyExtremeNudge = automaticCloseEnabled && canApplyExtremeNudgeToSurface({
         segment,
         category,
         aiConfirmedDrift,
@@ -5433,7 +5500,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [availableDriftAlarmFocusTargets, canUseCloudAiClassification, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlertsEnabled, driftAlarmCopy, driftAlarmSnooze, extremeNudgeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [automaticCloseEnabled, availableDriftAlarmFocusTargets, canUseCloudAiClassification, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -5442,7 +5509,7 @@ export default function App() {
   useEffect(() => {
     if (!status) return;
     if (status.running !== true) {
-      if (driftAlertsEnabled) {
+      if (driftAlertsRuntimeEnabled) {
         clearPausedDriftAlarmRuntime();
         publishDriftAlarmTrayStatus({ kind: "tracker_paused" }, null);
       }
@@ -5454,7 +5521,7 @@ export default function App() {
       snapshot: currentSnapshot,
       liveSegments: liveDriftAlarmSegmentsRef.current,
     });
-  }, [currentSnapshot, driftAlertsEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, selectedDay, status?.running]);
+  }, [currentSnapshot, driftAlertsRuntimeEnabled, evaluateDriftAlarm, publishDriftAlarmTrayStatus, selectedDay, status?.running]);
 
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
@@ -6089,6 +6156,88 @@ export default function App() {
       unlisten?.();
     };
   }, [handlePetVisibilityAction]);
+  useEffect(() => {
+    if (!petModeActive) {
+      void setNativePetQuickControlsVisible(false).catch(() => undefined);
+      return;
+    }
+    void syncNativePetQuickControlsState({
+      automaticCloseEnabled,
+      automaticCloseSavedEnabled,
+      automaticCloseOverride: activeAutomaticCloseOverride ? {
+        enabled: activeAutomaticCloseOverride.enabled,
+        kind: activeAutomaticCloseOverride.kind,
+        endsAtMs: activeAutomaticCloseOverride.endsAtMs,
+      } : null,
+      language: localization.effectiveLanguage,
+      theme,
+    }).catch(() => undefined);
+  }, [activeAutomaticCloseOverride, automaticCloseEnabled, automaticCloseSavedEnabled, localization.effectiveLanguage, petModeActive, theme]);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetQuickControlsAction((action) => {
+      if (disposed) return;
+      if (action === "hideOneHour" || action === "turnOff") {
+        handlePetVisibilityAction(action);
+        return;
+      }
+      if (action === "openDashboard") {
+        navigateToTab("dashboard", "Today");
+        return;
+      }
+      if (action === "openSettings") {
+        openCompanionNotificationSettings();
+        return;
+      }
+      const temporaryActions: Partial<Record<typeof action, readonly [boolean, AutomaticCloseOverrideKind]>> = {
+        automaticClosePause15: [false, "15"],
+        automaticClosePause60: [false, "60"],
+        automaticClosePauseToday: [false, "today"],
+        automaticClosePauseForever: [false, "forever"],
+        automaticCloseEnable15: [true, "15"],
+        automaticCloseEnable60: [true, "60"],
+        automaticCloseEnableToday: [true, "today"],
+        automaticCloseEnableForever: [true, "forever"],
+      };
+      const temporaryAction = temporaryActions[action];
+      if (temporaryAction) {
+        setTemporaryAutomaticClose(...temporaryAction);
+        return;
+      }
+      if (action === "automaticCloseRestore") {
+        restoreSavedAutomaticClose();
+        return;
+      }
+      if (action === "automaticCloseExtend60" || action === "automaticCloseExtendToday") {
+        extendTemporaryAutomaticClose(action === "automaticCloseExtend60" ? "60" : "today");
+        return;
+      }
+      if (action !== "toggleAutomaticClose") return;
+      restoreSavedAutomaticClose();
+      const nextEnabled = !automaticCloseSavedEnabled;
+      if (nextEnabled && !driftAlertsEnabled) setDriftAlertsEnabled(true);
+      setExtremeNudgeEnabled(nextEnabled);
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [
+    automaticCloseSavedEnabled,
+    driftAlertsEnabled,
+    extendTemporaryAutomaticClose,
+    handlePetVisibilityAction,
+    navigateToTab,
+    openCompanionNotificationSettings,
+    restoreSavedAutomaticClose,
+    setDriftAlertsEnabled,
+    setExtremeNudgeEnabled,
+    setTemporaryAutomaticClose,
+  ]);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;

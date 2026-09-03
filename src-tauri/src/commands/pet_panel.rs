@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use tauri::{AppHandle, Emitter, LogicalPosition, WebviewWindow};
 
-use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan, PET_MODE_WINDOW_LABEL};
+use super::pet_mode::{current_pet_logical_position, probe_pet_drop_plan};
 
 const PET_SHAKE_WINDOW_MS: u64 = 1_000;
 const PET_SHAKE_MIN_SAMPLE_DISTANCE_PT: f64 = 2.0;
@@ -403,7 +403,10 @@ fn show_pet_panel_on_main_thread(app: &AppHandle, window: &WebviewWindow) -> Res
     {
         use tauri_nspanel::ManagerExt as PanelManagerExt;
 
-        if let Ok(panel) = app.get_webview_panel(PET_MODE_WINDOW_LABEL) {
+        // This helper is shared by the cat and its quick-controls panel. Use
+        // the requested window's registry label; a fixed `pet-mode` lookup
+        // reports success while leaving every secondary panel hidden.
+        if let Ok(panel) = app.get_webview_panel(window.label()) {
             panel.order_front_regardless();
             return Ok(());
         }

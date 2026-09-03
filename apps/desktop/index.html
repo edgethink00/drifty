@@ -20,11 +20,11 @@
 
         window.__DRIFTY_RESOLVE_BOOT_SURFACE__ = () => {
           const datasetSurface = document.documentElement.dataset.surface;
-          if (datasetSurface === "watcher" || datasetSurface === "companion" || datasetSurface === "pet-mode") return datasetSurface;
+          if (datasetSurface === "watcher" || datasetSurface === "companion" || datasetSurface === "pet-mode" || datasetSurface === "pet-quick-controls") return datasetSurface;
 
           try {
             const querySurface = new URLSearchParams(window.location.search).get("driftySurface");
-            if (querySurface === "watcher" || querySurface === "companion" || querySurface === "pet-mode") return querySurface;
+            if (querySurface === "watcher" || querySurface === "companion" || querySurface === "pet-mode" || querySurface === "pet-quick-controls") return querySurface;
           } catch (_error) {}
 
           return "app";
@@ -34,7 +34,7 @@
         const theme = window.__DRIFTY_RESOLVE_BOOT_THEME__();
         document.documentElement.dataset.theme = theme;
         document.documentElement.style.colorScheme = theme;
-        if (surface === "watcher" || surface === "companion" || surface === "pet-mode") {
+        if (surface === "watcher" || surface === "companion" || surface === "pet-mode" || surface === "pet-quick-controls") {
           document.documentElement.dataset.surface = surface;
         } else {
           document.documentElement.dataset.bootActive = "true";
@@ -230,7 +230,7 @@
       });
       window.addEventListener("unhandledrejection", (event) => {
         const surface = window.__DRIFTY_RESOLVE_BOOT_SURFACE__?.() ?? "app";
-        if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "companion" || surface === "pet-mode")) {
+        if (window.__DRIFTY_BOOTSTRAPPED__ && (surface === "watcher" || surface === "companion" || surface === "pet-mode" || surface === "pet-quick-controls")) {
           event.preventDefault();
           document.getElementById("boot-error")?.remove();
           return;

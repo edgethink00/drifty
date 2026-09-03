@@ -34,6 +34,52 @@ const petModeCssContract = readFileSync("src/features/pet-mode/petMode.css", "ut
 const petModeDataContract = readFileSync("src/features/pet-mode/petModeData.ts", "utf8");
 const petModeWindowContract = readFileSync("src/features/pet-mode/PetModeWindowApp.tsx", "utf8");
 const petModeRustContract = readFileSync("../../src-tauri/src/commands/pet_mode.rs", "utf8");
+const petPanelRustContract = readFileSync("../../src-tauri/src/commands/pet_panel.rs", "utf8");
+const petQuickControlsCssContract = readFileSync("src/features/pet-mode/petModeQuickControls.css", "utf8");
+const petQuickControlsRustContract = readFileSync("../../src-tauri/src/commands/pet_quick_controls.rs", "utf8");
+const tokensContract = readFileSync("src/styles/tokens-base.css", "utf8");
+
+describe("shared native pet panels", () => {
+  it("orders the requested panel instead of always reopening the cat", () => {
+    expect(petPanelRustContract).toContain("app.get_webview_panel(window.label())");
+    expect(petPanelRustContract).not.toContain("app.get_webview_panel(PET_MODE_WINDOW_LABEL)");
+  });
+});
+
+describe("pet quick-controls material", () => {
+  it("applies one rounded native material only to the quick-controls panel", () => {
+    expect(petQuickControlsRustContract).toContain("fn apply_pet_quick_controls_material");
+    expect(petQuickControlsRustContract).toContain("NSVisualEffectMaterial::HudWindow");
+    expect(petQuickControlsRustContract).toContain("Some(PET_QUICK_CONTROLS_MATERIAL_RADIUS)");
+    expect(petQuickControlsRustContract).toContain("apply_pet_quick_controls_material(&window)");
+    expect(petPanelRustContract).not.toContain("apply_vibrancy");
+  });
+
+  it("uses near-opaque dedicated tints with a browser-only CSS blur fallback", () => {
+    expect(tokensContract).toContain("--pet-quick-controls-surface: rgba(250,250,248,.86);");
+    expect(tokensContract).toContain("--pet-quick-controls-surface: rgba(23,23,21,.88);");
+    expect(petQuickControlsCssContract).toContain("background: var(--pet-quick-controls-surface);");
+    expect(petQuickControlsCssContract).toContain(':root[data-runtime="browser"] .pet-quick-controls');
+    expect(petQuickControlsCssContract).toContain("backdrop-filter: blur(24px) saturate(1.16);");
+    expect(petQuickControlsCssContract).toContain("prefers-reduced-transparency: reduce");
+    expect(petQuickControlsCssContract).toContain("prefers-contrast: more");
+  });
+
+  it("keeps quick-control buttons seated while preserving hover feedback", () => {
+    const hoverRule = petQuickControlsCssContract.match(
+      /\.pet-quick-controls__toggle:hover,[\s\S]*?\{([\s\S]*?)\}/,
+    );
+    expect(hoverRule?.[1]).toContain("background:");
+    expect(hoverRule?.[1]).toContain("transform: none;");
+  });
+
+  it("keeps the native material appearance aligned with the app theme", () => {
+    expect(petQuickControlsRustContract).toContain("fn sync_pet_quick_controls_theme");
+    expect(petQuickControlsRustContract).toContain('state.theme == "dark"');
+    expect(petQuickControlsRustContract).toContain("Theme::Dark");
+    expect(petQuickControlsRustContract).toContain("Theme::Light");
+  });
+});
 
 describe("pet entry motion contract", () => {
   it("keeps native travel and renderer motion constants aligned", () => {

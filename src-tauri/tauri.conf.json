@@ -45,7 +45,8 @@
         "main-window",
         "watcher-window",
         "companion-window",
-        "pet-mode-window"
+        "pet-mode-window",
+        "pet-quick-controls-window"
       ]
     }
   },

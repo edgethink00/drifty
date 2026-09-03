@@ -149,6 +149,10 @@ fn main() {
             "pet_mode_reconcile_position",
             "pet_mode_remember_position",
             "pet_mode_probe_ax_seat",
+            "pet_quick_controls_set_visible",
+            "pet_quick_controls_sync_state",
+            "pet_quick_controls_cursor_inside",
+            "pet_quick_controls_action",
         ]),
     ))
     .unwrap_or_else(|error| panic!("failed to build tauri app manifest: {error:#?}"));

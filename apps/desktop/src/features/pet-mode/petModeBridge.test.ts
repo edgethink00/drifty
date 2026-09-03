@@ -322,6 +322,107 @@ describe("pet mode enabled bridge", () => {
   });
 });
 
+describe("pet quick-controls bridge", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    tauri.invoke.mockReset().mockResolvedValue(undefined);
+    tauriListen.listen.mockReset();
+  });
+
+  it("routes native menu open and close through the existing guarded command", async () => {
+    const { setNativePetQuickControlsMenuOpen } = await import("./petModeBridge");
+
+    await setNativePetQuickControlsMenuOpen(true);
+    await setNativePetQuickControlsMenuOpen(false);
+
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "pet_quick_controls_action", {
+      action: "menuOpened",
+    });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "pet_quick_controls_action", {
+      action: "menuClosed",
+    });
+  });
+
+  it("normalizes the native menu-state event to a boolean", async () => {
+    const values: boolean[] = [];
+    tauriListen.listen.mockImplementationOnce(async (
+      event: string,
+      handler: (event: { payload: { open?: unknown } }) => void,
+    ) => {
+      expect(event).toBe("pet-quick-controls-menu-state");
+      handler({ payload: { open: true } });
+      handler({ payload: { open: "true" } });
+      return vi.fn();
+    });
+    const { listenToNativePetQuickControlsMenuState } = await import("./petModeBridge");
+
+    await listenToNativePetQuickControlsMenuState((open) => values.push(open));
+
+    expect(values).toEqual([true, false]);
+  });
+
+  it("syncs the visual theme with the quick-controls state", async () => {
+    const { syncNativePetQuickControlsState } = await import("./petModeBridge");
+
+    await syncNativePetQuickControlsState({
+      automaticCloseEnabled: true,
+      automaticCloseSavedEnabled: true,
+      automaticCloseOverride: null,
+      language: "ko",
+      theme: "dark",
+    });
+
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_quick_controls_sync_state", {
+      state: {
+        automaticCloseEnabled: true,
+        automaticCloseSavedEnabled: true,
+        automaticCloseOverride: null,
+        language: "ko",
+        theme: "dark",
+      },
+    });
+  });
+
+  it("accepts only fully valid quick-controls state payloads", async () => {
+    const states: Array<{
+      automaticCloseEnabled: boolean;
+      automaticCloseSavedEnabled: boolean;
+      automaticCloseOverride: null | { enabled: boolean; kind: "15" | "60" | "today" | "forever"; endsAtMs: number | null };
+      language: "en" | "ko";
+      theme: "light" | "dark";
+    }> = [];
+    tauriListen.listen.mockImplementationOnce(async (
+      event: string,
+      handler: (event: { payload: Record<string, unknown> }) => void,
+    ) => {
+      expect(event).toBe("pet-quick-controls-state");
+      handler({ payload: {
+        automaticCloseEnabled: false,
+        automaticCloseSavedEnabled: true,
+        automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: 1_800_000 },
+        language: "ko",
+        theme: "dark",
+      } });
+      handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ko", theme: "sepia" } });
+      handler({ payload: { automaticCloseEnabled: "false", automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ko", theme: "light" } });
+      handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: null, language: "ja", theme: "light" } });
+      handler({ payload: { automaticCloseEnabled: false, automaticCloseSavedEnabled: true, automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: null }, language: "ko", theme: "light" } });
+      return vi.fn();
+    });
+    const { listenToNativePetQuickControlsState } = await import("./petModeBridge");
+
+    await listenToNativePetQuickControlsState((state) => states.push(state));
+
+    expect(states).toEqual([{
+      automaticCloseEnabled: false,
+      automaticCloseSavedEnabled: true,
+      automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: 1_800_000 },
+      language: "ko",
+      theme: "dark",
+    }]);
+  });
+});
+
 describe("pet mode intervention outcome classification", () => {
   type ContactHandler = (event: { payload: { id: string; contacted?: boolean; reason?: string } }) => void;
 

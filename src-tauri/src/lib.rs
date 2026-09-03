@@ -46,8 +46,10 @@ use commands::{
     pet_mode_report_pointer, pet_mode_resolve_drop, pet_mode_return_from_outing,
     pet_mode_return_home, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
     pet_mode_set_floor_home, pet_mode_set_presence, pet_mode_set_size, pet_mode_stalk_cursor, pet_mode_update,
-    pet_mode_update_hit_region, pet_mode_visibility_action, sentry_capture_native_smoke,
-    setup_companion_pill_window, setup_pet_mode_window, setup_watcher_window, share_card_save_png,
+    pet_mode_update_hit_region, pet_mode_visibility_action, pet_quick_controls_action,
+    pet_quick_controls_cursor_inside, pet_quick_controls_set_visible, pet_quick_controls_sync_state,
+    sentry_capture_native_smoke, setup_companion_pill_window, setup_pet_mode_window,
+    setup_pet_quick_controls_window, setup_watcher_window, share_card_save_png,
     startup_get_open_at_login_status, startup_set_open_at_login_enabled, system_open_settings_pane,
     tracker_apply_classification_rules, tracker_apply_synced_deletions,
     tracker_apply_synced_segments, tracker_clear_icon_caches, tracker_delete_activity_segments,
@@ -516,6 +518,7 @@ pub fn run() {
             setup_watcher_window(app)?;
             setup_companion_pill_window(app)?;
             setup_pet_mode_window(app)?;
+            setup_pet_quick_controls_window(app)?;
             let tracking_pause_restored = tracking_pause::restore_on_startup(app.handle());
             setup_tray(app.handle())?;
 
@@ -771,6 +774,10 @@ pub fn run() {
             pet_mode_reconcile_position,
             pet_mode_remember_position,
             pet_mode_resolve_drop,
+            pet_quick_controls_set_visible,
+            pet_quick_controls_sync_state,
+            pet_quick_controls_cursor_inside,
+            pet_quick_controls_action,
         ])
         .build(tauri::generate_context!());
 
