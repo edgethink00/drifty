@@ -13,11 +13,14 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import {
   loadSshAgentSources,
+  MAX_SAVED_SSH_AGENT_SOURCES,
   removeSshAgentSource,
   saveSshAgentSources,
+  subscribeSshAgentSources,
   upsertSshAgentSource,
   type SavedSshAgentSource,
 } from "./sshAgentSourcesStorage";
+import { sshAgentSourceBackfillDays } from "./useSshAgentSourceSyncController";
 
 type Operation = { readonly kind: "test" | "collect"; readonly host: string } | null;
 type Status = (Pick<SshAgentSourceTestResult, "ok" | "code" | "message"> & Partial<Pick<SshAgentSourceCollectResult, "turnsFound">>) | null;
@@ -42,6 +45,10 @@ function localizedStatusMessage(
   language: DisplayLanguage,
   t: LocalizationController["t"],
 ): string {
+  if (status.code === "empty") return t("agents.ssh.statusEmpty");
+  if (status.code === "collected") return t("agents.ssh.statusCollected", { count: status.turnsFound ?? 0 });
+  if (status.code === "save_error") return t("agents.ssh.saveError");
+  if (status.code === "source_limit") return t("agents.ssh.sourceLimit", { count: MAX_SAVED_SSH_AGENT_SOURCES });
   if (language === "en") return status.message;
   switch (status.code) {
     case "unavailable": return t("agents.ssh.statusUnavailable");
@@ -66,9 +73,11 @@ function localizedStatusMessage(
 export function SshAgentSourcesModal({
   onClose,
   onCollected,
+  collectSource = (host, backfillDays) => trackerClient.collectSshAgentSource(host, backfillDays),
 }: {
   readonly onClose: () => void;
   readonly onCollected: () => void;
+  readonly collectSource?: (host: string, backfillDays: number) => Promise<SshAgentSourceCollectResult>;
 }): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
   const dialogRef = useRef<HTMLElement>(null);
@@ -80,7 +89,12 @@ export function SshAgentSourcesModal({
   const [discovery, setDiscovery] = useState<Discovery>(null);
   const normalizedHost = host.trim();
   const isBusy = operation !== null;
-  const canCollectNew = normalizedHost.length > 0 && verifiedHost === normalizedHost && !isBusy;
+  const sourceLimitReached = sources.length >= MAX_SAVED_SSH_AGENT_SOURCES
+    && !sources.some((source) => source.host === normalizedHost);
+  const canCollectNew = normalizedHost.length > 0
+    && verifiedHost === normalizedHost
+    && !sourceLimitReached
+    && !isBusy;
   const savedHostKeys = new Set(sources.map((source) => source.host.toLocaleLowerCase()));
   const discoveredAliases = discovery?.aliases.filter((alias) => !savedHostKeys.has(alias.toLocaleLowerCase())) ?? [];
 
@@ -108,9 +122,17 @@ export function SshAgentSourcesModal({
     };
   }, []);
 
-  const updateSources = (next: SavedSshAgentSource[]) => {
+  useEffect(() => subscribeSshAgentSources(() => {
+    setSources(loadSshAgentSources());
+  }), []);
+
+  const updateSources = (next: SavedSshAgentSource[]): boolean => {
+    if (!saveSshAgentSources(next)) {
+      setStatus({ ok: false, code: "save_error", message: "Drifty could not save the SSH source for continuous collection." });
+      return false;
+    }
     setSources(next);
-    saveSshAgentSources(next);
+    return true;
   };
 
   const testConnection = async () => {
@@ -135,18 +157,29 @@ export function SshAgentSourcesModal({
     setOperation({ kind: "collect", host: targetHost });
     setStatus(null);
     try {
-      const result: SshAgentSourceCollectResult = await trackerClient.collectSshAgentSource(targetHost, 30);
+      const currentSources = loadSshAgentSources();
+      const savedSource = currentSources.find((source) => source.host === targetHost);
+      if (!savedSource && currentSources.length >= MAX_SAVED_SSH_AGENT_SOURCES) {
+        setStatus({ ok: false, code: "source_limit", message: "Remove a saved SSH source before adding another one." });
+        return;
+      }
+      const result = await collectSource(
+        targetHost,
+        savedSource ? sshAgentSourceBackfillDays(savedSource.lastCollectedAt, Date.now()) : 30,
+      );
       setStatus(result);
       if (result.ok) {
-        updateSources(upsertSshAgentSource(sources, {
+        const sourceSaved = updateSources(upsertSshAgentSource(loadSshAgentSources(), {
           host: targetHost,
           lastCollectedAt: new Date().toISOString(),
           lastMessage: result.message,
           turnsFound: result.turnsFound,
         }));
-        setHost(targetHost);
-        setVerifiedHost(targetHost);
-        onCollected();
+        if (sourceSaved) {
+          setHost(targetHost);
+          setVerifiedHost(targetHost);
+          onCollected();
+        }
       }
     } catch {
       setStatus({ ok: false, code: "collect_error", message: "Drifty could not collect from this host. Check SSH in Terminal, then retry." });
@@ -269,8 +302,10 @@ export function SshAgentSourcesModal({
               }}
             />
           </label>
-          <p id="agents-ssh-host-hint" className="agents-ssh-modal__hint">
-            {t("agents.ssh.hint")}
+          <p id="agents-ssh-host-hint" className={`agents-ssh-modal__hint${sourceLimitReached ? " is-error" : ""}`}>
+            {sourceLimitReached
+              ? t("agents.ssh.sourceLimit", { count: MAX_SAVED_SSH_AGENT_SOURCES })
+              : t("agents.ssh.hint")}
           </p>
           <div className="agents-ssh-modal__actions">
             <button
@@ -331,7 +366,7 @@ export function SshAgentSourcesModal({
                         aria-label={t("agents.ssh.removeAria", { host: source.host })}
                         title={t("agents.ssh.removeTitle")}
                         disabled={isBusy}
-                        onClick={() => updateSources(removeSshAgentSource(sources, source.host))}
+                        onClick={() => updateSources(removeSshAgentSource(loadSshAgentSources(), source.host))}
                       >
                         <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M8 3h4M7 6l.6 10h4.8L13 6" /></svg>
                       </button>

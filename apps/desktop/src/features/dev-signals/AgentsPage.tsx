@@ -80,6 +80,11 @@ import {
 } from "./AgentsBreakdown";
 import { AgentsHoverLayer, type AgentsHoverDetails } from "./AgentsHoverLayer";
 import { SshAgentSourcesModal } from "./SshAgentSourcesModal";
+import {
+  INACTIVE_SSH_AGENT_SOURCE_SYNC_STATUS,
+  type SshAgentSourceSyncController,
+  type SshAgentSourceSyncStatus,
+} from "./useSshAgentSourceSyncController";
 import "./agents-page.css";
 
 export type AgentsPeriod = "Today" | "Week";
@@ -1113,6 +1118,8 @@ export function AgentsPage({
   startOfDayMinutes,
   startOfWeek,
   todayDay,
+  sshSyncStatus = INACTIVE_SSH_AGENT_SOURCE_SYNC_STATUS,
+  syncSshHost,
 }: {
   readonly flowIntervalMinutes: FlowIntervalMinutes;
   readonly onFlowIntervalChange: (intervalMinutes: FlowIntervalMinutes) => void;
@@ -1121,6 +1128,8 @@ export function AgentsPage({
   readonly startOfDayMinutes: number;
   readonly startOfWeek: StartOfWeek;
   readonly todayDay: string;
+  readonly sshSyncStatus?: SshAgentSourceSyncStatus;
+  readonly syncSshHost?: SshAgentSourceSyncController["syncHostNow"];
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
@@ -1146,7 +1155,7 @@ export function AgentsPage({
     range.startDay,
     range.endDay,
     boundaryMinutes,
-    dataRefreshKey,
+    dataRefreshKey + sshSyncStatus.revision,
   );
   const models = useMemo(() => days.map(buildAgentsDayModel), [days]);
   const visiblePeak = useMemo(
@@ -1184,6 +1193,25 @@ export function AgentsPage({
   const nextSelectedDay = shiftDashboardPeriodDay(selectedDay, period, 1);
   const nextRange = getDashboardPeriodRange(nextSelectedDay, period, boundaryMinutes, startOfWeek);
   const canShiftForward = period === "Week" ? nextRange.startDay <= todayDay : nextSelectedDay <= todayDay;
+  const isSshSyncing = sshSyncStatus.syncing && sshSyncStatus.activeHosts.length > 0;
+  const failedSshHost = !isSshSyncing
+    && sshSyncStatus.lastErrorHost
+    && sshSyncStatus.sourceHosts.includes(sshSyncStatus.lastErrorHost)
+    ? sshSyncStatus.lastErrorHost
+    : null;
+  const isSshSyncError = failedSshHost !== null;
+  const visibleSshHosts = isSshSyncing
+    ? sshSyncStatus.activeHosts
+    : failedSshHost
+      ? [failedSshHost, ...sshSyncStatus.sourceHosts.filter((host) => host !== failedSshHost)]
+      : sshSyncStatus.sourceHosts;
+  const visibleSshHost = visibleSshHosts[0] ?? null;
+  const additionalVisibleSshHosts = Math.max(0, visibleSshHosts.length - 1);
+  const sshStatusAriaKey = isSshSyncing
+    ? additionalVisibleSshHosts > 0 ? "agents.ssh.syncingHostsAria" : "agents.ssh.syncingHostAria"
+    : isSshSyncError
+      ? additionalVisibleSshHosts > 0 ? "agents.ssh.errorHostsAria" : "agents.ssh.errorHostAria"
+      : additionalVisibleSshHosts > 0 ? "agents.ssh.autoSyncHostsAria" : "agents.ssh.autoSyncHostAria";
   const shiftPeriod = (direction: -1 | 1) => {
     if (direction === 1 && !canShiftForward) return;
     onSelectDay(shiftDashboardPeriodDay(selectedDay, period, direction));
@@ -1204,15 +1232,39 @@ export function AgentsPage({
               )}
             </h1>
           </div>
-          <button
-            type="button"
-            className="agents-ssh-trigger"
-            aria-label={t("agents.ssh.add")}
-            onClick={() => setSshModalOpen(true)}
-          >
-            <span>SSH</span>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
-          </button>
+          <div className="agents-ssh-controls">
+            <button
+              type="button"
+              className="agents-ssh-trigger"
+              aria-label={t("agents.ssh.add")}
+              onClick={() => setSshModalOpen(true)}
+            >
+              <span>SSH</span>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
+            </button>
+            {(sshSyncStatus.autoSyncEnabled || isSshSyncing) && visibleSshHost ? (
+              <span
+                className={`agents-ssh-sync-status${isSshSyncing ? " is-syncing" : ""}${isSshSyncError ? " is-error" : ""}`}
+                role="status"
+                aria-live="polite"
+                title={t(
+                  isSshSyncing
+                    ? "agents.ssh.syncingHostTitle"
+                    : isSshSyncError ? "agents.ssh.errorHostTitle" : "agents.ssh.autoSyncHostTitle",
+                  { host: visibleSshHost },
+                )}
+              >
+                <span className="sr-only">
+                  {t(sshStatusAriaKey, { host: visibleSshHost, count: additionalVisibleSshHosts })}
+                </span>
+                <span className="agents-ssh-sync-status__dot" aria-hidden="true" />
+                <code className="agents-ssh-sync-status__host" dir="ltr" aria-hidden="true">{visibleSshHost}</code>
+                {additionalVisibleSshHosts > 0 ? (
+                  <span className="agents-ssh-sync-status__count" aria-hidden="true">+{additionalVisibleSshHosts}</span>
+                ) : null}
+              </span>
+            ) : null}
+          </div>
         </div>
         <div className="dashboard-page-head__side">
           {/* In-page Day/Week toggle, ported from studyhall's proven treatment. */}
@@ -1291,6 +1343,7 @@ export function AgentsPage({
           <SshAgentSourcesModal
             onClose={() => setSshModalOpen(false)}
             onCollected={() => setDataRefreshKey((key) => key + 1)}
+            collectSource={syncSshHost}
           />
         ) : null}
       </div>
@@ -1333,6 +1386,7 @@ export function AgentsPage({
         <SshAgentSourcesModal
           onClose={() => setSshModalOpen(false)}
           onCollected={() => setDataRefreshKey((key) => key + 1)}
+          collectSource={syncSshHost}
         />
       ) : null}
     </div>

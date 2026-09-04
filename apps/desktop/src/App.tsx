@@ -238,6 +238,7 @@ import { useCloudBillingController } from "./features/billing/useCloudBillingCon
 import { useDeviceSyncController } from "./features/device-sync/useDeviceSyncController";
 import { fetchSyncDevices, purgeCloudSyncData, resumeCloudSyncData } from "./features/device-sync/deviceSyncApi";
 import { resetAccountSyncIdentity } from "./features/device-sync/accountDeletionSyncReset";
+import { useSshAgentSourceSyncController } from "./features/dev-signals/useSshAgentSourceSyncController";
 import {
   clearDeviceSyncCycleRecordsForUser,
   clearPendingDeviceSyncAccountReset,
@@ -661,6 +662,9 @@ export default function App() {
   const canOpenTeamsBeta = (devModeEnabled && teamsBetaEnabled) || isTeamQaMockEnabled();
   const canOpenProfileBeta = DEV_SETTINGS_ENABLED && devModeEnabled && profileBetaEnabled;
   const canOpenAgentsBeta = DEV_SETTINGS_ENABLED && devModeEnabled && agentsBetaEnabled;
+  const sshAgentSourceSync = useSshAgentSourceSyncController({
+    enabled: canOpenAgentsBeta && isTauriRuntime(),
+  });
   const [companionSurfacePolicy, setCompanionSurfacePolicy] = useState(resolveInitialCompanionSurfacePolicy);
   const [companionHiddenUntil, setCompanionHiddenUntil] = useState(resolveInitialCompanionHiddenUntil);
   const floatingCompanionDevActive = isDevModeActive && floatingCompanionDevEnabled;
@@ -8925,6 +8929,8 @@ export default function App() {
             startOfDayMinutes={startOfDayMinutes}
             startOfWeek={startOfWeek}
             todayDay={todayDay}
+            sshSyncStatus={sshAgentSourceSync.status}
+            syncSshHost={sshAgentSourceSync.syncHostNow}
           />
         ) : null}
 

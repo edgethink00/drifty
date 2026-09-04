@@ -122,8 +122,98 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(screen.getByRole("dialog", { name: "Collect from SSH" })).toBeTruthy();
     expect(screen.getByText(/Hosts are read locally/).textContent).toContain("~/.ssh/config");
     expect(screen.getByLabelText("Host or alias")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Collect & save" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Collect & keep synced" }).hasAttribute("disabled")).toBe(true);
     expect(await screen.findByText(/SSH config discovery is available in the Drifty desktop app/)).toBeTruthy();
+  });
+
+  it("shows continuous and active SSH collection feedback beside the add button", () => {
+    const { rerender } = render(
+      <LocalizationTestProvider language="ko">
+        <AgentsPage
+          flowIntervalMinutes={3}
+          onFlowIntervalChange={vi.fn()}
+          onSelectDay={vi.fn()}
+          selectedDay="2026-08-28"
+          startOfDayMinutes={0}
+          startOfWeek="monday"
+          todayDay="2026-08-28"
+          sshSyncStatus={{
+            autoSyncEnabled: true,
+            sourceCount: 2,
+            sourceHosts: ["lab-host", "10.0.0.8"],
+            activeHosts: [],
+            syncing: false,
+            revision: 0,
+            lastSuccessAt: "2026-08-28T12:00:00.000Z",
+            lastErrorHost: null,
+            lastError: null,
+          }}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    const sshButton = screen.getByRole("button", { name: "SSH 에이전트 소스 추가" });
+    expect(screen.getByRole("status").textContent).toContain("lab-host+1");
+    expect(screen.getByRole("status").querySelector(".sr-only")?.textContent).toContain("SSH 소스 lab-host");
+    expect(document.querySelector(".agents-ssh-controls")?.contains(sshButton)).toBe(true);
+
+    rerender(
+      <LocalizationTestProvider language="ko">
+        <AgentsPage
+          flowIntervalMinutes={3}
+          onFlowIntervalChange={vi.fn()}
+          onSelectDay={vi.fn()}
+          selectedDay="2026-08-28"
+          startOfDayMinutes={0}
+          startOfWeek="monday"
+          todayDay="2026-08-28"
+          sshSyncStatus={{
+            autoSyncEnabled: true,
+            sourceCount: 2,
+            sourceHosts: ["lab-host", "10.0.0.8"],
+            activeHosts: ["10.0.0.8"],
+            syncing: true,
+            revision: 0,
+            lastSuccessAt: "2026-08-28T12:00:00.000Z",
+            lastErrorHost: null,
+            lastError: null,
+          }}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("10.0.0.8");
+    expect(screen.getByRole("status").querySelector(".sr-only")?.textContent).toContain("10.0.0.8에서");
+    expect(document.querySelector(".agents-ssh-sync-status")?.classList.contains("is-syncing")).toBe(true);
+
+    rerender(
+      <LocalizationTestProvider language="ko">
+        <AgentsPage
+          flowIntervalMinutes={3}
+          onFlowIntervalChange={vi.fn()}
+          onSelectDay={vi.fn()}
+          selectedDay="2026-08-28"
+          startOfDayMinutes={0}
+          startOfWeek="monday"
+          todayDay="2026-08-28"
+          sshSyncStatus={{
+            autoSyncEnabled: true,
+            sourceCount: 2,
+            sourceHosts: ["lab-host", "10.0.0.8"],
+            activeHosts: [],
+            syncing: false,
+            revision: 0,
+            lastSuccessAt: "2026-08-28T12:00:00.000Z",
+            lastErrorHost: "10.0.0.8",
+            lastError: "Timed out.",
+          }}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("10.0.0.8+1");
+    expect(screen.getByRole("status").querySelector(".sr-only")?.textContent).toContain("자동 수집에 실패");
+    expect(document.querySelector(".agents-ssh-sync-status")?.classList.contains("is-error")).toBe(true);
   });
 
   it("uses the same persisted Flow detail control as Your Day", () => {
