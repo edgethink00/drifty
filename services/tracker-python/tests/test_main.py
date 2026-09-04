@@ -1168,6 +1168,49 @@ class TrackerMainTests(unittest.TestCase):
         self.assertEqual(result["data"]["fp-one"]["segmentId"], "1")
         mock_db.get_reusable_ai_classifications.assert_called_once_with(["fp-one", "fp-two"])
 
+    def test_save_classifications_command_reports_late_automatic_write_as_not_saved(self) -> None:
+        with temp_dir_closing_databases() as tmp:
+            db = TrackerDatabase(Path(tmp) / "tracker.sqlite3")
+            db.record_snapshot(
+                Snapshot(
+                    observed_at="2026-04-06T09:00:00+00:00",
+                    app_name="QA Activity",
+                    bundle_id="so.drifty.qa",
+                    window_title="Manual classification race",
+                    source="accessibility",
+                ),
+                5,
+            )
+            segment_id = db.fetch_timeline("2026-04-06")[0]["id"]
+
+            with patch.object(tracker_main, "database", return_value=db):
+                manual_result = tracker_main.save_classifications({
+                    "classifications": [{
+                        "segmentId": segment_id,
+                        "category": "learning",
+                        "productivity": "focus",
+                        "source": "manual",
+                        "confidence": 1,
+                    }]
+                })
+                late_result = tracker_main.save_classifications({
+                    "classifications": [{
+                        "segmentId": segment_id,
+                        "category": "utility",
+                        "productivity": "drift",
+                        "source": "llm",
+                        "confidence": 0.9,
+                        "aiResult": True,
+                    }]
+                })
+
+            self.assertEqual(manual_result["data"]["saved"], 1)
+            self.assertEqual(late_result["data"]["saved"], 0)
+            classification = db.fetch_timeline("2026-04-06")[0]["classification"]
+            self.assertEqual(classification["category"], "learning")
+            self.assertEqual(classification["productivity"], "focus")
+            self.assertEqual(classification["source"], "manual")
+
     def test_classification_rule_handlers_forward_to_database(self) -> None:
         mock_db = MagicMock()
         mock_db.get_classification_rules.return_value = []

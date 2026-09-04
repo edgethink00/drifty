@@ -1209,6 +1209,146 @@ class TrackerDatabaseTests(unittest.TestCase):
         fresh = self.database.fetch_timeline("2026-04-06")[0]
         self.assertFalse(fresh["classification"]["reusedAiResult"])
 
+    def test_late_non_manual_classifications_do_not_overwrite_manual_correction(self) -> None:
+        non_manual_sources = (
+            "llm",
+            "fallback",
+            "system",
+            "unknown",
+            "app-db",
+            "domain-db",
+            "youtube",
+            "rule",
+            "ai_review",
+        )
+
+        for index, source in enumerate(non_manual_sources):
+            with self.subTest(source=source):
+                segment_id = self._insert_segment_returning_id(
+                    f"2026-04-06T10:{index:02d}:00+00:00"
+                )
+                selected_before_manual = self.database.fetch_unclassified_segments(
+                    segment_ids={str(segment_id)}
+                )
+                self.assertEqual(
+                    [segment["id"] for segment in selected_before_manual],
+                    [str(segment_id)],
+                )
+
+                manual_saved = self.database.save_classifications([
+                    {
+                        "segmentId": segment_id,
+                        "category": "learning",
+                        "productivity": "focus",
+                        "source": "manual",
+                        "confidence": 1,
+                        "inputFingerprint": f"manual:{segment_id}",
+                    }
+                ])
+                late_saved = self.database.save_classifications([
+                    {
+                        "segmentId": segment_id,
+                        "category": "utility",
+                        "productivity": "drift",
+                        "source": source,
+                        "confidence": 0.9,
+                        "inputFingerprint": f"late:{source}:{segment_id}",
+                        "aiResult": source == "llm",
+                    }
+                ])
+
+                self.assertEqual(manual_saved, 1)
+                self.assertEqual(late_saved, 0)
+                classification = next(
+                    segment["classification"]
+                    for segment in self.database.fetch_timeline("2026-04-06")
+                    if segment["id"] == str(segment_id)
+                )
+                self.assertEqual(classification["category"], "learning")
+                self.assertEqual(classification["productivity"], "focus")
+                self.assertEqual(classification["source"], "manual")
+
+    def test_manual_classification_can_replace_existing_automatic_and_manual_corrections(self) -> None:
+        segment_id = self._insert_segment_returning_id("2026-04-06T11:00:00+00:00")
+        first_saved = self.database.save_classifications([
+            {
+                "segmentId": segment_id,
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "llm",
+                "confidence": 0.9,
+            }
+        ])
+        second_saved = self.database.save_classifications([
+            {
+                "segmentId": segment_id,
+                "category": "learning",
+                "productivity": "neutral",
+                "source": "manual",
+                "confidence": 1,
+            }
+        ])
+        third_saved = self.database.save_classifications([
+            {
+                "segmentId": segment_id,
+                "category": "communication",
+                "productivity": "drift",
+                "source": "manual",
+                "confidence": 1,
+            }
+        ])
+
+        self.assertEqual(first_saved, 1)
+        self.assertEqual(second_saved, 1)
+        self.assertEqual(third_saved, 1)
+        classification = next(
+            segment["classification"]
+            for segment in self.database.fetch_timeline("2026-04-06")
+            if segment["id"] == str(segment_id)
+        )
+        self.assertEqual(classification["category"], "communication")
+        self.assertEqual(classification["productivity"], "drift")
+        self.assertEqual(classification["source"], "manual")
+
+    def test_save_classifications_counts_only_rows_applied_in_a_mixed_batch(self) -> None:
+        protected_segment_id = self._insert_segment_returning_id("2026-04-06T12:00:00+00:00")
+        writable_segment_id = self._insert_segment_returning_id("2026-04-06T12:05:00+00:00")
+        self.database.save_classifications([
+            {
+                "segmentId": protected_segment_id,
+                "category": "learning",
+                "productivity": "focus",
+                "source": "manual",
+                "confidence": 1,
+            }
+        ])
+
+        saved = self.database.save_classifications([
+            {
+                "segmentId": protected_segment_id,
+                "category": "utility",
+                "productivity": "drift",
+                "source": "llm",
+                "confidence": 0.9,
+            },
+            {
+                "segmentId": writable_segment_id,
+                "category": "workspace",
+                "productivity": "focus",
+                "source": "llm",
+                "confidence": 0.9,
+            },
+        ])
+
+        classifications_by_id = {
+            segment["id"]: segment["classification"]
+            for segment in self.database.fetch_timeline("2026-04-06")
+            if segment["id"] in {str(protected_segment_id), str(writable_segment_id)}
+        }
+        self.assertEqual(saved, 1)
+        self.assertEqual(classifications_by_id[str(protected_segment_id)]["source"], "manual")
+        self.assertEqual(classifications_by_id[str(writable_segment_id)]["source"], "llm")
+
     def test_dashboard_week_timeline_omits_verbose_fields_without_full_timeline(self) -> None:
         self.database.record_snapshot(
             Snapshot(

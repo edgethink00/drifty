@@ -3468,7 +3468,9 @@ class TrackerDatabase:
                 stale = 1 if item.get("stale") else 0
                 classification_rule_id = item.get("classificationRuleId", item.get("classification_rule_id")) if source == "rule" else None
 
-                conn.execute(
+                # A classifier can select an unclassified segment, then finish after the
+                # user has corrected it. Resolve that race atomically at the write.
+                cursor = conn.execute(
                     """
                     INSERT INTO activity_classifications (
                         segment_id,
@@ -3506,6 +3508,8 @@ class TrackerDatabase:
                         ai_result = excluded.ai_result,
                         stale = excluded.stale,
                         classification_rule_id = excluded.classification_rule_id
+                    WHERE excluded.source = 'manual'
+                       OR activity_classifications.source != 'manual'
                     """,
                     (
                         segment_id,
@@ -3527,7 +3531,8 @@ class TrackerDatabase:
                         classification_rule_id,
                     ),
                 )
-                saved += 1
+                if cursor.rowcount > 0:
+                    saved += cursor.rowcount
         return saved
 
     def get_reusable_ai_classifications(self, input_fingerprints: list[str]) -> dict[str, dict[str, Any]]:

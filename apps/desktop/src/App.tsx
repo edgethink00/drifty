@@ -7239,14 +7239,18 @@ export default function App() {
       }
 
       const classifiedAt = new Date().toISOString();
-      await trackerClient.saveClassifications(targetValues.map(({ category, productivity, segment }) => buildClassificationCorrectionRecord({
+      const classifications = targetValues.map(({ category, productivity, segment }) => buildClassificationCorrectionRecord({
         category,
         classifiedAt,
         productivity,
         segment,
-      })));
+      }));
+      const result = await trackerClient.saveClassifications(classifications);
       clearLocalActivityCaches();
       await refresh(selectedDayRef.current);
+      if (result.saved !== classifications.length) {
+        throw new Error(`Only ${result.saved} of ${classifications.length} activity classifications were saved.`);
+      }
     } catch (caught) {
       setError(toErrorMessage(caught));
       throw caught;
