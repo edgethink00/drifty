@@ -65,6 +65,22 @@ describe("buildLiveWatcherSnapshot", () => {
     });
   });
 
+  it("keeps a raw live app unclassified while automatic classification is unavailable", () => {
+    const liveCodex: CurrentActivitySnapshot = {
+      observedAt: "2026-08-30T19:06:13.000Z",
+      appName: "ChatGPT",
+      bundleId: "com.openai.codex",
+      source: "nsworkspace",
+    };
+
+    expect(buildLiveWatcherSnapshot(liveCodex, [historicalFocus], {
+      includeBuiltInHeuristics: false,
+    })).toMatchObject({
+      productivity: "neutral",
+      category: "unknown",
+    });
+  });
+
   it("changes only the opaque surface revision when app or window identity changes", () => {
     const first = {
       ...liveYouTube,

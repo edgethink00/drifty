@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { EndOfDayReview, type EndOfDayReviewEvent } from "./EndOfDayReview";
 import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import {
   buildMilestoneSparks,
@@ -10,7 +9,6 @@ import {
 import type { CompanionReentryEvent } from "./companionReentry";
 import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
-import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
 import {
   isInformationalMomentEvent,
   isInformationalMomentSuppressedNow,
@@ -48,6 +46,9 @@ export function WatcherWindowApp() {
      surface a suppressed moment is dropped (the main window re-presents a
      due review after its cooldown), while interventions always go through. */
   const handleNativeShow = useCallback((nextEvent: CompanionPillWindowEvent) => {
+    /* Day Review belongs exclusively to the current Companion surface. Ignore
+       a stale legacy-routed payload instead of reconnecting Summary - Today. */
+    if ("kind" in nextEvent && nextEvent.kind === "endOfDayReview") return;
     if (!("kind" in nextEvent) || !isInformationalMomentEvent(nextEvent)) {
       setEvent(nextEvent);
       return;
@@ -80,12 +81,9 @@ export function WatcherWindowApp() {
   }, [handleNativeShow]);
 
   const handleDismiss = useCallback(() => {
-    /* A deliberate close inside the reporter's dwell window still proves the
-       card was seen. */
-    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
     setEvent(null);
     ignoreWatcherBridgePromise(dismissNativeWatcherPeek());
-  }, [event]);
+  }, []);
 
   /* The auto-dismiss budget freezes while macOS sleeps, so without a
      wall-clock expiry a card fired seconds before sleep would greet the user
@@ -116,19 +114,8 @@ export function WatcherWindowApp() {
   }, []);
 
   const handleOpenDashboard = useCallback(() => {
-    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard"));
-  }, [event]);
-
-  const handleViewDetails = useCallback(() => {
-    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("viewDetails"));
-  }, [event]);
-
-  const handleOpenNotificationSettings = useCallback(() => {
-    if (isEndOfDayReviewEvent(event)) reportEndOfDayReviewInteraction(event);
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openNotificationSettings"));
-  }, [event]);
+  }, []);
 
   const handleExtremeNudgeAction = useCallback((action: Parameters<typeof triggerNativeExtremeNudgeAction>[0]) => {
     if (action.type === "manual_correction") {
@@ -162,20 +149,15 @@ export function WatcherWindowApp() {
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", reentry.lastActiveAt));
   }, []);
 
-  const isReviewEvent = isEndOfDayReviewEvent(event);
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
   const isMilestone = isMilestoneEvent(event);
   const isReentry = isReentryEvent(event);
 
-  /* The once-a-day review slot is marked only when this surface confirms an
-     actual visible display, not when the payload was shipped. */
-  useEndOfDayReviewDisplayedReporter(isReviewEvent ? event : null);
-
   useEffect(() => {
-    if (isReviewEvent || isExtremeNudgeToastEvent || isMilestone || isReentry) {
+    if (isExtremeNudgeToastEvent || isMilestone || isReentry) {
       ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
     }
-  }, [isExtremeNudgeToastEvent, isMilestone, isReentry, isReviewEvent]);
+  }, [isExtremeNudgeToastEvent, isMilestone, isReentry]);
 
   return (
     <main
@@ -197,14 +179,6 @@ export function WatcherWindowApp() {
           onOpenDashboard={handleOpenDashboard}
           onOpenReentry={handleOpenReentry}
         />
-      ) : isReviewEvent ? (
-        <EndOfDayReview
-          event={event}
-          onOpenDashboard={handleOpenDashboard}
-          onViewDetails={handleViewDetails}
-          onOpenNotificationSettings={handleOpenNotificationSettings}
-          onClose={handleDismiss}
-        />
       ) : isExtremeNudgeToastEvent ? (
         <ExtremeNudgeToast event={event} onAction={handleExtremeNudgeAction} onDismiss={handleToastDismiss} />
       ) : (
@@ -216,10 +190,6 @@ export function WatcherWindowApp() {
       )}
     </main>
   );
-}
-
-function isEndOfDayReviewEvent(event: CompanionPillWindowEvent | null): event is EndOfDayReviewEvent {
-  return event !== null && "kind" in event && event.kind === "endOfDayReview";
 }
 
 function isExtremeNudgeToast(event: CompanionPillWindowEvent | null): event is ExtremeNudgeToastEvent {

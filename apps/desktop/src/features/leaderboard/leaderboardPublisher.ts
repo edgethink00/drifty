@@ -35,6 +35,8 @@ export type BuildLeaderboardCheckpointPayloadInput = {
   readonly timezone: string;
   readonly startOfDayMinutes: number;
   readonly showAiClassificationImpact: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
 };
 
 export type PublishLeaderboardPeriodsInput = {
@@ -44,11 +46,17 @@ export type PublishLeaderboardPeriodsInput = {
   readonly timezone: string;
   readonly startOfDayMinutes: number;
   readonly showAiClassificationImpact: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
+  /** Revalidate mutable publication policy after local payload construction. */
+  readonly publicationAllowed: () => boolean;
 };
 
 export type PublishLeaderboardPeriodsResult = LeaderboardResult<LeaderboardPublishPayloads>;
 
-export async function buildLeaderboardPublishPayloads(input: Omit<PublishLeaderboardPeriodsInput, "mode">): Promise<LeaderboardPublishPayloads> {
+export async function buildLeaderboardPublishPayloads(
+  input: Omit<PublishLeaderboardPeriodsInput, "mode" | "publicationAllowed">,
+): Promise<LeaderboardPublishPayloads> {
   const leaderboardWindowEndDay = logicalTodayIsoDate(input.startOfDayMinutes);
   const allPeriodWindowStartDay = getLeaderboardWindowStartDay(leaderboardWindowEndDay, "monthly");
   const fetchedSegments = await trackerClient.getTimeline(getLogicalDayRange(
@@ -96,6 +104,8 @@ export async function buildLeaderboardCheckpointPayload(
     timezone: input.timezone,
     startOfDayMinutes: input.startOfDayMinutes,
     showAiClassificationImpact: input.showAiClassificationImpact,
+    includeBuiltInHeuristics: input.includeBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
   });
 }
 
@@ -125,7 +135,15 @@ export async function publishLeaderboardPayloads(
 }
 
 export async function publishLeaderboardPeriods(input: PublishLeaderboardPeriodsInput): Promise<PublishLeaderboardPeriodsResult> {
-  const payloads = await buildLeaderboardPublishPayloads(input);
+  const { publicationAllowed, ...payloadInput } = input;
+  const payloads = await buildLeaderboardPublishPayloads(payloadInput);
+  if (!publicationAllowed()) {
+    return {
+      success: false,
+      error: "AI classification is paused. Reconnect AI before publishing focus totals.",
+      data: payloads,
+    };
+  }
   const result = await publishLeaderboardPayloads(input.mode, payloads.payloads);
   if (!result.success) {
     return { success: false, error: result.error ?? "Unable to publish leaderboard", data: payloads };
@@ -136,12 +154,14 @@ export async function publishLeaderboardPeriods(input: PublishLeaderboardPeriods
 function buildLeaderboardPublishPayload(
   period: LeaderboardPeriod,
   allPeriodSegments: ActivitySegment[],
-  input: Omit<PublishLeaderboardPeriodsInput, "mode">,
+  input: Omit<PublishLeaderboardPeriodsInput, "mode" | "publicationAllowed">,
 ): LeaderboardPublishPayload {
   const windowStartDay = getLeaderboardWindowStartDay(input.leaderboardWindowEndDay, period);
   const focusSeconds = buildRollingFocusSeconds(allPeriodSegments, windowStartDay, input.leaderboardWindowEndDay, {
     fallbackCandidates: allPeriodSegments,
     includeAiClassifications: input.showAiClassificationImpact,
+    includeBuiltInHeuristics: input.includeBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
   }, input.startOfDayMinutes);
 
   return {

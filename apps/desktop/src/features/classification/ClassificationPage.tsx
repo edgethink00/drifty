@@ -53,6 +53,7 @@ type ClassificationPageProps = {
   readonly effectiveClassifySourceId: string | null;
   readonly expandedClassificationActivityRows: ReadonlySet<string>;
   readonly isCurrentClassificationRange: boolean;
+  readonly devModeEnabled: boolean;
   readonly classificationCorrectionDraft: ClassificationCorrectionDraft | null;
   readonly classificationCorrectionNotice: ClassificationCorrectionNotice | null;
   readonly classificationCorrectionSaving: boolean;
@@ -167,6 +168,7 @@ export function ClassificationPage({
   effectiveClassifySourceId,
   expandedClassificationActivityRows,
   isCurrentClassificationRange,
+  devModeEnabled,
   classificationCorrectionDraft,
   classificationCorrectionNotice,
   classificationCorrectionSaving,
@@ -603,7 +605,9 @@ export function ClassificationPage({
                                       <dl className="classification-panel-view__activity-classification" aria-label={t("classification.summary")}>
                                         <div><dt>{t("common.category")}</dt><dd>{localizeClassificationSummaryValue(summary.categoryLabel, effectiveLanguage)}</dd></div>
                                         <div><dt>{t("common.productivity")}</dt><dd>{localizeClassificationSummaryValue(summary.productivityLabel, effectiveLanguage)}</dd></div>
-                                        <div><dt>{t("common.source")}</dt><dd>{localizeClassificationSummaryValue(summary.sourceLabel, effectiveLanguage)}</dd></div>
+                                        {devModeEnabled || summary.sourceLabel === "Manual" || summary.sourceLabel === "Custom rule"
+                                          ? <div><dt>{t("common.source")}</dt><dd>{localizeClassificationSummaryValue(summary.sourceLabel, effectiveLanguage)}</dd></div>
+                                          : null}
                                         <div><dt>{t("classification.confidence")}</dt><dd>{localizeClassificationSummaryValue(summary.confidenceLabel, effectiveLanguage)}</dd></div>
                                       </dl>
                                     ) : null}

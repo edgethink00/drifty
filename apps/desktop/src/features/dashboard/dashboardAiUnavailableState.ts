@@ -1,7 +1,9 @@
 import type { BillingEntitlement } from "../billing/billingService";
 import type { TranslationKey } from "../localization/translations";
+import type { ClassificationAvailability } from "../classification/classificationAvailability";
 
 export type DashboardAiUnavailableVariant = "trial-ended" | "cloud-plan" | "cloud-billing" | "device-limit" | "connect-ai";
+export const DASHBOARD_CLOUD_BILLING_VARIANTS = ["trial-ended", "cloud-plan", "cloud-billing"] as const;
 
 export type DashboardAiUnavailableState = {
   readonly variant: DashboardAiUnavailableVariant;
@@ -18,6 +20,7 @@ export type DashboardAiUnavailableInput = {
   readonly hasRequiredAccountAuth: boolean;
   readonly isSupabaseConfigured: boolean;
   readonly localAiReady: boolean;
+  readonly classificationAvailability?: ClassificationAvailability;
 };
 
 const TRIAL_ENDED_STATE = {
@@ -56,6 +59,15 @@ const CONNECT_AI_STATE = {
 } satisfies DashboardAiUnavailableState;
 
 export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailableInput): DashboardAiUnavailableState | null {
+  if (input.classificationAvailability) {
+    const availability = input.classificationAvailability;
+    if (availability.route === "local") {
+      return availability.state === "unavailable" ? CONNECT_AI_STATE : null;
+    }
+    if (availability.state === "ready" || availability.state === "checking" || availability.state === "retrying" || availability.state === "degraded") {
+      return null;
+    }
+  }
   if (input.localAiReady) return null;
   if (input.canUseCloudAiClassification) return null;
   if (input.billingEntitlement?.status === "locked") {
@@ -70,5 +82,5 @@ export function resolveDashboardAiUnavailableState(input: DashboardAiUnavailable
 }
 
 export function isCloudBillingVariant(variant: DashboardAiUnavailableVariant): boolean {
-  return variant === "trial-ended" || variant === "cloud-plan" || variant === "cloud-billing";
+  return DASHBOARD_CLOUD_BILLING_VARIANTS.some((candidate) => candidate === variant);
 }

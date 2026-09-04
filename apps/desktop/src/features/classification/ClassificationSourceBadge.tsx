@@ -7,12 +7,17 @@ export function ClassificationSourceBadge({
   ai,
   aiCached,
   language = "en",
+  showAutomaticSources = false,
 }: {
   source?: ClassificationSource | string | null;
   ai?: boolean | null;
   aiCached?: boolean | null;
   language?: DisplayLanguage;
+  /** Dev-only provenance inspection. Normal product UI shows only user-owned decisions. */
+  showAutomaticSources?: boolean;
 }) {
+  const userOwnedSource = source === "manual" || source === "rule";
+  if (!userOwnedSource && !showAutomaticSources) return null;
   const isAi = Boolean(ai || source === "llm");
   const label = language === "ko" ? koreanClassificationSourceLabel(source, ai, aiCached) : classificationSourceLabel(source, ai, aiCached);
 

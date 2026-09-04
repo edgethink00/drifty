@@ -10,11 +10,9 @@ describe("project auto-analysis gating contract", () => {
   });
 
   it("keeps the scheduler effect reactive to the project-library gate", () => {
-    const marker = "}, [isPreviewSurface, projectClassificationFeatureEnabled, ";
-    const start = appSource.indexOf(marker);
-    expect(start).toBeGreaterThan(-1);
-    const deps = appSource.slice(start + marker.length, appSource.indexOf("]", start));
-    expect(deps).toContain("hasActiveProject");
+    expect(appSource).toContain(
+      "}, [hasActiveProject, isPreviewSurface, projectAnalysisConnected, projectClassificationFeatureEnabled, startOfDayMinutes]);",
+    );
   });
 
   it("no longer carries a separate project-analysis consent gate", () => {

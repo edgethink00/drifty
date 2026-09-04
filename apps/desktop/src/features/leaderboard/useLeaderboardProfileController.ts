@@ -59,7 +59,11 @@ type UseLeaderboardProfileControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
   readonly isEffectiveAuthRequired: boolean;
   readonly isSupabaseConfigured: boolean;
+  /** False while AI-derived totals are unavailable or reconciling after recovery. */
+  readonly classificationAssessmentReady?: boolean;
   readonly showAiClassificationImpact: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
   readonly signInAnonymously: AuthState["signInAnonymously"];
   readonly startOfDayMinutes: number;
   readonly user: AuthState["user"];
@@ -322,7 +326,10 @@ export function useLeaderboardProfileController({
   isAuthResolved,
   isEffectiveAuthRequired,
   isSupabaseConfigured,
+  classificationAssessmentReady = true,
   showAiClassificationImpact,
+  includeBuiltInHeuristics,
+  builtInHeuristicsUnavailableSince,
   signInAnonymously,
   startOfDayMinutes,
   user,
@@ -364,6 +371,12 @@ export function useLeaderboardProfileController({
   const leaderboardManualActionInFlightRef = useRef(false);
   const leaderboardOptInCacheRef = useRef<LeaderboardOptInCache | null>(null);
   const leaderboardAutoPublishDayRef = useRef<string | null>(null);
+  const classificationAssessmentReadyRef = useRef(classificationAssessmentReady);
+  const classificationAssessmentRevisionRef = useRef(0);
+  if (classificationAssessmentReadyRef.current !== classificationAssessmentReady) {
+    classificationAssessmentReadyRef.current = classificationAssessmentReady;
+    classificationAssessmentRevisionRef.current += 1;
+  }
   const [leaderboardAutoPublishRefreshing, setLeaderboardAutoPublishRefreshing] = useState(false);
   const [leaderboardAutoPublishError, setLeaderboardAutoPublishError] = useState<string | null>(null);
 
@@ -379,8 +392,13 @@ export function useLeaderboardProfileController({
     [leaderboardSegments],
   );
   const leaderboardClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: publishableLeaderboardSegments, includeAiClassifications: showAiClassificationImpact }),
-    [publishableLeaderboardSegments, showAiClassificationImpact],
+    () => ({
+      fallbackCandidates: publishableLeaderboardSegments,
+      includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
+    }),
+    [builtInHeuristicsUnavailableSince, includeBuiltInHeuristics, publishableLeaderboardSegments, showAiClassificationImpact],
   );
   const localRollingFocusSeconds = useMemo(
     () => leaderboardLocalMetricsStatus === "ready" && leaderboardLocalMetricsScopeRef.current === leaderboardLocalMetricsScopeKey
@@ -651,6 +669,8 @@ export function useLeaderboardProfileController({
       timezone: leaderboardTimezone,
       startOfDayMinutes,
       showAiClassificationImpact,
+      includeBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
     });
     const selection = selectAutoPublishPayloads({
       payloads: payloads.payloads,
@@ -667,7 +687,7 @@ export function useLeaderboardProfileController({
       segmentCount: payloads.segmentCount,
       decisions: selection.decisions,
     };
-  }, [leaderboardOwnEntryScopeKey, leaderboardTimezone, leaderboardWindowEndDay, profile?.display_name, profileError, profileLoading, profileReadyUserId, showAiClassificationImpact, startOfDayMinutes, user?.id]);
+  }, [builtInHeuristicsUnavailableSince, includeBuiltInHeuristics, leaderboardOwnEntryScopeKey, leaderboardTimezone, leaderboardWindowEndDay, profile?.display_name, profileError, profileLoading, profileReadyUserId, showAiClassificationImpact, startOfDayMinutes, user?.id]);
 
   const confirmLeaderboardOptInForAutoPublish = useCallback(async (requiresRemoteCheck: boolean) => {
     if (!requiresRemoteCheck && scopedOwnLeaderboardEntry?.opted_in === true) {
@@ -700,7 +720,8 @@ export function useLeaderboardProfileController({
     period: Extract<LeaderboardPeriod, "daily" | "weekly">,
     windowEndDay: string,
   ): Promise<boolean> => {
-    if (!isSupabaseConfigured || shouldUsePreviewData()) return false;
+    const assessmentRevision = classificationAssessmentRevisionRef.current;
+    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUsePreviewData()) return false;
     if (!isPolicySignedIn || !user || leaderboardOwnEntryScopeKey === "signed-out") return false;
     if (leaderboardManualActionInFlightRef.current || leaderboardCheckpointPublishInFlightRef.current) return false;
     if (profileReadyUserId !== user.id || profileLoading || profileError) return false;
@@ -720,7 +741,11 @@ export function useLeaderboardProfileController({
         timezone: leaderboardTimezone,
         startOfDayMinutes,
         showAiClassificationImpact,
+        includeBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince,
       });
+      if (!classificationAssessmentReadyRef.current
+        || classificationAssessmentRevisionRef.current !== assessmentRevision) return false;
       const result = await publishOwnLeaderboardCheckpoint({
         period,
         focusSeconds: payload.focusSeconds,
@@ -734,13 +759,14 @@ export function useLeaderboardProfileController({
     } finally {
       leaderboardCheckpointPublishInFlightRef.current = false;
     }
-  }, [confirmLeaderboardOptInForAutoPublish, isPolicySignedIn, isSupabaseConfigured, leaderboardOwnEntryScopeKey, leaderboardTimezone, profile?.display_name, profileError, profileLoading, profileReadyUserId, showAiClassificationImpact, startOfDayMinutes, user]);
+  }, [builtInHeuristicsUnavailableSince, classificationAssessmentReady, confirmLeaderboardOptInForAutoPublish, includeBuiltInHeuristics, isPolicySignedIn, isSupabaseConfigured, leaderboardOwnEntryScopeKey, leaderboardTimezone, profile?.display_name, profileError, profileLoading, profileReadyUserId, showAiClassificationImpact, startOfDayMinutes, user]);
 
   const syncLeaderboardPublication = useCallback(async (
     reason: LeaderboardAutoPublishReason,
     options: LeaderboardAutoPublishOptions = {},
   ) => {
-    if (!isSupabaseConfigured || shouldUsePreviewData()) return;
+    const assessmentRevision = classificationAssessmentRevisionRef.current;
+    if (!classificationAssessmentReadyRef.current || !isSupabaseConfigured || shouldUsePreviewData()) return;
     if (!isPolicySignedIn || !user) return;
     if (leaderboardOwnEntryScopeKey === "signed-out") return;
     if (leaderboardManualActionInFlightRef.current) return;
@@ -762,12 +788,16 @@ export function useLeaderboardProfileController({
 
     try {
       const prepared = await prepareLeaderboardAutoPublish(options);
-      if (!prepared) return;
+      if (!prepared
+        || !classificationAssessmentReadyRef.current
+        || classificationAssessmentRevisionRef.current !== assessmentRevision) return;
       let publishablePrepared = prepared;
       preparedForFailure = publishablePrepared;
 
       const requiresRemoteCheck = prepared.decisions.some((decision) => decision.requiresRemoteOptInCheck);
       const optInConfirmation = await confirmLeaderboardOptInForAutoPublish(requiresRemoteCheck);
+      if (!classificationAssessmentReadyRef.current
+        || classificationAssessmentRevisionRef.current !== assessmentRevision) return;
       if (!optInConfirmation.optedIn) {
         if (optInConfirmation.failed) {
           writeLeaderboardAutoPublishRecords(buildAutoPublishRecords({
@@ -809,6 +839,8 @@ export function useLeaderboardProfileController({
         preparedForFailure = publishablePrepared;
       }
 
+      if (!classificationAssessmentReadyRef.current
+        || classificationAssessmentRevisionRef.current !== assessmentRevision) return;
       const result = await publishLeaderboardPayloads("auto", publishablePrepared.payloads);
       const publishedAt = new Date().toISOString();
       writeLeaderboardAutoPublishRecords(buildAutoPublishRecords({
@@ -870,6 +902,7 @@ export function useLeaderboardProfileController({
   }, [
     activeLeaderboardPeriod,
     activeTab,
+    classificationAssessmentReady,
     confirmLeaderboardOptInForAutoPublish,
     isPolicySignedIn,
     isSupabaseConfigured,
@@ -945,12 +978,17 @@ export function useLeaderboardProfileController({
   }, []);
 
   const handleLeaderboardOptIn = useCallback(async () => {
+    const assessmentRevision = classificationAssessmentRevisionRef.current;
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
     setProfileError(null);
 
     try {
+      if (!classificationAssessmentReadyRef.current) {
+        setLeaderboardActionError("AI classification is paused. Reconnect AI before joining the leaderboard.");
+        return;
+      }
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
         onAuthRequired();
         setLeaderboardActionError("Sign in with a drifty.so account before joining the beta leaderboard.");
@@ -1045,6 +1083,11 @@ export function useLeaderboardProfileController({
       setProfile(nextProfile);
       setProfileDraft(profileDraftFromProfile(nextProfile, authenticatedUser, authMetadataAvatarUrl));
 
+      if (!classificationAssessmentReadyRef.current
+        || classificationAssessmentRevisionRef.current !== assessmentRevision) {
+        setLeaderboardActionError("AI classification paused before your focus totals were published. Reconnect AI and try again.");
+        return;
+      }
       const result = await publishLeaderboardPeriods({
         mode: "join",
         profileDisplayName: nextProfile.display_name,
@@ -1052,6 +1095,10 @@ export function useLeaderboardProfileController({
         timezone: leaderboardTimezone,
         startOfDayMinutes,
         showAiClassificationImpact,
+        includeBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince,
+        publicationAllowed: () => classificationAssessmentReadyRef.current
+          && classificationAssessmentRevisionRef.current === assessmentRevision,
       });
 
       if (!result.success) {
@@ -1095,7 +1142,7 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, hasRequiredAccountAuth, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
+  }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
   const handleLeaderboardOptOut = useCallback(async () => {
     setLeaderboardActionLoading(true);

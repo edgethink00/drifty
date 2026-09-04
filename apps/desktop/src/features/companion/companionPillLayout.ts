@@ -12,6 +12,7 @@ export type CompanionPillState =
   | "drift"
   | "nudge"
   | "eod"
+  | "eodPending"
   | "eodCompact"
   | "eodMinimal";
 
@@ -31,6 +32,7 @@ export const COMPANION_PILL_SIZES: Record<CompanionPillState, CompanionPillSize>
   /* The clean 72px productivity ring removes 16px of unused outer-disc
      height while preserving the same edge and footer rhythm. */
   eod: { width: 331, height: 480 },
+  eodPending: { width: 331, height: 300 },
   eodCompact: { width: 310, height: 284 },
   eodMinimal: { width: 310, height: 223 },
 };

@@ -483,6 +483,29 @@ describe("CompanionPill native interactions", () => {
     expect(pill?.dataset.eodLayout).toBe("compact");
     expect(pill?.dataset.eodVersion).toBe("minimal");
     expect(onStateChange).toHaveBeenCalledWith("eodMinimal");
+
+    rerender(
+      <CompanionPill
+        peekEvent={null}
+        momentEvent={{
+          ...compactReview,
+          layout: "full",
+          assessment: {
+            state: "pending",
+            route: "cloud",
+            reason: "cloud_trial_expired",
+            recoveryAction: "upgrade",
+          },
+        }}
+        onDismissMoment={vi.fn()}
+        onOpenDashboard={vi.fn()}
+        onOpenSettings={vi.fn()}
+        onStateChange={onStateChange}
+      />,
+    );
+    expect(pill?.dataset.cardState).toBe("eodPending");
+    expect(pill?.dataset.eodAssessment).toBe("pending");
+    expect(onStateChange).toHaveBeenCalledWith("eodPending");
   });
 
   it("opens a milestone destination from its visible CTA on a simple click", () => {

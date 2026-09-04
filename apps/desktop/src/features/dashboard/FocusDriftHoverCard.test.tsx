@@ -18,6 +18,8 @@ const focusDriftPoint: FocusDriftPoint = {
   driftCaptures: 2,
   totalSeconds: 60 * 60,
   trackedSeconds: 60 * 60,
+  classifiedSeconds: 60 * 60,
+  unclassifiedSeconds: 0,
   windowSeconds: 30 * 60,
   focusScore: 50,
   driftScore: 50,

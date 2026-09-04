@@ -18,6 +18,7 @@ export async function buildClassificationMemoryContext(input: {
   readonly useLocalFallback: boolean;
   readonly soulOwnerId?: string | null;
   readonly contextSegments?: readonly ActivitySegment[];
+  readonly observePassiveLearning?: boolean;
 }): Promise<LiveClassificationMemoryContext> {
   const resolvedSoul = input.privacySettings.optional.workProfile
     ? await resolveLivingSoulForClassification(input.useLocalFallback, input.soulOwnerId).catch(() => null)
@@ -44,7 +45,7 @@ export async function buildClassificationMemoryContext(input: {
         input.items.length === 1 ? Date.parse(input.items[0].endedAt) : Date.now(),
       )
     : null;
-  if (resolvedSoul) {
+  if (resolvedSoul && input.observePassiveLearning !== false) {
     input.items.forEach((current) => {
       const episode = episodeByItemId[current.id];
       if (!episode) return;

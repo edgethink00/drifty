@@ -76,6 +76,8 @@ export interface AccountStatsInput {
   readonly windowEndDay: string;
   readonly startOfDayMinutes: number;
   readonly includeAiClassifications: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
 }
 
 function bucketSeconds(durations: ReturnType<typeof buildProductivityDurations>, label: ProductivityLabel): number {
@@ -101,7 +103,12 @@ export function buildAccountStatsPayload(monthSegments: ActivitySegment[], input
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const weekStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "weekly");
   const sod = input.startOfDayMinutes;
-  const options = { fallbackCandidates: monthSegments, includeAiClassifications: input.includeAiClassifications };
+  const options = {
+    fallbackCandidates: monthSegments,
+    includeAiClassifications: input.includeAiClassifications,
+    includeBuiltInHeuristics: input.includeBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
+  };
 
   const focus7d = Math.round(buildRollingFocusSeconds(monthSegments, weekStartDay, input.windowEndDay, options, sod));
   const focusToday = Math.round(buildRollingFocusSeconds(monthSegments, input.windowEndDay, input.windowEndDay, options, sod));

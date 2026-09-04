@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./SidebarCtaSlot";
+import { resolveClassificationAvailability } from "../classification/classificationAvailability";
 
 const activeEntitlement = {
   plan: "individual",
@@ -28,6 +29,30 @@ const baseInput = {
 afterEach(cleanup);
 
 describe("SidebarCtaSlot", () => {
+  it("keeps a ready managed local route out of the expired-Cloud lock state", () => {
+    const billingEntitlement = { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "trial_expired" } as const;
+    const classificationAvailability = resolveClassificationAvailability({
+      route: "local",
+      localProviderStatus: { kind: "connected" },
+      localConsecutiveFailures: 0,
+      localDisconnectConfirmed: false,
+      cloudOnline: true,
+      cloudConfigured: true,
+      cloudAuthenticated: true,
+      billingEntitlement,
+      billingEntitlementLoading: false,
+      billingEntitlementError: null,
+      cloudConnectionCheck: null,
+    });
+
+    expect(resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { issueKind: null, label: "Connected", providerLabel: "Local AI", tone: "ok" },
+      billingEntitlement,
+      classificationAvailability,
+    })).toMatchObject({ kind: "upgrade", alert: null, titleKey: "sidebar.cta.upgrade.localTitle" });
+  });
+
   it("prioritizes a managed model download over billing and AI actions", () => {
     expect(resolveSidebarCtaSlot({
       ...baseInput,

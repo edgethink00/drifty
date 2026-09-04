@@ -906,6 +906,44 @@ describe('domain helpers', () => {
     }, { rules })).toMatchObject({ productivity: 'focus', source: 'manual' });
   });
 
+  it('can stop built-in heuristics without hiding manual, custom-rule, or stored results', () => {
+    const knownApp = { ...segments[0], appName: 'Xcode', bundleId: 'com.apple.dt.xcode' };
+    expect(classifyActivityDetailed(knownApp, { includeBuiltInHeuristics: false })).toMatchObject({
+      category: 'unknown',
+      productivity: 'neutral',
+      source: 'unknown',
+    });
+
+    const rules = [{
+      targetKind: 'app' as const,
+      targetValue: 'Xcode',
+      category: 'learning' as const,
+      productivity: 'focus' as const,
+    }];
+    expect(classifyActivityDetailed(knownApp, { includeBuiltInHeuristics: false, rules })).toMatchObject({
+      category: 'learning',
+      productivity: 'focus',
+      source: 'rule',
+    });
+    expect(classifyActivityDetailed({
+      ...knownApp,
+      classification: { category: 'workspace', productivity: 'focus', source: 'manual', confidence: 1 },
+    }, { includeBuiltInHeuristics: false })).toMatchObject({ source: 'manual' });
+    expect(classifyActivityDetailed({
+      ...knownApp,
+      classification: { category: 'workspace', productivity: 'focus', source: 'llm', confidence: 0.9, aiResult: true },
+    }, { includeBuiltInHeuristics: false })).toMatchObject({ source: 'llm' });
+  });
+
+  it('applies the built-in heuristic cutoff only to newly captured activity', () => {
+    const before = { ...segments[0], id: 'before-cutoff', appName: 'Xcode', bundleId: 'com.apple.dt.xcode', startedAt: '2026-09-04T09:59:59.000Z' };
+    const after = { ...segments[0], id: 'after-cutoff', appName: 'Xcode', bundleId: 'com.apple.dt.xcode', startedAt: '2026-09-04T10:00:00.000Z' };
+    const options = { includeBuiltInHeuristics: false, builtInHeuristicsUnavailableSince: '2026-09-04T10:00:00.000Z' };
+
+    expect(classifyActivityDetailed(before, options)).toMatchObject({ source: 'app-db' });
+    expect(classifyActivityDetailed(after, options)).toMatchObject({ category: 'unknown', source: 'unknown' });
+  });
+
   it('marks reused AI classifications as cached', () => {
     const segment = {
       ...segments[0],
@@ -952,6 +990,15 @@ describe('domain helpers', () => {
       ...vsCode,
       classification: stored,
     })).toMatchObject({ category: 'workspace', productivity: 'focus', source: 'app-db' });
+
+    expect(classifyActivityDetailed({
+      ...vsCode,
+      classification: stored,
+    }, { includeBuiltInHeuristics: false })).toMatchObject({
+      category: 'entertainment',
+      productivity: 'neutral',
+      source: 'stored',
+    });
   });
 
   it('skips disabled rules', () => {

@@ -29,14 +29,29 @@ export interface UseAccountStatsPublisherInput {
   readonly userScopeKey: string;
   readonly startOfDayMinutes: number;
   readonly includeAiClassifications: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
 }
 
 export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): void {
-  const { active, userScopeKey, startOfDayMinutes, includeAiClassifications } = input;
+  const { active, userScopeKey, startOfDayMinutes, includeAiClassifications, includeBuiltInHeuristics, builtInHeuristicsUnavailableSince } = input;
   const inFlightRef = useRef(false);
+  const publicationContextKey = JSON.stringify([
+    active,
+    userScopeKey,
+    startOfDayMinutes,
+    includeAiClassifications,
+    includeBuiltInHeuristics ?? null,
+    builtInHeuristicsUnavailableSince ?? null,
+  ]);
+  const publicationContextRef = useRef({ active, key: publicationContextKey });
+  if (publicationContextRef.current.key !== publicationContextKey) {
+    publicationContextRef.current = { active, key: publicationContextKey };
+  }
 
   const runCycle = useCallback(async () => {
-    if (!active || shouldUsePreviewData() || inFlightRef.current) return;
+    const publicationContext = publicationContextRef.current;
+    if (!publicationContext.active || shouldUsePreviewData() || inFlightRef.current) return;
     inFlightRef.current = true;
     try {
       // Recomputed every run so day rollover is picked up by the next trigger.
@@ -45,12 +60,16 @@ export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): 
         windowEndDay,
         startOfDayMinutes,
         includeAiClassifications,
+        includeBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince,
       });
+      if (publicationContextRef.current !== publicationContext) return;
       const payloadKey = buildAccountStatsPayloadKey(payload);
       const record = findAccountStatsPublishRecord(readAccountStatsPublishRecords(), userScopeKey);
       const decision = shouldPublishAccountStats({ record, payloadKey, now: new Date() });
       if (!decision.shouldPublish) return;
 
+      if (publicationContextRef.current !== publicationContext) return;
       const result = await publishAccountStats(payload);
       recordAccountStatsPublishAttempt({ userScopeKey, payloadKey, success: result.success, now: new Date() });
     } catch {
@@ -58,11 +77,12 @@ export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): 
     } finally {
       inFlightRef.current = false;
     }
-  }, [active, includeAiClassifications, startOfDayMinutes, userScopeKey]);
+  }, [builtInHeuristicsUnavailableSince, includeAiClassifications, includeBuiltInHeuristics, startOfDayMinutes, userScopeKey]);
 
   useEffect(() => {
     // Preview/demo surfaces never publish; skip mounting the timer and listeners entirely.
     if (!active || shouldUsePreviewData()) return undefined;
+    const effectPublicationContext = publicationContextRef.current;
 
     void runCycle();
     const intervalId = window.setInterval(() => {
@@ -81,6 +101,11 @@ export function useAccountStatsPublisher(input: UseAccountStatsPublisherInput): 
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      // Invalidate an in-flight build on unmount even if `active` never had a
+      // chance to render false.
+      if (publicationContextRef.current === effectPublicationContext) {
+        publicationContextRef.current = { active: false, key: `${effectPublicationContext.key}:disposed` };
+      }
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);

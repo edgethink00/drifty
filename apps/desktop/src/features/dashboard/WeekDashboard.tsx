@@ -844,6 +844,7 @@ export function WeekDashboard({
                 entries={productivityRingEntries}
                 totalSeconds={totalSeconds}
                 centerPercent={productivityCenterPercent}
+                meaning="productivity"
                 flowBlocks={[]}
                 appIcons={appIcons}
                 getAppBreakdown={(entry) => buildHoverRows(entry.key, "productivity")}

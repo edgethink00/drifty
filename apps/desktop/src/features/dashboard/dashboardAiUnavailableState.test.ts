@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { BillingEntitlement } from "../billing/billingService";
+import { resolveClassificationAvailability } from "../classification/classificationAvailability";
 import { resolveDashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { buildDashboardAiUnavailablePreviewInput } from "./dashboardAiUnavailablePreview";
 
@@ -14,6 +15,61 @@ const trialExpiredEntitlement = {
 } satisfies BillingEntitlement;
 
 describe("resolveDashboardAiUnavailableState", () => {
+  it("does not show trial recovery when the selected local provider is ready", () => {
+    const classificationAvailability = resolveClassificationAvailability({
+      route: "local",
+      localProviderStatus: { kind: "connected" },
+      localConsecutiveFailures: 0,
+      localDisconnectConfirmed: false,
+      cloudOnline: true,
+      cloudConfigured: true,
+      cloudAuthenticated: true,
+      billingEntitlement: trialExpiredEntitlement,
+      billingEntitlementLoading: false,
+      billingEntitlementError: null,
+      cloudConnectionCheck: null,
+    });
+
+    expect(resolveDashboardAiUnavailableState({
+      billingEntitlement: trialExpiredEntitlement,
+      billingEntitlementError: null,
+      billingEntitlementLoading: false,
+      canUseCloudAiClassification: false,
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      localAiReady: true,
+      classificationAvailability,
+    })).toBeNull();
+  });
+
+  it("keeps an offline Cloud route quiet instead of showing billing recovery", () => {
+    const activeEntitlement = { ...trialExpiredEntitlement, status: "active", canUseApp: true, lockedReason: undefined } as const;
+    const classificationAvailability = resolveClassificationAvailability({
+      route: "cloud",
+      localProviderStatus: { kind: "unconfigured" },
+      localConsecutiveFailures: 0,
+      localDisconnectConfirmed: false,
+      cloudOnline: false,
+      cloudConfigured: true,
+      cloudAuthenticated: true,
+      billingEntitlement: activeEntitlement,
+      billingEntitlementLoading: false,
+      billingEntitlementError: null,
+      cloudConnectionCheck: null,
+    });
+
+    expect(resolveDashboardAiUnavailableState({
+      billingEntitlement: activeEntitlement,
+      billingEntitlementError: null,
+      billingEntitlementLoading: false,
+      canUseCloudAiClassification: false,
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      localAiReady: false,
+      classificationAvailability,
+    })).toBeNull();
+  });
+
   it("routes trial expiration to plan recovery", () => {
     expect(resolveDashboardAiUnavailableState({
       billingEntitlement: trialExpiredEntitlement,

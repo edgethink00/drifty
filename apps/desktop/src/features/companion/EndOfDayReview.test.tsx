@@ -2,12 +2,12 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LegacyEndOfDayReview as EndOfDayReview } from "./EndOfDayReview";
 import {
-  EndOfDayReview,
   buildEndOfDayReviewDailySignals,
   buildEndOfDayReviewSummary,
   type EndOfDayReviewEvent,
-} from "./EndOfDayReview";
+} from "./endOfDayReviewModel";
 
 const reviewDay = "2026-04-06";
 const generatedAt = "2026-04-06T23:58:00.000Z";
@@ -70,6 +70,42 @@ function buildReviewEvent(segments: ActivitySegment[]): EndOfDayReviewEvent {
 afterEach(cleanup);
 
 describe("buildEndOfDayReviewDailySignals", () => {
+  it("does not turn unclassified known-app time into focus while AI is unavailable", () => {
+    const segment = {
+      ...buildSegment({
+        id: "unclassified-xcode",
+        appName: "Xcode",
+        bundleId: "com.apple.dt.Xcode",
+        startHour: 9,
+        durationMinutes: 60,
+        category: "workspace",
+        productivity: "focus",
+      }),
+      classification: undefined,
+    };
+    const summary = buildEndOfDayReviewSummary({
+      day: reviewDay,
+      generatedAt,
+      segments: [segment],
+      classificationOptions: {
+        includeBuiltInHeuristics: false,
+        builtInHeuristicsUnavailableSince: "2026-04-06T00:00:00.000Z",
+      },
+    });
+
+    expect(summary.focusSeconds).toBe(0);
+    expect(summary.driftSeconds).toBe(0);
+    expect(summary.neutralSeconds).toBe(0);
+    expect(summary.unclassifiedSeconds).toBe(60 * 60);
+    expect(summary.categorySummaries).toEqual([
+      expect.objectContaining({ label: "Unknown", durationSeconds: 60 * 60 }),
+    ]);
+
+    render(<EndOfDayReview event={summary} />);
+    expect(screen.getByText("Unclassified")).toBeTruthy();
+    expect(screen.getByText("Neutral").closest("div")?.textContent).toContain("0m");
+  });
+
   it("derives deep runs and the strongest focus hour from local segments", () => {
     const signals = buildEndOfDayReviewDailySignals([
       buildSegment({
@@ -123,6 +159,34 @@ describe("buildEndOfDayReviewDailySignals", () => {
       peakHourLabel: null,
       peakHourFocusSeconds: 0,
     });
+  });
+
+  it("withholds comparison, signals, and leaderboard celebration from a pending assessment", () => {
+    const pending = buildEndOfDayReviewSummary({
+      day: reviewDay,
+      generatedAt,
+      segments: [buildSegment({
+        id: "pending-review",
+        appName: "Code",
+        startHour: 9,
+        durationMinutes: 180,
+        category: "workspace",
+        productivity: "focus",
+      })],
+      isMock: true,
+      assessment: {
+        state: "pending",
+        route: "local",
+        reason: "provider_disconnected",
+        recoveryAction: "retry",
+      },
+    });
+
+    expect(pending.assessment?.state).toBe("pending");
+    expect(pending.highlightLabel).toBeUndefined();
+    expect(pending.comparison).toBeUndefined();
+    expect(pending.dailySignals).toBeUndefined();
+    expect(pending.leaderboardCelebration).toBeUndefined();
   });
 });
 

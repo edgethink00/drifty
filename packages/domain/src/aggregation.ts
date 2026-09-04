@@ -918,6 +918,15 @@ export function classifyActivityDetailed(segment: ActivitySegment, options?: Cla
   // (predefined registry vs keyword hints) and any registry updates win over the
   // snapshot. Rows with a rule id come from user rules and stay authoritative.
   const stampedHeuristic = storedUsable?.source === "rule" && !storedUsable.classificationRuleId;
+  if (storedUsable && stampedHeuristic && !shouldIncludeBuiltInHeuristics(segment, options)) {
+    return detail(
+      { category: storedUsable.category, productivity: storedUsable.productivity },
+      surface,
+      "stored",
+      storedUsable.confidence,
+      storedUsable.reason ?? "Stored built-in classification",
+    );
+  }
   if (storedUsable && !stampedHeuristic) {
     const source: ClassificationSource = storedUsable.source === "llm" || storedUsable.source === "rule" || storedUsable.source === "app-db" || storedUsable.source === "domain-db" || storedUsable.source === "youtube" ? storedUsable.source : "stored";
     return detail(
@@ -930,7 +939,20 @@ export function classifyActivityDetailed(segment: ActivitySegment, options?: Cla
     );
   }
 
+  if (!shouldIncludeBuiltInHeuristics(segment, options)) {
+    return unknownDetail(surface, "Automatic classification is unavailable for this activity");
+  }
+
   return isBrowserActivity(segment) ? classifyBrowserActivity(segment) : classifyAppActivity(segment);
+}
+
+function shouldIncludeBuiltInHeuristics(segment: ActivitySegment, options?: ClassificationOptions): boolean {
+  const unavailableSince = options?.builtInHeuristicsUnavailableSince;
+  if (!unavailableSince) return options?.includeBuiltInHeuristics !== false;
+  const cutoffMs = new Date(unavailableSince).getTime();
+  const segmentStartMs = new Date(segment.startedAt).getTime();
+  if (!Number.isFinite(cutoffMs) || !Number.isFinite(segmentStartMs)) return options?.includeBuiltInHeuristics !== false;
+  return segmentStartMs < cutoffMs;
 }
 
 export function findMatchingClassificationRule(segment: ActivitySegment, rules?: ClassificationRuleOption[]): ClassificationRuleOption | null {

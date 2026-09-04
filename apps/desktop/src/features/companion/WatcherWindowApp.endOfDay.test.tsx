@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { WatcherWindowApp } from "./WatcherWindowApp";
 import type { WatcherWindowEvent } from "./watcherBridge";
 
@@ -47,7 +47,7 @@ const endOfDayReviewEvent: EndOfDayReviewEvent = {
   },
 };
 
-describe("WatcherWindowApp end-of-day review", () => {
+describe("WatcherWindowApp Day Review isolation", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
@@ -58,7 +58,7 @@ describe("WatcherWindowApp end-of-day review", () => {
     document.documentElement.style.colorScheme = "";
   });
 
-  it("renders native end-of-day review events", async () => {
+  it("ignores a legacy-routed Day Review payload", async () => {
     bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
       bridge.showHandler = handler;
       return vi.fn();
@@ -71,106 +71,10 @@ describe("WatcherWindowApp end-of-day review", () => {
       bridge.showHandler?.(endOfDayReviewEvent);
     });
 
-    const review = screen.getByLabelText("Drifty end-of-day review");
-    expect(review).toBeTruthy();
-    expect(screen.queryByLabelText("Drifty watcher check-in")).toBeNull();
-    expect(within(review).getByText("Summary - Today")).toBeTruthy();
-    expect(within(review).queryByText("Evening review")).toBeNull();
-    expect(within(review).getAllByText("2h 15m").length).toBeGreaterThan(0);
-    expect(within(review).getByLabelText("Focus and drift summary")).toBeTruthy();
-    expect(within(review).getByLabelText("End-of-day review tables")).toBeTruthy();
-    expect(within(review).getByLabelText("Most used apps")).toBeTruthy();
-    expect(screen.getByLabelText("Focus breakdown detail")).toBeTruthy();
-    expect(screen.getByLabelText("Neutral breakdown detail")).toBeTruthy();
-    expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
-  });
-
-  it("keeps end-of-day review visible when native interactivity enablement rejects", async () => {
-    bridge.setNativeWatcherInteractive.mockRejectedValueOnce(new Error("notification.is_permission_granted not allowed on window \"watcher-peek\""));
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
-      bridge.showHandler = handler;
-      return vi.fn();
-    });
-
-    render(<WatcherWindowApp />);
-    await act(async () => undefined);
-
-    act(() => {
-      bridge.showHandler?.(endOfDayReviewEvent);
-    });
-    await act(async () => undefined);
-
-    expect(screen.getByLabelText("Drifty end-of-day review")).toBeTruthy();
-    expect(screen.getByText("Summary - Today")).toBeTruthy();
-    expect(screen.getByLabelText("End-of-day review tables")).toBeTruthy();
-    expect(screen.getByLabelText("Category breakdown")).toBeTruthy();
-    expect(screen.getByLabelText("Most used apps")).toBeTruthy();
-    expect(screen.queryByLabelText("Drifty watcher check-in")).toBeNull();
-    expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
-  });
-
-  it("sends typed native actions from end-of-day review buttons", async () => {
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
-      bridge.showHandler = handler;
-      return vi.fn();
-    });
-
-    render(<WatcherWindowApp />);
-    await act(async () => undefined);
-
-    act(() => {
-      bridge.showHandler?.(endOfDayReviewEvent);
-    });
-
-    screen.getByRole("button", { name: /open dashboard/i }).click();
-    screen.getByRole("button", { name: /review settings/i }).click();
-
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenNthCalledWith(1, "openDashboard");
-    expect(screen.queryByRole("button", { name: /view details/i })).toBeNull();
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenNthCalledWith(2, "openNotificationSettings");
-  });
-
-  it("keeps end-of-day review visible when native review actions reject", async () => {
-    bridge.triggerNativeEndOfDayReviewAction.mockRejectedValueOnce(new Error("notification.is_permission_granted not allowed on window \"watcher-peek\""));
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
-      bridge.showHandler = handler;
-      return vi.fn();
-    });
-
-    render(<WatcherWindowApp />);
-    await act(async () => undefined);
-
-    act(() => {
-      bridge.showHandler?.(endOfDayReviewEvent);
-    });
-
-    act(() => {
-      screen.getByRole("button", { name: /open dashboard/i }).click();
-    });
-    await act(async () => undefined);
-
-    expect(screen.getByLabelText("Drifty end-of-day review")).toBeTruthy();
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard");
-  });
-
-  it("dismisses the native end-of-day review from the close button", async () => {
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: WatcherWindowEvent) => void) => {
-      bridge.showHandler = handler;
-      return vi.fn();
-    });
-
-    render(<WatcherWindowApp />);
-    await act(async () => undefined);
-
-    act(() => {
-      bridge.showHandler?.(endOfDayReviewEvent);
-    });
-
-    act(() => {
-      screen.getByRole("button", { name: "Close end-of-day review" }).click();
-    });
-
-    expect(bridge.dismissNativeWatcherPeek).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText("Drifty end-of-day review")).toBeNull();
+    expect(screen.queryByText("Summary - Today")).toBeNull();
+    expect(screen.queryByLabelText("Drifty watcher check-in")).toBeNull();
+    expect(bridge.setNativeWatcherInteractive).not.toHaveBeenCalledWith(true);
+    expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
   });
 });

@@ -1,8 +1,9 @@
 import { classifyActivityDetailed, type ActivityClassificationRecord, type ActivitySegment } from "@drifty/domain";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   BUILT_IN_HEURISTIC_TAXONOMY_VERSION,
   materializeBuiltInHeuristicClassifications,
+  persistBuiltInHeuristicClassifications,
 } from "./heuristicClassificationMaterialization";
 
 const CLASSIFIED_AT = "2026-06-18T00:00:00.000Z";
@@ -165,5 +166,26 @@ describe("materializeBuiltInHeuristicClassifications", () => {
       productivity: "drift",
       source: "youtube",
     }));
+  });
+
+  it("rechecks availability after yielding and before a scheduled batch reaches storage", async () => {
+    const result = materializeBuiltInHeuristicClassifications({
+      classifiedAt: CLASSIFIED_AT,
+      segments: [segment({ id: "late-save", appName: "Xcode", bundleId: "com.apple.dt.xcode" })],
+    });
+    const saveClassifications = vi.fn().mockResolvedValue({ saved: 1 });
+    let checks = 0;
+
+    const saved = await persistBuiltInHeuristicClassifications(
+      result.classifications,
+      saveClassifications,
+      () => {
+        checks += 1;
+        return checks === 1;
+      },
+    );
+
+    expect(saved).toBe(0);
+    expect(saveClassifications).not.toHaveBeenCalled();
   });
 });

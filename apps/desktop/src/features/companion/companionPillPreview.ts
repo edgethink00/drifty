@@ -2,7 +2,7 @@ import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { CompanionReentryEvent } from "./companionReentry";
 import { buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmEvent } from "./driftAlarmEvent";
-import { buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./EndOfDayReview";
+import { buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { buildMockEndOfDayReviewSegments } from "./endOfDayReviewData";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 

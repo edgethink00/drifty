@@ -46,6 +46,8 @@ function makePoint(index: number, x: number, focusY: number): FocusDriftPoint {
     driftCaptures: 0,
     totalSeconds: 0,
     trackedSeconds: 0,
+    classifiedSeconds: 0,
+    unclassifiedSeconds: 0,
     windowSeconds: 30 * 60,
     focusScore: 0,
     driftScore: 0,
@@ -269,6 +271,33 @@ describe("buildSmoothPath", () => {
 });
 
 describe("buildFocusDriftChart", () => {
+  it("leaves an honest curve gap for fully unclassified tracked windows", () => {
+    const unclassifiedSegment: ActivitySegment = {
+      ...makeTimedSegment("unclassified-after-cutoff", 13 * 60, 30),
+      classification: undefined,
+    };
+    const chart = buildFocusDriftChart([
+      makeTimedSegment("focus-before-cutoff", 12 * 60, 30),
+      unclassifiedSegment,
+      makeTimedSegment("focus-after-recovery", 14 * 60, 30),
+    ], "2026-06-13", {
+      builtInHeuristicsUnavailableSince: "2026-06-13T13:00:00",
+    });
+    const gapPoint = chart.points.find((point) => point.bucketStartMinute === 13 * 60);
+
+    expect(gapPoint).toMatchObject({
+      trackedSeconds: 30 * 60,
+      classifiedSeconds: 0,
+      unclassifiedSeconds: 30 * 60,
+    });
+    expect(chart.seriesPointRuns).toHaveLength(2);
+    expect(chart.seriesPointRuns.flat().some((point) => point.id === gapPoint?.id)).toBe(false);
+    expect(chart.focusPath.match(/M/g)).toHaveLength(2);
+    expect(chart.driftPath.match(/M/g)).toHaveLength(2);
+    expect(chart.focusAreaPath.match(/Z/g)).toHaveLength(2);
+    expect(chart.driftAreaPath.match(/Z/g)).toHaveLength(2);
+  });
+
   it("keeps replay reveal position separate from completed chart geometry", () => {
     const chart = buildFocusDriftChart([
       makeTimedSegment("late-focus", 18 * 60, 60),

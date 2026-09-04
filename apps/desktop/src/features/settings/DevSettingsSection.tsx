@@ -66,6 +66,7 @@ type DevSettingsSectionProps = {
   readonly forceChromiumAxExtremeNudgeEnabled: boolean;
   readonly forceFrontmostFallbackCaptureEnabled: boolean;
   readonly deviceSyncPreviewEnabled: boolean;
+  readonly aiAvailabilityGateDevDisabled: boolean;
   readonly webAccountPreviewEnabled: boolean;
   readonly projectClassificationAiReviewEvents: readonly AiReviewEvent[];
   readonly projectClassificationCorrectionsBusy: boolean;
@@ -96,6 +97,7 @@ type DevSettingsSectionProps = {
   readonly onForceChromiumAxExtremeNudgeChange: (enabled: boolean) => void;
   readonly onForceFrontmostFallbackCaptureChange: (enabled: boolean) => void;
   readonly onDeviceSyncPreviewEnabledChange: (enabled: boolean) => void;
+  readonly onAiAvailabilityGateDevDisabledChange: (disabled: boolean) => void;
   readonly onWebAccountPreviewEnabledChange: (enabled: boolean) => void;
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
@@ -141,6 +143,7 @@ export function DevSettingsSection({
   forceChromiumAxExtremeNudgeEnabled,
   forceFrontmostFallbackCaptureEnabled,
   deviceSyncPreviewEnabled,
+  aiAvailabilityGateDevDisabled,
   webAccountPreviewEnabled,
   projectClassificationAiReviewEvents,
   projectClassificationCorrectionsBusy,
@@ -171,6 +174,7 @@ export function DevSettingsSection({
   onForceChromiumAxExtremeNudgeChange,
   onForceFrontmostFallbackCaptureChange,
   onDeviceSyncPreviewEnabledChange,
+  onAiAvailabilityGateDevDisabledChange,
   onWebAccountPreviewEnabledChange,
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
@@ -688,6 +692,15 @@ export function DevSettingsSection({
       {activeSubsection === "uiFlows" ? (
         <div className="settings-block settings-block--dev-preview">
           <h3>Flow previews</h3>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">AI availability gate rollback</div>
+            <div className="desc">Disable the provider-readiness gate and restore legacy built-in classification behavior for diagnosis.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={aiAvailabilityGateDevDisabled} onChange={onAiAvailabilityGateDevDisabledChange} ariaLabel="Disable AI availability gate" />
+          </div>
+        </div>
         <div className="settings-row">
           <div>
             <div className="lbl">Startup loading screen</div>

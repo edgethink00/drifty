@@ -1,5 +1,5 @@
 import { classifyActivityDetailed, logicalDayIsoDateForDate } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, ClassificationOptions, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
@@ -55,14 +55,14 @@ type MutableHistoryRow = {
   searchParts: string[];
 };
 
-export function buildHistoryRows(segments: readonly ActivitySegment[]): readonly HistoryRow[] {
+export function buildHistoryRows(segments: readonly ActivitySegment[], classificationOptions?: ClassificationOptions): readonly HistoryRow[] {
   const rows: HistoryRow[] = [];
   let currentRow: MutableHistoryRow | null = null;
 
   for (const segment of [...segments].sort((left, right) => Date.parse(left.startedAt) - Date.parse(right.startedAt))) {
     if (currentRow === null || !canMergeIntoHistoryRow(currentRow, segment)) {
       if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
-      currentRow = startHistoryRow(segment);
+      currentRow = startHistoryRow(segment, classificationOptions);
       continue;
     }
 
@@ -77,7 +77,7 @@ export function buildHistoryRows(segments: readonly ActivitySegment[]): readonly
   return rows.sort((left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt));
 }
 
-export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], limit: number): HistoryRowsWindow {
+export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], limit: number, classificationOptions?: ClassificationOptions): HistoryRowsWindow {
   const rowLimit = Math.max(0, Math.floor(limit));
   if (rowLimit === 0 || segments.length === 0) return { rows: [], hasMore: segments.length > 0 };
 
@@ -91,18 +91,18 @@ export function buildHistoryRowsWindow(segments: readonly ActivitySegment[], lim
     if (!segment) continue;
 
     if (currentRow === null) {
-      currentRow = startHistoryRow(segment);
+      currentRow = startHistoryRow(segment, classificationOptions);
       continue;
     }
 
     if (canPrependIntoHistoryRow(currentRow, segment)) {
-      prependIntoHistoryRow(currentRow, segment);
+      prependIntoHistoryRow(currentRow, segment, classificationOptions);
       continue;
     }
 
     rows.push(finishHistoryRow(currentRow));
     if (rows.length >= rowLimit) return { rows, hasMore: true };
-    currentRow = startHistoryRow(segment);
+    currentRow = startHistoryRow(segment, classificationOptions);
   }
 
   if (currentRow !== null) rows.push(finishHistoryRow(currentRow));
@@ -139,8 +139,8 @@ export function historyRowTitle(row: HistoryRow): string {
   return row.siteTitle ?? row.windowTitle ?? row.siteDomain ?? row.appName;
 }
 
-function startHistoryRow(segment: ActivitySegment): MutableHistoryRow {
-  const classification = historyClassification(segment);
+function startHistoryRow(segment: ActivitySegment, classificationOptions?: ClassificationOptions): MutableHistoryRow {
+  const classification = historyClassification(segment, classificationOptions);
   return {
     id: `history-row-${segment.id}-${segment.id}`,
     segmentIds: [segment.id],
@@ -192,8 +192,8 @@ function canPrependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegme
     Date.parse(segment.endedAt) === Date.parse(row.startedAt);
 }
 
-function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment): void {
-  const classification = historyClassification(segment);
+function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment, classificationOptions?: ClassificationOptions): void {
+  const classification = historyClassification(segment, classificationOptions);
   row.segmentIds.unshift(segment.id);
   row.startedAt = segment.startedAt;
   row.durationSeconds += segment.durationSeconds;
@@ -226,8 +226,11 @@ function historySearchParts(segment: ActivitySegment): readonly string[] {
   ].filter((part): part is string => Boolean(part));
 }
 
-function historyClassification(segment: ActivitySegment): HistoryClassification {
-  const classification = segment.classification ?? classifyActivityDetailed(segment, { includeAiClassifications: false });
+function historyClassification(segment: ActivitySegment, classificationOptions?: ClassificationOptions): HistoryClassification {
+  const classification = segment.classification ?? classifyActivityDetailed(segment, {
+    ...classificationOptions,
+    includeAiClassifications: false,
+  });
   return {
     category: classification.category,
     productivity: classification.productivity,

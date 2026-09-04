@@ -44,7 +44,9 @@ type WeekDashboardModelInput = {
 };
 
 export type WeekDashboardDayModelCacheSettings = {
+  readonly builtInHeuristicsUnavailableSince?: string | null;
   readonly includeAiClassifications: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
   readonly startOfDayMinutes: number;
 };
 
@@ -116,7 +118,9 @@ export function syncWeekDashboardDayModelCacheSettings(
 ): WeekDashboardDayModelCacheSettings {
   if (
     previousSettings
+    && previousSettings.builtInHeuristicsUnavailableSince === nextSettings.builtInHeuristicsUnavailableSince
     && previousSettings.includeAiClassifications === nextSettings.includeAiClassifications
+    && previousSettings.includeBuiltInHeuristics === nextSettings.includeBuiltInHeuristics
     && previousSettings.startOfDayMinutes === nextSettings.startOfDayMinutes
   ) {
     return previousSettings;

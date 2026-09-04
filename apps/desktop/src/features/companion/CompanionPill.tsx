@@ -38,6 +38,7 @@ export type CompanionPillProps = {
   isTrackingPaused?: boolean;
   onDismissMoment: (reason: CompanionPillDismissReason) => void;
   onOpenDashboard: () => void;
+  onOpenDayReviewAiSettings?: () => void;
   onOpenReentry?: (event: Extract<CompanionPillMomentEvent, { kind: "reentry" }>) => void;
   onOpenMilestoneDestination?: (destination: "leaderboard" | "insights" | "dashboard") => void;
   onOpenSettings: () => void;
@@ -82,6 +83,7 @@ function resolvePillState(
 ): CompanionPillState {
   if (momentEvent) {
     if (momentEvent.kind === "endOfDayReview") {
+      if (momentEvent.assessment?.state === "pending") return "eodPending";
       if (momentEvent.layout === "full") return "eod";
       return momentEvent.layout === "compact" ? "eodCompact" : "eodMinimal";
     }
@@ -106,6 +108,7 @@ export function CompanionPill({
   isTrackingPaused = false,
   onDismissMoment,
   onOpenDashboard,
+  onOpenDayReviewAiSettings,
   onOpenReentry,
   onOpenMilestoneDestination,
   onOpenSettings,
@@ -267,7 +270,7 @@ export function CompanionPill({
      short staged entrance/exit inside that frame, so no resident controls are
      visibly dragged through the changing viewport. */
   const state = resolvePillState(momentEvent);
-  const visualState = state === "eodCompact" || state === "eodMinimal" ? "eod" : state;
+  const visualState = state === "eodPending" || state === "eodCompact" || state === "eodMinimal" ? "eod" : state;
   const isClosingMoment = momentEvent === null && presentMomentEvent !== null;
   const nativeOpeningCompleted = momentEvent !== null
     && (presentsMomentImmediately
@@ -448,6 +451,9 @@ export function CompanionPill({
       data-eod-version={renderedMomentEvent?.kind === "endOfDayReview"
         ? (renderedMomentEvent.layout ?? "minimal")
         : undefined}
+      data-eod-assessment={renderedMomentEvent?.kind === "endOfDayReview"
+        ? renderedMomentEvent.assessment?.state
+        : undefined}
       data-mood={mood}
       data-collapsed-kind={collapsedState.kind}
       data-tier={tier ? String(tier) : undefined}
@@ -484,6 +490,7 @@ export function CompanionPill({
             isDragging={isDragging}
             onDismiss={handleDismissMoment}
             onOpenDashboard={handleOpenMomentDashboard}
+            onOpenAiSettings={onOpenDayReviewAiSettings}
             onOpenReentry={handleOpenReentry}
             onOpenDestination={handleOpenMomentDestination}
             onAction={handleMomentAction}

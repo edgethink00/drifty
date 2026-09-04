@@ -6,7 +6,7 @@ import {
   type FocusEvent,
   type KeyboardEvent,
 } from "react";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { CompanionReentryEvent } from "./companionReentry";
 import {
@@ -219,6 +219,7 @@ export function CompanionPillMoment({
   isDragging = false,
   onDismiss,
   onOpenDashboard,
+  onOpenAiSettings,
   onOpenReentry,
   onOpenDestination,
   onAction,
@@ -230,6 +231,7 @@ export function CompanionPillMoment({
   isDragging?: boolean;
   onDismiss: (reason: CompanionPillDismissReason) => void;
   onOpenDashboard: () => void;
+  onOpenAiSettings?: () => void;
   onOpenReentry?: (event: CompanionReentryEvent) => void;
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
   onAction?: (action: DriftAlarmAction) => void;
@@ -350,6 +352,7 @@ export function CompanionPillMoment({
           event={event}
           onDismiss={() => onDismiss("explicit")}
           onOpenDashboard={onOpenDashboard}
+          onOpenAiSettings={onOpenAiSettings}
         />
       </div>
     );

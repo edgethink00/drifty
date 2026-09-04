@@ -37,6 +37,10 @@ export function CompactProductivityCircleChart({
   // Entries carry classified time only; the percent is a share of that classified
   // total (the unclassified remainder up to totalSeconds is intentionally not shown).
   const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  const unclassifiedSeconds = Math.max(0, totalSeconds - classifiedSeconds);
+  const classificationCoveragePercent = totalSeconds > 0
+    ? Math.round((classifiedSeconds / totalSeconds) * 100)
+    : 0;
   const focusPercent = classifiedSeconds > 0 ? Math.round((focusSeconds / classifiedSeconds) * 100) : 0;
   const circleLabel = formatCompactBarLabel("Productivity", entries, (entry) => productivityLabel(entry.productivity));
   const gap = activeEntries.length > 1 ? 1.6 : 0;
@@ -93,16 +97,25 @@ export function CompactProductivityCircleChart({
           </svg>
           <div className="flow-compact-productivity-circle__center" aria-hidden="true">
             <strong>{focusPercent}%</strong>
+            <span>focus</span>
           </div>
         </div>
-        <div className="flow-compact-split-chart__legend" aria-hidden="true">
-          {summaryEntries.map((entry) => (
-            <span className="flow-compact-split-chart__legend-item" key={entry.productivity}>
-              <span className="flow-compact-split-chart__swatch" style={{ background: PRODUCTIVITY_COLORS[entry.productivity] }} />
-              <span className="flow-compact-split-chart__legend-label">{productivityLabel(entry.productivity)}</span>
-              <span className="flow-compact-split-chart__legend-value">{formatProductivityLegendHours(entry.totalSeconds)}</span>
-            </span>
-          ))}
+        <div className="flow-compact-productivity-circle__details">
+          <div className="flow-compact-split-chart__legend" aria-hidden="true">
+            {summaryEntries.map((entry) => (
+              <span className="flow-compact-split-chart__legend-item" key={entry.productivity}>
+                <span className="flow-compact-split-chart__swatch" style={{ background: PRODUCTIVITY_COLORS[entry.productivity] }} />
+                <span className="flow-compact-split-chart__legend-label">{productivityLabel(entry.productivity)}</span>
+                <span className="flow-compact-split-chart__legend-value">{formatProductivityLegendHours(entry.totalSeconds)}</span>
+              </span>
+            ))}
+          </div>
+          <div className="flow-compact-productivity-circle__coverage">
+            <span>Focus % uses classified time</span>
+            {unclassifiedSeconds > 0 ? (
+              <span>{classificationCoveragePercent}% classified · {formatCompactDurationFromSeconds(unclassifiedSeconds)} unclassified</span>
+            ) : null}
+          </div>
         </div>
       </div>
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} /> : null}

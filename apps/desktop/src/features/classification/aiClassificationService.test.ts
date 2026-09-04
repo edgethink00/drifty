@@ -1016,9 +1016,11 @@ describe("runAiClassification cloud contract", () => {
       expect(result.selectedSegments).toBe(5);
       expect(result.savedRecords).toBe(5);
       expect(invoke).not.toHaveBeenCalled();
-      expect(saveClassifications).toHaveBeenCalledTimes(2);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-90", source: "system", aiResult: false })]);
-      expect(saveClassifications.mock.calls[1]?.[0]).toHaveLength(4);
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(5);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ segmentId: "segment-90", source: "system", aiResult: false }),
+      ]));
     } finally {
       cleanupServiceMocks();
     }
@@ -1667,6 +1669,160 @@ describe("runAiClassification cloud contract", () => {
         usedAiProvider: false,
         connectionEvidence: "failure",
       });
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not save deterministic rows when the selected provider is not ready", async () => {
+    const deterministicSegment = createUnknownSegment(99, {
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Project implementation",
+    });
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([deterministicSegment], { session: null });
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:11434/v1", model: "qwen-test" },
+        allowProviderlessPersistence: false,
+      });
+
+      expect(result).toMatchObject({ status: "empty", selectedSegments: 0, savedRecords: 0 });
+      expect(nativeInvoke).not.toHaveBeenCalled();
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not partially save deterministic rows when the provider transport fails", async () => {
+    const deterministicSegment = createUnknownSegment(99, {
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Project implementation",
+    });
+
+    try {
+      const { runAiClassification, saveClassifications } = await importServiceWithSegments([
+        deterministicSegment,
+        createUnknownSegment(1),
+      ], {
+        session: null,
+        nativeError: "error sending request for url (http://127.0.0.1:11434/v1/chat/completions)",
+      });
+
+      await expect(runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:11434/v1", model: "qwen-test" },
+        allowProviderlessPersistence: false,
+      })).rejects.toThrow("error sending request");
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not partially save deterministic rows when Cloud returns no usable classifications", async () => {
+    const deterministicSegment = createUnknownSegment(99, {
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Project implementation",
+    });
+
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([
+        deterministicSegment,
+        createUnknownSegment(1),
+      ]);
+      invoke.mockReset();
+      invoke.mockResolvedValue({
+        data: { model: "gemini-3.1-flash-lite", results: [] },
+        error: null,
+      });
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        allowProviderlessPersistence: false,
+      });
+
+      expect(result).toMatchObject({
+        status: "error",
+        savedRecords: 0,
+        failureKind: "content",
+        usedAiProvider: true,
+      });
+      expect(invoke).toHaveBeenCalled();
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("does not partially save deterministic rows when local AI returns no usable classifications", async () => {
+    const deterministicSegment = createUnknownSegment(99, {
+      appName: "Visual Studio Code",
+      bundleId: "com.microsoft.VSCode",
+      windowTitle: "Project implementation",
+    });
+
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments([
+        deterministicSegment,
+        createUnknownSegment(1),
+      ], {
+        session: null,
+        nativeRawBody: JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({ results: [] }) } }],
+          usage: { prompt_tokens: 120, completion_tokens: 8 },
+        }),
+      });
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://127.0.0.1:11434/v1", model: "qwen-test" },
+        allowProviderlessPersistence: false,
+      });
+
+      expect(result).toMatchObject({
+        status: "error",
+        savedRecords: 0,
+        failureKind: "content",
+        usedAiProvider: true,
+      });
+      expect(nativeInvoke).toHaveBeenCalled();
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
+  it("drops a completed provider batch when the selected provider changed before commit", async () => {
+    try {
+      const { runAiClassification, invoke, saveClassifications } = await importServiceWithSegments([
+        createUnknownSegment(1),
+      ]);
+      let providerStillSelected = true;
+      invoke.mockImplementationOnce(async () => {
+        providerStillSelected = false;
+        return {
+          data: {
+            model: "gemini-3.1-flash-lite",
+            results: [{
+              id: "segment-1",
+              category: "workspace",
+              productivity: "focus",
+              confidence: 0.9,
+              reason: "Work context",
+            }],
+          },
+          error: null,
+        };
+      });
+
+      const result = await runAiClassification({ day: "2026-05-22" }, 20, {
+        persistenceAllowed: () => providerStillSelected,
+      });
+
+      expect(result).toMatchObject({ status: "empty", savedRecords: 0, usedAiProvider: true });
+      expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
       cleanupServiceMocks();
     }
@@ -2370,15 +2526,17 @@ describe("runAiClassification cloud contract", () => {
       const body = invoke.mock.calls[0]?.[1]?.body as { items: Array<{ id: string; inputFingerprint: string }> };
       expect(body.items).toHaveLength(1);
       expect(body.items[0].id).toBe("segment-2");
-      expect(saveClassifications).toHaveBeenCalledTimes(2);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", category: "utility", aiResult: true })]);
-      expect(saveClassifications.mock.calls[1]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-2", category: "workspace", aiResult: true })]);
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ segmentId: "segment-1", category: "utility", aiResult: true }),
+        expect.objectContaining({ segmentId: "segment-2", category: "workspace", aiResult: true }),
+      ]));
     } finally {
       cleanupServiceMocks();
     }
   });
 
-  it("reports saved reused records when remaining misses cannot use Supabase", async () => {
+  it("does not save reused records when remaining misses cannot use Supabase", async () => {
     const segments = [createUnknownSegment(1), createUnknownSegment(2)];
 
     try {
@@ -2388,15 +2546,13 @@ describe("runAiClassification cloud contract", () => {
       });
       const result = await runAiClassification({ day: "2026-05-22" });
 
-      expect(result.status).toBe("saved");
-      expect(result.selectedSegments).toBe(1);
-      expect(result.savedRecords).toBe(1);
-      expect(result.message).toContain("Saved 1 reused AI");
-      expect(result.message).toContain("Run AI classification for the remaining 1 unknown segment");
+      expect(result.status).toBe("disabled");
+      expect(result.selectedSegments).toBe(0);
+      expect(result.savedRecords).toBe(0);
+      expect(result.message).toContain("Sign in");
       expect(getSession).toHaveBeenCalledTimes(2);
       expect(invoke).not.toHaveBeenCalled();
-      expect(saveClassifications).toHaveBeenCalledTimes(1);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", category: "utility", aiResult: true })]);
+      expect(saveClassifications).not.toHaveBeenCalled();
     } finally {
       cleanupServiceMocks();
     }
@@ -2861,6 +3017,47 @@ describe("runAiClassification cloud contract", () => {
     }
   });
 
+  it("returns a live classification without saving it after the selected provider changes", async () => {
+    const segment = createUnknownSegment(1, {
+      id: "42",
+      appName: "Google Chrome",
+      browserName: "Google Chrome",
+      siteDomain: "youtube.com",
+      siteTitle: "Video",
+      siteUrl: "https://www.youtube.com/watch?v=lecture",
+      youtubeVideoId: "lecture",
+      youtubeCategory: "Entertainment",
+    });
+
+    try {
+      const { classifyLiveActivityWithAi, invoke, saveClassifications } = await importServiceWithSegments([segment], {
+        edgeResult: {
+          category: "entertainment",
+          productivity: "drift",
+          confidence: 0.86,
+          reason: "AI confirms drift video",
+        },
+      });
+      let providerStillSelected = true;
+      const providerResult = await invoke();
+      invoke.mockReset();
+      invoke.mockImplementationOnce(async () => {
+        providerStillSelected = false;
+        return providerResult;
+      });
+
+      const result = await classifyLiveActivityWithAi(segment, {
+        persistLiveResult: true,
+        persistenceAllowed: () => providerStillSelected,
+      });
+
+      expect(result.kind).toBe("classified");
+      expect(saveClassifications).not.toHaveBeenCalled();
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
+
   it("keeps supplied live segment classifications when optional persistence fails", async () => {
     const segment = createUnknownSegment(1, {
       id: "42",
@@ -3110,12 +3307,9 @@ describe("runAiClassification cloud contract", () => {
       expect(invoke).not.toHaveBeenCalled();
       expect(nativeInvoke).not.toHaveBeenCalled();
       expect(getReusableAiClassifications).not.toHaveBeenCalled();
-      expect(saveClassifications).toHaveBeenCalledTimes(2);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([
         expect.objectContaining({ segmentId: "segment-2", source: "rule", category: "entertainment", productivity: "drift", aiResult: false }),
-      ]);
-      expect(saveClassifications.mock.calls[1]?.[0]).toHaveLength(3);
-      expect(saveClassifications.mock.calls[1]?.[0]).toEqual(expect.arrayContaining([
         expect.objectContaining({ segmentId: "segment-1", source: "system", aiResult: false }),
         expect.objectContaining({ segmentId: "segment-3", source: "system", aiResult: false }),
         expect.objectContaining({ segmentId: "segment-4", source: "system", aiResult: false }),
@@ -3141,9 +3335,11 @@ describe("runAiClassification cloud contract", () => {
 
       expect(result.status).toBe("saved");
       expect(invoke).not.toHaveBeenCalled();
-      expect(saveClassifications).toHaveBeenCalledTimes(2);
-      expect(saveClassifications.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-99", aiResult: false, source: "rule" })]);
-      expect(saveClassifications.mock.calls[1]?.[0]).toEqual([expect.objectContaining({ segmentId: "segment-1", aiResult: true, source: "llm" })]);
+      expect(saveClassifications).toHaveBeenCalledTimes(1);
+      expect(saveClassifications.mock.calls[0]?.[0]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ segmentId: "segment-99", aiResult: false, source: "rule" }),
+        expect.objectContaining({ segmentId: "segment-1", aiResult: true, source: "llm" }),
+      ]));
     } finally {
       cleanupServiceMocks();
     }

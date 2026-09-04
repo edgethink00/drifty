@@ -11,6 +11,7 @@ export function renderProductionDevSettings(
 ) {
   const props = {
     activeSubsection: "diagnostics" as const,
+    aiAvailabilityGateDevDisabled: false,
     dashboardAiUnavailablePreview: null,
     dashboardAiUnavailablePreviewCase: "connect-ai",
     sidebarCtaPreviewCase: null,
@@ -76,6 +77,7 @@ export function renderProductionDevSettings(
     onTeamsBetaChange: vi.fn(),
     onProfileBetaChange: vi.fn(),
     onAgentsBetaChange: vi.fn(),
+    onAiAvailabilityGateDevDisabledChange: vi.fn(),
     legacyShellBlurPreviewEnabled: false,
     onLegacyShellBlurPreviewEnabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),

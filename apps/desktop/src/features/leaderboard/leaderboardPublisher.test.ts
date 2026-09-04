@@ -147,6 +147,7 @@ describe("leaderboardPublisher", () => {
       timezone: "Asia/Seoul",
       startOfDayMinutes: 0,
       showAiClassificationImpact: false,
+      publicationAllowed: () => true,
     });
 
     expect(result.success).toBe(true);
@@ -170,6 +171,7 @@ describe("leaderboardPublisher", () => {
       timezone: "Asia/Seoul",
       startOfDayMinutes: 0,
       showAiClassificationImpact: false,
+      publicationAllowed: () => true,
     });
 
     expect(result.success).toBe(true);
@@ -179,6 +181,34 @@ describe("leaderboardPublisher", () => {
       undefined,
       { updateProfile: false },
     );
+  });
+
+  it("does not publish when assessment readiness closes while payloads are being built", async () => {
+    const today = todayIsoDate();
+    let resolveTimeline: ((segments: ActivitySegment[]) => void) | undefined;
+    const timeline = new Promise<ActivitySegment[]>((resolve) => {
+      resolveTimeline = resolve;
+    });
+    let publicationAllowed = true;
+    getTimeline.mockReturnValue(timeline);
+
+    const resultPromise = publishLeaderboardPeriods({
+      mode: "join",
+      profileDisplayName: "Alex",
+      leaderboardWindowEndDay: today,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+      publicationAllowed: () => publicationAllowed,
+    });
+
+    publicationAllowed = false;
+    resolveTimeline?.([makeSegment(today, 3600)]);
+    const result = await resultPromise;
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/classification is paused/i);
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
   it("builds an exact closed weekly checkpoint without replacing it with today", async () => {

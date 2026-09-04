@@ -97,12 +97,6 @@ function axisTickStyle(x: number): FocusDriftAxisTickStyle {
   return { "--focus-drift-axis-x": `${x}%` };
 }
 
-function buildFocusDriftAreaPath(points: readonly FocusDriftPoint[], path: string): string {
-  const first = points[0];
-  const last = points[points.length - 1];
-  return first && last && path ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${path.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z` : "";
-}
-
 /** Horizontal snap reach of the line hover: one 30-minute window on either
  *  side of a tracked point. Beyond that (untracked gaps, the region past the
  *  last window) the cursor is over empty chart, so no card is shown. */
@@ -129,20 +123,12 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     () => chart.points.filter((point) => point.totalSeconds > 0 && isPointRevealed(point, chart)),
     [chart],
   );
-  const measuredPoints = useMemo(
-    () => chart.points.filter((point) => !point.isFuture),
-    [chart.points],
-  );
   const markerX = visibleMarkerXForChart(chart);
   const plotStyle = plotStyleForChart(markerX);
   const shouldRenderMarker = markerX !== null;
   const shouldRenderSeries = chart.hasData;
   const revealClipWidth = revealClipWidthForChart(chart);
   const chartClipPath = revealClipWidth === null ? "url(#focus-drift-chart-bounds)" : "url(#focus-drift-chart-reveal)";
-  const driftMistAreaPath = useMemo(
-    () => buildFocusDriftAreaPath(measuredPoints, chart.driftPath),
-    [chart.driftPath, measuredPoints],
-  );
   const shouldRenderChart = chart.hasData || chart.isLive || chart.revealX !== null;
   const sectionAriaLabel = effectiveLanguage === "en"
     ? chart.revealX !== null && chart.revealTimeLabel
@@ -175,7 +161,8 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     markerX = point.x,
   ): FocusDriftHoverState {
     const yKey = kind === "focus" ? "focusY" : "driftY";
-    const marker = getSmoothPathPointAtX(measuredPoints, yKey, markerX);
+    const seriesRun = chart.seriesPointRuns.find((run) => run.some((candidate) => candidate.id === point.id)) ?? [point];
+    const marker = getSmoothPathPointAtX(seriesRun, yKey, markerX);
 
     return {
       point,
@@ -222,9 +209,18 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     const rightIndex = hoverPoints.findIndex((point) => point.x >= hoverX);
     const nextPoint = hoverPoints[rightIndex] ?? lastPoint;
     const previousPoint = hoverPoints[Math.max(0, rightIndex - 1)] ?? firstPoint;
-    const focusY = getSmoothPathPointAtX(measuredPoints, "focusY", hoverX)?.y
+    const nearestPoint = Math.abs(previousPoint.x - hoverX) <= Math.abs(nextPoint.x - hoverX) ? previousPoint : nextPoint;
+    if (Math.abs(chartX - nearestPoint.x) > HOVER_MAX_X_DISTANCE) {
+      setHover(null);
+      return;
+    }
+    const seriesRun = chart.seriesPointRuns.find((run) => run.some((candidate) => candidate.id === nearestPoint.id)) ?? [nearestPoint];
+    const runFirstPoint = seriesRun[0] ?? nearestPoint;
+    const runLastPoint = seriesRun[seriesRun.length - 1] ?? nearestPoint;
+    const curveX = Math.min(Math.max(hoverX, runFirstPoint.x), runLastPoint.x);
+    const focusY = getSmoothPathPointAtX(seriesRun, "focusY", curveX)?.y
       ?? previousPoint.focusY;
-    const driftY = getSmoothPathPointAtX(measuredPoints, "driftY", hoverX)?.y
+    const driftY = getSmoothPathPointAtX(seriesRun, "driftY", curveX)?.y
       ?? previousPoint.driftY;
     const focusDistance = Math.abs(chartY - focusY);
     const driftDistance = Math.abs(chartY - driftY);
@@ -236,11 +232,6 @@ export const FocusDriftSection = memo(function FocusDriftSection({
     }
 
     const kind: FocusDriftHoverKind = focusDistance <= driftDistance ? "focus" : "drift";
-    const nearestPoint = Math.abs(previousPoint.x - hoverX) <= Math.abs(nextPoint.x - hoverX) ? previousPoint : nextPoint;
-    if (Math.abs(chartX - nearestPoint.x) > HOVER_MAX_X_DISTANCE) {
-      setHover(null);
-      return;
-    }
     // The card describes one 30-minute window, so the dot shares that
     // window's x coordinate. Its y still comes from the rendered spline,
     // never from the raw source control point.
@@ -286,7 +277,7 @@ export const FocusDriftSection = memo(function FocusDriftSection({
                 {shouldRenderSeries ? (
                   <g clipPath={chartClipPath}>
                     <path className="focus-drift__area" d={chart.focusAreaPath} />
-                    <path className="focus-drift__drift-mist" d={driftMistAreaPath} />
+                    <path className="focus-drift__drift-mist" d={chart.driftAreaPath} />
                     <path className="focus-drift__line focus-drift__line--focus" d={chart.focusPath} />
                     <path className="focus-drift__line focus-drift__line--drift" d={chart.driftPath} />
                   </g>

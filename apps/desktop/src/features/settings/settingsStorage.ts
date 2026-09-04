@@ -17,6 +17,8 @@ export const SIDEBAR_COLLAPSED_STORAGE_KEY = "drifty.sidebar.collapsed";
 export const DASHBOARD_BREAKDOWN_OPEN_STORAGE_KEY = "drifty.dashboard.breakdownOpen";
 
 export const AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY = "drifty.dev.showAiClassificationImpact";
+export const AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY = "drifty.dev.disableAiAvailabilityGate";
+export const BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY = "drifty.classification.builtInHeuristicsUnavailableSince.v1";
 
 export const DEV_MODE_STORAGE_KEY = "drifty.dev.mode";
 export const LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY = "drifty.deviceSync.enabled";
@@ -438,6 +440,26 @@ export function retireLegacyDeviceSyncEnabledPreference(): void {
 export function resolveInitialDeviceSyncPreviewEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialAiAvailabilityGateDevDisabled(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY) === "1";
+}
+
+export function resolveInitialBuiltInHeuristicsUnavailableSince(): string | null {
+  if (typeof window === "undefined") return null;
+  const value = window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY);
+  return value && Number.isFinite(new Date(value).getTime()) ? value : null;
+}
+
+export function persistBuiltInHeuristicsUnavailableSince(value: string | null): void {
+  if (typeof window === "undefined") return;
+  if (value && Number.isFinite(new Date(value).getTime())) {
+    window.localStorage.setItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY, value);
+    return;
+  }
+  window.localStorage.removeItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY);
 }
 
 // Off by default (opt-in): the Dev-settings toggle is the sole gate for the web account

@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
 import type { DriftAlarmEvent } from "./driftAlarmEvent";
@@ -31,6 +31,7 @@ export type EndOfDayReviewAction =
   | "viewDetails"
   | "openNotificationSettings"
   | "openSettings"
+  | "openAiSettings"
   | "openLeaderboard"
   | "openTrends"
   | "openActivityDay";
@@ -328,6 +329,7 @@ function isEndOfDayReviewAction(value: unknown): value is EndOfDayReviewAction {
     || value === "viewDetails"
     || value === "openNotificationSettings"
     || value === "openSettings"
+    || value === "openAiSettings"
     || value === "openLeaderboard"
     || value === "openTrends"
     || value === "openActivityDay";

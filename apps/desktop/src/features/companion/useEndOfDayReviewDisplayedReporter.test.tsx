@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import {
   END_OF_DAY_REVIEW_DISPLAY_DWELL_MS,
   reportEndOfDayReviewInteraction,

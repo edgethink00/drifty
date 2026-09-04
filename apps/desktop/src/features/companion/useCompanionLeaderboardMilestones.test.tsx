@@ -87,6 +87,93 @@ describe("useCompanionLeaderboardMilestones", () => {
     expect(mocks.showMilestone).not.toHaveBeenCalled();
   });
 
+  it("stores a recovered weekly result without replaying it as a milestone", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-03T09:05:00+09:00"));
+    mocks.fetchCheckpoint.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        rank: 2,
+        participant_count: 14,
+        display_name: "Drifty",
+        period: "weekly",
+        focus_seconds: 58_000,
+        focus_seconds_7d: 58_000,
+        window_start_date: "2026-07-27",
+        window_end_date: "2026-08-02",
+        timezone: "Asia/Seoul",
+        opted_in: true,
+        updated_at: "2026-08-02T14:00:00.000Z",
+      },
+    });
+
+    const { rerender } = renderHook(
+      (props: { ready: boolean; recoveryPending: boolean }) => useCompanionLeaderboardMilestones({
+        ready: props.ready,
+        recoveryPending: props.recoveryPending,
+        userScopeKey: "user-1",
+        calendarDay: "2026-08-03",
+        startOfDayMinutes: 0,
+        startOfWeek: "monday",
+        announcementsEnabled: true,
+        publishCheckpoint: mocks.publishCheckpoint,
+      }),
+      { initialProps: { ready: false, recoveryPending: true } },
+    );
+
+    rerender({ ready: true, recoveryPending: false });
+
+    await waitFor(() => expect(mocks.fetchCheckpoint).toHaveBeenCalledWith("weekly", "2026-08-02"));
+    expect(mocks.showMilestone).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("drifty.companion.leaderboardCelebrations.v2"))
+      .toContain('"lastWeeklyWindowEndDay":"2026-08-02"');
+  });
+
+  it("keeps a pre-result recovery suppressed until the weekly result becomes final", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-08-03T08:59:00+09:00"));
+    mocks.fetchCheckpoint.mockResolvedValue({
+      success: true,
+      error: null,
+      data: {
+        rank: 2,
+        participant_count: 14,
+        display_name: "Drifty",
+        period: "weekly",
+        focus_seconds: 58_000,
+        focus_seconds_7d: 58_000,
+        window_start_date: "2026-07-27",
+        window_end_date: "2026-08-02",
+        timezone: "Asia/Seoul",
+        opted_in: true,
+        updated_at: "2026-08-02T14:00:00.000Z",
+      },
+    });
+
+    const { rerender } = renderHook(
+      (props: { ready: boolean; recoveryPending: boolean }) => useCompanionLeaderboardMilestones({
+        ready: props.ready,
+        recoveryPending: props.recoveryPending,
+        userScopeKey: "user-1",
+        calendarDay: "2026-08-03",
+        startOfDayMinutes: 0,
+        startOfWeek: "monday",
+        announcementsEnabled: true,
+        publishCheckpoint: mocks.publishCheckpoint,
+      }),
+      { initialProps: { ready: false, recoveryPending: true } },
+    );
+
+    rerender({ ready: true, recoveryPending: false });
+    await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+
+    await waitFor(() => expect(mocks.fetchCheckpoint).toHaveBeenCalledWith("weekly", "2026-08-02"));
+    expect(mocks.showMilestone).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem("drifty.companion.leaderboardCelebrations.v2"))
+      .toContain('"lastWeeklyWindowEndDay":"2026-08-02"');
+  });
+
   it("waits until a late logical day boundary before finalizing the closed week", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-08-03T09:05:00+09:00"));

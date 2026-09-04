@@ -40,6 +40,8 @@ type UseAiSetupControllerResult = {
   readonly aiSetupDialogOpen: boolean;
   readonly localAiClassificationOptions: LocalAiClassificationOptions | null;
   readonly localAiConnectionFingerprint: string | null;
+  /** Consecutive failures for the current provider fingerprint, including the quiet first failure. */
+  readonly localAiConnectionFailureCount: number;
   readonly localAiConnectionProviderLabel: ReturnType<typeof localAiProviderLabel>;
   /** True once the failure is confirmed by repeated probes — gates chrome/status disconnect surfaces. */
   readonly localAiConnectionPersistentFailure: boolean;
@@ -110,6 +112,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   }, [aiConnectionTest.runningFingerprint, currentLocalAiConnectionCheck, localAiConnectionFingerprint, localAiSetup]);
 
   const localAiConnectionPersistentFailure = isEstablishedLocalAiDisconnect(currentLocalAiConnectionCheck);
+  const localAiConnectionFailureCount = currentLocalAiConnectionCheck?.consecutiveFailures ?? 0;
 
   const recordLocalAiClassificationSummary = useCallback((summary: AiClassificationSummary) => {
     if (!localAiConnectionFingerprint) return;
@@ -285,6 +288,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     aiSetupDialogOpen,
     localAiClassificationOptions,
     localAiConnectionFingerprint,
+    localAiConnectionFailureCount,
     localAiConnectionProviderLabel,
     localAiConnectionPersistentFailure,
     localAiMemoryUsageBytes,

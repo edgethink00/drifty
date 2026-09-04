@@ -39,12 +39,14 @@ html[data-surface="companion"] #root {
   --pill-moment-control-size: 26px;
   --p-focus: #4f751e;
   --p-neutral: #9b968b;
+  --p-unclassified: #6f6c65;
   --p-drift: #a34139;
   --pill-rgb: 252, 252, 250;
 }
 :root[data-theme="dark"] .companion-pill-surface {
   --p-focus: #b7d96b;
   --p-neutral: #8f897d;
+  --p-unclassified: #aaa69c;
   --p-drift: #e87568;
   --pill-rgb: 28, 29, 26;
 }
@@ -122,6 +124,34 @@ html[data-surface="companion"] #root {
 }
 .companion-drift-alarm-card--preview .pill button {
   pointer-events: none;
+}
+.companion-day-review-browser-surface {
+  --pill-gutter-x: 0px;
+  --pill-gutter-y: 0px;
+  height: 223px;
+  pointer-events: none;
+  position: fixed;
+  right: var(--space-4);
+  top: var(--space-4);
+  width: 310px;
+  z-index: var(--z-companion-drift-card);
+}
+.companion-day-review-browser-surface[data-layout="compact"] {
+  height: 284px;
+}
+.companion-day-review-browser-surface[data-layout="full"] {
+  height: 480px;
+  width: 331px;
+}
+.companion-day-review-browser-surface[data-assessment="pending"] {
+  height: 300px;
+  width: 331px;
+}
+.companion-day-review-browser-surface .pill {
+  height: 100%;
+  pointer-events: auto;
+  right: 0;
+  top: 0;
 }
 .companion-pill-surface .pill[data-state="eod"] {
   width: 331px;
@@ -563,6 +593,10 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .pill[data-card-state="eod"] {
   --pill-card-width: 331px;
   --pill-card-height: 480px;
+}
+.companion-pill-surface .pill[data-card-state="eodPending"] {
+  --pill-card-width: 331px;
+  --pill-card-height: 300px;
 }
 .companion-pill-surface .pill[data-card-state="eodCompact"] {
   --pill-card-width: 310px;
@@ -1224,6 +1258,36 @@ html[data-surface="companion"] #root {
   display: flex; align-items: center; gap: 14px;
   padding-top: 8px; padding-bottom: 8px;
 }
+.companion-pill-surface .eodv12__pending {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  background: color-mix(in srgb, var(--p-unclassified) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--p-unclassified) 22%, transparent);
+}
+.companion-pill-surface .eodv12__pending[data-tone="trial-ended"] {
+  background: color-mix(in srgb, var(--p-drift) 7%, transparent);
+  border-color: color-mix(in srgb, var(--p-drift) 18%, transparent);
+}
+.companion-pill-surface .eodv12__pending-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+.companion-pill-surface .eodv12__pending b {
+  display: block;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.3;
+}
+.companion-pill-surface .eodv12__pending-action {
+  flex: none;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 10.5px;
+}
 .companion-pill-surface .eodv--12 .eodv6__donut { width: 72px; height: 72px; }
 .companion-pill-surface .eodv12__cats .eod__row { font-size: 13px; gap: 9px; }
 /* the donut's figures read a touch light beside the bold deltas. SF Mono only
@@ -1243,6 +1307,17 @@ html[data-surface="companion"] #root {
 }
 .companion-pill-surface .eodv12__duo b { font-family: var(--font-display); font-size: 17px; font-weight: 760; letter-spacing: -.03em; color: var(--text); font-variant-numeric: tabular-nums; }
 .companion-pill-surface .eodv12__duo .eod__delta { margin: 1px 0 0; }
+.companion-pill-surface .eodv12__apps-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.companion-pill-surface .eodv12__apps-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-soft);
+  font: 600 9.5px/1 var(--font-body);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.companion-pill-surface .eodv12__apps-link:hover { color: var(--text); }
 .companion-pill-surface .eodv12__apps { display: flex; flex-direction: column; gap: 7px; margin-top: 7px; }
 
 /* mirrors the shipped AppUsagePanel row: rank, identity, share bar, figures.
@@ -1352,6 +1427,9 @@ html[data-surface="companion"] #root {
   gap: 11px;
   padding-top: 7px;
   padding-bottom: 7px;
+}
+.companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv12__pending {
+  padding: 10px;
 }
 .companion-pill-surface .pill[data-eod-layout="compact"] .view--eod .eodv6__donut {
   width: 62px;

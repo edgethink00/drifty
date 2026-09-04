@@ -121,6 +121,7 @@ function makeOptions(overrides: Partial<UseFirstDayPreparationOptions> = {}): Us
     setProgress: vi.fn(),
     runAiClassification: vi.fn().mockResolvedValue(emptySummary),
     runAiClassificationUntilEmpty: vi.fn().mockResolvedValue(emptySummary),
+    selectedAiProviderKeyRef: { current: "cloud" },
     ...overrides,
   };
 }
@@ -357,6 +358,41 @@ describe("useFirstDayPreparation", () => {
     expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
+  it("does not finish first-day classification with a provider that changed while waiting", async () => {
+    const selectedAiProviderKeyRef = { current: "local:model-a" };
+    managedAiMocks.getManagedLocalAiStatus.mockResolvedValue({
+      state: "installing",
+      selectedModelId: "drifty-qwen3-5-4b-default",
+      installedModels: [],
+      baseUrl: null,
+      model: null,
+      message: "Downloading…",
+      artifactDir: null,
+      progress: { percent: 44, downloadedBytes: 1_200, totalBytes: 2_700 },
+      errorKind: null,
+      memoryUsageBytes: null,
+    });
+    const options = makeOptions({
+      canUseCloudAiClassificationRef: { current: false },
+      cloudAiSelected: false,
+      managedLocalSelected: true,
+      selectedAiProviderKeyRef,
+    });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(20));
+    await act(async () => {
+      selectedAiProviderKeyRef.current = "local:model-b";
+      await vi.advanceTimersByTimeAsync(1_500);
+      await flushAsync(20);
+    });
+
+    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(options.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+    expect(options.onReveal).not.toHaveBeenCalled();
+    expect(result.current.failure).toBe("classification_incomplete");
+  });
+
   it("pauses when no selected managed model download was ever started", async () => {
     const options = makeOptions({
       canUseCloudAiClassificationRef: { current: false },
@@ -371,6 +407,23 @@ describe("useFirstDayPreparation", () => {
     expect(options.runAiClassification).not.toHaveBeenCalled();
     expect(options.onReveal).not.toHaveBeenCalled();
     expect(result.current.failure).toBe("classification_incomplete");
+  });
+
+  it("does not fall back to Cloud when the selected local route is unconfigured", async () => {
+    const options = makeOptions({
+      browserHistoryImportEnabled: false,
+      canUseCloudAiClassificationRef: { current: true },
+      cloudAiSelected: false,
+      localAiClassificationOptionsRef: { current: null },
+      managedLocalSelected: false,
+    });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(20));
+
+    expect(options.runAiClassification).not.toHaveBeenCalled();
+    expect(options.runAiClassificationUntilEmpty).not.toHaveBeenCalled();
+    expect(options.onReveal).toHaveBeenCalledTimes(1);
   });
 
   it("continues classification when the optional browser history import throws", async () => {

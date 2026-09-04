@@ -25,8 +25,14 @@ describe("ClassificationSourceBadge", () => {
     expect(sourceRule).toContain("color: var(--text-muted);");
   });
 
-  it("treats an LLM source as AI even when the explicit boolean is absent", () => {
-    render(<ClassificationSourceBadge source="llm" />);
+  it("hides automatic provenance in normal product UI", () => {
+    const { container } = render(<ClassificationSourceBadge source="llm" />);
+
+    expect(container.childElementCount).toBe(0);
+  });
+
+  it("keeps automatic provenance available for Dev inspection", () => {
+    render(<ClassificationSourceBadge source="llm" showAutomaticSources />);
 
     const badge = screen.getByText("AI");
     expect(badge.getAttribute("aria-label")).toBe("Classification source: AI");
@@ -35,7 +41,7 @@ describe("ClassificationSourceBadge", () => {
   });
 
   it("keeps cached LLM provenance labeled and accented as AI", () => {
-    render(<ClassificationSourceBadge source="llm" aiCached />);
+    render(<ClassificationSourceBadge source="llm" aiCached showAutomaticSources />);
 
     const badge = screen.getByText("AI cache");
     expect(badge.getAttribute("aria-label")).toBe("Classification source: AI cache");
@@ -43,10 +49,18 @@ describe("ClassificationSourceBadge", () => {
   });
 
   it("keeps predefined provenance visually compact without losing its accessible meaning", () => {
-    render(<ClassificationSourceBadge source="domain-db" />);
+    render(<ClassificationSourceBadge source="domain-db" showAutomaticSources />);
 
     const badge = screen.getByText("Predefined");
     expect(badge.getAttribute("aria-label")).toBe("Classification source: Predefined");
     expect(badge.classList.contains("classification-source-badge--ai")).toBe(false);
+  });
+
+  it("shows only manual and custom-rule badges by default", () => {
+    const { rerender } = render(<ClassificationSourceBadge source="manual" />);
+    expect(screen.getByText("Manual")).toBeTruthy();
+
+    rerender(<ClassificationSourceBadge source="rule" language="ko" />);
+    expect(screen.getByText("사용자 규칙")).toBeTruthy();
   });
 });

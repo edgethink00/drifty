@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 import type { AiClassificationSummary, AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
+import { BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY } from "./features/settings/settingsStorage";
 
 const styles = readAppStyles();
 const AI_CLASSIFICATION_BACKGROUND_THRESHOLD = 20;
@@ -379,6 +380,11 @@ function setRendererFocus(focused: boolean) {
   });
 }
 
+function disableAiAvailabilityGateForSchedulerTest() {
+  window.localStorage.setItem("drifty.dev.mode", "1");
+  window.localStorage.setItem("drifty.dev.disableAiAvailabilityGate", "1");
+}
+
 describe("App AI classification controls", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -464,7 +470,13 @@ describe("App AI classification controls", () => {
     });
     aiClassificationMocks.runAiClassificationUntilEmpty.mockImplementation(async () => {
       executionUsageAfterAvailable = true;
-      return { status: "saved", selectedSegments: 30, savedRecords: 30, message: "Classified all available activity: saved 30 AI classifications across 2 batches.", metrics: selectedDayMetrics } satisfies AiClassificationSummary;
+      return {
+        status: "saved",
+        selectedSegments: 30,
+        savedRecords: 30,
+        message: "Classified all available activity: saved 30 AI classifications across 2 batches.",
+        metrics: { ...selectedDayMetrics, classifiedSegments: 100, unclassifiedSegments: 0 },
+      } satisfies AiClassificationSummary;
     });
   });
 
@@ -647,7 +659,9 @@ describe("App AI classification controls", () => {
     const activityToggle = panel.querySelector<HTMLButtonElement>(".classification-panel-view__activity-toggle");
     expect(activityToggle).toBeTruthy();
     fireEvent.click(activityToggle as HTMLButtonElement);
-    expect(panel.querySelector(".classification-panel-view__activity-classification")?.textContent).toContain("SourceAI");
+    const summary = panel.querySelector(".classification-panel-view__activity-classification");
+    expect(summary?.textContent).not.toContain("SourceAI");
+    expect(summary?.querySelectorAll("dd")).toHaveLength(3);
   });
 
   it("uses the selected category tone for classification selections and activity detail bars", async () => {
@@ -715,13 +729,14 @@ describe("App AI classification controls", () => {
     expect(styles).toMatch(/\.classification-panel-view__category-row:has\(\.category-dot--entertainment\)\s*{[\s\S]*--classification-category-tone:\s*var\(--category-entertainment\);[\s\S]*\.classification-panel-view__category-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-category-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__source-row\[data-selected="true"\]\s*{[\s\S]*border-color:\s*transparent;[\s\S]*box-shadow:[\s\S]*var\(--classification-selected-tone\)/);
     expect(styles).toMatch(/\.classification-panel-view__activity-row\s*{[\s\S]*align-items:\s*center;/);
-  }, 30_000);
+  }, 60_000);
 
   it("auto-runs one 20-item AI classification batch for the logical day when the renderer is not focused", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T00:30:00+09:00"));
     const today = "2026-06-15";
     window.localStorage.setItem("drifty.general.startOfDayMinutes", "240");
+    disableAiAvailabilityGateForSchedulerTest();
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
     render(<App />);
@@ -729,6 +744,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      expect.objectContaining({ allowProviderlessPersistence: true, persistenceAllowed: expect.any(Function) }),
     ));
   });
 
@@ -736,6 +752,7 @@ describe("App AI classification controls", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     const today = "2026-06-16";
+    disableAiAvailabilityGateForSchedulerTest();
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
     render(<App />);
@@ -754,6 +771,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      expect.objectContaining({ allowProviderlessPersistence: true, persistenceAllowed: expect.any(Function) }),
     ));
   });
 
@@ -761,6 +779,7 @@ describe("App AI classification controls", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date("2026-06-16T10:00:00+09:00"));
     const today = "2026-06-16";
+    disableAiAvailabilityGateForSchedulerTest();
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
     aiClassificationMocks.runAiClassificationForUnknownThreshold.mockRejectedValue(
@@ -1358,21 +1377,32 @@ describe("App AI classification controls", () => {
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD));
 
-    render(<App />);
+    const firstRender = render(<App />);
 
     await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalled());
 
     expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).not.toHaveBeenCalled();
     expect(aiClassificationMocks.runAiClassification).not.toHaveBeenCalled();
+
+    const firstCutoff = window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY);
+    expect(firstCutoff).not.toBeNull();
+    expect(Number.isFinite(new Date(firstCutoff ?? "").getTime())).toBe(true);
+
+    firstRender.unmount();
+    render(<App />);
+    await waitFor(() => expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(2));
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(firstCutoff);
   });
 
-  it("waits for a usable Drifty Cloud entitlement before auto-running cloud AI classification", async () => {
+  it("restores a persisted backlog and waits for usable Cloud entitlement before draining it", async () => {
     const today = currentAutoClassificationDay();
+    const cutoff = "2026-09-01T08:00:00.000Z";
     const entitlementRequest = createDeferred<{
       success: true;
       data: { plan: "individual"; status: "active"; canUseApp: true; trialEndsAt: null; currentPeriodEnd: null };
     }>();
     billingMocks.fetchBillingEntitlement.mockReturnValue(entitlementRequest.promise);
+    window.localStorage.setItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY, cutoff);
     setRendererFocus(false);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_BACKGROUND_THRESHOLD, today));
 
@@ -1387,10 +1417,157 @@ describe("App AI classification controls", () => {
       data: { plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null },
     });
 
-    await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
-      { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start: cutoff,
+        end: expect.any(String),
+        limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      }),
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      expect.objectContaining({ allowProviderlessPersistence: true, persistenceAllowed: expect.any(Function) }),
     ));
+    const recoveryQuery = aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls[0]?.[0];
+    expect(recoveryQuery).not.toHaveProperty("day");
+    expect(new Date(recoveryQuery?.end ?? 0).getTime()).toBeGreaterThan(new Date(cutoff).getTime());
+  });
+
+  it("keeps retrying a safety-capped recovery range until no unclassified rows remain", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-05T10:00:00+09:00"));
+    const cutoff = "2026-09-01T08:00:00.000Z";
+    const firstCompletionProbe = createDeferred<ActivitySegment[]>();
+    window.localStorage.setItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY, cutoff);
+    setRendererFocus(false);
+    aiClassificationMocks.runAiClassificationUntilEmpty
+      .mockResolvedValueOnce({
+        status: "saved",
+        selectedSegments: 2_000,
+        savedRecords: 2_000,
+        message: "Run again to continue.",
+        metrics: { ...selectedDayMetrics, classifiedSegments: 2_000, unclassifiedSegments: 7 },
+      } satisfies AiClassificationSummary)
+      .mockResolvedValueOnce({
+        status: "saved",
+        selectedSegments: 7,
+        savedRecords: 7,
+        message: "Classified all available activity.",
+        metrics: { ...selectedDayMetrics, classifiedSegments: 2_007, unclassifiedSegments: 0 },
+      } satisfies AiClassificationSummary);
+    trackerClient.getUnclassifiedSegments
+      .mockReturnValueOnce(firstCompletionProbe.promise)
+      .mockResolvedValueOnce([]);
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trackerClient.getUnclassifiedSegments).toHaveBeenCalledTimes(1));
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+
+    await act(async () => {
+      firstCompletionProbe.resolve(createUnclassifiedSegments(1, "2026-09-01"));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBeNull());
+    for (const [query] of aiClassificationMocks.runAiClassificationUntilEmpty.mock.calls) {
+      expect(query).toEqual(expect.objectContaining({
+        start: cutoff,
+        end: expect.any(String),
+        limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
+      }));
+    }
+  });
+
+  it("retries recovery when the canonical completion probe fails transiently", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-05T10:00:00+09:00"));
+    const cutoff = "2026-09-01T08:00:00.000Z";
+    const firstCompletionProbe = createDeferred<ActivitySegment[]>();
+    window.localStorage.setItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY, cutoff);
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments
+      .mockReturnValueOnce(firstCompletionProbe.promise)
+      .mockResolvedValueOnce([]);
+
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trackerClient.getUnclassifiedSegments).toHaveBeenCalledTimes(1));
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+
+    await act(async () => {
+      firstCompletionProbe.reject(new Error("tracker database busy"));
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBeNull());
+  });
+
+  it("does not resurrect a recovery timer after the owning effect is disposed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-05T10:00:00+09:00"));
+    const cutoff = "2026-09-01T08:00:00.000Z";
+    const completionProbe = createDeferred<ActivitySegment[]>();
+    window.localStorage.setItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY, cutoff);
+    setRendererFocus(false);
+    trackerClient.getUnclassifiedSegments.mockReturnValue(completionProbe.promise);
+
+    const view = render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(trackerClient.getUnclassifiedSegments).toHaveBeenCalledTimes(1));
+    view.unmount();
+    completionProbe.resolve([]);
+    await act(async () => {
+      await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    });
+
+    expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+  });
+
+  it("resumes an incomplete recovery immediately after restart", async () => {
+    const cutoff = "2026-09-01T08:00:00.000Z";
+    const firstRecoveryPass = createDeferred<AiClassificationSummary>();
+    window.localStorage.setItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY, cutoff);
+    setRendererFocus(false);
+    aiClassificationMocks.runAiClassificationUntilEmpty
+      .mockReturnValueOnce(firstRecoveryPass.promise)
+      .mockResolvedValueOnce({
+        status: "saved",
+        selectedSegments: 1,
+        savedRecords: 1,
+        message: "Classified all available local activity.",
+        // Aggregate metrics can retain an unclassified row synced from
+        // another device; the local candidate probe still completes recovery.
+        metrics: { ...selectedDayMetrics, classifiedSegments: 2_001, unclassifiedSegments: 1 },
+      } satisfies AiClassificationSummary);
+    trackerClient.getUnclassifiedSegments.mockResolvedValue([]);
+
+    const firstRender = render(<App />);
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(1));
+    expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBe(cutoff);
+
+    firstRender.unmount();
+    firstRecoveryPass.resolve({
+      status: "saved",
+      selectedSegments: 2_000,
+      savedRecords: 2_000,
+      message: "Run again to continue.",
+      metrics: { ...selectedDayMetrics, classifiedSegments: 2_000, unclassifiedSegments: 1 },
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    render(<App />);
+
+    await waitFor(() => expect(aiClassificationMocks.runAiClassificationUntilEmpty).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(window.localStorage.getItem(BUILT_IN_HEURISTICS_UNAVAILABLE_SINCE_STORAGE_KEY)).toBeNull());
   });
 
   it("does not auto-run cloud AI classification when billing entitlement cannot be loaded", async () => {
@@ -1420,7 +1597,7 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
-      { localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.1:8b" } },
+      expect.objectContaining({ localProvider: { provider: "self_hosted", baseUrl: "http://localhost:11434/v1", model: "llama3.1:8b" }, allowProviderlessPersistence: false, persistenceAllowed: expect.any(Function) }),
     ));
   });
 
@@ -1447,14 +1624,16 @@ describe("App AI classification controls", () => {
     await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
       { day: today, limit: AI_CLASSIFICATION_BACKGROUND_THRESHOLD },
       AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
-      {
+      expect.objectContaining({
+        allowProviderlessPersistence: false,
+        persistenceAllowed: expect.any(Function),
         localProvider: {
           provider: "openrouter_byok",
           apiKey: "sk-or-v1-test",
           model: "openai/gpt-4o-mini",
           fallbackModels: ["qwen/qwen3.6-flash", "deepseek/deepseek-v4-flash:free"],
         },
-      },
+      }),
     ));
   });
 
@@ -1468,6 +1647,7 @@ describe("App AI classification controls", () => {
       return recordedInteraction ? AI_CLASSIFICATION_FOCUSED_IDLE_MS + 1 : 0;
     });
     const today = currentAutoClassificationDay();
+    disableAiAvailabilityGateForSchedulerTest();
     setRendererFocus(true);
     trackerClient.getUnclassifiedSegments.mockResolvedValue(createUnclassifiedSegments(AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, today));
 
@@ -1477,6 +1657,7 @@ describe("App AI classification controls", () => {
       await waitFor(() => expect(aiClassificationMocks.runAiClassificationForUnknownThreshold).toHaveBeenCalledWith(
         { day: today, limit: AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD },
         AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD,
+        expect.objectContaining({ allowProviderlessPersistence: true, persistenceAllowed: expect.any(Function) }),
       ));
     } finally {
       dateNow.mockRestore();

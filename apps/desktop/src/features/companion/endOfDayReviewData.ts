@@ -1,4 +1,4 @@
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent, EndOfDayReviewPendingAssessment } from "./endOfDayReviewModel";
 import { isBrowserHistoryImportSegment } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, AppIconMap, AppIdentity, ProductivityLabel } from "@drifty/domain";
 import {
@@ -11,6 +11,8 @@ export type EndOfDayReviewSummaryInput = {
   generatedAt: string;
   segments: ActivitySegment[];
   leaderboardCelebration?: LeaderboardCelebration;
+  /** `null` explicitly previews the ordinary fully assessed state. */
+  assessment?: EndOfDayReviewPendingAssessment | null;
   isMock?: boolean;
 };
 
@@ -215,4 +217,14 @@ export function buildMockEndOfDayReviewSegments(day: string): ActivitySegment[] 
       productivity: "drift",
     }),
   ];
+}
+
+/** Review-only fixture: AI drops at 14:20 while raw tracking continues. */
+export function buildMockPendingEndOfDayReviewSegments(day: string): ActivitySegment[] {
+  const unavailableAt = new Date(`${day}T14:20:00`).getTime();
+  return buildMockEndOfDayReviewSegments(day).map((segment) => (
+    new Date(segment.startedAt).getTime() >= unavailableAt
+      ? { ...segment, classification: undefined }
+      : segment
+  ));
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ActivitySegment, AppIconMap } from "@drifty/domain";
+import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty/domain";
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
@@ -10,6 +10,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 
 type HistoryViewProps = {
   readonly appIcons: AppIconMap;
+  readonly classificationOptions?: ClassificationOptions;
   readonly deleting: boolean;
   readonly hasMoreSegments?: boolean;
   readonly initialLoading?: boolean;
@@ -73,6 +74,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
 
 export function HistoryView({
   appIcons,
+  classificationOptions,
   deleting,
   hasMoreSegments = false,
   initialLoading = false,
@@ -104,12 +106,12 @@ export function HistoryView({
   }, [onSearchQueryChange]);
 
   const recentHistoryWindow = useMemo(
-    () => isSearching ? null : buildHistoryRowsWindow(segments, renderLimit),
-    [isSearching, renderLimit, segments],
+    () => isSearching ? null : buildHistoryRowsWindow(segments, renderLimit, classificationOptions),
+    [classificationOptions, isSearching, renderLimit, segments],
   );
   const searchableRows = useMemo(
-    () => isSearching ? buildHistoryRows(segments) : EMPTY_HISTORY_ROWS,
-    [isSearching, segments],
+    () => isSearching ? buildHistoryRows(segments, classificationOptions) : EMPTY_HISTORY_ROWS,
+    [classificationOptions, isSearching, segments],
   );
 
   const visibleRows = useMemo(() => (

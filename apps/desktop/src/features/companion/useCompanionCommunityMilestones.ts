@@ -11,11 +11,13 @@ import { isTauriRuntime, showNativeCompanionMilestone } from "./watcherBridge";
 
 export function useCompanionCommunityMilestones({
   ready,
+  recoveryPending = false,
   day,
   focusSecondsToday,
   announcementsEnabled,
 }: {
   readonly ready: boolean;
+  readonly recoveryPending?: boolean;
   readonly day: string;
   readonly focusSecondsToday: number;
   readonly announcementsEnabled: boolean;
@@ -23,12 +25,22 @@ export function useCompanionCommunityMilestones({
   const [model, setModel] = useState<CommunityFocusPercentileModel | null>(null);
   const progressRef = useRef(readCompanionCommunityMilestones());
   const deliveryInFlightRef = useRef(false);
+  const suppressRecoveredDayRef = useRef(false);
+
+  useEffect(() => {
+    if (recoveryPending) suppressRecoveredDayRef.current = true;
+  }, [recoveryPending]);
 
   useEffect(() => {
     let disposed = false;
     if (!ready || progressRef.current.celebratedDailyTopTen) {
       setModel(null);
       return undefined;
+    }
+    if (suppressRecoveredDayRef.current) {
+      suppressRecoveredDayRef.current = false;
+      progressRef.current = { ...progressRef.current, suppressedDay: day };
+      persistCompanionCommunityMilestones(progressRef.current);
     }
     void loadCommunityFocusPercentileModels().then((models) => {
       if (!disposed) setModel(models.daily);

@@ -100,6 +100,28 @@ describe("useCompanionCommunityMilestones", () => {
     expect(mocks.showMilestone).not.toHaveBeenCalled();
   });
 
+  it("uses the recovered day as a baseline instead of replaying a paused milestone", async () => {
+    mocks.loadModels.mockResolvedValue(MODELS);
+    const { rerender } = renderHook(
+      (props: { ready: boolean; recoveryPending: boolean }) => useCompanionCommunityMilestones({
+        ready: props.ready,
+        recoveryPending: props.recoveryPending,
+        day: "2026-08-28",
+        focusSecondsToday: 20 * 60 * 60,
+        announcementsEnabled: true,
+      }),
+      { initialProps: { ready: false, recoveryPending: true } },
+    );
+
+    rerender({ ready: true, recoveryPending: false });
+
+    await waitFor(() => expect(mocks.loadModels).toHaveBeenCalledOnce());
+    await waitFor(() => expect(window.localStorage.getItem(
+      "drifty.companion.communityMilestones.v1",
+    )).toContain('"suppressedDay":"2026-08-28"'));
+    expect(mocks.showMilestone).not.toHaveBeenCalled();
+  });
+
   it("retries on a later day after native delivery fails", async () => {
     mocks.loadModels.mockResolvedValue(MODELS);
     mocks.showMilestone.mockResolvedValueOnce(false).mockResolvedValueOnce(true);

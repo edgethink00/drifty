@@ -1,7 +1,7 @@
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
 import {
   buildAppUsageSummaries,
   buildFlowBlocksForIntervals,
@@ -23,10 +23,12 @@ import {
 } from "@drifty/domain";
 import logoUrl from "./assets/drifty-mark.svg";
 import {
+  DASHBOARD_CLOUD_BILLING_VARIANTS,
   resolveDashboardAiUnavailableState,
   isCloudBillingVariant,
 } from "./features/dashboard/dashboardAiUnavailableState";
 import {
+  clearDashboardAiRecoveryDismissal,
   isDashboardAiRecoveryDismissed,
   storeDashboardAiRecoveryDismissal,
 } from "./features/dashboard/dashboardAiRecoveryDismissal";
@@ -75,6 +77,7 @@ import { SiteIconProvider } from "./components/SiteIconContext";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, describeLocalAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
+import { applyClassificationAvailabilityToAiStatus, resolveBuiltInHeuristicsUnavailableSince, resolveClassificationAvailability, resolveProjectAnalysisConnected, shouldRunClassificationRecoveryBatch } from "./features/classification/classificationAvailability";
 import { useClassificationRulesController } from "./features/classification/useClassificationRulesController";
 import { AvailableUpdateDialog } from "./features/updates/AvailableUpdateDialog";
 import { TopbarUpdateButton } from "./features/updates/TopbarUpdateButton";
@@ -93,7 +96,7 @@ import {
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthogClient";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
-import { DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, isDevOnboardingForceOpenEnabled } from "./appFeatureSwitches";
+import { AI_AVAILABILITY_CLASSIFICATION_GATE_ENABLED, DEV_SETTINGS_ENABLED, END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED, END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED, isDevOnboardingBypassEnabled, isDevOnboardingForceOpenEnabled } from "./appFeatureSwitches";
 import { useAuth } from "./features/auth/AuthContext";
 import type { AuthConnectionStatus } from "./features/auth/authConnectionStatus";
 import { AuthModal } from "./features/auth/AuthModal";
@@ -180,11 +183,12 @@ import {
   type CompanionResidentPreference,
 } from "./features/companion/companionPillSettings";
 import { recordCompanionEngagementMetric } from "./features/companion/companionEngagementMetrics";
+import { CompanionDayReviewBrowserSurface } from "./features/companion/CompanionDayReviewBrowserSurface";
 import {
-  EndOfDayReview,
   buildEndOfDayReviewSummary,
+  sumPendingEndOfDayReviewSeconds,
   type EndOfDayReviewEvent,
-} from "./features/companion/EndOfDayReview";
+} from "./features/companion/endOfDayReviewModel";
 import {
   buildBreakReturnAlarmEvent,
   buildDriftAlarmEvent,
@@ -325,7 +329,7 @@ import { toLeaderboardCelebration, type LeaderboardCelebration } from "./feature
 import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
 import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
-import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
+import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
 import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
@@ -366,7 +370,7 @@ import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedL
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
 import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
-import { AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
+import { AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
 import type { AppThemeColorOverrides, CategoryColorOverrides, DemoDashboardReplaySettings, EnhancedContextSettings, EnhancedContextSourceFamily, StartOfWeek, ThemeMode } from "./features/settings/settingsStorage";
 import { CATEGORY_COLORS, categoryLabel, productivityLabel } from "./lib/activityLabels";
@@ -748,6 +752,7 @@ export default function App() {
   const [deviceSyncPreferenceOwnerId, setDeviceSyncPreferenceOwnerId] = useState<string | null>(null);
   const deviceSyncToggleGenerationRef = useRef(0);
   const [devDeviceSyncPreviewEnabled, setDevDeviceSyncPreviewEnabled] = useState(resolveInitialDeviceSyncPreviewEnabled);
+  const [aiAvailabilityGateDevDisabled, setAiAvailabilityGateDevDisabled] = useState(resolveInitialAiAvailabilityGateDevDisabled);
   const [deviceTimelineFilter, setDeviceTimelineFilter] = useState<DeviceTimelineFilter>("all");
   // Dev-only gate for the web account preview: embed detail-share toggles on the Profile
   // tab + background publishing of the aggregate account summary for drifty.so.
@@ -941,6 +946,7 @@ export default function App() {
     aiSetupDialogOpen,
     localAiClassificationOptions,
     localAiConnectionFingerprint,
+    localAiConnectionFailureCount,
     localAiConnectionProviderLabel,
     localAiConnectionPersistentFailure,
     localAiMemoryUsageBytes,
@@ -1248,6 +1254,11 @@ export default function App() {
       return;
     }
 
+    if (action === "openAiSettings") {
+      openAiSetupSettings();
+      return;
+    }
+
     if (action === "openNotificationSettings") {
       openEndOfDayReviewSettings();
       return;
@@ -1264,7 +1275,7 @@ export default function App() {
     }
 
     openEndOfDayReviewDashboard();
-  }, [navigateToTab, openCompanionNotificationSettings, openEndOfDayReviewDashboard, openEndOfDayReviewSettings, startOfDayMinutes]);
+  }, [navigateToTab, openAiSetupSettings, openCompanionNotificationSettings, openEndOfDayReviewDashboard, openEndOfDayReviewSettings, startOfDayMinutes]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalShowsGoogle, setAuthModalShowsGoogle] = useState(true);
   const [authModalIntent, setAuthModalIntent] = useState<"default" | "promo">("default");
@@ -1337,64 +1348,6 @@ export default function App() {
     setAuthModalShowsGoogle(false);
     setAuthModalOpen(true);
   }, []);
-  const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({
-      fallbackCandidates: segments,
-      includeAiClassifications: showAiClassificationImpact,
-      rules: classificationRules,
-    }),
-    [classificationRules, segments, showAiClassificationImpact],
-  );
-  const companionFocusRecordClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({
-      includeAiClassifications: showAiClassificationImpact,
-      rules: classificationRules,
-    }),
-    [classificationRules, showAiClassificationImpact],
-  );
-  const materializeBuiltInHeuristicTimeline = useCallback((sourceSegments: ActivitySegment[]) => materializeBuiltInHeuristicClassifications({
-    classificationOptions: { fallbackCandidates: sourceSegments, includeAiClassifications: false, rules: classificationRules },
-    segments: sourceSegments,
-  }), [classificationRules]);
-  const recentDriftAlarmFocusTargets = useMemo(
-    () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons, siteIcons),
-    [appIcons, historySegments, segments, selectedDayClassificationOptions, siteIcons],
-  );
-  const [availableDriftAlarmFocusTargets, setAvailableDriftAlarmFocusTargets] = useState<DriftAlarmFocusTarget[]>([]);
-  const availableDriftAlarmFocusTargetsRef = useRef<DriftAlarmFocusTarget[]>([]);
-  const availableDriftAlarmFocusTargetsPromiseRef = useRef<Promise<DriftAlarmFocusTarget[]> | null>(null);
-  const applyAvailableDriftAlarmFocusTargets = useCallback((targets: DriftAlarmFocusTarget[]) => {
-    if (haveSameDriftAlarmFocusTargets(availableDriftAlarmFocusTargetsRef.current, targets)) return;
-    availableDriftAlarmFocusTargetsRef.current = targets;
-    setAvailableDriftAlarmFocusTargets(targets);
-  }, []);
-  const resolveCurrentAvailableDriftAlarmFocusTargets = useCallback(async () => {
-    const pendingTargets = availableDriftAlarmFocusTargetsPromiseRef.current;
-    if (!pendingTargets) return availableDriftAlarmFocusTargetsRef.current;
-    try {
-      return await pendingTargets;
-    } catch (error) {
-      console.warn("Failed to resolve current focus target availability", error);
-      return availableDriftAlarmFocusTargetsRef.current;
-    }
-  }, []);
-  useEffect(() => {
-    let active = true;
-    const definitelyAvailableTargets = filterDefinitelyAvailableFocusTargets(recentDriftAlarmFocusTargets);
-    applyAvailableDriftAlarmFocusTargets(definitelyAvailableTargets);
-
-    const resolvedTargetsPromise = resolveAvailableFocusTargets(recentDriftAlarmFocusTargets);
-    availableDriftAlarmFocusTargetsPromiseRef.current = resolvedTargetsPromise;
-    void resolvedTargetsPromise.then((resolvedTargets) => {
-      if (!active) return;
-      if (availableDriftAlarmFocusTargetsPromiseRef.current !== resolvedTargetsPromise) return;
-      applyAvailableDriftAlarmFocusTargets(resolvedTargets);
-    });
-
-    return () => {
-      active = false;
-    };
-  }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
   // Keep the compact onboarding window chrome through the first-day preparation gate,
   // so the loading screen runs in the small onboarding window rather than the full app
   // window. Only apply when the desired state actually flips to avoid a resize flicker
@@ -1602,6 +1555,166 @@ export default function App() {
     openPromoAuthModal();
   }, [openPromoAuthModal, signOut]);
   const canUseCloudAiClassification = isCloudOnline && isSupabaseConfigured && isPolicySignedIn && billingEntitlement?.canUseApp === true;
+  const classificationAvailabilityGateEnabled = AI_AVAILABILITY_CLASSIFICATION_GATE_ENABLED
+    && !(isDevModeActive && aiAvailabilityGateDevDisabled);
+  const selectedClassificationRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud"
+    ? "cloud" as const
+    : "local" as const;
+  const selectedLocalAiClassificationOptions = selectedClassificationRoute === "local"
+    ? localAiClassificationOptions
+    : null;
+  const canUseSelectedCloudAiClassification = selectedClassificationRoute === "cloud"
+    && canUseCloudAiClassification;
+  const hasSelectedAiClassificationProvider = Boolean(
+    selectedLocalAiClassificationOptions || canUseSelectedCloudAiClassification,
+  );
+  const classificationAvailabilityInput = {
+    localProviderStatus: localAiProviderStatus,
+    localConsecutiveFailures: localAiConnectionFailureCount,
+    localDisconnectConfirmed: localAiConnectionPersistentFailure,
+    cloudOnline: isCloudOnline,
+    cloudConfigured: isSupabaseConfigured,
+    cloudAuthenticated: isPolicySignedIn,
+    billingEntitlement,
+    billingEntitlementLoading,
+    billingEntitlementError,
+    cloudConnectionCheck: cloudAiConnectionCheck,
+  };
+  const cloudClassificationAvailability = resolveClassificationAvailability({
+    ...classificationAvailabilityInput,
+    route: "cloud",
+  });
+  const classificationAvailability = selectedClassificationRoute === "cloud"
+    ? cloudClassificationAvailability
+    : resolveClassificationAvailability({ ...classificationAvailabilityInput, route: "local" });
+  const classificationAvailabilityRef = useRef(classificationAvailability);
+  classificationAvailabilityRef.current = classificationAvailability;
+  const dashboardAiRecoveryResolved = Boolean(selectedLocalAiClassificationOptions)
+    || billingEntitlement?.status === "trialing"
+    || billingEntitlement?.status === "active";
+
+  useEffect(() => {
+    if (!dashboardAiRecoveryResolved) return;
+    for (const recoveryKey of DASHBOARD_CLOUD_BILLING_VARIANTS) {
+      clearDashboardAiRecoveryDismissal(recoveryKey);
+    }
+    setDismissedDashboardAiRecoveryKey(null);
+  }, [dashboardAiRecoveryResolved]);
+  const previousClassificationAvailabilityStateRef = useRef(classificationAvailability.state);
+  const currentClassificationAvailabilityStateRef = useRef(classificationAvailability.state);
+  currentClassificationAvailabilityStateRef.current = classificationAvailability.state;
+  const builtInHeuristicsUnavailableSinceRef = useRef<string | null>(resolveInitialBuiltInHeuristicsUnavailableSince());
+  const [classificationRecoveryPending, setClassificationRecoveryPending] = useState(
+    () => classificationAvailabilityGateEnabled && builtInHeuristicsUnavailableSinceRef.current !== null,
+  );
+  const classificationRecoveryTransitionPending = shouldRunClassificationRecoveryBatch(
+    previousClassificationAvailabilityStateRef.current,
+    classificationAvailability.state,
+  );
+  const classificationAssessmentReady = !classificationAvailabilityGateEnabled || (
+    classificationAvailability.state === "ready"
+    && builtInHeuristicsUnavailableSinceRef.current === null
+    && !classificationRecoveryPending
+    && !classificationRecoveryTransitionPending
+  );
+  const classificationAssessmentReadyRef = useRef(classificationAssessmentReady);
+  classificationAssessmentReadyRef.current = classificationAssessmentReady;
+  builtInHeuristicsUnavailableSinceRef.current = resolveBuiltInHeuristicsUnavailableSince({
+    gateEnabled: classificationAvailabilityGateEnabled,
+    state: classificationAvailability.state,
+    recoveryPending: classificationRecoveryPending || classificationRecoveryTransitionPending,
+    currentValue: builtInHeuristicsUnavailableSinceRef.current,
+    now: new Date().toISOString(),
+  });
+  const builtInHeuristicsUnavailableSince = builtInHeuristicsUnavailableSinceRef.current;
+  useEffect(() => {
+    persistBuiltInHeuristicsUnavailableSince(builtInHeuristicsUnavailableSince);
+  }, [builtInHeuristicsUnavailableSince]);
+  const allowBuiltInHeuristics = !classificationAvailabilityGateEnabled || classificationAvailability.allowBuiltInHeuristics;
+  const allowAutomaticClassificationAttempt = hasSelectedAiClassificationProvider && (
+    !classificationAvailabilityGateEnabled
+      || classificationAvailability.allowAutomaticClassification
+      || classificationAvailability.allowRecoveryProbe
+  );
+  const selectedDayClassificationOptions = useMemo<ClassificationOptions>(
+    () => ({
+      fallbackCandidates: segments,
+      includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
+      rules: classificationRules,
+    }),
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, segments, showAiClassificationImpact],
+  );
+  const companionFocusRecordClassificationOptions = useMemo<ClassificationOptions>(
+    () => ({
+      includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
+      rules: classificationRules,
+    }),
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, showAiClassificationImpact],
+  );
+  const materializeBuiltInHeuristicTimeline = useCallback((sourceSegments: ActivitySegment[]) => materializeBuiltInHeuristicClassifications({
+    classificationOptions: {
+      fallbackCandidates: sourceSegments,
+      includeAiClassifications: false,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
+      rules: classificationRules,
+    },
+    segments: sourceSegments,
+  }), [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules]);
+  const allowBuiltInHeuristicsRef = useRef(allowBuiltInHeuristics);
+  allowBuiltInHeuristicsRef.current = allowBuiltInHeuristics;
+  const scheduleAvailableBuiltInHeuristicPersistence = useCallback((classifications: BuiltInHeuristicClassificationMaterialization["classifications"]) => {
+    // A history load can finish after the selected AI route becomes unavailable.
+    // Re-check at the commit boundary so a stale render cannot persist heuristics.
+    if (!allowBuiltInHeuristicsRef.current) return;
+    scheduleBuiltInHeuristicClassificationPersistence(
+      classifications,
+      () => allowBuiltInHeuristicsRef.current,
+    );
+  }, []);
+  const recentDriftAlarmFocusTargets = useMemo(
+    () => buildRecentFocusTargets(segments, historySegments, selectedDayClassificationOptions, appIcons, siteIcons),
+    [appIcons, historySegments, segments, selectedDayClassificationOptions, siteIcons],
+  );
+  const [availableDriftAlarmFocusTargets, setAvailableDriftAlarmFocusTargets] = useState<DriftAlarmFocusTarget[]>([]);
+  const availableDriftAlarmFocusTargetsRef = useRef<DriftAlarmFocusTarget[]>([]);
+  const availableDriftAlarmFocusTargetsPromiseRef = useRef<Promise<DriftAlarmFocusTarget[]> | null>(null);
+  const applyAvailableDriftAlarmFocusTargets = useCallback((targets: DriftAlarmFocusTarget[]) => {
+    if (haveSameDriftAlarmFocusTargets(availableDriftAlarmFocusTargetsRef.current, targets)) return;
+    availableDriftAlarmFocusTargetsRef.current = targets;
+    setAvailableDriftAlarmFocusTargets(targets);
+  }, []);
+  const resolveCurrentAvailableDriftAlarmFocusTargets = useCallback(async () => {
+    const pendingTargets = availableDriftAlarmFocusTargetsPromiseRef.current;
+    if (!pendingTargets) return availableDriftAlarmFocusTargetsRef.current;
+    try {
+      return await pendingTargets;
+    } catch (error) {
+      console.warn("Failed to resolve current focus target availability", error);
+      return availableDriftAlarmFocusTargetsRef.current;
+    }
+  }, []);
+  useEffect(() => {
+    let active = true;
+    const definitelyAvailableTargets = filterDefinitelyAvailableFocusTargets(recentDriftAlarmFocusTargets);
+    applyAvailableDriftAlarmFocusTargets(definitelyAvailableTargets);
+
+    const resolvedTargetsPromise = resolveAvailableFocusTargets(recentDriftAlarmFocusTargets);
+    availableDriftAlarmFocusTargetsPromiseRef.current = resolvedTargetsPromise;
+    void resolvedTargetsPromise.then((resolvedTargets) => {
+      if (!active) return;
+      if (availableDriftAlarmFocusTargetsPromiseRef.current !== resolvedTargetsPromise) return;
+      applyAvailableDriftAlarmFocusTargets(resolvedTargets);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [applyAvailableDriftAlarmFocusTargets, recentDriftAlarmFocusTargets]);
   // Paid device sync: same entitlement gate as cloud AI, plus the per-device
   // explicit opt-in toggle (raw activity leaves the device only when both hold).
   // While the feature is in preview it is additionally gated behind a dedicated
@@ -1979,7 +2092,10 @@ export default function App() {
     isAuthResolved: authStatus !== "loading",
     isEffectiveAuthRequired,
     isSupabaseConfigured,
+    classificationAssessmentReady,
     showAiClassificationImpact,
+    includeBuiltInHeuristics: allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
     signInAnonymously,
     startOfDayMinutes,
     user,
@@ -1989,34 +2105,43 @@ export default function App() {
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
+    includeBuiltInHeuristics: allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
+    classificationAssessmentReady,
   });
   // Web account preview (Dev-gated): while active, periodically publish the aggregate-only
   // account summary that powers the drifty.so account dashboard. Private self-view data —
   // owner-only RLS on the table, nothing public and nothing raw.
   const webAccountStatsActive = isDevModeActive && devWebAccountPreviewEnabled && isCloudOnline && isSupabaseConfigured && isPolicySignedIn;
   useAccountStatsPublisher({
-    active: webAccountStatsActive,
+    active: webAccountStatsActive && classificationAssessmentReady,
     userScopeKey: user?.id ?? "anonymous",
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
+    includeBuiltInHeuristics: allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
   });
   const profileDailyProductivity = useDailyProductivitySeries({
     windowEndDay: leaderboardWindowEndDay,
     startOfDayMinutes,
     includeAiClassifications: showAiClassificationImpact,
+    includeBuiltInHeuristics: allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
     enabled: activeTab === "leaderboard",
   });
-  const aiClassificationProviderKey = localAiClassificationOptions
+  const aiClassificationProviderKey = selectedLocalAiClassificationOptions
     ? `local:${localAiConnectionFingerprint ?? "unconfigured"}`
-    : canUseCloudAiClassification
+    : canUseSelectedCloudAiClassification
       ? "cloud"
       : "disabled";
+  const currentAiClassificationProviderKeyRef = useRef(aiClassificationProviderKey);
+  currentAiClassificationProviderKeyRef.current = aiClassificationProviderKey;
   const classificationActivity = useClassificationActivity();
   const establishedCloudClassificationIssueKind = isEstablishedCloudAiDisconnect(cloudAiConnectionCheck)
     ? cloudAiConnectionCheck?.issueKind ?? null
     : null;
-  const aiConnectionStatus = resolveAiConnectionStatus({
-    canUseCloudAi: canUseCloudAiClassification,
+  const resolvedAiConnectionStatus = resolveAiConnectionStatus({
+    canUseCloudAi: canUseSelectedCloudAiClassification,
     localProviderStatus: localAiProviderStatus,
     localProviderLabel: localAiConnectionFingerprint ? localAiConnectionProviderLabel : null,
     localMemoryUsageBytes: localAiMemoryUsageBytes,
@@ -2025,13 +2150,16 @@ export default function App() {
     // Local providers report connectivity through localProviderStatus (with
     // failure hysteresis); only cloud runs surface summary errors here, and
     // content-level failures (provider answered, output unusable) never do.
-    classificationIssueKind: !localAiClassificationOptions ? establishedCloudClassificationIssueKind : null,
-    cloudIssueKind: billingEntitlementError
+    classificationIssueKind: selectedClassificationRoute === "cloud" ? establishedCloudClassificationIssueKind : null,
+    cloudIssueKind: selectedClassificationRoute === "cloud" && billingEntitlementError
       ? aiConnectionIssueKindFromMessage(billingEntitlementError)
-      : billingEntitlement?.lockedReason === "device_limit_reached"
+      : selectedClassificationRoute === "cloud" && billingEntitlement?.lockedReason === "device_limit_reached"
         ? "provider"
         : null,
   });
+  const aiConnectionStatus = classificationAvailabilityGateEnabled
+    ? applyClassificationAvailabilityToAiStatus(resolvedAiConnectionStatus, classificationAvailability)
+    : resolvedAiConnectionStatus;
   const previousAiClassificationProviderKeyRef = useRef<string | null>(null);
   useEffect(() => {
     const previousAiClassificationProviderKey = previousAiClassificationProviderKeyRef.current;
@@ -2083,6 +2211,7 @@ export default function App() {
         localAiConfigured: localAiConnectionFingerprint !== null,
         localAiDisconnectConfirmed: localAiConnectionPersistentFailure,
         managedLocalAiStatus: isManagedLocalAiRoute(localAiSetup) ? managedLocalAiStatus : null,
+        classificationAvailability: classificationAvailabilityGateEnabled ? classificationAvailability : undefined,
       },
   );
   const sidebarUpgradeDismissed = !isSidebarCtaPreviewActive
@@ -2328,7 +2457,7 @@ export default function App() {
           setHistorySearchSegments(materializedPage.segments);
           setHistorySearchNextCursor(timelinePage.nextCursor);
           setHistorySearchHasMoreSegments(timelinePage.hasMore);
-          scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
+          scheduleAvailableBuiltInHeuristicPersistence(materializedPage.classifications);
           loadMissingAppIcons({
             segments: materializedPage.segments,
             shouldReportFailure: () => historySearchRequestRef.current === requestId,
@@ -2618,6 +2747,9 @@ export default function App() {
       const snapshot = await resolveWatcherSnapshot(segmentsRef.current, reminderThresholdSeconds, {
         fallbackCandidates: segmentsRef.current,
         includeAiClassifications: showAiClassificationImpact,
+        includeBuiltInHeuristics: allowBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince,
+        rules: classificationRules,
       });
       const nextEvent = {
         id: Date.now(),
@@ -2638,7 +2770,7 @@ export default function App() {
     })().finally(() => {
       watcherRequestInFlightRef.current = false;
     });
-  }, [armWatcherRecoveryTimer, clearWatcherEvent, showAiClassificationImpact, status?.running]);
+  }, [allowBuiltInHeuristics, armWatcherRecoveryTimer, builtInHeuristicsUnavailableSince, classificationRules, clearWatcherEvent, showAiClassificationImpact, status?.running]);
 
   const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<boolean> => {
     if (!isTauriRuntime()) {
@@ -2655,25 +2787,68 @@ export default function App() {
 
   const buildEndOfDayReviewEvent = useCallback(async (input: EndOfDayReviewSummaryInput): Promise<EndOfDayReviewEvent> => {
     const currentAppIcons = appIconsRef.current;
-    const baseEvent = buildEndOfDayReviewSummary({ ...input, appIcons: currentAppIcons });
+    const { assessment: requestedAssessment, ...reviewInput } = input;
+    const resolveCurrentInput = () => {
+      const currentAvailability = classificationAvailabilityRef.current;
+      const inferredPendingAssessment = !classificationAssessmentReadyRef.current ? {
+        state: "pending",
+        route: currentAvailability.route,
+        reason: currentAvailability.reason,
+        recoveryAction: currentAvailability.recoveryAction,
+        unavailableSince: builtInHeuristicsUnavailableSinceRef.current,
+      } as const : undefined;
+      const inferredPendingSeconds = inferredPendingAssessment
+        ? sumPendingEndOfDayReviewSeconds(
+          reviewInput.segments,
+          inferredPendingAssessment.unavailableSince,
+          companionFocusRecordClassificationOptions,
+        )
+        : 0;
+      const assessment = requestedAssessment === null
+        ? undefined
+        : requestedAssessment ?? (inferredPendingSeconds > 0 ? inferredPendingAssessment : undefined);
+      return { ...reviewInput, assessment };
+    };
+    const resolvedInput = resolveCurrentInput();
+    const baseEvent = buildEndOfDayReviewSummary({ ...resolvedInput, appIcons: currentAppIcons, classificationOptions: companionFocusRecordClassificationOptions });
+    const layout = baseEvent.assessment ? "full" as const : "minimal" as const;
     const missingIconRequests = input.isMock ? [] : collectMissingEndOfDayReviewIconRequests(baseEvent);
     if (!isTauriRuntime() || missingIconRequests.length === 0) {
-      return { ...baseEvent, layout: "minimal" };
+      return { ...baseEvent, layout };
     }
 
     try {
       const resolvedIcons = await trackerClient.getAppIcons(missingIconRequests);
+      // A provider can become unavailable while native icon lookup is in
+      // flight. An automatic review may downgrade to pending at this commit
+      // boundary, but an explicit Dev preview and an already-pending review
+      // keep the assessment they were built with.
+      const latestResolvedInput = requestedAssessment === undefined && !resolvedInput.assessment
+        ? resolveCurrentInput()
+        : resolvedInput;
       return {
         ...buildEndOfDayReviewSummary({
-        ...input,
-        appIcons: mergeResolvedAppIcons(currentAppIcons, missingIconRequests, resolvedIcons),
+          ...latestResolvedInput,
+          appIcons: mergeResolvedAppIcons(currentAppIcons, missingIconRequests, resolvedIcons),
+          classificationOptions: companionFocusRecordClassificationOptions,
         }),
-        layout: "minimal",
+        layout: latestResolvedInput.assessment ? "full" : layout,
       };
     } catch {
-      return { ...baseEvent, layout: "minimal" };
+      const latestResolvedInput = requestedAssessment === undefined && !resolvedInput.assessment
+        ? resolveCurrentInput()
+        : resolvedInput;
+      if (latestResolvedInput === resolvedInput) return { ...baseEvent, layout };
+      return {
+        ...buildEndOfDayReviewSummary({
+          ...latestResolvedInput,
+          appIcons: currentAppIcons,
+          classificationOptions: companionFocusRecordClassificationOptions,
+        }),
+        layout: latestResolvedInput.assessment ? "full" : layout,
+      };
     }
-  }, []);
+  }, [companionFocusRecordClassificationOptions]);
 
   const handleEndOfDayReviewPreview = useCallback(() => {
     if (!END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED) return;
@@ -2683,6 +2858,7 @@ export default function App() {
       day: selectedDay,
       generatedAt: new Date().toISOString(),
       segments: previewSegments,
+      assessment: null,
       isMock: true,
     }).then(showEndOfDayReview);
   }, [buildEndOfDayReviewEvent, isDevModeActive, segments, selectedDay, showEndOfDayReview]);
@@ -2941,7 +3117,7 @@ export default function App() {
     void learnLivingSoulFromFeedback({
       feedback,
       contextSegments: segmentsRef.current,
-      provider: currentSoulLearningProvider(localAiClassificationOptions, canUseCloudAiClassification),
+      provider: currentSoulLearningProvider(selectedLocalAiClassificationOptions, canUseSelectedCloudAiClassification),
     }).catch((error) => console.warn("Unable to learn from Not a drift feedback.", error));
 
     driftAlarmSourceSegmentsRef.current.delete(sourceSegmentId);
@@ -3205,7 +3381,7 @@ export default function App() {
       setClassificationMetrics(nextClassificationMetrics);
       setAiClassificationUsage(nextAiClassificationUsage);
       setAiClassificationUsageDay(nextAiClassificationUsage ? day : null);
-      scheduleBuiltInHeuristicClassificationPersistence([
+      scheduleAvailableBuiltInHeuristicPersistence([
         ...materializedTimeline.classifications,
         ...(materializedArchiveTimelines?.classifications ?? []),
       ]);
@@ -3355,7 +3531,7 @@ export default function App() {
         void learnLivingSoulFromFeedback({
           feedback,
           contextSegments: segmentsRef.current,
-          provider: currentSoulLearningProvider(localAiClassificationOptions, canUseCloudAiClassification),
+          provider: currentSoulLearningProvider(selectedLocalAiClassificationOptions, canUseSelectedCloudAiClassification),
         }).catch((error) => console.warn("Unable to learn from classification correction.", error));
       }
       setClassificationCorrectionDraft(null);
@@ -3439,7 +3615,7 @@ export default function App() {
         setHistoryNextCursor(timelinePage.nextCursor);
         setHistoryHasMoreSegments(timelinePage.hasMore);
         setHistoryLoadMoreError(null);
-        scheduleBuiltInHeuristicClassificationPersistence(materializedRecentTimeline.classifications);
+        scheduleAvailableBuiltInHeuristicPersistence(materializedRecentTimeline.classifications);
         loadMissingHistoryIcons(materializedRecentTimeline.segments);
 
         void (async () => {
@@ -3492,7 +3668,7 @@ export default function App() {
       if (dashboardWeekRefreshKey) setDashboardWeekRefreshState({ key: dashboardWeekRefreshKey, status: "idle" });
       if (historyHourlySummary !== null) setInsightHourly(historyHourlySummary);
       if (historySiteSummary !== null) setInsightTopSites(historySiteSummary);
-      scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
+      scheduleAvailableBuiltInHeuristicPersistence(materializedArchiveTimelines.classifications);
       loadMissingHistoryIcons(materializedArchiveTimelines.segments);
       return true;
     } catch (nextError) {
@@ -3536,14 +3712,23 @@ export default function App() {
 
   // Live view of the local AI options for the first-day gate: the managed-model
   // attach watcher can fill the setup while the gate is running.
-  const localAiClassificationOptionsRef = useRef(localAiClassificationOptions);
+  const localAiClassificationOptionsRef = useRef(selectedLocalAiClassificationOptions);
   useEffect(() => {
-    localAiClassificationOptionsRef.current = localAiClassificationOptions;
-  }, [localAiClassificationOptions]);
-  const canUseCloudAiClassificationRef = useRef(canUseCloudAiClassification);
+    localAiClassificationOptionsRef.current = selectedLocalAiClassificationOptions;
+  }, [selectedLocalAiClassificationOptions]);
+  const canUseCloudAiClassificationRef = useRef(canUseSelectedCloudAiClassification);
   useEffect(() => {
-    canUseCloudAiClassificationRef.current = canUseCloudAiClassification;
-  }, [canUseCloudAiClassification]);
+    canUseCloudAiClassificationRef.current = canUseSelectedCloudAiClassification;
+  }, [canUseSelectedCloudAiClassification]);
+  // The managed-local key intentionally stays stable while its downloaded model
+  // attaches; changing the chosen route/provider still invalidates the preparation.
+  const firstDaySelectedAiProviderKey = selectedClassificationRoute === "cloud"
+    ? "cloud"
+    : localAiSetup.provider === "managed_local"
+      ? "local:managed_local"
+      : `local:${localAiSetup.provider}:${localAiConnectionFingerprint ?? "unconfigured"}`;
+  const firstDaySelectedAiProviderKeyRef = useRef(firstDaySelectedAiProviderKey);
+  firstDaySelectedAiProviderKeyRef.current = firstDaySelectedAiProviderKey;
   // Picking Local AI in onboarding routes classification to the managed model the
   // moment the download starts (driftyRoute "local"), so the route — not the
   // provider default — is the "user chose Local AI" signal.
@@ -3562,8 +3747,12 @@ export default function App() {
     ...args: Parameters<typeof runAiClassification>
   ): Promise<AiClassificationSummary> => {
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
+    const providerKeyAtStart = currentAiClassificationProviderKeyRef.current;
     try {
-      const summary = await runAiClassification(...args);
+      const summary = await runAiClassification(args[0], args[1], {
+        ...args[2],
+        persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
+      });
       if (args[2]?.localProvider) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       return summary;
@@ -3577,8 +3766,12 @@ export default function App() {
     ...args: Parameters<typeof runAiClassificationUntilEmpty>
   ): Promise<AiClassificationSummary> => {
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
+    const providerKeyAtStart = currentAiClassificationProviderKeyRef.current;
     try {
-      const summary = await runAiClassificationUntilEmpty(...args);
+      const summary = await runAiClassificationUntilEmpty(args[0], args[1], {
+        ...args[2],
+        persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
+      });
       if (args[2]?.localProvider) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       return summary;
@@ -3606,6 +3799,7 @@ export default function App() {
     refresh,
     runAiClassification: runFirstDayAiClassification,
     runAiClassificationUntilEmpty: runFirstDayAiClassificationUntilEmpty,
+    selectedAiProviderKeyRef: firstDaySelectedAiProviderKeyRef,
     selectDay,
     selectedDayRef,
     setPhase: setFirstDayPreparationPhase,
@@ -3636,7 +3830,7 @@ export default function App() {
       setHistorySegments((currentSegments) => mergeHistoryTimelinePages(currentSegments, materializedPage.segments));
       setHistoryNextCursor(timelinePage.nextCursor);
       setHistoryHasMoreSegments(timelinePage.hasMore);
-      scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
+      scheduleAvailableBuiltInHeuristicPersistence(materializedPage.classifications);
 
       loadMissingAppIcons({
         segments: materializedPage.segments,
@@ -3684,7 +3878,7 @@ export default function App() {
       setHistorySearchSegments((currentSegments) => mergeHistoryTimelinePages(currentSegments, materializedPage.segments));
       setHistorySearchNextCursor(timelinePage.nextCursor);
       setHistorySearchHasMoreSegments(timelinePage.hasMore);
-      scheduleBuiltInHeuristicClassificationPersistence(materializedPage.classifications);
+      scheduleAvailableBuiltInHeuristicPersistence(materializedPage.classifications);
 
       loadMissingAppIcons({
         segments: materializedPage.segments,
@@ -3728,7 +3922,7 @@ export default function App() {
       if (dashboardWeekPrefetchRequestRef.current !== requestId) return false;
 
       updateDriftAlarmHistorySegments(day, materializedArchiveTimelines.segments);
-      scheduleBuiltInHeuristicClassificationPersistence(materializedArchiveTimelines.classifications);
+      scheduleAvailableBuiltInHeuristicPersistence(materializedArchiveTimelines.classifications);
       return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown error";
@@ -4078,6 +4272,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(DEVICE_SYNC_PREVIEW_STORAGE_KEY, devDeviceSyncPreviewEnabled ? "1" : "0");
   }, [devDeviceSyncPreviewEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, aiAvailabilityGateDevDisabled ? "1" : "0");
+  }, [aiAvailabilityGateDevDisabled]);
 
   useEffect(() => {
     window.localStorage.setItem(WEB_ACCOUNT_PREVIEW_STORAGE_KEY, devWebAccountPreviewEnabled ? "1" : "0");
@@ -4486,6 +4684,8 @@ export default function App() {
           baseSegments,
           {
             includeAiClassifications: showAiClassificationImpact,
+            includeBuiltInHeuristics: allowBuiltInHeuristics,
+            builtInHeuristicsUnavailableSince,
             rules: classificationRules,
           },
         );
@@ -4561,6 +4761,8 @@ export default function App() {
     const driftAlarmClassificationOptions = {
       fallbackCandidates: driftAlarmSegments,
       includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
       rules: classificationRules,
     } satisfies ClassificationOptions;
     const driftAlarmFocusTargets = buildRecentFocusTargets(
@@ -4615,7 +4817,7 @@ export default function App() {
     }
 
     if (!latestDrift) {
-      const liveAiCandidate = systemTransientActivity === null && (localAiClassificationOptions || canUseCloudAiClassification)
+      const liveAiCandidate = systemTransientActivity === null && classificationAvailability.state === "ready"
         ? resolveLiveDriftAlarmAiCandidate({
           segments: driftAlarmSegments,
           currentSnapshot: alarmSnapshot,
@@ -4662,10 +4864,20 @@ export default function App() {
             segment: summarizeDriftAlarmSegment(liveAiCandidate.segment, liveAiCandidate.sourceSegmentId),
             evaluation,
           });
-          const liveAiOptions = localAiClassificationOptions
-            ? { ...localAiClassificationOptions, persistLiveResult: true, contextSegments: driftAlarmSegments }
-            : { persistLiveResult: true, contextSegments: driftAlarmSegments };
-          const liveAiProviderKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+          const providerKeyAtStart = aiClassificationProviderKey;
+          const liveAiOptions = selectedLocalAiClassificationOptions
+            ? {
+              ...selectedLocalAiClassificationOptions,
+              persistLiveResult: true,
+              contextSegments: driftAlarmSegments,
+              persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
+            }
+            : {
+              persistLiveResult: true,
+              contextSegments: driftAlarmSegments,
+              persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
+            };
+          const liveAiProviderKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
           const refreshAfterLiveAiClassification = async () => {
             const alarmDay = currentDriftAlarmDay();
             if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
@@ -4785,7 +4997,7 @@ export default function App() {
           currentSnapshot: alarmSnapshot,
           classificationOptions: driftAlarmClassificationOptions,
           minimumDurationSeconds: driftAlertDelaySeconds,
-          liveAiAvailable: Boolean(localAiClassificationOptions || canUseCloudAiClassification),
+          liveAiAvailable: classificationAvailability.state === "ready",
           systemTransientActivity,
         }),
         evaluation,
@@ -5380,10 +5592,15 @@ export default function App() {
       evaluation,
     });
     publishEvaluationDriftAlarmTrayStatus({ kind: "checking", candidateDetail }, checkedAt);
+    const providerKeyAtStart = aiClassificationProviderKey;
     void evaluateYouTubeDriftAlarmGate({
       segment,
       category,
-      aiOptions: localAiClassificationOptions,
+      allowAiClassification: classificationAvailability.state === "ready",
+      aiOptions: {
+        ...(selectedLocalAiClassificationOptions ?? {}),
+        persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
+      },
     }).then(async (gateResult) => {
       if (!isCurrentGateAttempt()) return;
       const applySettledGateResult = async (settledResult: YouTubeDriftAlarmGateSettledResult) => {
@@ -5524,7 +5741,7 @@ export default function App() {
         reason: error instanceof Error ? error.message : "AI gate failed",
       }, checkedAt);
     });
-  }, [automaticCloseEnabled, availableDriftAlarmFocusTargets, canUseCloudAiClassification, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, localAiClassificationOptions, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
+  }, [aiClassificationProviderKey, allowBuiltInHeuristics, automaticCloseEnabled, availableDriftAlarmFocusTargets, builtInHeuristicsUnavailableSince, canUseSelectedCloudAiClassification, classificationAvailability.state, classificationRules, devModeEnabled, driftAlertDelaySeconds, driftAlarmCopy, driftAlarmSnooze, driftAlertsRuntimeEnabled, forceChromiumAxExtremeNudgeEnabled, petModeActive, publishDriftAlarmTrayStatus, recordBreakRecoveryOutcome, refreshLiveDriftAlarmActivity, returnToFocusTarget, selectedLocalAiClassificationOptions, showAiClassificationImpact, showDriftAlarm, startOfDayMinutes, status?.running]);
 
   useEffect(() => {
     evaluateDriftAlarmRef.current = evaluateDriftAlarm;
@@ -5575,6 +5792,9 @@ export default function App() {
           void showDueDriftWatcherPeek(segmentsRef.current, showWatcherPeek, driftReminderStateRef, {
             fallbackCandidates: segmentsRef.current,
             includeAiClassifications: showAiClassificationImpact,
+            includeBuiltInHeuristics: allowBuiltInHeuristics,
+            builtInHeuristicsUnavailableSince,
+            rules: classificationRules,
           });
         } else {
           showWatcherPeek();
@@ -5589,7 +5809,7 @@ export default function App() {
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, todayDay, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
+  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, selectedDay, showAiClassificationImpact, showWatcherPeek, status?.running, todayDay, watcherMode, watcherPeekEnabled, watcherPeriodicMaxMinutes, watcherPeriodicMinMinutes]);
 
   const dashboardRange = useMemo(() => getDashboardPeriodRange(selectedDay, dashPeriod, startOfDayMinutes, startOfWeek), [dashPeriod, selectedDay, startOfDayMinutes, startOfWeek]);
   const dashboardWeekRange = useMemo(() => getDashboardPeriodRange(selectedDay, "Week", startOfDayMinutes, startOfWeek), [selectedDay, startOfDayMinutes, startOfWeek]);
@@ -5616,7 +5836,7 @@ export default function App() {
       ...getLogicalDayRange(startDay, endDay, startOfDayMinutes),
     };
   }, [dashboardWeekRange.startDay, startOfDayMinutes]);
-  const dashboardPreviousWeekFocusKey = `${dashboardPreviousWeekRange.start}:${dashboardPreviousWeekRange.end}:${showAiClassificationImpact}`;
+  const dashboardPreviousWeekFocusKey = `${dashboardPreviousWeekRange.start}:${dashboardPreviousWeekRange.end}:${showAiClassificationImpact}:${allowBuiltInHeuristics}:${builtInHeuristicsUnavailableSince ?? "ready"}`;
   const dashboardPreviousDayRange = useMemo(() => {
     const day = shiftIsoDate(selectedDay, -1);
     return {
@@ -5624,7 +5844,7 @@ export default function App() {
       ...getLogicalDayRange(day, day, startOfDayMinutes),
     };
   }, [selectedDay, startOfDayMinutes]);
-  const dashboardPreviousDayFocusKey = `${dashboardPreviousDayRange.start}:${dashboardPreviousDayRange.end}:${showAiClassificationImpact}`;
+  const dashboardPreviousDayFocusKey = `${dashboardPreviousDayRange.start}:${dashboardPreviousDayRange.end}:${showAiClassificationImpact}:${allowBuiltInHeuristics}:${builtInHeuristicsUnavailableSince ?? "ready"}`;
   const dashboardWeekCompactSource = useMemo<DashboardSegmentSource | null>(() => (
     dashboardWeekCompactHistoryLoad
       ? {
@@ -5792,16 +6012,18 @@ export default function App() {
       ? dashboardWeekRefreshState.status
       : "loading";
   const dashboardClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: effectiveDashboardSegments, includeAiClassifications: showAiClassificationImpact }),
-    [effectiveDashboardSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: effectiveDashboardSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, effectiveDashboardSegments, showAiClassificationImpact],
   );
   const effectiveSelectedDayClassificationOptions = useMemo<ClassificationOptions>(
     () => buildSelectedDayDashboardClassificationOptions({
       fallbackCandidates: effectiveSelectedDaySegments,
       includeAiClassifications: showAiClassificationImpact,
+      includeBuiltInHeuristics: allowBuiltInHeuristics,
+      builtInHeuristicsUnavailableSince,
       rules: classificationRules,
     }),
-    [classificationRules, effectiveSelectedDaySegments, showAiClassificationImpact],
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, effectiveSelectedDaySegments, showAiClassificationImpact],
   );
   const dashboardActiveDays = useMemo(
     () => buildDailyTotals(effectiveDashboardSegments, effectiveDashboardRange.startDay, effectiveDashboardRange.endDay, startOfDayMinutes).filter((day) => day.totalSeconds > 0).length,
@@ -5848,22 +6070,22 @@ export default function App() {
     [insightRange.endDay, insightRange.startDay, trendsRange],
   );
   const insightClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact }),
-    [activeInsightSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
+    [activeInsightSegments, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact],
   );
   const productivityPersonaReport = useMemo(
     () => buildProductivityPersona(activeInsightSegments, insightClassificationOptions),
     [activeInsightSegments, insightClassificationOptions],
   );
   const historyClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact }),
-    [historySegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, historySegments, showAiClassificationImpact],
   );
   const weekDashboardPrewarmSegments = dashboardWeekCompactHistoryLoad?.materialized.segments ?? historySegments;
   const shouldPrewarmWeekDashboard = dashboardWeekCompactHistoryLoad !== null || historySegments.length > 0;
   const weekDashboardPrewarmClassificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: weekDashboardPrewarmSegments, includeAiClassifications: showAiClassificationImpact }),
-    [showAiClassificationImpact, weekDashboardPrewarmSegments],
+    () => ({ fallbackCandidates: weekDashboardPrewarmSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact, weekDashboardPrewarmSegments],
   );
   useEffect(() => {
     if (activeTab !== "dashboard" || dashPeriod !== "Week") return undefined;
@@ -5883,6 +6105,8 @@ export default function App() {
           const previousWeekClassificationOptions: ClassificationOptions = {
             fallbackCandidates: load.materialized.segments,
             includeAiClassifications: showAiClassificationImpact,
+            includeBuiltInHeuristics: allowBuiltInHeuristics,
+            builtInHeuristicsUnavailableSince,
           };
           setDashboardPreviousWeekFocusLoad({
             key: dashboardPreviousWeekFocusKey,
@@ -5905,6 +6129,8 @@ export default function App() {
     };
   }, [
     activeTab,
+    allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
     dashPeriod,
     dashboardPreviousWeekFocusKey,
     dashboardPreviousWeekFocusLoad?.key,
@@ -5935,6 +6161,8 @@ export default function App() {
           const previousDayClassificationOptions: ClassificationOptions = {
             fallbackCandidates: load.materialized.segments,
             includeAiClassifications: showAiClassificationImpact,
+            includeBuiltInHeuristics: allowBuiltInHeuristics,
+            builtInHeuristicsUnavailableSince,
           };
           setDashboardPreviousDayFocusLoad({
             key: dashboardPreviousDayFocusKey,
@@ -5957,6 +6185,8 @@ export default function App() {
     };
   }, [
     activeTab,
+    allowBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince,
     dashPeriod,
     dashboardPreviousDayFocusKey,
     dashboardPreviousDayFocusLoad?.key,
@@ -5974,7 +6204,7 @@ export default function App() {
   weekDashboardDayModelCacheSettingsRef.current = syncWeekDashboardDayModelCacheSettings(
     weekDashboardDayModelCache,
     weekDashboardDayModelCacheSettingsRef.current,
-    { includeAiClassifications: showAiClassificationImpact, startOfDayMinutes },
+    { includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, startOfDayMinutes },
   );
   useEffect(() => {
     if (!shouldPrewarmWeekDashboard) return undefined;
@@ -6028,11 +6258,32 @@ export default function App() {
         hasRequiredAccountAuth,
         isSupabaseConfigured,
         localAiReady: Boolean(localAiClassificationOptions),
+        classificationAvailability,
       })
       : null;
   const dashboardAiRecoveryKey = dashboardAiUnavailableState && isCloudBillingVariant(dashboardAiUnavailableState.variant)
     ? dashboardAiUnavailableState.variant
     : null;
+  useEffect(() => {
+    if (dismissedDashboardAiRecoveryKey === null) return undefined;
+
+    const releaseReminderIfEligible = () => {
+      if (isDashboardAiRecoveryDismissed(dismissedDashboardAiRecoveryKey)) return;
+      setDismissedDashboardAiRecoveryKey((currentKey) => (
+        currentKey === dismissedDashboardAiRecoveryKey ? null : currentKey
+      ));
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") releaseReminderIfEligible();
+    };
+
+    window.addEventListener("focus", releaseReminderIfEligible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", releaseReminderIfEligible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [dismissedDashboardAiRecoveryKey]);
   const dashboardAiRecoveryDismissed = dashboardAiRecoveryKey !== null
     && (dismissedDashboardAiRecoveryKey === dashboardAiRecoveryKey || isDashboardAiRecoveryDismissed(dashboardAiRecoveryKey));
   const dashboardAiRecoveryState = dashboardAiRecoveryKey !== null && !dashboardAiRecoveryDismissed
@@ -6088,10 +6339,12 @@ export default function App() {
       todaySegments,
       {
         includeAiClassifications: showAiClassificationImpact,
+        includeBuiltInHeuristics: allowBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince,
         rules: classificationRules,
       },
     );
-  }, [classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay]);
+  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay]);
   const watcherSnapshot = useMemo(() => buildWatcherSnapshot(segments, selectedDayClassificationOptions), [selectedDayClassificationOptions, segments]);
   useEffect(() => { watcherSnapshotRef.current = watcherSnapshot; }, [watcherSnapshot]);
   useEffect(() => { petModeLiveSnapshotRef.current = petModeLiveSnapshot; }, [petModeLiveSnapshot]);
@@ -6303,6 +6556,8 @@ export default function App() {
         todaySegments,
         {
           includeAiClassifications: showAiClassificationImpact,
+          includeBuiltInHeuristics: allowBuiltInHeuristics,
+          builtInHeuristicsUnavailableSince,
           rules: classificationRules,
         },
       );
@@ -6311,9 +6566,11 @@ export default function App() {
       ? watcherSnapshot
       : buildWatcherSnapshot(todaySegments, {
         includeAiClassifications: showAiClassificationImpact,
+        includeBuiltInHeuristics: allowBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince,
         rules: classificationRules,
       });
-  }, [classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot]);
+  }, [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, currentSnapshot, segments, selectedDay, showAiClassificationImpact, todayDay, watcherSnapshot]);
 
   useEffect(() => {
     const client = trackerClient as Partial<typeof trackerClient>;
@@ -6329,14 +6586,17 @@ export default function App() {
     && !isInitialDailyFocusQuietPeriod(onboardingCompletedAt);
 
   useCompanionCommunityMilestones({
-    ready: companionDailyFocusEvaluable && isSupabaseConfigured && !shouldUsePreviewData(),
+    ready: classificationAssessmentReady && companionDailyFocusEvaluable && isSupabaseConfigured && !shouldUsePreviewData(),
+    recoveryPending: classificationAvailabilityGateEnabled && (
+      classificationRecoveryPending || builtInHeuristicsUnavailableSince !== null
+    ),
     day: todayDay,
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     announcementsEnabled: companionAchievementAnnouncementsEnabled,
   });
 
   useCompanionDailyFocusMilestones({
-    ready: companionDailyFocusEvaluable,
+    ready: classificationAssessmentReady && companionDailyFocusEvaluable,
     day: todayDay,
     focusSecondsToday: companionTodaySnapshot.focusSecondsToday,
     /* Visibility controls only the resident capsule. A milestone is an alert,
@@ -6352,7 +6612,7 @@ export default function App() {
   });
 
   useCompanionFocusRunMilestones({
-    ready: companionDailyFocusEvaluable,
+    ready: classificationAssessmentReady && companionDailyFocusEvaluable,
     day: todayDay,
     startOfDayMinutes,
     currentRunSeconds: companionTodaySnapshot.focusStrikeSeconds ?? 0,
@@ -6361,7 +6621,10 @@ export default function App() {
   });
 
   useCompanionLeaderboardMilestones({
-    ready: isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
+    ready: classificationAssessmentReady && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData(),
+    recoveryPending: classificationAvailabilityGateEnabled && (
+      classificationRecoveryPending || builtInHeuristicsUnavailableSince !== null
+    ),
     userScopeKey: user?.id ?? null,
     calendarDay: localDateKey(new Date()),
     startOfDayMinutes,
@@ -6430,8 +6693,8 @@ export default function App() {
   }, [classificationSegments, segments]);
   const classificationTotalSeconds = useMemo(() => totalDurationSeconds(classificationSegments), [classificationSegments]);
   const classificationOptions = useMemo<ClassificationOptions>(
-    () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact }),
-    [classificationSegments, showAiClassificationImpact],
+    () => ({ fallbackCandidates: classificationSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
+    [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationSegments, showAiClassificationImpact],
   );
   const classificationProductivityTotals = useMemo(
     () => buildProductivityDurations(classificationSegments, classificationOptions),
@@ -6538,6 +6801,7 @@ export default function App() {
       ? formatLocalizedDayLabel(selectedDay, localization.effectiveLanguage)
       : selectedDayLabel;
   const insightDateLabel = formatLocalizedDateRangeLabel(insightRange.startDay, insightRange.endDay, localization.effectiveLanguage);
+  const endOfDayReviewQueryPreviewMode = new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview");
   const shouldShowEndOfDayReviewPreview = END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && isDevModeActive && import.meta.env.VITE_DRIFTY_END_OF_DAY_REVIEW_PREVIEW === "1";
 
   useEffect(() => {
@@ -6545,16 +6809,26 @@ export default function App() {
     if (!isDevModeActive) return;
     if (!hasLoadedOnce) return;
     if (endOfDayReviewQueryPreviewShownRef.current) return;
-    if (!shouldShowEndOfDayReviewPreview && new URLSearchParams(window.location.search).get("driftyEndOfDayReviewPreview") !== "1") return;
+    if (!shouldShowEndOfDayReviewPreview && endOfDayReviewQueryPreviewMode !== "1" && endOfDayReviewQueryPreviewMode !== "pending") return;
 
     endOfDayReviewQueryPreviewShownRef.current = true;
+    const showPendingAssessment = endOfDayReviewQueryPreviewMode === "pending";
     void buildEndOfDayReviewEvent({
       day: todayDay,
       generatedAt: new Date().toISOString(),
-      segments: buildMockEndOfDayReviewSegments(todayDay),
+      segments: showPendingAssessment
+        ? buildMockPendingEndOfDayReviewSegments(todayDay)
+        : buildMockEndOfDayReviewSegments(todayDay),
+      assessment: showPendingAssessment ? {
+        state: "pending",
+        route: "cloud",
+        reason: "cloud_trial_expired",
+        recoveryAction: "upgrade",
+        unavailableSince: new Date(`${todayDay}T14:20:00`).toISOString(),
+      } : null,
       isMock: true,
     }).then(showEndOfDayReview);
-  }, [buildEndOfDayReviewEvent, hasLoadedOnce, isDevModeActive, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
+  }, [buildEndOfDayReviewEvent, endOfDayReviewQueryPreviewMode, hasLoadedOnce, isDevModeActive, showEndOfDayReview, shouldShowEndOfDayReviewPreview, todayDay]);
 
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
@@ -6562,6 +6836,8 @@ export default function App() {
     if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
     if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
+    if (classificationAvailabilityGateEnabled
+      && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
     if (endOfDayReviewAutomaticInFlightRef.current) return;
 
     const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay;
@@ -6579,7 +6855,7 @@ export default function App() {
     const reviewDue = !reviewShown
       && isInstallDayReviewEligible(onboardingCompletedAt, todayDay, startOfDayMinutes)
       && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
-    if (!reviewDue && leaderboardCheckpointDone) return;
+    if (!reviewDue && (leaderboardCheckpointDone || !classificationAssessmentReady)) return;
 
     if (reviewDue) {
       const lastPresentedAt = endOfDayReviewLastPresentedAtRef.current;
@@ -6588,7 +6864,7 @@ export default function App() {
 
     endOfDayReviewAutomaticInFlightRef.current = true;
     void (async () => {
-      if (!leaderboardCheckpointDone) {
+      if (!leaderboardCheckpointDone && classificationAssessmentReady) {
         try {
           if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
             // Keep the current public board fresh, then materialize the exact
@@ -6607,7 +6883,7 @@ export default function App() {
 
       let leaderboardCelebration: LeaderboardCelebration | undefined;
       try {
-        if (isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+        if (classificationAssessmentReady && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
           const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", todayDay);
           if (checkpoint?.success) {
             leaderboardCelebration = toLeaderboardCelebration(
@@ -6641,7 +6917,7 @@ export default function App() {
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });
-  }, [buildEndOfDayReviewEvent, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -6676,6 +6952,12 @@ export default function App() {
   const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
   const selectedDayRange = useMemo(() => getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
   const analysisModel = useAnalysisModelSetup(isSupabaseConfigured, localAiSetup.provider);
+  const projectAnalysisConnected = resolveProjectAnalysisConnected({
+    analysisConnected: analysisModel.analysisConnected,
+    analysisProvider: analysisModel.analysisSetup.provider,
+    cloudAvailability: cloudClassificationAvailability,
+    gateEnabled: classificationAvailabilityGateEnabled,
+  });
   // One-shot: "AI setup" on the Projects page lands on the Intelligence tab.
   const [aiSetupRequestedTab, setAiSetupRequestedTab] = useState<"providers" | "intelligence" | null>(null);
   const projectClassification = useProjectClassification({
@@ -6685,7 +6967,7 @@ export default function App() {
     insightRange: { start: insightRange.start, end: insightRange.end },
     analysisSetup: analysisModel.analysisSetup,
     resolveOpenRouterKey: analysisModel.resolveOpenRouterKey,
-    analysisConnected: analysisModel.analysisConnected,
+    analysisConnected: projectAnalysisConnected,
     onClassificationChanged: () => { void refreshHistoryData(); },
   });
   const dashboardProjectRange = useMemo(
@@ -7019,11 +7301,11 @@ export default function App() {
     scheduleProjectAutoAnalysisRef.current = scheduleProjectAutoAnalysis;
   });
   useEffect(() => {
-    if (!analysisModel.analysisConnected) return;
+    if (!projectAnalysisConnected) return;
     const blocked = projectsBlockedOnModel(projectAutoAnalysis);
     if (blocked.length === 0) return;
     for (const projectId of blocked) scheduleProjectAutoAnalysisRef.current(projectId);
-  }, [analysisModel.analysisConnected, projectAutoAnalysis]);
+  }, [projectAnalysisConnected, projectAutoAnalysis]);
   const requestProjectPassRun = useCallback(() => {
     // An explicit click should not wait out the debounce window.
     if (queuedAutoAnalysisTimerRef.current !== null) {
@@ -7057,13 +7339,13 @@ export default function App() {
     }
     if (!isNewActiveProject || !saved.id) return true;
 
-    if (!analysisModel.analysisConnected) {
+    if (!projectAnalysisConnected) {
       setProjectAutoAnalysis((current) => setProjectAutoAnalysisPhase(current, saved.id, "waiting_for_model"));
       return true;
     }
     scheduleProjectAutoAnalysis(saved.id);
     return true;
-  }, [analysisModel.analysisConnected, dropQueuedProjectAutoAnalysis, projectClassification, scheduleProjectAutoAnalysis]);
+  }, [dropQueuedProjectAutoAnalysis, projectAnalysisConnected, projectClassification, scheduleProjectAutoAnalysis]);
   // Keyed on the last pass that actually completed cleanly, not on the newest
   // recorded row: a partially failed pass still records a row (its tokens were
   // spent) but leaves the window stale, and locking the retry behind it would
@@ -7358,34 +7640,48 @@ export default function App() {
     };
   }, []);
 
-  const runAutoAiClassificationBatch = useCallback(async () => {
-    if (!localAiClassificationOptions && !canUseCloudAiClassification) return;
-    if (shouldBlockLocalTrackerAccess) return;
-    if (!hasLoadedOnce) return;
-    if (classificationActionLoading) return;
+  const runAutoAiClassificationBatch = useCallback(async (options: {
+    readonly forceBacklogBatch?: boolean;
+    readonly query?: UnclassifiedSegmentsQuery;
+    readonly analyticsRange?: "current_day" | "recent";
+  } = {}): Promise<AiClassificationSummary | null> => {
+    const forceBacklogBatch = options.forceBacklogBatch === true;
+    if (!allowAutomaticClassificationAttempt) return null;
+    if (shouldBlockLocalTrackerAccess) return null;
+    if (!hasLoadedOnce) return null;
+    if (classificationActionLoading) return null;
     // The first-day preparation gate is already classifying today in the foreground;
     // running the periodic batch concurrently would double-classify the same day.
-    if (preparingFirstDay) return;
-    if (aiClassificationInFlightRef.current) return;
+    if (preparingFirstDay) return null;
+    if (aiClassificationInFlightRef.current) return null;
 
     const today = logicalTodayIsoDate(startOfDayMinutes);
     const isFocused = rendererFocusedRef.current;
     const threshold = isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
-    if (isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return;
-    const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+    if (!forceBacklogBatch && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
+    const providerKeyAtStart = aiClassificationProviderKey;
+    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
     const trigger = isFocused ? "focused_idle" : "background_threshold";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
 
     aiClassificationInFlightRef.current = true;
     try {
-      const query = toClassificationQueryForDay(today, threshold);
-      const summary = localAiClassificationOptions
-        ? await runAiClassificationForUnknownThreshold(query, threshold, localAiClassificationOptions)
-        : await runAiClassificationForUnknownThreshold(query, threshold);
-      if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
+      const query = options.query
+        ? { ...options.query, limit: threshold }
+        : toClassificationQueryForDay(today, threshold);
+      const analyticsRange = options.analyticsRange ?? "current_day";
+      const runOptions = {
+        ...(selectedLocalAiClassificationOptions ?? {}),
+        allowProviderlessPersistence: !classificationAvailabilityGateEnabled || classificationAvailability.state === "ready",
+        persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
+      };
+      const summary = forceBacklogBatch
+        ? await runAiClassificationUntilEmpty(query, threshold, runOptions)
+        : await runAiClassificationForUnknownThreshold(query, threshold, runOptions);
+      if (selectedLocalAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
-      if (summary.status === "empty" && summary.savedRecords === 0) return;
-      if (selectedDayRef.current === today) {
+      if (summary.status === "empty" && summary.savedRecords === 0) return summary;
+      if (analyticsRange === "current_day" && selectedDayRef.current === today) {
         setClassificationSummary(summary);
         if (summary.metrics) setClassificationMetrics(summary.metrics);
         const nextUsage = await loadAiClassificationUsage(today);
@@ -7398,29 +7694,115 @@ export default function App() {
         // and the foreground-grade rebuild every batch is a background heap-churn
         // driver on par with the removed 30s full refresh.
         if (summary.savedRecords > 0 && selectedDayRef.current === today) await refresh(today, { foreground: rendererFocusedRef.current });
+      } else if (summary.savedRecords > 0 && selectedDayRef.current === today) {
+        await refresh(today, { foreground: rendererFocusedRef.current });
       }
-      captureAiClassificationRun(trigger, providerKind, "current_day", summary);
+      captureAiClassificationRun(trigger, providerKind, analyticsRange, summary);
       if (summary.savedRecords > 0) {
         await syncLeaderboardPublication("classification_updated");
         await refreshLeaderboardData();
       }
+      return summary;
     } catch (nextError) {
-      const localFailure = localAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
+      const localFailure = selectedLocalAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
       const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
       if (localFailure) recordLocalAiClassificationError(localFailure);
-      captureAiClassificationRun(trigger, providerKind, "current_day", {
+      captureAiClassificationRun(trigger, providerKind, options.analyticsRange ?? "current_day", {
         status: "error",
         selectedSegments: 0,
         savedRecords: 0,
         ...failure,
       });
-      if (selectedDayRef.current === today) {
+      if ((options.analyticsRange ?? "current_day") === "current_day" && selectedDayRef.current === today) {
         setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
       }
+      return null;
     } finally {
       aiClassificationInFlightRef.current = false;
     }
-  }, [canUseCloudAiClassification, classificationActionLoading, hasLoadedOnce, localAiClassificationOptions, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+  }, [aiClassificationProviderKey, allowAutomaticClassificationAttempt, canUseSelectedCloudAiClassification, classificationActionLoading, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, preparingFirstDay, recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary, refreshLeaderboardData, rendererFocused, selectedDay, selectedLocalAiClassificationOptions, shouldBlockLocalTrackerAccess, startOfDayMinutes, syncLeaderboardPublication]);
+
+  useEffect(() => {
+    const previousState = previousClassificationAvailabilityStateRef.current;
+    previousClassificationAvailabilityStateRef.current = classificationAvailability.state;
+    if (!classificationAvailabilityGateEnabled) {
+      setClassificationRecoveryPending(false);
+      return;
+    }
+    if (classificationAvailability.state !== "ready") {
+      if (classificationAvailability.state !== "checking") setClassificationRecoveryPending(true);
+      return;
+    }
+    if (!classificationRecoveryPending) {
+      if (builtInHeuristicsUnavailableSinceRef.current !== null
+        || shouldRunClassificationRecoveryBatch(previousState, classificationAvailability.state)) {
+        setClassificationRecoveryPending(true);
+      }
+      return;
+    }
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function runRecoveryPass() {
+      if (cancelled) return;
+      try {
+        const unavailableSince = builtInHeuristicsUnavailableSinceRef.current;
+        if (!unavailableSince) {
+          setClassificationRecoveryPending(false);
+          return;
+        }
+
+        const summary = await runAutoAiClassificationBatch({
+          forceBacklogBatch: true,
+          query: {
+            start: unavailableSince,
+            end: new Date().toISOString(),
+          },
+          analyticsRange: "recent",
+        });
+        if (cancelled || currentClassificationAvailabilityStateRef.current !== "ready") return;
+        if (summary && summary.status !== "error" && summary.status !== "disabled") {
+          // Reuse the canonical candidate selector for the completion check.
+          // Aggregate metrics also include synced rows from other devices, while
+          // this device intentionally classifies local-origin rows only.
+          const remainingCandidates = await trackerClient.getUnclassifiedSegments({
+            start: unavailableSince,
+            end: new Date().toISOString(),
+            limit: 1,
+          });
+          if (cancelled || currentClassificationAvailabilityStateRef.current !== "ready") return;
+          if (remainingCandidates.length === 0) {
+            // Only the pass that owns the current recovery generation may
+            // clear it. A cleaned-up pass must not erase a newer outage.
+            if (builtInHeuristicsUnavailableSinceRef.current !== unavailableSince) return;
+            builtInHeuristicsUnavailableSinceRef.current = null;
+            persistBuiltInHeuristicsUnavailableSince(null);
+            setClassificationRecoveryPending(false);
+            return;
+          }
+        }
+      } catch {
+        // A transient tracker/completion-probe failure must not strand the
+        // persisted cutoff. The same bounded recovery pass retries below.
+      }
+      if (cancelled) return;
+
+      // Another classification pass may still own the single-flight lock, a
+      // safety-capped drain may still have rows, or provider backoff may be in
+      // force. Keep the persisted cutoff and retry; the service itself owns the
+      // request-rate/backoff rules, so this timer never bypasses them.
+      retryTimer = setTimeout(() => {
+        void runRecoveryPass();
+      }, AUTO_AI_CLASSIFICATION_INTERVAL_MS);
+    }
+
+    void runRecoveryPass();
+    return () => {
+      cancelled = true;
+      if (retryTimer !== null) clearTimeout(retryTimer);
+    };
+  }, [classificationAvailability.state, classificationAvailabilityGateEnabled, classificationRecoveryPending, runAutoAiClassificationBatch]);
 
   useEffect(() => {
     // Preview/demo fixtures ship pre-classified segments and seed a cloud-
@@ -7478,13 +7860,13 @@ export default function App() {
     // slow cold start would burn the one-shot guard on a no-op and defer today's
     // first pass to the hourly tick. analysisConnected is a dep so a late connect
     // re-runs this effect and ticks then.
-    if (analysisModel.analysisConnected && !projectPassOpenTickedRef.current) {
+    if (projectAnalysisConnected && !projectPassOpenTickedRef.current) {
       projectPassOpenTickedRef.current = true;
       tick("open");
     }
     const intervalId = setInterval(() => tick("schedule"), PROJECT_PASS_SCHEDULE_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [isPreviewSurface, projectClassificationFeatureEnabled, hasActiveProject, startOfDayMinutes, analysisModel.analysisConnected]);
+  }, [hasActiveProject, isPreviewSurface, projectAnalysisConnected, projectClassificationFeatureEnabled, startOfDayMinutes]);
 
   useEffect(() => {
     if (authStatus === "authenticated" && (!isEffectiveAuthRequired || hasRequiredAccountAuth)) {
@@ -7831,8 +8213,8 @@ export default function App() {
   }
 
   async function handleRunAiClassificationNow() {
-    if (!canUseCloudAiClassification && !localAiClassificationOptions) {
-      const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." } satisfies AiClassificationSummary;
+    if (!hasSelectedAiClassificationProvider) {
+      const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
       captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
@@ -7841,7 +8223,8 @@ export default function App() {
     if (aiClassificationInFlightRef.current) return;
 
     const executionUsageDay = todayIsoDate();
-    const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+    const providerKeyAtStart = aiClassificationProviderKey;
+    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
     const range = selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
@@ -7849,10 +8232,10 @@ export default function App() {
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: "Running AI classification..." });
     try {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
-      const summary = localAiClassificationOptions
-        ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, localAiClassificationOptions)
-        : await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, { bypassCloudRequestBackoff: true });
-      if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
+      const summary = selectedLocalAiClassificationOptions
+        ? await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, { ...selectedLocalAiClassificationOptions, allowProviderlessPersistence: !classificationAvailabilityGateEnabled || classificationAvailability.state === "ready", persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart })
+        : await runAiClassification(toClassificationQueryForDay(selectedDay), undefined, { allowProviderlessPersistence: !classificationAvailabilityGateEnabled || classificationAvailability.state === "ready", bypassCloudRequestBackoff: true, persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart });
+      if (selectedLocalAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary(summary);
       if (summary.metrics) setClassificationMetrics(summary.metrics);
@@ -7865,7 +8248,7 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
       captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
-      const localFailure = localAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
+      const localFailure = selectedLocalAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
       const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
       if (localFailure) recordLocalAiClassificationError(localFailure);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
@@ -7882,8 +8265,8 @@ export default function App() {
   }
 
   async function handleRunSelectedDayAiClassification() {
-    if (!canUseCloudAiClassification && !localAiClassificationOptions) {
-      const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Sign in or configure local AI to run AI classification." } satisfies AiClassificationSummary;
+    if (!hasSelectedAiClassificationProvider) {
+      const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
       captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
@@ -7893,7 +8276,8 @@ export default function App() {
     if (aiClassificationInFlightRef.current) return;
 
     const executionUsageDay = todayIsoDate();
-    const providerKind = toAiProviderAnalytics(Boolean(localAiClassificationOptions), canUseCloudAiClassification);
+    const providerKeyAtStart = aiClassificationProviderKey;
+    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification);
     const range = targetDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
@@ -7901,10 +8285,10 @@ export default function App() {
     setClassificationSummary({ status: "running", selectedSegments: 0, savedRecords: 0, message: `Classifying all unclassified activity for ${formatDayLabel(targetDay)}...` });
     try {
       const usageBefore = await loadAiClassificationUsage(executionUsageDay);
-      const summary = localAiClassificationOptions
-        ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, localAiClassificationOptions)
-        : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, { bypassCloudRequestBackoff: true });
-      if (localAiClassificationOptions) recordLocalAiClassificationSummary(summary);
+      const summary = selectedLocalAiClassificationOptions
+        ? await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, { ...selectedLocalAiClassificationOptions, allowProviderlessPersistence: !classificationAvailabilityGateEnabled || classificationAvailability.state === "ready", persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart })
+        : await runAiClassificationUntilEmpty(toClassificationQueryForDay(targetDay), undefined, { allowProviderlessPersistence: !classificationAvailabilityGateEnabled || classificationAvailability.state === "ready", bypassCloudRequestBackoff: true, persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart });
+      if (selectedLocalAiClassificationOptions) recordLocalAiClassificationSummary(summary);
       else recordCloudAiClassificationSummary(summary, cloudAiConnectionGeneration);
       setClassificationSummary({
         ...summary,
@@ -7920,7 +8304,7 @@ export default function App() {
       setAiClassificationUsageMeasurement(executionUsageDay, nextUsage);
       captureAiClassificationRun("manual", providerKind, range, summary);
     } catch (nextError) {
-      const localFailure = localAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
+      const localFailure = selectedLocalAiClassificationOptions ? describeLocalAiClassificationFailure(nextError) : null;
       const failure = localFailure ?? await recordCloudAiClassificationError(nextError, cloudAiConnectionGeneration);
       if (localFailure) recordLocalAiClassificationError(localFailure);
       setClassificationSummary({ status: "error", selectedSegments: 0, savedRecords: 0, ...failure });
@@ -8043,7 +8427,7 @@ export default function App() {
       historySegments,
       leaderboardSegments,
       ai: {
-        route: localAiClassificationOptions ? "local" : canUseCloudAiClassification ? "cloud" : "disabled",
+        route: hasSelectedAiClassificationProvider ? selectedClassificationRoute : "disabled",
         connectionStatus: aiConnectionStatus,
         cloud: {
           isSupabaseConfigured,
@@ -8070,7 +8454,7 @@ export default function App() {
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });
@@ -8969,6 +9353,7 @@ export default function App() {
             effectiveClassifySourceId={effectiveClassifySourceId}
             expandedClassificationActivityRows={expandedClassificationActivityRows}
             isCurrentClassificationRange={isCurrentClassificationRange}
+            devModeEnabled={isDevModeActive}
             classificationCorrectionDraft={classificationCorrectionDraft}
             classificationCorrectionNotice={classificationCorrectionNotice}
             classificationCorrectionSaving={classificationCorrectionSaving}
@@ -9011,6 +9396,7 @@ export default function App() {
             {isDeferredTabBodyReady ? (
               <LazyHistoryView
                 appIcons={appIcons}
+                classificationOptions={historyClassificationOptions}
                 deleting={historyDeleting}
                 hasMoreSegments={displayedHistoryHasMoreSegments}
                 initialLoading={historyInitialLoading}
@@ -9046,7 +9432,7 @@ export default function App() {
             projectsLoading={projectClassification.projectsLoading}
             running={projectClassification.running}
             runError={projectClassification.runError}
-            analysisConnected={analysisModel.analysisConnected}
+            analysisConnected={projectAnalysisConnected}
             analysisSetup={analysisModel.analysisSetup}
             autoAnalysis={projectAutoAnalysis}
             matchCooldown={projectMatchCooldown}
@@ -9384,6 +9770,7 @@ export default function App() {
                     forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
                     forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
                     deviceSyncPreviewEnabled={devDeviceSyncPreviewEnabled}
+                    aiAvailabilityGateDevDisabled={aiAvailabilityGateDevDisabled}
                     webAccountPreviewEnabled={devWebAccountPreviewEnabled}
                     projectClassificationAiReviewEvents={projectClassification.aiReviewEvents}
                     projectClassificationCorrectionsBusy={projectClassification.running}
@@ -9413,6 +9800,7 @@ export default function App() {
                     onForceChromiumAxExtremeNudgeChange={setForceChromiumAxExtremeNudgeEnabled}
                     onForceFrontmostFallbackCaptureChange={setForceFrontmostFallbackCaptureEnabled}
                     onDeviceSyncPreviewEnabledChange={setDevDeviceSyncPreviewEnabled}
+                    onAiAvailabilityGateDevDisabledChange={setAiAvailabilityGateDevDisabled}
                     onWebAccountPreviewEnabledChange={setDevWebAccountPreviewEnabled}
                     onRevertProjectClassificationCorrection={(id) => void projectClassification.revertReviewEvent(id)}
                     onOpenDebugLogs={() => void handleOpenDebugLogs()}
@@ -9483,12 +9871,11 @@ export default function App() {
         <>
           <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} />
           {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && endOfDayReviewEvent ? (
-            <EndOfDayReview
+            <CompanionDayReviewBrowserSurface
               event={endOfDayReviewEvent}
               onOpenDashboard={() => handleEndOfDayReviewAction("openDashboard")}
-              onViewDetails={() => handleEndOfDayReviewAction("viewDetails")}
-              onOpenNotificationSettings={() => handleEndOfDayReviewAction("openNotificationSettings")}
-              onClose={() => setEndOfDayReviewEvent(null)}
+              onOpenAiSettings={() => handleEndOfDayReviewAction("openAiSettings")}
+              onDismiss={() => setEndOfDayReviewEvent(null)}
             />
           ) : null}
           {driftAlarmEvent ? (

@@ -15,6 +15,7 @@ const COMPANION_WEEKLY_RESULT_REFRESH_COOLDOWN_MS = 5 * 60 * 1000;
 
 export function useCompanionLeaderboardMilestones({
   ready,
+  recoveryPending = false,
   userScopeKey,
   calendarDay,
   startOfDayMinutes,
@@ -23,6 +24,7 @@ export function useCompanionLeaderboardMilestones({
   publishCheckpoint,
 }: {
   readonly ready: boolean;
+  readonly recoveryPending?: boolean;
   readonly userScopeKey: string | null;
   readonly calendarDay: string;
   readonly startOfDayMinutes: number;
@@ -32,8 +34,13 @@ export function useCompanionLeaderboardMilestones({
 }) {
   const progressRef = useRef<CompanionLeaderboardMilestoneProgress | null>(null);
   const lastRefreshAtRef = useRef(0);
+  const suppressRecoveredResultRef = useRef(false);
   const announcementsEnabledRef = useRef(announcementsEnabled);
   announcementsEnabledRef.current = announcementsEnabled;
+
+  useEffect(() => {
+    if (recoveryPending) suppressRecoveredResultRef.current = true;
+  }, [recoveryPending]);
 
   useEffect(() => {
     if (!ready || !userScopeKey) {
@@ -61,11 +68,17 @@ export function useCompanionLeaderboardMilestones({
         startOfWeek,
         startOfDayMinutes,
       );
+      // Before the weekly result minute there is no finalized window yet.
+      // Keep a recovery suppression armed so that same recovered result is
+      // stored, but not announced, when the morning timer reaches it.
       if (!windowEndDay) return;
       if (
         progressRef.current.lastWeeklyWindowEndDay
         && progressRef.current.lastWeeklyWindowEndDay >= windowEndDay
-      ) return;
+      ) {
+        suppressRecoveredResultRef.current = false;
+        return;
+      }
 
       inFlight = true;
       try {
@@ -78,8 +91,11 @@ export function useCompanionLeaderboardMilestones({
           progress: progressRef.current,
           windowEndDay,
           entry: result.data ?? null,
-          announce: announcementsEnabledRef.current && isTauriRuntime(),
+          announce: !suppressRecoveredResultRef.current
+            && announcementsEnabledRef.current
+            && isTauriRuntime(),
         });
+        suppressRecoveredResultRef.current = false;
         progressRef.current = evaluation.progress;
         persistCompanionLeaderboardMilestones(evaluation.progress);
         if (evaluation.event) {

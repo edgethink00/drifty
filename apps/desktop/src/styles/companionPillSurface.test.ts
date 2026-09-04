@@ -160,6 +160,7 @@ describe("companion pill surface", () => {
     const ring = cssRule(".companion-pill-surface .eodv6__ring");
     const ringRow = cssRule(".companion-pill-surface .eodv12__ringrow");
     const reviewGeometry = cssRule('.companion-pill-surface .pill[data-card-state="eod"]');
+    const pendingReviewGeometry = cssRule('.companion-pill-surface .pill[data-card-state="eodPending"]');
     const compactReviewGeometry = cssRule('.companion-pill-surface .pill[data-card-state="eodCompact"]');
     const minimalReviewGeometry = cssRule('.companion-pill-surface .pill[data-card-state="eodMinimal"]');
     const compactReviewShell = cssRule('.companion-pill-surface .pill[data-state="eod"][data-eod-layout="compact"]');
@@ -170,6 +171,8 @@ describe("companion pill surface", () => {
     expect(ringRow).toContain("padding-top: 8px; padding-bottom: 8px;");
     expect(pillStyles).toContain(".eodv6__donut { width: 72px; height: 72px; }");
     expect(reviewGeometry).toContain("--pill-card-height: 480px;");
+    expect(pendingReviewGeometry).toContain("--pill-card-width: 331px;");
+    expect(pendingReviewGeometry).toContain("--pill-card-height: 300px;");
     expect(compactReviewGeometry).toContain("--pill-card-width: 310px;");
     expect(compactReviewGeometry).toContain("--pill-card-height: 284px;");
     expect(minimalReviewGeometry).toContain("--pill-card-width: 310px;");
@@ -177,6 +180,15 @@ describe("companion pill surface", () => {
     expect(compactReviewShell).toContain("width: 310px;");
     expect(pillStyles).toContain('.pill[data-eod-layout="compact"] .view--eod .eodv12b--apps { display: none; }');
     expect(pillStyles).toContain('.pill[data-eod-version="minimal"] .view--eod .eodv12__duo { display: none; }');
+  });
+
+  it("reserves the warm warning surface for an ended Pro trial", () => {
+    const pending = cssRule(".companion-pill-surface .eodv12__pending");
+    const trialEnded = cssRule('.companion-pill-surface .eodv12__pending[data-tone="trial-ended"]');
+
+    expect(pending).toContain("background: color-mix(in srgb, var(--p-unclassified) 11%, transparent);");
+    expect(trialEnded).toContain("background: color-mix(in srgb, var(--p-drift) 7%, transparent);");
+    expect(trialEnded).toContain("border-color: color-mix(in srgb, var(--p-drift) 18%, transparent);");
   });
 
   it("connects direct menu-bar moments to the native status item", () => {

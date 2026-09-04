@@ -108,6 +108,7 @@ export type UseFirstDayPreparationOptions = {
   readonly setProgress: (progress: number | null) => void;
   readonly runAiClassification: RunAiClassificationBatch;
   readonly runAiClassificationUntilEmpty: RunAiClassificationBatch;
+  readonly selectedAiProviderKeyRef: MutableRefObject<string>;
 };
 
 // The most recent logical day (today, then yesterday, then the day before) that has
@@ -139,6 +140,7 @@ export function useFirstDayPreparation({
   refresh,
   runAiClassification,
   runAiClassificationUntilEmpty,
+  selectedAiProviderKeyRef,
   selectDay,
   selectedDayRef,
   setPhase,
@@ -191,12 +193,14 @@ export function useFirstDayPreparation({
     let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
     let initialSegmentCount: number | null = null;
     let remainingSegmentCount: number | null = null;
+    const selectedProviderKeyAtStart = selectedAiProviderKeyRef.current;
+    const selectedProviderUnchanged = () => selectedAiProviderKeyRef.current === selectedProviderKeyAtStart;
     const providerKind = () => {
       const localProvider = localAiClassificationOptionsRef.current?.localProvider.provider;
       if (localProvider === "managed_local") return "local" as const;
       if (localProvider === "openrouter_byok" || localProvider === "self_hosted") return "custom" as const;
       if (managedLocalSelected) return "local" as const;
-      if (cloudAiSelected || canUseCloudAiClassificationRef.current) return "cloud" as const;
+      if (cloudAiSelected && canUseCloudAiClassificationRef.current) return "cloud" as const;
       return "none" as const;
     };
     const captureOutcome = (outcome: "success" | FirstDayPreparationFailureReason) => {
@@ -250,7 +254,7 @@ export function useFirstDayPreparation({
     // download progress on the loading bar and hand back the options once they exist.
     // Bails when there is genuinely nothing to wait for (no download, or it failed).
     const waitForManagedModelOptions = async (): Promise<LocalAiClassificationOptions | null> => {
-      while (!settled && !cancelled) {
+      while (!settled && !cancelled && selectedProviderUnchanged()) {
         const options = localAiClassificationOptionsRef.current;
         if (options) return options;
         try {
@@ -270,7 +274,7 @@ export function useFirstDayPreparation({
     // already visible, so a long download only delays the background fill-in.
     const waitForManagedModelInBackground = async (): Promise<LocalAiClassificationOptions | null> => {
       const deadline = Date.now() + FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS;
-      while (!cancelled && Date.now() < deadline) {
+      while (!cancelled && selectedProviderUnchanged() && Date.now() < deadline) {
         const options = localAiClassificationOptionsRef.current;
         if (options) return options;
         try {
@@ -287,7 +291,7 @@ export function useFirstDayPreparation({
 
     const waitForCloudAiAvailability = async (): Promise<boolean> => {
       const deadline = Date.now() + FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS;
-      while (!settled && !cancelled && Date.now() < deadline) {
+      while (!settled && !cancelled && selectedProviderUnchanged() && Date.now() < deadline) {
         if (canUseCloudAiClassificationRef.current) return true;
         await firstDayPreparationDelay(FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS);
       }
@@ -429,7 +433,6 @@ export function useFirstDayPreparation({
       // Managed Local AI counts as "available" even while its download is still
       // running — the gate waits for it (phase "downloading") instead of skipping AI.
       const aiCouldBecomeAvailable = Boolean(localAiClassificationOptionsRef.current)
-        || canUseCloudAiClassificationRef.current
         || cloudAiSelected
         || managedLocalSelected;
       try {
@@ -489,7 +492,11 @@ export function useFirstDayPreparation({
               console.warn("Managed local AI warmup did not complete", error);
             }
           }
-          if ((classifyOptions || canUseCloudAiClassificationRef.current) && !settled) {
+          if (!selectedProviderUnchanged() && !settled) {
+            fail("classification_incomplete", "The selected AI provider changed during preparation.");
+            return;
+          }
+          if ((classifyOptions || (cloudAiSelected && canUseCloudAiClassificationRef.current)) && !settled) {
             setPhase("classifying");
             setProgress(null);
             const complete = await classifyTodayWithProgress(today, classifyOptions);
@@ -515,13 +522,15 @@ export function useFirstDayPreparation({
       // revealed (heuristic) dashboard still fills in with AI classifications.
       if (revealed && aiCouldBecomeAvailable && !shouldBlockLocalTrackerAccess) {
         void (async () => {
+          if (!selectedProviderUnchanged()) return;
           let backgroundOptions = localAiClassificationOptionsRef.current;
           if (!backgroundOptions && !canUseCloudAiClassificationRef.current && managedLocalSelected) {
             backgroundOptions = await waitForManagedModelInBackground();
             if (!backgroundOptions) return;
           }
+          if (!backgroundOptions && !(cloudAiSelected && canUseCloudAiClassificationRef.current)) return;
           for (const offset of FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS) {
-            if (cancelled) return;
+            if (cancelled || !selectedProviderUnchanged()) return;
             const day = shiftIsoDate(today, offset);
             try {
               const summary = await runClassificationForDay(day, backgroundOptions);

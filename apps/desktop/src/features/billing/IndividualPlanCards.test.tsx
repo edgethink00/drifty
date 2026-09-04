@@ -26,7 +26,7 @@ describe("IndividualPlanCards", () => {
     expect(within(freePlan).getByText("forever")).toBeTruthy();
     expect(within(freePlan).getByText("On-device AI you control")).toBeTruthy();
     expect(within(freePlan).getAllByText("Current plan").length).toBeGreaterThan(0);
-    expect(within(freePlan).getByText(/Local classification and predefined rules/)).toBeTruthy();
+    expect(within(freePlan).getByText(/Custom classification rules you create/)).toBeTruthy();
     expect(within(freePlan).getAllByText(/API key/).length).toBeGreaterThan(0);
     expect(within(freePlan).getAllByText(/On-device AI classification/).length).toBeGreaterThan(0);
     expect(within(freePlan).queryByText(/^Local-first$/i)).toBeNull();

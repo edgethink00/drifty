@@ -117,6 +117,10 @@ describe("companion pill geometry", () => {
     expect(COMPANION_PILL_SIZES.eod.height).toBe(Math.max(...heights));
   });
 
+  it("fits a pending day review to its reduced raw-data content", () => {
+    expect(COMPANION_PILL_SIZES.eodPending).toEqual({ width: 331, height: 300 });
+  });
+
   it("keeps Compact v2 aligned with the reviewed prototype geometry", () => {
     expect(COMPANION_PILL_SIZES.eodCompact).toEqual({ width: 310, height: 284 });
   });

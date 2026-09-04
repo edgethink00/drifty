@@ -172,6 +172,9 @@ async function openSocialLeaderboard() {
 function enableProfileBetaGate() {
   window.localStorage.setItem("drifty.dev.mode", "1");
   window.localStorage.setItem("drifty.dev.profileBeta", "1");
+  // These tests exercise leaderboard participation, not AI availability. Keep the
+  // Dev rollback active so publishing remains evaluable under the legacy fixture.
+  window.localStorage.setItem("drifty.dev.disableAiAvailabilityGate", "1");
 }
 
 async function openSocialProfile() {
@@ -380,6 +383,12 @@ describe("App leaderboard participation", () => {
         siteTitle: "Developer docs",
         platform: "macos",
         source: "nsworkspace",
+        classification: {
+          category: "workspace",
+          productivity: "focus",
+          source: "manual",
+          confidence: 1,
+        },
       },
     ]);
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
@@ -615,6 +624,12 @@ describe("App leaderboard participation", () => {
         siteTitle: "Developer docs",
         platform: "macos",
         source: "nsworkspace",
+        classification: {
+          category: "workspace",
+          productivity: "focus",
+          source: "manual",
+          confidence: 1,
+        },
       },
     ]);
     fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [] });
@@ -1131,9 +1146,16 @@ describe("App leaderboard participation", () => {
             durationSeconds: 1800,
             appName: "Safari",
             siteDomain: "stackoverflow.com",
-        siteTitle: "Developer docs",
+            siteTitle: "Developer docs",
             platform: "macos",
             source: "nsworkspace",
+            classification: {
+              category: "workspace",
+              productivity: "focus",
+              source: "manual",
+              confidence: 1,
+              reason: "Test classification",
+            },
           },
         ];
       }
@@ -1150,9 +1172,16 @@ describe("App leaderboard participation", () => {
             durationSeconds: 3600,
             appName: "Safari",
             siteDomain: "stackoverflow.com",
-        siteTitle: "Developer docs",
+            siteTitle: "Developer docs",
             platform: "macos",
             source: "nsworkspace",
+            classification: {
+              category: "workspace",
+              productivity: "focus",
+              source: "manual",
+              confidence: 1,
+              reason: "Test classification",
+            },
           },
         ];
       }

@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
 
 /**
@@ -9,9 +9,9 @@ import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
  * Work hours answers "how did today go" before anything else, and it means the
  * whole tracked day, not only focus — reading "3 minutes worked" off a
  * focus-only number under a work-hours label was a lie the card told thin
- * days. The ring then breaks that total into focus, drift and other; the pair
- * below names what a good stretch looked like; top apps says where the time
- * actually went.
+ * days. The ring then breaks that total into focus, drift, neutral, and any
+ * explicitly unclassified time; the pair below names what a good stretch
+ * looked like; top apps says where the time actually went.
  */
 
 type RingStyle = CSSProperties & { "--seg"?: string };
@@ -22,24 +22,33 @@ export function CompanionPillDayReview({
   event,
   onDismiss,
   onOpenDashboard,
+  onOpenAiSettings,
 }: {
   event: EndOfDayReviewEvent;
   onDismiss: () => void;
   onOpenDashboard: () => void;
+  onOpenAiSettings?: () => void;
 }) {
   const totalSeconds = Math.max(0, event.totalSeconds);
   const focusSeconds = Math.max(0, event.focusSeconds);
   const driftSeconds = Math.max(0, event.driftSeconds);
-  const otherSeconds = Math.max(0, totalSeconds - focusSeconds - driftSeconds);
+  const unclassifiedSeconds = Math.max(0, event.unclassifiedSeconds ?? 0);
+  const neutralSeconds = Math.max(
+    0,
+    event.neutralSeconds ?? totalSeconds - focusSeconds - driftSeconds - unclassifiedSeconds,
+  );
   const focusPercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
-  const driftPercent = totalSeconds > 0 ? (driftSeconds / totalSeconds) * 100 : 0;
-  const otherPercent = Math.max(0, 100 - focusPercent - driftPercent);
+  const focusShare = totalSeconds > 0 ? (focusSeconds / totalSeconds) * 100 : 0;
+  const driftShare = totalSeconds > 0 ? (driftSeconds / totalSeconds) * 100 : 0;
+  const neutralShare = totalSeconds > 0 ? (neutralSeconds / totalSeconds) * 100 : 0;
+  const unclassifiedShare = totalSeconds > 0 ? (unclassifiedSeconds / totalSeconds) * 100 : 0;
   const totalDeltaSeconds = event.comparison
     ? event.comparison.focusDeltaSeconds + event.comparison.driftDeltaSeconds + event.comparison.otherDeltaSeconds
     : 0;
   const sources = (event.sourceSummaries ?? []).slice(0, 3);
   const topShare = sources[0]?.percent ?? 0;
   const signals = event.dailySignals;
+  const pendingAssessment = event.assessment?.state === "pending" ? event.assessment : null;
 
   return (
     <>
@@ -49,7 +58,8 @@ export function CompanionPillDayReview({
             <PillBrandMark />
           </span>
           Day review
-          {event.highlightLabel ? <span className="eod__badge">{event.highlightLabel}</span> : null}
+          {pendingAssessment ? <span className="eod__badge">AI disconnected</span> : null}
+          {!pendingAssessment && event.highlightLabel ? <span className="eod__badge">{event.highlightLabel}</span> : null}
         </span>
         <button className="card__close" type="button" title="Dismiss" onClick={onDismiss}>
           <PillDismissIcon />
@@ -58,50 +68,60 @@ export function CompanionPillDayReview({
 
       <div className="eodv eodv--12" data-sensitive>
         <div className="eodv12b eodv12b--head">
-          <span className="eodsec">Work hours</span>
+          <span className="eodsec">{pendingAssessment ? "Tracked time" : "Work hours"}</span>
           <b>{formatReviewClockDuration(totalSeconds)}</b>
-          {event.comparison ? (
+          {!pendingAssessment && event.comparison ? (
             <ReviewDelta seconds={totalDeltaSeconds} tone="good" suffix=" vs yesterday" />
           ) : null}
         </div>
 
-        <div className="eodv12b eodv12__ringrow">
-          <div className="eodv6__donut" aria-hidden="true">
-            <i
-              className="eodv6__ring"
-              style={buildDonutRingStyle(focusPercent, driftPercent, otherPercent)}
-            />
-            <b>
-              {focusPercent}
-              <span>%</span>
-            </b>
+        {!pendingAssessment ? (
+          <div className="eodv12b eodv12__ringrow">
+            <div className="eodv6__donut" aria-hidden="true">
+              <i
+                className="eodv6__ring"
+                style={buildDonutRingStyle(focusShare, driftShare, neutralShare, unclassifiedShare)}
+              />
+              <b>
+                {focusPercent}
+                <span>%</span>
+              </b>
+            </div>
+            <div className="eodv12__cats">
+              <CategoryRow
+                label="Focus"
+                seconds={focusSeconds}
+                tone="var(--p-focus)"
+                deltaSeconds={event.comparison?.focusDeltaSeconds}
+                deltaTone="good"
+              />
+              <CategoryRow
+                label="Drift"
+                seconds={driftSeconds}
+                tone="var(--p-drift)"
+                deltaSeconds={event.comparison?.driftDeltaSeconds}
+                deltaTone="good"
+              />
+              <CategoryRow
+                label="Neutral"
+                seconds={neutralSeconds}
+                tone="var(--p-neutral)"
+                deltaSeconds={event.comparison?.otherDeltaSeconds}
+                deltaTone="flat"
+              />
+              {unclassifiedSeconds > 0 ? (
+                <CategoryRow
+                  label="Unclassified"
+                  seconds={unclassifiedSeconds}
+                  tone="var(--p-unclassified)"
+                  deltaTone="flat"
+                />
+              ) : null}
+            </div>
           </div>
-          <div className="eodv12__cats">
-            <CategoryRow
-              label="Focus"
-              seconds={focusSeconds}
-              tone="var(--p-focus)"
-              deltaSeconds={event.comparison?.focusDeltaSeconds}
-              deltaTone="good"
-            />
-            <CategoryRow
-              label="Drift"
-              seconds={driftSeconds}
-              tone="var(--p-drift)"
-              deltaSeconds={event.comparison?.driftDeltaSeconds}
-              deltaTone="good"
-            />
-            <CategoryRow
-              label="Other"
-              seconds={otherSeconds}
-              tone="var(--p-neutral)"
-              deltaSeconds={event.comparison?.otherDeltaSeconds}
-              deltaTone="flat"
-            />
-          </div>
-        </div>
+        ) : null}
 
-        {signals ? (
+        {!pendingAssessment && signals ? (
           <div className="eodv12__duo">
             <div className="eodv12b">
               <span>Deep sessions</span>
@@ -126,7 +146,14 @@ export function CompanionPillDayReview({
 
         {sources.length > 0 ? (
           <div className="eodv12b eodv12b--apps">
-            <div className="eodsec">Top apps</div>
+            <div className="eodsec eodv12__apps-heading">
+              <span>Top apps</span>
+              {pendingAssessment ? (
+                <button className="eodv12__apps-link" type="button" onClick={onOpenDashboard}>
+                  See tracked day
+                </button>
+              ) : null}
+            </div>
             <div className="eodv12__apps">
               {sources.map((source, index) => {
                 const relative = topShare > 0 ? Math.round((source.percent / topShare) * 100) : 0;
@@ -148,15 +175,47 @@ export function CompanionPillDayReview({
             </div>
           </div>
         ) : null}
+
+        {pendingAssessment ? (
+          <div
+            className="eodv12b eodv12__pending"
+            data-tone={pendingAssessment.reason === "cloud_trial_expired" ? "trial-ended" : undefined}
+          >
+            <div className="eodv12__pending-head">
+              <b>{pendingAssessmentTitle(pendingAssessment.reason)}</b>
+              {onOpenAiSettings ? (
+                <button className="act act--primary eodv12__pending-action" type="button" onClick={onOpenAiSettings}>
+                  {pendingAssessmentActionLabel(pendingAssessment.reason)}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      <div className="card__actions">
-        <button className="act act--primary" type="button" onClick={onOpenDashboard}>
-          See full day
-        </button>
-      </div>
+      {!pendingAssessment ? (
+        <div className="card__actions">
+          <button className="act act--primary" type="button" onClick={onOpenDashboard}>
+            See full day
+          </button>
+        </div>
+      ) : null}
     </>
   );
+}
+
+function pendingAssessmentTitle(reason: NonNullable<EndOfDayReviewEvent["assessment"]>["reason"]): string {
+  if (reason === "cloud_trial_expired") return "Your Pro trial ended";
+  if (reason === "cloud_payment_required" || reason === "cloud_billing_missing") return "Cloud classification needs attention";
+  if (reason === "provider_not_configured" || reason === "cloud_not_configured") return "Connect AI to finish this review";
+  return "AI disconnected before the day was classified";
+}
+
+function pendingAssessmentActionLabel(reason: string): string {
+  if (reason === "cloud_trial_expired" || reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
+    return "Upgrade to Pro";
+  }
+  return "AI settings";
 }
 
 function CategoryRow({
@@ -218,12 +277,14 @@ function formatReviewClockDuration(seconds: number): string {
 function buildDonutRingStyle(
   focusPercent: number,
   driftPercent: number,
-  otherPercent: number,
+  neutralPercent: number,
+  unclassifiedPercent: number,
 ): DonutRingStyle {
   const shares = [
     ["var(--p-focus)", focusPercent],
     ["var(--p-drift)", driftPercent],
-    ["var(--p-neutral)", otherPercent],
+    ["var(--p-neutral)", neutralPercent],
+    ["var(--p-unclassified)", unclassifiedPercent],
   ] as const;
   let cursor = 0;
   const stops: string[] = [];

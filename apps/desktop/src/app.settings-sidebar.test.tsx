@@ -240,6 +240,7 @@ describe("App settings sidebar", () => {
   it("keeps the web-account publisher available while Dev mode and its preview are enabled", async () => {
     window.localStorage.setItem("drifty.dev.mode", "1");
     window.localStorage.setItem("drifty.dev.webAccountPreview", "1");
+    window.localStorage.setItem("drifty.dev.disableAiAvailabilityGate", "1");
 
     render(<App />);
 

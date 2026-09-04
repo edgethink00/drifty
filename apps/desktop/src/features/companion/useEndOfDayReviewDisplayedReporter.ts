@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
 import { notifyNativeEndOfDayReviewDisplayed } from "./watcherBridge";
 

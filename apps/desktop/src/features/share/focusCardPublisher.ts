@@ -64,6 +64,8 @@ export interface FocusCardInput {
   readonly windowEndDay: string;
   readonly startOfDayMinutes: number;
   readonly includeAiClassifications: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
   /** Per-detail opt-ins, all default OFF: a detail is computed and attached only when its flag is on. */
   readonly shareCategoryBreakdown?: boolean;
   readonly shareHourlyPattern?: boolean;
@@ -152,7 +154,12 @@ export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: F
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const weekStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "weekly");
   const sod = input.startOfDayMinutes;
-  const options = { fallbackCandidates: publishableMonthSegments, includeAiClassifications: input.includeAiClassifications };
+  const options = {
+    fallbackCandidates: publishableMonthSegments,
+    includeAiClassifications: input.includeAiClassifications,
+    includeBuiltInHeuristics: input.includeBuiltInHeuristics,
+    builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
+  };
 
   const focus7d = Math.round(buildRollingFocusSeconds(publishableMonthSegments, weekStartDay, input.windowEndDay, options, sod));
   const focusToday = Math.round(buildRollingFocusSeconds(publishableMonthSegments, input.windowEndDay, input.windowEndDay, options, sod));

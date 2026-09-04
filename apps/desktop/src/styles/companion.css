@@ -1167,6 +1167,11 @@ html[data-theme="dark"] .src-tile--drift {
   background: var(--productivity-neutral);
 }
 
+.end-of-day-review__breakdown-dot--unclassified,
+.end-of-day-review__breakdown-item--unclassified .end-of-day-review__breakdown-bar span {
+  background: var(--text-soft);
+}
+
 .end-of-day-review__breakdown-bar {
   background: color-mix(in srgb, var(--text-soft) 16%, transparent);
   border-radius: 999px;
@@ -1469,6 +1474,14 @@ html[data-surface="watcher"] .end-of-day-review,
   min-width: 0;
 }
 
+.eodr-brand .window-logo {
+  display: block;
+  flex: 0 0 auto;
+  height: 1rem;
+  object-fit: contain;
+  width: auto;
+}
+
 .eodr-logo {
   align-items: center;
   background: linear-gradient(150deg, var(--accent), var(--accent-strong));
@@ -1652,6 +1665,10 @@ html[data-surface="watcher"] .end-of-day-review,
 
 .eodr-dial__segment--other {
   stroke: var(--productivity-neutral);
+}
+
+.eodr-dial__segment--unclassified {
+  stroke: var(--text-soft);
 }
 
 .eodr-dial__center {

@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingEntitlement } from "../billing/billingService";
+import type { ClassificationAvailability } from "../classification/classificationAvailability";
 import { useLocalization } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 import {
@@ -72,6 +73,7 @@ type ResolveSidebarCtaSlotInput = {
   /** True only after the configured provider has failed consecutive health checks. */
   readonly localAiDisconnectConfirmed: boolean;
   readonly managedLocalAiStatus?: ManagedLocalAiStatus | null;
+  readonly classificationAvailability?: ClassificationAvailability;
   readonly now?: number;
 };
 
@@ -104,6 +106,7 @@ export function resolveSidebarCtaSlot({
   localAiConfigured,
   localAiDisconnectConfirmed,
   managedLocalAiStatus = null,
+  classificationAvailability,
   now = Date.now(),
 }: ResolveSidebarCtaSlotInput): SidebarCtaSlotState | null {
   const managedDownload = managedLocalDownloadState(managedLocalAiStatus);
@@ -131,6 +134,20 @@ export function resolveSidebarCtaSlot({
         true,
       )
       : null;
+  }
+
+  if (classificationAvailability?.route === "local") {
+    if (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying") return null;
+    if (classificationAvailability.state === "ready") {
+      return billingEntitlement?.status === "active" ? null : localModelUpgradeState(billingCheckoutLoading);
+    }
+    if (classificationAvailability.state === "unavailable" || classificationAvailability.state === "degraded") {
+      return aiDisconnectedState(
+        classificationAvailability.issueKind ?? "provider",
+        aiRecoveryProviderLabel(localAiProvider, localAiConfigured),
+        localAiConfigured,
+      );
+    }
   }
 
   if (billingEntitlement?.status === "locked") {
@@ -420,6 +437,20 @@ function trialEndedState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
     titleKey: "sidebar.cta.trialEnded.title",
     titleEmphasisCount: null,
     tone: "ended",
+  };
+}
+
+function localModelUpgradeState(billingCheckoutLoading: boolean): SidebarCtaSlotState {
+  return {
+    actionLabelKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.action",
+    alert: null,
+    copyKey: billingCheckoutLoading ? "sidebar.cta.openingCheckout" : "sidebar.cta.upgrade.localDetail",
+    direction: "forward",
+    disabled: billingCheckoutLoading,
+    kind: "upgrade",
+    titleKey: "sidebar.cta.upgrade.localTitle",
+    titleEmphasisCount: null,
+    tone: "upgrade",
   };
 }
 

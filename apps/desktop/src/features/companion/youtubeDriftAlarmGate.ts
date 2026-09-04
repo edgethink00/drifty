@@ -33,6 +33,7 @@ export type YouTubeDriftAlarmGateResult =
 export type YouTubeDriftAlarmGateInput = {
   readonly segment: ActivitySegment;
   readonly category: ActivityCategory;
+  readonly allowAiClassification?: boolean;
   readonly aiOptions?: AiClassificationRunOptions | null;
   readonly timeoutMs?: number;
   readonly deadlineMs?: number;
@@ -41,6 +42,9 @@ export type YouTubeDriftAlarmGateInput = {
 export async function evaluateYouTubeDriftAlarmGate(input: YouTubeDriftAlarmGateInput): Promise<YouTubeDriftAlarmGateResult> {
   const subject = resolveDriftAlarmGateSubject(input.segment);
   if (subject.kind === "skip") return { kind: "skipped", reason: subject.reason };
+  if (input.allowAiClassification === false) {
+    return { kind: "suppress", reason: "ai-unavailable:classification-gate" };
+  }
 
   const timeoutMs = input.timeoutMs ?? DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS;
   const deadlineMs = Math.max(timeoutMs, input.deadlineMs ?? YOUTUBE_DRIFT_ALARM_GATE_DEADLINE_MS);

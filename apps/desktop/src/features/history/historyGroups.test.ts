@@ -24,6 +24,17 @@ function historySegment(
 }
 
 describe("buildHistoryRows", () => {
+  it("keeps new known-app activity unclassified while built-in heuristics are gated", () => {
+    const rows = buildHistoryRows([
+      historySegment("new", "2026-06-10T01:00:00+00:00", "2026-06-10T01:10:00+00:00", 600),
+    ], {
+      includeBuiltInHeuristics: false,
+      builtInHeuristicsUnavailableSince: "2026-06-10T00:00:00+00:00",
+    });
+
+    expect(rows[0]?.classification).toMatchObject({ category: "unknown", productivity: "neutral" });
+  });
+
   it("merges adjacent records when app and window title stay the same", () => {
     const rows = buildHistoryRows([
       historySegment("middle", "2026-06-10T01:10:00+00:00", "2026-06-10T01:20:00+00:00", 600),

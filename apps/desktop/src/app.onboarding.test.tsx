@@ -233,6 +233,7 @@ vi.mock("./features/billing/billingService", () => ({
 }));
 
 vi.mock("./appFeatureSwitches", () => ({
+  AI_AVAILABILITY_CLASSIFICATION_GATE_ENABLED: true,
   AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED: true,
   DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED: false,
   DEV_ONBOARDING_BYPASS_ENABLED: false,

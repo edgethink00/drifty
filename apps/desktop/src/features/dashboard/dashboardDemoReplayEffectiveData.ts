@@ -19,8 +19,10 @@ type DashboardDemoReplayEffectiveDataInput = {
 };
 
 type SelectedDayDashboardClassificationOptionsInput = {
+  readonly builtInHeuristicsUnavailableSince?: string | null;
   readonly fallbackCandidates: ActivitySegment[];
   readonly includeAiClassifications: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
   readonly rules: ClassificationOptions["rules"];
 };
 
@@ -72,8 +74,10 @@ export function buildSelectedDayDashboardClassificationOptions(
   input: SelectedDayDashboardClassificationOptionsInput,
 ): ClassificationOptions {
   return {
+    builtInHeuristicsUnavailableSince: input.builtInHeuristicsUnavailableSince,
     fallbackCandidates: input.fallbackCandidates,
     includeAiClassifications: input.includeAiClassifications,
+    includeBuiltInHeuristics: input.includeBuiltInHeuristics,
     rules: input.rules,
   };
 }

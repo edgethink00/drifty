@@ -1,4 +1,4 @@
-import { categorizeActivity, logicalDayStartMs, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
+import { classifyActivityDetailed, logicalDayStartMs, logicalMinuteOfDay, normalizeStartOfDayMinutes } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { getInsightSurfaceIdentity } from "../insights/insightData";
 import type { DriftSurfaceAccumulator } from "../insights/insightData";
@@ -42,6 +42,8 @@ export type FocusDriftPoint = {
   driftCaptures: number;
   totalSeconds: number;
   trackedSeconds: number;
+  classifiedSeconds: number;
+  unclassifiedSeconds: number;
   windowSeconds: number;
   focusScore: number;
   driftScore: number;
@@ -84,6 +86,8 @@ export type FocusDriftChart = {
   focusPath: string;
   driftPath: string;
   focusAreaPath: string;
+  driftAreaPath: string;
+  seriesPointRuns: FocusDriftPoint[][];
   peakFocusPoint: FocusDriftPoint | null;
   peakDriftPoint: FocusDriftPoint | null;
   focusConsistency: number;
@@ -124,6 +128,46 @@ export const FOCUS_DRIFT_Y_AXIS_TICKS = [
 
 export const FOCUS_DRIFT_GRID_PATH = FOCUS_DRIFT_Y_AXIS_TICKS.map((tick) => `M${FOCUS_DRIFT_CHART_BOUNDS.left} ${tick.y}H${FOCUS_DRIFT_CHART_BOUNDS.right}`).join(" ");
 
+function splitFocusDriftSeriesPointRuns(points: readonly FocusDriftPoint[]): FocusDriftPoint[][] {
+  const runs: FocusDriftPoint[][] = [];
+  let currentRun: FocusDriftPoint[] = [];
+  let waitingForClassifiedData = false;
+
+  const commitRun = () => {
+    if (currentRun.length > 0) runs.push(currentRun);
+    currentRun = [];
+  };
+
+  for (const point of points) {
+    const isUnclassifiedGap = point.unclassifiedSeconds > 0 && point.classifiedSeconds === 0;
+    if (isUnclassifiedGap) {
+      commitRun();
+      waitingForClassifiedData = true;
+      continue;
+    }
+    if (waitingForClassifiedData && point.classifiedSeconds === 0) continue;
+    waitingForClassifiedData = false;
+    currentRun.push(point);
+  }
+  commitRun();
+  return runs;
+}
+
+function buildSeriesPath(runs: readonly (readonly FocusDriftPoint[])[], yKey: "focusY" | "driftY"): string {
+  return runs.map((run) => buildSmoothPath(run, yKey)).filter(Boolean).join(" ");
+}
+
+function buildSeriesAreaPath(runs: readonly (readonly FocusDriftPoint[])[], yKey: "focusY" | "driftY"): string {
+  return runs.map((run) => {
+    const path = buildSmoothPath(run, yKey);
+    const first = run[0];
+    const last = run[run.length - 1];
+    return first && last && path
+      ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${path.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z`
+      : "";
+  }).filter(Boolean).join(" ");
+}
+
 export function buildFocusDriftChart(segments: ActivitySegment[], day: string, classificationOptions?: ClassificationOptions, currentMinuteOfDay?: number | null, startOfDayMinutes = 0): FocusDriftChart {
   return buildWindowedFocusDriftChart(segments, day, classificationOptions, currentMinuteOfDay, startOfDayMinutes);
 }
@@ -163,6 +207,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     focusSeconds: 0,
     driftSeconds: 0,
     trackedSeconds: 0,
+    classifiedSeconds: 0,
+    unclassifiedSeconds: 0,
     focusCaptures: 0,
     driftCaptures: 0,
     focusSources: new Map<string, FocusDriftSourceAccumulator>(),
@@ -181,7 +227,9 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
   const isLive = currentX !== null && currentBucketStartMinute !== null;
 
   for (const segment of segments) {
-    const productivity = categorizeActivity(segment, classificationOptions);
+    const classification = classifyActivityDetailed(segment, classificationOptions);
+    const productivity = classification.productivity;
+    const isUnclassified = classification.category === "unknown";
     const sourceIdentity = productivity === "focus" || productivity === "drift" ? getInsightSurfaceIdentity(segment) : null;
     const segmentStartMs = new Date(segment.startedAt).getTime();
     const segmentEndMs = new Date(segment.endedAt).getTime();
@@ -193,11 +241,16 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
       if (overlapSeconds <= 0) continue;
 
       bucket.trackedSeconds += overlapSeconds;
-      if (productivity === "focus" && sourceIdentity) {
+      if (isUnclassified) {
+        bucket.unclassifiedSeconds += overlapSeconds;
+      } else {
+        bucket.classifiedSeconds += overlapSeconds;
+      }
+      if (!isUnclassified && productivity === "focus" && sourceIdentity) {
         bucket.focusSeconds += overlapSeconds;
         bucket.focusCaptures += 1;
         addFocusDriftSourceOverlap(bucket.focusSources, sourceIdentity, overlapSeconds);
-      } else if (productivity === "drift" && sourceIdentity) {
+      } else if (!isUnclassified && productivity === "drift" && sourceIdentity) {
         bucket.driftSeconds += overlapSeconds;
         bucket.driftCaptures += 1;
         addFocusDriftSourceOverlap(bucket.driftSources, sourceIdentity, overlapSeconds);
@@ -230,6 +283,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
       driftCaptures: entry.driftCaptures,
       totalSeconds,
       trackedSeconds: entry.trackedSeconds,
+      classifiedSeconds: entry.classifiedSeconds,
+      unclassifiedSeconds: entry.unclassifiedSeconds,
       windowSeconds,
       focusScore,
       driftScore,
@@ -243,10 +298,11 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
 
   const measuredPoints = isLive ? points.filter((point) => !point.isFuture) : points;
   const activePoints = measuredPoints.filter((point) => point.totalSeconds > 0);
-  const focusPath = buildSmoothPath(measuredPoints, "focusY");
-  const driftPath = buildSmoothPath(measuredPoints, "driftY");
-  const first = measuredPoints[0], last = measuredPoints[measuredPoints.length - 1];
-  const focusAreaPath = first && last && focusPath ? `M ${first.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} L ${focusPath.slice(2)} L ${last.x} ${FOCUS_DRIFT_CHART_BOUNDS.bottom} Z` : "";
+  const seriesPointRuns = splitFocusDriftSeriesPointRuns(measuredPoints);
+  const focusPath = buildSeriesPath(seriesPointRuns, "focusY");
+  const driftPath = buildSeriesPath(seriesPointRuns, "driftY");
+  const focusAreaPath = buildSeriesAreaPath(seriesPointRuns, "focusY");
+  const driftAreaPath = buildSeriesAreaPath(seriesPointRuns, "driftY");
   const peakFocusPoint = activePoints.reduce<FocusDriftPoint | null>((current, point) => (!current || point.focusScore > current.focusScore ? point : current), null);
   const peakDriftPoint = activePoints.reduce<FocusDriftPoint | null>((current, point) => (!current || point.driftScore > current.driftScore ? point : current), null);
 
@@ -255,6 +311,8 @@ export function buildWindowedFocusDriftChart(segments: ActivitySegment[], day: s
     focusPath,
     driftPath,
     focusAreaPath,
+    driftAreaPath,
+    seriesPointRuns,
     peakFocusPoint,
     peakDriftPoint,
     focusConsistency: buildAverageFocusScore(activePoints),

@@ -63,13 +63,15 @@ export interface UseDailyProductivityInput {
   readonly windowEndDay: string;
   readonly startOfDayMinutes: number;
   readonly includeAiClassifications: boolean;
+  readonly includeBuiltInHeuristics?: boolean;
+  readonly builtInHeuristicsUnavailableSince?: string | null;
   /** Fetch only while the surface that renders the chart is active. */
   readonly enabled: boolean;
 }
 
 /** 30-day series from the tracker; null while loading/disabled. */
 export function useDailyProductivitySeries(input: UseDailyProductivityInput): DailyProductivityPoint[] | null {
-  const { windowEndDay, startOfDayMinutes, includeAiClassifications, enabled } = input;
+  const { windowEndDay, startOfDayMinutes, includeAiClassifications, includeBuiltInHeuristics, builtInHeuristicsUnavailableSince, enabled } = input;
   const [series, setSeries] = useState<DailyProductivityPoint[] | null>(null);
 
   useEffect(() => {
@@ -85,7 +87,7 @@ export function useDailyProductivitySeries(input: UseDailyProductivityInput): Da
           segments,
           startDay,
           windowEndDay,
-          { fallbackCandidates: segments, includeAiClassifications },
+          { fallbackCandidates: segments, includeAiClassifications, includeBuiltInHeuristics, builtInHeuristicsUnavailableSince },
           startOfDayMinutes,
         );
         if (!cancelled) setSeries(next);
@@ -97,7 +99,7 @@ export function useDailyProductivitySeries(input: UseDailyProductivityInput): Da
     return () => {
       cancelled = true;
     };
-  }, [enabled, windowEndDay, startOfDayMinutes, includeAiClassifications]);
+  }, [builtInHeuristicsUnavailableSince, enabled, includeAiClassifications, includeBuiltInHeuristics, startOfDayMinutes, windowEndDay]);
 
   return series;
 }

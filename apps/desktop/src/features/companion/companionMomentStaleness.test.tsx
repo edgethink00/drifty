@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { CompanionPillMoment } from "./CompanionPillMoment";
 import { COMPANION_MOMENT_STALE_AFTER_MS } from "./companionMomentFreshness";
 

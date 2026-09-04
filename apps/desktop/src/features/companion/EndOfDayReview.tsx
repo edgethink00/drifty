@@ -1,72 +1,19 @@
 import { useState, type CSSProperties, type MouseEvent } from "react";
-import { buildAppUsageSummaries, buildProductivityDurations, secondsToLabel, type ActivitySegment, type AppIconMap } from "@drifty/domain";
+import { secondsToLabel } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DismissIcon, SettingsIcon } from "./DriftAlarmIcons";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import driftyWordmarkUrl from "../../assets/drifty-wordmark.png";
-import type { CompanionDayReviewLayout } from "./companionPillLayout";
 import type { LeaderboardCelebration } from "./companionLeaderboardMilestones";
+import type {
+  EndOfDayReviewBreakdownKey,
+  EndOfDayReviewCategorySummary,
+  EndOfDayReviewEvent,
+  EndOfDayReviewSourceSummary,
+  EndOfDayReviewTopSource,
+} from "./endOfDayReviewModel";
 
-type ReviewBreakdownKey = "focus" | "drift" | "other";
-
-export type EndOfDayReviewTopSource = {
-  appName: string;
-  bundleId?: string | null;
-  iconSrc?: string | null;
-  sourceLabel: string;
-  durationSeconds: number;
-};
-
-export type EndOfDayReviewBreakdownSource = EndOfDayReviewTopSource & {
-  key: ReviewBreakdownKey;
-};
-
-export type EndOfDayReviewCategorySummary = {
-  label: string;
-  durationSeconds: number;
-  percent: number;
-};
-
-export type EndOfDayReviewSourceSummary = EndOfDayReviewTopSource & {
-  percent: number;
-};
-
-export type EndOfDayReviewComparison = {
-  focusDeltaSeconds: number;
-  driftDeltaSeconds: number;
-  otherDeltaSeconds: number;
-};
-
-export type EndOfDayReviewDailySignals = {
-  deepSessionCount: number;
-  longestFocusRunSeconds: number;
-  peakHourLabel: string | null;
-  peakHourFocusSeconds: number;
-};
-
-export type EndOfDayReviewEvent = {
-  kind: "endOfDayReview";
-  /** Presentation choice carried into the dedicated Companion webview. */
-  layout?: CompanionDayReviewLayout;
-  placement?: "top-right";
-  day: string;
-  generatedAt: string;
-  trackedLabel: string;
-  focusLabel: string;
-  driftLabel: string;
-  totalSeconds: number;
-  focusSeconds: number;
-  driftSeconds: number;
-  topSource: EndOfDayReviewTopSource | null;
-  breakdownSources?: EndOfDayReviewBreakdownSource[];
-  categorySummaries?: EndOfDayReviewCategorySummary[];
-  sourceSummaries?: EndOfDayReviewSourceSummary[];
-  highlightLabel?: string;
-  comparison?: EndOfDayReviewComparison;
-  dailySignals?: EndOfDayReviewDailySignals;
-  leaderboardCelebration?: LeaderboardCelebration;
-  isMock?: boolean;
-};
+type ReviewBreakdownKey = EndOfDayReviewBreakdownKey;
 
 type EndOfDayReviewProps = {
   event: EndOfDayReviewEvent;
@@ -106,7 +53,7 @@ type ReviewCategoryStyle = CSSProperties & {
 };
 
 const REVIEW_GRAPH_RADIUS = 40;
-const BREAKDOWN_ORDER: Record<ReviewBreakdownKey, number> = { focus: 0, drift: 1, other: 2 };
+const BREAKDOWN_ORDER: Record<ReviewBreakdownKey, number> = { focus: 0, drift: 1, other: 2, unclassified: 3 };
 const REVIEW_CATEGORY_COLORS = [
   "var(--productivity-focus)",
   "#64645f",
@@ -115,124 +62,13 @@ const REVIEW_CATEGORY_COLORS = [
   "#bd6257",
 ] as const;
 
-export function buildEndOfDayReviewSummary({
-  day,
-  generatedAt,
-  segments,
-  appIcons = {},
-  leaderboardCelebration,
-  isMock = false,
-}: {
-  day: string;
-  generatedAt: string;
-  segments: ActivitySegment[];
-  appIcons?: AppIconMap;
-  leaderboardCelebration?: LeaderboardCelebration;
-  isMock?: boolean;
-}): EndOfDayReviewEvent {
-  const totalSeconds = segments.reduce((total, segment) => total + segment.durationSeconds, 0);
-  const productivityDurations = buildProductivityDurations(segments);
-  const focusSeconds = productivityDurations.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
-  const driftSeconds = productivityDurations.find((entry) => entry.productivity === "drift")?.totalSeconds ?? 0;
-  const dailySignals = buildEndOfDayReviewDailySignals(segments);
-  const resolvedLeaderboardCelebration = leaderboardCelebration ?? (isMock ? {
-    period: "daily" as const,
-    rank: 2 as const,
-    participantCount: 14,
-    focusSeconds,
-    windowEndDay: day,
-  } : undefined);
+/**
+ * Retained visual reference for the pre-Companion `Summary - Today` panel.
+ * Product surfaces must render `CompanionPillDayReview`; this component is
+ * intentionally isolated from App, bridge, and watcher runtime wiring.
+ */
 
-  return {
-    kind: "endOfDayReview",
-    placement: "top-right",
-    day,
-    generatedAt,
-    trackedLabel: `${formatReviewDuration(totalSeconds)} tracked`,
-    focusLabel: `${formatReviewDuration(focusSeconds)} focus`,
-    driftLabel: `${formatReviewDuration(driftSeconds)} drift`,
-    totalSeconds,
-    focusSeconds,
-    driftSeconds,
-    topSource: buildTopSource(segments, appIcons),
-    breakdownSources: buildBreakdownSources(segments, appIcons),
-    categorySummaries: buildCategorySummaries(segments, totalSeconds),
-    sourceSummaries: buildSourceSummaries(segments, totalSeconds, appIcons),
-    /* Cross-day comparison data is not yet part of the live summary input.
-       Keep production honest, while the deterministic Dev preview reproduces
-       the reviewed card state instead of silently dropping those rows. */
-    highlightLabel: resolvedLeaderboardCelebration
-      ? `#${resolvedLeaderboardCelebration.rank} of ${resolvedLeaderboardCelebration.participantCount} · 8 PM`
-      : isMock ? "Best this week" : undefined,
-    comparison: isMock ? {
-      focusDeltaSeconds: 38 * 60,
-      driftDeltaSeconds: -9 * 60,
-      otherDeltaSeconds: 5 * 60,
-    } : undefined,
-    dailySignals,
-    leaderboardCelebration: resolvedLeaderboardCelebration,
-    isMock: isMock || undefined,
-  };
-}
-
-const DEEP_SESSION_MIN_SECONDS = 45 * 60;
-const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
-
-export function buildEndOfDayReviewDailySignals(segments: ActivitySegment[]): EndOfDayReviewDailySignals {
-  const focusSegments = segments
-    .filter((segment) => segment.classification?.productivity === "focus")
-    .map((segment) => ({
-      startedAt: new Date(segment.startedAt),
-      endedAt: new Date(segment.endedAt),
-      durationSeconds: Math.max(0, segment.durationSeconds),
-    }))
-    .filter((segment) => Number.isFinite(segment.startedAt.getTime()) && Number.isFinite(segment.endedAt.getTime()))
-    .sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
-
-  const focusRuns: number[] = [];
-  let runEndMs = 0;
-  let runSeconds = 0;
-  for (const segment of focusSegments) {
-    const startMs = segment.startedAt.getTime();
-    const endMs = Math.max(startMs, segment.endedAt.getTime());
-    if (runSeconds > 0 && startMs > runEndMs + FOCUS_RUN_MAX_GAP_MS) {
-      focusRuns.push(runSeconds);
-      runSeconds = 0;
-    }
-    runSeconds += segment.durationSeconds;
-    runEndMs = Math.max(runEndMs, endMs);
-  }
-  if (runSeconds > 0) focusRuns.push(runSeconds);
-
-  const deepRuns = focusRuns.filter((seconds) => seconds >= DEEP_SESSION_MIN_SECONDS);
-  const focusByHour = new Map<number, number>();
-  for (const segment of focusSegments) {
-    let cursorMs = segment.startedAt.getTime();
-    const endMs = Math.max(cursorMs, segment.endedAt.getTime());
-    while (cursorMs < endMs) {
-      const hour = new Date(cursorMs);
-      hour.setMinutes(0, 0, 0);
-      const hourStartMs = hour.getTime();
-      const hourEndMs = hourStartMs + 60 * 60 * 1000;
-      const overlapSeconds = Math.max(0, Math.min(endMs, hourEndMs) - cursorMs) / 1000;
-      focusByHour.set(hourStartMs, (focusByHour.get(hourStartMs) ?? 0) + overlapSeconds);
-      cursorMs = Math.min(endMs, hourEndMs);
-    }
-  }
-
-  const peak = Array.from(focusByHour.entries())
-    .sort((left, right) => right[1] - left[1] || left[0] - right[0])[0];
-  const peakDate = peak ? new Date(peak[0]) : null;
-
-  return {
-    deepSessionCount: deepRuns.length,
-    longestFocusRunSeconds: Math.max(0, ...focusRuns),
-    peakHourLabel: peakDate ? `${String(peakDate.getHours()).padStart(2, "0")}:00` : null,
-    peakHourFocusSeconds: Math.round(peak?.[1] ?? 0),
-  };
-}
-
-export function EndOfDayReview({
+export function LegacyEndOfDayReview({
   event,
   isMock = false,
   onOpenDashboard,
@@ -549,96 +385,30 @@ function ReviewSourceIcon({ source }: { source: EndOfDayReviewSourceSummary }) {
   );
 }
 
-function buildTopSource(segments: ActivitySegment[], appIcons: AppIconMap): EndOfDayReviewTopSource | null {
-  return buildTopSourceFromSegments(segments, appIcons);
-}
-
-function buildCategorySummaries(segments: ActivitySegment[], totalSeconds: number): EndOfDayReviewCategorySummary[] {
-  const totals = new Map<string, number>();
-
-  for (const segment of segments) {
-    const category = segment.classification?.category ?? "unknown";
-    totals.set(category, (totals.get(category) ?? 0) + segment.durationSeconds);
-  }
-
-  return Array.from(totals.entries())
-    .map(([category, durationSeconds]) => ({
-      label: formatCategoryLabel(category),
-      durationSeconds,
-      percent: safePercent(durationSeconds, totalSeconds),
-    }))
-    .sort((left, right) => right.durationSeconds - left.durationSeconds || left.label.localeCompare(right.label))
-    .slice(0, 5);
-}
-
-function buildSourceSummaries(segments: ActivitySegment[], totalSeconds: number, appIcons: AppIconMap): EndOfDayReviewSourceSummary[] {
-  return buildAppUsageSummaries(segments, { limit: 3, groupBy: "app" }).map((summary) => {
-    const appSegments = segments.filter((segment) => segment.appName === summary.appName);
-    const topSource = buildAppUsageSummaries(appSegments, { limit: 1 })[0];
-    const sourceLabel = topSource ? sourceLabelForSummary(topSource) : summary.appName;
-    const bundleId = summary.bundleId ?? null;
-
-    return {
-      appName: summary.appName,
-      bundleId,
-      iconSrc: resolveAppIconSrc(summary.appName, bundleId, appIcons),
-      sourceLabel,
-      durationSeconds: summary.totalSeconds,
-      percent: safePercent(summary.totalSeconds, totalSeconds),
-    };
-  });
-}
-
-function buildBreakdownSources(segments: ActivitySegment[], appIcons: AppIconMap): EndOfDayReviewBreakdownSource[] {
-  return (["focus", "drift", "other"] as ReviewBreakdownKey[]).flatMap((key) => {
-    const source = buildTopSourceFromSegments(segments.filter((segment) => matchesBreakdownKey(segment, key)), appIcons);
-    return source ? [{ ...source, key }] : [];
-  });
-}
-
-function buildTopSourceFromSegments(segments: ActivitySegment[], appIcons: AppIconMap): EndOfDayReviewTopSource | null {
-  const topApp = buildAppUsageSummaries(segments, { limit: 1, groupBy: "app" })[0];
-  if (!topApp) return null;
-
-  const appSegments = segments.filter((segment) => segment.appName === topApp.appName);
-  const topSource = buildAppUsageSummaries(appSegments, { limit: 1 })[0];
-  const sourceLabel = topSource ? sourceLabelForSummary(topSource) : topApp.appName;
-  const bundleId = topApp.bundleId ?? null;
-
-  return {
-    appName: topApp.appName,
-    bundleId,
-    iconSrc: resolveAppIconSrc(topApp.appName, bundleId, appIcons),
-    sourceLabel,
-    durationSeconds: topApp.totalSeconds,
-  };
-}
-
-function resolveAppIconSrc(appName: string, bundleId: string | null, appIcons: AppIconMap): string | null {
-  if (bundleId && appIcons[bundleId]) return appIcons[bundleId];
-  return appIcons[appName] ?? null;
-}
-
-function matchesBreakdownKey(segment: ActivitySegment, key: ReviewBreakdownKey): boolean {
-  const productivity = segment.classification?.productivity ?? "neutral";
-  if (key === "focus") return productivity === "focus";
-  if (key === "drift") return productivity === "drift";
-  return productivity !== "focus" && productivity !== "drift";
-}
-
 function buildReviewBreakdown(event: EndOfDayReviewEvent): ReviewBreakdownItem[] {
   const totalSeconds = Math.max(0, event.totalSeconds);
   const focusSeconds = Math.max(0, event.focusSeconds);
   const driftSeconds = Math.max(0, event.driftSeconds);
-  const otherSeconds = Math.max(0, totalSeconds - focusSeconds - driftSeconds);
+  const unclassifiedSeconds = Math.max(0, event.unclassifiedSeconds ?? 0);
+  const otherSeconds = Math.max(0, event.neutralSeconds ?? totalSeconds - focusSeconds - driftSeconds - unclassifiedSeconds);
 
   const sourceByKey = new Map((event.breakdownSources ?? []).map((source) => [source.key, source]));
 
-  return [
+  const breakdown: ReviewBreakdownItem[] = [
     { key: "focus", label: "Focus", seconds: focusSeconds, percent: safePercent(focusSeconds, totalSeconds), topSource: sourceByKey.get("focus") ?? null },
     { key: "drift", label: "Drift", seconds: driftSeconds, percent: safePercent(driftSeconds, totalSeconds), topSource: sourceByKey.get("drift") ?? null },
     { key: "other", label: "Neutral", seconds: otherSeconds, percent: safePercent(otherSeconds, totalSeconds), topSource: sourceByKey.get("other") ?? null },
   ];
+  if (unclassifiedSeconds > 0) {
+    breakdown.push({
+      key: "unclassified",
+      label: "Unclassified",
+      seconds: unclassifiedSeconds,
+      percent: safePercent(unclassifiedSeconds, totalSeconds),
+      topSource: sourceByKey.get("unclassified") ?? null,
+    });
+  }
+  return breakdown;
 }
 
 function buildCompactBreakdown(breakdown: ReviewBreakdownItem[]): ReviewBreakdownItem[] {
@@ -652,20 +422,6 @@ function safePercent(seconds: number, totalSeconds: number): number {
 
 function formatReviewPercent(percent: number): string {
   return Number.isInteger(percent) ? `${percent}%` : `${percent.toFixed(1)}%`;
-}
-
-function formatCategoryLabel(category: string): string {
-  return category
-    .split(/[_-]/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ") || "Unknown";
-}
-
-function sourceLabelForSummary(summary: ReturnType<typeof buildAppUsageSummaries>[number]): string {
-  if (summary.siteDomain) return summary.siteDomain;
-  if (summary.siteTitle) return summary.siteTitle;
-  return summary.appName;
 }
 
 function formatReviewDuration(totalSeconds: number): string {

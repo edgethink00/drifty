@@ -4,6 +4,8 @@ declare const __DRIFTY_DEV_FORCE_ONBOARDING__: boolean;
 declare const __DRIFTY_DEV_ALLOW_ONBOARDING_AUTH_SKIP__: boolean;
 
 export const AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED = true;
+/** Emergency rollback for gating built-in classification behind provider readiness. */
+export const AI_AVAILABILITY_CLASSIFICATION_GATE_ENABLED = true;
 export const DEV_SETTINGS_ENABLED = true;
 export const DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED = true;
 export const DEVELOPER_PRE_RELEASE_UPDATES_ENABLED = true;

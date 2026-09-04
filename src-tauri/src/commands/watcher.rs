@@ -28,8 +28,6 @@ pub const COMPANION_PILL_WINDOW_LABEL: &str = "companion-pill";
 
 const WATCHER_PEEK_WIDTH: f64 = 560.0;
 const WATCHER_PEEK_HEIGHT: f64 = 340.0;
-const END_OF_DAY_REVIEW_WIDTH: f64 = 560.0;
-const END_OF_DAY_REVIEW_HEIGHT: f64 = 720.0;
 pub(super) const WATCHER_PEEK_WORK_AREA_MARGIN: f64 = 32.0;
 
 pub(super) const COMPANION_PILL_COLLAPSED_WIDTH: f64 = 220.0;
@@ -48,6 +46,7 @@ const COMPANION_PILL_MOMENT_WIDTH: f64 = 352.0;
 const COMPANION_PILL_MOMENT_HEIGHT: f64 = 130.0;
 const COMPANION_PILL_REVIEW_WIDTH: f64 = 331.0;
 const COMPANION_PILL_REVIEW_HEIGHT: f64 = 480.0;
+const COMPANION_PILL_PENDING_REVIEW_HEIGHT: f64 = 300.0;
 const COMPANION_PILL_COMPACT_REVIEW_WIDTH: f64 = 310.0;
 const COMPANION_PILL_COMPACT_REVIEW_HEIGHT: f64 = 284.0;
 const COMPANION_PILL_MINIMAL_REVIEW_WIDTH: f64 = 310.0;
@@ -290,7 +289,16 @@ pub fn setup_companion_pill_window(app: &tauri::App) -> tauri::Result<()> {
 
 #[tauri::command]
 pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), String> {
-    if companion_pill_enabled() {
+    let companion_enabled = companion_pill_enabled();
+    /* Day Review has one product renderer. The public UI's "off" preference
+    maps to moments-only, so it still reaches Companion; a truly disabled
+    native surface drops the review instead of reviving Summary - Today. */
+    if is_end_of_day_review_payload(&payload)
+        && !should_route_day_review_to_companion(&payload, companion_enabled)
+    {
+        return Ok(());
+    }
+    if companion_enabled {
         annotate_companion_presentation(&mut payload, companion_menu_bar_mode());
         let window = app
             .get_webview_window(COMPANION_PILL_WINDOW_LABEL)
@@ -866,8 +874,6 @@ fn position_watcher_window(app: &AppHandle, payload: &Value) -> Result<(), Strin
     let size = work_area.size.to_logical::<f64>(scale_factor);
     let watcher_position = if is_milestone_payload(payload) || is_reentry_payload(payload) {
         calculate_standalone_milestone_window_position(position.x, position.y, size.width)
-    } else if is_end_of_day_review_payload(payload) {
-        calculate_end_of_day_review_window_position(position.x, position.y, size.width, size.height)
     } else if is_extreme_nudge_toast_payload(payload) {
         calculate_extreme_nudge_toast_window_position(position.x, position.y, size.width)
     } else {
@@ -929,7 +935,7 @@ fn watcher_surface_window_label(use_companion: bool) -> &'static str {
 fn validate_companion_pill_state(state: &str) -> Result<(), String> {
     match state {
         "collapsed" | "peek" | "milestone" | "reentry" | "drift" | "nudge" | "eod"
-        | "eodCompact" | "eodMinimal" => Ok(()),
+        | "eodPending" | "eodCompact" | "eodMinimal" => Ok(()),
         _ => Err(format!("unknown companion pill state: {state}")),
     }
 }
@@ -1037,6 +1043,10 @@ pub(super) fn companion_pill_capsule_size(state: &str) -> Result<(f64, f64), Str
         "reentry" => (COMPANION_PILL_REENTRY_WIDTH, COMPANION_PILL_REENTRY_HEIGHT),
         "drift" | "nudge" => (COMPANION_PILL_MOMENT_WIDTH, COMPANION_PILL_MOMENT_HEIGHT),
         "eod" => (COMPANION_PILL_REVIEW_WIDTH, COMPANION_PILL_REVIEW_HEIGHT),
+        "eodPending" => (
+            COMPANION_PILL_REVIEW_WIDTH,
+            COMPANION_PILL_PENDING_REVIEW_HEIGHT,
+        ),
         "eodCompact" => (
             COMPANION_PILL_COMPACT_REVIEW_WIDTH,
             COMPANION_PILL_COMPACT_REVIEW_HEIGHT,
@@ -1506,8 +1516,6 @@ fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
             COMPANION_PILL_REENTRY_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
             COMPANION_PILL_REENTRY_HEIGHT + COMPANION_PILL_GUTTER_Y * 2.0,
         )
-    } else if is_end_of_day_review_payload(payload) {
-        (END_OF_DAY_REVIEW_WIDTH, END_OF_DAY_REVIEW_HEIGHT)
     } else if is_extreme_nudge_toast_payload(payload) {
         extreme_nudge_toast_window_dimensions()
     } else {
@@ -1518,7 +1526,6 @@ fn watcher_window_dimensions_for_payload(payload: &Value) -> (f64, f64) {
 fn should_ignore_cursor_events_for_payload(payload: &Value) -> bool {
     !(is_milestone_payload(payload)
         || is_reentry_payload(payload)
-        || is_end_of_day_review_payload(payload)
         || is_extreme_nudge_toast_payload(payload))
 }
 
@@ -1552,25 +1559,15 @@ fn calculate_standalone_milestone_window_position(
     )
 }
 
-fn calculate_end_of_day_review_window_position(
-    work_area_x: f64,
-    work_area_y: f64,
-    work_area_width: f64,
-    work_area_height: f64,
-) -> LogicalPosition<f64> {
-    let available_x = (work_area_width - END_OF_DAY_REVIEW_WIDTH).max(0.0);
-    let available_y = (work_area_height - END_OF_DAY_REVIEW_HEIGHT).max(0.0);
-    let x_margin = WATCHER_PEEK_WORK_AREA_MARGIN.min(available_x);
-    let y_margin = WATCHER_PEEK_WORK_AREA_MARGIN.min(available_y);
-
-    LogicalPosition::new(work_area_x + available_x - x_margin, work_area_y + y_margin)
-}
-
 fn is_end_of_day_review_payload(payload: &Value) -> bool {
     matches!(
         payload.get("kind").and_then(Value::as_str),
         Some("endOfDayReview")
     )
+}
+
+fn should_route_day_review_to_companion(payload: &Value, companion_enabled: bool) -> bool {
+    companion_enabled && is_end_of_day_review_payload(payload)
 }
 
 fn is_milestone_payload(payload: &Value) -> bool {

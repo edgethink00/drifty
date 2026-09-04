@@ -59,6 +59,16 @@ export interface ClassificationRuleOption {
 export interface ClassificationOptions {
   fallbackCandidates?: ActivitySegment[];
   includeAiClassifications?: boolean;
+  /**
+   * Controls built-in app/domain/YouTube semantic heuristics for activity that
+   * does not already have an authoritative stored or user-rule result.
+   */
+  includeBuiltInHeuristics?: boolean;
+  /**
+   * When set, built-in heuristics remain available for earlier history but are
+   * disabled for activity captured at or after this availability cutoff.
+   */
+  builtInHeuristicsUnavailableSince?: string | null;
   rules?: ClassificationRuleOption[];
 }
 

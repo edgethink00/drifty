@@ -29,6 +29,9 @@ export interface BuiltInHeuristicClassificationMaterialization {
 }
 
 type SaveClassifications = (classifications: ActivityClassificationRecord[]) => Promise<{ saved: number }>;
+type PersistenceAllowed = () => boolean;
+
+const persistenceAlwaysAllowed: PersistenceAllowed = () => true;
 
 export function materializeBuiltInHeuristicClassifications(
   input: BuiltInHeuristicClassificationMaterializationInput,
@@ -55,18 +58,26 @@ export function materializeBuiltInHeuristicClassifications(
 
 export function scheduleBuiltInHeuristicClassificationPersistence(
   classifications: readonly ActivityClassificationRecord[],
+  persistenceAllowed: PersistenceAllowed = persistenceAlwaysAllowed,
 ): void {
   if (classifications.length === 0) return;
 
   setTimeout(() => {
-    void persistBuiltInHeuristicClassifications(classifications).catch(reportBuiltInHeuristicPersistenceError);
+    if (!persistenceAllowed()) return;
+    void persistBuiltInHeuristicClassifications(
+      classifications,
+      defaultSaveClassifications,
+      persistenceAllowed,
+    ).catch(reportBuiltInHeuristicPersistenceError);
   }, 0);
 }
 
 export async function persistBuiltInHeuristicClassifications(
   classifications: readonly ActivityClassificationRecord[],
   saveClassifications: SaveClassifications = defaultSaveClassifications,
+  persistenceAllowed: PersistenceAllowed = persistenceAlwaysAllowed,
 ): Promise<number> {
+  if (!persistenceAllowed()) return 0;
   const uniqueClassifications = dedupeClassificationsBySegmentId(classifications);
   let saved = 0;
 
@@ -75,6 +86,7 @@ export async function persistBuiltInHeuristicClassifications(
     if (batch.length === 0) continue;
 
     await yieldToRenderer();
+    if (!persistenceAllowed()) return saved;
     const result = await saveClassifications(batch);
     saved += result.saved;
   }

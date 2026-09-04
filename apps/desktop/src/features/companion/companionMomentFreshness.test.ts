@@ -7,6 +7,7 @@ import {
 } from "./companionMomentFreshness";
 import {
   END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS,
+  buildMockPendingEndOfDayReviewSegments,
   sumEndOfDayReviewTrackedSeconds,
 } from "./endOfDayReviewData";
 
@@ -46,6 +47,17 @@ describe("end-of-day review minimum tracked time", () => {
     expect(sumEndOfDayReviewTrackedSeconds(segments)).toBe(10_800);
     expect(sumEndOfDayReviewTrackedSeconds([])).toBe(0);
   });
+
+  it("keeps the afternoon mock activity raw after the 14:20 AI cutoff", () => {
+    const segments = buildMockPendingEndOfDayReviewSegments("2026-09-04");
+    const cutoff = new Date("2026-09-04T14:20:00").getTime();
+    const beforeCutoff = segments.filter((item) => new Date(item.startedAt).getTime() < cutoff);
+    const afterCutoff = segments.filter((item) => new Date(item.startedAt).getTime() >= cutoff);
+
+    expect(beforeCutoff.every((item) => item.classification)).toBe(true);
+    expect(afterCutoff.every((item) => !item.classification)).toBe(true);
+    expect(sumEndOfDayReviewTrackedSeconds(segments)).toBeGreaterThan(END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS);
+  });
 });
 
 function segment(durationSeconds: number): ActivitySegment {
@@ -59,4 +71,3 @@ function segment(durationSeconds: number): ActivitySegment {
     source: "accessibility",
   };
 }
-

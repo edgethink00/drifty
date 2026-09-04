@@ -316,6 +316,13 @@ export function CompanionWindowApp() {
     ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings"));
   }, []);
 
+  const handleOpenDayReviewAiSettings = useCallback(() => {
+    const current = momentEventRef.current;
+    if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
+    recordCompanionEngagementMetric("settings_opened");
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openAiSettings"));
+  }, []);
+
   const handleOpenMilestoneDestination = useCallback((destination: "leaderboard" | "insights" | "dashboard") => {
     finishCurrentMoment();
     recordCompanionEngagementMetric(destination === "leaderboard"
@@ -524,6 +531,7 @@ export function CompanionWindowApp() {
         isTrackingPaused={peekEvent?.trackingPaused === true}
         onDismissMoment={handleDismiss}
         onOpenDashboard={handleOpenDashboard}
+        onOpenDayReviewAiSettings={handleOpenDayReviewAiSettings}
         onOpenReentry={handleOpenReentry}
         onOpenMilestoneDestination={handleOpenMilestoneDestination}
         onOpenSettings={handleOpenSettings}
@@ -562,6 +570,7 @@ function resolveCompanionAnchor(targetState: CompanionPillState): CompanionHoriz
 
 function companionMomentState(event: CompanionPillMomentEvent): CompanionPillState {
   if (event.kind === "endOfDayReview") {
+    if (event.assessment?.state === "pending") return "eodPending";
     if (event.layout === "full") return "eod";
     return event.layout === "compact" ? "eodCompact" : "eodMinimal";
   }

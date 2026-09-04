@@ -17,14 +17,6 @@ fn centers_watcher_inside_shifted_work_area() {
 }
 
 #[test]
-fn positions_end_of_day_review_top_right_in_work_area() {
-    let position = calculate_end_of_day_review_window_position(0.0, 25.0, 1440.0, 775.0);
-
-    assert_eq!(position.x, 848.0);
-    assert_eq!(position.y, 57.0);
-}
-
-#[test]
 fn positions_resident_companion_pill_top_right() {
     let position = calculate_companion_pill_default_position(0.0, 33.0, 1728.0);
 
@@ -125,7 +117,14 @@ fn identifies_only_event_cards_as_direct_menu_bar_moments() {
 
 #[test]
 fn every_menu_bar_card_reenters_from_the_status_item() {
-    for state in ["milestone", "reentry", "drift", "nudge", "eod"] {
+    for state in [
+        "milestone",
+        "reentry",
+        "drift",
+        "nudge",
+        "eod",
+        "eodPending",
+    ] {
         assert!(should_prepare_direct_menu_bar_card(true, state));
     }
     for state in ["collapsed", "peek"] {
@@ -353,6 +352,10 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
     );
     assert_eq!(companion_pill_capsule_size("eod").unwrap(), (331.0, 480.0));
     assert_eq!(
+        companion_pill_capsule_size("eodPending").unwrap(),
+        (331.0, 300.0)
+    );
+    assert_eq!(
         companion_pill_capsule_size("eodCompact").unwrap(),
         (310.0, 284.0)
     );
@@ -392,6 +395,13 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
         )
     );
     assert_eq!(
+        companion_pill_dimensions("eodPending").unwrap(),
+        (
+            COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
+            300.0 + COMPANION_PILL_GUTTER_Y * 2.0
+        )
+    );
+    assert_eq!(
         companion_pill_dimensions("eodCompact").unwrap(),
         (
             COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
@@ -405,15 +415,6 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
             223.0 + COMPANION_PILL_GUTTER_Y * 2.0
         )
     );
-}
-
-#[test]
-fn sizes_end_of_day_review_as_redesigned_review_panel() {
-    let payload = serde_json::json!({"kind": "endOfDayReview"});
-    let (width, height) = watcher_window_dimensions_for_payload(&payload);
-
-    assert_eq!(width, 560.0);
-    assert_eq!(height, 720.0);
 }
 
 #[test]
@@ -469,18 +470,12 @@ fn standalone_milestone_accepts_cursor_events() {
 }
 
 #[test]
-fn keeps_end_of_day_review_inside_shifted_work_area_when_space_allows() {
-    let position = calculate_end_of_day_review_window_position(80.0, 24.0, 1360.0, 900.0);
-
-    assert_eq!(position.x, 848.0);
-    assert_eq!(position.y, 56.0);
-}
-
-#[test]
 fn detects_end_of_day_review_payload_by_kind() {
     let payload = serde_json::json!({"kind": "endOfDayReview"});
 
     assert!(is_end_of_day_review_payload(&payload));
+    assert!(!should_route_day_review_to_companion(&payload, false));
+    assert!(should_route_day_review_to_companion(&payload, true));
 }
 
 #[test]
@@ -498,13 +493,8 @@ fn does_not_detect_normal_watcher_payload() {
     });
 
     assert!(!is_end_of_day_review_payload(&payload));
-}
-
-#[test]
-fn end_of_day_review_payload_accepts_cursor_events() {
-    let payload = serde_json::json!({"kind": "endOfDayReview"});
-
-    assert!(!should_ignore_cursor_events_for_payload(&payload));
+    assert!(!should_route_day_review_to_companion(&payload, false));
+    assert!(!should_route_day_review_to_companion(&payload, true));
 }
 
 #[test]

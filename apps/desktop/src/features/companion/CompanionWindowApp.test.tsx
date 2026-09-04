@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionWindowApp } from "./CompanionWindowApp";
-import type { EndOfDayReviewEvent } from "./EndOfDayReview";
+import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
 import { DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS } from "./driftAlarmEvent";
@@ -119,6 +119,18 @@ const reviewMoment: EndOfDayReviewEvent = {
   topSource: null,
 };
 
+const pendingReviewMoment: EndOfDayReviewEvent = {
+  ...reviewMoment,
+  assessment: {
+    state: "pending",
+    route: "local",
+    reason: "provider_disconnected",
+    recoveryAction: "retry",
+    pendingSeconds: reviewMoment.totalSeconds,
+  },
+  unclassifiedSeconds: reviewMoment.totalSeconds,
+};
+
 const focusMilestone = {
   kind: "milestone" as const,
   id: "day1h",
@@ -209,6 +221,19 @@ describe("CompanionWindowApp", () => {
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openSettings");
     expect(bridge.triggerNativeCompanionVisibilityAction).toHaveBeenNthCalledWith(1, "hideOneHour");
     expect(bridge.triggerNativeCompanionVisibilityAction).toHaveBeenNthCalledWith(2, "turnOff");
+  });
+
+  it("routes the pending Day Review recovery action to AI setup", async () => {
+    vi.useFakeTimers();
+    const { getByRole } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.(pendingReviewMoment));
+    act(() => bridge.transitionHandler?.({ state: "eodPending", phase: "started", anchor: "center" }));
+    act(() => vi.advanceTimersByTime(180));
+
+    fireEvent.click(getByRole("button", { name: "AI settings" }));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openAiSettings");
   });
 
   it("renders production milestone preview payloads with their celebration tier", async () => {

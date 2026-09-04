@@ -161,6 +161,8 @@ export function buildLiveWatcherSnapshot(
       driftReminderElapsedSeconds,
       {
         includeAiClassifications: classificationOptions?.includeAiClassifications,
+        includeBuiltInHeuristics: classificationOptions?.includeBuiltInHeuristics,
+        builtInHeuristicsUnavailableSince: classificationOptions?.builtInHeuristicsUnavailableSince,
         rules: classificationOptions?.rules,
         fallbackCandidates: [liveIdentity],
       },
