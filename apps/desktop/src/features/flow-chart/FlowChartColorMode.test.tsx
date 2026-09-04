@@ -179,7 +179,7 @@ describe("FlowChartView color mode", () => {
     expect(within(chart).getByText("No project")).toBeTruthy();
   });
 
-  it("shows the three shared direct attributes without a classification-source badge", async () => {
+  it("shows only the available direct attributes without a classification-source badge", async () => {
     render(<FlowChartView blocks={[makeFlowBlock({ classificationSource: "domain-db" })]} appIcons={{}} intervalMinutes={3} />);
 
     fireEvent.focus(screen.getByRole("button", { name: /^workspace.*focus/i }));
@@ -190,10 +190,10 @@ describe("FlowChartView color mode", () => {
 
     expect(hoverCard).toBeTruthy();
     expect(hoverCard.textContent).toContain("docs.example.com");
-    expect(within(attributes).getByText("No project")).toBeTruthy();
+    expect(within(attributes).queryByRole("button", { name: /Change Project/ })).toBeNull();
     expect(within(attributes).getByText("Workspace")).toBeTruthy();
     expect(within(attributes).getByText("Focus")).toBeTruthy();
-    expect(attributes.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    expect(attributes.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
     expect(hoverCard.textContent).not.toContain("Predefined");
     expect(detail.textContent).toBe("Docs");
     expect(detail.compareDocumentPosition(attributes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

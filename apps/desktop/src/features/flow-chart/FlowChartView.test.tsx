@@ -773,7 +773,8 @@ describe("FlowChartView activity inspector", () => {
     const inspector = screen.getByRole("dialog", { name: "docs.example.com" });
     expect(within(inspector).getByRole("button", { name: /Change Category/ })).toBeTruthy();
     expect(within(inspector).getByRole("button", { name: /Delete activity/ })).toBeTruthy();
-    expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
     expect(document.querySelector(".flow-hover-card")).toBeNull();
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
     expect(document.querySelector(".flow-hover-group-highlight.is-pinned")).toBeTruthy();

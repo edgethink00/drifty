@@ -95,10 +95,10 @@ export default defineConfig(({ command, mode }) => {
     test: {
       environment: "node",
       globals: true,
-      // The Windows build host has enough memory for two Vitest workers, but
-      // the default parallelism starves long jsdom integration files and makes
-      // their per-test timeouts flaky. Keep faster native defaults elsewhere.
-      maxWorkers: process.platform === "win32" ? 2 : undefined,
+      // Windows and the shared CI host have enough memory for two Vitest
+      // workers, but default parallelism starves long jsdom integration files
+      // and makes their per-test timeouts flaky. Keep native defaults locally.
+      maxWorkers: process.platform === "win32" || process.env.CI ? 2 : undefined,
       setupFiles: ["./src/test/setupTimezone.ts"],
     },
   };

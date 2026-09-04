@@ -121,6 +121,18 @@ type InspectorValues = {
   readonly productivity: ProductivityLabel;
 };
 
+function shouldShowProjectAttribute(
+  projectOptions: readonly ActivityInspectorProjectOption[],
+  projectId: string | null,
+  hasMixedProject: boolean,
+): boolean {
+  // A null-id option is only the “No project” sentinel. Keep historical or
+  // mixed assignments explainable even when their project is no longer active.
+  return projectOptions.some((project) => project.id !== null)
+    || projectId !== null
+    || hasMixedProject;
+}
+
 type SegmentInspectorValues = ActivityInspectorSegmentValues;
 
 type SavedDirectChange = {
@@ -792,11 +804,16 @@ function ActivityInspectorBody({
   const currentProject = projectOptions.find((project) => project.id === values.projectId) ?? null;
   const projectLabel = values.projectId === null
     ? t("dashboard.week.inspector.noProject")
-    : currentProject?.name ?? event.projectName ?? t("dashboard.week.inspector.noProject");
+    : currentProject?.name ?? event.projectName ?? t("dashboard.week.inspector.unavailableProject");
   const projectColor = values.projectId === null
     ? PRODUCTIVITY_COLORS.neutral
     : currentProject?.color ?? event.projectColor ?? PRODUCTIVITY_COLORS.neutral;
   const devices = remoteDeviceLabels(event, segments, deviceLabelById);
+  const showProjectAttribute = shouldShowProjectAttribute(
+    projectOptions,
+    values.projectId,
+    Boolean(event.hasMixedProject),
+  );
 
   const rows: readonly {
     field: ActivityInspectorAttribute;
@@ -805,13 +822,13 @@ function ActivityInspectorBody({
     color: string;
     mixed: boolean;
   }[] = [
-    {
+    ...(showProjectAttribute ? [{
       field: "project",
       label: t("common.project"),
       valueLabel: projectLabel,
       color: projectColor,
       mixed: Boolean(event.hasMixedProject) && values.projectId === (event.projectId ?? null),
-    },
+    } as const] : []),
     {
       field: "category",
       label: t("common.category"),
@@ -975,7 +992,17 @@ export function ActivityInspectorPreview({
   readonly onFocusLeave?: () => void;
 }) {
   const previewRef = useRef<HTMLDivElement>(null);
-  const layout = useAnchoredCardLayout(anchorElement, previewRef, event.id, onDismiss);
+  const showProjectAttribute = shouldShowProjectAttribute(
+    projectOptions,
+    event.projectId ?? null,
+    Boolean(event.hasMixedProject),
+  );
+  const layout = useAnchoredCardLayout(
+    anchorElement,
+    previewRef,
+    `${event.id}:${showProjectAttribute ? "project" : "no-project"}`,
+    onDismiss,
+  );
   const hoverBridgeStyle = calculateHoverBridgeStyle(anchorElement, layout);
   const dialogId = `activity-inspector-preview-${event.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const titleId = `${dialogId}-title`;
@@ -1120,22 +1147,28 @@ export function WeekActivityInspector({
     readonly field: ActivityInspectorAttribute;
     readonly element: HTMLButtonElement;
   } | null>(null);
+  const hasMixedProject = new Set(segmentValues.map((item) => item.projectId ?? "__no_project__")).size > 1;
+  const showProjectAttribute = shouldShowProjectAttribute(projectOptions, values.projectId, hasMixedProject);
   const layout = useAnchoredCardLayout(
     anchorElement,
     inspectorRef,
-    `${event.id}:${view}:${error ?? ""}:${savedChange?.nextValueLabel ?? ""}`,
+    `${event.id}:${view}:${error ?? ""}:${savedChange?.nextValueLabel ?? ""}:${showProjectAttribute ? "project" : "no-project"}`,
     () => onClose(false),
   );
   const count = targetSegments.length;
   const canMutate = !actionsDisabledReason && count > 0;
-  const expandedAttribute = view === "project" || view === "category" || view === "productivity" ? view : null;
+  const expandedAttribute = view === "category"
+    || view === "productivity"
+    || (view === "project" && showProjectAttribute)
+    ? view
+    : null;
   const selectedProject = projectOptions.find((project) => project.id === values.projectId) ?? null;
   const displayedEvent: ActivityInspectorEvent = {
     ...event,
     projectId: values.projectId,
     projectName: values.projectId === null ? null : selectedProject?.name ?? event.projectName,
     projectColor: values.projectId === null ? null : selectedProject?.color ?? event.projectColor,
-    hasMixedProject: new Set(segmentValues.map((item) => item.projectId ?? "__no_project__")).size > 1,
+    hasMixedProject,
     hasMixedCategory: new Set(segmentValues.map((item) => item.category)).size > 1,
     hasMixedProductivity: new Set(segmentValues.map((item) => item.productivity)).size > 1,
   };
@@ -1197,6 +1230,12 @@ export function WeekActivityInspector({
   }, [event.category, event.productivity, event.projectId]);
 
   useLayoutEffect(() => {
+    if (view !== "project" || showProjectAttribute) return;
+    setPickerTrigger(null);
+    setView("overview");
+  }, [showProjectAttribute, view]);
+
+  useLayoutEffect(() => {
     const element = expandedAttribute ? triggerRefs.current[expandedAttribute] ?? null : null;
     setPickerTrigger((current) => {
       if (!expandedAttribute || !element) return null;
@@ -1206,7 +1245,10 @@ export function WeekActivityInspector({
   }, [expandedAttribute]);
 
   const focusTrigger = useCallback((field: ActivityInspectorAttribute) => {
-    window.requestAnimationFrame(() => triggerRefs.current[field]?.focus({ preventScroll: true }));
+    window.requestAnimationFrame(() => {
+      const target = triggerRefs.current[field] ?? inspectorRef.current;
+      target?.focus({ preventScroll: true });
+    });
   }, []);
 
   const closePicker = useCallback(() => {

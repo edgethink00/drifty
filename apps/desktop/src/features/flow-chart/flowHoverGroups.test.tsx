@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { FlowBlock } from "@drifty/domain";
 import { FlowChartView } from "./FlowChartView";
@@ -105,8 +105,10 @@ describe("flow hover groups", () => {
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: /time block: 01:00–01:12/i })[0]);
-    expect(screen.getByRole("dialog", { name: "cmux" })).toBeTruthy();
-    expect(screen.getByRole("dialog", { name: "cmux" }).querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    const inspector = screen.getByRole("dialog", { name: "cmux" });
+    expect(inspector).toBeTruthy();
+    expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
   });
 
   it("sums each cell's composition across the hover group with the painted winner first", () => {

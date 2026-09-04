@@ -349,7 +349,8 @@ describe("WeekDashboard activity inspector", () => {
     expect(within(inspector).getByText(/Mixed values · showing dominant/)).toBeTruthy();
     expect(within(inspector).queryByText("Focus · dominant")).toBeNull();
     expect(within(inspector).queryByText("Workspace · dominant")).toBeNull();
-    expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(inspector.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
     expect(inspector.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(2);
     expect(within(inspector).getByRole("button", { name: /Change Category/ }).getAttribute("aria-expanded")).toBe("false");
     expect(document.activeElement).toBe(inspector);
@@ -606,6 +607,7 @@ describe("WeekDashboard activity inspector", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog", { name: "Design review" }).querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
     expect(screen.getByText("Drifty")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Current value: Drifty · dominant/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Change Project/ }));
@@ -619,6 +621,138 @@ describe("WeekDashboard activity inspector", () => {
       expect(onAssignProject).toHaveBeenNthCalledWith(2, [weekSegments[0]], "drifty");
       expect(onAssignProject).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("shows Project for an unassigned activity once a project exists", () => {
+    const onAssignProject = vi.fn().mockResolvedValue(undefined);
+    renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      projectOptions: [{ id: "drifty", name: "Drifty", color: "#688c35" }],
+      onAssignProject,
+    });
+
+    fireEvent.mouseMove(document.querySelector(".week-v2-calendar__event")!);
+
+    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+    if (!preview) throw new Error("expected the anchored activity preview");
+    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: No project/ })).toBeTruthy();
+    expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+  });
+
+  it("keeps Project hidden when the only supplied option is the No project sentinel", () => {
+    renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      projectOptions: [{ id: null, name: "No project", color: "#9ca3af" }],
+    });
+
+    fireEvent.mouseMove(document.querySelector(".week-v2-calendar__event")!);
+
+    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+    if (!preview) throw new Error("expected the anchored activity preview");
+    expect(within(preview).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
+  });
+
+  it("reveals Project in an open preview when the first real project loads", () => {
+    const baseOverrides = {
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      onAssignProject: vi.fn().mockResolvedValue(undefined),
+    } as const;
+    const { rerender } = renderWeekDashboard(baseOverrides);
+
+    fireEvent.mouseMove(document.querySelector(".week-v2-calendar__event")!);
+    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+    if (!preview) throw new Error("expected the anchored activity preview");
+    expect(within(preview).queryByRole("button", { name: /Change Project/ })).toBeNull();
+
+    rerender(weekDashboardElement({
+      ...baseOverrides,
+      projectOptions: [{ id: "drifty", name: "Drifty", color: "#688c35" }],
+    }));
+
+    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: No project/ })).toBeTruthy();
+  });
+
+  it("closes an open Project picker if the final real project disappears", async () => {
+    const calendarEvents = new Map([["2024-01-03", [makeWeekCalendarEvent()]]]);
+    const baseOverrides = {
+      calendarEvents,
+      activityActionsEnabled: true,
+      onAssignProject: vi.fn().mockResolvedValue(undefined),
+    } as const;
+    const { rerender } = renderWeekDashboard({
+      ...baseOverrides,
+      projectOptions: [{ id: "drifty", name: "Drifty", color: "#688c35" }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+    fireEvent.click(within(inspector).getByRole("button", { name: /Change Project/ }));
+    expect(document.querySelector('.week-activity-inspector__picker[data-field="project"]')).toBeTruthy();
+
+    rerender(weekDashboardElement(baseOverrides));
+
+    await waitFor(() => expect(inspector.getAttribute("data-view")).toBe("overview"));
+    expect(document.querySelector('.week-activity-inspector__picker[data-field="project"]')).toBeNull();
+    expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
+  });
+
+  it("keeps Project visible when an existing assignment is absent from the options", () => {
+    renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent()]]]),
+      activityActionsEnabled: true,
+      projectBySegmentId: new Map([["week-focus-code", "archived-project"]]),
+      onAssignProject: vi.fn().mockResolvedValue(undefined),
+    });
+
+    fireEvent.mouseMove(document.querySelector(".week-v2-calendar__event")!);
+
+    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+    if (!preview) throw new Error("expected the anchored activity preview");
+    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: Unavailable project/ })).toBeTruthy();
+    expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+  });
+
+  it("keeps Project visible for mixed assignments when the dominant activity is unassigned", () => {
+    renderWeekDashboard({
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      projectBySegmentId: new Map([
+        ["week-focus-code", null],
+        ["week-drift-browser", "archived-project"],
+      ]),
+      onAssignProject: vi.fn().mockResolvedValue(undefined),
+    });
+
+    fireEvent.mouseMove(document.querySelector(".week-v2-calendar__event")!);
+
+    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
+    if (!preview) throw new Error("expected the anchored activity preview");
+    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: No project · dominant/ })).toBeTruthy();
+    expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+  });
+
+  it("returns focus to the inspector when removing its final unavailable project assignment", async () => {
+    const onAssignProject = vi.fn().mockResolvedValue(undefined);
+    renderWeekDashboard({
+      calendarEvents: new Map([["2024-01-03", [makeWeekCalendarEvent()]]]),
+      activityActionsEnabled: true,
+      projectBySegmentId: new Map([["week-focus-code", "archived-project"]]),
+      onAssignProject,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+    fireEvent.click(within(inspector).getByRole("button", { name: /Change Project/ }));
+    fireEvent.click(screen.getByRole("option", { name: "No project" }));
+
+    await waitFor(() => expect(onAssignProject).toHaveBeenCalledWith([weekSegments[0]], null));
+    await waitFor(() => expect(document.activeElement).toBe(inspector));
+    expect(within(inspector).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(within(inspector).getByRole("button", { name: "Undo Project change" })).toBeTruthy();
   });
 
   it("opens from right-click and confirms full-record deletion before calling the mutation", async () => {
@@ -649,7 +783,8 @@ describe("WeekDashboard activity inspector", () => {
     expect(preview).toBeTruthy();
     expect(within(preview!).getByRole("button", { name: /Change Category/ })).toBeTruthy();
     expect(within(preview!).getByRole("button", { name: /Delete 2 activities/ })).toBeTruthy();
-    expect(preview?.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
+    expect(within(preview!).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(preview?.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
     expect(preview?.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(2);
     const previewText = preview?.textContent;
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
