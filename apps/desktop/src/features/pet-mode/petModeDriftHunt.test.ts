@@ -7,6 +7,9 @@ import {
   PET_MODE_CURSOR_MOUTH_X_LEFT,
   PET_MODE_CURSOR_MOUTH_X_RIGHT,
   PET_MODE_CURSOR_MOUTH_Y,
+  PET_MODE_DRIFT_CHASE_DURATION_MS,
+  PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY,
+  PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY,
   PET_MODE_DRIFT_NOTICE_SECONDS,
   PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE,
   PET_MODE_DRIFT_CURSOR_RETURN_TIERS,
@@ -78,6 +81,7 @@ describe("petModeDriftHunt", () => {
 
   it("defaults to one attempt and persists the bounded chase controls", () => {
     expect(resolvePetModeDriftHuntSettings()).toEqual(DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS);
+    expect(DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS.chaseDurationMs).toBe(PET_MODE_DRIFT_CHASE_DURATION_MS);
     persistPetModeDriftHuntSettings({
       ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
       enabled: true,
@@ -94,6 +98,22 @@ describe("petModeDriftHunt", () => {
       softTurns: false,
       showAlertCue: false,
     });
+  });
+
+  it("migrates the legacy eight-second chase default to a post-approach 2.5-second budget", () => {
+    window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, "8000");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY, JSON.stringify({
+      chaseDurationMs: 8_000,
+      stalkSpeed: 180,
+    }));
+
+    expect(resolvePetModeDriftHuntSettings()).toMatchObject({
+      chaseDurationMs: 2_500,
+      stalkSpeed: 180,
+    });
+    expect(window.localStorage.getItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY)).toBe("2500");
+    expect(window.localStorage.getItem(PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY))
+      .toBe("post-approach-2.5");
   });
 
   it("migrates only the legacy 6s/3s/2s carry defaults to the reviewed 6s/2s/1s tiers", () => {

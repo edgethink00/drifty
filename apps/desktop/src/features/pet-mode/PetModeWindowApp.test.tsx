@@ -1047,7 +1047,7 @@ describe("PetModeWindowApp", () => {
       ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS,
       enabled: true,
       mode: "single",
-      chaseDurationMs: 8_000,
+      chaseDurationMs: 2_500,
       softTurns: true,
       showAlertCue: true,
     });

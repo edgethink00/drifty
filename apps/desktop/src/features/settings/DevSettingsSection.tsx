@@ -525,7 +525,7 @@ export function DevSettingsSection({
                 <>
                   <div className="settings-mode-switch" role="radiogroup" aria-label="Cursor hunt policy">
                     <button type="button" className={`settings-mode-option${driftHuntSettings.mode === "single" ? " is-active" : ""}`} role="radio" aria-checked={driftHuntSettings.mode === "single"} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, mode: "single" })}><span>한 번만 노림</span></button>
-                    <button type="button" className={`settings-mode-option${driftHuntSettings.mode === "chase" ? " is-active" : ""}`} role="radio" aria-checked={driftHuntSettings.mode === "chase"} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, mode: "chase" })}><span>몇 초간 추격</span></button>
+                    <button type="button" className={`settings-mode-option${driftHuntSettings.mode === "chase" ? " is-active" : ""}`} role="radio" aria-checked={driftHuntSettings.mode === "chase"} onClick={() => updateDriftHuntSettings({ ...driftHuntSettings, mode: "chase" })}><span>도착 후 추가 추격</span></button>
                   </div>
                   <div className="pet-mode-lab__carry-tiers" aria-label="Cursor carry duration tiers">
                     {driftHuntCarryTiers.map(({ label, maxMovementDistance, durationMs }) => (
@@ -534,12 +534,12 @@ export function DevSettingsSection({
                   </div>
                   <div className="pet-mode-lab__hunt-preview" aria-label="Cursor hunt native previews">
                     <PetModeLabAction label="단발 사냥 재생" detail="현재 커서를 한 번 노리는 실제 native 경로" action="cursor_hunt_single" active={petModeLabState?.activeAction === "cursor_hunt_single"} disabled={isPetModeLabActionDisabled("cursor_hunt_single")} onAction={onPreviewPetModeAction} />
-                    <PetModeLabAction label={`${driftHuntSettings.chaseDurationMs / 1_000}초 추격 재생`} detail="현재 설정 시간 동안 커서를 추격하는 실제 native 경로" action="cursor_hunt_chase" active={petModeLabState?.activeAction === "cursor_hunt_chase"} disabled={isPetModeLabActionDisabled("cursor_hunt_chase")} onAction={onPreviewPetModeAction} />
+                    <PetModeLabAction label={`전체 사냥 재생 · 추격 최대 ${driftHuntSettings.chaseDurationMs / 1_000}초`} detail="고양이가 최초 커서 위치까지 간 뒤, 도착 시 커서가 이동해 있으면 따라잡을 때까지 계속 추격하는 실제 native 경로" action="cursor_hunt_chase" active={petModeLabState?.activeAction === "cursor_hunt_chase"} disabled={isPetModeLabActionDisabled("cursor_hunt_chase")} onAction={onPreviewPetModeAction} />
                   </div>
                   <details className="pet-mode-lab__hunt-details">
                     <summary>추격 세부 설정 · 자유 조정</summary>
                     <div className="pet-mode-lab__tuning-heading"><span>다가가기</span><small>발견부터 입으로 잡을 때까지</small></div>
-                    <PetModeHuntRange label="추격 지속" detail="몇 초간 추격 모드의 제한 시간" value={driftHuntSettings.chaseDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.chaseDurationMs} valueLabel={`${(driftHuntSettings.chaseDurationMs / 1_000).toFixed(1)}초`} ariaLabel="Cursor chase duration" onChange={(chaseDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, chaseDurationMs })} />
+                    <PetModeHuntRange label="추가 추격 최대 시간" detail="최초 위치까지 가는 시간은 제외 · 이동한 커서를 따라잡으면 즉시 종료" value={driftHuntSettings.chaseDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.chaseDurationMs} valueLabel={`${(driftHuntSettings.chaseDurationMs / 1_000).toFixed(1)}초`} ariaLabel="Cursor chase duration" onChange={(chaseDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, chaseDurationMs })} />
                     <PetModeHuntRange label="쫓아가는 속도" detail="고양이가 커서를 따라가는 이동 속도" value={driftHuntSettings.stalkSpeed} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.stalkSpeed} valueLabel={`${driftHuntSettings.stalkSpeed}pt/s`} ariaLabel="Cursor stalk speed" onChange={(stalkSpeed) => updateDriftHuntSettings({ ...driftHuntSettings, stalkSpeed })} />
                     <PetModeHuntRange label="잡는 범위" detail="입이 이 거리 안에 오면 물었다고 판정" value={driftHuntSettings.captureRadius} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.captureRadius} valueLabel={`${driftHuntSettings.captureRadius}pt`} ariaLabel="Cursor capture radius" onChange={(captureRadius) => updateDriftHuntSettings({ ...driftHuntSettings, captureRadius })} />
                     <PetModeHuntRange label="문 직후 멈춤" detail="잡은 순간을 읽을 수 있게 잠깐 정지" value={driftHuntSettings.biteHoldMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.biteHoldMs} valueLabel={`${driftHuntSettings.biteHoldMs}ms`} ariaLabel="Cursor bite hold" onChange={(biteHoldMs) => updateDriftHuntSettings({ ...driftHuntSettings, biteHoldMs })} />

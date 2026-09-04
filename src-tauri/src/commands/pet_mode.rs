@@ -59,8 +59,10 @@ const PET_MODE_WALK_SPEED: f64 = 20.8;
 // this is just over four seconds, long enough to read without becoming roam.
 const PET_MODE_POST_DROP_WALK_DISTANCE: f64 = 84.0;
 const PET_MODE_POST_DROP_WALK_MAX_SECONDS: f64 = 5.0;
-const PET_MODE_STALK_MIN_DURATION_MS: u64 = 600;
-const PET_MODE_STALK_MAX_DURATION_MS: u64 = 8_000;
+const PET_MODE_STALK_MIN_APPROACH_TIMEOUT_MS: u64 = 600;
+const PET_MODE_STALK_MAX_APPROACH_TIMEOUT_MS: u64 = 8_000;
+const PET_MODE_STALK_MIN_CHASE_DURATION_MS: u64 = 600;
+const PET_MODE_STALK_MAX_CHASE_DURATION_MS: u64 = 8_000;
 const PET_MODE_STALK_MIN_SPEED: f64 = 80.0;
 const PET_MODE_STALK_MAX_SPEED: f64 = 360.0;
 const PET_MODE_STALK_MIN_BITE_GAP: f64 = 0.0;
@@ -375,8 +377,10 @@ pub struct PetModeCursorSample {
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PetModeStalkRequest {
-    duration_ms: u64,
+    approach_timeout_ms: u64,
+    chase_duration_ms: u64,
     bite_gap: f64,
+    capture_radius: f64,
     speed: f64,
     retarget_cursor: bool,
     turn_hysteresis: f64,
@@ -3151,10 +3155,19 @@ fn resident_seat_anchor_for_current_position(
 }
 
 fn validate_pet_mode_stalk_request(request: PetModeStalkRequest) -> Result<(), String> {
-    if !(PET_MODE_STALK_MIN_DURATION_MS..=PET_MODE_STALK_MAX_DURATION_MS)
-        .contains(&request.duration_ms)
+    if !(PET_MODE_STALK_MIN_APPROACH_TIMEOUT_MS..=PET_MODE_STALK_MAX_APPROACH_TIMEOUT_MS)
+        .contains(&request.approach_timeout_ms)
     {
-        return Err("Pet Mode stalk duration is outside the safe range".to_string());
+        return Err("Pet Mode stalk approach timeout is outside the safe range".to_string());
+    }
+    if request.retarget_cursor {
+        if !(PET_MODE_STALK_MIN_CHASE_DURATION_MS..=PET_MODE_STALK_MAX_CHASE_DURATION_MS)
+            .contains(&request.chase_duration_ms)
+        {
+            return Err("Pet Mode follow-up chase duration is outside the safe range".to_string());
+        }
+    } else if request.chase_duration_ms != 0 {
+        return Err("Pet Mode single-target stalk cannot include a chase duration".to_string());
     }
     if !request.bite_gap.is_finite()
         || !(PET_MODE_STALK_MIN_BITE_GAP..=PET_MODE_STALK_MAX_BITE_GAP).contains(&request.bite_gap)
@@ -3165,6 +3178,12 @@ fn validate_pet_mode_stalk_request(request: PetModeStalkRequest) -> Result<(), S
         || !(PET_MODE_STALK_MIN_SPEED..=PET_MODE_STALK_MAX_SPEED).contains(&request.speed)
     {
         return Err("Pet Mode stalk speed is outside the safe range".to_string());
+    }
+    if !request.capture_radius.is_finite()
+        || !(PET_MODE_CARRY_MIN_CAPTURE_RADIUS..=PET_MODE_CARRY_MAX_CAPTURE_RADIUS)
+            .contains(&request.capture_radius)
+    {
+        return Err("Pet Mode stalk capture radius is outside the safe range".to_string());
     }
     if !request.turn_hysteresis.is_finite()
         || !(0.0..=PET_MODE_STALK_MAX_TURN_HYSTERESIS).contains(&request.turn_hysteresis)
@@ -3440,6 +3459,17 @@ fn pet_mode_stalk_step(
     )
 }
 
+fn pet_mode_stalk_budget_expired(
+    request: PetModeStalkRequest,
+    approach_elapsed: Duration,
+    chase_elapsed: Option<Duration>,
+) -> bool {
+    match chase_elapsed {
+        Some(elapsed) => elapsed >= Duration::from_millis(request.chase_duration_ms),
+        None => approach_elapsed >= Duration::from_millis(request.approach_timeout_ms),
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn primary_pointer_pressed() -> bool {
     #[link(name = "ApplicationServices", kind = "framework")]
@@ -3538,8 +3568,9 @@ fn stalk_pet_toward_cursor(
     }
 
     let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
-    // Single-attempt mode captures one target. Chase mode may refresh it below,
-    // but only for the selected bounded duration and with turn hysteresis.
+    // Both modes first approach the cursor position captured here. Chase mode
+    // starts retargeting only if the pointer has escaped that position by the
+    // time the cat arrives, so initial travel never consumes the chase budget.
     let intent = capture_pet_mode_stalk_intent(
         (initial_position.x as f64, initial_position.y as f64),
         cursor_point,
@@ -3555,10 +3586,10 @@ fn stalk_pet_toward_cursor(
     emit_pet_event(&window, json!({ "kind": "motion", "motion": "stalk" }))?;
     thread::sleep(Duration::from_millis(34));
 
-    let started_at = Instant::now();
-    let duration = Duration::from_millis(request.duration_ms);
+    let approach_started_at = Instant::now();
+    let mut chase_started_at: Option<Instant> = None;
     let turn_cooldown = Duration::from_millis(request.turn_cooldown_ms);
-    let mut last_turn_at = started_at;
+    let mut last_turn_at = approach_started_at;
     let mut last_frame_at = Instant::now();
     let outcome = loop {
         if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
@@ -3579,7 +3610,7 @@ fn stalk_pet_toward_cursor(
         }
         let position = window.outer_position().map_err(|error| error.to_string())?;
         let current = (position.x as f64, position.y as f64);
-        if request.retarget_cursor {
+        if chase_started_at.is_some() {
             captured_cursor = cursor;
             let next_facing = pet_mode_chase_facing(
                 current,
@@ -3602,10 +3633,14 @@ fn stalk_pet_toward_cursor(
                 work_area,
             );
         }
-        if started_at.elapsed() >= duration {
-            // A fixed target that cannot be reached within its budget is a
-            // miss, not mouth contact. Only an actual final stalk step below
-            // may produce `Completed` and unlock the bite/carry sequence.
+        if pet_mode_stalk_budget_expired(
+            request,
+            approach_started_at.elapsed(),
+            chase_started_at.map(|started_at| started_at.elapsed()),
+        ) {
+            // Initial approach and follow-up chase have independent bounds.
+            // Only an actual final stalk step below may produce `Completed`
+            // and unlock the bite/carry sequence.
             break PetModeStalkOutcome::TimedOut;
         }
         let elapsed = last_frame_at
@@ -3625,6 +3660,45 @@ fn stalk_pet_toward_cursor(
                 next.1.round() as i32,
             ))
             .map_err(|error| error.to_string())?;
+        if reached_target && request.retarget_cursor && chase_started_at.is_none() {
+            if pet_mode_cursor_within_capture(
+                cursor,
+                cursor_point,
+                request.capture_radius * scale_factor,
+            ) {
+                captured_cursor = cursor;
+                break PetModeStalkOutcome::Completed;
+            }
+
+            // The cat has reached the coordinate where the chase began, but
+            // the pointer escaped. Start the visible follow-up budget now,
+            // retarget once from the landed position, and never reset it on
+            // later pointer movement.
+            let chase_started = Instant::now();
+            chase_started_at = Some(chase_started);
+            captured_cursor = cursor;
+            let next_facing = pet_mode_chase_facing(
+                next,
+                cursor,
+                panel_size,
+                facing,
+                request.turn_hysteresis * scale_factor,
+                true,
+            );
+            if next_facing != facing {
+                facing = next_facing;
+                emit_pet_event(&window, json!({ "kind": "facing", "facing": facing }))?;
+            }
+            last_turn_at = chase_started;
+            target = pet_mode_stalk_target(
+                cursor,
+                panel_size,
+                facing,
+                request.bite_gap * scale_factor,
+                work_area,
+            );
+            continue;
+        }
         if reached_target {
             break PetModeStalkOutcome::Completed;
         }
@@ -4679,8 +4753,10 @@ mod tests {
     #[test]
     fn stalk_request_rejects_unbounded_motion() {
         let valid = PetModeStalkRequest {
-            duration_ms: 3_200,
+            approach_timeout_ms: 3_200,
+            chase_duration_ms: 0,
             bite_gap: 0.0,
+            capture_radius: 18.0,
             speed: 220.0,
             retarget_cursor: false,
             turn_hysteresis: 48.0,
@@ -4688,17 +4764,30 @@ mod tests {
         };
         assert!(validate_pet_mode_stalk_request(valid).is_ok());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            duration_ms: 8_000,
+            approach_timeout_ms: 8_000,
             ..valid
         })
         .is_ok());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            duration_ms: 8_001,
+            approach_timeout_ms: 8_001,
             ..valid
         })
         .is_err());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            duration_ms: 30_000,
+            retarget_cursor: true,
+            chase_duration_ms: 2_500,
+            approach_timeout_ms: 8_000,
+            ..valid
+        })
+        .is_ok());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            retarget_cursor: true,
+            chase_duration_ms: 8_001,
+            ..valid
+        })
+        .is_err());
+        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
+            chase_duration_ms: 2_500,
             ..valid
         })
         .is_err());
@@ -4712,6 +4801,41 @@ mod tests {
             ..valid
         })
         .is_err());
+    }
+
+    #[test]
+    fn stalk_budget_starts_the_chase_clock_only_after_initial_approach() {
+        let chase = PetModeStalkRequest {
+            approach_timeout_ms: 8_000,
+            chase_duration_ms: 2_500,
+            bite_gap: 0.0,
+            capture_radius: 18.0,
+            speed: 220.0,
+            retarget_cursor: true,
+            turn_hysteresis: 48.0,
+            turn_cooldown_ms: 500,
+        };
+
+        assert!(!pet_mode_stalk_budget_expired(
+            chase,
+            Duration::from_millis(7_999),
+            None,
+        ));
+        assert!(pet_mode_stalk_budget_expired(
+            chase,
+            Duration::from_millis(8_000),
+            None,
+        ));
+        assert!(!pet_mode_stalk_budget_expired(
+            chase,
+            Duration::from_millis(8_000),
+            Some(Duration::from_millis(2_499)),
+        ));
+        assert!(pet_mode_stalk_budget_expired(
+            chase,
+            Duration::from_millis(8_000),
+            Some(Duration::from_millis(2_500)),
+        ));
     }
 
     #[test]

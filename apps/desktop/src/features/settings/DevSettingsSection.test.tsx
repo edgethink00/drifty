@@ -268,7 +268,7 @@ describe("DevSettingsSection", () => {
     });
 
     expect(screen.getByRole("button", { name: /단발 사냥 재생/ }).getAttribute("disabled")).toBeNull();
-    expect(screen.getByRole("button", { name: /8초 추격 재생/ }).getAttribute("disabled")).toBeNull();
+    expect(screen.getByRole("button", { name: /전체 사냥 재생 · 추격 최대 2.5초/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Music note Manual 760 ms preview/ }).getAttribute("disabled")).toBeNull();
     expect(screen.getByRole("button", { name: /Walk/ }).getAttribute("disabled")).toBe("");
 
@@ -353,7 +353,7 @@ describe("DevSettingsSection", () => {
     expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("sleep_drift_full_preview");
 
     expect(screen.getByText("Cursor control")).toBeTruthy();
-    expect(screen.queryByRole("radio", { name: "몇 초간 추격" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "도착 후 추가 추격" })).toBeNull();
     expect(screen.queryByRole("button", { name: /단발 사냥 재생/ })).toBeNull();
     expect(screen.getByText("딴짓 반응 연출만 유지 · 실제 커서 접근 없음")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle drift cursor hunt" }));
@@ -365,12 +365,16 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("1초 물고 이동")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /단발 사냥 재생/ }));
     expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_single");
-    fireEvent.click(screen.getByRole("button", { name: /8초 추격 재생/ }));
+    const chasePreview = screen.getByRole("button", {
+      name: /전체 사냥 재생 · 추격 최대 2.5초.*고양이가 최초 커서 위치까지 간 뒤.*따라잡을 때까지 계속 추격/,
+    });
+    fireEvent.click(chasePreview);
     expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_chase");
-    fireEvent.click(screen.getByRole("radio", { name: "몇 초간 추격" }));
+    fireEvent.click(screen.getByRole("radio", { name: "도착 후 추가 추격" }));
     fireEvent.click(screen.getByText("추격 세부 설정 · 자유 조정"));
+    expect(screen.getByText("최초 위치까지 가는 시간은 제외 · 이동한 커서를 따라잡으면 즉시 종료")).toBeTruthy();
     fireEvent.change(screen.getByRole("slider", { name: "Cursor chase duration" }), { target: { value: "6500" } });
-    expect(screen.getByRole("button", { name: /6.5초 추격 재생/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /전체 사냥 재생 · 추격 최대 6.5초/ })).toBeTruthy();
     fireEvent.change(screen.getByRole("slider", { name: "Cursor stalk speed" }), { target: { value: "280" } });
     fireEvent.change(screen.getByRole("slider", { name: "Cursor carry distance" }), { target: { value: "96" } });
     fireEvent.change(screen.getByRole("slider", { name: "Still cursor carry duration" }), { target: { value: "5000" } });

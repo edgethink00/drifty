@@ -25,6 +25,13 @@ export const PET_MODE_DRIFT_CURSOR_YANK_DISTANCE = 34;
 export const PET_MODE_DRIFT_CURSOR_GRIP_MS = 420;
 export const PET_MODE_DRIFT_CURSOR_LAG_MS = 0;
 /**
+ * The cat may spend up to this long reaching the cursor position that began a
+ * chase. This is a hidden safety bound, not part of the visible chase budget.
+ */
+export const PET_MODE_DRIFT_APPROACH_TIMEOUT_MS = 8_000;
+/** Time available only after the cursor escapes the cat's initial approach. */
+export const PET_MODE_DRIFT_CHASE_DURATION_MS = 2_500;
+/**
  * Carry time selected by how much the pointer resisted during the approach.
  * The defaults preserve the reviewed 6s/2s/1s behavior, while Dev tuning may
  * replace each duration without changing the resistance thresholds.
@@ -40,11 +47,13 @@ export const PET_MODE_DRIFT_CURSOR_RETURN_TIERS = [
 export const PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY = "drifty.pet.driftHuntEnabled.v1";
 export const PET_MODE_DRIFT_HUNT_MODE_STORAGE_KEY = "drifty.pet.driftHuntMode.v1";
 export const PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY = "drifty.pet.driftHuntChaseDuration.v1";
+export const PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY = "drifty.pet.driftHuntChaseDurationRevision.v1";
 export const PET_MODE_DRIFT_CHASE_SOFT_TURNS_STORAGE_KEY = "drifty.pet.driftHuntSoftTurns.v1";
 export const PET_MODE_DRIFT_HUNT_ALERT_STORAGE_KEY = "drifty.pet.driftHuntAlertCue.v1";
 export const PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY = "drifty.pet.driftHuntTuning.v1";
 export const PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY = "drifty.pet.driftHuntTuningRevision.v1";
 const PET_MODE_DRIFT_HUNT_TUNING_REVISION = "carry-6-2-1";
+const PET_MODE_DRIFT_CHASE_DURATION_REVISION = "post-approach-2.5";
 export const PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS = 48;
 export const PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS = 500;
 export const PET_MODE_DRIFT_HUNT_TUNING_RANGES = {
@@ -95,7 +104,7 @@ export type PetModeDriftHuntSettings = {
 export const DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS: PetModeDriftHuntSettings = {
   enabled: false,
   mode: "single",
-  chaseDurationMs: 8_000,
+  chaseDurationMs: PET_MODE_DRIFT_CHASE_DURATION_MS,
   softTurns: true,
   showAlertCue: true,
   stalkSpeed: PET_MODE_DRIFT_STALK_SPEED,
@@ -196,19 +205,43 @@ export function resolvePetModeDriftHuntSettings(): PetModeDriftHuntSettings {
   const storedEnabled = readStorage(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY);
   const storedMode = readStorage(PET_MODE_DRIFT_HUNT_MODE_STORAGE_KEY);
   const storedDuration = Number(readStorage(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY));
+  const storedDurationRevision = readStorage(PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY);
   const storedSoftTurns = readStorage(PET_MODE_DRIFT_CHASE_SOFT_TURNS_STORAGE_KEY);
   const storedAlertCue = readStorage(PET_MODE_DRIFT_HUNT_ALERT_STORAGE_KEY);
   const tuning = readStoredTuning();
+  const candidateChaseDuration = Number.isFinite(storedDuration) && storedDuration > 0
+    ? storedDuration
+    : tuning.chaseDurationMs;
+  const carriesLegacyChaseDefault = storedDurationRevision !== PET_MODE_DRIFT_CHASE_DURATION_REVISION
+    && candidateChaseDuration === 8_000;
+  const chaseDurationRange = PET_MODE_DRIFT_HUNT_TUNING_RANGES.chaseDurationMs;
+  const boundedChaseDuration = typeof candidateChaseDuration === "number"
+    && candidateChaseDuration >= chaseDurationRange.min
+    && candidateChaseDuration <= chaseDurationRange.max
+    ? candidateChaseDuration
+    : undefined;
+  const chaseDurationMs = normalizeTuningValue(
+    "chaseDurationMs",
+    carriesLegacyChaseDefault ? PET_MODE_DRIFT_CHASE_DURATION_MS : boundedChaseDuration,
+  );
+  if (carriesLegacyChaseDefault) {
+    try {
+      window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, String(chaseDurationMs));
+      window.localStorage.setItem(
+        PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY,
+        PET_MODE_DRIFT_CHASE_DURATION_REVISION,
+      );
+    } catch {
+      // Use the migrated value for this session even when storage is read-only.
+    }
+  }
   return {
     // Cursor mutation is a Dev-only experiment. Keep a second gate here in
     // the pet webview so a stale feature flag cannot escape after Dev mode is
     // hidden or disabled in the main window.
     enabled: devModeEnabled && storedEnabled === "true",
     mode: storedMode === "chase" ? "chase" : "single",
-    chaseDurationMs: normalizeTuningValue(
-      "chaseDurationMs",
-      Number.isFinite(storedDuration) && storedDuration > 0 ? storedDuration : tuning.chaseDurationMs,
-    ),
+    chaseDurationMs,
     softTurns: storedSoftTurns === null
       ? DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS.softTurns
       : storedSoftTurns === "true",
@@ -235,6 +268,10 @@ export function persistPetModeDriftHuntSettings(settings: PetModeDriftHuntSettin
     window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, String(settings.enabled));
     window.localStorage.setItem(PET_MODE_DRIFT_HUNT_MODE_STORAGE_KEY, settings.mode);
     window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, String(settings.chaseDurationMs));
+    window.localStorage.setItem(
+      PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY,
+      PET_MODE_DRIFT_CHASE_DURATION_REVISION,
+    );
     window.localStorage.setItem(PET_MODE_DRIFT_CHASE_SOFT_TURNS_STORAGE_KEY, String(settings.softTurns));
     window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ALERT_STORAGE_KEY, String(settings.showAlertCue));
     const tuning = Object.fromEntries(
