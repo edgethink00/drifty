@@ -21,6 +21,75 @@ const PET_STROKE_MAX_DURATION_MS: u64 = 2_400;
 // as that reverse never arrives.
 const PET_STROKE_PICKUP_GRACE_MS: u64 = 220;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum PetPanelGestureState {
+    #[default]
+    Pending,
+    // The drag threshold crossed and WebKit owns the pickup pose, but the
+    // native panel has not started following the pointer yet.
+    DragPickup,
+    // Native pointer following is irreversible for this press. A later
+    // stroke-shaped path is the shake gesture and cannot reclassify the drag.
+    Dragging,
+    // Stroke classification is terminal for this press.
+    Stroke,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PetPanelGestureEvent {
+    DragStarted,
+    StrokeDetected,
+}
+
+impl PetPanelGestureState {
+    fn observe(
+        &mut self,
+        elapsed_ms: u64,
+        pointer_dx: f64,
+        pointer_dy: f64,
+        stroking: bool,
+    ) -> Option<PetPanelGestureEvent> {
+        match *self {
+            Self::Pending if stroking => {
+                *self = Self::Stroke;
+                Some(PetPanelGestureEvent::StrokeDetected)
+            }
+            Self::Pending
+                if elapsed_ms >= PET_STROKE_PICKUP_GRACE_MS
+                    && is_pet_drag_delta(pointer_dx, pointer_dy) =>
+            {
+                *self = Self::DragPickup;
+                Some(PetPanelGestureEvent::DragStarted)
+            }
+            // WebKit may already be painting the pickup pose when the second
+            // stroke reversal arrives. It is still safe to reclassify here
+            // because native has not moved the panel yet.
+            Self::DragPickup if stroking => {
+                *self = Self::Stroke;
+                Some(PetPanelGestureEvent::StrokeDetected)
+            }
+            _ => None,
+        }
+    }
+
+    fn begin_following_pointer(&mut self) {
+        if *self == Self::DragPickup {
+            *self = Self::Dragging;
+        }
+    }
+
+    fn moved(self) -> bool {
+        // Preserve the public outcome contract: a threshold-crossed pickup is
+        // a drag even if mouse-up arrives before the visual pickup delay and
+        // the native panel receives its first/final position only on release.
+        matches!(self, Self::DragPickup | Self::Dragging)
+    }
+
+    fn stroke_detected(self) -> bool {
+        self == Self::Stroke
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PetPanelDragOutcome {
     pub moved: bool,
@@ -554,11 +623,10 @@ pub fn perform_pet_panel_drag(
         Ok(())
     };
 
-    let mut moved = false;
+    let mut gesture = PetPanelGestureState::Pending;
     let mut pickup_started_at: Option<Instant> = None;
     let pickup_delay = Duration::from_millis(pickup_delay_ms.min(500));
     let mut last_probe_at = Instant::now();
-    let mut stroke_hold = false;
 
     loop {
         let pointer = app.cursor_position().map_err(|error| error.to_string())?;
@@ -572,32 +640,38 @@ pub fn perform_pet_panel_drag(
         let elapsed_ms = gesture_started.elapsed().as_millis().min(u64::MAX as u128) as u64;
         let samples: Vec<_> = shake_detector.samples.iter().copied().collect();
         let stroking = pet_stroke_detected(&samples);
-        if stroking && !stroke_hold {
-            stroke_hold = true;
-            window
-                .emit("pet-mode-stroke-detected", true)
-                .map_err(|error| error.to_string())?;
-        }
-        // Once a stroke is recognized, keep the cat in place for the rest of
-        // this press. Before that, wait a short grace so the second reverse
-        // can arrive instead of flashing the held pose on the first 7px.
-        let waiting_for_stroke = !stroke_hold && elapsed_ms < PET_STROKE_PICKUP_GRACE_MS;
-        if !moved && is_pet_drag_delta(dx, dy) && !stroke_hold && !waiting_for_stroke {
-            moved = true;
-            pickup_started_at = Some(Instant::now());
-            // A press remains a normal petting tap until physical pointer
-            // movement crosses this threshold. Emitting at that exact boundary
-            // prevents a click from ever flashing the held sprite, while the
-            // native pickup hold below gives WebKit time to paint it before the
-            // panel starts following the cursor. A recognized stroke keeps the
-            // cat in place instead of starting that pickup.
-            window
-                .emit("pet-mode-drag-start", true)
-                .map_err(|error| error.to_string())?;
+        match gesture.observe(elapsed_ms, dx, dy, stroking) {
+            Some(PetPanelGestureEvent::StrokeDetected) => {
+                // A stroke may take over while only the pickup artwork is
+                // visible. Clear its clock so this press can never begin moving
+                // the panel on a later loop iteration.
+                pickup_started_at = None;
+                window
+                    .emit("pet-mode-stroke-detected", true)
+                    .map_err(|error| error.to_string())?;
+            }
+            Some(PetPanelGestureEvent::DragStarted) => {
+                pickup_started_at = Some(Instant::now());
+                // A press remains a normal petting tap until physical pointer
+                // movement crosses this threshold. Emitting at that exact
+                // boundary prevents a click from flashing the held sprite,
+                // while the native pickup hold below gives WebKit time to paint
+                // it before the panel starts following the cursor.
+                window
+                    .emit("pet-mode-drag-start", true)
+                    .map_err(|error| error.to_string())?;
+            }
+            None => {}
         }
         let pickup_finished =
             pickup_started_at.is_some_and(|started_at| started_at.elapsed() >= pickup_delay);
         if pickup_finished {
+            // Crossing this boundary is irreversible for the current press.
+            // A later back-and-forth belongs to the shipped shake gesture, not
+            // to petting, because the cat is already following the pointer.
+            gesture.begin_following_pointer();
+        }
+        if gesture == PetPanelGestureState::Dragging {
             dispatch_apply(false)?;
             if last_probe_at.elapsed() >= Duration::from_millis(40) {
                 last_probe_at = Instant::now();
@@ -616,7 +690,8 @@ pub fn perform_pet_panel_drag(
         if !pressed {
             // A fast real drag may finish before the visual pickup hold. Keep
             // its full pointer delta instead of degrading it into a click.
-            if moved {
+            if gesture.moved() {
+                gesture.begin_following_pointer();
                 // Drain any in-flight coalesced apply so the waiting settle
                 // below is guaranteed to be dispatched, not skipped.
                 let drain_deadline = Instant::now() + MAIN_THREAD_TIMEOUT;
@@ -633,9 +708,9 @@ pub fn perform_pet_panel_drag(
     }
 
     Ok(PetPanelDragOutcome {
-        moved,
-        shake_detected: moved && shake_detector.detected(),
-        stroke_detected: !moved && stroke_hold,
+        moved: gesture.moved(),
+        shake_detected: gesture.moved() && shake_detector.detected(),
+        stroke_detected: gesture.stroke_detected(),
     })
 }
 
@@ -658,7 +733,8 @@ pub fn perform_pet_panel_drag(
 #[cfg(test)]
 mod tests {
     use super::{
-        is_pet_drag_delta, pet_drag_origin, pet_stroke_detected, PetShakeDetector, PetShakeSample,
+        is_pet_drag_delta, pet_drag_origin, pet_stroke_detected, PetPanelGestureEvent,
+        PetPanelGestureState, PetShakeDetector, PetShakeSample,
     };
     #[cfg(target_os = "macos")]
     use super::{pet_panel_native_origin_after_logical_move, pet_panel_needs_main_thread_hop};
@@ -687,6 +763,73 @@ mod tests {
     fn drag_starts_only_when_the_physical_threshold_is_crossed() {
         assert!(is_pet_drag_delta(7.0, 0.0));
         assert!(is_pet_drag_delta(5.0, 5.0));
+    }
+
+    #[test]
+    fn a_late_stroke_can_cancel_pickup_before_the_panel_moves() {
+        let mut gesture = PetPanelGestureState::Pending;
+
+        assert_eq!(
+            gesture.observe(221, 12.0, 0.0, false),
+            Some(PetPanelGestureEvent::DragStarted)
+        );
+        assert_eq!(gesture, PetPanelGestureState::DragPickup);
+        assert_eq!(
+            gesture.observe(240, 1.0, 0.0, true),
+            Some(PetPanelGestureEvent::StrokeDetected)
+        );
+        assert_eq!(gesture, PetPanelGestureState::Stroke);
+        assert!(!gesture.moved());
+        assert!(gesture.stroke_detected());
+    }
+
+    #[test]
+    fn a_stroke_cannot_take_over_after_the_panel_follows_the_pointer() {
+        let mut gesture = PetPanelGestureState::Pending;
+
+        assert_eq!(
+            gesture.observe(221, 12.0, 0.0, false),
+            Some(PetPanelGestureEvent::DragStarted)
+        );
+        gesture.begin_following_pointer();
+        assert_eq!(gesture, PetPanelGestureState::Dragging);
+        assert_eq!(gesture.observe(480, 0.0, 0.0, true), None);
+        assert_eq!(gesture, PetPanelGestureState::Dragging);
+        assert!(gesture.moved());
+        assert!(!gesture.stroke_detected());
+    }
+
+    #[test]
+    fn a_shake_stays_a_drag_when_its_path_later_matches_a_stroke() {
+        let mut detector = PetShakeDetector::default();
+        let mut gesture = PetPanelGestureState::Pending;
+        for &(at_ms, x, y) in &[(0, 0.0, 0.0), (100, 30.0, 0.0), (220, 80.0, 0.0)] {
+            detector.observe(at_ms, x, y);
+            let samples: Vec<_> = detector.samples.iter().copied().collect();
+            let event = gesture.observe(at_ms, x, y, pet_stroke_detected(&samples));
+            if event == Some(PetPanelGestureEvent::DragStarted) {
+                gesture.begin_following_pointer();
+            }
+        }
+
+        assert_eq!(gesture, PetPanelGestureState::Dragging);
+
+        let mut matched_stroke_shape = false;
+        for step in 1..=50 {
+            let at_ms = 220 + step * 120;
+            let x = if step % 2 == 0 { 80.0 } else { 130.0 };
+            detector.observe(at_ms, x, 0.0);
+            let samples: Vec<_> = detector.samples.iter().copied().collect();
+            let stroking = pet_stroke_detected(&samples);
+            matched_stroke_shape |= stroking;
+            assert_eq!(gesture.observe(at_ms, x, 0.0, stroking), None);
+        }
+
+        assert_eq!(gesture, PetPanelGestureState::Dragging);
+        assert!(gesture.moved());
+        assert!(!gesture.stroke_detected());
+        assert!(matched_stroke_shape);
+        assert!(detector.detected());
     }
 
     #[test]
