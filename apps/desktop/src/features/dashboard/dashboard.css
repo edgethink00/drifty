@@ -1220,21 +1220,63 @@ span.flow-hover-card__identity-pill {
   min-width: 0;
 }
 
-/* The row must respond to the list's own width, not the window's: this panel
-   sits beside a fixed-width feature card, so at a 900px window the list is only
-   ~220px wide and window media queries never fire. Below this width the four
-   columns cannot hold a name, a bar, and a stats string at once, and the name
-   track collapses to 0 while the stats text overflows across it. Stacking is
-   the only layout that stays readable at the raised type floor.
+/* Keep the established feature-card/list composition while making ranks 2–6
+   share one set of column boundaries. Without the shared tracks, each row's
+   figures string independently moved the identity/bar boundary, and long
+   titles could paint across the bar before their ellipsis boundary resolved. */
+:where(.app-usage-panel--activity) .app-usage-list {
+  grid-template-columns: 2.7ch minmax(0, 1.42fr) minmax(3.5rem, 0.68fr) minmax(0, auto);
+  column-gap: 0.5rem;
+}
 
-   The threshold is deliberately tight. Measured on origin/main the name track
-   is 0px wide at a 900px window but 72px by 1100px, so only the genuinely
-   broken widths fold and the default 1254px window keeps its four columns.
+:where(.app-usage-panel--activity) .app-usage-row {
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+}
+
+:where(.app-usage-panel--activity) .app-usage-row__copy {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+:where(.app-usage-panel--activity) .app-usage-row__title {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Cancel the earlier viewport fallback while the row is still using its wide
+   shared tracks. The authoritative narrow rules below restore column 2 only
+   when the complete row actually folds. */
+:where(.app-usage-panel--activity) .app-usage-row__bar,
+:where(.app-usage-panel--activity) .app-usage-row__figures {
+  grid-column: auto;
+  overflow: hidden;
+}
+
+:where(.app-usage-panel--activity) .app-usage-row__figures strong,
+:where(.app-usage-panel--activity) .app-usage-row__figures span {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The row must respond to the list's own width, not the window's. Below this
+   width the four columns cannot hold a name, a bar, and a stats string at once,
+   and the name track collapses to 0 while the stats text overflows across it.
+   Above it, keep the established compact row even when the surrounding window
+   is narrow; the dashboard may already have given this panel a wider full-row
+   track.
+
+   The threshold is deliberately below the compact 860px case. At that window
+   the list is 322px wide and retains four columns; at a 600px window the list
+   is 286px wide and the identity copy otherwise collapses to 0px, so that
+   genuinely broken width folds instead.
 
    Declared after the later same-specificity rules above so the compact layout
    is not silently overridden by the cascade. */
-@container app-usage-list (max-width: 17rem) {
-  .app-usage-row {
+@container app-usage-list (max-width: 19rem) {
+  :where(.app-usage-panel--activity) .app-usage-row {
     grid-template-columns: 2.35ch minmax(0, 1fr);
     height: auto;
     min-height: 0;
@@ -1243,15 +1285,15 @@ span.flow-hover-card__identity-pill {
     padding: 0.4rem 0;
   }
 
-  .app-usage-row__bar,
-  .app-usage-row__figures {
+  :where(.app-usage-panel--activity) .app-usage-row__bar,
+  :where(.app-usage-panel--activity) .app-usage-row__figures {
     grid-column: 2;
   }
 
   /* Keep the stacked row compact: the duration and the share line sit side by
      side rather than each claiming a full line, so the list does not turn into
      a long scroll just because it folded. */
-  .app-usage-row__figures {
+  :where(.app-usage-panel--activity) .app-usage-row__figures {
     display: flex;
     align-items: baseline;
     gap: 0.42rem;
@@ -1260,16 +1302,13 @@ span.flow-hover-card__identity-pill {
   }
 }
 
-/* Fold the split to one column just before the ranked list would stack its own
-   rows, so the feature card and the list change shape together. Declared last
-   because `.app-usage-content` is redefined further up the file; at equal
-   specificity the later rule has to win.
-
-   Measured on this panel: the list folds at 17rem, which it reaches while the
-   panel is ~30rem wide. Folding the split at 32rem keeps the card and list in
-   step without touching any width that already renders correctly. */
+/* Fold the feature/list split before its side-by-side list becomes unreadable.
+   Once stacked, the list uses the panel's full content width and keeps compact
+   four-column rows until that width reaches the separate 19rem row threshold.
+   Declared last because `.app-usage-content` is redefined further up the file;
+   at equal specificity the later rule has to win. */
 @container app-usage-panel (max-width: 32rem) {
-  .app-usage-content {
+  :where(.app-usage-panel--activity) .app-usage-content {
     grid-template-columns: minmax(0, 1fr);
   }
 }

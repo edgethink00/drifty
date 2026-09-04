@@ -128,7 +128,7 @@ export function AppUsagePanel({
   const hasItems = rankedItems.length > 0;
 
   return (
-    <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.appUsageAria") : `App usage for ${periodLabel}`}>
+    <section className="app-usage-panel app-usage-panel--activity editorial-panel editorial-panel--soft" aria-label={effectiveLanguage === "ko" ? t("dashboard.today.appUsageAria") : `App usage for ${periodLabel}`}>
       {hasItems && primaryItem ? (
         <div className="app-usage-content">
           <article

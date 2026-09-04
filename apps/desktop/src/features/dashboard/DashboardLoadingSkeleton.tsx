@@ -67,7 +67,7 @@ function TodayDashboardLoadingSkeleton() {
         </section>
       </div>
 
-      <section className="app-usage-panel editorial-panel editorial-panel--soft app-usage-panel--loading" aria-hidden="true">
+      <section className="app-usage-panel app-usage-panel--activity editorial-panel editorial-panel--soft app-usage-panel--loading" aria-hidden="true">
         <div className="app-usage-content">
           <article className="app-usage-feature dashboard-skeleton-panel">
             <div className="app-usage-feature__identity">
