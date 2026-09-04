@@ -32,6 +32,7 @@
     "allow-pet-mode-roam",
     "allow-pet-mode-exit-screen",
     "allow-pet-mode-return-from-outing",
+    "allow-pet-mode-prepare-outing-hunt",
     "allow-pet-mode-reconcile-position",
     "allow-pet-mode-remember-position",
     "allow-pet-mode-probe-ax-seat",

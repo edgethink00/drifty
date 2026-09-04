@@ -1679,9 +1679,29 @@
   gap: var(--space-3);
   min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.pet-mode-lab__hunt-enable[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line));
   background: color-mix(in srgb, var(--accent-soft) 28%, var(--surface));
+}
+
+/* Mirror the semantic parent state so the card and switch paint together. */
+.pet-mode-lab__hunt-enable[data-active="false"] .toggle {
+  border-color: var(--line);
+  background: var(--bg-2);
+}
+
+.pet-mode-lab__hunt-enable[data-active="false"] .toggle::after {
+  transform: translateX(0);
+}
+
+.pet-mode-lab__hunt-enable--production {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
 }
 
 .pet-mode-lab__hunt-enable > span {
@@ -1698,6 +1718,20 @@
 .pet-mode-lab__carry-tiers small {
   color: var(--muted);
   font-size: .6875rem;
+}
+
+.pet-mode-lab__boundary-badge {
+  flex: 0 0 auto;
+  padding: .2rem .45rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  font-family: var(--font-mono);
+  font-size: .6875rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 .pet-mode-lab__hunt-off {

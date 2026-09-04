@@ -252,6 +252,13 @@ export function DevSettingsSection({
       return petModeLabState !== null
         && petModeLabState.activeAction !== null;
     }
+    if (action === "sleep_drift_notice" || action === "sleep_drift_full_preview") {
+      return petModeLabState !== null
+        && (petModeLabState.activeAction !== null
+          || (petModeLabState.phase !== "idle"
+            && petModeLabState.phase !== "sit"
+            && petModeLabState.phase !== "sleep"));
+    }
     if (action === "cursor_hunt_single" || action === "cursor_hunt_chase") {
       return petModeLabState !== null
         && (petModeLabState.activeAction !== null
@@ -490,12 +497,28 @@ export function DevSettingsSection({
           </div>
           <div className="pet-mode-lab__row pet-mode-lab__row--hunt">
             <div className="pet-mode-lab__row-copy">
-              <div className="lbl">Cursor hunt</div>
-              <div className="desc">Dev-only cursor play. Off keeps the production cat passive during drift.</div>
+              <div className="lbl">Drift reaction</div>
+              <div className="desc">Production behavior. Sleeping notice and wake-up escalation never move the cursor.</div>
             </div>
             <div className="pet-mode-lab__hunt-policy">
-              <div className="pet-mode-lab__hunt-enable">
-                <span><strong>{driftHuntSettings.enabled ? "Enabled for QA" : "Off by default"}</strong><small>다음 drift부터 적용</small></span>
+              <div className="pet-mode-lab__hunt-enable pet-mode-lab__hunt-enable--production">
+                <span><strong>On with Pet Mode</strong><small>10초 눈치챔 · 24초 기상 · 커서 이동 없음</small></span>
+                <span className="pet-mode-lab__boundary-badge">Production</span>
+              </div>
+              <div className="pet-mode-lab__hunt-preview" aria-label="Drift reaction previews">
+                <PetModeLabAction label="잠든 감지 재생" detail="주황 빠직 + 찡그림 · 딴짓 중 계속 유지" action="sleep_drift_notice" active={petModeLabState?.activeAction === "sleep_drift_notice"} disabled={isPetModeLabActionDisabled("sleep_drift_notice")} onAction={onPreviewPetModeAction} />
+                <PetModeLabAction label="잠든 딴짓 전체 재생" detail="감지부터 빨간 !까지 압축 · 실제 커서 이동 없음" action="sleep_drift_full_preview" active={petModeLabState?.activeAction === "sleep_drift_full_preview"} disabled={isPetModeLabActionDisabled("sleep_drift_full_preview")} onAction={onPreviewPetModeAction} />
+              </div>
+            </div>
+          </div>
+          <div className="pet-mode-lab__row pet-mode-lab__row--hunt">
+            <div className="pet-mode-lab__row-copy">
+              <div className="lbl">Cursor control</div>
+              <div className="desc">Dev-only experiment. Tracks, bites, and carries the real cursor.</div>
+            </div>
+            <div className="pet-mode-lab__hunt-policy">
+              <div className="pet-mode-lab__hunt-enable" data-active={driftHuntSettings.enabled}>
+                <span><strong>{driftHuntSettings.enabled ? "Enabled for QA" : "Off by default"}</strong><small>실제 커서 개입 · 다음 drift부터 적용</small></span>
                 <Toggle checked={driftHuntSettings.enabled} onChange={(enabled) => updateDriftHuntSettings({ ...driftHuntSettings, enabled })} ariaLabel="Toggle drift cursor hunt" />
               </div>
               {driftHuntSettings.enabled ? (
@@ -525,7 +548,7 @@ export function DevSettingsSection({
                       <Toggle checked={driftHuntSettings.softTurns} onChange={(softTurns) => updateDriftHuntSettings({ ...driftHuntSettings, softTurns })} ariaLabel="Toggle soft cursor chase turns" />
                     </div>
                     <div className="pet-mode-lab__hunt-detail-row">
-                      <span className="pet-mode-lab__hunt-detail-label"><strong>발견 느낌표</strong><small>추격 시작 때 주황색 ! 1회</small></span>
+                      <span className="pet-mode-lab__hunt-detail-label"><strong>발견 느낌표</strong><small>추격 시작 때 빨간 ! 1회</small></span>
                       <Toggle checked={driftHuntSettings.showAlertCue} onChange={(showAlertCue) => updateDriftHuntSettings({ ...driftHuntSettings, showAlertCue })} ariaLabel="Toggle cursor hunt alert cue" />
                     </div>
                     {driftHuntSettings.showAlertCue ? <PetModeHuntRange label="느낌표 길이" detail="팝업이 나타났다 사라지는 시간" value={driftHuntSettings.alertDurationMs} range={PET_MODE_DRIFT_HUNT_TUNING_RANGES.alertDurationMs} valueLabel={`${driftHuntSettings.alertDurationMs}ms`} ariaLabel="Cursor hunt alert duration" onChange={(alertDurationMs) => updateDriftHuntSettings({ ...driftHuntSettings, alertDurationMs })} /> : null}
@@ -547,7 +570,7 @@ export function DevSettingsSection({
                     </div>
                   </details>
                 </>
-              ) : <div className="pet-mode-lab__hunt-off">앉아 있기만 함 · 커서 접근 없음</div>}
+              ) : <div className="pet-mode-lab__hunt-off">딴짓 반응 연출만 유지 · 실제 커서 접근 없음</div>}
             </div>
           </div>
               </div>

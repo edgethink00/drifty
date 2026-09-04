@@ -212,6 +212,8 @@ export type PetModePreviewAction =
   | "wake"
   | "pet"
   | "outing"
+  | "sleep_drift_notice"
+  | "sleep_drift_full_preview"
   | "cursor_hunt_single"
   | "cursor_hunt_chase";
 

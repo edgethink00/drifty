@@ -53,6 +53,7 @@ type PetModeCatPhase =
   | "release";
 
 type PetModeRestPose = "idle" | "sit";
+type PetModeDriftCue = "none" | "sleep-notice" | "sleep-wake";
 
 type WalkFramesFile = {
   readonly frames: readonly string[];
@@ -92,6 +93,8 @@ export function PetModeCat({
   musicNoteVisible = false,
   quietNotice = false,
   devForceLiveBlink = false,
+  driftCue = "none",
+  sleepDriftExpression = false,
 }: {
   readonly phase: PetModeCatPhase;
   readonly facing: "left" | "right";
@@ -121,6 +124,10 @@ export function PetModeCat({
   readonly quietNotice?: boolean;
   /** Deterministic Dev/QA capture hook; production callers leave this false. */
   readonly devForceLiveBlink?: boolean;
+  /** Sleep-only drift reaction drawn from the existing vector artwork. */
+  readonly driftCue?: PetModeDriftCue;
+  /** Holds the annoyed sleeping eyelids for the active drift reaction. */
+  readonly sleepDriftExpression?: boolean;
 }) {
   const [walkFrames, setWalkFrames] = useState<readonly string[]>([]);
   const [walkFrame, setWalkFrame] = useState(0);
@@ -458,7 +465,7 @@ export function PetModeCat({
   const usesLiveD = selectedSitVariant.kind === "live-raster";
   const hasLiveDSitGaze = phase === "sit" && usesLiveD && (gazeOffset.x !== 0 || gazeOffset.y !== 0);
   const hasLiveDNeutralSit = phase === "sit" && usesLiveD && !hasLiveDSitGaze;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy"
     || phase === "drowsy";
@@ -747,7 +754,7 @@ export function PetModeCat({
             draggable={false}
           />
         ) : phase === "sleep" ? (
-          <PetModeSleepPose />
+          <PetModeSleepPose irritated={sleepDriftExpression || driftCue !== "none"} />
         ) : phase === "sit" ? (
           <PetModeSitPose sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
         ) : usesRunRaster ? (
@@ -1136,7 +1143,7 @@ function PetModeSitPose({
   );
 }
 
-function PetModeSleepPose() {
+function PetModeSleepPose({ irritated = false }: { readonly irritated?: boolean }) {
   return (
     <svg className="pet-mode-cat__vector pet-mode-cat__sleep-pose" viewBox="0 0 150 120" aria-hidden="true">
       <path
@@ -1144,8 +1151,26 @@ function PetModeSleepPose() {
         d="M16.5 81.3c0-27.2 19.8-46.7 48.4-46.7h10c20.8 0 39.5 7.1 51.1 18.3 4.6-2.6 8.4-1.8 9.8 3.2 3.7 12.6 3.6 27.7-3.6 39.9-6.9 11.6-21.2 14-37.6 13.7-8.1-.1-11.8-1.8-18.9.9-7.3 2.8-17.6 1.5-25.4.9-21.2-1.7-33.8-11.9-33.8-30.2Z"
       />
       <g className="pet-mode-cat__face">
-        <path d="M83.9 92.2 Q87.9 95.4 91.9 92.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-        <path d="M113.7 92.2 Q117.7 95.4 121.7 92.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-front" d="M83.9 92.2 Q87.9 95.4 91.9 92.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+        {irritated ? (
+          <g className="pet-mode-cat__sleep-eyes--squint">
+            <path
+              d="M84.8 91.7 Q88.2 94.1 91.4 93.4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
+            <path
+              d="M114.6 93.4 Q117.8 94.1 121.2 91.7"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+            />
+          </g>
+        ) : null}
+        <path className="pet-mode-cat__sleep-eye pet-mode-cat__sleep-eye--closed-rear" d="M113.7 92.2 Q117.7 95.4 121.7 92.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
         <path d="M98.9 95.1 Q100.9 97.7 102.9 95.4 Q104.9 97.7 106.9 95.1" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
       </g>
     </svg>
@@ -1155,4 +1180,4 @@ function PetModeSleepPose() {
 export {
   resolvePetModeSitGazeAnchor,
 };
-export type { PetModeCatPhase, PetModeRestPose };
+export type { PetModeCatPhase, PetModeDriftCue, PetModeRestPose };

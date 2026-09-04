@@ -306,6 +306,38 @@
   animation: pet-mode-sleep-breathe 2.8s ease-in-out infinite;
   transform-origin: 50% 92%;
 }
+
+/* A sleeping cat notices drift without changing to a new illustrated pose.
+   Freeze the existing sleep drawing, compress both eyelids low toward the
+   nose, and hold the orange anger crack close to the forehead. Keeping the cue
+   static reads as restrained annoyance instead of a full-body startle. The
+   later committed hunt owns the red alert. */
+.pet-mode-cat.has-sleep-drift-cue.pet-mode-cat--sleep .pet-mode-cat__motion {
+  animation: none;
+  filter: var(--pet-drop-shadow);
+}
+.pet-mode-cat.has-sleep-drift-cue { filter: none; }
+.pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__zzz {
+  opacity: 0;
+  animation: none;
+}
+.pet-mode-cat__sleep-eyes--squint { opacity: 0; }
+.pet-mode-cat.has-sleep-drift-expression .pet-mode-cat__sleep-eye--closed-front,
+.pet-mode-cat.has-sleep-drift-expression .pet-mode-cat__sleep-eye--closed-rear { opacity: 0; }
+.pet-mode-cat.has-sleep-drift-expression .pet-mode-cat__sleep-eyes--squint { opacity: 1; }
+.pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__anger {
+  fill: #ff9f0a;
+  filter: none;
+  opacity: 1;
+  transform: translate(-4px, 4px) scale(.92);
+  transform-origin: center;
+  animation: none;
+}
+.pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__anger-glyph {
+  animation: none;
+  transform-box: fill-box;
+  transform-origin: 14% 88%;
+}
 /* Sitting is a long-held pose, so it keeps the same slow breathing the sleep
    pose uses. Without it a multi-minute sit reads as a frozen bitmap. */
 .pet-mode-cat--sit .pet-mode-cat__motion {
@@ -772,7 +804,7 @@
 }
 .pet-mode-cat--notice .pet-mode-cat__alert { color: #ff9f0a; }
 .pet-mode-cat--stalk.has-hunt-alert .pet-mode-cat__alert {
-  color: #ff9f0a;
+  color: #ff453a;
   animation: pet-mode-hunt-alert var(--pet-hunt-alert-duration, 480ms) cubic-bezier(.22, 1, .36, 1) both;
 }
 .pet-mode-cat.is-playful-paw .pet-mode-cat__alert,
@@ -884,6 +916,19 @@
 @keyframes pet-mode-sleep-breathe {
   0%, 100% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1); }
   50% { transform: translate(var(--pet-gaze-body-x, 0px), var(--pet-gaze-body-y, 0px)) scaleY(1.025); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-mode-cat.has-sleep-drift-cue.pet-mode-cat--sleep .pet-mode-cat__motion,
+  .pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__anger,
+  .pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__anger-glyph {
+    animation: none;
+  }
+
+  .pet-mode-cat.has-sleep-drift-cue .pet-mode-cat__anger,
+  .pet-mode-cat.has-sleep-drift-expression .pet-mode-cat__sleep-eyes--squint {
+    opacity: 1;
+  }
 }
 
 /* Release layering contract: like the pickup, this is a discrete

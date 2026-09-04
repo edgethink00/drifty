@@ -10,11 +10,15 @@ import {
   PET_MODE_DRIFT_NOTICE_SECONDS,
   PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE,
   PET_MODE_DRIFT_CURSOR_RETURN_TIERS,
+  PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY,
+  PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY,
   PET_MODE_DRIFT_STALK_SECONDS,
   advancePetModeDriftHunt,
+  commitPetModeDriftHuntAction,
   persistPetModeDriftHuntSettings,
   resolvePetModeDriftHuntSettings,
   resolvePetModeDriftCursorReturnDuration,
+  suppressPetModeDriftHunt,
 } from "./petModeDriftHunt";
 
 const snapshot = (productivity: "focus" | "neutral" | "drift", durationSeconds: number, contextLabel = "video") => ({
@@ -32,16 +36,16 @@ describe("petModeDriftHunt", () => {
     ]);
     expect(resolvePetModeDriftCursorReturnDuration(0)).toBe(6_000);
     expect(resolvePetModeDriftCursorReturnDuration(7)).toBe(6_000);
-    expect(resolvePetModeDriftCursorReturnDuration(7.1)).toBe(3_000);
-    expect(resolvePetModeDriftCursorReturnDuration(12)).toBe(3_000);
-    expect(resolvePetModeDriftCursorReturnDuration(12.1)).toBe(2_000);
-    expect(resolvePetModeDriftCursorReturnDuration(18)).toBe(2_000);
-    expect(resolvePetModeDriftCursorReturnDuration(40)).toBe(2_000);
+    expect(resolvePetModeDriftCursorReturnDuration(7.1)).toBe(2_000);
+    expect(resolvePetModeDriftCursorReturnDuration(12)).toBe(2_000);
+    expect(resolvePetModeDriftCursorReturnDuration(12.1)).toBe(1_000);
+    expect(resolvePetModeDriftCursorReturnDuration(18)).toBe(1_000);
+    expect(resolvePetModeDriftCursorReturnDuration(40)).toBe(1_000);
   });
 
   it("keeps even the six-second carry visibly moving", () => {
     // 128pt over six seconds is about 21pt/s. Keep it above the old 16pt/s
-    // crawl while pinning the reviewed 6s/3s/2s timing contract above.
+    // crawl while pinning the reviewed 6s/2s/1s timing contract above.
     for (const tier of PET_MODE_DRIFT_CURSOR_RETURN_TIERS) {
       const speed = PET_MODE_DRIFT_CURSOR_RETURN_DISTANCE / (tier.durationMs / 1_000);
       expect(speed).toBeGreaterThan(20);
@@ -90,6 +94,46 @@ describe("petModeDriftHunt", () => {
       softTurns: false,
       showAlertCue: false,
     });
+  });
+
+  it("migrates only the legacy 6s/3s/2s carry defaults to the reviewed 6s/2s/1s tiers", () => {
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY, JSON.stringify({
+      stalkSpeed: 180,
+      carryStillDurationMs: 6_000,
+      carryNudgeDurationMs: 3_000,
+      carryYankDurationMs: 2_000,
+    }));
+
+    expect(resolvePetModeDriftHuntSettings()).toMatchObject({
+      stalkSpeed: 180,
+      carryStillDurationMs: 6_000,
+      carryNudgeDurationMs: 2_000,
+      carryYankDurationMs: 1_000,
+    });
+    expect(window.localStorage.getItem(PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY))
+      .toBe("carry-6-2-1");
+    expect(JSON.parse(window.localStorage.getItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY) ?? "{}"))
+      .toMatchObject({
+        stalkSpeed: 180,
+        carryStillDurationMs: 6_000,
+        carryNudgeDurationMs: 2_000,
+        carryYankDurationMs: 1_000,
+      });
+  });
+
+  it("preserves previously customized carry durations during the default migration", () => {
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY, JSON.stringify({
+      carryStillDurationMs: 5_000,
+      carryNudgeDurationMs: 2_600,
+      carryYankDurationMs: 1_400,
+    }));
+
+    expect(resolvePetModeDriftHuntSettings()).toMatchObject({
+      carryStillDurationMs: 5_000,
+      carryNudgeDurationMs: 2_600,
+      carryYankDurationMs: 1_400,
+    });
+    expect(window.localStorage.getItem(PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY)).toBeNull();
   });
 
   it("keeps a persisted hunt flag inert whenever Dev mode is off", () => {
@@ -146,22 +190,43 @@ describe("petModeDriftHunt", () => {
 
     const noticed = advancePetModeDriftHunt(early.state, snapshot("drift", PET_MODE_DRIFT_NOTICE_SECONDS), false);
     expect(noticed.action).toBe("notice");
+    expect(advancePetModeDriftHunt(noticed.state, snapshot("drift", 11), false).action).toBe("notice");
+    const noticeCommitted = commitPetModeDriftHuntAction(noticed.state, "notice");
 
-    const stalked = advancePetModeDriftHunt(noticed.state, snapshot("drift", PET_MODE_DRIFT_STALK_SECONDS), false);
+    const stalked = advancePetModeDriftHunt(noticeCommitted, snapshot("drift", PET_MODE_DRIFT_STALK_SECONDS), false);
     expect(stalked.action).toBe("stalk");
-    expect(advancePetModeDriftHunt(stalked.state, snapshot("drift", 90), false).action).toBeNull();
+    expect(advancePetModeDriftHunt(stalked.state, snapshot("drift", 25), false).action).toBe("stalk");
+    const stalkCommitted = commitPetModeDriftHuntAction(stalked.state, "stalk");
+    expect(advancePetModeDriftHunt(stalkCommitted, snapshot("drift", 90), false).action).toBeNull();
+  });
+
+  it("keeps a blocked notice pending and upgrades it to the stronger stalk", () => {
+    const notice = advancePetModeDriftHunt(
+      EMPTY_PET_MODE_DRIFT_HUNT_STATE,
+      snapshot("drift", PET_MODE_DRIFT_NOTICE_SECONDS),
+      false,
+    );
+    expect(notice.state.pendingAction).toBe("notice");
+
+    const upgraded = advancePetModeDriftHunt(
+      notice.state,
+      snapshot("drift", PET_MODE_DRIFT_STALK_SECONDS),
+      false,
+    );
+    expect(upgraded.action).toBe("stalk");
+    expect(upgraded.state.pendingAction).toBe("stalk");
   });
 
   it("starts a new budget when the context changes or its duration rewinds", () => {
     const first = advancePetModeDriftHunt(
-      { contextLabel: "video", lastDurationSeconds: 70, noticed: true, stalked: true },
+      { contextLabel: "video", lastDurationSeconds: 70, noticed: true, stalked: true, pendingAction: null },
       snapshot("drift", PET_MODE_DRIFT_NOTICE_SECONDS, "game"),
       false,
     );
     expect(first.action).toBe("notice");
 
     const rewound = advancePetModeDriftHunt(
-      { contextLabel: "game", lastDurationSeconds: 70, noticed: true, stalked: true },
+      { contextLabel: "game", lastDurationSeconds: 70, noticed: true, stalked: true, pendingAction: null },
       snapshot("drift", PET_MODE_DRIFT_NOTICE_SECONDS, "game"),
       false,
     );
@@ -169,7 +234,7 @@ describe("petModeDriftHunt", () => {
   });
 
   it("resets outside drift and suppresses translation for Reduced Motion", () => {
-    const used = { contextLabel: "video", lastDurationSeconds: 70, noticed: true, stalked: true };
+    const used = { contextLabel: "video", lastDurationSeconds: 70, noticed: true, stalked: true, pendingAction: null } as const;
     expect(advancePetModeDriftHunt(used, snapshot("focus", 80), false)).toEqual({
       state: EMPTY_PET_MODE_DRIFT_HUNT_STATE,
       action: null,
@@ -181,8 +246,23 @@ describe("petModeDriftHunt", () => {
       true,
     );
     expect(notice.action).toBe("notice");
-    const held = advancePetModeDriftHunt(notice.state, snapshot("drift", PET_MODE_DRIFT_STALK_SECONDS + 1), true);
+    const held = advancePetModeDriftHunt(
+      commitPetModeDriftHuntAction(notice.state, "notice"),
+      snapshot("drift", PET_MODE_DRIFT_STALK_SECONDS + 1),
+      true,
+    );
     expect(held.action).toBeNull();
     expect(held.state.stalked).toBe(false);
+  });
+
+  it("suppresses stale catch-up after an explicit hide or off transition", () => {
+    const suppressed = suppressPetModeDriftHunt(snapshot("drift", 44));
+    expect(suppressed).toMatchObject({
+      contextLabel: "video",
+      noticed: true,
+      stalked: true,
+      pendingAction: null,
+    });
+    expect(advancePetModeDriftHunt(suppressed, snapshot("drift", 45), false).action).toBeNull();
   });
 });

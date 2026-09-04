@@ -111,6 +111,17 @@ describe("pet mode enabled bridge", () => {
     expect(tauri.invoke).not.toHaveBeenCalled();
   });
 
+  it("forwards the complete sleeping-drift preview through the native command boundary", async () => {
+    tauri.invoke.mockResolvedValueOnce(undefined);
+    const { previewNativePetModeAction } = await import("./petModeBridge");
+
+    await expect(previewNativePetModeAction("sleep_drift_full_preview")).resolves.toBe(true);
+
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_preview_action", {
+      action: "sleep_drift_full_preview",
+    });
+  });
+
   it("carries one native generation through the complete outing lifecycle", async () => {
     tauri.invoke
       .mockResolvedValueOnce({ side: "right", generation: 19 })
@@ -134,6 +145,18 @@ describe("pet mode enabled bridge", () => {
     expect(tauri.invoke).toHaveBeenNthCalledWith(3, "pet_mode_return_from_outing", {
       side: "right",
       outingGeneration: 19,
+    });
+  });
+
+  it("prepares an outing hunt with the same visibility generation", async () => {
+    tauri.invoke.mockResolvedValueOnce({ facing: "right" });
+    const { prepareNativePetOutingHunt } = await import("./petModeBridge");
+
+    await expect(prepareNativePetOutingHunt({ side: "left", generation: 23 }))
+      .resolves.toEqual({ facing: "right" });
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_mode_prepare_outing_hunt", {
+      side: "left",
+      outingGeneration: 23,
     });
   });
 

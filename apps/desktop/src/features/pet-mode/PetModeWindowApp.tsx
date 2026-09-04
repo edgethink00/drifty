@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
+import { PET_MODE_DRIFT_REACTION_ENABLED } from "../../appFeatureSwitches";
 import {
   PetModeCat,
   resolvePetModeSitGazeAnchor,
   type PetModeCatPhase,
+  type PetModeDriftCue,
   type PetModeRestPose,
 } from "./PetModeCat";
 import {
@@ -20,6 +22,7 @@ import {
   listenToNativePetModeLabStateRequest,
   moveNativePetToTarget,
   probeNativePetAxSeat,
+  prepareNativePetOutingHunt,
   reconcileNativePetPosition,
   rememberNativePetPosition,
   resolveNativePetDrop,
@@ -107,6 +110,7 @@ import {
   type PetModeInterventionTarget,
   type PetModeLabAction,
   type PetModeLifeAction,
+  type PetModeOutingTicket,
   type PetModePostDropReaction,
   type PetModePreviewAction,
   type PetModeSnapshot,
@@ -125,10 +129,19 @@ import {
   EMPTY_PET_MODE_DRIFT_HUNT_STATE,
   PET_MODE_DRIFT_HUNT_ALERT_MS,
   PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
+  PET_MODE_DRIFT_NOTICE_SECONDS,
   PET_MODE_DRIFT_NOTICE_MS,
+  PET_MODE_DRIFT_SLEEP_EXPRESSION_PREVIEW_MS,
+  PET_MODE_DRIFT_SLEEP_FULL_PREVIEW_HOLD_MS,
+  PET_MODE_DRIFT_SLEEP_NOTICE_MS,
+  PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS,
+  PET_MODE_DRIFT_SLEEP_WAKE_MS,
   PET_MODE_DRIFT_STALK_SETTLE_MS,
   advancePetModeDriftHunt,
+  commitPetModeDriftHuntAction,
   resolvePetModeDriftHuntSettings,
+  suppressPetModeDriftHunt,
+  type PetModeDriftHuntAction,
   type PetModeDriftHuntSettings,
   type PetModeDriftHuntState,
 } from "./petModeDriftHunt";
@@ -139,7 +152,7 @@ const LAB_LIFE_ACTIONS = ["walk", "stretch", "tail_flick"] as const;
 // are much heavier, and a 4 Hz diagnostic is still comfortably live to a
 // person deciding where to drop the cat.
 const PET_MODE_AX_PROBE_INTERVAL_MS = 250;
-type LifeAction = Exclude<PetModePreviewAction, "cursor_hunt_single" | "cursor_hunt_chase"> | "drowsy";
+type LifeAction = Exclude<PetModePreviewAction, "sleep_drift_notice" | "sleep_drift_full_preview" | "cursor_hunt_single" | "cursor_hunt_chase"> | "drowsy";
 type PetModeAxProbeKind = "scanning" | "free" | "overlap" | "blocked" | "unknown" | "off";
 type PetModeAxProbeDisplay = {
   readonly kind: PetModeAxProbeKind;
@@ -193,6 +206,7 @@ export function PetModeWindowApp() {
   const [proudWalk, setProudWalk] = useState(false);
   const [musicNoteVisible, setMusicNoteVisible] = useState(false);
   const [snapshot, setSnapshot] = useState<PetModeSnapshot | null>(null);
+  const snapshotRef = useRef<PetModeSnapshot | null>(null);
   const [labLifeLoopEnabled, setLabLifeLoopEnabled] = useState(false);
   const [dragProbe, setDragProbe] = useState<PetDropPlan | null>(null);
   const [axSeatProbe, setAxSeatProbe] = useState<PetModeAxProbeDisplay | null>(null);
@@ -203,6 +217,10 @@ export function PetModeWindowApp() {
   const [manualGazeActive, setManualGazeActive] = useState(false);
   const [huntAlertVisible, setHuntAlertVisible] = useState(false);
   const [huntAlertDurationMs, setHuntAlertDurationMs] = useState(PET_MODE_DRIFT_HUNT_ALERT_MS);
+  const [driftCue, setDriftCue] = useState<PetModeDriftCue>("none");
+  const [sleepDriftAnnoyedContext, setSleepDriftAnnoyedContext] = useState<string | null>(null);
+  const [sleepDriftPreviewExpression, setSleepDriftPreviewExpression] = useState(false);
+  const [driftRetryRevision, setDriftRetryRevision] = useState(0);
   const [guidesEnabled, setGuidesEnabled] = useState(() => {
     try {
       return window.localStorage.getItem(PET_MODE_GUIDES_STORAGE_KEY) === "1";
@@ -276,10 +294,44 @@ export function PetModeWindowApp() {
   const focusRestingRef = useRef(false);
   const focusRestAppliedRef = useRef(false);
   const driftHuntRef = useRef<PetModeDriftHuntState>(EMPTY_PET_MODE_DRIFT_HUNT_STATE);
+  const cursorHuntActiveRef = useRef(false);
+  const cursorHuntRevisionRef = useRef(0);
   const huntAlertTimerRef = useRef<number | null>(null);
+  const driftCueTokenRef = useRef<number | null>(null);
+  const outingTicketRef = useRef<PetModeOutingTicket | null>(null);
+
+  const clearHuntAlert = useCallback(() => {
+    if (huntAlertTimerRef.current !== null) {
+      window.clearTimeout(huntAlertTimerRef.current);
+      huntAlertTimerRef.current = null;
+    }
+    setHuntAlertVisible(false);
+  }, []);
+
+  const showTimedHuntAlert = useCallback((visible: boolean, durationMs: number) => {
+    clearHuntAlert();
+    setHuntAlertDurationMs(durationMs);
+    if (!visible) return;
+    setHuntAlertVisible(true);
+    huntAlertTimerRef.current = window.setTimeout(() => {
+      huntAlertTimerRef.current = null;
+      setHuntAlertVisible(false);
+    }, durationMs);
+  }, [clearHuntAlert]);
 
   useEffect(() => () => {
     if (huntAlertTimerRef.current !== null) window.clearTimeout(huntAlertTimerRef.current);
+  }, []);
+
+  const showDriftCue = useCallback((nextCue: Exclude<PetModeDriftCue, "none">, token: number) => {
+    driftCueTokenRef.current = token;
+    setDriftCue(nextCue);
+  }, []);
+
+  const clearDriftCue = useCallback((token: number) => {
+    if (driftCueTokenRef.current !== token) return;
+    driftCueTokenRef.current = null;
+    setDriftCue("none");
   }, []);
 
   const playMusicNote = useCallback(() => {
@@ -326,31 +378,51 @@ export function PetModeWindowApp() {
     };
   }, []);
 
-  const commitPhase = useCallback((nextPhase: PetModeCatPhase) => {
+  const commitPhase = useCallback((nextPhase: PetModeCatPhase, onCommit?: () => void) => {
     phaseRef.current = nextPhase;
     reportLabState(nextPhase);
     const transition = ++poseTransitionRef.current;
-    const commit = () => {
-      if (transition === poseTransitionRef.current && phaseRef.current === nextPhase) {
-        renderedPhaseRef.current = nextPhase;
-        setPhase(nextPhase);
-        setHitRegionCommitRevision((revision) => revision + 1);
+    return new Promise<boolean>((resolve) => {
+      const commit = () => {
+        if (transition === poseTransitionRef.current && phaseRef.current === nextPhase) {
+          renderedPhaseRef.current = nextPhase;
+          // Clear the sleeping overlay in the same render that swaps to the
+          // upright artwork. Clearing it earlier exposes one neutral sleeping
+          // frame while the native hit region is still being staged. The
+          // expression can outlive its cue during the full Dev preview, so it
+          // must be cleared independently to avoid leaking into the next sleep.
+          if (nextPhase !== "sleep") {
+            if (driftCueTokenRef.current !== null) {
+              driftCueTokenRef.current = null;
+              setDriftCue("none");
+            }
+            setSleepDriftPreviewExpression(false);
+          }
+          onCommit?.();
+          setPhase(nextPhase);
+          setHitRegionCommitRevision((revision) => revision + 1);
+          resolve(true);
+          return;
+        }
+        resolve(false);
+      };
+      const reject = () => {
+        if (transition === poseTransitionRef.current && phaseRef.current === nextPhase) {
+          phaseRef.current = renderedPhaseRef.current;
+          reportLabState(renderedPhaseRef.current);
+        }
+        resolve(false);
+      };
+      if (!petModeEnabledRef.current || !visibleRef.current) {
+        commit();
+        return;
       }
-    };
-    const reject = () => {
-      if (transition !== poseTransitionRef.current || phaseRef.current !== nextPhase) return;
-      phaseRef.current = renderedPhaseRef.current;
-      reportLabState(renderedPhaseRef.current);
-    };
-    if (!petModeEnabledRef.current || !visibleRef.current) {
-      commit();
-      return;
-    }
-    const finishTransition = beginHitRegionTransition();
-    void stagePetModeHitRegionTransition({
-      regionId: `transition:${nextPhase}`,
-      mirrored: facingRef.current === "left",
-    }).then(commit, reject).finally(finishTransition);
+      const finishTransition = beginHitRegionTransition();
+      void stagePetModeHitRegionTransition({
+        regionId: `transition:${nextPhase}`,
+        mirrored: facingRef.current === "left",
+      }).then(commit, reject).finally(finishTransition);
+    });
   }, [beginHitRegionTransition, reportLabState]);
 
   const commitFacing = useCallback((nextFacing: "left" | "right") => {
@@ -405,6 +477,12 @@ export function PetModeWindowApp() {
 
   useEffect(() => {
     if (phase !== "idle" && phase !== "entry") setPreserveEntryLanding(false);
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase === "idle" || phase === "sit" || phase === "sleep") {
+      setDriftRetryRevision((revision) => revision + 1);
+    }
   }, [phase]);
 
   const setActiveLabAction = useCallback((action: PetModeLabAction | null) => {
@@ -834,6 +912,13 @@ export function PetModeWindowApp() {
       restartAutonomousCycle();
       setPetModeEnabled(enabled);
       if (!enabled) {
+        outingTicketRef.current = null;
+        driftHuntRef.current = suppressPetModeDriftHunt(snapshotRef.current);
+        driftCueTokenRef.current = null;
+        setDriftCue("none");
+        setSleepDriftAnnoyedContext(null);
+        setSleepDriftPreviewExpression(false);
+        setHuntAlertVisible(false);
         setPreserveEntryLanding(false);
         setProudWalk(false);
         commitPhase("idle");
@@ -900,9 +985,10 @@ export function PetModeWindowApp() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // Cursor hunt is owned by the Dev settings webview. Turning it off is a
-  // hard safety boundary, not merely a policy for the next drift episode, so
-  // the pet webview must cancel any stalk/carry already in flight.
+  // Native cursor control is owned by the Dev settings webview. Turning it off
+  // is a hard safety boundary, so cancel an active stalk/carry immediately.
+  // The approved visual drift reaction is independent and must stay intact;
+  // an annoyed sleeping cat still wakes and reacts without moving the cursor.
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (
@@ -911,14 +997,18 @@ export function PetModeWindowApp() {
         && event.key !== DEV_MODE_STORAGE_KEY
       ) return;
       if (resolvePetModeDriftHuntSettings().enabled) return;
-      actionTokenRef.current += 1;
+      if (!cursorHuntActiveRef.current) return;
+      cursorHuntActiveRef.current = false;
+      cursorHuntRevisionRef.current += 1;
+      clearHuntAlert();
       void cancelNativePetMotion().catch(() => undefined);
+      actionTokenRef.current += 1;
       setActiveLabAction(null);
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, [commitPhase, setActiveLabAction]);
+  }, [clearHuntAlert, commitPhase, setActiveLabAction]);
 
   useEffect(() => {
     let disposed = false;
@@ -1102,15 +1192,18 @@ export function PetModeWindowApp() {
       commitPhase("walk");
       const outingTicket = await exitNativePetScreen();
       if (token !== actionTokenRef.current) return;
+      outingTicketRef.current = outingTicket;
       commitVisibility(false);
       await setNativePetPresence(false, outingTicket.generation);
       await delay(awayMilliseconds);
       if (token !== actionTokenRef.current) return;
+      outingTicketRef.current = null;
       commitVisibility(true);
       commitPhase("walk");
       await returnNativePetFromOuting(outingTicket);
     } finally {
       if (token === actionTokenRef.current && visibleRef.current) {
+        outingTicketRef.current = null;
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
@@ -1250,67 +1343,165 @@ export function PetModeWindowApp() {
 
   const playCursorHunt = useCallback(async (
     huntSettings: PetModeDriftHuntSettings,
-    options: { allowWhileResting?: boolean } = {},
+    options: {
+      allowWhileResting?: boolean;
+      outingTicket?: PetModeOutingTicket | null;
+    } = {},
   ) => {
     const focusBlocksHunt = () => !options.allowWhileResting && focusRestingRef.current;
     if (!huntSettings.enabled || focusBlocksHunt()) return;
+    const cursorHuntRevision = ++cursorHuntRevisionRef.current;
+    cursorHuntActiveRef.current = true;
+    try {
+      const outingTicket = options.outingTicket ?? null;
+      const startedAsleep = outingTicket === null && phaseRef.current === "sleep";
+      const token = ++actionTokenRef.current;
+      restartAutonomousCycle();
+      await cancelNativePetMotion().catch(() => undefined);
+      const armHuntAlert = () => showTimedHuntAlert(
+        huntSettings.showAlertCue,
+        huntSettings.alertDurationMs,
+      );
+
+      if (outingTicket !== null) {
+        // A natural outing is already hidden. Paint the committed stalk pose and
+        // red alert before native reveals the panel at the cursor display edge;
+        // never travel through the remembered home as an intermediate frame.
+        commitFacing(outingTicket.side === "left" ? "right" : "left");
+        setPreserveEntryLanding(false);
+        const stalkCommitted = await commitPhase("stalk", armHuntAlert);
+        if (!stalkCommitted || token !== actionTokenRef.current || focusBlocksHunt()) return;
+        commitVisibility(true);
+        await delay(0);
+        const entry = await prepareNativePetOutingHunt(outingTicket).catch(() => null);
+        if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+        if (entry === null) {
+          // Preparation can fail after the outing timer has already yielded
+          // ownership to this hunt. Recover the resident panel at home instead
+          // of leaving the pet permanently hidden with no timer left to return it.
+          outingTicketRef.current = null;
+          clearHuntAlert();
+          await setNativePetPresence(true).catch(() => undefined);
+          if (token === actionTokenRef.current) {
+            commitPhase(focusRestingRef.current ? "sit" : "idle");
+          }
+          return;
+        }
+        outingTicketRef.current = null;
+        commitFacing(entry.facing);
+      } else {
+        await revealForAction().catch(() => undefined);
+        if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+        setPreserveEntryLanding(false);
+
+        if (startedAsleep) {
+          // First let the existing sleeping drawing notice the problem: stop the
+          // Zs, squint both eyes, and hold a static orange crack. Then rise
+          // directly into the red exclamation/stalk with no neutral standing beat.
+          sleepTouchRef.current = 0;
+          showDriftCue("sleep-wake", token);
+          await delay(PET_MODE_DRIFT_SLEEP_WAKE_MS);
+          if (token !== actionTokenRef.current || focusBlocksHunt()) {
+            clearDriftCue(token);
+            return;
+          }
+        }
+
+        // Start the red cue in the same committed render as the upright gait;
+        // native hit-region staging must not expose it over the previous pose.
+        const stalkCommitted = await commitPhase("stalk", armHuntAlert);
+        if (!stalkCommitted || token !== actionTokenRef.current || focusBlocksHunt()) return;
+      }
+
+      const stalk = await stalkNativePetCursor(huntSettings).catch(() => null);
+      if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+      if (
+        stalk?.outcome === "completed"
+        && stalk.cursorX !== null
+        && stalk.cursorY !== null
+      ) {
+        commitFacing(stalk.facing);
+        // The stalk target is authored from the walk SVG's mouth centre, so
+        // contact no longer borrows the unrelated browser-tab paw sequence.
+        // Hold the closed mouth long enough to read, then let native pivot the
+        // body around that exact point and return with the cursor along the
+        // approach path. Native emits the one intentional facing change together
+        // with the return gait so React never servo-flips mid-walk.
+        commitPhase("bite");
+        await delay(huntSettings.biteHoldMs);
+        if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+        await returnWithNativePetCursor({
+          targetX: stalk.cursorX,
+          targetY: stalk.cursorY,
+          approachFacing: stalk.facing,
+          cursorMovementDistance: stalk.cursorMovementDistance,
+          settings: huntSettings,
+        }).catch(() => null);
+        if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+        commitPhase("bite");
+        await delay(huntSettings.biteHoldMs);
+      }
+      if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+      commitPhase("sit");
+      await delay(PET_MODE_DRIFT_STALK_SETTLE_MS);
+      if (token === actionTokenRef.current && !focusRestingRef.current) commitPhase("idle");
+    } finally {
+      if (cursorHuntRevision === cursorHuntRevisionRef.current) {
+        cursorHuntActiveRef.current = false;
+      }
+    }
+  }, [clearDriftCue, clearHuntAlert, commitFacing, commitPhase, commitVisibility, restartAutonomousCycle, revealForAction, showDriftCue, showTimedHuntAlert]);
+
+  const playPassiveDriftReaction = useCallback(async () => {
+    if (focusRestingRef.current) return;
+    const startedAsleep = phaseRef.current === "sleep";
     const token = ++actionTokenRef.current;
     restartAutonomousCycle();
     await cancelNativePetMotion().catch(() => undefined);
-    await revealForAction().catch(() => undefined);
-    if (token !== actionTokenRef.current || focusBlocksHunt()) return;
+    if (token !== actionTokenRef.current || focusRestingRef.current) return;
     setPreserveEntryLanding(false);
-    if (huntAlertTimerRef.current !== null) window.clearTimeout(huntAlertTimerRef.current);
-    setHuntAlertVisible(huntSettings.showAlertCue);
-    setHuntAlertDurationMs(huntSettings.alertDurationMs);
-    huntAlertTimerRef.current = huntSettings.showAlertCue
-      ? window.setTimeout(() => {
-        huntAlertTimerRef.current = null;
-        setHuntAlertVisible(false);
-      }, huntSettings.alertDurationMs)
-      : null;
-    commitPhase("stalk");
 
-    const stalk = await stalkNativePetCursor(huntSettings).catch(() => null);
-    if (token !== actionTokenRef.current || focusBlocksHunt()) return;
-    if (
-      stalk?.outcome === "completed"
-      && stalk.cursorX !== null
-      && stalk.cursorY !== null
-    ) {
-      commitFacing(stalk.facing);
-      // The stalk target is authored from the walk SVG's mouth centre, so
-      // contact no longer borrows the unrelated browser-tab paw sequence.
-      // Hold the closed mouth long enough to read, then let native pivot the
-      // body around that exact point and return with the cursor along the
-      // approach path. Native emits the one intentional facing change together
-      // with the return gait so React never servo-flips mid-walk.
-      commitPhase("bite");
-      await delay(huntSettings.biteHoldMs);
-      if (token !== actionTokenRef.current || focusBlocksHunt()) return;
-      await returnWithNativePetCursor({
-        targetX: stalk.cursorX,
-        targetY: stalk.cursorY,
-        approachFacing: stalk.facing,
-        cursorMovementDistance: stalk.cursorMovementDistance,
-        settings: huntSettings,
-      }).catch(() => null);
-      if (token !== actionTokenRef.current || focusBlocksHunt()) return;
-      commitPhase("bite");
-      await delay(huntSettings.biteHoldMs);
+    if (startedAsleep) {
+      sleepTouchRef.current = 0;
+      showDriftCue("sleep-wake", token);
+      await delay(PET_MODE_DRIFT_SLEEP_WAKE_MS);
+      if (token !== actionTokenRef.current || focusRestingRef.current) {
+        clearDriftCue(token);
+        return;
+      }
     }
-    if (token !== actionTokenRef.current || focusBlocksHunt()) return;
-    commitPhase("sit");
+
+    const stalkCommitted = await commitPhase("stalk", () => {
+      showTimedHuntAlert(true, PET_MODE_DRIFT_HUNT_ALERT_MS);
+    });
+    if (!stalkCommitted || token !== actionTokenRef.current || focusRestingRef.current) {
+      clearDriftCue(token);
+      return;
+    }
+
+    // The production reaction deliberately stops at the readable upright beat.
+    // Native pointer pursuit and carrying belong exclusively to Cursor control.
     await delay(PET_MODE_DRIFT_STALK_SETTLE_MS);
-    if (token === actionTokenRef.current && !focusRestingRef.current) commitPhase("idle");
-  }, [commitFacing, commitPhase, restartAutonomousCycle, revealForAction]);
+    if (token === actionTokenRef.current && !focusRestingRef.current) {
+      commitPhase("idle");
+    }
+  }, [clearDriftCue, commitPhase, restartAutonomousCycle, showDriftCue, showTimedHuntAlert]);
 
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetModeEvent((event) => {
       if (event.kind === "snapshot") {
+        snapshotRef.current = event.snapshot;
         setSnapshot(event.snapshot);
+        setSleepDriftAnnoyedContext((annoyedContext) => (
+          annoyedContext !== null
+          && event.snapshot.productivity === "drift"
+          && event.snapshot.contextLabel === annoyedContext
+          && event.snapshot.durationSeconds >= PET_MODE_DRIFT_NOTICE_SECONDS
+            ? annoyedContext
+            : null
+        ));
         const nextSurfaceRevision = event.snapshot.surfaceRevision;
         if (typeof nextSurfaceRevision === "number") {
           const previousSurfaceRevision = lastSurfaceRevisionRef.current;
@@ -1341,6 +1532,18 @@ export function PetModeWindowApp() {
         // any old outing/return timer so it cannot hide the freshly revealed
         // cat after native has already replayed the entry motion.
         actionTokenRef.current += 1;
+        outingTicketRef.current = null;
+        driftHuntRef.current = {
+          ...driftHuntRef.current,
+          noticed: true,
+          stalked: true,
+          pendingAction: null,
+        };
+        driftCueTokenRef.current = null;
+        setDriftCue("none");
+        setSleepDriftAnnoyedContext(null);
+        setSleepDriftPreviewExpression(false);
+        setHuntAlertVisible(false);
         sleepTouchRef.current = 0;
         restartAutonomousCycle();
         setPreserveEntryLanding(false);
@@ -1428,8 +1631,14 @@ export function PetModeWindowApp() {
       }
       if (event.kind === "preview_action") {
         const previewAction = event.action;
+        const isSleepDriftNoticePreview = previewAction === "sleep_drift_notice";
+        const isSleepDriftFullPreview = previewAction === "sleep_drift_full_preview";
         const isCursorHuntPreview = previewAction === "cursor_hunt_single"
           || previewAction === "cursor_hunt_chase";
+        const canStartFromCurrentRestPose =
+          ((isSleepDriftNoticePreview || isSleepDriftFullPreview)
+            && (phaseRef.current === "sit" || phaseRef.current === "sleep"))
+          || (isCursorHuntPreview && phaseRef.current === "sit");
         // Lab previews are deliberately single-flight. A walk moves the native
         // overlay independently, so letting another pose start during that trip
         // makes the cat look as if it is stretching or sleeping while walking.
@@ -1437,12 +1646,91 @@ export function PetModeWindowApp() {
         // sleep pose immediately.
         if (
           phaseRef.current !== "idle"
-          && !(isCursorHuntPreview && phaseRef.current === "sit")
+          && !canStartFromCurrentRestPose
           && previewAction !== "music_note"
           && previewAction !== "wake"
           && previewAction !== "stop"
         ) {
           reportLabState();
+          return;
+        }
+        if (isSleepDriftNoticePreview) {
+          void (async () => {
+            const actionRevision = setActiveLabAction(previewAction);
+            const token = ++actionTokenRef.current;
+            try {
+              await revealForAction();
+              if (token !== actionTokenRef.current) return;
+              sleepTouchRef.current = 0;
+              const sleepCommitted = await commitPhase("sleep");
+              if (!sleepCommitted || token !== actionTokenRef.current) return;
+              await delay(PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS);
+              if (token !== actionTokenRef.current) return;
+              setSleepDriftPreviewExpression(true);
+              showDriftCue("sleep-notice", token);
+              await delay(PET_MODE_DRIFT_SLEEP_NOTICE_MS);
+              clearDriftCue(token);
+              await delay(Math.max(
+                0,
+                PET_MODE_DRIFT_SLEEP_EXPRESSION_PREVIEW_MS - PET_MODE_DRIFT_SLEEP_NOTICE_MS,
+              ));
+            } finally {
+              clearDriftCue(token);
+              setSleepDriftPreviewExpression(false);
+              clearActiveLabAction(actionRevision);
+            }
+          })();
+          return;
+        }
+        if (isSleepDriftFullPreview) {
+          void (async () => {
+            const actionRevision = setActiveLabAction(previewAction);
+            const token = ++actionTokenRef.current;
+            try {
+              await revealForAction();
+              if (token !== actionTokenRef.current) return;
+              sleepTouchRef.current = 0;
+              const sleepCommitted = await commitPhase("sleep");
+              if (!sleepCommitted || token !== actionTokenRef.current) return;
+              await delay(PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS);
+              if (token !== actionTokenRef.current) return;
+
+              // Compress the real 10 s notice and 24 s escalation into one
+              // deterministic visual review. This path never invokes native
+              // cursor stalking or carrying.
+              setSleepDriftPreviewExpression(true);
+              showDriftCue("sleep-notice", token);
+              await delay(PET_MODE_DRIFT_SLEEP_NOTICE_MS);
+              if (token !== actionTokenRef.current) return;
+              clearDriftCue(token);
+              await delay(PET_MODE_DRIFT_SLEEP_FULL_PREVIEW_HOLD_MS);
+              if (token !== actionTokenRef.current) return;
+
+              showDriftCue("sleep-wake", token);
+              await delay(PET_MODE_DRIFT_SLEEP_WAKE_MS);
+              if (token !== actionTokenRef.current) return;
+
+              const stalkCommitted = await commitPhase("stalk", () => {
+                setHuntAlertDurationMs(PET_MODE_DRIFT_HUNT_ALERT_MS);
+                setHuntAlertVisible(true);
+              });
+              if (!stalkCommitted || token !== actionTokenRef.current) return;
+              await delay(PET_MODE_DRIFT_HUNT_ALERT_MS);
+              if (token !== actionTokenRef.current) return;
+              setHuntAlertVisible(false);
+              await delay(PET_MODE_DRIFT_STALK_SETTLE_MS - PET_MODE_DRIFT_HUNT_ALERT_MS);
+              if (token === actionTokenRef.current) {
+                commitPhase(focusRestingRef.current ? "sit" : "idle");
+              }
+            } finally {
+              if (token === actionTokenRef.current) {
+                clearDriftCue(token);
+                setSleepDriftPreviewExpression(false);
+                setHuntAlertVisible(false);
+              }
+              clearActiveLabAction(actionRevision);
+            }
+          })();
           return;
         }
         if (isCursorHuntPreview) {
@@ -1544,7 +1832,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [clearActiveLabAction, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, setActiveLabAction]);
+  }, [clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
 
   useEffect(() => {
     const resting = snapshot?.productivity === "focus";
@@ -1593,6 +1881,7 @@ export function PetModeWindowApp() {
         && !automaticInterventionRef.current;
       if (manualDragRef.current || explicitLabPreviewOwnsMotion) return;
       focusRestAppliedRef.current = true;
+      clearHuntAlert();
       if (automaticInterventionRef.current && activeLabActionRef.current === "intervention") {
         contextChangedInterventionTokenRef.current = actionTokenRef.current;
       }
@@ -1615,7 +1904,7 @@ export function PetModeWindowApp() {
         commitPhase("idle");
       }
     }
-  }, [commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, snapshot?.productivity, updateDragReleasePose]);
+  }, [clearHuntAlert, commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, snapshot?.productivity, updateDragReleasePose]);
 
   useEffect(() => {
     const next = advancePetModeDriftHunt(
@@ -1624,31 +1913,69 @@ export function PetModeWindowApp() {
       prefersReducedMotion(),
     );
     driftHuntRef.current = next.state;
-    if (!petModeEnabled || !next.action || manualDragRef.current || activeLabActionRef.current) return;
-
+    if (!next.action) return;
     const huntSettings = resolvePetModeDriftHuntSettings();
-    if (!huntSettings.enabled) return;
-    if (next.action === "stalk") {
-      void playCursorHunt(huntSettings);
+    const naturallyOuting = !visibleRef.current && outingTicketRef.current !== null;
+    const explicitHidden = !visibleRef.current && !naturallyOuting;
+    if (!PET_MODE_DRIFT_REACTION_ENABLED || !petModeEnabled || explicitHidden) {
+      driftHuntRef.current = suppressPetModeDriftHunt(snapshot);
       return;
     }
+    const stablePhase = naturallyOuting
+      || phaseRef.current === "idle"
+      || phaseRef.current === "sit"
+      || phaseRef.current === "sleep";
+    // Menu, direct manipulation, previews, and transient action poses keep
+    // ownership. The state machine leaves the action pending, so the next
+    // snapshot (or explicit retry revision) can run it after the pet settles.
+    if (
+      menuOpenRef.current
+      || manualDragRef.current
+      || activeLabActionRef.current
+      || !stablePhase
+    ) return;
+
+    const action: Exclude<PetModeDriftHuntAction, null> = next.action;
+    driftHuntRef.current = commitPetModeDriftHuntAction(next.state, action);
+    if (action === "stalk") {
+      if (huntSettings.enabled) {
+        void playCursorHunt(huntSettings, {
+          outingTicket: visibleRef.current ? null : outingTicketRef.current,
+        });
+      } else if (visibleRef.current) {
+        void playPassiveDriftReaction();
+      }
+      // A passive reaction never resurrects a cat during its natural outing.
+      // Only the explicitly enabled Cursor control may enter from off-screen.
+      return;
+    }
+
+    // The early notice is intentionally silent while the cat is naturally
+    // away. It still consumes only the notice budget; the later stalk can
+    // enter from the cursor display edge using the retained outing ticket.
+    if (!visibleRef.current) return;
+    const restingPhase = phaseRef.current;
+    if (restingPhase === "sleep") {
+      const token = actionTokenRef.current;
+      setSleepDriftAnnoyedContext(snapshot?.contextLabel ?? null);
+      showDriftCue("sleep-notice", token);
+      void delay(PET_MODE_DRIFT_SLEEP_NOTICE_MS).then(() => clearDriftCue(token));
+      return;
+    }
+
     const token = ++actionTokenRef.current;
     restartAutonomousCycle();
     void cancelNativePetMotion().catch(() => undefined);
     void (async () => {
-      if (!visibleRef.current) {
-        commitVisibility(true);
-        await setNativePetPresence(true).catch(() => undefined);
-      }
       if (token !== actionTokenRef.current || focusRestingRef.current) return;
       setPreserveEntryLanding(false);
-
       commitPhase("notice");
       await delay(PET_MODE_DRIFT_NOTICE_MS);
-
-      if (token === actionTokenRef.current && !focusRestingRef.current) commitPhase("idle");
+      if (token === actionTokenRef.current && !focusRestingRef.current) {
+        commitPhase(restingPhase === "sit" ? "sit" : "idle");
+      }
     })();
-  }, [commitPhase, commitVisibility, petModeEnabled, playCursorHunt, restartAutonomousCycle, snapshot]);
+  }, [clearDriftCue, commitPhase, driftRetryRevision, petModeEnabled, playCursorHunt, playPassiveDriftReaction, restartAutonomousCycle, showDriftCue, snapshot]);
 
   useEffect(() => {
     if (phase !== "entry") return;
@@ -2142,6 +2469,7 @@ export function PetModeWindowApp() {
     }).catch(() => undefined).finally(() => {
       menuOpenRef.current = false;
       setMenuHolding(false);
+      setDriftRetryRevision((revision) => revision + 1);
     });
   };
 
@@ -2188,6 +2516,20 @@ export function PetModeWindowApp() {
   };
 
   const entering = phase === "entry";
+  const persistentSleepDriftExpression = sleepDriftAnnoyedContext !== null
+    && snapshot?.productivity === "drift"
+    && snapshot.contextLabel === sleepDriftAnnoyedContext
+    && snapshot.durationSeconds >= PET_MODE_DRIFT_NOTICE_SECONDS;
+  const activeSleepDriftExpression = sleepDriftPreviewExpression || persistentSleepDriftExpression;
+  // Once the sleeping cat notices drift, keep the orange crack and suppress
+  // the normal Z until the episode clears or the upright stalk replaces it.
+  // A transient wake cue still wins so the final committed beat keeps its
+  // dedicated state without inserting a neutral sleeping frame.
+  const renderedDriftCue: PetModeDriftCue = driftCue !== "none"
+    ? driftCue
+    : phase === "sleep" && activeSleepDriftExpression
+      ? "sleep-notice"
+      : "none";
 
   return (
     <main className="pet-mode-surface" data-productivity={snapshot?.productivity ?? "neutral"}>
@@ -2225,6 +2567,8 @@ export function PetModeWindowApp() {
             gazeOffset={gazeOffset}
             huntAlertVisible={huntAlertVisible}
             huntAlertDurationMs={huntAlertDurationMs}
+            driftCue={renderedDriftCue}
+            sleepDriftExpression={activeSleepDriftExpression}
             dragPickupPose={dragPickupPose}
             dragReleasePose={dragReleasePose}
             proudWalk={proudWalk}

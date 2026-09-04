@@ -4,6 +4,16 @@ import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 export const PET_MODE_DRIFT_NOTICE_SECONDS = 10;
 export const PET_MODE_DRIFT_STALK_SECONDS = 24;
 export const PET_MODE_DRIFT_NOTICE_MS = 1_400;
+/** First reaction beat before the sustained orange crack enters its hold. */
+export const PET_MODE_DRIFT_SLEEP_NOTICE_MS = 820;
+/** Bounded Dev preview so the sustained crack and eyelids are easy to inspect. */
+export const PET_MODE_DRIFT_SLEEP_EXPRESSION_PREVIEW_MS = 2_400;
+/** Establish the sleeping pose before the compressed notice begins. */
+export const PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS = 650;
+/** Compressed stand-in for the real 14 s between notice and escalation. */
+export const PET_MODE_DRIFT_SLEEP_FULL_PREVIEW_HOLD_MS = 1_500;
+/** Readable sleeping recoil before the cat rises directly into its stalk. */
+export const PET_MODE_DRIFT_SLEEP_WAKE_MS = 440;
 export const PET_MODE_DRIFT_STALK_SETTLE_MS = 1_200;
 export const PET_MODE_DRIFT_CURSOR_BITE_HOLD_MS = 120;
 export const PET_MODE_DRIFT_HUNT_ALERT_MS = 480;
@@ -16,7 +26,7 @@ export const PET_MODE_DRIFT_CURSOR_GRIP_MS = 420;
 export const PET_MODE_DRIFT_CURSOR_LAG_MS = 0;
 /**
  * Carry time selected by how much the pointer resisted during the approach.
- * The defaults preserve the reviewed 6s/3s/2s behavior, while Dev tuning may
+ * The defaults preserve the reviewed 6s/2s/1s behavior, while Dev tuning may
  * replace each duration without changing the resistance thresholds.
  *
  * The ordering is deliberate: a pointer left alone is carried longest, while
@@ -24,8 +34,8 @@ export const PET_MODE_DRIFT_CURSOR_LAG_MS = 0;
  */
 export const PET_MODE_DRIFT_CURSOR_RETURN_TIERS = [
   { label: "무저항", maxMovementDistance: 7, durationMs: 6_000 },
-  { label: "약한 저항", maxMovementDistance: 12, durationMs: 3_000 },
-  { label: "강한 저항", maxMovementDistance: 18, durationMs: 2_000 },
+  { label: "약한 저항", maxMovementDistance: 12, durationMs: 2_000 },
+  { label: "강한 저항", maxMovementDistance: 18, durationMs: 1_000 },
 ] as const;
 export const PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY = "drifty.pet.driftHuntEnabled.v1";
 export const PET_MODE_DRIFT_HUNT_MODE_STORAGE_KEY = "drifty.pet.driftHuntMode.v1";
@@ -33,6 +43,8 @@ export const PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY = "drifty.pet.driftHuntCh
 export const PET_MODE_DRIFT_CHASE_SOFT_TURNS_STORAGE_KEY = "drifty.pet.driftHuntSoftTurns.v1";
 export const PET_MODE_DRIFT_HUNT_ALERT_STORAGE_KEY = "drifty.pet.driftHuntAlertCue.v1";
 export const PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY = "drifty.pet.driftHuntTuning.v1";
+export const PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY = "drifty.pet.driftHuntTuningRevision.v1";
+const PET_MODE_DRIFT_HUNT_TUNING_REVISION = "carry-6-2-1";
 export const PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS = 48;
 export const PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS = 500;
 export const PET_MODE_DRIFT_HUNT_TUNING_RANGES = {
@@ -147,9 +159,33 @@ function readStoredTuning(): Partial<Record<PetModeDriftHuntTuningKey, number>> 
   try {
     const stored = readStorage(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY);
     const parsed: unknown = stored ? JSON.parse(stored) : {};
-    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+    const tuning = parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
       ? parsed as Partial<Record<PetModeDriftHuntTuningKey, number>>
       : {};
+    const carriesLegacyDefaults = tuning.carryStillDurationMs === 6_000
+      && tuning.carryNudgeDurationMs === 3_000
+      && tuning.carryYankDurationMs === 2_000;
+    if (
+      readStorage(PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY) !== PET_MODE_DRIFT_HUNT_TUNING_REVISION
+      && carriesLegacyDefaults
+    ) {
+      const migrated = {
+        ...tuning,
+        carryNudgeDurationMs: PET_MODE_DRIFT_CURSOR_RETURN_TIERS[1].durationMs,
+        carryYankDurationMs: PET_MODE_DRIFT_CURSOR_RETURN_TIERS[2].durationMs,
+      };
+      try {
+        window.localStorage.setItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY, JSON.stringify(migrated));
+        window.localStorage.setItem(
+          PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY,
+          PET_MODE_DRIFT_HUNT_TUNING_REVISION,
+        );
+      } catch {
+        // Use the migrated values for this session even when storage is read-only.
+      }
+      return migrated;
+    }
+    return tuning;
   } catch {
     return {};
   }
@@ -206,6 +242,10 @@ export function persistPetModeDriftHuntSettings(settings: PetModeDriftHuntSettin
         .map((key) => [key, normalizeTuningValue(key, settings[key])]),
     );
     window.localStorage.setItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY, JSON.stringify(tuning));
+    window.localStorage.setItem(
+      PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY,
+      PET_MODE_DRIFT_HUNT_TUNING_REVISION,
+    );
   } catch {
     // The pet keeps safe defaults when storage is unavailable.
   }
@@ -218,6 +258,7 @@ export type PetModeDriftHuntState = {
   readonly lastDurationSeconds: number;
   readonly noticed: boolean;
   readonly stalked: boolean;
+  readonly pendingAction: PetModeDriftHuntAction;
 };
 
 export const EMPTY_PET_MODE_DRIFT_HUNT_STATE: PetModeDriftHuntState = {
@@ -225,7 +266,39 @@ export const EMPTY_PET_MODE_DRIFT_HUNT_STATE: PetModeDriftHuntState = {
   lastDurationSeconds: 0,
   noticed: false,
   stalked: false,
+  pendingAction: null,
 };
+
+export function commitPetModeDriftHuntAction(
+  state: PetModeDriftHuntState,
+  action: Exclude<PetModeDriftHuntAction, null>,
+): PetModeDriftHuntState {
+  return {
+    ...state,
+    noticed: true,
+    stalked: action === "stalk" ? true : state.stalked,
+    pendingAction: null,
+  };
+}
+
+/**
+ * Records the current episode as intentionally ignored. This is used for an
+ * explicit hide/off so enabling the pet again does not replay stale anger.
+ */
+export function suppressPetModeDriftHunt(
+  snapshot: PetModeSnapshot | null,
+): PetModeDriftHuntState {
+  if (!snapshot || snapshot.productivity !== "drift") {
+    return EMPTY_PET_MODE_DRIFT_HUNT_STATE;
+  }
+  return {
+    contextLabel: snapshot.contextLabel,
+    lastDurationSeconds: Math.max(0, snapshot.durationSeconds),
+    noticed: true,
+    stalked: true,
+    pendingAction: null,
+  };
+}
 
 /**
  * Gives each continuous drift context one small escalation budget. A context
@@ -248,41 +321,43 @@ export function advancePetModeDriftHunt(
     ? { ...EMPTY_PET_MODE_DRIFT_HUNT_STATE, contextLabel: snapshot.contextLabel }
     : previous;
 
-  if (!episode.noticed && durationSeconds >= PET_MODE_DRIFT_NOTICE_SECONDS) {
-    return {
-      state: {
-        contextLabel: snapshot.contextLabel,
-        lastDurationSeconds: durationSeconds,
-        noticed: true,
-        stalked: episode.stalked,
-      },
-      action: "notice",
-    };
-  }
-
   if (
     !reducedMotion
-    && episode.noticed
     && !episode.stalked
     && durationSeconds >= PET_MODE_DRIFT_STALK_SECONDS
   ) {
+    const state = {
+      ...episode,
+      contextLabel: snapshot.contextLabel,
+      lastDurationSeconds: durationSeconds,
+      pendingAction: "stalk" as const,
+    };
     return {
-      state: {
-        contextLabel: snapshot.contextLabel,
-        lastDurationSeconds: durationSeconds,
-        noticed: true,
-        stalked: true,
-      },
-      action: "stalk",
+      state,
+      action: state.pendingAction,
     };
   }
 
+  if (!episode.noticed && durationSeconds >= PET_MODE_DRIFT_NOTICE_SECONDS) {
+    const state = {
+      ...episode,
+      contextLabel: snapshot.contextLabel,
+      lastDurationSeconds: durationSeconds,
+      pendingAction: "notice" as const,
+    };
+    return { state, action: state.pendingAction };
+  }
+
+  const pendingAction = reducedMotion && episode.pendingAction === "stalk"
+    ? (!episode.noticed ? "notice" : null)
+    : episode.pendingAction;
   return {
     state: {
       ...episode,
       contextLabel: snapshot.contextLabel,
       lastDurationSeconds: durationSeconds,
+      pendingAction,
     },
-    action: null,
+    action: pendingAction,
   };
 }

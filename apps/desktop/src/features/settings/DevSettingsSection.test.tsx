@@ -278,6 +278,48 @@ describe("DevSettingsSection", () => {
     expect(screen.getByText("Music note", { selector: ".pet-mode-lab__status" })).toBeTruthy();
   });
 
+  it("keeps the sleeping-drift previews clickable when the cat is already asleep", async () => {
+    const props = renderProductionDevSettings({
+      activeSubsection: "petCompanion",
+      petModeEnabled: true,
+    });
+    await act(async () => undefined);
+
+    act(() => {
+      petModeLabEvents.listener?.({ phase: "sleep", activeAction: null, lifeLoopEnabled: false });
+    });
+
+    const notice = screen.getByRole("button", { name: /잠든 감지 재생/ });
+    const complete = screen.getByRole("button", { name: /잠든 딴짓 전체 재생/ });
+    expect(notice.getAttribute("disabled")).toBeNull();
+    expect(complete.getAttribute("disabled")).toBeNull();
+
+    fireEvent.click(complete);
+    expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("sleep_drift_full_preview");
+  });
+
+  it("keeps the Cursor control switch appearance synchronized with its OFF and ON labels", () => {
+    renderProductionDevSettings({
+      activeSubsection: "petCompanion",
+      petModeEnabled: true,
+    });
+
+    const toggle = screen.getByRole("switch", { name: "Toggle drift cursor hunt" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.classList.contains("on")).toBe(false);
+    expect(screen.getByText("Off by default")).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(toggle.classList.contains("on")).toBe(true);
+    expect(screen.getByText("Enabled for QA")).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.classList.contains("on")).toBe(false);
+    expect(screen.getByText("Off by default")).toBeTruthy();
+  });
+
   it("lets Dev calibrate the floor-home stay band without changing the shipped default", () => {
     const onPetModeFloorHomePtChange = vi.fn();
     renderProductionDevSettings({
@@ -298,15 +340,29 @@ describe("DevSettingsSection", () => {
   it("persists a bounded cursor chase policy from the Pet Mode Lab", () => {
     const props = renderProductionDevSettings({ activeSubsection: "petCompanion", petModeEnabled: true });
 
+    expect(screen.getByText("Drift reaction")).toBeTruthy();
+    expect(screen.getByText("Production")).toBeTruthy();
+    expect(screen.getByText("10초 눈치챔 · 24초 기상 · 커서 이동 없음")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", {
+      name: /잠든 감지 재생.*주황 빠직 \+ 찡그림.*딴짓 중 계속 유지/,
+    }));
+    expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("sleep_drift_notice");
+    fireEvent.click(screen.getByRole("button", {
+      name: /잠든 딴짓 전체 재생.*감지부터 빨간 !까지 압축.*실제 커서 이동 없음/,
+    }));
+    expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("sleep_drift_full_preview");
+
+    expect(screen.getByText("Cursor control")).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "몇 초간 추격" })).toBeNull();
     expect(screen.queryByRole("button", { name: /단발 사냥 재생/ })).toBeNull();
+    expect(screen.getByText("딴짓 반응 연출만 유지 · 실제 커서 접근 없음")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle drift cursor hunt" }));
     expect(screen.getByText("무저항")).toBeTruthy();
     expect(screen.getByText("6초 물고 이동")).toBeTruthy();
     expect(screen.getByText("약한 저항")).toBeTruthy();
-    expect(screen.getByText("3초 물고 이동")).toBeTruthy();
-    expect(screen.getByText("강한 저항")).toBeTruthy();
     expect(screen.getByText("2초 물고 이동")).toBeTruthy();
+    expect(screen.getByText("강한 저항")).toBeTruthy();
+    expect(screen.getByText("1초 물고 이동")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /단발 사냥 재생/ }));
     expect(props.onPreviewPetModeAction).toHaveBeenCalledWith("cursor_hunt_single");
     fireEvent.click(screen.getByRole("button", { name: /8초 추격 재생/ }));
@@ -320,7 +376,7 @@ describe("DevSettingsSection", () => {
     fireEvent.change(screen.getByRole("slider", { name: "Still cursor carry duration" }), { target: { value: "5000" } });
     fireEvent.change(screen.getByRole("slider", { name: "Cursor carry lag" }), { target: { value: "160" } });
     fireEvent.click(screen.getByRole("switch", { name: "Toggle soft cursor chase turns" }));
-    expect(screen.getByText("추격 시작 때 주황색 ! 1회")).toBeTruthy();
+    expect(screen.getByText("추격 시작 때 빨간 ! 1회")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle cursor hunt alert cue" }));
 
     expect(window.localStorage.getItem("drifty.pet.driftHuntEnabled.v1")).toBe("true");

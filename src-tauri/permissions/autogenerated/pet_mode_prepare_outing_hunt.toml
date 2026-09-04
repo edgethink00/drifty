@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-prepare-outing-hunt"
+description = "Enables the pet_mode_prepare_outing_hunt command without any pre-configured scope."
+commands.allow = ["pet_mode_prepare_outing_hunt"]
+
+[[permission]]
+identifier = "deny-pet-mode-prepare-outing-hunt"
+description = "Denies the pet_mode_prepare_outing_hunt command without any pre-configured scope."
+commands.deny = ["pet_mode_prepare_outing_hunt"]

@@ -11,6 +11,10 @@ export const REPLAY_ONBOARDING_DEV_TOOL_ENABLED = true;
 export const END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED = true;
 export const END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED = true;
 export const END_OF_DAY_REVIEW_NOTIFICATIONS_ENABLED = END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED;
+// The visual drift reaction is a production Pet Mode behavior. Native cursor
+// tracking/carrying remains independently gated by the Dev-only Cursor control
+// setting in petModeDriftHunt.ts.
+export const PET_MODE_DRIFT_REACTION_ENABLED = true;
 
 const RAW_DEV_SKIP_ONBOARDING = typeof __DRIFTY_DEV_SKIP_ONBOARDING__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING__ : false;
 const RAW_DEV_SKIP_ONBOARDING_AUTH = typeof __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__ === "boolean" ? __DRIFTY_DEV_SKIP_ONBOARDING_AUTH__ : false;

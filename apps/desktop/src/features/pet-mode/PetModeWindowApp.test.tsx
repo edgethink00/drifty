@@ -37,6 +37,12 @@ import {
   PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
   PET_MODE_DRIFT_NOTICE_MS,
   PET_MODE_DRIFT_NOTICE_SECONDS,
+  PET_MODE_DRIFT_SLEEP_EXPRESSION_PREVIEW_MS,
+  PET_MODE_DRIFT_SLEEP_FULL_PREVIEW_HOLD_MS,
+  PET_MODE_DRIFT_SLEEP_NOTICE_MS,
+  PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS,
+  PET_MODE_DRIFT_SLEEP_WAKE_MS,
+  PET_MODE_DRIFT_STALK_SETTLE_MS,
   PET_MODE_DRIFT_STALK_SECONDS,
 } from "./petModeDriftHunt";
 import {
@@ -127,6 +133,7 @@ const bridge = vi.hoisted(() => ({
   reportNativePetPointer: vi.fn().mockResolvedValue(undefined),
   returnNativePetHome: vi.fn().mockResolvedValue(undefined),
   exitNativePetScreen: vi.fn().mockResolvedValue({ side: "left", generation: 1 }),
+  prepareNativePetOutingHunt: vi.fn().mockResolvedValue({ facing: "right" }),
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
   roamNativePet: vi.fn().mockResolvedValue(undefined),
   sampleNativePetCursor: vi.fn().mockResolvedValue(null),
@@ -192,6 +199,7 @@ vi.mock("./petModeBridge", () => ({
   reportNativePetPointer: bridge.reportNativePetPointer,
   returnNativePetHome: bridge.returnNativePetHome,
   exitNativePetScreen: bridge.exitNativePetScreen,
+  prepareNativePetOutingHunt: bridge.prepareNativePetOutingHunt,
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
   roamNativePet: bridge.roamNativePet,
   sampleNativePetCursor: bridge.sampleNativePetCursor,
@@ -1079,7 +1087,568 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("sit");
   });
 
-  it("keeps cursor hunting inert until the Dev toggle is enabled", async () => {
+  it("notices drift in place while asleep, then rises directly into the committed hunt", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.stalkNativePetCursor.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_NOTICE_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(true);
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+    expect(cat.querySelector(".pet-mode-cat__sleep-eyes--squint")).not.toBeNull();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_NOTICE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(true);
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "neutral", contextLabel: "work", durationSeconds: 0 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(false);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleep-wake")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_WAKE_MS - 1); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the approved sleeping drift reaction active while cursor control is off", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_NOTICE_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_NOTICE_MS); });
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleep-wake")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_WAKE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
+
+    const cancellationCount = bridge.cancelNativePetMotion.mock.calls.length;
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: DEV_MODE_STORAGE_KEY,
+        newValue: "0",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(cancellationCount);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_STALK_SETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("keeps a sleeping drift reaction alive when cursor control is turned off mid-episode", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_NOTICE_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "false");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY,
+        newValue: "false",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_WAKE_MS); });
+
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("replays the sleeping notice through the bounded Dev QA action", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep_drift_notice" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS); });
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_NOTICE_MS); });
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(true);
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        PET_MODE_DRIFT_SLEEP_EXPRESSION_PREVIEW_MS - PET_MODE_DRIFT_SLEEP_NOTICE_MS,
+      );
+    });
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(false);
+  });
+
+  it("previews the complete sleeping drift escalation without moving the native cursor", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep_drift_full_preview" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS); });
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_NOTICE_MS); });
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(true);
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_FULL_PREVIEW_HOLD_MS); });
+    expect(cat.classList.contains("is-sleep-wake")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_WAKE_MS - 1); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_HUNT_ALERT_MS); });
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_STALK_SETTLE_MS - PET_MODE_DRIFT_HUNT_ALERT_MS);
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("does not leak an interrupted full-preview expression into the next sleep", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep_drift_full_preview" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS + PET_MODE_DRIFT_SLEEP_NOTICE_MS,
+      );
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(true);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "stop" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(false);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-sleep-drift-cue")).toBe(false);
+  });
+
+  it("keeps the annoyed sleeping face until the staged stalk artwork is ready", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let finishStalkTransition!: () => void;
+    bridge.stagePetModeHitRegionTransition.mockImplementation(async ({ regionId }) => {
+      if (regionId !== "transition:stalk") return;
+      await new Promise<void>((resolve) => {
+        finishStalkTransition = resolve;
+      });
+    });
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep_drift_full_preview" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS
+        + PET_MODE_DRIFT_SLEEP_NOTICE_MS
+        + PET_MODE_DRIFT_SLEEP_FULL_PREVIEW_HOLD_MS
+        + PET_MODE_DRIFT_SLEEP_WAKE_MS,
+      );
+    });
+
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleep-wake")).toBe(true);
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(true);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_HUNT_ALERT_MS);
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+
+    await act(async () => { finishStalkTransition(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_HUNT_ALERT_MS - 1); });
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+  });
+
+  it("starts the complete drift preview when the Lab cat is already asleep", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep_drift_full_preview" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_SLEEP_PREVIEW_SETTLE_MS); });
+
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleep-notice")).toBe(true);
+  });
+
+  it("defers a due hunt while the context menu owns the cat", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let closeMenu!: () => void;
+    bridge.openNativePetModeMenu.mockImplementationOnce(() => new Promise((resolve) => {
+      closeMenu = () => resolve(true);
+    }));
+    bridge.stalkNativePetCursor.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    fireEvent.contextMenu(screen.getByLabelText("Pet Drifty cat. Drag to move. Right-click for options."));
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+
+    await act(async () => { closeMenu(); await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not replay a stale hunt after explicit hide and re-enable", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    const hiddenUntil = Date.now() + 60_000;
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(hiddenUntil));
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
+        newValue: String(hiddenUntil),
+      }));
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+
+    window.localStorage.removeItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY);
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
+        newValue: null,
+      }));
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS + 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("enters a natural outing from the cursor display edge before stalking", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.stalkNativePetCursor.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000);
+      await Promise.resolve();
+    });
+
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_NOTICE_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.prepareNativePetOutingHunt).not.toHaveBeenCalled();
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).not.toBe("notice");
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(bridge.prepareNativePetOutingHunt).toHaveBeenCalledWith({ side: "left", generation: 1 });
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+    expect(bridge.prepareNativePetOutingHunt.mock.invocationCallOrder[0])
+      .toBeLessThan(bridge.stalkNativePetCursor.mock.invocationCallOrder[0]);
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stalk");
+  });
+
+  it("recovers at home if a natural-outing hunt cannot prepare its edge entry", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.prepareNativePetOutingHunt.mockResolvedValueOnce(null);
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(bridge.setNativePetPresence).toHaveBeenLastCalledWith(true);
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("keeps native cursor control inert while the production drift reaction stays active", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));
@@ -1099,12 +1668,55 @@ describe("PetModeWindowApp", () => {
     });
     await act(async () => { await Promise.resolve(); });
 
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).not.toBe("stalk");
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stalk");
+    expect(screen.getByLabelText("Drifty pet cat").classList.contains("has-hunt-alert")).toBe(true);
     expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRIFT_STALK_SETTLE_MS); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
 
     act(() => bridge.eventHandler?.({ kind: "preview_action", action: "cursor_hunt_single" }));
     await act(async () => { await Promise.resolve(); });
     expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+  });
+
+  it("clears the passive drift alert as soon as focus returns", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(true);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "editor", durationSeconds: 1 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(cat.getAttribute("data-phase")).toBe("sit");
+    expect(cat.classList.contains("has-hunt-alert")).toBe(false);
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(bridge.returnWithNativePetCursor).not.toHaveBeenCalled();
   });
 
   it("runs the same native cursor hunt path from the enabled Dev preview", async () => {

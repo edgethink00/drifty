@@ -73,6 +73,10 @@ export type PetModeCursorReturnResult = {
   readonly movedDistance: number;
 };
 
+export type PetModeOutingHuntEntry = {
+  readonly facing: "left" | "right";
+};
+
 export type PetModeSeatResolutionReason =
   | "control_overlap"
   | "no_control_overlap"
@@ -490,6 +494,16 @@ export async function exitNativePetScreen(): Promise<PetModeOutingTicket> {
 
 export async function returnNativePetFromOuting(ticket: PetModeOutingTicket): Promise<void> {
   await invoke("pet_mode_return_from_outing", {
+    side: ticket.side,
+    outingGeneration: ticket.generation,
+  });
+}
+
+export async function prepareNativePetOutingHunt(
+  ticket: PetModeOutingTicket,
+): Promise<PetModeOutingHuntEntry | null> {
+  if (!isTauriRuntime()) return null;
+  return invoke<PetModeOutingHuntEntry | null>("pet_mode_prepare_outing_hunt", {
     side: ticket.side,
     outingGeneration: ticket.generation,
   });

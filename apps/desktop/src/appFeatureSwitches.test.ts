@@ -18,6 +18,7 @@ describe("app feature switches", () => {
     expect(switches.REPLAY_ONBOARDING_DEV_TOOL_ENABLED).toBe(true);
     expect(switches.END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED).toBe(true);
     expect(switches.END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED).toBe(true);
+    expect(switches.PET_MODE_DRIFT_REACTION_ENABLED).toBe(true);
   });
 
   it("does not let release-channel values change feature availability", async () => {

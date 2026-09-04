@@ -246,6 +246,12 @@ pub struct PetModeOutingTicket {
     generation: u64,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PetModeOutingHuntEntry {
+    facing: &'static str,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PetModeLabTargetKind {
@@ -278,6 +284,8 @@ pub enum PetModePreviewAction {
     Wake,
     Pet,
     Outing,
+    SleepDriftNotice,
+    SleepDriftFullPreview,
     CursorHuntSingle,
     CursorHuntChase,
 }
@@ -1718,6 +1726,55 @@ pub async fn pet_mode_exit_screen(app: AppHandle) -> Result<PetModeOutingTicket,
     .map_err(|error| error.to_string())?
 }
 
+/// Re-enters a naturally-outing pet on the display that currently owns the
+/// cursor, without first snapping through its remembered home. The outing
+/// generation is the ownership boundary: an explicit Hide/Off/Show that wins
+/// while this is queued makes the request a no-op instead of resurrecting an
+/// older residence.
+#[tauri::command]
+pub async fn pet_mode_prepare_outing_hunt(
+    app: AppHandle,
+    side: String,
+    outing_generation: u64,
+) -> Result<Option<PetModeOutingHuntEntry>, String> {
+    async_runtime::spawn_blocking(move || {
+        if side != "left" && side != "right" {
+            return Err("Invalid Pet Mode outing side".to_string());
+        }
+        if !pet_outing_is_current(outing_generation) {
+            return Ok(None);
+        }
+        let window = app
+            .get_webview_window(PET_MODE_WINDOW_LABEL)
+            .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+        let monitor = resolve_pet_cursor_monitor(&app)
+            .or_else(|| resolve_pet_home_monitor(&app))
+            .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
+        let start = calculate_pet_outing_return_start(&monitor, &side);
+        cancel_pet_motion();
+        if !pet_outing_is_current(outing_generation) {
+            return Ok(None);
+        }
+        window
+            .set_position(start)
+            .map_err(|error| error.to_string())?;
+        if !pet_outing_is_current(outing_generation) {
+            reconcile_pet_visibility(&app, &window)?;
+            return Ok(None);
+        }
+        show_pet_panel(&app, &window)?;
+        if !pet_outing_is_current(outing_generation) {
+            reconcile_pet_visibility(&app, &window)?;
+            return Ok(None);
+        }
+        Ok(Some(PetModeOutingHuntEntry {
+            facing: if side == "left" { "right" } else { "left" },
+        }))
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
 #[tauri::command]
 pub async fn pet_mode_return_from_outing(
     app: AppHandle,
@@ -2987,6 +3044,21 @@ fn calculate_pet_outing_return_start(monitor: &Monitor, side: &str) -> LogicalPo
         position.x + size.width + 12.0
     };
     LogicalPosition::new(x, home.y)
+}
+
+fn resolve_pet_cursor_monitor(app: &AppHandle) -> Option<Monitor> {
+    let cursor = app.cursor_position().ok()?;
+    app.available_monitors().ok()?.into_iter().find(|monitor| {
+        let position = monitor.position();
+        let size = monitor.size();
+        PetModePhysicalRect {
+            x: position.x as f64,
+            y: position.y as f64,
+            width: size.width as f64,
+            height: size.height as f64,
+        }
+        .contains((cursor.x, cursor.y))
+    })
 }
 
 fn clamp_pet_position(
@@ -5183,7 +5255,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_actions_accept_active_life_loop_tail_note_sit_and_cursor_hunt_wire_values() {
+    fn preview_actions_accept_active_life_loop_tail_note_sleep_drift_and_cursor_hunt_wire_values() {
         let life_loop: PetModePreviewAction = serde_json::from_str("\"life_loop\"").unwrap();
         let tail: PetModePreviewAction = serde_json::from_str("\"tail_flick\"").unwrap();
         let note: PetModePreviewAction = serde_json::from_str("\"music_note\"").unwrap();
@@ -5194,6 +5266,10 @@ mod tests {
         let angry_wake: PetModePreviewAction =
             serde_json::from_str("\"sleep_angry_wake\"").unwrap();
         let sit: PetModePreviewAction = serde_json::from_str("\"sit\"").unwrap();
+        let sleep_drift_notice: PetModePreviewAction =
+            serde_json::from_str("\"sleep_drift_notice\"").unwrap();
+        let sleep_drift_full_preview: PetModePreviewAction =
+            serde_json::from_str("\"sleep_drift_full_preview\"").unwrap();
         let hunt_single: PetModePreviewAction =
             serde_json::from_str("\"cursor_hunt_single\"").unwrap();
         let hunt_chase: PetModePreviewAction =
@@ -5208,6 +5284,14 @@ mod tests {
         assert!(matches!(tail_note, PetModePreviewAction::TailFlickWithNote));
         assert!(matches!(angry_wake, PetModePreviewAction::SleepAngryWake));
         assert!(matches!(sit, PetModePreviewAction::Sit));
+        assert!(matches!(
+            sleep_drift_notice,
+            PetModePreviewAction::SleepDriftNotice
+        ));
+        assert!(matches!(
+            sleep_drift_full_preview,
+            PetModePreviewAction::SleepDriftFullPreview
+        ));
         assert!(matches!(
             hunt_single,
             PetModePreviewAction::CursorHuntSingle
