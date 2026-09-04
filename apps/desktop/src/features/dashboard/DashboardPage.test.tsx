@@ -178,6 +178,7 @@ describe("DashboardPage demo replay empty data", () => {
     });
 
     expect(screen.getByRole("heading", { name: "1시간 집중했습니다" })).toBeTruthy();
+    expect(screen.getByLabelText("생산성 분류 차트")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "공유" }));
 
     expect(screen.getByRole("dialog", { name: "오늘 공유" })).toBeTruthy();
@@ -190,6 +191,12 @@ describe("DashboardPage demo replay empty data", () => {
 });
 
 describe("DashboardPage day metrics without measured activity", () => {
+  it("announces loading in Korean", () => {
+    renderDashboardWithNoData({ initialDataLoading: true, language: "ko" });
+
+    expect(screen.getByRole("status", { name: "대시보드 데이터를 불러오는 중" })).toBeTruthy();
+  });
+
   it("keeps the Korean Today empty state in Korean", () => {
     renderDashboardWithNoData({ dashboardReplay: null, language: "ko" });
 

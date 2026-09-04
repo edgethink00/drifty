@@ -7,6 +7,7 @@ import type {
   DeveloperToolsClient,
   DeveloperToolsStatus,
 } from "../../lib/api/developerToolsClient";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { DeveloperSettingsSection } from "./DeveloperSettingsSection";
 
 const artifact = (overrides: Partial<DeveloperArtifactStatus> = {}): DeveloperArtifactStatus => ({
@@ -191,5 +192,50 @@ describe("DeveloperSettingsSection", () => {
     expect((await screen.findAllByText("Unavailable in this build")).length).toBe(1);
     expect(client.getStatus).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /Install CLI/i })).toBeNull();
+  });
+
+  it("localizes native unavailable messages in Korean", async () => {
+    const unavailableMessageStatus = status({
+      cli: artifact({
+        state: "unavailableInBuild",
+        canInstall: false,
+        message: "The CLI executable is unavailable in this build.",
+      }),
+      codexSkill: artifact({
+        state: "unavailableInBuild",
+        canInstall: false,
+        installedPath: "~/.codex/skills/drifty",
+        message: "The bundled Codex skill is unavailable in this build.",
+      }),
+    });
+
+    render(
+      <LocalizationTestProvider language="ko">
+        <DeveloperSettingsSection client={mockClient(unavailableMessageStatus)} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(await screen.findByText("CLI 실행 파일이 이 빌드에 포함되어 있지 않습니다.")).toBeTruthy();
+    expect(screen.getByText("Codex용 번들 스킬이 이 빌드에 포함되어 있지 않습니다.")).toBeTruthy();
+    expect(screen.queryByText("The CLI executable is unavailable in this build.")).toBeNull();
+  });
+
+  it("localizes a native repair warning in Korean", async () => {
+    const repairStatus = status({
+      cli: artifact({
+        state: "needsRepair",
+        canInstall: false,
+        message: "This path points somewhere Drifty does not own. Drifty will not replace or remove it.",
+      }),
+    });
+
+    render(
+      <LocalizationTestProvider language="ko">
+        <DeveloperSettingsSection client={mockClient(repairStatus)} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(await screen.findByText("이 경로가 Drifty 소유가 아닌 다른 위치를 가리킵니다. Drifty는 이를 바꾸거나 제거하지 않습니다.")).toBeTruthy();
+    expect(screen.queryByText(/This path points somewhere/u)).toBeNull();
   });
 });

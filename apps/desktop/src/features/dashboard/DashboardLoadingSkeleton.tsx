@@ -1,4 +1,5 @@
 import type { DashboardPeriod } from "./dashboardPeriods";
+import { useLocalization } from "../localization/LocalizationContext";
 import { MonthDashboardLoadingSkeleton } from "./DashboardPeriodLoadingSkeletons";
 
 type DashboardLoadingSkeletonProps = {
@@ -14,13 +15,15 @@ export function DashboardLoadingSkeleton({ dashPeriod }: DashboardLoadingSkeleto
 }
 
 function TodayDashboardLoadingSkeleton() {
+  const { t } = useLocalization();
+
   return (
     <>
       <div
         className="flow-breakdown-layout dashboard-loading-skeleton dashboard-loading-skeleton--today"
         role="status"
         aria-live="polite"
-        aria-label="Loading dashboard data"
+        aria-label={t("dashboard.loadingAria")}
       >
         <div className="flow-breakdown-layout__chart dashboard-skeleton-panel dashboard-skeleton-panel--flow" aria-hidden="true">
           <div className="dashboard-skeleton-flow-head">

@@ -153,6 +153,7 @@ describe("AppUsagePanel", () => {
     );
 
     const card = screen.getByLabelText("가장 많이 사용한 앱: Code");
+    expect(within(card).getByLabelText("1위")).toBeTruthy();
     expect(within(card).getByText("가장 많이 사용한 앱")).toBeTruthy();
     expect(within(card).getByText("1시간 30분")).toBeTruthy();
     expect(within(card).getByText("비중")).toBeTruthy();

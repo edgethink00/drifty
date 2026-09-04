@@ -1,6 +1,8 @@
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import { submitFeedback, type FeedbackAttachment } from "./feedbackService";
 
 const MESSAGE_MAX_LENGTH = 3_000;
@@ -32,6 +34,7 @@ type FeedbackModalProps = {
 };
 
 export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [email, setEmail] = useState(initialEmail?.trim() ?? "");
   const [message, setMessage] = useState("");
   const [attachments, setAttachments] = useState<AttachmentDraft[]>([]);
@@ -58,21 +61,21 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
     const trimmedMessage = message.trim();
 
     if (!trimmedMessage) {
-      setFieldErrors({ message: "Write a short note before sending feedback." });
+      setFieldErrors({ message: t("feedback.error.messageRequired") });
       setFormError(null);
       messageInputRef.current?.focus();
       return;
     }
 
     if (!trimmedEmail) {
-      setFieldErrors({ email: "Enter an email address so we can follow up." });
+      setFieldErrors({ email: t("feedback.error.emailRequired") });
       setFormError(null);
       emailInputRef.current?.focus();
       return;
     }
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
-      setFieldErrors({ email: "Enter a valid email address, like name@example.com." });
+      setFieldErrors({ email: t("feedback.error.emailInvalid") });
       setFormError(null);
       emailInputRef.current?.focus();
       return;
@@ -87,7 +90,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
       preparedAttachments = await Promise.all(attachments.map(({ file }) => readAttachmentFile(file)));
     } catch {
       setIsSending(false);
-      setAttachmentError("Unable to read the selected image. Remove it and try again.");
+      setAttachmentError(t("feedback.error.readImage"));
       return;
     }
 
@@ -105,7 +108,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
       return;
     }
 
-    setFormError(result.error);
+    setFormError(localizeFeedbackServiceError(result.error, effectiveLanguage, t));
   }
 
   function handleOverlayClick() {
@@ -132,22 +135,22 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
 
     for (const file of selectedFiles) {
       if (attachments.length + acceptedAttachments.length >= MAX_ATTACHMENTS) {
-        validationError = `Attach up to ${MAX_ATTACHMENTS} images.`;
+        validationError = t("feedback.error.maxImages", { count: MAX_ATTACHMENTS });
         break;
       }
 
       if (file.size > MAX_ATTACHMENT_BYTES) {
-        validationError = `${file.name} is larger than ${formatFileSize(MAX_ATTACHMENT_BYTES)}.`;
+        validationError = t("feedback.error.fileTooLarge", { name: file.name, size: formatFileSize(MAX_ATTACHMENT_BYTES) });
         continue;
       }
 
       if (!ALLOWED_ATTACHMENT_TYPES.has(getAttachmentContentType(file))) {
-        validationError = `${file.name} is not a supported image type.`;
+        validationError = t("feedback.error.unsupportedImage", { name: file.name });
         continue;
       }
 
       if (totalBytes + file.size > MAX_ATTACHMENT_TOTAL_BYTES) {
-        validationError = `Keep images under ${formatFileSize(MAX_ATTACHMENT_TOTAL_BYTES)} total.`;
+        validationError = t("feedback.error.totalTooLarge", { size: formatFileSize(MAX_ATTACHMENT_TOTAL_BYTES) });
         break;
       }
 
@@ -185,26 +188,26 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
         aria-labelledby="feedback-modal-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label="Close" onClick={() => { if (!isSending) onClose(); }} />
+        <ModalCloseButton label={t("feedback.close")} onClick={() => { if (!isSending) onClose(); }} />
         <div className="modal-head feedback-modal__header">
           <div className="modal-head__copy">
-            <h2 id="feedback-modal-title">{isSent ? "Feedback sent" : "Send feedback"}</h2>
-            {isSent ? null : <p>Tell us what&apos;s broken, what&apos;s missing, or what would make Drifty better.</p>}
+            <h2 id="feedback-modal-title">{isSent ? t("feedback.sentTitle") : t("feedback.title")}</h2>
+            {isSent ? null : <p>{t("feedback.description")}</p>}
           </div>
         </div>
 
         {isSent ? (
           <div className="feedback-modal__sent" role="status">
-            <span className="label-mono">Received</span>
-            <strong>We got your feedback.</strong>
-            <p>If we need more detail, we&apos;ll reply to {email.trim()}.</p>
+            <span className="label-mono">{t("feedback.received")}</span>
+            <strong>{t("feedback.receivedTitle")}</strong>
+            <p>{t("feedback.followUp", { email: email.trim() })}</p>
           </div>
         ) : null}
 
         {isSent ? null : (
           <form className="feedback-modal__form" onSubmit={handleSubmit} noValidate>
             <div className="feedback-modal__field">
-              <label className="feedback-modal__label" htmlFor="feedback-email">Email</label>
+              <label className="feedback-modal__label" htmlFor="feedback-email">{t("feedback.email")}</label>
               <input
                 id="feedback-email"
                 className={`feedback-modal__input${fieldErrors.email ? " is-invalid" : ""}`}
@@ -216,7 +219,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
                   setEmail(event.target.value);
                   if (fieldErrors.email) setFieldErrors((current) => ({ ...current, email: undefined }));
                 }}
-                placeholder="e.g. name@example.com"
+                placeholder={t("feedback.emailPlaceholder")}
                 disabled={isSending}
                 ref={emailInputRef}
                 autoFocus={!emailPrefilled}
@@ -233,14 +236,14 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
                 <textarea
                   id="feedback-message"
                   className={`feedback-modal__textarea${fieldErrors.message ? " is-invalid" : ""}`}
-                  aria-label="Message"
+                  aria-label={t("feedback.messageAria")}
                   required
                   value={message}
                   onChange={(event) => {
                     setMessage(event.target.value);
                     if (fieldErrors.message) setFieldErrors((current) => ({ ...current, message: undefined }));
                   }}
-                  placeholder="What should we know?"
+                  placeholder={t("feedback.messagePlaceholder")}
                   maxLength={MESSAGE_MAX_LENGTH}
                   disabled={isSending}
                   ref={messageInputRef}
@@ -261,15 +264,15 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
 
             {attachments.length > 0 ? (
               <div className="feedback-modal__images">
-                <ul className="feedback-modal__image-list" aria-label="Selected images">
+                <ul className="feedback-modal__image-list" aria-label={t("feedback.selectedImages")}>
                   {attachments.map((attachment) => (
                     <li className="feedback-modal__image-chip" key={attachment.id}>
-                      {attachment.previewUrl ? <img src={attachment.previewUrl} alt="" aria-hidden="true" /> : <span aria-hidden="true">IMG</span>}
+                      {attachment.previewUrl ? <img src={attachment.previewUrl} alt="" aria-hidden="true" /> : <span aria-hidden="true">{t("feedback.imageFallback")}</span>}
                       <div>
                         <strong>{attachment.file.name}</strong>
                         <small>{formatFileSize(attachment.file.size)}</small>
                       </div>
-                      <button type="button" onClick={() => removeAttachment(attachment.id)} disabled={isSending} aria-label={`Remove ${attachment.file.name}`}>
+                      <button type="button" onClick={() => removeAttachment(attachment.id)} disabled={isSending} aria-label={t("feedback.removeImage", { name: attachment.file.name })}>
                         ×
                       </button>
                     </li>
@@ -292,7 +295,7 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
                   <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
                   </svg>
-                  <span>Attach images</span>
+                  <span>{t("feedback.attachImages")}</span>
                   <input
                     type="file"
                     accept={ATTACHMENT_ACCEPT}
@@ -303,10 +306,10 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
                 </label>
               </div>
               <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose} disabled={isSending}>
-                Cancel
+                {t("common.cancel")}
               </button>
               <button type="submit" className="modal-btn modal-btn--primary" disabled={isSending}>
-                {isSending ? "Sending…" : "Send"}
+                {isSending ? t("feedback.sending") : t("feedback.send")}
               </button>
             </div>
           </form>
@@ -315,16 +318,34 @@ export function FeedbackModal({ initialEmail, onClose }: FeedbackModalProps) {
         {isSent ? (
           <div className="modal-foot feedback-modal__actions">
             <button type="button" className="modal-btn modal-btn--ghost" onClick={handleSendAnother}>
-              Send another
+              {t("feedback.sendAnother")}
             </button>
             <button type="button" className="modal-btn modal-btn--primary" onClick={onClose} autoFocus>
-              Close
+              {t("feedback.closeAction")}
             </button>
           </div>
         ) : null}
       </section>
     </div>
   );
+}
+
+function localizeFeedbackServiceError(
+  error: string,
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): string {
+  if (language === "en") return error;
+  switch (error) {
+    case "Write a short note before sending feedback.": return t("feedback.error.messageRequired");
+    case "Enter an email address so we can follow up.": return t("feedback.error.emailRequired");
+    case "Enter a valid email address, like name@example.com.": return t("feedback.error.emailInvalid");
+    case "Feedback sending is not configured in this build.":
+    case "Unable to send feedback right now.":
+      return t("feedback.error.send");
+    default:
+      return t("feedback.error.sendWithDetail", { detail: error });
+  }
 }
 
 function createAttachmentId(file: File, index: number) {

@@ -265,6 +265,16 @@ describe("WeekDashboard axis scale", () => {
     expect(container.querySelector(".week-v2-calendar__event")).toBeNull();
   });
 
+  it("announces the initial loading frame in Korean", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        {weekDashboardElement({ initialDataLoading: true })}
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("status", { name: "대시보드 데이터를 불러오는 중" })).toBeTruthy();
+  });
+
   it("uses the compressed 75 percent calendar y-axis by default", () => {
     const { container } = renderWeekDashboard();
 
@@ -1476,6 +1486,17 @@ describe("WeekDashboard breakdown panel", () => {
     expect(eyebrowRule).toContain("overflow-wrap: anywhere;");
     expect(eyebrowRule).toContain("word-break: keep-all;");
     expect(eyebrowRule).toContain("text-wrap: balance;");
+  });
+
+  it("keeps the Korean productivity breakdown accessible name in Korean", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        {weekDashboardElement()}
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByLabelText("생산성 분류 차트")).toBeTruthy();
+    expect(screen.queryByLabelText("생산성 compact classification")).toBeNull();
   });
 
   it("keeps empty and tied weekly summary states deterministic", () => {

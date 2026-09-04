@@ -142,7 +142,7 @@ export function AppUsagePanel({
                 <div>
                   <span className="app-usage-kicker">{primaryItem.usageKind === "site" ? t("dashboard.today.mostUsedSite") : t("dashboard.today.mostUsedApp")}</span>
                   <div className="app-usage-feature__title">
-                    <span className="app-usage-rank app-usage-rank--inline" aria-label={`Rank ${primaryItem.rank}`}>#{primaryItem.rank}</span>
+                    <span className="app-usage-rank app-usage-rank--inline" aria-label={t("dashboard.today.rank", { rank: primaryItem.rank })}>#{primaryItem.rank}</span>
                     <strong>{displayName(primaryItem)}</strong>
                   </div>
                   <p>{formatUsageContext(primaryItem, effectiveLanguage, t)}</p>
@@ -178,7 +178,7 @@ export function AppUsagePanel({
 
                 return (
                   <li className="app-usage-row" key={`${item.rank}-${item.usageKind}-${item.siteDomain ?? item.bundleId ?? item.appName}`}>
-                    <div className="app-usage-rank" aria-label={`Rank ${item.rank}`}>
+                    <div className="app-usage-rank" aria-label={t("dashboard.today.rank", { rank: item.rank })}>
                       {item.rank.toString().padStart(2, "0")}
                     </div>
                     <div className="app-usage-row__main">

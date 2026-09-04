@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { formatCompactDurationFromSeconds } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
@@ -62,6 +63,7 @@ function ProjectEditorModal({
   readonly onCreate: TeamProjectsViewProps["onCreate"];
   readonly onUpdate: TeamProjectsViewProps["onUpdate"];
 }): JSX.Element {
+  const { t } = useLocalization();
   const project = state.project;
   const [name, setName] = useState(project?.name ?? "");
   const [description, setDescription] = useState(project?.description ?? "");
@@ -92,11 +94,11 @@ function ProjectEditorModal({
         aria-labelledby="team-editor-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <ModalCloseButton label="Close project editor" onClick={onClose} />
+        <ModalCloseButton label={t("team.editor.close")} onClick={onClose} />
         <div className="modal-head">
           <div className="modal-head__copy">
-            <h2 id="team-editor-title">{state.mode === "edit" ? "Edit project" : "New shared project"}</h2>
-            <p>{teamName} · shared project</p>
+            <h2 id="team-editor-title">{state.mode === "edit" ? t("team.editor.editTitle") : t("team.editor.newTitle")}</h2>
+            <p>{t("team.editor.subtitle", { team: teamName })}</p>
           </div>
         </div>
         <div className="team-modal__body project-editor-modal__body">
@@ -111,9 +113,9 @@ function ProjectEditorModal({
           />
           {actionError ? <p className="team-message team-message--error">{actionError}</p> : null}
           <div className="modal-foot team-modal__actions">
-            <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>Cancel</button>
+            <button type="button" className="modal-btn modal-btn--ghost" onClick={onClose}>{t("common.cancel")}</button>
             <button type="button" className="modal-btn modal-btn--primary" disabled={actionLoading || !name.trim()} onClick={submit}>
-              {state.mode === "edit" ? "Save changes" : "Create project"}
+              {state.mode === "edit" ? t("team.editor.save") : t("team.editor.create")}
             </button>
           </div>
         </div>
@@ -142,6 +144,7 @@ export function TeamProjectsView({
   onUpdate,
   onArchive,
 }: TeamProjectsViewProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -220,17 +223,17 @@ export function TeamProjectsView({
     if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 1;
     return Math.round((end - start) / 86_400_000) + 1;
   })();
-  const totalCaption = windowDays <= 1 ? "Today" : `Last ${windowDays} days`;
+  const totalCaption = windowDays <= 1 ? t("team.projects.today") : t("team.projects.lastDays", { count: windowDays });
 
   const emptyLabel = projects.length === 0
     ? loading
-      ? "Loading shared projects…"
-      : "No shared projects yet. Create the first one — the definition syncs to every member's computer."
-    : "No projects match.";
+      ? t("team.projects.loading")
+      : t("team.projects.empty")
+    : t("team.projects.noMatch");
 
   if (selectedProject) {
     return (
-      <section className="team-data-panel" aria-label="Shared projects">
+      <section className="team-data-panel" aria-label={t("team.projects.aria")}>
         <TeamProjectDetailView
           project={selectedProject}
           mix={mix}
@@ -266,52 +269,53 @@ export function TeamProjectsView({
   }
 
   return (
-    <section className="team-data-panel" aria-label="Shared projects">
+    <section className="team-data-panel" aria-label={t("team.projects.aria")}>
       <div className="team-dash-section">
-        <div className="projects-toolbar" aria-label="Shared project filters">
+        <div className="projects-toolbar" aria-label={t("team.projects.filtersAria")}>
           <span className="projects-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             <input
               className="settings-input"
               type="text"
-              aria-label="Search project name"
-              placeholder="Search project name…"
+              aria-label={t("team.projects.searchAria")}
+              placeholder={t("team.projects.searchPlaceholder")}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
           </span>
           <SettingsSelect
-            ariaLabel="Filter by status"
+            ariaLabel={t("team.projects.statusFilterAria")}
             className="projects-status-filter"
             value={statusFilter}
             options={[
-              { value: "all", label: "All statuses" },
-              { value: "active", label: "Active" },
-              { value: "archived", label: "Archived" },
+              { value: "all", label: t("team.projects.allStatuses") },
+              { value: "active", label: t("team.projects.active") },
+              { value: "archived", label: t("team.projects.archived") },
             ]}
             onChange={setStatusFilter}
           />
           <span className="projects-toolbar__spacer" />
           <button type="button" className="app-btn app-btn--primary" disabled={actionLoading} onClick={startCreate}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-            New project
+            {t("team.projects.new")}
           </button>
         </div>
 
         {error ? <p className="team-message team-message--error">{error}</p> : null}
         {actionError && !editor ? <p className="team-message team-message--error">{actionError}</p> : null}
 
-        <div className="projects-table" role="region" aria-label="Shared projects">
+        <div className="projects-table" role="region" aria-label={t("team.projects.aria")}>
           <div className="projects-table__head">
-            <span>Project</span>
-            <span>Status</span>
-            <span>Team time in range</span>
-            <span><span className="sr-only">Actions</span></span>
+            <span>{t("team.projects.headerProject")}</span>
+            <span>{t("team.projects.headerStatus")}</span>
+            <span>{t("team.projects.headerTeamTime")}</span>
+            <span><span className="sr-only">{t("team.projects.headerActions")}</span></span>
           </div>
           {filtered.map((project) => {
             const isArchived = project.status === "archived";
             const totalSeconds = secondsByProjectId.get(project.id) ?? 0;
-            const descShort = project.description.trim() || "No description yet";
+            const descShort = project.description.trim() || t("team.projects.noDescription");
+            const projectName = project.name || t("team.projects.untitled");
             return (
               <div
                 className={`projects-table__rowwrap${isArchived ? " projects-table__rowwrap--archived" : ""}`}
@@ -323,27 +327,27 @@ export function TeamProjectsView({
                     <button
                       type="button"
                       className="projects-table__open"
-                      aria-label={`Open ${project.name || "Untitled project"} project`}
+                      aria-label={t("team.projects.openAria", { name: projectName })}
                       onClick={(event) => {
                         event.stopPropagation();
                         setSelectedProjectId(project.id);
                       }}
                     >
-                      <strong>{project.name || "Untitled project"}</strong>
+                      <strong>{projectName}</strong>
                       <small>{descShort}</small>
                     </button>
                   </div>
-                  <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
+                  <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? t("team.projects.archived") : t("team.projects.active")}</span>
                   <div className="pt-total">
                     <small>{totalCaption}</small>
-                    <b>{totalSeconds > 0 ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</b>
+                    <b>{formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</b>
                   </div>
                   <span className="pt-menu-slot">
                     {project.can_manage ? (
                       <button
                         type="button"
                         className="pt-more"
-                        aria-label={`Options for ${project.name}`}
+                        aria-label={t("team.projects.optionsAria", { name: projectName })}
                         aria-haspopup="menu"
                         aria-expanded={menuFor === project.id}
                         onClick={(event) => {
@@ -355,7 +359,7 @@ export function TeamProjectsView({
                       </button>
                     ) : null}
                     {menuFor === project.id ? (
-                      <div className="pt-menu" role="menu" aria-label="Project options">
+                      <div className="pt-menu" role="menu" aria-label={t("team.projects.options")}>
                         <button
                           type="button"
                           role="menuitem"
@@ -365,7 +369,7 @@ export function TeamProjectsView({
                           }}
                         >
                           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M11.2 2.8a1.4 1.4 0 0 1 2 2L5.5 12.5l-2.7.7.7-2.7 7.7-7.7Z" /></svg>
-                          Edit
+                          {t("team.projects.edit")}
                         </button>
                         <button
                           type="button"
@@ -378,7 +382,7 @@ export function TeamProjectsView({
                           }}
                         >
                           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="2.2" y="3" width="11.6" height="2.6" rx="0.6" /><path d="M3.2 5.6v6.2a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V5.6" /><path d="M6.4 8.2h3.2" /></svg>
-                          {isArchived ? "Restore" : "Archive"}
+                          {isArchived ? t("team.projects.restore") : t("team.projects.archive")}
                         </button>
                       </div>
                     ) : null}

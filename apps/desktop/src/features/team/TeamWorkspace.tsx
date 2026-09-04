@@ -12,6 +12,9 @@ import type { UseTeamControllerResult } from "./useTeamController";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { DateNavigator } from "../../components/DateNavigator";
 import { useModalDismiss } from "../../lib/useModalDismiss";
+import { formatLocalizedDateRangeLabel } from "../../lib/formatting";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { DisplayLanguage } from "../localization/languagePreference";
 import "./team.css";
 
 /** Sidebar-initiated actions that open a workspace modal (see App's team nav menu). */
@@ -35,12 +38,39 @@ export type TeamWorkspaceProps = {
   readonly onPendingInviteClear?: () => void;
 };
 
-const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+function localizedTeamRole(label: string, t: LocalizationController["t"]): string {
+  switch (label.trim().toLowerCase()) {
+    case "owner": return t("team.role.owner");
+    case "member": return t("team.role.member");
+    case "admin": return t("team.role.admin");
+    default: return label;
+  }
+}
 
-function shortDate(iso: string): string {
-  const [, month, day] = iso.split("-").map(Number);
-  if (!Number.isFinite(month) || !Number.isFinite(day)) return iso;
-  return `${MONTH_LABELS[(month! - 1 + 12) % 12]} ${day}`;
+function localizedTeamError(message: string | null, language: DisplayLanguage, t: LocalizationController["t"]): string | null {
+  if (!message || language === "en") return message;
+  return t("team.error.withDetail", { detail: message });
+}
+
+function localizedPublishNote(message: string | null, language: DisplayLanguage, t: LocalizationController["t"]): string | null {
+  if (!message || language === "en") return message;
+  if (message.startsWith("No classified team-project time yet")) return t("team.notice.noClassifiedTime");
+  if (message === "Stopped sharing your project time.") return t("team.notice.stopped");
+  if (message.startsWith("Stopped sharing —")) return t("team.notice.stoppedAndRemoved");
+  const sharedMatch = /^Shared (.+) across (\d+) projects? for this window\.$/u.exec(message);
+  if (sharedMatch) {
+    return t("team.notice.shared", {
+      duration: localizedEnglishDuration(sharedMatch[1]!),
+      count: sharedMatch[2]!,
+    });
+  }
+  return t("team.notice.withDetail", { detail: message });
+}
+
+function localizedEnglishDuration(duration: string): string {
+  return duration
+    .replace(/(\d+)h\b/gu, "$1시간")
+    .replace(/(\d+)m\b/gu, "$1분");
 }
 
 function TeamBadgeIcon(): JSX.Element {
@@ -70,6 +100,7 @@ export function TeamWorkspace({
   onAcceptPendingInvite,
   onPendingInviteClear,
 }: TeamWorkspaceProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [period, setPeriod] = useState<TeamPeriod>("weekly");
   const [windowOffset, setWindowOffset] = useState(0);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -117,6 +148,11 @@ export function TeamWorkspace({
   });
   const qaProjects = useTeamQaMockProjects({ period, windowOffset, startOfDayMinutes });
   const projects = qaMock ? qaProjects : realProjects;
+  const displayTeamError = localizedTeamError(teamError, effectiveLanguage, t);
+  const displayTeamActionError = localizedTeamError(teamActionError, effectiveLanguage, t);
+  const displayProjectError = localizedTeamError(projects.error, effectiveLanguage, t);
+  const displayProjectActionError = localizedTeamError(projects.actionError, effectiveLanguage, t);
+  const displayPublishNote = localizedPublishNote(projects.publishNote, effectiveLanguage, t);
 
   const activeInvite = useMemo(() => invites.find((invite) => invite.status === "pending") ?? null, [invites]);
   const hasTeam = teams.length > 0 && Boolean(selectedTeam);
@@ -203,8 +239,12 @@ export function TeamWorkspace({
   };
 
   const isPopulated = canUse && hasTeam && !pendingInvite;
-  const pageTitle = !isPopulated ? "Teams" : subView === "projects" ? "Projects" : "Dashboards";
-  const windowLabel = `${shortDate(projects.window.start_date)} – ${shortDate(projects.window.end_date)}`;
+  const pageTitle = !isPopulated
+    ? t("team.page.teams")
+    : subView === "projects"
+      ? t("team.page.projects")
+      : t("team.page.dashboards");
+  const windowLabel = formatLocalizedDateRangeLabel(projects.window.start_date, projects.window.end_date, effectiveLanguage);
   const atLatestWindow = windowOffset === 0;
 
   return (
@@ -216,11 +256,11 @@ export function TeamWorkspace({
         {/* Both sub-views read the same window (chart + the table's Team time column). */}
         {isPopulated ? (
           <div className="classification-range-controls trends-range-controls">
-            <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label="Range granularity">
+            <div className="settings-mode-switch settings-mode-switch--triple" role="radiogroup" aria-label={t("team.range.aria")}>
               {([
-                { key: "daily", label: "Day" },
-                { key: "weekly", label: "Week" },
-                { key: "monthly", label: "Month" },
+                { key: "daily", label: t("common.day") },
+                { key: "weekly", label: t("common.week") },
+                { key: "monthly", label: t("common.month") },
               ] as const).map((option) => (
                 <button
                   type="button"
@@ -240,23 +280,23 @@ export function TeamWorkspace({
             {/* Shared with Dashboard/Trends/Projects/Classification so the step
                 controls cannot drift from the rest of the app again. */}
             <DateNavigator
-              ariaLabel="Dashboard time window"
+              ariaLabel={t("team.range.windowAria")}
               label={windowLabel}
-              todayLabel="Latest"
+              todayLabel={t("common.latest")}
               isTodayDisabled={atLatestWindow}
               isNextDisabled={atLatestWindow}
               onPrevious={() => setWindowOffset((offset) => offset + 1)}
               onNext={() => setWindowOffset((offset) => Math.max(0, offset - 1))}
               onToday={() => setWindowOffset(0)}
-              previousLabel="Previous window"
-              nextLabel="Next window"
+              previousLabel={t("team.range.previous")}
+              nextLabel={t("team.range.next")}
             />
           </div>
         ) : null}
       </div>
 
       <div className="team-page-layout">
-        <section className="team-panel" aria-label="Team shared projects">
+        <section className="team-panel" aria-label={t("team.panel.sharedProjects")}>
           {renderBody()}
         </section>
       </div>
@@ -271,19 +311,19 @@ export function TeamWorkspace({
     if (!isSupabaseEnabled && !qaMock) {
       return (
         <div className="empty-state team-state">
-          <strong>Cloud sync required</strong>
-          <p>Team features need cloud sync configured.</p>
+          <strong>{t("team.state.cloudTitle")}</strong>
+          <p>{t("team.state.cloudBody")}</p>
         </div>
       );
     }
     if ((!isSignedIn || !hasRequiredAccountAuth) && !qaMock) {
       return (
         <div className="empty-state team-state">
-          <span className="label-mono">Account required</span>
-          <strong>Sign in required</strong>
-          <p>Use a drifty.so account before creating teams or joining with invites.</p>
+          <span className="label-mono">{t("team.state.accountLabel")}</span>
+          <strong>{t("team.state.signInTitle")}</strong>
+          <p>{t("team.state.signInBody")}</p>
           <div className="team-onboard__actions">
-            <button type="button" className="app-btn app-btn--primary" onClick={onSignIn}>Open sign-in</button>
+            <button type="button" className="app-btn app-btn--primary" onClick={onSignIn}>{t("team.state.openSignIn")}</button>
           </div>
         </div>
       );
@@ -291,13 +331,13 @@ export function TeamWorkspace({
 
     if (pendingInvite) {
       return (
-        <section className="team-pending-invite" role="region" aria-label="Pending team invite">
+        <section className="team-pending-invite" role="region" aria-label={t("team.invite.pendingAria")}>
           <div>
             <strong>
-              You have a pending team invite
+              {t("team.invite.pendingTitle")}
               {pendingInvite.inviteCode ? <> (<code className="team-code-inline">{pendingInvite.inviteCode}</code>)</> : null}
             </strong>
-            <p>Joining shares nothing until your first Share my time.</p>
+            <p>{t("team.invite.sharingStartsLater")}</p>
           </div>
           <div className="team-onboard__actions">
             <button
@@ -306,35 +346,35 @@ export function TeamWorkspace({
               disabled={teamActionLoading}
               onClick={() => void onAcceptPendingInvite({ inviteKey: pendingInvite.inviteKey })}
             >
-              Join team
+              {t("team.invite.join")}
             </button>
-            <button type="button" className="app-btn app-btn--quiet" onClick={() => onPendingInviteClear?.()}>Dismiss</button>
+            <button type="button" className="app-btn app-btn--quiet" onClick={() => onPendingInviteClear?.()}>{t("team.invite.dismiss")}</button>
           </div>
-          {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
+          {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
         </section>
       );
     }
 
     if (teamLoading && teams.length === 0) {
-      return <div className="team-empty">Loading teams…</div>;
+      return <div className="team-empty">{t("team.state.loadingTeams")}</div>;
     }
 
     if (!hasTeam) {
       return (
         <>
-          <div className="team-onboard" aria-label="Start a team">
+          <div className="team-onboard" aria-label={t("team.onboarding.aria")}>
             <span className="team-onboard__icon" aria-hidden="true"><TeamBadgeIcon /></span>
-            <strong>See where your team's time goes</strong>
-            <p>Create a team or join one with an invite code. Define shared projects together — only aggregate time per project is ever shared.</p>
+            <strong>{t("team.onboarding.title")}</strong>
+            <p>{t("team.onboarding.body")}</p>
             <div className="team-onboard__actions">
               <button type="button" className="app-btn app-btn--primary" onClick={() => openAdd("create")}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                Create a team
+                {t("team.onboarding.create")}
               </button>
-              <button type="button" className="app-btn app-btn--secondary" onClick={() => openAdd("join")}>Join with code</button>
+              <button type="button" className="app-btn app-btn--secondary" onClick={() => openAdd("join")}>{t("team.onboarding.joinWithCode")}</button>
             </div>
           </div>
-          {teamError ? <p className="team-message team-message--error">{teamError}</p> : null}
+          {displayTeamError ? <p className="team-message team-message--error">{displayTeamError}</p> : null}
         </>
       );
     }
@@ -350,21 +390,21 @@ export function TeamWorkspace({
             memberCount={selectedTeam?.member_count ?? 0}
             memberDisplayName={selectedTeam?.member_display_name ?? null}
             loading={projects.loading}
-            error={projects.error ?? teamError}
-            publishNote={projects.publishNote}
+            error={displayProjectError ?? displayTeamError}
+            publishNote={displayPublishNote}
             onRefresh={() => void projects.refresh()}
           />
         ) : (
           <TeamProjectsView
-            teamName={selectedTeam?.organization_name ?? "Team"}
+            teamName={selectedTeam?.organization_name ?? t("team.page.teams")}
             projects={projects.projects}
             mix={projects.mix}
             members={projects.members}
             memberDisplayName={selectedTeam?.member_display_name ?? null}
             window={projects.window}
             loading={projects.loading}
-            error={projects.error}
-            actionError={projects.actionError}
+            error={displayProjectError}
+            actionError={displayProjectActionError}
             actionLoading={projects.actionLoading}
             onCreate={onCreateProject}
             onUpdate={(input) => void projects.updateProject(input)}
@@ -374,7 +414,7 @@ export function TeamWorkspace({
 
         <p className="team-footnote">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.2 2.9 7.6 7 8.6 4.1-1 7-4.4 7-8.6V6l-7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
-          Your Mac classifies your own activity locally. Only per-project totals are shared — apps, sites, and windows stay on your device.
+          {t("team.privacy.footnote")}
         </p>
       </>
     );
@@ -393,58 +433,58 @@ export function TeamWorkspace({
           aria-labelledby="team-invite-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <ModalCloseButton label="Close invite dialog" onClick={() => setInviteOpen(false)} />
+          <ModalCloseButton label={t("team.invite.close")} onClick={() => setInviteOpen(false)} />
           <div className="modal-head">
             <div className="modal-head__copy">
-              <h2 id="team-invite-title">Invite to {selectedTeam?.organization_name ?? "your team"}</h2>
-              <p>Share one link or code — data stays aggregate-only.</p>
+              <h2 id="team-invite-title">{t("team.invite.title", { team: selectedTeam?.organization_name ?? t("team.invite.defaultTeam") })}</h2>
+              <p>{t("team.invite.body")}</p>
             </div>
           </div>
           <div className="team-modal__body">
             {activeInvite ? (
               <>
                 <div className="team-modal__field">
-                  <span className="label-mono">Invite link</span>
+                  <span className="label-mono">{t("team.invite.link")}</span>
                   <div className="team-copy-row">
                     <input
                       className="settings-input modal-code"
                       readOnly
                       value={inviteUrl || inviteCode}
-                      aria-label="Invite link"
+                      aria-label={t("team.invite.link")}
                       onFocus={(event) => event.target.select()}
                     />
                     <button type="button" className="modal-btn modal-btn--primary" onClick={() => copyValue("link", inviteUrl || inviteCode)}>
-                      {copiedKey === "link" ? "Copied ✓" : "Copy link"}
+                      {copiedKey === "link" ? t("team.invite.copied") : t("team.invite.copyLink")}
                     </button>
                   </div>
                 </div>
                 <div className="team-modal__field">
-                  <span className="label-mono">Invite code</span>
+                  <span className="label-mono">{t("team.invite.code")}</span>
                   <div className="team-code">
                     <strong>{inviteCode}</strong>
                     <div className="team-code__actions">
                       <button
                         type="button"
                         className="team-iconbtn"
-                        aria-label="Generate a new code"
-                        title="Generate a new code"
+                        aria-label={t("team.invite.newCode")}
+                        title={t("team.invite.newCode")}
                         disabled={teamActionLoading}
                         onClick={() => void regenerateInvite()}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.2 12a7.8 7.8 0 0 1 13.2-5.6L20 8.6" /><path d="M19.8 12a7.8 7.8 0 0 1-13.2 5.6L4 15.4" /><path d="M20 4v4.6h-4.6M4 20v-4.6h4.6" /></svg>
                       </button>
                       <button type="button" className="modal-btn modal-btn--ghost" onClick={() => copyValue("code", inviteCode)}>
-                        {copiedKey === "code" ? "Copied ✓" : "Copy"}
+                        {copiedKey === "code" ? t("team.invite.copied") : t("team.invite.copy")}
                       </button>
                     </div>
                   </div>
-                  <p className="team-modal__hint">Refreshing the code disables the previous one.</p>
+                  <p className="team-modal__hint">{t("team.invite.refreshHint")}</p>
                 </div>
               </>
             ) : (
-              <p className="team-modal__hint">{teamActionLoading ? "Creating an invite…" : "No live invite yet."}</p>
+              <p className="team-modal__hint">{teamActionLoading ? t("team.invite.creating") : t("team.invite.none")}</p>
             )}
-            {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
+            {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
           </div>
         </section>
       </div>
@@ -462,26 +502,26 @@ export function TeamWorkspace({
           aria-labelledby="team-settings-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <ModalCloseButton label="Close" onClick={() => setSettingsOpen(false)} />
+          <ModalCloseButton label={t("team.settings.close")} onClick={() => setSettingsOpen(false)} />
           <div className="modal-head">
             <div className="modal-head__copy">
-              <h2 id="team-settings-title">Team settings</h2>
-              <p>{selectedTeam?.organization_name ?? "Your team"} — membership and sharing.</p>
+              <h2 id="team-settings-title">{t("team.settings.title")}</h2>
+              <p>{t("team.settings.subtitle", { team: selectedTeam?.organization_name ?? t("team.settings.defaultTeam") })}</p>
             </div>
           </div>
           <div className="team-modal__body team-settings">
             <div className="team-set-section">
-              <span className="label-mono">Team</span>
+              <span className="label-mono">{t("team.settings.team")}</span>
               <div className="team-set-member">
                 <span className="team-set-member__name">{selectedTeam?.organization_name}</span>
-                <span className="team-set-role">{selectedTeam?.member_count ?? 0} members</span>
-                <span className="team-set-role--admin">{selectedTeam?.role_label}</span>
+                <span className="team-set-role">{t("team.settings.memberCount", { count: selectedTeam?.member_count ?? 0 })}</span>
+                <span className="team-set-role--admin">{localizedTeamRole(selectedTeam?.role_label ?? "", t)}</span>
               </div>
             </div>
 
             <div className="team-set-section">
               <div className="team-set-memhead">
-                <span className="label-mono">Invites</span>
+                <span className="label-mono">{t("team.settings.invites")}</span>
                 <button
                   type="button"
                   className="modal-btn modal-btn--secondary team-set-invite"
@@ -491,42 +531,42 @@ export function TeamWorkspace({
                   }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
-                  Invite
+                  {t("team.settings.invite")}
                 </button>
               </div>
               {activeInvite ? (
-                <p className="team-modal__hint">One live invite code: {activeInvite.invite_code}</p>
+                <p className="team-modal__hint">{t("team.settings.liveInvite", { code: activeInvite.invite_code })}</p>
               ) : (
-                <p className="team-modal__hint">No live invite right now.</p>
+                <p className="team-modal__hint">{t("team.settings.noInvite")}</p>
               )}
             </div>
 
             <div className="team-set-section">
-              <span className="label-mono">Your sharing</span>
+              <span className="label-mono">{t("team.settings.yourSharing")}</span>
               <p className="team-modal__hint">
-                {projects.publishNote ?? "Share publishes only your per-project totals for the current window. Apps, sites, and windows never leave your computer."}
+                {displayPublishNote ?? t("team.settings.sharingBody")}
               </p>
               <div className="team-set-share">
                 <button
                   type="button"
                   className="modal-btn modal-btn--primary"
                   disabled={projects.publishing}
-                  aria-label="Share my project time with the team"
+                  aria-label={t("team.settings.shareAria")}
                   onClick={() => void projects.publishMyTime()}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 15V4" /><path d="m7 9 5-5 5 5" /><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" /></svg>
-                  {projects.publishing ? "Sharing…" : "Share my time"}
+                  {projects.publishing ? t("team.settings.sharing") : t("team.settings.share")}
                 </button>
                 <button
                   type="button"
                   className="modal-btn modal-btn--ghost"
-                  aria-label="Stop sharing my project time"
+                  aria-label={t("team.settings.stopAria")}
                   onClick={() => void projects.stopSharing()}
                 >
-                  Stop sharing
+                  {t("team.settings.stop")}
                 </button>
               </div>
-              {projects.actionError ? <p className="team-message team-message--error">{projects.actionError}</p> : null}
+              {displayProjectActionError ? <p className="team-message team-message--error">{displayProjectActionError}</p> : null}
             </div>
           </div>
         </section>
@@ -545,14 +585,14 @@ export function TeamWorkspace({
           aria-labelledby="team-add-title"
           onClick={(event) => event.stopPropagation()}
         >
-          <ModalCloseButton label="Close" onClick={() => setAddOpen(false)} />
+          <ModalCloseButton label={t("team.add.close")} onClick={() => setAddOpen(false)} />
           <div className="modal-head">
             <div className="modal-head__copy">
-              <h2 id="team-add-title">Add a team</h2>
+              <h2 id="team-add-title">{t("team.add.title")}</h2>
             </div>
           </div>
           <div className="team-modal__body">
-            <div className="team-seg" role="tablist" aria-label="Add team mode">
+            <div className="team-seg" role="tablist" aria-label={t("team.add.modeAria")}>
               <button
                 type="button"
                 role="tab"
@@ -560,7 +600,7 @@ export function TeamWorkspace({
                 aria-selected={addTab === "create"}
                 onClick={() => setAddTab("create")}
               >
-                <span>Create</span>
+                <span>{t("team.add.createTab")}</span>
               </button>
               <button
                 type="button"
@@ -569,56 +609,56 @@ export function TeamWorkspace({
                 aria-selected={addTab === "join"}
                 onClick={() => setAddTab("join")}
               >
-                <span>Join</span>
+                <span>{t("team.add.joinTab")}</span>
               </button>
             </div>
             {addTab === "create" ? (
               <>
                 <div className="team-modal__field">
-                  <span className="label-mono">Team name</span>
+                  <span className="label-mono">{t("team.add.name")}</span>
                   <input
                     className="settings-input"
-                    placeholder="Deep Work Crew"
+                    placeholder={t("team.add.namePlaceholder")}
                     value={teamName}
                     maxLength={120}
-                    aria-label="Team name"
+                    aria-label={t("team.add.name")}
                     onChange={(event) => setTeamName(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") submitCreateTeam();
                     }}
                   />
-                  <p className="team-modal__hint">You'll manage this team as its admin.</p>
+                  <p className="team-modal__hint">{t("team.add.adminHint")}</p>
                 </div>
-                {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
+                {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
                 <div className="modal-foot team-modal__actions">
-                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>Cancel</button>
+                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}</button>
                   <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !teamName.trim()} onClick={submitCreateTeam}>
-                    Create team
+                    {t("team.add.create")}
                   </button>
                 </div>
               </>
             ) : (
               <>
                 <div className="team-modal__field">
-                  <span className="label-mono">Invite code or link</span>
+                  <span className="label-mono">{t("team.add.inviteKey")}</span>
                   <input
                     className="settings-input"
-                    placeholder="DRFT-ABCD-2345 or paste an invite link"
+                    placeholder={t("team.add.invitePlaceholder")}
                     value={inviteKey}
                     maxLength={500}
-                    aria-label="Team invite code or link"
+                    aria-label={t("team.add.inviteAria")}
                     onChange={(event) => setInviteKey(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key === "Enter") submitJoin();
                     }}
                   />
-                  <p className="team-modal__hint">Joining shares nothing until your first Share my time.</p>
+                  <p className="team-modal__hint">{t("team.invite.sharingStartsLater")}</p>
                 </div>
-                {teamActionError ? <p className="team-message team-message--error">{teamActionError}</p> : null}
+                {displayTeamActionError ? <p className="team-message team-message--error">{displayTeamActionError}</p> : null}
                 <div className="modal-foot team-modal__actions">
-                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>Cancel</button>
+                  <button type="button" className="modal-btn modal-btn--ghost" onClick={() => setAddOpen(false)}>{t("common.cancel")}</button>
                   <button type="button" className="modal-btn modal-btn--primary" disabled={teamActionLoading || !inviteKey.trim()} onClick={submitJoin}>
-                    Join team
+                    {t("team.invite.join")}
                   </button>
                 </div>
               </>

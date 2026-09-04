@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react";
+import { useLocalization, type LocalizationController } from "../features/localization/LocalizationContext";
 
 export type ProjectColorSwatch = {
   readonly color: string;
@@ -34,8 +35,10 @@ export function ProjectColorToken({
   readonly ariaLabel: string;
   readonly onPick: (color: string) => void;
 }): JSX.Element {
+  const { t } = useLocalization();
   const [open, setOpen] = useState(false);
-  const name = swatches.find((swatch) => swatch.color === value)?.name ?? "Custom";
+  const rawName = swatches.find((swatch) => swatch.color === value)?.name;
+  const name = rawName ? localizedColorName(rawName, t) : t("projects.color.custom");
 
   return (
     <div className={`settings-color-token${open ? " is-open" : ""}`}>
@@ -43,7 +46,7 @@ export function ProjectColorToken({
         <span className="settings-color-trigger__swatch" style={swatchStyle(value)} aria-hidden="true" />
         <span className="settings-color-trigger__copy">
           <span className="settings-color-token__name">{name}</span>
-          <span className="settings-color-token__action">Change color</span>
+          <span className="settings-color-token__action">{t("projects.color.change")}</span>
         </span>
         <span className="settings-color-trigger__chevron" aria-hidden="true" />
       </button>
@@ -53,6 +56,7 @@ export function ProjectColorToken({
             {swatches.map((swatch) => {
               const isSelected = swatch.color === value;
               const isUsed = !isSelected && (usedColors?.has(swatch.color) ?? false);
+              const localizedName = localizedColorName(swatch.name, t);
               return (
                 <button
                   key={swatch.color}
@@ -61,8 +65,8 @@ export function ProjectColorToken({
                   style={swatchStyle(swatch.color)}
                   role="radio"
                   aria-checked={isSelected}
-                  aria-label={`Color ${swatch.name}${isUsed ? " (already used)" : ""}`}
-                  title={isUsed ? "Already used by another project" : swatch.name}
+                  aria-label={t("projects.color.optionAria", { name: localizedName, used: isUsed ? t("projects.color.usedSuffix") : "" })}
+                  title={isUsed ? t("projects.color.usedTitle") : localizedName}
                   onClick={() => {
                     onPick(swatch.color);
                     setOpen(false);
@@ -75,4 +79,20 @@ export function ProjectColorToken({
       ) : null}
     </div>
   );
+}
+
+function localizedColorName(name: string, t: LocalizationController["t"]): string {
+  switch (name) {
+    case "Indigo": return t("projects.color.indigo");
+    case "Pink": return t("projects.color.pink");
+    case "Amber": return t("projects.color.amber");
+    case "Emerald": return t("projects.color.emerald");
+    case "Blue": return t("projects.color.blue");
+    case "Violet": return t("projects.color.violet");
+    case "Red": return t("projects.color.red");
+    case "Teal": return t("projects.color.teal");
+    case "Orange": return t("projects.color.orange");
+    case "Lime": return t("projects.color.lime");
+    default: return name;
+  }
 }

@@ -462,6 +462,7 @@ export function DashboardPage({
                 {showProjectDonut ? (
                   <CompactRingChart
                     title={t("dashboard.today.projects")}
+                    ariaLabel={t("dashboard.today.compactClassificationAria", { title: t("dashboard.today.projects") })}
                     entries={flowProjectRingEntries ?? []}
                     totalSeconds={totalSeconds}
                     centerPercent={flowProjectCenterPercent ?? 0}
@@ -472,6 +473,7 @@ export function DashboardPage({
                 ) : (
                   <CompactRingChart
                     title={t("dashboard.today.productivity")}
+                    ariaLabel={t("dashboard.today.compactClassificationAria", { title: t("dashboard.today.productivity") })}
                     entries={dayProductivityRingEntries}
                     totalSeconds={totalSeconds}
                     centerPercent={dayProductivityCenterPercent}
@@ -482,7 +484,7 @@ export function DashboardPage({
                 )}
                 <CompactClassificationBar<CategoryDuration>
                   title={t("dashboard.today.categories")}
-                  ariaLabel={effectiveLanguage === "ko" ? t("dashboard.today.categories") : "Category compact classification"}
+                  ariaLabel={t("dashboard.today.compactClassificationAria", { title: t("common.category") })}
                   entries={dayActiveCategoryEntries}
                   totalSeconds={totalSeconds}
                   getKey={(entry) => entry.category}

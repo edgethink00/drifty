@@ -1,13 +1,17 @@
+import { useLocalization } from "../localization/LocalizationContext";
+
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MONTH_CELLS = Array.from({ length: 35 }, (_, index) => index);
 
 export function MonthDashboardLoadingSkeleton() {
+  const { t } = useLocalization();
+
   return (
     <section
       className="month-v2 dashboard-loading-skeleton dashboard-loading-skeleton--month"
       role="status"
       aria-live="polite"
-      aria-label="Loading dashboard data"
+      aria-label={t("dashboard.loadingAria")}
     >
       <div className="month-v2-story" aria-hidden="true">
         <div>

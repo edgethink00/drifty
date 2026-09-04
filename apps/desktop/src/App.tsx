@@ -8200,31 +8200,43 @@ export default function App() {
 
   if (isEffectiveAuthRequired && hasEffectiveBlockingAuthConfigurationError) {
     return (
-      <>
-        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
-        <AuthConfigurationGate />
-        {latestBuildPrompt}
-      </>
+      <SiteIconProvider value={siteIcons}>
+        <LocalizationProvider controller={localization}>
+          <>
+            {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
+            <AuthConfigurationGate />
+            {latestBuildPrompt}
+          </>
+        </LocalizationProvider>
+      </SiteIconProvider>
     );
   }
 
   if (isEffectiveAuthRequired && authStatus === "loading" && !onboardingOpen) {
     return (
-      <>
-        <AuthLoadingGate />
-        {latestBuildPrompt}
-      </>
+      <SiteIconProvider value={siteIcons}>
+        <LocalizationProvider controller={localization}>
+          <>
+            <AuthLoadingGate />
+            {latestBuildPrompt}
+          </>
+        </LocalizationProvider>
+      </SiteIconProvider>
     );
   }
 
   if (isEffectiveAuthRequired && !hasRequiredAccountAuth && !onboardingOpen) {
     return (
-      <>
-        {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
-        <AuthRequiredGate onSignIn={openDefaultAuthModal} />
-        {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
-        {latestBuildPrompt}
-      </>
+      <SiteIconProvider value={siteIcons}>
+        <LocalizationProvider controller={localization}>
+          <>
+            {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
+            <AuthRequiredGate onSignIn={openDefaultAuthModal} />
+            {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+            {latestBuildPrompt}
+          </>
+        </LocalizationProvider>
+      </SiteIconProvider>
     );
   }
 
@@ -8545,24 +8557,24 @@ export default function App() {
         {canOpenTeamsBeta ? (
           <>
             <div className="nav-label nav-label--teams">
-              <span>Your teams</span>
+              <span>{localization.t("team.nav.yourTeams")}</span>
               {!isSidebarVisuallyCollapsed ? (
                 <button
                   type="button"
                   className="nav-label__add"
-                  aria-label="Create or join a team"
-                  title="Create or join a team"
+                  aria-label={localization.t("team.nav.createOrJoin")}
+                  title={localization.t("team.nav.createOrJoin")}
                   onClick={() => openTeamAction("add")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
                 </button>
               ) : null}
             </div>
-            <nav className="sidebar-nav sidebar-nav--teams" aria-label="Your teams">
+            <nav className="sidebar-nav sidebar-nav--teams" aria-label={localization.t("team.nav.yourTeams")}>
               {teamController.teams.length === 0 ? (
                 <button type="button" className={activeTab === "team" ? "nav-item active" : "nav-item"} aria-current={activeTab === "team" ? "page" : undefined} onClick={() => navigateToTab("team")}>
-                  <NavIcon type="team" /><span>Teams</span>
-                  {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">Teams</span> : null}
+                  <NavIcon type="team" /><span>{localization.t("team.nav.teams")}</span>
+                  {isSidebarVisuallyCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{localization.t("team.nav.teams")}</span> : null}
                 </button>
               ) : (
                 teamController.teams.map((team) => {
@@ -8619,7 +8631,7 @@ export default function App() {
                               <button
                                 type="button"
                                 className="team-nav-more"
-                                aria-label="Team options"
+                                aria-label={localization.t("team.nav.options")}
                                 aria-haspopup="menu"
                                 aria-expanded={teamNavMenuOpen}
                                 onClick={(event) => {
@@ -8643,7 +8655,7 @@ export default function App() {
                         <div className="sidebar-subnav">
                           <button
                             type="button"
-                            aria-label="Team dashboards"
+                            aria-label={localization.t("team.nav.dashboardsAria")}
                             className={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
                             aria-current={activeTab === "team" && isSelectedTeam && teamSubView === "dashboards" ? "page" : undefined}
                             onClick={() => {
@@ -8653,11 +8665,11 @@ export default function App() {
                             }}
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true"><rect x="3" y="3" width="7.5" height="9" rx="1.5" /><rect x="13.5" y="3" width="7.5" height="5.5" rx="1.5" /><rect x="13.5" y="12" width="7.5" height="9" rx="1.5" /><rect x="3" y="15.5" width="7.5" height="5.5" rx="1.5" /></svg>
-                            <span>Dashboards</span>
+                            <span>{localization.t("team.nav.dashboards")}</span>
                           </button>
                           <button
                             type="button"
-                            aria-label="Team projects"
+                            aria-label={localization.t("team.nav.projectsAria")}
                             className={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "nav-item nav-item--sub active" : "nav-item nav-item--sub"}
                             aria-current={activeTab === "team" && isSelectedTeam && teamSubView === "projects" ? "page" : undefined}
                             onClick={() => {
@@ -8667,7 +8679,7 @@ export default function App() {
                             }}
                           >
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></svg>
-                            <span>Projects</span>
+                            <span>{localization.t("team.nav.projects")}</span>
                           </button>
                         </div>
                       ) : null}
@@ -8676,18 +8688,18 @@ export default function App() {
                 })
               )}
               {teamNavMenuOpen && teamNavMenuPos && !isSidebarVisuallyCollapsed ? (
-                <div className="team-nav-menu" role="menu" aria-label="Team options" style={{ left: teamNavMenuPos.left, top: teamNavMenuPos.top }}>
+                <div className="team-nav-menu" role="menu" aria-label={localization.t("team.nav.options")} style={{ left: teamNavMenuPos.left, top: teamNavMenuPos.top }}>
                   <button type="button" role="menuitem" onClick={() => openTeamAction("invite")}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
-                    Invite teammate
+                    {localization.t("team.nav.inviteTeammate")}
                   </button>
                   <button type="button" role="menuitem" onClick={() => openTeamAction("settings")}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
-                    Team settings
+                    {localization.t("team.nav.settings")}
                   </button>
                   <button type="button" role="menuitem" onClick={() => openTeamAction("add")}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-                    Create or join a team
+                    {localization.t("team.nav.createOrJoin")}
                   </button>
                 </div>
               ) : null}
@@ -9186,9 +9198,9 @@ export default function App() {
 	                    publicProfileStatus={
 	                      isLeaderboardOptedIn
 	                        ? ownLeaderboardEntry?.rank
-	                          ? `On the board as #${ownLeaderboardEntry.rank}`
-	                          : "On the board"
-	                        : "Not on the board yet"
+	                          ? localization.t("leaderboard.onBoardAs", { rank: ownLeaderboardEntry.rank })
+	                          : localization.t("leaderboard.onBoard")
+	                        : localization.t("leaderboard.notOnBoard")
 	                    }
 	                    shouldShowCloudCheckoutPlans={shouldShowCloudCheckoutPlans}
 	                    userEmail={user?.email ?? null}

@@ -8,7 +8,8 @@ import {
   type DeveloperToolsClient,
   type DeveloperToolsStatus,
 } from "../../lib/api/developerToolsClient";
-import { useLocalization } from "../localization/LocalizationContext";
+import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
+import { localizeSettingsError } from "../localization/settingsMessageTranslations";
 import type { TranslationKey } from "../localization/translations";
 import "./DeveloperSettingsSection.css";
 
@@ -58,8 +59,34 @@ const unavailableStatus: DeveloperToolsStatus = {
   openCodeSkill: unavailableArtifact("~/.config/opencode/skills/drifty"),
 };
 
+const STATUS_MESSAGE_KEYS = {
+  "Drifty could not inspect the installation path.": "settings.developer.inspectPathDetail",
+  "A regular file or directory already uses this path. Drifty will not replace it.": "settings.developer.pathOccupiedDetail",
+  "Drifty could not read the existing symbolic link.": "settings.developer.readLinkDetail",
+  "The installed link points to an older or missing Drifty app. Repair it to use this app.": "settings.developer.oldLinkDetail",
+  "This path points somewhere Drifty does not own. Drifty will not replace or remove it.": "settings.developer.foreignPathDetail",
+} as const satisfies Readonly<Record<string, TranslationKey>>;
+
+function localizeArtifactMessage(
+  status: DeveloperArtifactStatus | undefined,
+  artifact: ArtifactKey,
+  agentName: string,
+  language: DisplayLanguage,
+  t: LocalizationController["t"],
+): string | null {
+  if (!status?.message) return null;
+  if (language === "en") return status.message;
+  if (status.state === "unavailableInBuild") {
+    return artifact === "cli"
+      ? t("settings.developer.cliUnavailableDetail")
+      : t("settings.developer.skillUnavailableDetail", { agent: agentName });
+  }
+  const messageKey = STATUS_MESSAGE_KEYS[status.message as keyof typeof STATUS_MESSAGE_KEYS];
+  return messageKey ? t(messageKey) : localizeSettingsError(status.message, language, t);
+}
+
 export function DeveloperSettingsSection({ client = developerToolsClient }: DeveloperSettingsSectionProps) {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const [status, setStatus] = useState<DeveloperToolsStatus | null>(null);
   const [busy, setBusy] = useState<{ artifact: ArtifactKey; operation: Operation } | null>(null);
   const [selectedSkillTarget, setSelectedSkillTarget] = useState<DeveloperSkillTarget>("codex");
@@ -120,6 +147,8 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
   const selectedTarget = SKILL_TARGETS.find((target) => target.id === selectedSkillTarget) ?? SKILL_TARGETS[0];
   const skillStatus = status?.[SKILL_STATUS_KEYS[selectedSkillTarget]];
   const skillPath = skillStatus?.installedPath ?? `${selectedTarget.path}/drifty`;
+  const cliStatusMessage = localizeArtifactMessage(cliStatus, "cli", "CLI", effectiveLanguage, t);
+  const skillStatusMessage = localizeArtifactMessage(skillStatus, selectedSkillTarget, t(selectedTarget.nameKey), effectiveLanguage, t);
 
   return (
     <div className="settings-section settings-section--developer">
@@ -134,7 +163,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
           <div className="developer-cli-row__copy">
             <div className="lbl">{t("settings.developer.cliTitle")}</div>
             <div className="desc">{t("settings.developer.cliDescription")}</div>
-            {cliStatus?.message ? <div className="desc developer-note developer-note--warn" role="status">{cliStatus.message}</div> : null}
+            {cliStatusMessage ? <div className="desc developer-note developer-note--warn" role="status">{cliStatusMessage}</div> : null}
           </div>
           <div className="ctrl settings-row__actions">
             <ArtifactActions
@@ -189,7 +218,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
           <div>
             <div className="lbl">{`${t(selectedTarget.nameKey)} ${t("settings.developer.agentSkillSuffix")}`}</div>
             <div className="desc">{t("settings.developer.skillDescription")}</div>
-            {skillStatus?.message ? <div className="desc developer-note developer-note--warn" role="status">{skillStatus.message}</div> : null}
+            {skillStatusMessage ? <div className="desc developer-note developer-note--warn" role="status">{skillStatusMessage}</div> : null}
           </div>
           <div className="ctrl settings-row__actions">
             <SkillTargetPicker
@@ -234,7 +263,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
 
       {error ? (
         <div className="developer-tool-error" role="alert">
-          <span>{error}</span>
+          <span>{localizeSettingsError(error, effectiveLanguage, t)}</span>
           <button type="button" className="settings-btn" disabled={busy !== null} onClick={() => void refresh()}>{t("settings.developer.retry")}</button>
         </div>
       ) : null}

@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 
-import { formatCompactDurationFromSeconds, formatDayLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDateRangeLabel, formatLocalizedDayLabel } from "../../lib/formatting";
+import { useLocalization } from "../localization/LocalizationContext";
 import { ProjectTrendChartSkeleton } from "../projects/ProjectTrendChartSkeleton";
 import type { ProjectTrendColumn } from "../projects/projectTrendView";
 import { buildTeamTrendModel } from "./teamTrendView";
@@ -70,6 +71,7 @@ export function TeamProjectDetailView({
   onEdit,
   onArchive,
 }: TeamProjectDetailViewProps): JSX.Element {
+  const { effectiveLanguage, t } = useLocalization();
   const [hover, setHover] = useState<HoverState | null>(null);
   const isArchived = project.status === "archived";
 
@@ -108,13 +110,16 @@ export function TeamProjectDetailView({
   }, [members, project.id, memberDisplayName]);
 
   const dayCount = windowDayCount(timeWindow);
-  const windowCaption = dayCount <= 1 ? "Today" : `Last ${dayCount} days`;
+  const windowCaption = dayCount <= 1 ? t("team.projects.today") : t("team.projects.lastDays", { count: dayCount });
+  const localizedWindowLabel = formatLocalizedDateRangeLabel(timeWindow.start_date, timeWindow.end_date, effectiveLanguage);
   const { left, right, top, bottom } = view.bounds;
 
   function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
     setHover({
-      dayLabel: formatDayLabel(column.day),
-      totalLabel: column.totalSeconds > 0 ? formatCompactDurationFromSeconds(column.totalSeconds) : "No shared time",
+      dayLabel: formatLocalizedDayLabel(column.day, effectiveLanguage),
+      totalLabel: column.totalSeconds > 0
+        ? formatLocalizedCompactDurationFromSeconds(column.totalSeconds, effectiveLanguage)
+        : t("team.dashboard.noSharedTime"),
       x: event.clientX,
       y: event.clientY,
     });
@@ -123,21 +128,21 @@ export function TeamProjectDetailView({
   return (
     <div className="project-detail">
       <button type="button" className="app-btn app-btn--quiet app-btn--compact project-detail__back" onClick={onBack}>
-        <span aria-hidden="true">&larr;</span> All projects
+        <span aria-hidden="true">&larr;</span> {t("team.detail.back")}
       </button>
 
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={`Shared project ${project.name}`}>
+      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.detail.projectAria", { name: project.name })}>
         <div className="project-detail__head">
           <div className="project-detail__identity">
             <span className="pt-swatch" style={{ background: project.color }} aria-hidden="true" />
-            <h2 className="project-detail__name">{project.name || "Untitled project"}</h2>
-            <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? "Archived" : "Active"}</span>
+            <h2 className="project-detail__name">{project.name || t("team.projects.untitled")}</h2>
+            <span className={`chip${isArchived ? " gray" : " green"}`}>{isArchived ? t("team.projects.archived") : t("team.projects.active")}</span>
           </div>
           {project.can_manage ? (
             <div className="project-detail__actions">
-              <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onEdit(project)}>Edit</button>
+              <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onEdit(project)}>{t("team.projects.edit")}</button>
               <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onArchive(project.id, !isArchived)}>
-                {isArchived ? "Restore" : "Archive"}
+                {isArchived ? t("team.projects.restore") : t("team.projects.archive")}
               </button>
             </div>
           ) : null}
@@ -145,19 +150,19 @@ export function TeamProjectDetailView({
         {project.description.trim() ? (
           <p className="project-detail__desc">{project.description}</p>
         ) : (
-          <p className="project-detail__desc project-detail__desc--empty">No description yet — the description is the shared definition every member's Mac matches against.</p>
+          <p className="project-detail__desc project-detail__desc--empty">{t("team.detail.emptyDescription")}</p>
         )}
-        <div className="project-detail__stats" role="group" aria-label="Shared project window stats">
+        <div className="project-detail__stats" role="group" aria-label={t("team.detail.statsAria")}>
           <div className="project-detail__stat">
-            <span className="label-mono">Team time &middot; {windowCaption}</span>
-            <strong>{hasData ? formatCompactDurationFromSeconds(totalSeconds) : "0m"}</strong>
+            <span className="label-mono">{t("team.detail.teamTime", { range: windowCaption })}</span>
+            <strong>{formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</strong>
           </div>
           <div className="project-detail__stat">
-            <span className="label-mono">Share of team time</span>
+            <span className="label-mono">{t("team.detail.share")}</span>
             <strong>{hasData ? `${sharePct}%` : "—"}</strong>
           </div>
           <div className="project-detail__stat">
-            <span className="label-mono">Contributors</span>
+            <span className="label-mono">{t("team.detail.contributors")}</span>
             <strong>{memberRows.length}</strong>
           </div>
         </div>
@@ -165,7 +170,7 @@ export function TeamProjectDetailView({
 
       {loading && !hasData ? (
         <ProjectTrendChartSkeleton
-          windowLabel={`${timeWindow.start_date} – ${timeWindow.end_date}`}
+          windowLabel={localizedWindowLabel}
           legendProjects={[{ id: project.id, name: project.name, color: project.color }]}
           isDayMode={false}
           startDay={timeWindow.start_date}
@@ -173,14 +178,14 @@ export function TeamProjectDetailView({
           startOfDayMinutes={0}
         />
       ) : (
-        <section className="editorial-panel editorial-panel--soft insight-chart-panel ptc-panel" aria-label="Shared time trend">
+        <section className="editorial-panel editorial-panel--soft insight-chart-panel ptc-panel" aria-label={t("team.detail.trendAria")}>
           <div className="insight-panel-head">
-            <span className="label-mono">Shared time &middot; {view.spanLabel}</span>
+            <span className="label-mono">{t("team.dashboard.sharedTime", { range: localizedWindowLabel })}</span>
           </div>
           {hasData ? (
             <div className="ptc-chart">
               <div className="ptc-plot">
-                <svg className="ptc-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={`Shared time by day for ${project.name}`}>
+                <svg className="ptc-svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={t("team.detail.byDayAria", { name: project.name })}>
                   <path className="ptc-grid" d={view.gridPath} />
                   <g className="ptc-areas">
                     {view.areaBands.map((band) => (
@@ -227,26 +232,26 @@ export function TeamProjectDetailView({
               </div>
             </div>
           ) : (
-            <div className="team-empty">No shared time in this window yet.</div>
+            <div className="team-empty">{t("team.detail.emptyTime")}</div>
           )}
         </section>
       )}
 
-      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={`Member split for ${project.name}`}>
+      <section className="editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.detail.memberSplitAria", { name: project.name })}>
         <div className="insight-panel-head">
-          <span className="label-mono">By member &middot; {windowCaption}</span>
+          <span className="label-mono">{t("team.detail.byMember", { range: windowCaption })}</span>
         </div>
         {memberRows.length === 0 ? (
-          <div className="team-empty">No member breakdown yet.</div>
+          <div className="team-empty">{t("team.dashboard.noMemberBreakdown")}</div>
         ) : (
           <div className="team-rank">
             {memberRows.map((member) => (
-              <div className="team-rank-row" key={member.name} title={`${member.name} · ${member.pct}% of this project`}>
+              <div className="team-rank-row" key={member.name} title={t("team.detail.memberTitle", { name: member.name, percent: member.pct })}>
                 <div className="team-rank-meta">
                   <span className="team-rank-name">
                     <span className="team-member__avatar" aria-hidden="true">{initialsFor(member.name)}</span>
                     {member.name}
-                    {member.isYou ? <span className="team-you-chip">You</span> : null}
+                    {member.isYou ? <span className="team-you-chip">{t("team.dashboard.you")}</span> : null}
                   </span>
                   <span className="team-rank-val">
                     <b>{member.pct}%</b>

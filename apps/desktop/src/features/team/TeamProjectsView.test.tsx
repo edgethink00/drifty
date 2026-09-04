@@ -3,6 +3,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { TeamProjectsView, type TeamProjectsViewProps } from "./TeamProjectsView";
 import type { TeamProject } from "./teamTypes";
 
@@ -74,5 +75,19 @@ describe("TeamProjectsView", () => {
     expect(screen.getByRole("menu", { name: "Project options" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("menu", { name: "Project options" })).toBeNull();
+  });
+
+  it("localizes the shared-project controls while preserving user-authored content", () => {
+    render(
+      <LocalizationTestProvider language="ko">
+        <TeamProjectsView {...props()} />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "새 프로젝트" })).toBeTruthy();
+    expect(screen.getByLabelText("프로젝트 이름 검색")).toBeTruthy();
+    expect(screen.getByText("기간 내 팀 시간")).toBeTruthy();
+    expect(screen.getByText("Shared alpha")).toBeTruthy();
+    expect(screen.getByText("Shared project")).toBeTruthy();
   });
 });

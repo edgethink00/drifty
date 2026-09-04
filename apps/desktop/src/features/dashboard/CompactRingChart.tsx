@@ -24,6 +24,7 @@ export interface CompactRingEntry {
 
 export interface CompactRingChartProps {
   readonly title: string;
+  readonly ariaLabel?: string;
   readonly entries: readonly CompactRingEntry[];
   readonly totalSeconds: number;
   readonly centerPercent: number;
@@ -41,6 +42,7 @@ function formatCompactRingLegendHours(totalSeconds: number, language: DisplayLan
 
 export function CompactRingChart({
   title,
+  ariaLabel,
   entries,
   totalSeconds,
   centerPercent,
@@ -87,7 +89,7 @@ export function CompactRingChart({
   }
 
   return (
-    <div className="flow-compact-split-chart__panel flow-compact-split-chart__panel--circle" aria-label={`${title} compact classification`}>
+    <div className="flow-compact-split-chart__panel flow-compact-split-chart__panel--circle" aria-label={ariaLabel ?? `${title} compact classification`}>
       <div className="flow-compact-split-chart__head">
         <span className="label-mono">{title}</span>
         <strong>{formatLocalizedCompactDurationFromSeconds(totalSeconds, language)}</strong>

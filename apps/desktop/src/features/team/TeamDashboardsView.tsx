@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import type { CSSProperties, MouseEvent } from "react";
 
-import { formatCompactDurationFromSeconds, formatDayLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDateRangeLabel, formatLocalizedDayLabel } from "../../lib/formatting";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { ProjectTrendColumn } from "../projects/projectTrendView";
 import { buildTeamTrendModel } from "./teamTrendView";
 import type { TeamProject, TeamProjectMemberRow, TeamProjectMixRow } from "./teamTypes";
@@ -85,6 +86,7 @@ export function TeamDashboardsView({
   publishNote,
   onRefresh,
 }: TeamDashboardsViewProps) {
+  const { effectiveLanguage, t } = useLocalization();
   const [hover, setHover] = useState<HoverState | null>(null);
 
   const trend = useMemo(() => buildTeamTrendModel(mix, timeWindow), [mix, timeWindow]);
@@ -120,7 +122,7 @@ export function TeamDashboardsView({
           .sort((left, right) => right[1] - left[1])
           .map(([projectId, seconds]) => {
             const pct = total > 0 ? (seconds / total) * 100 : 0;
-            const projectName = nameByProjectId.get(projectId) ?? "Project";
+            const projectName = nameByProjectId.get(projectId) ?? t("team.dashboard.projectFallback");
             return {
               projectId,
               color: colorByProjectId.get(projectId) ?? FALLBACK_COLOR,
@@ -132,24 +134,27 @@ export function TeamDashboardsView({
         return { name, isYou: name === memberDisplayName, totalSeconds: total, segments };
       })
       .sort((left, right) => right.totalSeconds - left.totalSeconds || left.name.localeCompare(right.name));
-  }, [colorByProjectId, memberDisplayName, members, projects, slices]);
+  }, [colorByProjectId, memberDisplayName, members, projects, slices, t]);
 
   const dayCount = windowDayCount(timeWindow);
-  const windowShortLabel = dayCount <= 1 ? "Today" : `${dayCount} days`;
-  const sharingLabel = memberCount > 0 ? `${memberRows.length} of ${memberCount}` : `${memberRows.length}`;
+  const windowShortLabel = dayCount <= 1 ? t("team.dashboard.today") : t("team.dashboard.days", { count: dayCount });
+  const sharingLabel = memberCount > 0
+    ? t("team.dashboard.sharingCount", { sharing: memberRows.length, total: memberCount })
+    : `${memberRows.length}`;
   const activeProjectCount = projects.filter((project) => project.status === "active").length;
+  const localizedWindowLabel = formatLocalizedDateRangeLabel(timeWindow.start_date, timeWindow.end_date, effectiveLanguage);
   const { left, right, top, bottom } = view.bounds;
 
   function showHover(column: ProjectTrendColumn, event: MouseEvent<SVGRectElement>) {
     const labelByKey = new Map(view.series.map((item) => [item.key, item.label]));
     setHover({
-      dayLabel: formatDayLabel(column.day),
-      totalLabel: column.segments.length === 0 ? "No shared time" : formatCompactDurationFromSeconds(column.totalSeconds),
+      dayLabel: formatLocalizedDayLabel(column.day, effectiveLanguage),
+      totalLabel: column.segments.length === 0 ? t("team.dashboard.noSharedTime") : formatLocalizedCompactDurationFromSeconds(column.totalSeconds, effectiveLanguage),
       rows: column.segments.map((segment) => ({
         key: segment.key,
-        label: labelByKey.get(segment.key) ?? "Project",
+        label: labelByKey.get(segment.key) ?? t("team.dashboard.projectFallback"),
         color: segment.color,
-        durationLabel: formatCompactDurationFromSeconds(segment.seconds),
+        durationLabel: formatLocalizedCompactDurationFromSeconds(segment.seconds, effectiveLanguage),
       })),
       x: event.clientX,
       y: event.clientY,
@@ -157,10 +162,10 @@ export function TeamDashboardsView({
   }
 
   return (
-    <section className="team-data-panel team-grid" aria-label="Shared project dashboards">
+    <section className="team-data-panel team-grid" aria-label={t("team.dashboard.aria")}>
       <div className="team-dash-section team-card team-card--side editorial-panel editorial-panel--soft insight-chart-panel" aria-labelledby="team-mix-heading">
         <div className="insight-panel-head">
-          <span className="label-mono" id="team-mix-heading">Team mix</span>
+          <span className="label-mono" id="team-mix-heading">{t("team.dashboard.mix")}</span>
         </div>
 
         {publishNote ? (
@@ -176,14 +181,14 @@ export function TeamDashboardsView({
               const pct = totalSeconds > 0 ? Math.round((slice.seconds / totalSeconds) * 100) : 0;
               const barWidth = maxSliceSeconds > 0 ? (slice.seconds / maxSliceSeconds) * 100 : 0;
               return (
-                <div className="team-rank-row" key={slice.projectId} title={`${slice.name} · ${formatCompactDurationFromSeconds(slice.seconds)} (${pct}%)`}>
+                <div className="team-rank-row" key={slice.projectId} title={`${slice.name} · ${formatLocalizedCompactDurationFromSeconds(slice.seconds, effectiveLanguage)} (${pct}%)`}>
                   <div className="team-rank-meta">
                     <span className="team-rank-name">
                       <span className="team-legend-swatch" style={{ background: slice.color }} />
                       {slice.name}
                     </span>
                     <span className="team-rank-val">
-                      <b>{formatCompactDurationFromSeconds(slice.seconds)}</b>
+                      <b>{formatLocalizedCompactDurationFromSeconds(slice.seconds, effectiveLanguage)}</b>
                       <span>{pct}%</span>
                     </span>
                   </div>
@@ -196,14 +201,14 @@ export function TeamDashboardsView({
           </div>
         ) : (
           <div className="team-empty">
-            {loading ? "Loading shared time…" : "No shared project time yet — define shared projects, then share your time from Team settings."}
+            {loading ? t("team.dashboard.loadingTime") : t("team.dashboard.emptyTime")}
           </div>
         )}
       </div>
 
       <div className="team-dash-section team-card team-card--chart editorial-panel editorial-panel--soft insight-chart-panel ptc-panel" aria-labelledby="team-trend-heading">
         <div className="insight-panel-head">
-          <span className="label-mono" id="team-trend-heading">Shared time &middot; {view.spanLabel}</span>
+          <span className="label-mono" id="team-trend-heading">{t("team.dashboard.sharedTime", { range: localizedWindowLabel })}</span>
           <div className="insight-panel-head__legend">
             {slices.slice(0, 6).map((slice) => (
               <span className="chip ptc-chip" key={slice.projectId}>
@@ -221,7 +226,7 @@ export function TeamDashboardsView({
                 viewBox="0 0 100 100"
                 preserveAspectRatio="none"
                 role="img"
-                aria-label="Stacked shared project time by day"
+                aria-label={t("team.dashboard.chartAria")}
               >
                 <path className="ptc-grid" d={view.gridPath} />
                 <g className="ptc-areas">
@@ -269,28 +274,28 @@ export function TeamDashboardsView({
             </div>
           </div>
         ) : (
-          <div className="team-empty">No timeline yet — shared time appears here once members share.</div>
+          <div className="team-empty">{t("team.dashboard.emptyTimeline")}</div>
         )}
       </div>
 
-      <div className="team-dash-section team-card team-card--stats editorial-panel editorial-panel--soft insight-chart-panel" aria-label="Team totals">
+      <div className="team-dash-section team-card team-card--stats editorial-panel editorial-panel--soft insight-chart-panel" aria-label={t("team.dashboard.totalsAria")}>
         <div className="insight-panel-head">
-          <span className="label-mono">Totals</span>
+          <span className="label-mono">{t("team.dashboard.totals")}</span>
           <button type="button" className="app-btn app-btn--quiet app-btn--compact" onClick={onRefresh} disabled={loading}>
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? t("team.dashboard.refreshing") : t("team.dashboard.refresh")}
           </button>
         </div>
         <div className="team-stats-stack">
           <div className="team-stat team-stat--lead">
-            <span className="label-mono">Shared · {windowShortLabel}</span>
-            <strong>{formatCompactDurationFromSeconds(totalSeconds)}</strong>
+            <span className="label-mono">{t("team.dashboard.shared", { range: windowShortLabel })}</span>
+            <strong>{formatLocalizedCompactDurationFromSeconds(totalSeconds, effectiveLanguage)}</strong>
           </div>
           <div className="team-stat">
-            <span className="label-mono">Active projects</span>
+            <span className="label-mono">{t("team.dashboard.activeProjects")}</span>
             <strong>{activeProjectCount}</strong>
           </div>
           <div className="team-stat">
-            <span className="label-mono">Sharing</span>
+            <span className="label-mono">{t("team.dashboard.sharing")}</span>
             <strong>{sharingLabel}</strong>
           </div>
         </div>
@@ -299,10 +304,10 @@ export function TeamDashboardsView({
 
       <div className="team-dash-section team-card team-card--members editorial-panel editorial-panel--soft insight-chart-panel" aria-labelledby="team-members-heading">
         <div className="insight-panel-head">
-          <span className="label-mono" id="team-members-heading">By member</span>
+          <span className="label-mono" id="team-members-heading">{t("team.dashboard.byMember")}</span>
         </div>
         {memberRows.length === 0 ? (
-          <div className="team-empty">No member breakdown yet.</div>
+          <div className="team-empty">{t("team.dashboard.noMemberBreakdown")}</div>
         ) : (
           <div className="team-members">
             {memberRows.map((member) => (
@@ -310,9 +315,9 @@ export function TeamDashboardsView({
                 <span className="team-member__avatar" aria-hidden="true">{initialsFor(member.name)}</span>
                 <span className="team-member__name">
                   <strong>{member.name}</strong>
-                  {member.isYou ? <span className="team-you-chip">You</span> : null}
+                  {member.isYou ? <span className="team-you-chip">{t("team.dashboard.you")}</span> : null}
                 </span>
-                <div className="team-member__bar" role="img" aria-label={`${member.name} project split`}>
+                <div className="team-member__bar" role="img" aria-label={t("team.dashboard.memberSplitAria", { name: member.name })}>
                   {member.segments.map((segment) => (
                     <span
                       className="team-member__seg"

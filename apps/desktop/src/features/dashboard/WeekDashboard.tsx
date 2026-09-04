@@ -580,7 +580,7 @@ export function WeekDashboard({
   return (
     <section
       className={`week-v2${initialDataLoading ? " dashboard-loading-skeleton dashboard-loading-skeleton--week" : ""}`}
-      aria-label={initialDataLoading ? "Loading dashboard data" : t("dashboard.week.overviewAria")}
+      aria-label={initialDataLoading ? t("dashboard.loadingAria") : t("dashboard.week.overviewAria")}
       aria-busy={initialDataLoading || undefined}
       aria-live={initialDataLoading ? "polite" : undefined}
       role={initialDataLoading ? "status" : undefined}
@@ -840,6 +840,7 @@ export function WeekDashboard({
             <>
               <CompactRingChart
                 title={t("common.productivity")}
+                ariaLabel={t("dashboard.today.compactClassificationAria", { title: t("common.productivity") })}
                 entries={productivityRingEntries}
                 totalSeconds={totalSeconds}
                 centerPercent={productivityCenterPercent}
