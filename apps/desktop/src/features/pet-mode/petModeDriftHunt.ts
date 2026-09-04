@@ -321,6 +321,9 @@ export function advancePetModeDriftHunt(
     ? { ...EMPTY_PET_MODE_DRIFT_HUNT_STATE, contextLabel: snapshot.contextLabel }
     : previous;
 
+  // A snapshot can first observe an episode after both thresholds have passed.
+  // The strongest due action must win or the notice consumes this refresh and
+  // the stalk cannot run until another snapshot happens to arrive.
   if (
     !reducedMotion
     && !episode.stalked

@@ -1087,6 +1087,39 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("sit");
   });
 
+  it("starts a hunt when the first drift snapshot is already past the stalk threshold", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_HUNT_ENABLED_STORAGE_KEY, "true");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.stalkNativePetCursor.mockImplementationOnce(() => new Promise(() => undefined));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: {
+          productivity: "drift",
+          contextLabel: "video",
+          durationSeconds: PET_MODE_DRIFT_STALK_SECONDS + 6,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("stalk");
+    expect(bridge.stalkNativePetCursor).toHaveBeenCalledTimes(1);
+  });
+
   it("notices drift in place while asleep, then rises directly into the committed hunt", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");

@@ -200,6 +200,29 @@ describe("petModeDriftHunt", () => {
     expect(advancePetModeDriftHunt(stalkCommitted, snapshot("drift", 90), false).action).toBeNull();
   });
 
+  it("prioritizes the stalk when the first sparse snapshot crosses both thresholds", () => {
+    const overdue = advancePetModeDriftHunt(
+      EMPTY_PET_MODE_DRIFT_HUNT_STATE,
+      snapshot("drift", PET_MODE_DRIFT_STALK_SECONDS + 6),
+      false,
+    );
+
+    expect(overdue.action).toBe("stalk");
+    expect(overdue.state).toMatchObject({
+      noticed: false,
+      stalked: false,
+      pendingAction: "stalk",
+    });
+
+    const committed = commitPetModeDriftHuntAction(overdue.state, "stalk");
+    expect(committed).toMatchObject({
+      noticed: true,
+      stalked: true,
+      pendingAction: null,
+    });
+    expect(advancePetModeDriftHunt(committed, snapshot("drift", 60), false).action).toBeNull();
+  });
+
   it("keeps a blocked notice pending and upgrades it to the stronger stalk", () => {
     const notice = advancePetModeDriftHunt(
       EMPTY_PET_MODE_DRIFT_HUNT_STATE,
