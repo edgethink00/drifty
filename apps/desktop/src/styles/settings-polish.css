@@ -113,6 +113,20 @@
   gap: var(--space-4);
 }
 
+.dev-settings-page-header {
+  padding: 0 0.5rem 0.2rem;
+}
+
+.dev-settings-page-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.18rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.2;
+}
+
 .app-shell--settings {
   grid-template-columns: var(--sidebar-expanded-width) minmax(0, 1fr);
   transition: none;
@@ -164,6 +178,36 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.35rem;
+  }
+
+  .app-shell:has(.content--settings) .sidebar--settings .settings-dev-subnav {
+    display: flex;
+    grid-column: 1 / -1;
+    gap: 0.35rem;
+    margin: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding: 0 0.35rem 0.3rem;
+    scroll-padding-inline: 0.35rem;
+    scrollbar-width: none;
+  }
+
+  .app-shell:has(.content--settings) .sidebar--settings .settings-dev-subnav::before {
+    display: none;
+  }
+
+  .app-shell:has(.content--settings) .sidebar--settings .settings-dev-subnav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .app-shell:has(.content--settings) .sidebar--settings .settings-nav-subitem {
+    flex: 0 0 auto;
+    min-height: 2rem;
+    padding: 0.42rem 0.68rem;
+    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 74%, transparent);
+    font-size: 0.75rem;
+    text-align: center;
   }
 
   .app-shell:has(.content--settings) .sidebar--settings .settings-nav-group .nav-label {

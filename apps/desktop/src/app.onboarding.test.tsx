@@ -2376,6 +2376,7 @@ describe("App onboarding", () => {
 
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     fireEvent.click(within(settingsNav).getByRole("button", { name: /^Dev$/i }));
+    fireEvent.click(await within(settingsNav).findByRole("button", { name: /^UI & flows$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^Open onboarding$/i }));
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
@@ -2419,6 +2420,7 @@ describe("App onboarding", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
     const settingsNav = await screen.findByRole("navigation", { name: /settings sections/i });
     fireEvent.click(within(settingsNav).getByRole("button", { name: /^Dev$/i }));
+    fireEvent.click(await within(settingsNav).findByRole("button", { name: /^UI & flows$/i }));
     fireEvent.click(await screen.findByRole("button", { name: /^Replay tutorial$/i }));
 
     expect(await screen.findByRole("region", { name: /start with the shape of your day/i })).toBeTruthy();
@@ -2459,6 +2461,7 @@ describe("App onboarding", () => {
 
     const settingsNav = screen.getByRole("navigation", { name: /settings sections/i });
     fireEvent.click(within(settingsNav).getByRole("button", { name: /^Dev$/i }));
+    fireEvent.click(await within(settingsNav).findByRole("button", { name: /^UI & flows$/i }));
 
     expect(screen.queryByText(/^Replay onboarding$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Open onboarding$/i })).toBeNull();

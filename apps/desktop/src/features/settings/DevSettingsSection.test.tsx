@@ -93,8 +93,8 @@ describe("DevSettingsSection", () => {
     expect(rendererButton.getAttribute("disabled")).toBeNull();
   });
 
-  it("toggles Team preview from the Preview block", () => {
-    const props = renderProductionDevSettings();
+  it("toggles Team preview from Feature flags", () => {
+    const props = renderProductionDevSettings({ activeSubsection: "featureFlags" });
 
     expect(screen.getByText("Team preview (beta)")).toBeTruthy();
     fireEvent.click(screen.getByRole("switch", { name: "Toggle Teams beta" }));
@@ -109,7 +109,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("keeps the detailed Pet Mode Lab in Dev while the pet itself ships elsewhere", () => {
-    renderProductionDevSettings();
+    renderProductionDevSettings({ activeSubsection: "petCompanion" });
     expect(screen.getByRole("group", { name: "Pet Mode Lab" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Intervention/ }).getAttribute("disabled")).toBe("");
     expect(screen.getByRole("button", { name: /Walk 20.8 px\/s sample/ }).getAttribute("disabled")).toBe("");
@@ -121,7 +121,7 @@ describe("DevSettingsSection", () => {
     expect(screen.queryByRole("radiogroup", { name: "Pet size" })).toBeNull();
 
     cleanup();
-    const enabledProps = renderProductionDevSettings({ petModeEnabled: true });
+    const enabledProps = renderProductionDevSettings({ activeSubsection: "petCompanion", petModeEnabled: true });
     fireEvent.click(screen.getByRole("button", { name: /Intervention/ }));
     expect(enabledProps.onPreviewPetModeIntervention).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: /Stretch Flow Stretch C/ }));
@@ -173,7 +173,11 @@ describe("DevSettingsSection", () => {
   });
 
   it("keeps the fast-run beta opt-in in Dev and dependent on the pet", () => {
-    const offProps = renderProductionDevSettings({ petModeEnabled: false, petModeRunBetaEnabled: false });
+    const offProps = renderProductionDevSettings({
+      activeSubsection: "petCompanion",
+      petModeEnabled: false,
+      petModeRunBetaEnabled: false,
+    });
     const disabledToggle = screen.getByRole("switch", { name: "Toggle the beta fast-run animation" });
     expect(disabledToggle.getAttribute("aria-checked")).toBe("false");
     expect(disabledToggle.hasAttribute("disabled")).toBe(true);
@@ -181,13 +185,17 @@ describe("DevSettingsSection", () => {
     expect(offProps.onPetModeRunBetaEnabledChange).not.toHaveBeenCalled();
 
     cleanup();
-    const onProps = renderProductionDevSettings({ petModeEnabled: true, petModeRunBetaEnabled: false });
+    const onProps = renderProductionDevSettings({
+      activeSubsection: "petCompanion",
+      petModeEnabled: true,
+      petModeRunBetaEnabled: false,
+    });
     fireEvent.click(screen.getByRole("switch", { name: "Toggle the beta fast-run animation" }));
     expect(onProps.onPetModeRunBetaEnabledChange).toHaveBeenCalledWith(true);
   });
 
   it("shows the real pet phase and prevents overlapping Lab actions", async () => {
-    renderProductionDevSettings({ petModeEnabled: true });
+    renderProductionDevSettings({ activeSubsection: "petCompanion", petModeEnabled: true });
     await act(async () => undefined);
 
     act(() => {
@@ -222,7 +230,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("previews left and right facing only while the pet is resting", async () => {
-    renderProductionDevSettings({ petModeEnabled: true });
+    renderProductionDevSettings({ activeSubsection: "petCompanion", petModeEnabled: true });
     await act(async () => undefined);
 
     const facingToggle = screen.getByRole("switch", { name: "Face pet right" });
@@ -252,7 +260,7 @@ describe("DevSettingsSection", () => {
 
   it("keeps explicit cursor hunt previews available while the focused cat is sitting", async () => {
     window.localStorage.setItem("drifty.pet.driftHuntEnabled.v1", "true");
-    renderProductionDevSettings({ petModeEnabled: true });
+    renderProductionDevSettings({ activeSubsection: "petCompanion", petModeEnabled: true });
     await act(async () => undefined);
 
     act(() => {
@@ -273,6 +281,7 @@ describe("DevSettingsSection", () => {
   it("lets Dev calibrate the floor-home stay band without changing the shipped default", () => {
     const onPetModeFloorHomePtChange = vi.fn();
     renderProductionDevSettings({
+      activeSubsection: "petCompanion",
       petModeEnabled: true,
       petModeFloorHomePt: 20,
       onPetModeFloorHomePtChange,
@@ -287,7 +296,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("persists a bounded cursor chase policy from the Pet Mode Lab", () => {
-    const props = renderProductionDevSettings({ petModeEnabled: true });
+    const props = renderProductionDevSettings({ activeSubsection: "petCompanion", petModeEnabled: true });
 
     expect(screen.queryByRole("radio", { name: "몇 초간 추격" })).toBeNull();
     expect(screen.queryByRole("button", { name: /단발 사냥 재생/ })).toBeNull();
@@ -329,7 +338,10 @@ describe("DevSettingsSection", () => {
   });
 
   it("keeps the floating Companion behind an explicit Dev toggle", () => {
-    const props = renderProductionDevSettings({ floatingCompanionDevEnabled: false });
+    const props = renderProductionDevSettings({
+      activeSubsection: "petCompanion",
+      floatingCompanionDevEnabled: false,
+    });
 
     expect(screen.getByText(/production uses the menu-bar Companion/i)).toBeTruthy();
     expect(screen.queryByRole("radio", { name: "Floating" })).toBeNull();
@@ -338,24 +350,32 @@ describe("DevSettingsSection", () => {
     expect(props.onFloatingCompanionDevEnabledChange).toHaveBeenCalledWith(true);
   });
 
-  it("keeps core Dev preview controls visible without release-channel feature gates", () => {
+  it("renders only the active Dev subsection", () => {
     renderProductionDevSettings();
 
+    const diagnosticsHeading = screen.getByRole("heading", { name: "Diagnostics" });
+    expect(diagnosticsHeading).toBeTruthy();
+    expect(diagnosticsHeading.closest(".dev-settings-page-header")?.querySelector("p")).toBeNull();
     expect(screen.getByRole("heading", { name: /^Debug logs$/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^AX fallback diagnostics/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^AX fallback diagnostics/ }));
     expect(screen.getByText("Force browser history URL fallback")).toBeTruthy();
     expect(screen.getByRole("group", { name: /^Pre-release updates$/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Check Latest Build$/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /^Preview$/ })).toBeTruthy();
-    expect(screen.getByRole("heading", { name: /^Dev$/ })).toBeTruthy();
-    expect(screen.getByText("Team preview (beta)")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
+    expect(screen.queryByText("Team preview (beta)")).toBeNull();
+    expect(screen.queryByRole("heading", { name: /^Flow previews$/ })).toBeNull();
     expect(screen.queryByRole("group", { name: "Dashboard demo replay" })).toBeNull();
+
+    cleanup();
+    renderProductionDevSettings({ activeSubsection: "featureFlags" });
+    expect(screen.getByRole("heading", { name: "Feature flags" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Product preview flags" })).toBeTruthy();
+    expect(screen.getByText("Team preview (beta)")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();
   });
 
   it("previews the real startup loading screen for seven seconds", () => {
-    renderProductionDevSettings();
+    renderProductionDevSettings({ activeSubsection: "uiFlows" });
 
     fireEvent.click(screen.getByRole("button", { name: "Preview 7 seconds" }));
 
@@ -364,7 +384,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("previews production milestones through the active notification surface", () => {
-    const props = renderProductionDevSettings();
+    const props = renderProductionDevSettings({ activeSubsection: "petCompanion" });
     fireEvent.click(screen.getByRole("button", { name: "30-day record" }));
     fireEvent.click(screen.getByRole("button", { name: "Weekly final #2" }));
     fireEvent.click(screen.getByRole("button", { name: "Weekly final #1" }));
@@ -375,14 +395,14 @@ describe("DevSettingsSection", () => {
   });
 
   it("keeps production placement choices out of the Dev Companion Lab", () => {
-    renderProductionDevSettings();
+    renderProductionDevSettings({ activeSubsection: "petCompanion" });
 
     expect(screen.queryByRole("radiogroup", { name: "Companion policy" })).toBeNull();
     expect(screen.queryByRole("radiogroup", { name: "Menu bar display" })).toBeNull();
   });
 
   it("keeps the Companion Day review as a moment preview without a version picker", () => {
-    renderProductionDevSettings();
+    renderProductionDevSettings({ activeSubsection: "petCompanion" });
 
     expect(screen.getByRole("button", { name: "Day review" })).toBeTruthy();
     expect(screen.queryByText("V3 final")).toBeNull();
@@ -393,7 +413,7 @@ describe("DevSettingsSection", () => {
   /* Drift alerts, the break-over card and the day review only ever appeared
      after real drift, so their layout could not be reviewed on demand. */
   it("previews the decision cards through the active notification surface", () => {
-    const props = renderProductionDevSettings();
+    const props = renderProductionDevSettings({ activeSubsection: "petCompanion" });
     fireEvent.click(screen.getByRole("button", { name: "Drift alert" }));
     fireEvent.click(screen.getByRole("button", { name: "Break over" }));
     fireEvent.click(screen.getByRole("button", { name: "Automatic close" }));
@@ -437,7 +457,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("does not expose the isolated onboarding v2.1 preview", () => {
-    renderProductionDevSettings();
+    renderProductionDevSettings({ activeSubsection: "uiFlows" });
 
     expect(screen.queryByText(/^Onboarding v2\.1 preview$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Preview v2\.1$/i })).toBeNull();
@@ -446,7 +466,7 @@ describe("DevSettingsSection", () => {
   it("shows dashboard demo replay controls and calls replay handlers when the feature switch is enabled", () => {
     featureSwitches.demoDashboardReplayDevToolEnabled = true;
 
-    const props = renderProductionDevSettings();
+    const props = renderProductionDevSettings({ activeSubsection: "uiFlows" });
     fireEvent.click(screen.getByRole("button", { name: "Replay Your Day" }));
     fireEvent.click(screen.getByRole("button", { name: "Replay Your Week" }));
     const preRollInput = screen.getByLabelText("Demo replay pre-roll seconds");
@@ -455,7 +475,7 @@ describe("DevSettingsSection", () => {
     fireEvent.change(durationInput, { target: { value: "60" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
 
-    expect(screen.getByRole("heading", { name: "Preview" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Flow previews" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Dashboard demo replay" })).toBeTruthy();
     expect(preRollInput.getAttribute("min")).toBe(String(DEMO_DASHBOARD_REPLAY_PRE_ROLL_MIN_SECONDS));
     expect(preRollInput.getAttribute("max")).toBe(String(DEMO_DASHBOARD_REPLAY_PRE_ROLL_MAX_SECONDS));
@@ -478,7 +498,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("keeps the project classification diagnostics in the Dev section without an enable toggle", () => {
-    renderProductionDevSettings();
+    renderProductionDevSettings({ activeSubsection: "aiCapture" });
     expect(screen.getByRole("heading", { name: "Project classification" })).toBeTruthy();
     // The feature ships default-on; only the diagnostics remain in Dev.
     expect(screen.queryByRole("switch", { name: "Toggle project classification preview" })).toBeNull();
@@ -551,7 +571,7 @@ describe("DevSettingsSection", () => {
   });
 
   it("shows production status with only dogfood diagnostics and the design experiment", () => {
-    const props = renderProductionDevSettings();
+    const props = renderProductionDevSettings({ activeSubsection: "aiCapture" });
 
     expect(screen.getByRole("button", { name: /^Enhanced context dogfood/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /^Enhanced context dogfood/ }));

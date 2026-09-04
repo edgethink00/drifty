@@ -49,8 +49,13 @@ import type {
   CompanionMomentPreviewId,
 } from "../companion/companionPillPreview";
 import { PET_MODE_BROWSER_X_SHORTCUT_LABEL } from "../pet-mode/usePetModeBrowserXShortcut";
+import {
+  DEV_SETTINGS_SUBSECTIONS,
+  type DevSettingsSubsection,
+} from "./devSettingsNavigation";
 
 type DevSettingsSectionProps = {
+  readonly activeSubsection: DevSettingsSubsection;
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
   readonly sidebarCtaPreviewCase: SidebarCtaPreviewCase | null;
@@ -125,6 +130,7 @@ type DevSettingsSectionProps = {
 };
 
 export function DevSettingsSection({
+  activeSubsection,
   dashboardAiUnavailablePreview,
   dashboardAiUnavailablePreviewCase,
   sidebarCtaPreviewCase,
@@ -219,6 +225,8 @@ export function DevSettingsSection({
   const driftHuntCarryTiers = resolvePetModeDriftCursorReturnTiers(driftHuntSettings);
 
   useEffect(() => {
+    if (activeSubsection !== "petCompanion") return undefined;
+
     let disposed = false;
     let unlisten: (() => void) | null = null;
     void listenToNativePetModeLabState(setPetModeLabState).then((nextUnlisten) => {
@@ -233,7 +241,7 @@ export function DevSettingsSection({
       disposed = true;
       cleanupTauriEventListener(unlisten);
     };
-  }, []);
+  }, [activeSubsection]);
 
   const isPetModeLabActionDisabled = (action: PetModeLabAction) => {
     if (!petModeEnabled) return true;
@@ -271,47 +279,66 @@ export function DevSettingsSection({
     || petModeLabState === null
     || petModeLabState.activeAction !== null
     || (petModeLabState.phase !== "idle" && petModeLabState.phase !== "sit");
+  const activeSubsectionOption = DEV_SETTINGS_SUBSECTIONS.find((option) => option.id === activeSubsection)
+    ?? DEV_SETTINGS_SUBSECTIONS[0];
+  const subsectionTitle = t(activeSubsectionOption.labelKey);
 
   return (
-    <div className="settings-section">
-      <DevSettingsDebugLogsBlock onOpenDebugLogs={onOpenDebugLogs} />
-      <SentrySmokeDiagnostics />
-      <div className="settings-block settings-block--dev-preview">
-        <h3>Pre-release updates</h3>
-        <PreReleaseUpdatesSettingsRow
-          status={preReleaseUpdateStatus}
-          message={preReleaseUpdateMessage}
-          error={preReleaseUpdateError}
-          busy={preReleaseUpdateBusy}
-          canInstallPreReleaseUpdate={canInstallPreReleaseUpdate}
-          onCheckLatestBuild={onCheckLatestBuild}
-          onInstallLatestBuild={onInstallLatestBuild}
-        />
-      </div>
+    <div className="settings-section settings-section--dev" aria-labelledby="dev-settings-page-title">
+      <header className="dev-settings-page-header">
+        <h2 id="dev-settings-page-title">{subsectionTitle}</h2>
+      </header>
 
-      {/* Preview and beta features share one Settings group. */}
-      <div className="settings-block settings-block--dev-preview">
-        <h3 className="settings-block__title-with-badge" aria-label={t("settings.dev.preview")}>
-          <span>{t("settings.dev.preview")}</span>
-          <span className="settings-beta-badge">Beta</span>
-        </h3>
-        {/* Only the Lab stays here. The pet itself, its coat, and its size are
-            production settings and live in Companion & Alerts. */}
-        <div className="pet-mode-lab" role="group" aria-label="Pet Mode Lab">
-          <div className="pet-mode-lab__heading">
-            <div>
-              <div className="lbl">Pet Mode Lab</div>
-              <div className="desc">Run production behaviors individually or leave the approved life loop on for observation. Turn the pet on in Companion &amp; Alerts first.</div>
-            </div>
-            <span className="pet-mode-lab__status" data-active={petModeEnabled}>{petModeLabStatus}</span>
+      {activeSubsection === "diagnostics" ? (
+        <>
+          <DevSettingsDebugLogsBlock onOpenDebugLogs={onOpenDebugLogs} />
+          <SentrySmokeDiagnostics />
+          <div className="settings-block settings-block--dev-preview">
+            <h3>Pre-release updates</h3>
+            <PreReleaseUpdatesSettingsRow
+              status={preReleaseUpdateStatus}
+              message={preReleaseUpdateMessage}
+              error={preReleaseUpdateError}
+              busy={preReleaseUpdateBusy}
+              canInstallPreReleaseUpdate={canInstallPreReleaseUpdate}
+              onCheckLatestBuild={onCheckLatestBuild}
+              onInstallLatestBuild={onInstallLatestBuild}
+            />
           </div>
-          {petModeLabPointerStatus || petModeLabInputBounds ? (
-            <div className="pet-mode-lab__diagnostics" role="status" aria-label="Pet Mode diagnostics">
-              {petModeLabPointerStatus ? <div className="pet-mode-lab__diagnostic"><span>Contact</span><code>{petModeLabPointerStatus}</code></div> : null}
-              {petModeLabInputBounds ? <div className="pet-mode-lab__diagnostic"><span>Input</span><code>{petModeLabInputBounds}</code></div> : null}
-            </div>
-          ) : null}
-          <div className="pet-mode-lab__groups">
+          <DevSettingsAxFallbackCard
+            forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
+            forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
+            forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
+            forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
+            onForceBrowserHistoryUrlFallbackChange={onForceBrowserHistoryUrlFallbackChange}
+            onForceChromiumAxCaptureChange={onForceChromiumAxCaptureChange}
+            onForceChromiumAxExtremeNudgeChange={onForceChromiumAxExtremeNudgeChange}
+            onForceFrontmostFallbackCaptureChange={onForceFrontmostFallbackCaptureChange}
+          />
+        </>
+      ) : null}
+
+      {activeSubsection === "petCompanion" ? (
+        <>
+          <div className="settings-block settings-block--dev-preview">
+            <h3>Pet Mode Lab</h3>
+            {/* The pet itself, its coat, and its size are production settings
+                and live in Companion & Alerts. */}
+            <div className="pet-mode-lab" role="group" aria-label="Pet Mode Lab">
+              <div className="pet-mode-lab__heading">
+                <div>
+                  <div className="lbl">Native behavior harness</div>
+                  <div className="desc">Run production behaviors individually or leave the approved life loop on for observation. Turn the pet on in Companion &amp; Alerts first.</div>
+                </div>
+                <span className="pet-mode-lab__status" data-active={petModeEnabled}>{petModeLabStatus}</span>
+              </div>
+              {petModeLabPointerStatus || petModeLabInputBounds ? (
+                <div className="pet-mode-lab__diagnostics" role="status" aria-label="Pet Mode diagnostics">
+                  {petModeLabPointerStatus ? <div className="pet-mode-lab__diagnostic"><span>Contact</span><code>{petModeLabPointerStatus}</code></div> : null}
+                  {petModeLabInputBounds ? <div className="pet-mode-lab__diagnostic"><span>Input</span><code>{petModeLabInputBounds}</code></div> : null}
+                </div>
+              ) : null}
+              <div className="pet-mode-lab__groups">
           {/* Six labelled sections with prose under each one pushed the real
               controls far down the page. Everything a button explained now
               lives in its own tooltip, so the Lab is a compact bank of actions
@@ -523,16 +550,33 @@ export function DevSettingsSection({
               ) : <div className="pet-mode-lab__hunt-off">앉아 있기만 함 · 커서 접근 없음</div>}
             </div>
           </div>
+              </div>
+            </div>
           </div>
-        </div>
-        <DevSettingsDeviceSyncBlock
-          deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
-          onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
-        />
-        <DevSettingsWebAccountBlock
-          webAccountPreviewEnabled={webAccountPreviewEnabled}
-          onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}
-        />
+          <DevSettingsCompanionPillBlock
+            floatingEnabled={floatingCompanionDevEnabled}
+            onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
+            onPreviewMilestone={onPreviewCompanionMilestone}
+            onPreviewMoment={onPreviewCompanionMoment}
+            onPreviewDayReview={onPreviewCompanionDayReview}
+          />
+        </>
+      ) : null}
+
+      {activeSubsection === "featureFlags" ? (
+        <div className="settings-block settings-block--dev-preview">
+          <h3 className="settings-block__title-with-badge" aria-label="Product preview flags">
+            <span>Product preview flags</span>
+            <span className="settings-beta-badge">Beta</span>
+          </h3>
+          <DevSettingsDeviceSyncBlock
+            deviceSyncPreviewEnabled={deviceSyncPreviewEnabled}
+            onDeviceSyncPreviewEnabledChange={onDeviceSyncPreviewEnabledChange}
+          />
+          <DevSettingsWebAccountBlock
+            webAccountPreviewEnabled={webAccountPreviewEnabled}
+            onWebAccountPreviewEnabledChange={onWebAccountPreviewEnabledChange}
+          />
         <div className="settings-row">
           <div>
             <div className="lbl">Team preview (beta)</div>
@@ -569,37 +613,58 @@ export function DevSettingsSection({
             <Toggle checked={legacyShellBlurPreviewEnabled} onChange={onLegacyShellBlurPreviewEnabledChange} ariaLabel="Toggle legacy shell blur preview" />
           </div>
         </div>
-      </div>
-      <SettingsCollapsibleCard title="Enhanced context dogfood">
-        <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
-      </SettingsCollapsibleCard>
-      <DevSettingsProjectClassificationBlock
-        projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
-        projectClassificationCorrectionsBusy={projectClassificationCorrectionsBusy}
-        projectPassRuns={projectPassRuns}
-        onRevertProjectClassificationCorrection={onRevertProjectClassificationCorrection}
-      />
+        </div>
+      ) : null}
 
-      {/* Dev-only tools and previews, all merged under one Dev block at the end */}
-      <DevSettingsCompanionPillBlock
-        floatingEnabled={floatingCompanionDevEnabled}
-        onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
-        onPreviewMilestone={onPreviewCompanionMilestone}
-        onPreviewMoment={onPreviewCompanionMoment}
-        onPreviewDayReview={onPreviewCompanionDayReview}
-      />
-      <DevSettingsAxFallbackCard
-        forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
-        forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}
-        forceChromiumAxExtremeNudgeEnabled={forceChromiumAxExtremeNudgeEnabled}
-        forceFrontmostFallbackCaptureEnabled={forceFrontmostFallbackCaptureEnabled}
-        onForceBrowserHistoryUrlFallbackChange={onForceBrowserHistoryUrlFallbackChange}
-        onForceChromiumAxCaptureChange={onForceChromiumAxCaptureChange}
-        onForceChromiumAxExtremeNudgeChange={onForceChromiumAxExtremeNudgeChange}
-        onForceFrontmostFallbackCaptureChange={onForceFrontmostFallbackCaptureChange}
-      />
-      <div className="settings-block settings-block--dev-preview">
-        <h3>Dev</h3>
+      {activeSubsection === "aiCapture" ? (
+        <>
+          <SettingsCollapsibleCard title="Enhanced context dogfood">
+            <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
+          </SettingsCollapsibleCard>
+          <DevSettingsProjectClassificationBlock
+            projectClassificationAiReviewEvents={projectClassificationAiReviewEvents}
+            projectClassificationCorrectionsBusy={projectClassificationCorrectionsBusy}
+            projectPassRuns={projectPassRuns}
+            onRevertProjectClassificationCorrection={onRevertProjectClassificationCorrection}
+          />
+          {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
+            <div className="settings-block settings-block--dev-preview">
+              <h3>AI availability preview</h3>
+              <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="AI unavailable preview case">
+                <div>
+                  <div className="lbl">Dashboard unavailable state</div>
+                  <div className="desc">
+                    Apply a selected AI unavailable case to the dashboard three days ago. {dashboardAiUnavailablePreview ? `Active on ${formatDayLabel(dashboardAiUnavailablePreview.appliedDay)}.` : "Dev-mode preview tool."}
+                  </div>
+                </div>
+                <div className="ctrl settings-row__actions">
+                  <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="AI unavailable preview cases">
+                    {DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`settings-mode-option${dashboardAiUnavailablePreviewCase === option.id ? " is-active" : ""}`}
+                        role="radio"
+                        aria-checked={dashboardAiUnavailablePreviewCase === option.id}
+                        onClick={() => onDashboardAiUnavailablePreviewCaseChange(option.id)}
+                      >
+                        <span>{option.label}</span>
+                        <small>{option.detail}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="settings-btn settings-btn--primary" onClick={onPreviewDashboardAiUnavailableCase}>Preview 3 days ago</button>
+                  {dashboardAiUnavailablePreview ? <button type="button" className="settings-btn" onClick={onClearDashboardAiUnavailablePreview}>Clear preview</button> : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {activeSubsection === "uiFlows" ? (
+        <div className="settings-block settings-block--dev-preview">
+          <h3>Flow previews</h3>
         <div className="settings-row">
           <div>
             <div className="lbl">Startup loading screen</div>
@@ -623,35 +688,6 @@ export function DevSettingsSection({
             onReplay={onReplayDashboardDemo}
             onReset={onResetDemoDashboardReplaySettings}
           />
-        ) : null}
-        {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
-          <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="AI unavailable preview case">
-            <div>
-              <div className="lbl">AI unavailable preview</div>
-              <div className="desc">
-                Apply a selected AI unavailable case to the dashboard three days ago. {dashboardAiUnavailablePreview ? `Active on ${formatDayLabel(dashboardAiUnavailablePreview.appliedDay)}.` : "Dev-mode preview tool."}
-              </div>
-            </div>
-            <div className="ctrl settings-row__actions">
-              <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="AI unavailable preview cases">
-                {DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    className={`settings-mode-option${dashboardAiUnavailablePreviewCase === option.id ? " is-active" : ""}`}
-                    role="radio"
-                    aria-checked={dashboardAiUnavailablePreviewCase === option.id}
-                    onClick={() => onDashboardAiUnavailablePreviewCaseChange(option.id)}
-                  >
-                    <span>{option.label}</span>
-                    <small>{option.detail}</small>
-                  </button>
-                ))}
-              </div>
-              <button type="button" className="settings-btn settings-btn--primary" onClick={onPreviewDashboardAiUnavailableCase}>Preview 3 days ago</button>
-              {dashboardAiUnavailablePreview ? <button type="button" className="settings-btn" onClick={onClearDashboardAiUnavailablePreview}>Clear preview</button> : null}
-            </div>
-          </div>
         ) : null}
         <div className="settings-row settings-row--fallback settings-row--ai-preview" role="group" aria-label="Sidebar CTA slot preview">
           <div>
@@ -703,7 +739,8 @@ export function DevSettingsSection({
             </div>
           </>
         ) : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

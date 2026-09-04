@@ -10,6 +10,7 @@ export function renderProductionDevSettings(
   propOverrides: Partial<DevSettingsSectionTestProps> = {},
 ) {
   const props = {
+    activeSubsection: "diagnostics" as const,
     dashboardAiUnavailablePreview: null,
     dashboardAiUnavailablePreviewCase: "connect-ai",
     sidebarCtaPreviewCase: null,

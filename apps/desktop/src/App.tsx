@@ -123,6 +123,11 @@ import type { AppThemeColorKey } from "./features/settings/SettingsColorControls
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
 import { PermissionsSettingsSection } from "./features/settings/PermissionsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
+import {
+  DEV_SETTINGS_SUBSECTION_STORAGE_KEY,
+  resolveDevSettingsSubsection,
+  type DevSettingsSubsection,
+} from "./features/settings/devSettingsNavigation";
 import { analysisModelDisplayLabel } from "./features/settings/analysisModelSetup";
 import {
   AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
@@ -598,6 +603,13 @@ export default function App() {
   const [classificationCorrectionNotice, setClassificationCorrectionNotice] = useState<ClassificationCorrectionNotice | null>(null);
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [devSettingsSubsection, setDevSettingsSubsection] = useState(() => (
+    resolveDevSettingsSubsection(window.localStorage.getItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY))
+  ));
+  const handleDevSettingsSubsectionChange = useCallback((subsection: DevSettingsSubsection) => {
+    setDevSettingsSubsection(subsection);
+    if (contentRef.current) contentRef.current.scrollTop = 0;
+  }, []);
   const {
     backgroundUpdatesEnabled,
     availableUpdate,
@@ -1121,7 +1133,7 @@ export default function App() {
       setPetModeLabInputBounds(null);
       return;
     }
-    if (activeTab !== "settings" || settingsSection !== "dev") return;
+    if (activeTab !== "settings" || settingsSection !== "dev" || devSettingsSubsection !== "petCompanion") return;
     let disposed = false;
     const refresh = () => {
       void getNativePetInputBounds().then((bounds) => {
@@ -1137,7 +1149,7 @@ export default function App() {
       window.clearTimeout(timerId);
       window.clearInterval(intervalId);
     };
-  }, [activeTab, formatPetModeInputBounds, petModeActive, settingsSection]);
+  }, [activeTab, devSettingsSubsection, formatPetModeInputBounds, petModeActive, settingsSection]);
 
   const navigateForward = useCallback(() => {
     setNavigationHistory((current) => (
@@ -1193,12 +1205,13 @@ export default function App() {
   const handleAppMenuCheckLatestBuild = useCallback(() => {
     setLatestBuildNoticeVisible(true);
     if (DEV_SETTINGS_ENABLED && devModeEnabled) {
+      handleDevSettingsSubsectionChange("diagnostics");
       setSettingsSection("dev");
       navigateToTab("settings");
       setAccountMenuOpen(false);
     }
     void developerPreReleaseUpdateController.checkLatestBuild();
-  }, [developerPreReleaseUpdateController.checkLatestBuild, devModeEnabled, navigateToTab]);
+  }, [developerPreReleaseUpdateController.checkLatestBuild, devModeEnabled, handleDevSettingsSubsectionChange, navigateToTab]);
 
   const handleAppMenuToggleDevMode = useCallback(() => {
     setDevModeEnabled((enabled) => !enabled);
@@ -4065,6 +4078,10 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(WEB_ACCOUNT_PREVIEW_STORAGE_KEY, devWebAccountPreviewEnabled ? "1" : "0");
   }, [devWebAccountPreviewEnabled]);
+
+  useEffect(() => {
+    window.localStorage.setItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY, devSettingsSubsection);
+  }, [devSettingsSubsection]);
 
   // Leaving the Projects tab visible after the preview is switched off would strand
   // the user on a hidden surface — send them back to the dashboard.
@@ -8082,7 +8099,11 @@ export default function App() {
     : null;
   const manualUpdateStatusRenderedInSettings = activeTab === "settings" && settingsSection === "general";
   const latestBuildStatusRenderedInSettings =
-    activeTab === "settings" && settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled;
+    activeTab === "settings"
+    && settingsSection === "dev"
+    && devSettingsSubsection === "diagnostics"
+    && DEV_SETTINGS_ENABLED
+    && devModeEnabled;
   const appStatusNotice = latestBuildStatusNotice ?? manualUpdateStatusNotice;
   const shellStatusNotice =
     (latestBuildStatusNotice && !latestBuildStatusRenderedInSettings ? latestBuildStatusNotice : null)
@@ -8410,9 +8431,11 @@ export default function App() {
       {activeTab === "settings" ? (
         <SettingsSidebar
           activeSection={settingsSection}
+          activeDevSubsection={devSettingsSubsection}
           isCollapsed={isSidebarVisuallyCollapsed}
           showDevSection={DEV_SETTINGS_ENABLED && devModeEnabled}
           onBack={handleSettingsBack}
+          onDevSubsectionChange={handleDevSettingsSubsectionChange}
           onSectionChange={setSettingsSection}
           onSendFeedback={() => setFeedbackModalOpen(true)}
         />
@@ -9327,6 +9350,7 @@ export default function App() {
                 {settingsSection === "developer" && <DeveloperSettingsSection />}
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection
+                    activeSubsection={devSettingsSubsection}
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
                     dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
                     sidebarCtaPreviewCase={sidebarCtaPreviewCase}
