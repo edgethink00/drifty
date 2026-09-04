@@ -20,9 +20,11 @@ html[data-surface="pet-quick-controls"] #root {
   background: var(--pet-quick-controls-surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.14),
-    inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
+  /* This surface fills its 36pt native panel edge to edge. An outward CSS
+     shadow is clipped by the rectangular WebView bounds, which turns the
+     rounded corners into hard grey patches. Keep the elevation cue inside the
+     capsule; the native HudWindow material supplies the remaining separation. */
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);
   color: var(--text);
   user-select: none;
   -webkit-user-select: none;

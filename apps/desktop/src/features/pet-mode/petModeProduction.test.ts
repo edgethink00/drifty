@@ -65,6 +65,19 @@ describe("pet quick-controls material", () => {
     expect(petQuickControlsCssContract).toContain("prefers-contrast: more");
   });
 
+  it("keeps outward shadows out of the exact-size native panel", () => {
+    const surfaceRule = petQuickControlsCssContract.match(
+      /\.pet-quick-controls\s*\{([\s\S]*?)\n\}/,
+    );
+    expect(surfaceRule?.[1]).toContain(
+      "box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);",
+    );
+    expect(surfaceRule?.[1]).not.toContain("0 10px 24px");
+    expect(petQuickControlsRustContract).toContain(
+      "const PET_QUICK_CONTROLS_HEIGHT: f64 = 36.0;",
+    );
+  });
+
   it("keeps quick-control buttons seated while preserving hover feedback", () => {
     const hoverRule = petQuickControlsCssContract.match(
       /\.pet-quick-controls__toggle:hover,[\s\S]*?\{([\s\S]*?)\}/,
