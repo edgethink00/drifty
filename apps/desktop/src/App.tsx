@@ -1454,15 +1454,18 @@ export default function App() {
   const toggleAccountMenu = useCallback(() => {
     setAccountMenuOpen((open) => (postOnboardingAccountGuideActive ? true : !open));
   }, [postOnboardingAccountGuideActive]);
-  const postOnboardingSidebarGuideReviewStartedRef = useRef(false);
-  useEffect(() => {
-    if (!postOnboardingSidebarGuideReviewEnabled || postOnboardingSidebarGuideReviewStartedRef.current) return;
-    postOnboardingSidebarGuideReviewStartedRef.current = true;
+  const replayPostOnboardingSidebarGuide = useCallback(() => {
     setSidebarCollapsed(false);
     selectDay(logicalTodayIsoDate(startOfDayMinutes));
     navigateToTab("dashboard", "Today");
     restartPostOnboardingSidebarGuide();
-  }, [navigateToTab, postOnboardingSidebarGuideReviewEnabled, restartPostOnboardingSidebarGuide, startOfDayMinutes]);
+  }, [navigateToTab, restartPostOnboardingSidebarGuide, startOfDayMinutes]);
+  const postOnboardingSidebarGuideReviewStartedRef = useRef(false);
+  useEffect(() => {
+    if (!postOnboardingSidebarGuideReviewEnabled || postOnboardingSidebarGuideReviewStartedRef.current) return;
+    postOnboardingSidebarGuideReviewStartedRef.current = true;
+    replayPostOnboardingSidebarGuide();
+  }, [postOnboardingSidebarGuideReviewEnabled, replayPostOnboardingSidebarGuide]);
   const deviceSyncAccountId = authStatus === "authenticated" && hasRequiredAccountAuth && user?.id
     ? user.id
     : null;
@@ -9370,6 +9373,7 @@ export default function App() {
                     onCheckLatestBuild={() => void developerPreReleaseUpdateController.checkLatestBuild()}
                     onInstallLatestBuild={() => void developerPreReleaseUpdateController.installLatestBuild()}
                     onOpenReplayOnboarding={() => void handleOpenDeveloperOnboarding()}
+                    onReplayTutorial={replayPostOnboardingSidebarGuide}
                     onPetModeRunBetaEnabledChange={setPetModeRunBetaEnabled}
                     onPreviewPetModeIntervention={() => {
                       const target = buildPetModePreviewInterventionTarget(segments);

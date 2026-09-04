@@ -95,6 +95,7 @@ type DevSettingsSectionProps = {
   readonly onRevertProjectClassificationCorrection: (id: number) => void;
   readonly onOpenDebugLogs: () => void;
   readonly onOpenReplayOnboarding: () => void;
+  readonly onReplayTutorial: () => void;
   readonly onPetModeRunBetaEnabledChange: (enabled: boolean) => void;
   readonly onPreviewPetModeIntervention: () => void;
   readonly onRehearsePetModeIntercept: () => void;
@@ -168,6 +169,7 @@ export function DevSettingsSection({
   onRevertProjectClassificationCorrection,
   onOpenDebugLogs,
   onOpenReplayOnboarding,
+  onReplayTutorial,
   onPetModeRunBetaEnabledChange,
   onPreviewPetModeIntervention,
   onRehearsePetModeIntercept,
@@ -680,15 +682,26 @@ export function DevSettingsSection({
           </div>
         </div>
         {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
-          <div className="settings-row">
-            <div>
-              <div className="lbl">Replay onboarding</div>
-              <div className="desc">Open the setup flow again without clearing saved onboarding state.</div>
+          <>
+            <div className="settings-row">
+              <div>
+                <div className="lbl">Replay onboarding</div>
+                <div className="desc">Open the setup flow again without clearing saved onboarding state.</div>
+              </div>
+              <div className="ctrl">
+                <button type="button" className="settings-btn" onClick={onOpenReplayOnboarding}>Open onboarding</button>
+              </div>
             </div>
-            <div className="ctrl">
-              <button type="button" className="settings-btn" onClick={onOpenReplayOnboarding}>Open onboarding</button>
+            <div className="settings-row">
+              <div>
+                <div className="lbl">Replay tutorial</div>
+                <div className="desc">Restart the sidebar walkthrough from Dashboard without changing onboarding completion.</div>
+              </div>
+              <div className="ctrl">
+                <button type="button" className="settings-btn" onClick={onReplayTutorial}>Replay tutorial</button>
+              </div>
             </div>
-          </div>
+          </>
         ) : null}
       </div>
     </div>

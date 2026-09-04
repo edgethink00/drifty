@@ -2385,6 +2385,50 @@ describe("App onboarding", () => {
     expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
   });
 
+  it("replays the sidebar tutorial from Dev Settings without clearing onboarding completion", async () => {
+    const onboardingStorageKey = getUserOnboardingStorageKey("user-1");
+    const completedOnboardingRecord = JSON.stringify({
+      version: 2,
+      completed: true,
+      displayName: "Alex",
+      workType: "Design",
+      workTypeOther: "",
+      workDomain: "Tech",
+      workDomainOther: "",
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: null,
+      completedAt: "2026-05-08T00:00:00.000Z",
+    });
+    window.localStorage.setItem(onboardingStorageKey, completedOnboardingRecord);
+    window.localStorage.setItem(
+      postOnboardingSidebarGuideStorageKey("user-1"),
+      JSON.stringify({
+        version: 1,
+        status: "completed",
+        step: "account",
+        startedAt: "2026-05-08T00:00:00.000Z",
+        updatedAt: "2026-05-08T00:05:00.000Z",
+      }),
+    );
+    window.localStorage.setItem("drifty.dev.mode", "1");
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /^alex$/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^settings$/i }));
+    const settingsNav = await screen.findByRole("navigation", { name: /settings sections/i });
+    fireEvent.click(within(settingsNav).getByRole("button", { name: /^Dev$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Replay tutorial$/i }));
+
+    expect(await screen.findByRole("region", { name: /start with the shape of your day/i })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /^Settings$/ })).toBeNull();
+    expect(parsePostOnboardingSidebarGuideRecord(
+      window.localStorage.getItem(postOnboardingSidebarGuideStorageKey("user-1")),
+    )).toMatchObject({ status: "active", step: "dashboard" });
+    expect(window.localStorage.getItem(onboardingStorageKey)).toBe(completedOnboardingRecord);
+  });
+
   it("hides replay onboarding controls from Dev Settings when the replay dev tool is disabled", async () => {
     appFeatureSwitches.replayOnboardingDevToolEnabled = false;
     window.localStorage.setItem(
@@ -2418,6 +2462,8 @@ describe("App onboarding", () => {
 
     expect(screen.queryByText(/^Replay onboarding$/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /^Open onboarding$/i })).toBeNull();
+    expect(screen.queryByText(/^Replay tutorial$/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Replay tutorial$/i })).toBeNull();
   });
 
   it("does not show local onboarding when local completion state already exists", async () => {
