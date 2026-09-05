@@ -358,19 +358,20 @@ describe("catching the cat cancels the close", () => {
       .toContain("lastDriftAlertSegmentRef.current = null");
   });
 
-  it("keys the one-round reprieve to the current delivery segment", () => {
-    // The drift episode alert key is stable across fast tab transitions, while
-    // the delivery source identifies the current target the cat approached.
-    expect(app).toContain("petInterceptedSegmentRef.current = deliverySourceSegmentId ?? segment.id");
-    expect(app).toContain("if (petInterceptedSegmentRef.current === (deliverySourceSegmentId ?? segment.id))");
-    expect(app).toContain("pet_intercept_reprieve");
+  it("keys a caught pet's grace to the continuous drift episode", () => {
+    expect(app).toContain("petInterceptionGraceRef.current = buildPetInterceptionGrace(episodeKey)");
+    expect(app).toContain("isPetInterceptionGraceActive(currentGrace, episodeKey)");
+    expect(app).toContain("pet_intercept_grace");
   });
 
-  it("spends the reprieve so a continued drift is nudged again", () => {
-    const gate = app.slice(app.indexOf("if (petInterceptedSegmentRef.current === (deliverySourceSegmentId"));
-    const spentReprieve = gate.slice(0, gate.indexOf("recordDriftAlarmDebugEvent"));
-    expect(spentReprieve).toContain("petInterceptedSegmentRef.current = null");
-    expect(spentReprieve).toContain("lastDriftAlertSegmentRef.current = null");
+  it("suppresses delivery before AI gating without consuming an active grace", () => {
+    const gate = app.slice(app.indexOf("if (isPetInterceptionGraceActive(currentGrace, episodeKey))"));
+    const activeGrace = gate.slice(0, gate.indexOf("if (currentGrace !== null)"));
+    expect(activeGrace).toContain("lastDriftAlertSegmentRef.current = null");
+    expect(activeGrace).not.toContain("petInterceptionGraceRef.current = null");
+    expect(activeGrace).toContain("return;");
+    expect(app.indexOf("if (isPetInterceptionGraceActive(currentGrace, episodeKey))"))
+      .toBeLessThan(app.indexOf("if (pendingDriftAlarmGateRef.current === alertKey)"));
   });
 
   it("reports every missed contact exactly once with its real cause", () => {
@@ -392,7 +393,7 @@ describe("catching the cat cancels the close", () => {
     const branch = app.slice(app.indexOf("if (targetChanged) {"));
     const body = branch.slice(0, branch.indexOf("if (intercepted) {"));
     expect(body).toContain("lastDriftAlertSegmentRef.current = null");
-    expect(body).toContain("petInterceptedSegmentRef.current = null");
+    expect(body).toContain("petInterceptionGraceRef.current = null");
     expect(body).toContain("reason: result.diagnostic");
     expect(body).toContain("return;");
     expect(body).not.toContain("showFallbackDriftAlarm");

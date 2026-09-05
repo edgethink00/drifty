@@ -236,6 +236,11 @@ import {
   type DriftAlarmSessionProtection,
 } from "./features/companion/driftAlarmSessionProtection";
 import {
+  buildPetInterceptionGrace,
+  isPetInterceptionGraceActive,
+  type PetInterceptionGrace,
+} from "./features/companion/petInterceptionGrace";
+import {
   CloudTrialStartedNotice,
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
@@ -2266,11 +2271,10 @@ export default function App() {
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
   const driftAlarmSessionProtectionRef = useRef<DriftAlarmSessionProtection | null>(null);
-  // Catching the cat buys one quiet round per drift stretch. Keyed by source
-  // segment rather than alert key, because the alert key embeds `endedAt` and
-  // rotates every poll while the same drift continues; keying on it would hand
-  // out a fresh reprieve every 15 seconds and make interception a free bypass.
-  const petInterceptedSegmentRef = useRef<string | null>(null);
+  // A real catch is an explicit veto of this close attempt. Keep its short
+  // grace on the stable drift episode so tracker segment rollover or an extra
+  // refresh cannot make the cat return before the grace deadline.
+  const petInterceptionGraceRef = useRef<PetInterceptionGrace | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const pendingDriftAlarmGateGenerationRef = useRef(0);
   const lastEligibleDriftCandidateRef = useRef<DriftAlarmCandidate | null>(null);
@@ -3210,8 +3214,8 @@ export default function App() {
         pendingBreakReturnAlarmRef.current = null;
         breakRecoveryAssessmentRef.current = null;
         // An explicit break starts a new intervention cycle at expiry. Do not
-        // spend its first post-break poll on a reprieve earned before the break.
-        petInterceptedSegmentRef.current = null;
+        // carry a catch grace across the break the user deliberately chose.
+        petInterceptionGraceRef.current = null;
         driftAlarmSnoozeRef.current = nextSnooze;
         setBreakRecoveryAssessment(null);
         setDriftAlarmSnooze(nextSnooze);
@@ -5008,7 +5012,7 @@ export default function App() {
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       lastDriftAlertSegmentRef.current = null;
-      petInterceptedSegmentRef.current = null;
+      petInterceptionGraceRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
         setDriftAlarmSnooze(null);
@@ -5016,7 +5020,7 @@ export default function App() {
       return;
     }
 
-    const { alertKey } = latestDrift;
+    const { alertKey, episodeKey } = latestDrift;
     let deliveryCandidate = latestDrift;
     let { category, segment } = deliveryCandidate;
     let deliveryDriftDurationSeconds = deliveryCandidate.driftDurationSeconds;
@@ -5044,7 +5048,7 @@ export default function App() {
       pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
       lastDriftAlertSegmentRef.current = null;
-      petInterceptedSegmentRef.current = null;
+      petInterceptionGraceRef.current = null;
       clearPendingTransientDriftAlarm();
       publishEvaluationDriftAlarmTrayStatus({
         kind: "suppressed",
@@ -5114,6 +5118,27 @@ export default function App() {
       default:
         assertNever(transientDecision);
     }
+    const currentGrace = petInterceptionGraceRef.current;
+    if (isPetInterceptionGraceActive(currentGrace, episodeKey)) {
+      // A catch vetoes delivery for the full grace period. Stop here before
+      // any AI delivery gate so background polls neither resend the pet nor
+      // spend provider work on a close that cannot run yet.
+      lastDriftAlertSegmentRef.current = null;
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_suppressed",
+        alertKey,
+        reason: "pet_intercept_grace",
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
+      publishEvaluationDriftAlarmTrayStatus({
+        kind: "suppressed",
+        reason: "pet_intercept_grace",
+        candidateDetail,
+      }, checkedAt);
+      return;
+    }
+    if (currentGrace !== null) petInterceptionGraceRef.current = null;
     const buildCurrentDriftAlarmEvent = (
       focusTargets: readonly DriftAlarmFocusTarget[] = availableDriftAlarmFocusTargetsForAlarm,
       petIntercepted = false,
@@ -5218,25 +5243,6 @@ export default function App() {
       breakReturnAlarm: DriftAlarmBreakSnooze | null = null,
     ) => {
       lastDriftAlertSegmentRef.current = alertKey;
-      // One caught cat per drift stretch keeps the reprieve meaningful without
-      // letting it become permanent: this round stays quiet, and the next poll
-      // sends the cat again if the drift is still going.
-      if (petInterceptedSegmentRef.current === (deliverySourceSegmentId ?? segment.id)) {
-        petInterceptedSegmentRef.current = null;
-        // The alert key now stays stable for the whole continuous episode.
-        // Re-open the gate after spending this one-poll reprieve so catching
-        // the cat cannot silence an episode forever.
-        lastDriftAlertSegmentRef.current = null;
-        recordDriftAlarmDebugEvent({
-          kind: "extreme_nudge_result",
-          alertKey,
-          result: "not_applied",
-          reason: "pet_intercept_reprieve",
-          candidate: summarizeDriftAlarmCandidate(latestDrift),
-          evaluation,
-        });
-        return;
-      }
       recordDriftAlarmDebugEvent({
         kind: "extreme_nudge_started",
         alertKey,
@@ -5281,7 +5287,7 @@ export default function App() {
           // Focus or another non-drift context can become current during the
           // native approach. That is neither a catch nor a technical failure:
           // the target is no longer current, so do not close it in the
-          // background and do not spend the user's one-round catch reprieve.
+          // background and do not create a catch grace for an unrelated target.
           if (intervention.outcome === "cancelled") {
             return { applied: false, diagnostic: "pet_context_changed" } as const;
           }
@@ -5321,7 +5327,7 @@ export default function App() {
               || result.diagnostic === "pet_target_changed";
             if (targetChanged) {
               lastDriftAlertSegmentRef.current = null;
-              petInterceptedSegmentRef.current = null;
+              petInterceptionGraceRef.current = null;
               publishEvaluationDriftAlarmTrayStatus({
                 kind: "suppressed",
                 reason: result.diagnostic,
@@ -5330,8 +5336,7 @@ export default function App() {
               return;
             }
             if (intercepted) {
-              petInterceptedSegmentRef.current = deliverySourceSegmentId ?? segment.id;
-              // Let the next poll consume the promised one-round reprieve.
+              petInterceptionGraceRef.current = buildPetInterceptionGrace(episodeKey);
               lastDriftAlertSegmentRef.current = null;
             }
             // A caught cat is a deliberate user signal, not a delivery failure.

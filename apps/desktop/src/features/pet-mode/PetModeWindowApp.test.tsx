@@ -1643,6 +1643,8 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stalk");
   });
 
+  // This fake-timer recovery case exceeded Vitest's 5s default in two CI runs;
+  // each timeout was followed by cascading empty-DOM failures in later cases.
   it("recovers at home if a natural-outing hunt cannot prepare its edge entry", async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, "random").mockReturnValue(0.5);
@@ -1679,7 +1681,7 @@ describe("PetModeWindowApp", () => {
     expect(bridge.setNativePetPresence).toHaveBeenLastCalledWith(true);
     expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
-  });
+  }, 15_000);
 
   it("keeps native cursor control inert while the production drift reaction stays active", async () => {
     vi.useFakeTimers();
