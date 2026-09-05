@@ -28,7 +28,13 @@ onboarding-visual/
 .qa-captures/
 .qa-results/
 playwright-report/
-.codex/
+!/.codex/
+.codex/*
+!.codex/skills/
+.codex/skills/*
+!.codex/skills/land/
+.codex/skills/land/*
+!.codex/skills/land/SKILL.md
 .codegraph
 .debug-journal.md
 .debug-artifacts/
