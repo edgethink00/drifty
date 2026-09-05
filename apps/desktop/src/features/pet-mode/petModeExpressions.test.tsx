@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
@@ -229,17 +229,20 @@ describe("pet expressions", () => {
 
     for (let interaction = 1; interaction <= 3; interaction += 1) {
       petOnce();
-      await act(async () => { await Promise.resolve(); });
-      expect(phase(), `stroke ${interaction}`).toBe("happy");
+      await waitFor(() => {
+        expect(phase(), `stroke ${interaction}`).toBe("happy");
+      });
     }
 
     petOnce();
-    await act(async () => { await Promise.resolve(); });
-    expect(phase(), "stroke 4").toBe("drowsy");
+    await waitFor(() => {
+      expect(phase(), "stroke 4").toBe("drowsy");
+    });
 
     petOnce();
-    await act(async () => { await Promise.resolve(); });
-    expect(phase(), "stroke 5").toBe("sleep");
+    await waitFor(() => {
+      expect(phase(), "stroke 5").toBe("sleep");
+    });
   });
 
   it("does not settle when the pets are spaced beyond the streak window", async () => {
