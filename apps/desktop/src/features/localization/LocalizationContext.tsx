@@ -4,6 +4,7 @@ import {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
   resolveInitialDisplayLanguage,
+  resolveSystemDisplayLanguage,
   type DisplayLanguage,
 } from "./languagePreference";
 
@@ -11,6 +12,7 @@ export {
   DISPLAY_LANGUAGE_STORAGE_KEY,
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
   resolveInitialDisplayLanguage,
+  resolveSystemDisplayLanguage,
   type DisplayLanguage,
 } from "./languagePreference";
 

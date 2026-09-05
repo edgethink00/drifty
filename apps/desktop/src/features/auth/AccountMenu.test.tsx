@@ -154,7 +154,7 @@ describe("AccountMenu", () => {
     fireEvent.keyDown(languageItem, { key: "ArrowRight" });
 
     const englishOption = screen.getByRole("menuitemradio", { name: "English" });
-    const koreanOption = screen.getByRole("menuitemradio", { name: "Korean (Beta)" });
+    const koreanOption = screen.getByRole("menuitemradio", { name: "Korean" });
     expect(englishOption.getAttribute("aria-checked")).toBe("true");
     expect(document.activeElement).toBe(englishOption);
 
@@ -164,7 +164,7 @@ describe("AccountMenu", () => {
     expect(document.activeElement).toBe(languageItem);
 
     fireEvent.click(languageItem);
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Korean (Beta)" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Korean" }));
 
     await waitFor(() => expect(screen.getByRole("button", { name: "게스트" })).toBeTruthy());
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");

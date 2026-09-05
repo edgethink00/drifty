@@ -112,6 +112,7 @@
 
 .dc-onb-content--welcome {
   margin: auto;
+  transform: translateY(-24px);
 }
 
 .dc-onb-title {
@@ -141,16 +142,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding-top: 6px;
   text-align: center;
 }
 
-.dc-onb-welcome__icon {
-  width: 30px;
-  height: 30px;
+.dc-onb-welcome__wordmark {
   display: block;
-  margin-bottom: 6px;
+  width: 60px;
+  height: auto;
+  margin-bottom: 24px;
   animation: dcOnbRise 0.55s both;
 }
 
@@ -158,40 +157,76 @@
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
   font-size: 32px;
   font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
+  letter-spacing: -0.022em;
+  line-height: 1.15;
   animation: dcOnbRise 0.55s both;
 }
 
-.dc-onb-welcome__headline--muted {
-  color: var(--dc-onb-pale);
-  animation-delay: 0.12s;
-}
-
 .dc-onb-welcome__body {
-  max-width: 46ch;
-  margin-top: 4px;
-  font-size: 17px;
+  margin-top: 14px;
+  font-size: 16px;
   line-height: 1.55;
   color: var(--dc-onb-muted);
   animation: dcOnbRise 0.55s 0.3s both;
 }
 
+.dc-onb-welcome__body > span {
+  display: block;
+}
+
 .dc-onb-welcome__note {
+  margin-top: 10px;
   font-size: 14px;
+  line-height: 1.45;
   color: var(--dc-onb-soft);
   animation: dcOnbRise 0.55s 0.48s both;
 }
 
+.dc-onb-language {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 41px;
+  padding: 3px;
+  border: 1px solid var(--dc-onb-line);
+  border-radius: 999px;
+  background: var(--dc-onb-raised);
+  animation: dcOnbRise 0.55s 0.42s both;
+}
 
+.dc-onb-language__option {
+  appearance: none;
+  min-height: 32px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dc-onb-soft);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 560;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
+}
 
+.dc-onb-language__option:hover:not([aria-checked="true"]) {
+  color: var(--dc-onb-text);
+}
 
+.dc-onb-language__option[aria-checked="true"] {
+  background: var(--dc-onb-surface);
+  color: var(--dc-onb-text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--dc-onb-text) 12%, transparent);
+}
 
-
-
-
-
-
+.dc-onb-language__option:focus-visible {
+  outline: 2px solid var(--dc-onb-accent);
+  outline-offset: 1px;
+}
 
 .dc-onb-copy {
   margin: 0 0 20px;
@@ -2037,6 +2072,7 @@
   .dc-onb-welcome__icon,
   .dc-onb-welcome__headline,
   .dc-onb-welcome__body,
+  .dc-onb-language,
   .dc-onb-cat-stage__mover,
   .dc-onb-advanced-cards,
   .dc-onb-spinner,

@@ -381,7 +381,7 @@ export function AccountMenu({
               aria-checked={effectiveLanguage === "ko"}
               onClick={() => selectLanguage("ko")}
             >
-              <span>{t("settings.general.languageKoreanBeta")}</span>
+              <span>{t("settings.general.languageKorean")}</span>
               <span className="account-menu-language-check" aria-hidden="true"><CheckIcon /></span>
             </button>
           </div>

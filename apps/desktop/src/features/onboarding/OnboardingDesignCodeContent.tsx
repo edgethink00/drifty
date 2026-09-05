@@ -12,6 +12,7 @@ import { ConnectServerStep } from "./components/steps/ConnectServerStep";
 import { TestConnectionStep } from "./components/steps/TestConnectionStep";
 import { SelfDataReviewStep } from "./components/steps/SelfDataReviewStep";
 import { ReadyStep } from "./components/steps/ReadyStep";
+import { OnboardingLanguageToggle } from "./components/OnboardingLanguageToggle";
 import { useLocalization } from "../localization/LocalizationContext";
 import { DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 
@@ -174,6 +175,7 @@ export function OnboardingDesignCodeContent({
 
         {showFooter ? (
           <div className="onb-actions dc-onb-actions">
+            {flow.step === "welcome" ? <OnboardingLanguageToggle /> : null}
             {showBack ? (
               <button
                 type="button"

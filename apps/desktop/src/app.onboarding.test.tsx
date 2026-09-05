@@ -569,8 +569,11 @@ describe("App onboarding", () => {
 
     expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
     expect(await screen.findByText(/welcome to drifty\./i, undefined, { timeout: 6_000 })).toBeTruthy();
-    expect(await screen.findByText(/your ai time tracker/i, undefined, { timeout: 6_000 })).toBeTruthy();
-    expect(document.querySelector(".dc-onb-welcome__icon")).toBeTruthy();
+    expect(await screen.findByText(/no timers, no entries/i, undefined, { timeout: 6_000 })).toBeTruthy();
+    expect(screen.getByText(/its AI sorts focus from drift/i)).toBeTruthy();
+    expect(screen.getByText(/a few quick setup steps and you're tracking/i)).toBeTruthy();
+    expect(screen.getByRole("img", { name: "drifty" })).toBeTruthy();
+    expect(document.querySelector(".dc-onb-welcome__icon")).toBeNull();
     expect(screen.queryByLabelText(/activity context becoming a useful focus insight/i)).toBeNull();
     expect(screen.queryByText(/about a minute/i)).toBeNull();
 

@@ -41,7 +41,7 @@ export function GeneralSettingsSection({
   const { effectiveLanguage, setDisplayLanguage, t } = useLocalization();
   const languageOptions = [
     { value: "en", label: t("settings.general.languageEnglish") },
-    { value: "ko", label: t("settings.general.languageKoreanBeta") },
+    { value: "ko", label: t("settings.general.languageKorean") },
   ] satisfies ReadonlyArray<{ value: DisplayLanguage; label: string }>;
   const startOfWeekOptions = [
     { value: "monday", label: t("settings.weekday.monday") },

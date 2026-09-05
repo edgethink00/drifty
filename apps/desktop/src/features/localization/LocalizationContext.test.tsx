@@ -7,6 +7,8 @@ import {
   LEGACY_KOREAN_LOCALIZATION_PREVIEW_STORAGE_KEY,
   LocalizationProvider,
   LocalizationTestProvider,
+  resolveInitialDisplayLanguage,
+  resolveSystemDisplayLanguage,
   useLocalization,
   useLocalizationController,
 } from "./LocalizationContext";
@@ -64,7 +66,49 @@ function GeneralSettingsHarness() {
 }
 
 describe("display language preference", () => {
-  it("defaults every public surface to English", () => {
+  it("defaults Korean-system users to Korean on first launch", () => {
+    expect(resolveInitialDisplayLanguage({
+      language: "ko-KR",
+      languages: ["ko-KR", "en-US"],
+    })).toBe("ko");
+  });
+
+  it("uses only the system's first preferred language when available", () => {
+    expect(resolveSystemDisplayLanguage({
+      language: "ko-KR",
+      languages: ["en-US", "ko-KR"],
+    })).toBe("en");
+    expect(resolveSystemDisplayLanguage({
+      language: "en-KR",
+      languages: ["en-KR"],
+    })).toBe("en");
+  });
+
+  it("recognizes Korean language tags independently of region and separator style", () => {
+    expect(resolveSystemDisplayLanguage({ language: "ko", languages: [] })).toBe("ko");
+    expect(resolveSystemDisplayLanguage({ language: "ko-US", languages: [] })).toBe("ko");
+    expect(resolveSystemDisplayLanguage({ language: "ko_KR", languages: [] })).toBe("ko");
+  });
+
+  it("falls back to English when the system language is missing or unreadable", () => {
+    expect(resolveSystemDisplayLanguage({ language: "", languages: [] })).toBe("en");
+    expect(resolveSystemDisplayLanguage({
+      get language(): string {
+        throw new Error("language unavailable");
+      },
+    })).toBe("en");
+  });
+
+  it("keeps an explicit English preference on a Korean system", () => {
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+
+    expect(resolveInitialDisplayLanguage({
+      language: "ko-KR",
+      languages: ["ko-KR"],
+    })).toBe("en");
+  });
+
+  it("defaults non-Korean public surfaces to English", () => {
     render(<ControllerHarness />);
 
     expect(screen.getByText("en")).toBeTruthy();
@@ -101,9 +145,9 @@ describe("display language preference", () => {
     const languageSelect = screen.getByRole("combobox", { name: "Language" });
     expect(languageSelect.textContent).toContain("English");
     fireEvent.click(languageSelect);
-    fireEvent.click(screen.getByRole("option", { name: "Korean (Beta)" }));
+    fireEvent.click(screen.getByRole("option", { name: "Korean" }));
 
-    expect(screen.getByRole("combobox", { name: "언어" }).textContent).toContain("한국어 (베타)");
+    expect(screen.getByRole("combobox", { name: "언어" }).textContent).toContain("한국어");
     expect(screen.getByText("이 Mac에서 Drifty에 사용할 언어를 선택합니다.")).toBeTruthy();
     expect(window.localStorage.getItem(DISPLAY_LANGUAGE_STORAGE_KEY)).toBe("ko");
     expect(document.documentElement.lang).toBe("ko");
