@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IndividualPlanCards } from "./IndividualPlanCards";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { readAppStyles } from "../../test/readStyles";
 
 afterEach(cleanup);
@@ -17,7 +18,7 @@ describe("IndividualPlanCards", () => {
 
     expect(screen.getByRole("radio", { name: /monthly/i })).toBeTruthy();
     expect(screen.getByRole("radio", { name: /yearly/i })).toBeTruthy();
-    expect(screen.getByText("Save $24/year")).toBeTruthy();
+    expect(screen.getByText("Save 28%")).toBeTruthy();
     expect(screen.queryByRole("radio", { name: /quarterly/i })).toBeNull();
     expect(screen.queryByRole("article", { name: /business plan/i })).toBeNull();
     expect(screen.queryByText(/every 3 months|\$4\.33/i)).toBeNull();
@@ -142,4 +143,25 @@ describe("IndividualPlanCards", () => {
     expect(onManageCurrentPlan).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: /^Manage billing$/i })).toBeNull();
   });
+});
+
+
+it("keeps the Korean annual savings, invoice amount, and checkout interval consistent", () => {
+  const onSelectPlan = vi.fn();
+  render(
+    <LocalizationTestProvider language="ko">
+      <IndividualPlanCards loadingInterval={null} onSelectPlan={onSelectPlan} />
+    </LocalizationTestProvider>,
+  );
+  expect(screen.getByText("$7")).toBeTruthy();
+  fireEvent.click(screen.getByRole("radio", { name: "연간 28% 절약" }));
+  expect(screen.getByText("$5")).toBeTruthy();
+  expect(screen.getByText("월 기준 · 연 $60 결제")).toBeTruthy();
+  expect(screen.queryByText(/\{\{|\}\}/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Drifty Pro 요금제 선택" }));
+  expect(onSelectPlan).toHaveBeenLastCalledWith("yearly");
+  fireEvent.click(screen.getByRole("radio", { name: "월간" }));
+  expect(screen.getByText("$7")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Drifty Pro 요금제 선택" }));
+  expect(onSelectPlan).toHaveBeenLastCalledWith("monthly");
 });

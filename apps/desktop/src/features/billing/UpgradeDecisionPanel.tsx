@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { BillingInterval } from "./billingService";
 import {
   INDIVIDUAL_PRICING,
+  INDIVIDUAL_YEARLY_SAVINGS_PERCENT,
   individualMonthlyDisplayAmount,
   type VisibleBillingInterval,
 } from "./individualPricing";
@@ -74,7 +75,7 @@ export function UpgradeDecisionPanel({
           onClick={() => setBillingInterval("yearly")}
         >
           <span>{t("billing.plan.intervalYearly")}</span>
-          <small>{t("billing.plan.intervalSavings", { amount: INDIVIDUAL_PRICING.yearly.annualSavings })}</small>
+          <small>{t("billing.plan.intervalSavings", { percent: INDIVIDUAL_YEARLY_SAVINGS_PERCENT })}</small>
         </button>
       </div>
 

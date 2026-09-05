@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { UpgradeDecisionPanel } from "./UpgradeDecisionPanel";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
 
 afterEach(cleanup);
 
@@ -29,7 +30,7 @@ describe("UpgradeDecisionPanel", () => {
     fireEvent.click(within(panel).getByRole("radio", { name: /yearly/i }));
     expect(within(panel).getByText("$5")).toBeTruthy();
     expect(within(panel).getByText("/ month · $60 billed yearly")).toBeTruthy();
-    expect(within(panel).getByText("Save $24/year")).toBeTruthy();
+    expect(within(panel).getByText("Save 28%")).toBeTruthy();
     fireEvent.click(within(panel).getByRole("button", { name: /continue with pro/i }));
     expect(onSelectPlan).toHaveBeenCalledWith("yearly");
   });
@@ -103,4 +104,25 @@ describe("UpgradeDecisionPanel", () => {
     expect(screen.getByRole("button", { name: /opening checkout/i })).toHaveProperty("disabled", true);
     expect(screen.getByRole("button", { name: /view local ai setup/i })).toHaveProperty("disabled", true);
   });
+});
+
+
+it("keeps the Korean annual savings, invoice amount, and checkout interval consistent", () => {
+  const onSelectPlan = vi.fn();
+  render(
+    <LocalizationTestProvider language="ko">
+      <UpgradeDecisionPanel loadingInterval={null} onSelectPlan={onSelectPlan} context="upgrade" />
+    </LocalizationTestProvider>,
+  );
+  expect(screen.getByText("$7")).toBeTruthy();
+  fireEvent.click(screen.getByRole("radio", { name: "연간 28% 절약" }));
+  expect(screen.getByText("$5")).toBeTruthy();
+  expect(screen.getByText("월 기준 · 연 $60 결제")).toBeTruthy();
+  expect(screen.queryByText(/\{\{|\}\}/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Pro로 업그레이드" }));
+  expect(onSelectPlan).toHaveBeenLastCalledWith("yearly");
+  fireEvent.click(screen.getByRole("radio", { name: "월간" }));
+  expect(screen.getByText("$7")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Pro로 업그레이드" }));
+  expect(onSelectPlan).toHaveBeenLastCalledWith("monthly");
 });

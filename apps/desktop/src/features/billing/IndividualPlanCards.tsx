@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { BillingInterval } from "./billingService";
 import {
   INDIVIDUAL_PRICING,
+  INDIVIDUAL_YEARLY_SAVINGS_PERCENT,
   individualMonthlyDisplayAmount,
   type VisibleBillingInterval,
 } from "./individualPricing";
@@ -180,7 +181,7 @@ export function IndividualPlanCards({
           <span>{t(option.labelKey)}</span>
           {option.savingsKey ? (
             <small className="individual-plan-interval__save">
-              {t(option.savingsKey, { amount: INDIVIDUAL_PRICING.yearly.annualSavings })}
+              {t(option.savingsKey, { percent: INDIVIDUAL_YEARLY_SAVINGS_PERCENT })}
             </small>
           ) : null}
         </button>
