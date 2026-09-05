@@ -117,3 +117,18 @@ export function buildClassificationCorrectionRecord({
     classifiedAt,
   };
 }
+
+/** Classification tab corrections always save a reusable app/site/detail choice. */
+export async function persistClassificationCorrection(
+  draft: ClassificationCorrectionDraft,
+  persistence: {
+    saveRule: (input: ClassificationRuleInput) => Promise<boolean>;
+  },
+): Promise<boolean> {
+  return persistence.saveRule({
+    targetKind: draft.targetKind, targetValue: draft.targetValue, matchScope: draft.scope,
+    detailKind: draft.scope === "detail" ? draft.detailKind : null,
+    detailValue: draft.scope === "detail" ? draft.detailValue : null,
+    category: draft.category, productivity: draft.productivity, enabled: true, confidence: 1,
+  });
+}

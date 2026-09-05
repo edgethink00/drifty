@@ -19,7 +19,7 @@ describe("Classification saved rules list styles", () => {
     const detailRule = cssRule(styles, ".classification-rule-card__detail");
     const deleteActionRule = cssRule(styles, ".content--settings .classification-rule-card__delete.settings-btn");
 
-    expect(source).toContain("settings-row settings-row--group-end classification-rule-list-section");
+    expect(source).toContain("settings-row settings-row--group-start settings-row--group-end classification-rule-list-section");
     expect(source).toContain("classification-rule-list-shell");
     expect(source).not.toContain("classification-rule-list-panel");
     expect(sectionRule).toContain("display: grid;");

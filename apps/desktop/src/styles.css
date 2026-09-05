@@ -14,6 +14,7 @@
 @import "./styles/visual-parity.css";
 @import "./styles/trends.css";
 @import "./features/settings/classificationRuleLayout.css";
+@import "./features/settings/classificationRulesManager.css";
 @import "./styles/help-trigger.css";
 /* Keep the shared app-button contract last so feature CSS cannot silently
    restore legacy mono/uppercase button typography. */

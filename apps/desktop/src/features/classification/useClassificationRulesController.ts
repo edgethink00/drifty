@@ -10,10 +10,10 @@ import type {
   ProductivityLabel,
 } from "@drifty/domain";
 import { canonicalizeClassificationRuleSiteUrl, siteTargetFromCanonicalUrl } from "@drifty/domain";
+import type { LocalizationController } from "../localization/LocalizationContext";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { toErrorMessage } from "../../lib/formatting";
 import {
-  classificationRuleScopeLabel,
   hasDuplicateClassificationRule,
   normalizeDomainRuleInput,
 } from "./classificationViewData";
@@ -21,8 +21,8 @@ import {
 type DomainRuleMode = "domain" | "url";
 
 type UseClassificationRulesControllerInput = {
-  readonly activeTab: string;
-  readonly settingsSection: string;
+  readonly managerOpen: boolean;
+  readonly t: LocalizationController["t"];
   readonly onRefreshSelectedDay: () => Promise<unknown>;
 };
 
@@ -35,7 +35,6 @@ type UseClassificationRulesControllerResult = {
   readonly appRuleSearchRef: RefObject<HTMLDivElement>;
   readonly appRuleTargetValue: string;
   readonly classificationRuleApplyResult: ClassificationRuleApplyResult | null;
-  readonly classificationRuleApplying: boolean;
   readonly classificationRuleCandidates: ClassificationRuleCandidate[];
   readonly classificationRuleCandidatesLoading: boolean;
   readonly classificationRuleDeletingId: string | null;
@@ -54,7 +53,6 @@ type UseClassificationRulesControllerResult = {
   readonly domainRuleSearchRef: RefObject<HTMLDivElement>;
   readonly handleAppRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
   readonly handleAppRuleSearchFocus: () => void;
-  readonly handleApplyClassificationRules: () => Promise<void>;
   readonly handleDeleteClassificationRule: (rule: ClassificationRule) => Promise<void>;
   readonly handleDomainRuleSearchBlur: (event: FocusEvent<HTMLDivElement>) => void;
   readonly handleDomainRuleSearchFocus: () => void;
@@ -75,8 +73,8 @@ type UseClassificationRulesControllerResult = {
 };
 
 export function useClassificationRulesController({
-  activeTab,
-  settingsSection,
+  managerOpen,
+  t,
   onRefreshSelectedDay,
 }: UseClassificationRulesControllerInput): UseClassificationRulesControllerResult {
   const [classificationRules, setClassificationRules] = useState<ClassificationRule[]>([]);
@@ -85,7 +83,6 @@ export function useClassificationRulesController({
   const [classificationRuleMessage, setClassificationRuleMessage] = useState<string | null>(null);
   const [classificationRuleSavingKind, setClassificationRuleSavingKind] = useState<ClassificationRuleTargetKind | null>(null);
   const [classificationRuleDeletingId, setClassificationRuleDeletingId] = useState<string | null>(null);
-  const [classificationRuleApplying, setClassificationRuleApplying] = useState(false);
   const [classificationRuleApplyResult, setClassificationRuleApplyResult] = useState<ClassificationRuleApplyResult | null>(null);
   const [domainRuleInput, setDomainRuleInput] = useState("");
   const [domainRuleCandidates, setDomainRuleCandidates] = useState<ClassificationRuleCandidate[]>([]);
@@ -123,10 +120,11 @@ export function useClassificationRulesController({
     setClassificationRuleMessage(null);
     setClassificationRuleApplyResult(null);
     try {
-      const savedRule = await trackerClient.saveClassificationRule(input);
+      const saved = await trackerClient.saveClassificationRule(input);
+      if (!saved) throw new Error("The classification could not be saved. Try again.");
       const applyResult = await trackerClient.applyClassificationRules();
       setClassificationRuleApplyResult(applyResult);
-      setClassificationRuleMessage(`${classificationRuleScopeLabel(savedRule)} rule saved locally.`);
+      setClassificationRuleMessage(t("classification.rules.saved"));
       setClassificationRules(await trackerClient.getClassificationRules());
       await onRefreshSelectedDay();
       return true;
@@ -136,7 +134,7 @@ export function useClassificationRulesController({
     } finally {
       setClassificationRuleSavingKind(null);
     }
-  }, [onRefreshSelectedDay]);
+  }, [onRefreshSelectedDay, t]);
 
   const handleSaveDomainRule = useCallback(async () => {
     if (domainRuleMode === "url") {
@@ -223,7 +221,7 @@ export function useClassificationRulesController({
     setClassificationRuleApplyResult(null);
     try {
       await trackerClient.deleteClassificationRule(rule.id);
-      setClassificationRuleMessage(`${classificationRuleScopeLabel(rule)} rule deleted locally.`);
+      setClassificationRuleMessage(t("classification.rules.removed"));
       setClassificationRules(await trackerClient.getClassificationRules());
       await onRefreshSelectedDay();
     } catch (nextError) {
@@ -231,23 +229,7 @@ export function useClassificationRulesController({
     } finally {
       setClassificationRuleDeletingId(null);
     }
-  }, [onRefreshSelectedDay]);
-
-  const handleApplyClassificationRules = useCallback(async () => {
-    setClassificationRuleApplying(true);
-    setClassificationRulesError(null);
-    setClassificationRuleMessage(null);
-    try {
-      const applyResult = await trackerClient.applyClassificationRules();
-      setClassificationRuleApplyResult(applyResult);
-      setClassificationRuleMessage("Local rules reapplied to matching activity.");
-      await onRefreshSelectedDay();
-    } catch (nextError) {
-      setClassificationRulesError(toErrorMessage(nextError));
-    } finally {
-      setClassificationRuleApplying(false);
-    }
-  }, [onRefreshSelectedDay]);
+  }, [onRefreshSelectedDay, t]);
 
   const handleSelectClassificationCandidate = useCallback((candidate: ClassificationRuleCandidate) => {
     setAppRuleSearch(candidate.displayName);
@@ -321,12 +303,12 @@ export function useClassificationRulesController({
   }, [loadClassificationRules]);
 
   useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "classification") return;
+    if (!managerOpen) return;
     void loadClassificationRules();
-  }, [activeTab, loadClassificationRules, settingsSection]);
+  }, [loadClassificationRules, managerOpen]);
 
   useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "classification") return undefined;
+    if (!managerOpen) return undefined;
     if (!domainRuleSearchPanelOpen) {
       setDomainRuleCandidatesLoading(false);
       return undefined;
@@ -353,10 +335,10 @@ export function useClassificationRulesController({
       disposed = true;
       window.clearTimeout(timeoutId);
     };
-  }, [activeTab, domainRuleInput, domainRuleSearchPanelOpen, settingsSection]);
+  }, [domainRuleInput, domainRuleSearchPanelOpen, managerOpen]);
 
   useEffect(() => {
-    if (activeTab !== "settings" || settingsSection !== "classification") return undefined;
+    if (!managerOpen) return undefined;
     if (!appRuleSearchPanelOpen) {
       setClassificationRuleCandidatesLoading(false);
       return undefined;
@@ -383,7 +365,7 @@ export function useClassificationRulesController({
       disposed = true;
       window.clearTimeout(timeoutId);
     };
-  }, [activeTab, appRuleSearch, appRuleSearchPanelOpen, settingsSection]);
+  }, [appRuleSearch, appRuleSearchPanelOpen, managerOpen]);
 
   useEffect(() => {
     if (!domainRuleSearchPanelOpen) return undefined;
@@ -406,7 +388,6 @@ export function useClassificationRulesController({
     appRuleSearchRef,
     appRuleTargetValue,
     classificationRuleApplyResult,
-    classificationRuleApplying,
     classificationRuleCandidates,
     classificationRuleCandidatesLoading,
     classificationRuleDeletingId,
@@ -425,7 +406,6 @@ export function useClassificationRulesController({
     domainRuleSearchRef,
     handleAppRuleSearchBlur,
     handleAppRuleSearchFocus,
-    handleApplyClassificationRules,
     handleDeleteClassificationRule,
     handleDomainRuleSearchBlur,
     handleDomainRuleSearchFocus,

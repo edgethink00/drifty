@@ -14,17 +14,12 @@ function cssRuleExact(styles: string, selector: string): string {
 }
 
 describe("Classification rule layout styles", () => {
-  it("keeps the Domain rule row on a single band with the Rule type toggle inline", () => {
+  it("keeps address and scope in separate fields above the classification controls", () => {
     const styles = readAppStyles();
-    const domainGridRule = cssRule(styles, ".classification-rule-form__grid:not(.classification-rule-form__grid--app)");
-    const labelRowRule = cssRule(styles, ".classification-rule-field__labelrow");
-    const modeOptionLabelRule = cssRuleExact(styles, ".classification-rule-mode-control .settings-mode-option span");
-
-    expect(domainGridRule).toContain('"target category productivity action"');
-    // The dedicated full-width "mode" band is gone; the toggle rides in the label row.
-    expect(domainGridRule).not.toContain('"mode mode mode mode"');
-    expect(labelRowRule).toContain("justify-content: space-between;");
-    expect(modeOptionLabelRule).toContain("white-space: nowrap;");
+    const gridRule = cssRule(styles, ".classification-rules-manager .classification-rule-form__grid");
+    expect(gridRule).toContain('"target target target" "category productivity action"');
+    expect(styles).toContain('"target target scope" "category productivity action"');
+    expect(cssRuleExact(styles, ".classification-rule-mode-control .settings-mode-option span")).toContain("white-space: nowrap;");
   });
 
   it("keeps Domain rule fields responsive after the feature override import", () => {

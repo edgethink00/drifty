@@ -1,0 +1,180 @@
+/* Reuse the Settings page, section, group and control styles. */
+.classification-rules-manager__add > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+  padding: 0.72rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--settings-row-card-bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-label-size);
+  list-style: none;
+}
+.classification-rules-manager__add > summary::-webkit-details-marker { display: none; }
+.classification-rules-manager__add > summary::before {
+  content: "";
+  width: 0.4rem;
+  height: 0.4rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+.classification-rules-manager__add[open] > summary { margin-bottom: var(--space-3); }
+.classification-rules-manager__add[open] > summary::before { transform: rotate(45deg); }
+.classification-rules-manager__add > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+.classification-rules-manager .classification-rule-list-shell {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.classification-rules-manager .classification-rule-card {
+  padding: var(--space-3);
+}
+.classification-rules-manager .classification-rule-list-head {
+  align-items: center;
+}
+.classification-rules-manager__intro,
+.classification-rules-manager__help {
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+  word-break: keep-all;
+}
+.classification-rules-manager__help summary { cursor: pointer; width: fit-content; }
+.classification-rules-manager__help p { margin: var(--space-2) 0 0; }
+.classification-rule-list-count { color: var(--text-soft); font-size: var(--type-caption-size); white-space: nowrap; }
+.classification-rule-list-tools { display: flex; align-items: center; justify-content: end; gap: var(--space-2); min-width: 0; }
+.classification-rules-manager .classification-rule-list-tools .settings-input { width: min(17rem, 100%); min-width: 0; }
+.classification-rules-manager .classification-rule-list-tools .settings-btn { min-width: 5rem; }
+.classification-rules-manager .classification-rule-list-head { flex-direction: row; flex-wrap: wrap; }
+.classification-rules-manager .classification-rule-list:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.classification-rules-manager .classification-rule-card__actions .settings-btn {
+  min-width: 4rem;
+  height: var(--settings-control-height);
+  min-height: var(--settings-control-height);
+}
+.classification-rules-manager .classification-rule-card__editor,
+.classification-rules-manager .classification-rule-card__confirmation {
+  min-width: 0;
+}
+.classification-rule-card__editor fieldset {
+  border: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-3);
+}
+.classification-rule-card__editor .classification-rule-field {
+  flex: 1 1 12rem;
+}
+.classification-rule-card__editor p,
+.classification-rule-card__confirmation p {
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-block: var(--space-3);
+  word-break: keep-all;
+}
+.classification-correction__identity p {
+  color: var(--text-muted);
+  line-height: 1.5;
+  word-break: keep-all;
+}
+@media (max-width: 900px) {
+  .classification-range-controls { flex-wrap: wrap; }
+  .classification-rules-manager .classification-rule-card__actions { flex-wrap: wrap; }
+}
+.classification-rules-manager .classification-rule-list {
+  max-height: min(30rem, 55vh);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+.classification-rules-manager .classification-rule-card__editor,
+.classification-rules-manager .classification-rule-card__confirmation {
+  grid-column: 1 / -1;
+}
+.classification-rules-manager .classification-rule-card__meta {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.classification-rules-manager .classification-rule-card__detail { white-space: normal; }
+.classification-rules-manager .classification-rule-card__editor,
+.classification-rules-manager .classification-rule-card__confirmation { scroll-margin: var(--space-3); }
+@media (max-width: 1100px) {
+  .classification-rules-manager .classification-rule-card__actions { justify-content: end; }
+}
+
+.classification-rules-manager .classification-rule-card__editor p,
+.classification-rules-manager .classification-rule-card__confirmation p {
+  white-space: normal;
+  overflow: visible;
+}
+
+.content--settings .classification-rule-list-section.settings-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+.classification-rules-manager .classification-rule-list-shell,
+.classification-rules-manager .classification-rule-list-head { width: 100%; min-width: 0; }
+/* Inside the bounded list, an open picker participates in the row layout so
+   the final row's choices remain reachable instead of clipping at the edge. */
+.classification-rule-card__editor .settings-select-control__menu {
+  position: static;
+  margin-top: var(--space-1);
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+}
+
+.classification-rules-manager .classification-rule-card__form-actions {
+  display: flex;
+  justify-content: end;
+  gap: var(--space-2);
+}
+.classification-rules-manager .classification-rule-card__form-actions .settings-btn {
+  min-width: 5rem;
+  width: auto;
+  min-height: var(--classification-rule-control-height);
+}
+.classification-rules-manager .classification-rule-card__editor p,
+.classification-rules-manager .classification-rule-card__confirmation p {
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  color: var(--text-soft);
+}
+.classification-rules-manager__notice {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--settings-row-card-bg);
+  color: var(--text-soft);
+  font-family: var(--font-ui);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.classification-rules-manager__notice strong { color: var(--text); font-weight: 500; }
+.classification-rules-manager__notice--error { color: var(--warn); }
+@media (min-width: 721px) and (max-width: 1100px) {
+  .classification-rules-manager .classification-rule-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+}
+@media (max-width: 720px) {
+  .classification-rule-card__editor fieldset { grid-template-columns: minmax(0, 1fr); }
+}

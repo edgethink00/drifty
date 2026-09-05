@@ -118,7 +118,7 @@ import { hideBootShell } from "./features/loading/bootShell";
 import { BUILD_INFO } from "./buildInfo";
 import { AccountSettingsSection } from "./features/settings/AccountSettingsSection";
 import { AppearanceSettingsSection } from "./features/settings/AppearanceSettingsSection";
-import { ClassificationSettingsSection } from "./features/settings/ClassificationSettingsSection";
+import { ClassificationRulesManager } from "./features/settings/ClassificationRulesManager";
 import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
@@ -415,7 +415,7 @@ import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
 import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
-import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, type ClassificationCorrectionDraft, type ClassificationCorrectionNotice, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
+import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, persistClassificationCorrection, type ClassificationCorrectionDraft, type ClassificationCorrectionNotice, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
 import { captureCorrectionEvidence } from "./features/classification/correctionEvidence";
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
@@ -971,7 +971,6 @@ export default function App() {
     appRuleSearchRef,
     appRuleTargetValue,
     classificationRuleApplyResult,
-    classificationRuleApplying,
     classificationRuleCandidates,
     classificationRuleCandidatesLoading,
     classificationRuleDeletingId,
@@ -990,7 +989,6 @@ export default function App() {
     domainRuleSearchRef,
     handleAppRuleSearchBlur,
     handleAppRuleSearchFocus,
-    handleApplyClassificationRules,
     handleDeleteClassificationRule,
     handleDomainRuleSearchBlur,
     handleDomainRuleSearchFocus,
@@ -1009,8 +1007,8 @@ export default function App() {
     updateAppRuleSearch,
     updateDomainRuleInput,
   } = useClassificationRulesController({
-    activeTab,
-    settingsSection,
+    managerOpen: activeTab === "settings" && settingsSection === "classification",
+    t: localization.t,
     onRefreshSelectedDay: () => refresh(selectedDay),
   });
   const [dashboardAiUnavailablePreviewCase, setDashboardAiUnavailablePreviewCase] = useState<DashboardAiUnavailablePreviewCase>("trial-ended");
@@ -3465,21 +3463,8 @@ export default function App() {
     const draft = classificationCorrectionDraft;
     if (!draft || classificationCorrectionSaving) return;
 
-    const ruleInput: ClassificationRuleInput = {
-      targetKind: draft.targetKind,
-      targetValue: draft.targetValue,
-      matchScope: draft.scope,
-      detailKind: draft.scope === "detail" ? draft.detailKind : null,
-      detailValue: draft.scope === "detail" ? draft.detailValue : null,
-      category: draft.category,
-      productivity: draft.productivity,
-      enabled: true,
-      confidence: 1,
-    };
-
     setClassificationCorrectionNotice(null);
     setClassificationCorrectionSaving(true);
-    let ruleSaved = false;
     try {
       let feedbackSegment: ActivitySegment | null = null;
       if (draft.scope === "detail" && draft.rowId) {
@@ -3495,27 +3480,12 @@ export default function App() {
         )) ?? null;
       }
 
-      const saved = await saveClassificationRule(ruleInput);
+      const saved = await persistClassificationCorrection(draft, {
+        saveRule: saveClassificationRule,
+      });
       if (!saved) {
-        setClassificationCorrectionNotice({
-          kind: "error",
-          message: "We couldn’t finish applying this correction. Your choices are still here, so you can try again.",
-        });
+        setClassificationCorrectionNotice({ kind: "error", message: localization.t("classification.correction.saveError") });
         return;
-      }
-      ruleSaved = true;
-
-      if (draft.scope === "detail" && draft.rowId) {
-        const row = classificationActivityRows.find((item) => item.id === draft.rowId) ?? null;
-        if (row && row.segments.length > 0) {
-          const classifiedAt = new Date().toISOString();
-          await trackerClient.saveClassifications(row.segments.map((segment) => buildClassificationCorrectionRecord({
-            category: draft.category,
-            classifiedAt,
-            productivity: draft.productivity,
-            segment,
-          })));
-        }
       }
 
       if (feedbackSegment) {
@@ -3541,16 +3511,15 @@ export default function App() {
       setClassificationCorrectionDraft(null);
       setClassificationCorrectionNotice({
         kind: "success",
-        message: `${draft.displayLabel ?? draft.targetValue} is now ${categoryLabel(draft.category)} · ${productivityLabel(draft.productivity)}. This correction helps Memory classify similar activity.`,
+        message: localization.t("classification.correction.savedAlways"),
       });
+      clearLocalActivityCaches();
       await refresh(selectedDayRef.current);
     } catch (nextError) {
       console.warn("Unable to finish classification correction.", toErrorMessage(nextError));
       setClassificationCorrectionNotice({
         kind: "error",
-        message: ruleSaved
-          ? "The rule was saved, but this activity couldn’t be fully updated. Try again to finish the correction."
-          : "We couldn’t save this correction. Your choices are still here, so you can try again.",
+        message: localization.t("classification.correction.saveError"),
       });
     } finally {
       setClassificationCorrectionSaving(false);
@@ -9587,6 +9556,57 @@ export default function App() {
           <div className="page">
             <h1 className="sr-only">{localization.t("common.settings")}</h1>
             <div className="settings-panel-stack">
+                {settingsSection === "classification" && (
+                  <ClassificationRulesManager
+                    onSaveRule={saveClassificationRule}
+                    appIcons={appIcons}
+                    appRuleCategory={appRuleCategory}
+                    appRuleDisplayName={appRuleDisplayName}
+                    appRuleProductivity={appRuleProductivity}
+                    appRuleSearch={appRuleSearch}
+                    appRuleSearchPanelOpen={appRuleSearchPanelOpen}
+                    appRuleSearchRef={appRuleSearchRef}
+                    appRuleTargetValue={appRuleTargetValue}
+                    appThemeColorOverrides={appThemeColorOverrides}
+                    categoryColorOverrides={categoryColorOverrides}
+                    classificationRuleApplyResult={classificationRuleApplyResult}
+                    classificationRuleCandidates={classificationRuleCandidates}
+                    classificationRuleCandidatesLoading={classificationRuleCandidatesLoading}
+                    classificationRuleDeletingId={classificationRuleDeletingId}
+                    classificationRuleMessage={classificationRuleMessage}
+                    classificationRuleSavingKind={classificationRuleSavingKind}
+                    classificationRuleSegments={classificationRuleSegments}
+                    classificationRules={classificationRules}
+                    classificationRulesError={classificationRulesError}
+                    classificationRulesLoading={classificationRulesLoading}
+                    domainRuleCandidates={domainRuleCandidates}
+                    domainRuleCandidatesLoading={domainRuleCandidatesLoading}
+                    domainRuleCategory={domainRuleCategory}
+                    domainRuleInput={domainRuleInput}
+                    domainRuleMode={domainRuleMode}
+                    domainRuleProductivity={domainRuleProductivity}
+                    domainRuleSearchPanelOpen={domainRuleSearchPanelOpen}
+                    domainRuleSearchRef={domainRuleSearchRef}
+                    onAppRuleCategoryChange={setAppRuleCategory}
+                    onAppRuleProductivityChange={setAppRuleProductivity}
+                    onAppRuleSearchBlur={handleAppRuleSearchBlur}
+                    onAppRuleSearchChange={updateAppRuleSearch}
+                    onAppRuleSearchFocus={handleAppRuleSearchFocus}
+                    onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
+                    onDomainRuleCategoryChange={setDomainRuleCategory}
+                    onDomainRuleInputChange={updateDomainRuleInput}
+                    onDomainRuleModeChange={setDomainRuleMode}
+                    onDomainRuleProductivityChange={setDomainRuleProductivity}
+                    onDomainRuleSearchBlur={handleDomainRuleSearchBlur}
+                    onDomainRuleSearchFocus={handleDomainRuleSearchFocus}
+                    onLoadClassificationRules={() => void loadClassificationRules()}
+                    onSaveAppRule={() => void handleSaveAppRule()}
+                    onSaveDomainRule={() => void handleSaveDomainRule()}
+                    onSelectClassificationCandidate={handleSelectClassificationCandidate}
+                    onSelectDomainRuleCandidate={handleSelectDomainRuleCandidate}
+                    onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
+                  />
+                )}
                 {settingsSection === "account" && (
                   <AccountSettingsSection
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
@@ -9672,58 +9692,6 @@ export default function App() {
                     onCategoryColorChange={handleCategoryColorChange}
                     onCategoryColorReset={handleCategoryColorReset}
                     onThemeChange={setTheme}
-                  />
-                )}
-                {settingsSection === "classification" && (
-                  <ClassificationSettingsSection
-                    appIcons={appIcons}
-                    appRuleCategory={appRuleCategory}
-                    appRuleDisplayName={appRuleDisplayName}
-                    appRuleProductivity={appRuleProductivity}
-                    appRuleSearch={appRuleSearch}
-                    appRuleSearchPanelOpen={appRuleSearchPanelOpen}
-                    appRuleSearchRef={appRuleSearchRef}
-                    appRuleTargetValue={appRuleTargetValue}
-                    appThemeColorOverrides={appThemeColorOverrides}
-                    categoryColorOverrides={categoryColorOverrides}
-                    classificationRuleApplyResult={classificationRuleApplyResult}
-                    classificationRuleApplying={classificationRuleApplying}
-                    classificationRuleCandidates={classificationRuleCandidates}
-                    classificationRuleCandidatesLoading={classificationRuleCandidatesLoading}
-                    classificationRuleDeletingId={classificationRuleDeletingId}
-                    classificationRuleMessage={classificationRuleMessage}
-                    classificationRuleSavingKind={classificationRuleSavingKind}
-                    classificationRuleSegments={classificationRuleSegments}
-                    classificationRules={classificationRules}
-                    classificationRulesError={classificationRulesError}
-                    classificationRulesLoading={classificationRulesLoading}
-                    domainRuleCandidates={domainRuleCandidates}
-                    domainRuleCandidatesLoading={domainRuleCandidatesLoading}
-                    domainRuleCategory={domainRuleCategory}
-                    domainRuleInput={domainRuleInput}
-                    domainRuleMode={domainRuleMode}
-                    domainRuleProductivity={domainRuleProductivity}
-                    domainRuleSearchPanelOpen={domainRuleSearchPanelOpen}
-                    domainRuleSearchRef={domainRuleSearchRef}
-                    onAppRuleCategoryChange={setAppRuleCategory}
-                    onAppRuleProductivityChange={setAppRuleProductivity}
-                    onAppRuleSearchBlur={handleAppRuleSearchBlur}
-                    onAppRuleSearchChange={updateAppRuleSearch}
-                    onAppRuleSearchFocus={handleAppRuleSearchFocus}
-                    onApplyClassificationRules={() => void handleApplyClassificationRules()}
-                    onDeleteClassificationRule={(rule) => void handleDeleteClassificationRule(rule)}
-                    onDomainRuleCategoryChange={setDomainRuleCategory}
-                    onDomainRuleInputChange={updateDomainRuleInput}
-                    onDomainRuleModeChange={setDomainRuleMode}
-                    onDomainRuleProductivityChange={setDomainRuleProductivity}
-                    onDomainRuleSearchBlur={handleDomainRuleSearchBlur}
-                    onDomainRuleSearchFocus={handleDomainRuleSearchFocus}
-                    onLoadClassificationRules={() => void loadClassificationRules()}
-                    onSaveAppRule={() => void handleSaveAppRule()}
-                    onSaveDomainRule={() => void handleSaveDomainRule()}
-                    onSelectClassificationCandidate={handleSelectClassificationCandidate}
-                    onSelectDomainRuleCandidate={handleSelectDomainRuleCandidate}
-                    onToggleClassificationRule={(rule, enabled) => void handleToggleClassificationRule(rule, enabled)}
                   />
                 )}
                 {settingsSection === "aiSetup" && (

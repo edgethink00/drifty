@@ -45,7 +45,7 @@ describe("SettingsSidebar", () => {
     ]);
     expect(within(aiGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "AI setup",
-      "Classification rules",
+      "My classifications",
     ]);
     const advancedGroup = screen.getByRole("group", { name: /^Advanced$/ });
     expect(within(advancedGroup).getAllByRole("button").map((button) => button.textContent)).toEqual(["Agents & CLI"]);

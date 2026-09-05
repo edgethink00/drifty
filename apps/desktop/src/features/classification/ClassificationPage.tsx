@@ -208,7 +208,7 @@ export function ClassificationPage({
     const categoryValues = CATEGORY_ORDER.filter((category) => category !== "unknown");
 
     const isDetailCorrection = classificationCorrectionDraft.scope === "detail";
-    const targetLabel = t(classificationCorrectionDraft.targetKind === "site" ? "classification.domain" : "classification.app");
+    const targetLabel = classificationCorrectionDraft.displayLabel ?? classificationCorrectionDraft.targetValue;
     const scopeDescription = isDetailCorrection
       ? t("classification.correction.detailScope", { detail: localizedCorrectionDetailLabel(classificationCorrectionDraft.detailKind, t) })
       : t("classification.correction.surfaceScope", { target: targetLabel });
@@ -241,6 +241,7 @@ export function ClassificationPage({
                 role="radio"
                 aria-checked={selected}
                 tabIndex={selected ? 0 : -1}
+                disabled={classificationCorrectionSaving}
                 className="classification-correction__chip"
                 data-selected={String(selected)}
                 style={{ "--chip-tone": CATEGORY_COLORS[category] } as CSSProperties}
@@ -271,6 +272,7 @@ export function ClassificationPage({
                 role="radio"
                 aria-checked={selected}
                 tabIndex={selected ? 0 : -1}
+                disabled={classificationCorrectionSaving}
                 className="classification-correction__chip"
                 data-selected={String(selected)}
                 style={{ "--chip-tone": PRODUCTIVITY_COLORS[productivity] } as CSSProperties}
