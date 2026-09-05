@@ -14,7 +14,7 @@ import {
 import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { OpenRouterSetupPanel } from "./OpenRouterSetupPanel";
-import type { DriftyAiRoute, LocalAiSetupState } from "./localAiSetup";
+import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetupState } from "./localAiSetup";
 import { isActiveProviderTestable, providerForSection, sectionForProvider } from "./aiSetupProviderSelection";
 import { AiSetupSupportSections } from "./AiSetupSupportSections";
 import { AiSetupPanelTabs, type AiSetupPanelTab } from "./AiSetupPanelTabs";
@@ -162,7 +162,7 @@ export function AiSetupPanel({
       case "openrouter":
         return localAiSetup.openRouterApiKey.trim().length > 0;
       case "custom":
-        return localAiSetup.selfHostedBaseUrl.trim().length > 0 && localAiSetup.selfHostedModel.trim().length > 0;
+        return Boolean(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim());
       default:
         return true;
     }
@@ -227,7 +227,7 @@ export function AiSetupPanel({
             onTestConnection={handleTestConnection}
           />
 
-          <h4 className="ai-setup-provider-heading">{t("settings.ai.configureProviders")}</h4>
+          <h4 className="ai-setup-provider-heading">{t("settings.ai.connectionDetails")}</h4>
 
           <div className="ai-setup-choices" role="group" aria-label={t("settings.ai.setupChoicesAria")}>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
@@ -239,8 +239,16 @@ export function AiSetupPanel({
             </AiSetupSectionCard>
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={expandedSection === "custom"} onToggle={handleToggleSection}>
               <CustomEndpointSetupPanel
-                localAiSetup={localAiSetup}
-                onLocalAiSetupChange={onLocalAiSetupChange}
+                baseUrl={localAiSetup.selfHostedBaseUrl}
+                apiKey={localAiSetup.selfHostedApiKey}
+                model={localAiSetup.selfHostedModel}
+                sharingPartner="intelligence"
+                baseUrlAriaLabel={t("settings.ai.customEndpointBaseUrlAria")}
+                apiKeyAriaLabel={t("settings.ai.customEndpointApiKeyAria")}
+                modelAriaLabel={t("settings.ai.customEndpointModelAria")}
+                onBaseUrlChange={(selfHostedBaseUrl) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedBaseUrl }))}
+                onApiKeyChange={(selfHostedApiKey) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedApiKey }))}
+                onModelChange={(selfHostedModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel }))}
               />
             </AiSetupSectionCard>
           </div>

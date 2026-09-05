@@ -84,6 +84,11 @@ export function useAiConnectionTestRunner({
   }, [localAiSetup]);
 
   useEffect(() => {
+    setResult(null);
+    if (!autoFingerprint) completedAutoFingerprintRef.current = null;
+  }, [autoFingerprint]);
+
+  useEffect(() => {
     if (!autoFingerprint || running) return;
     if (completedAutoFingerprintRef.current === autoFingerprint) return;
     // Claim the fingerprint before the async run: effects can re-fire while the

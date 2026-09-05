@@ -368,7 +368,7 @@ import { useAiSetupController } from "./features/settings/useAiSetupController";
 import { useManagedLocalModelAttach } from "./features/settings/useManagedLocalModelAttach";
 import { useManagedLocalAiStatusObserver } from "./features/settings/useManagedLocalAiStatusObserver";
 import type { ManagedLocalAiStatus } from "./features/settings/managedLocalAiClient";
-import { isManagedLocalAiRoute } from "./features/settings/localAiSetup";
+import { isManagedLocalAiRoute, shouldPreferLegacyAnalysisCustomConnection } from "./features/settings/localAiSetup";
 import { LocalizationProvider, useLocalizationController } from "./features/localization/LocalizationContext";
 import { AI_AVAILABILITY_GATE_DEV_DISABLED_STORAGE_KEY, AI_CLASSIFICATION_VISIBILITY_STORAGE_KEY, APP_THEME_COLOR_OPTIONS, APP_THEME_COLOR_STORAGE_KEY, CATEGORY_COLOR_OPTIONS, CATEGORY_COLOR_STORAGE_KEY, FLOATING_COMPANION_DEV_STORAGE_KEY, DEV_MODE_STORAGE_KEY, DEVICE_SYNC_PREVIEW_STORAGE_KEY, WEB_ACCOUNT_PREVIEW_STORAGE_KEY, TEAMS_BETA_STORAGE_KEY, PROFILE_BETA_STORAGE_KEY, AGENTS_BETA_STORAGE_KEY, LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY, FORCE_BROWSER_HISTORY_URL_FALLBACK_STORAGE_KEY, FORCE_CHROMIUM_AX_CAPTURE_STORAGE_KEY, FORCE_CHROMIUM_AX_EXTREME_NUDGE_STORAGE_KEY, FORCE_FRONTMOST_FALLBACK_CAPTURE_STORAGE_KEY, SIDEBAR_COLLAPSED_STORAGE_KEY, START_OF_DAY_STORAGE_KEY, START_OF_WEEK_STORAGE_KEY, THEME_STORAGE_KEY, hourlyStartOfDayValueToMinutes, isHexColor, minutesToHourlyStartOfDayValue, persistBuiltInHeuristicsUnavailableSince, persistDemoDashboardReplaySettings, persistDeviceSyncEnabled, resetDemoDashboardReplaySettings, resolveDeviceSyncEnabled, resolveInitialAiAvailabilityGateDevDisabled, resolveInitialAiClassificationVisibility, resolveInitialAppThemeColorOverrides, resolveInitialBuiltInHeuristicsUnavailableSince, resolveInitialCategoryColorOverrides, resolveInitialFloatingCompanionDevEnabled, resolveInitialDemoDashboardReplaySettings, resolveInitialDevModeEnabled, resolveInitialDeviceSyncPreviewEnabled, resolveInitialWebAccountPreviewEnabled, resolveInitialTeamsBetaEnabled, resolveInitialProfileBetaEnabled, resolveInitialAgentsBetaEnabled, resolveInitialLegacyShellBlurPreviewEnabled, resolveInitialForceBrowserHistoryUrlFallbackEnabled, resolveInitialForceChromiumAxCaptureEnabled, resolveInitialForceChromiumAxExtremeNudgeEnabled, resolveInitialForceFrontmostFallbackCaptureEnabled, resolveInitialSidebarCollapsed, resolveInitialStartOfDayMinutes, resolveInitialStartOfWeek, resolveInitialTheme, retireLegacyDeviceSyncEnabledPreference , LEGACY_DEVICE_SYNC_ENABLED_STORAGE_KEY} from "./features/settings/settingsStorage";
 import { ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS, persistEnhancedContextSettings, resolveEffectiveEnhancedContextSettings, resolveInitialEnhancedContextSettings } from "./features/settings/settingsStorage";
@@ -6951,7 +6951,29 @@ export default function App() {
   const insightSiteSummary = insightTopSites.slice(0, 5);
   const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
   const selectedDayRange = useMemo(() => getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
-  const analysisModel = useAnalysisModelSetup(isSupabaseConfigured, localAiSetup.provider);
+  const updateSharedCustomEndpoint = useCallback((next: { readonly baseUrl: string; readonly apiKey: string }) => {
+    setLocalAiSetup((current) => ({
+      ...current,
+      selfHostedBaseUrl: next.baseUrl,
+      selfHostedApiKey: next.apiKey,
+    }));
+  }, [setLocalAiSetup]);
+  const sharedCustomEndpointConnection = useMemo(() => ({
+    baseUrl: localAiSetup.selfHostedBaseUrl,
+    apiKey: localAiSetup.selfHostedApiKey,
+    preferStoredConnection: shouldPreferLegacyAnalysisCustomConnection(localAiSetup),
+    onChange: updateSharedCustomEndpoint,
+  }), [
+    localAiSetup.selfHostedApiKey,
+    localAiSetup.selfHostedBaseUrl,
+    localAiSetup.selfHostedModel,
+    updateSharedCustomEndpoint,
+  ]);
+  const analysisModel = useAnalysisModelSetup(
+    isSupabaseConfigured,
+    localAiSetup.provider,
+    sharedCustomEndpointConnection,
+  );
   const projectAnalysisConnected = resolveProjectAnalysisConnected({
     analysisConnected: analysisModel.analysisConnected,
     analysisProvider: analysisModel.analysisSetup.provider,

@@ -1,12 +1,52 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_LOCAL_AI_SETUP,
   OPENROUTER_RECOMMENDED_MODELS,
+  normalizeOpenAiCompatibleBaseUrl,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
+  shouldPreferLegacyAnalysisCustomConnection,
+  toPersistedLocalAiSetup,
 } from "./localAiSetup";
 
 describe("OpenRouter setup normalization", () => {
+  it("normalizes HTTP endpoint URLs and rejects values that cannot be called", () => {
+    expect(normalizeOpenAiCompatibleBaseUrl(" https://models.example/v1/// ")).toBe("https://models.example/v1");
+    expect(normalizeOpenAiCompatibleBaseUrl("not a URL")).toBeNull();
+    expect(normalizeOpenAiCompatibleBaseUrl("file:///tmp/models")).toBeNull();
+  });
+
+  it("never persists the shared custom endpoint API key", () => {
+    const persisted = toPersistedLocalAiSetup({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedApiKey: "custom-session-secret",
+      selfHostedBaseUrl: " https://models.example/v1 ",
+      selfHostedModel: "qwen2.5:7b",
+    });
+
+    expect(persisted).not.toHaveProperty("selfHostedApiKey");
+    expect(persisted.selfHostedBaseUrl).toBe("https://models.example/v1");
+    expect(JSON.stringify(persisted)).not.toContain("custom-session-secret");
+  });
+
+  it("migrates a legacy Intelligence endpoint only over an untouched Classification custom slot", () => {
+    expect(shouldPreferLegacyAnalysisCustomConnection(DEFAULT_LOCAL_AI_SETUP)).toBe(true);
+    expect(shouldPreferLegacyAnalysisCustomConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      selfHostedBaseUrl: `${DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl}/`,
+    })).toBe(true);
+    expect(shouldPreferLegacyAnalysisCustomConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      selfHostedBaseUrl: "https://user-entered.example/v1",
+    })).toBe(false);
+    expect(shouldPreferLegacyAnalysisCustomConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      selfHostedModel: "classification-model",
+    })).toBe(false);
+  });
+
   it("keeps existing cleanup behavior when fallbacks include blanks, duplicates, and Auto", () => {
     const primaryModel = normalizeOpenRouterPrimaryModel("deepseek/deepseek-v4-flash");
 

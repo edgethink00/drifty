@@ -32,6 +32,7 @@
     "allow-accessibility-request-access",
     "allow-ai-classification-anthropic-chat",
     "allow-ai-classification-openai-chat",
+    "allow-ai-list-openai-models",
     "allow-correction-evidence-append",
     "allow-living-soul-read",
     "allow-living-soul-write",

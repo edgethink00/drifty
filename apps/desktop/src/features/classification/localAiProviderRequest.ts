@@ -94,7 +94,7 @@ export type MinimizedActivityPayload = {
 export type LocalAiProviderConfig =
   | { readonly provider: "managed_local"; readonly baseUrl: string; readonly model: string; readonly modelId: string }
   | { readonly provider: "openrouter_byok"; readonly apiKey: string; readonly model: string; readonly fallbackModels?: readonly string[] }
-  | { readonly provider: "self_hosted"; readonly baseUrl: string; readonly model: string };
+  | { readonly provider: "self_hosted"; readonly baseUrl: string; readonly apiKey?: string; readonly model: string };
 
 export type LocalAiProviderRequest = {
   readonly model: string;
@@ -160,6 +160,7 @@ function buildLocalProviderRequest(input: {
     case "self_hosted":
       return openAiCompatibleProviderRequest({
         baseUrl: provider.baseUrl,
+        apiKey: provider.apiKey,
         model: provider.model,
         payload: input.payload,
         workProfile: input.workProfile,
@@ -227,9 +228,10 @@ export function toLocalSoulRefinementRequest(
     }
     case "self_hosted": {
       const baseUrl = provider.baseUrl.trim();
+      const apiKey = provider.apiKey?.trim();
       const model = provider.model.trim();
       if (!baseUrl || !model) return null;
-      return { model, request: { baseUrl, model, maxTokens: 2_048, messages } };
+      return { model, request: { baseUrl, ...(apiKey ? { apiKey } : {}), model, maxTokens: 2_048, messages } };
     }
     case "openrouter_byok": {
       const apiKey = provider.apiKey.trim();
@@ -274,6 +276,7 @@ function soulPatternSchema(): Record<string, unknown> {
 function openAiCompatibleProviderRequest(
   input: {
     readonly baseUrl: string;
+    readonly apiKey?: string;
     readonly model: string;
     readonly payload: readonly MinimizedActivityPayload[];
     readonly workProfile: string | null;
@@ -283,12 +286,14 @@ function openAiCompatibleProviderRequest(
   options: OpenAiCompatibleRequestOptions = {},
 ): LocalAiProviderRequest | null {
   const baseUrl = input.baseUrl.trim();
+  const apiKey = input.apiKey?.trim();
   const model = input.model.trim();
   if (!baseUrl || !model) return null;
   return {
     model,
     request: {
       baseUrl,
+      ...(apiKey ? { apiKey } : {}),
       model,
       ...options,
       messages: [{

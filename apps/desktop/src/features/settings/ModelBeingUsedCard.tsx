@@ -75,7 +75,6 @@ export function ModelBeingUsedCard({
             options={providerOptions}
             onChange={onProviderChange}
           />
-          <span className="ai-setup-current-model__slash" aria-hidden="true">/</span>
           <SettingsSelect
             ariaLabel={modelAriaLabel}
             className="ai-setup-select-control ai-setup-select-control--model"

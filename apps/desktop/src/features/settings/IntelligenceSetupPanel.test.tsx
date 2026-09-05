@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { IntelligenceSetupPanel, type IntelligenceSetupPanelProps } from "./IntelligenceSetupPanel";
 import { DEFAULT_ANALYSIS_AI_SETUP, type AnalysisAiSetupState } from "./analysisModelSetup";
+
+const { testOpenAiCompatibleConnectionMock } = vi.hoisted(() => ({
+  testOpenAiCompatibleConnectionMock: vi.fn(),
+}));
+
+vi.mock("./aiConnectionTest", () => ({
+  testOpenAiCompatibleConnection: testOpenAiCompatibleConnectionMock,
+}));
 
 function buildSetup(overrides: Partial<AnalysisAiSetupState> = {}): AnalysisAiSetupState {
   return { ...DEFAULT_ANALYSIS_AI_SETUP, ...overrides };
@@ -33,6 +41,11 @@ function summaryRegion() {
 }
 
 describe("IntelligenceSetupPanel", () => {
+  beforeEach(() => {
+    testOpenAiCompatibleConnectionMock.mockReset();
+    testOpenAiCompatibleConnectionMock.mockResolvedValue({ kind: "success", message: "Connected in 18 ms." });
+  });
+
   it("explains the heavy project pass without naming a preferred model", () => {
     const { container } = renderPanel({ setup: buildSetup({ provider: "cloud" }) });
 
@@ -116,6 +129,101 @@ describe("IntelligenceSetupPanel", () => {
     // "Custom endpoint" shows in both the provider select and the (unconfigured) model select.
     expect(within(summaryRegion()).getAllByText("Custom endpoint").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: /Connect OpenRouter/i })).toBeNull();
+    expect(screen.getByRole("button", { name: "Fetch models" })).toBeTruthy();
+    // On the Intelligence tab the description names Classification as the sharing partner.
+    expect(screen.getByText(/Base URL and key are shared with Classification;/)).toBeTruthy();
+  });
+
+  it("tests the active custom endpoint with its shared key and Intelligence model", async () => {
+    renderPanel({
+      setup: buildSetup({
+        provider: "self_hosted",
+        selfHostedBaseUrl: "https://models.example/v1/",
+        selfHostedApiKey: "shared-session-key",
+        selfHostedModel: "intelligence-model",
+      }),
+    });
+
+    fireEvent.click(within(summaryRegion()).getByRole("button", { name: "Test AI connection" }));
+
+    await waitFor(() => expect(testOpenAiCompatibleConnectionMock).toHaveBeenCalledWith({
+      baseUrl: "https://models.example/v1",
+      apiKey: "shared-session-key",
+      model: "intelligence-model",
+    }));
+    expect(await within(summaryRegion()).findByText("Connected in 18 ms.")).toBeTruthy();
+  });
+
+  it("disables the custom endpoint connection test until its URL and model are valid", () => {
+    const firstSetup = buildSetup({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "not-a-url",
+      selfHostedModel: "intelligence-model",
+    });
+    const rendered = renderPanel({ setup: firstSetup });
+
+    const button = within(summaryRegion()).getByRole("button", { name: "Test AI connection" });
+    expect(button).toHaveProperty("disabled", true);
+
+    rendered.rerender(<IntelligenceSetupPanel
+      {...rendered.props}
+      setup={{ ...firstSetup, selfHostedBaseUrl: "https://models.example/v1", selfHostedModel: "   " }}
+    />);
+    expect(button).toHaveProperty("disabled", true);
+  });
+
+  it("recovers from an unexpected rejected connection test without exposing its error", async () => {
+    testOpenAiCompatibleConnectionMock.mockRejectedValueOnce(new Error("secret-bearing transport failure"));
+    renderPanel({
+      setup: buildSetup({
+        provider: "self_hosted",
+        selfHostedBaseUrl: "https://models.example/v1",
+        selfHostedModel: "intelligence-model",
+      }),
+    });
+
+    fireEvent.click(within(summaryRegion()).getByRole("button", { name: "Test AI connection" }));
+
+    expect(await within(summaryRegion()).findByText("Connection test failed.")).toBeTruthy();
+    expect(within(summaryRegion()).getByRole("button", { name: "Test AI connection" })).toHaveProperty("disabled", false);
+    expect(screen.queryByText(/secret-bearing/i)).toBeNull();
+  });
+
+  it("ignores a late result after the endpoint model changes", async () => {
+    let resolveFirstTest: ((result: { kind: "success"; message: string }) => void) | undefined;
+    testOpenAiCompatibleConnectionMock.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveFirstTest = resolve;
+    }));
+    const firstSetup = buildSetup({
+      provider: "self_hosted",
+      selfHostedBaseUrl: "https://models.example/v1",
+      selfHostedModel: "first-model",
+    });
+    const rendered = renderPanel({ setup: firstSetup });
+
+    fireEvent.click(within(summaryRegion()).getByRole("button", { name: "Test AI connection" }));
+    rendered.rerender(<IntelligenceSetupPanel {...rendered.props} setup={{ ...firstSetup, selfHostedModel: "second-model" }} />);
+    resolveFirstTest?.({ kind: "success", message: "Connected in 999 ms." });
+
+    await waitFor(() => expect(within(summaryRegion()).queryByText("Connected in 999 ms.")).toBeNull());
+    expect(within(summaryRegion()).getByRole("button", { name: "Test AI connection" })).toHaveProperty("disabled", false);
+  });
+
+  it("does not start duplicate tests for the same configuration", () => {
+    testOpenAiCompatibleConnectionMock.mockImplementationOnce(() => new Promise(() => undefined));
+    renderPanel({
+      setup: buildSetup({
+        provider: "self_hosted",
+        selfHostedBaseUrl: "https://models.example/v1",
+        selfHostedModel: "intelligence-model",
+      }),
+    });
+
+    const button = within(summaryRegion()).getByRole("button", { name: "Test AI connection" });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(testOpenAiCompatibleConnectionMock).toHaveBeenCalledTimes(1);
   });
 
   it("commits to a configured provider when its card is opened", () => {

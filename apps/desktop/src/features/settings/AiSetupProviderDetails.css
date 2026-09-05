@@ -287,6 +287,57 @@
   width: 100%;
 }
 
+.ai-setup-detail--custom-endpoint {
+  container-name: ai-custom-endpoint;
+  container-type: inline-size;
+}
+
+.ai-setup-custom-fields {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+
+.ai-setup-custom-field {
+  min-width: 0;
+}
+
+.ai-setup-custom-field--model {
+  grid-column: 1 / -1;
+}
+
+/* The fetch strip sits between the shared connection fields and the
+   tab-specific model field, mirroring the task order
+   (connect -> discover -> choose). */
+.ai-setup-connection-actions {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg-2) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  grid-column: 1 / -1;
+  justify-content: space-between;
+  min-width: 0;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+}
+
+.ai-setup-connection-actions__fetch.settings-btn {
+  flex: 0 0 auto;
+  height: 2rem;
+  min-height: 2rem;
+}
+
+.ai-setup-connection-actions__hint {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  min-width: 0;
+}
+
 .ai-setup-model-row > div {
   display: flex;
   flex-wrap: wrap;
@@ -304,6 +355,13 @@
   min-width: 0;
 }
 
+.ai-setup-custom-endpoint__title {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
 .ai-setup-custom-endpoint__header strong {
   color: var(--text);
   font-family: var(--font-display);
@@ -317,6 +375,166 @@
   color: var(--text-soft);
   font-size: var(--type-setting-desc-size);
   line-height: 1.4;
+}
+
+.ai-setup-custom-endpoint__header .ai-setup-preview-mock-badge {
+  background: color-mix(in srgb, var(--productivity-focus) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--productivity-focus) 24%, transparent);
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--productivity-focus) 82%, var(--text));
+  font-size: var(--type-caption-size);
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.24rem 0.42rem;
+}
+
+.ai-setup-model-fetch {
+  white-space: nowrap;
+}
+
+.ai-setup-model-field > label {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-control-size);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ai-setup-model-control.settings-select-control {
+  --settings-control-height: 2.28rem;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: var(--radius-sm);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  width: 100%;
+}
+
+.ai-setup-choice.is-expanded:has(.ai-setup-model-control[data-open="true"]) {
+  overflow: visible;
+  position: relative;
+  z-index: var(--z-settings-popover);
+}
+
+.ai-setup-choice.is-expanded:has(.ai-setup-model-control[data-open="true"]) .collapsible-panel__inner,
+.ai-setup-model-control.settings-select-control[data-open="true"] {
+  overflow: visible;
+}
+
+.ai-setup-model-control.settings-select-control:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
+}
+
+.ai-setup-model-control__input-shell {
+  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+}
+
+.ai-setup-model-control .settings-input.ai-setup-model-control__input {
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 1px) 0 0 calc(var(--radius-sm) - 1px);
+  min-height: var(--settings-control-height);
+  min-width: 0;
+  padding-inline: var(--space-3);
+}
+
+.ai-setup-model-control .settings-input.ai-setup-model-control__input:focus {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.ai-setup-model-control__toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--text-soft);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 2.25rem;
+  padding: 0 var(--space-2);
+}
+
+.ai-setup-model-control__toggle:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.ai-setup-model-control__toggle:focus-visible {
+  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
+  outline-offset: -3px;
+}
+
+.ai-setup-model-control__toggle:disabled {
+  cursor: default;
+  opacity: 0.36;
+}
+
+.ai-setup-model-control .settings-select-control__chevron {
+  margin-left: 0;
+}
+
+.ai-setup-model-control .settings-select-control__menu {
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--surface) 96%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--text) 14%, var(--line));
+  border-radius: var(--radius-sm);
+  box-shadow: 0 14px 34px color-mix(in srgb, var(--text) 13%, transparent);
+  left: 0;
+  max-height: min(12.5rem, 32vh);
+  overscroll-behavior: contain;
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  width: auto;
+  z-index: var(--z-settings-popover);
+}
+
+.ai-setup-model-control[data-menu-placement="top"] .settings-select-control__menu {
+  bottom: calc(100% + var(--space-1));
+  top: auto;
+}
+
+.ai-setup-model-control .settings-select-control__option {
+  min-height: 2.08rem;
+  padding-inline: var(--space-3);
+}
+
+.ai-setup-model-control .settings-select-control__option-label {
+  overflow-wrap: anywhere;
+}
+
+.ai-setup-model-discovery-message {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ai-setup-model-discovery-message.is-success {
+  color: var(--productivity-focus);
+}
+
+.ai-setup-model-discovery-message.is-error {
+  color: var(--warn);
+}
+
+@container ai-custom-endpoint (max-width: 35rem) {
+  .ai-setup-custom-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ai-setup-custom-field {
+    grid-column: auto;
+  }
 }
 
 .ai-managed-status {

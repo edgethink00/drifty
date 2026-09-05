@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { LocalAiProviderConfig } from "./localAiProviderRequest";
+import { invokePreviewAwareAiCommand } from "../settings/previewAiBridge";
 import {
   getManagedLocalAiStatus,
   startManagedLocalAi,
@@ -12,6 +13,7 @@ export type NativeOpenAiChatResponse = {
   readonly body?: unknown;
   readonly latencyMs?: unknown;
   readonly retryAfterMs?: unknown;
+  readonly previewMock?: unknown;
 };
 
 type ManagedLocalProviderConfig = Extract<LocalAiProviderConfig, { readonly provider: "managed_local" }>;
@@ -41,11 +43,11 @@ export async function invokeOpenAiChatWithManagedLocalRetry(
     ? await requestForReadyManagedLocalRuntime(request, managedLocalProvider)
     : request;
   try {
-    return await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: readyRequest });
+    return await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_openai_chat", { request: readyRequest });
   } catch (error) {
     if (!managedLocalProvider || !isLikelyManagedLocalConnectionError(error)) throw error;
     const readyStatus = await ensureManagedLocalAiReady(managedLocalProvider.modelId);
-    return await invoke<NativeOpenAiChatResponse>("ai_classification_openai_chat", {
+    return await invokePreviewAwareAiCommand<NativeOpenAiChatResponse>("ai_classification_openai_chat", {
       request: requestWithManagedLocalRuntime(request, managedLocalProvider, readyStatus),
     });
   }

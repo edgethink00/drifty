@@ -99,6 +99,25 @@ function promptFromRequest(request: LocalAiProviderRequest | null): string {
 }
 
 describe("toLocalProviderRequest", () => {
+  it("adds an optional bearer key to custom-endpoint Classification requests", () => {
+    const request = toLocalProviderRequest(
+      {
+        provider: "self_hosted",
+        baseUrl: "https://models.example/v1",
+        apiKey: "custom-session-key",
+        model: "classification-model",
+      },
+      [basePayload],
+      null,
+    );
+
+    expect(request?.request).toMatchObject({
+      baseUrl: "https://models.example/v1",
+      apiKey: "custom-session-key",
+      model: "classification-model",
+    });
+  });
+
   it("keeps managed local generations inside the measured 10-item context budget", () => {
     const request = toLocalProviderRequest(
       {

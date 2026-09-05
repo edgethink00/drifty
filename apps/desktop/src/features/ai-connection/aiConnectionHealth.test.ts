@@ -55,6 +55,25 @@ describe("localAiSetupFingerprint", () => {
     expect(firstFingerprint).not.toContain("sk-or-v1-first-secret");
     expect(secondFingerprint).not.toContain("sk-or-v1-second-secret");
   });
+
+  it("changes when a custom endpoint key changes without exposing the raw key", () => {
+    const firstFingerprint = localAiSetupFingerprint({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedApiKey: "first-custom-secret",
+      selfHostedModel: "qwen2.5:7b",
+    });
+    const secondFingerprint = localAiSetupFingerprint({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedApiKey: "second-custom-secret",
+      selfHostedModel: "qwen2.5:7b",
+    });
+
+    expect(firstFingerprint).not.toBe(secondFingerprint);
+    expect(firstFingerprint).not.toContain("first-custom-secret");
+    expect(secondFingerprint).not.toContain("second-custom-secret");
+  });
 });
 
 describe("localAiProviderLabel", () => {

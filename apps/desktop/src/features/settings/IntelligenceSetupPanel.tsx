@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { aiProviderBrandMark } from "./AiProviderBrandMark";
+import { testOpenAiCompatibleConnection, type AiConnectionTestResult } from "./aiConnectionTest";
 import { CollapsiblePanel } from "./CollapsiblePanel";
+import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
 import { ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS, ANALYSIS_OPENAI_MODEL_SUGGESTIONS, ANALYSIS_RECOMMENDED_MODELS, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_ANTHROPIC_MODEL, DEFAULT_ANALYSIS_OPENAI_MODEL, analysisModelDisplayLabel } from "./analysisModelSetup";
 import type { AnalysisAiSetupState, AnalysisProvider } from "./analysisModelSetup";
+import { normalizeOpenAiCompatibleBaseUrl } from "./localAiSetup";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import { localizeAiConnectionTestMessage } from "../localization/aiStatusTranslations";
 
 const CLOUD_MANAGED_MODEL_ID = "cloud_managed";
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
@@ -77,6 +81,18 @@ type SummaryInfo = {
   readonly ready: boolean;
 };
 
+type CustomEndpointTestConfiguration = {
+  readonly provider: AnalysisProvider;
+  readonly baseUrl: string;
+  readonly apiKey: string;
+  readonly model: string;
+};
+
+type TaggedConnectionTestResult = {
+  readonly configurationRevision: number;
+  readonly result: AiConnectionTestResult;
+};
+
 function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected: boolean, cloud: CloudBilling, t: LocalizationController["t"]): SummaryInfo {
   switch (setup.provider) {
     case "cloud":
@@ -106,7 +122,7 @@ function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected
         : { providerLabel: "Anthropic", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "self_hosted": {
-      const configured = setup.selfHostedBaseUrl.trim().length > 0 && setup.selfHostedModel.trim().length > 0;
+      const configured = Boolean(normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl) && setup.selfHostedModel.trim());
       const modelLabel = setup.selfHostedModel.trim() || t("settings.intelligence.notSet");
       return configured
         ? { providerLabel: t("settings.ai.customEndpoint"), modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
@@ -196,7 +212,7 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
 }
 
 export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, onConnectOpenRouter, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
-  const { t } = useLocalization();
+  const { effectiveLanguage, t } = useLocalization();
   const cloud: CloudBilling = { selectable: cloudSelectable, upgradeLabel: cloudSubscribeActionLabel, upgradeDisabled: cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling };
   // Whether a provider is ready to be the active analysis provider. Key-based
   // providers need their credentials first; Drifty Cloud is gated by subscription
@@ -212,7 +228,7 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
       case "anthropic":
         return setup.anthropicApiKey.trim().length > 0;
       case "self_hosted":
-        return setup.selfHostedBaseUrl.trim().length > 0 && setup.selfHostedModel.trim().length > 0;
+        return Boolean(normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl) && setup.selfHostedModel.trim());
       default:
         return true;
     }
@@ -228,6 +244,40 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
   // opens focused on whatever analysis model is currently in use.
   const [expandedCard, setExpandedCard] = useState<IntelligenceCardId | null>(() => CARD_FOR_PROVIDER[setup.provider]);
   const summary = summarizeAnalysisSetup(setup, openRouterConnected, cloud, t);
+  const [taggedConnectionTestResult, setTaggedConnectionTestResult] = useState<TaggedConnectionTestResult | null>(null);
+  const [runningConfigurationRevision, setRunningConfigurationRevision] = useState<number | null>(null);
+  const connectionTestRequestRef = useRef(0);
+  const activeConnectionTestRef = useRef<{ readonly requestId: number; readonly configurationRevision: number } | null>(null);
+  const customEndpointBaseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
+  const customEndpointModel = setup.selfHostedModel.trim();
+  const customEndpointConfiguration: CustomEndpointTestConfiguration = {
+    provider: setup.provider,
+    baseUrl: customEndpointBaseUrl ?? "",
+    apiKey: setup.selfHostedApiKey.trim(),
+    model: customEndpointModel,
+  };
+  const customEndpointConfigurationRef = useRef({ configuration: customEndpointConfiguration, revision: 0 });
+  if (!configurationsMatch(customEndpointConfigurationRef.current.configuration, customEndpointConfiguration)) {
+    customEndpointConfigurationRef.current = {
+      configuration: customEndpointConfiguration,
+      revision: customEndpointConfigurationRef.current.revision + 1,
+    };
+  }
+  const customEndpointConfigurationRevision = customEndpointConfigurationRef.current.revision;
+  const customEndpointTestable = setup.provider === "self_hosted"
+    && Boolean(customEndpointBaseUrl && customEndpointModel);
+  const connectionTestRunning = runningConfigurationRevision === customEndpointConfigurationRevision;
+  const connectionTestResult = taggedConnectionTestResult
+    && taggedConnectionTestResult.configurationRevision === customEndpointConfigurationRevision
+    ? taggedConnectionTestResult.result
+    : null;
+
+  useEffect(() => {
+    return () => {
+      connectionTestRequestRef.current += 1;
+      activeConnectionTestRef.current = null;
+    };
+  }, []);
 
   // The "Model being used" summary is directly selectable (like the Classification
   // tab): a provider dropdown + a model dropdown that write straight to setup.
@@ -262,12 +312,72 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
     }
   };
 
+  const handleTestCustomEndpoint = async () => {
+    if (!customEndpointBaseUrl || !customEndpointTestable) return;
+    const configuration = customEndpointConfiguration;
+    const configurationRevision = customEndpointConfigurationRevision;
+    if (activeConnectionTestRef.current?.configurationRevision === configurationRevision) return;
+    const requestId = ++connectionTestRequestRef.current;
+    activeConnectionTestRef.current = { requestId, configurationRevision };
+    setRunningConfigurationRevision(configurationRevision);
+    setTaggedConnectionTestResult(null);
+    try {
+      const result = await testOpenAiCompatibleConnection({
+        baseUrl: configuration.baseUrl,
+        apiKey: configuration.apiKey,
+        model: configuration.model,
+      });
+      if (
+        requestId === connectionTestRequestRef.current
+        && customEndpointConfigurationRef.current.revision === configurationRevision
+      ) {
+        setTaggedConnectionTestResult({ configurationRevision, result });
+      }
+    } catch {
+      if (
+        requestId === connectionTestRequestRef.current
+        && customEndpointConfigurationRef.current.revision === configurationRevision
+      ) {
+        setTaggedConnectionTestResult({
+          configurationRevision,
+          result: { kind: "error", issueKind: "provider", message: "Connection test failed." },
+        });
+      }
+    } finally {
+      if (activeConnectionTestRef.current?.requestId === requestId) {
+        activeConnectionTestRef.current = null;
+        setRunningConfigurationRevision(null);
+      }
+    }
+  };
+
+  const localizedConnectionTestMessage = connectionTestResult
+    ? localizeAiConnectionTestMessage(connectionTestResult.message, connectionTestResult.kind, effectiveLanguage, t)
+    : null;
+  const summaryTone = connectionTestResult?.kind === "error"
+    ? "error"
+    : connectionTestResult?.kind === "success"
+      ? "ok"
+      : summary.tone;
+
   return (
     <>
       <ModelBeingUsedCard
         regionAriaLabel={t("settings.intelligence.modelBeingUsedAria")}
-        heading={t("settings.ai.modelBeingUsed")}
-        tone={summary.tone}
+        heading={t("settings.ai.intelligenceRoute")}
+        headingAction={setup.provider === "self_hosted" ? (
+          <button
+            type="button"
+            className="settings-btn ai-setup-current-model__test"
+            aria-label={connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnectionAria")}
+            aria-busy={connectionTestRunning ? "true" : undefined}
+            disabled={connectionTestRunning || !customEndpointTestable}
+            onClick={() => void handleTestCustomEndpoint()}
+          >
+            {connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnection")}
+          </button>
+        ) : null}
+        tone={summaryTone}
         statusLabel={summary.statusLabel}
         statusProviderLabel={summary.providerLabel}
         statusAriaLabel={t("settings.intelligence.statusAria", { provider: summary.providerLabel, model: summary.modelLabel, status: summary.statusLabel })}
@@ -280,12 +390,14 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
         modelOptions={modelOptions}
         modelPlaceholder={t("settings.intelligence.selectModel")}
         onModelChange={handleModelChange}
+        statusMessage={localizedConnectionTestMessage}
+        statusMessageKind={connectionTestResult?.kind ?? null}
       />
       <p className="ai-setup-route-description intelligence-setup-panel__hint">
         {t("settings.intelligence.description")}
       </p>
 
-      <h4 className="ai-setup-provider-heading">{t("settings.ai.configureProviders")}</h4>
+      <h4 className="ai-setup-provider-heading">{t("settings.ai.connectionDetails")}</h4>
 
       <div className="ai-setup-choices" role="group" aria-label={t("settings.intelligence.providersAria")}>
         <IntelligenceProviderCard id="openrouter" title="OpenRouter" brandMark={aiProviderBrandMark("openrouter")} expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
@@ -384,34 +496,18 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
         </IntelligenceProviderCard>
 
         <IntelligenceProviderCard id="custom" title={t("settings.ai.customEndpoint")} brandMark={aiProviderBrandMark("custom")} expanded={expandedCard === "custom"} onToggle={handleToggle}>
-          <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.customModelAria")}>
-            <label className="ai-setup-field">
-              <span>{t("settings.ai.baseUrl")}</span>
-              <input
-                className="settings-input"
-                aria-label={t("settings.intelligence.endpointBaseUrlAria")}
-                value={setup.selfHostedBaseUrl}
-                onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl: event.target.value })}
-                placeholder="https://api.openai.com/v1"
-              />
-            </label>
-            <label className="ai-setup-field">
-              <span>{t("settings.ai.model")}</span>
-              <input
-                className="settings-input"
-                aria-label={t("settings.intelligence.endpointModelAria")}
-                value={setup.selfHostedModel}
-                onChange={(event) => onChange({ ...setup, provider: "self_hosted", selfHostedModel: event.target.value })}
-                placeholder="gpt-5-mini"
-              />
-            </label>
-            <ApiKeyField
-              ariaLabel={t("settings.intelligence.customApiKeyAria")}
-              value={setup.selfHostedApiKey}
-              placeholder="sk-... (optional)"
-              onValueChange={(value) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey: value })}
-            />
-          </div>
+          <CustomEndpointSetupPanel
+            baseUrl={setup.selfHostedBaseUrl}
+            apiKey={setup.selfHostedApiKey}
+            model={setup.selfHostedModel}
+            sharingPartner="classification"
+            baseUrlAriaLabel={t("settings.intelligence.endpointBaseUrlAria")}
+            apiKeyAriaLabel={t("settings.intelligence.customApiKeyAria")}
+            modelAriaLabel={t("settings.intelligence.endpointModelAria")}
+            onBaseUrlChange={(selfHostedBaseUrl) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl })}
+            onApiKeyChange={(selfHostedApiKey) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey })}
+            onModelChange={(selfHostedModel) => onChange({ ...setup, provider: "self_hosted", selfHostedModel })}
+          />
         </IntelligenceProviderCard>
       </div>
     </>
@@ -489,6 +585,20 @@ function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }
         placeholder={placeholder}
       />
     </label>
+  );
+}
+
+function configurationsMatch(
+  left: CustomEndpointTestConfiguration | null,
+  right: CustomEndpointTestConfiguration | null,
+): boolean {
+  return Boolean(
+    left
+    && right
+    && left.provider === right.provider
+    && left.baseUrl === right.baseUrl
+    && left.apiKey === right.apiKey
+    && left.model === right.model,
   );
 }
 

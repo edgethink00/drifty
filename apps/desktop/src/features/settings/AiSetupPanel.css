@@ -174,10 +174,9 @@
 }
 
 .ai-setup-current-model__controls {
-  align-items: center;
   display: grid;
-  gap: var(--space-2);
-  grid-template-columns: minmax(12rem, 0.62fr) auto minmax(16rem, 1fr);
+  gap: var(--space-3);
+  grid-template-columns: minmax(12rem, 0.62fr) minmax(16rem, 1fr);
   min-width: 0;
 }
 
@@ -438,13 +437,6 @@
   width: max(100%, 18rem);
 }
 
-.ai-setup-current-model__slash {
-  color: var(--text-muted);
-  font-size: 1.18rem;
-  font-weight: 520;
-  line-height: 1;
-}
-
 .ai-setup-provider-heading {
   margin-top: 0;
 }
@@ -452,10 +444,6 @@
 @media (max-width: 760px) {
   .ai-setup-current-model__controls {
     grid-template-columns: 1fr;
-  }
-
-  .ai-setup-current-model__slash {
-    justify-self: center;
   }
 
   .ai-setup-select-control--model .settings-select-control__menu {

@@ -180,6 +180,38 @@ describe("Settings content styles", () => {
     expect(openRouterImageRule).toContain("width: 1.16rem;");
   });
 
+  it("positions discovered custom-endpoint models as an out-of-flow popover", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const controlRule = cssRule(aiSetupStyles, ".ai-setup-model-control.settings-select-control");
+    const openControlRule = cssRule(aiSetupStyles, '.ai-setup-model-control.settings-select-control[data-open="true"]');
+    const menuRule = cssRule(aiSetupStyles, ".ai-setup-model-control .settings-select-control__menu");
+
+    expect(controlRule).toContain("overflow: hidden;");
+    expect(openControlRule).toContain("overflow: visible;");
+    expectRuleToContain(menuRule, [
+      "max-height: min(12.5rem, 32vh);",
+      "position: absolute;",
+      "top: calc(100% + var(--space-1));",
+      "z-index: var(--z-settings-popover);",
+    ]);
+  });
+
+  it("collapses custom-endpoint fields without horizontal overflow at the narrow container breakpoint", () => {
+    const aiSetupStyles = readAiSetupStyles();
+    const responsiveBlockStart = aiSetupStyles.indexOf("@container ai-custom-endpoint (max-width: 35rem)");
+    expect(responsiveBlockStart).toBeGreaterThanOrEqual(0);
+    const responsiveBlock = aiSetupStyles.slice(responsiveBlockStart, responsiveBlockStart + 260);
+    const fieldsRule = cssRule(aiSetupStyles, ".ai-setup-custom-fields");
+    const actionRule = cssRule(aiSetupStyles, ".ai-setup-connection-actions");
+
+    expect(fieldsRule).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+    expect(fieldsRule).toContain("min-width: 0;");
+    expect(responsiveBlock).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(responsiveBlock).toContain("grid-column: auto;");
+    expect(actionRule).toContain("flex-wrap: wrap;");
+    expect(actionRule).toContain("min-width: 0;");
+  });
+
   it("presents AI setup internal tabs as compact pill controls", () => {
     const aiSetupStyles = readAiSetupStyles();
     const tabListRule = cssRule(aiSetupStyles, ".ai-setup-panel-tabs");

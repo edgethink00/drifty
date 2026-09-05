@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { testLocalAiConnection } from "./aiConnectionTest";
+import { testLocalAiConnection, testOpenAiCompatibleConnection } from "./aiConnectionTest";
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 
 const { invokeMock } = vi.hoisted(() => ({
@@ -172,6 +172,87 @@ describe("testLocalAiConnection", () => {
       throw new Error("OpenRouter connection test should invoke a request object.");
     }
     expect("maxTokens" in requestArgs.request).toBe(false);
+  });
+
+  it("uses the optional shared custom-endpoint key for Classification", async () => {
+    invokeMock.mockResolvedValue({
+      status: 200,
+      body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}",
+      latencyMs: 19,
+    });
+
+    await testLocalAiConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedBaseUrl: "https://models.example/v1",
+      selfHostedApiKey: "custom-session-key",
+      selfHostedModel: "classification-model",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", {
+      request: expect.objectContaining({
+        baseUrl: "https://models.example/v1",
+        apiKey: "custom-session-key",
+        model: "classification-model",
+      }),
+    });
+  });
+
+  it("tests an Intelligence custom endpoint through the shared protocol path", async () => {
+    invokeMock.mockResolvedValue({
+      status: 200,
+      body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}",
+      latencyMs: 18,
+    });
+
+    const result = await testOpenAiCompatibleConnection({
+      baseUrl: "  https://models.example/v1/  ",
+      apiKey: "  shared-session-key  ",
+      model: "  intelligence-model  ",
+    });
+
+    expect(result).toEqual({ kind: "success", message: "Connected in 18 ms." });
+    expect(invokeMock).toHaveBeenCalledWith("ai_classification_openai_chat", {
+      request: expect.objectContaining({
+        baseUrl: "https://models.example/v1",
+        apiKey: "shared-session-key",
+        model: "intelligence-model",
+      }),
+    });
+  });
+
+  it("does not invoke native chat for an invalid custom endpoint URL", async () => {
+    const result = await testLocalAiConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedBaseUrl: "not-a-valid-url",
+      selfHostedModel: "classification-model",
+    });
+
+    expect(result).toEqual({
+      kind: "error",
+      issueKind: "provider",
+      message: "Complete the selected provider settings before testing.",
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("labels the built-in browser preview response as simulated", async () => {
+    invokeMock.mockResolvedValue({
+      status: 200,
+      body: "{\"choices\":[{\"message\":{\"content\":\"{\\\"ok\\\":true}\"}}]}",
+      latencyMs: 0,
+      previewMock: true,
+    });
+
+    const result = await testLocalAiConnection({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedBaseUrl: "https://preview-ai.drifty.invalid/v1",
+      selfHostedModel: "drifty-preview-fast",
+    });
+
+    expect(result).toEqual({ kind: "success", message: "Preview connection simulated." });
   });
 
   it.each([

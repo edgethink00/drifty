@@ -1,5 +1,6 @@
 import {
   isManagedLocalAiRoute,
+  normalizeOpenAiCompatibleBaseUrl,
   normalizeOpenRouterPrimaryModel,
   OPENROUTER_RECOMMENDED_MODELS,
   type LocalAiProvider,
@@ -195,7 +196,7 @@ export function localAiSetupFingerprint(setup: LocalAiSetupState): string | null
   switch (setup.provider) {
     case "managed_local": {
       if (!isManagedLocalAiRoute(setup)) return null;
-      const baseUrl = setup.managedLocalBaseUrl.trim();
+      const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.managedLocalBaseUrl);
       const model = setup.managedLocalModel.trim();
       const modelId = setup.managedLocalModelId.trim();
       if (!baseUrl || !model || !modelId) return null;
@@ -212,10 +213,11 @@ export function localAiSetupFingerprint(setup: LocalAiSetupState): string | null
       ].join("|");
     }
     case "self_hosted": {
-      const baseUrl = setup.selfHostedBaseUrl.trim();
+      const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
+      const apiKey = setup.selfHostedApiKey.trim();
       const model = setup.selfHostedModel.trim();
       if (!baseUrl || !model) return null;
-      return ["self_hosted", baseUrl, model].join("|");
+      return ["self_hosted", baseUrl, apiKey ? hashSecretForFingerprint(apiKey) : "no-key", model].join("|");
     }
     default:
       return assertNever(setup.provider);

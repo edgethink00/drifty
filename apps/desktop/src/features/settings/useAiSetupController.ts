@@ -16,15 +16,18 @@ import { localAiProviderConfigFromSetup } from "./localAiClassificationOptions";
 import type { LocalAiClassificationOptions } from "./localAiClassificationOptions";
 import { isActiveProviderTestable } from "./aiSetupProviderSelection";
 import {
+  DEFAULT_LOCAL_AI_SETUP,
   isManagedLocalAiRoute,
   LOCAL_AI_SETUP_STORAGE_KEY,
   resolveInitialLocalAiSetup,
   toPersistedLocalAiSetup,
   type LocalAiSetupState,
+  type PersistedLocalAiSetupState,
 } from "./localAiSetup";
 import type { AiConnectionTestResult } from "./aiConnectionTest";
 import { getManagedLocalAiStatus, type ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { loadOpenRouterApiKey, saveOpenRouterApiKey } from "./openRouterApiKeyStore";
+import { isPreviewAiMockBaseUrl, PREVIEW_AI_MOCK_BASE_URL, PREVIEW_AI_MOCK_MODELS } from "./previewAiContract";
 import { useAiConnectionTestRunner, type UseAiConnectionTestRunnerResult } from "./useAiConnectionTestRunner";
 
 const MANAGED_LOCAL_MEMORY_POLL_MS = 5_000;
@@ -55,7 +58,7 @@ type UseAiSetupControllerResult = {
 };
 
 export function useAiSetupController(): UseAiSetupControllerResult {
-  const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(resolveInitialLocalAiSetup);
+  const [localAiSetup, setLocalAiSetup] = useState<LocalAiSetupState>(resolvePreviewAwareInitialLocalAiSetup);
   const [localAiConnectionCheck, setLocalAiConnectionCheck] = useState<LocalAiConnectionCheck | null>(null);
   const [localAiMemoryUsageBytes, setLocalAiMemoryUsageBytes] = useState<number | null>(null);
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
@@ -210,7 +213,7 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   }, [localAiProviderStatusKind, runAutoConnectionTest]);
 
   useEffect(() => {
-    window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedLocalAiSetup(localAiSetup)));
+    window.localStorage.setItem(LOCAL_AI_SETUP_STORAGE_KEY, JSON.stringify(toPersistedPreviewSafeLocalAiSetup(localAiSetup)));
   }, [localAiSetup]);
 
   // Only touch the Keychain when the OpenRouter key is actually needed: the BYOK
@@ -299,6 +302,49 @@ export function useAiSetupController(): UseAiSetupControllerResult {
     setAiSetupDialogOpen,
     setLocalAiSetup,
   };
+}
+
+export function resolvePreviewAwareInitialLocalAiSetup(
+  initialSetup = resolveInitialLocalAiSetup(),
+  isDevelopment = import.meta.env.DEV,
+  previewFlag = import.meta.env.VITE_DRIFTY_PREVIEW,
+): LocalAiSetupState {
+  if (!isDevelopment || previewFlag !== "1") {
+    if (!isPreviewAiMockBaseUrl(initialSetup.selfHostedBaseUrl)) return initialSetup;
+    return {
+      ...initialSetup,
+      selfHostedBaseUrl: DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl,
+      selfHostedModel: PREVIEW_AI_MOCK_MODELS.includes(
+        initialSetup.selfHostedModel as (typeof PREVIEW_AI_MOCK_MODELS)[number],
+      )
+        ? ""
+        : initialSetup.selfHostedModel,
+    };
+  }
+  if (initialSetup.selfHostedBaseUrl !== DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl) return initialSetup;
+
+  return {
+    ...initialSetup,
+    selfHostedBaseUrl: PREVIEW_AI_MOCK_BASE_URL,
+    selfHostedModel: PREVIEW_AI_MOCK_MODELS.includes(
+      initialSetup.selfHostedModel as (typeof PREVIEW_AI_MOCK_MODELS)[number],
+    )
+      ? initialSetup.selfHostedModel
+      : "",
+  };
+}
+
+export function toPersistedPreviewSafeLocalAiSetup(setup: LocalAiSetupState): PersistedLocalAiSetupState {
+  if (!isPreviewAiMockBaseUrl(setup.selfHostedBaseUrl)) return toPersistedLocalAiSetup(setup);
+  return toPersistedLocalAiSetup({
+    ...setup,
+    selfHostedBaseUrl: DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl,
+    selfHostedModel: PREVIEW_AI_MOCK_MODELS.includes(
+      setup.selfHostedModel as (typeof PREVIEW_AI_MOCK_MODELS)[number],
+    )
+      ? ""
+      : setup.selfHostedModel,
+  });
 }
 
 function actualManagedLocalMemoryUsageBytes(status: ManagedLocalAiStatus, selectedModelId: string): number | null {

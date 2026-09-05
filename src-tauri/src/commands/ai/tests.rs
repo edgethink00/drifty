@@ -5,9 +5,116 @@ use std::thread;
 use serde_json::json;
 
 use super::{
-    post_anthropic_chat, post_openai_chat, AiClassificationAnthropicChatRequest,
-    AiClassificationChatRequest,
+    get_openai_models, post_anthropic_chat, post_openai_chat, AiClassificationAnthropicChatRequest,
+    AiClassificationChatRequest, AiModelListRequest, MAX_MODEL_LIST_RESPONSE_BYTES,
 };
+
+#[test]
+fn gets_openai_compatible_models_with_optional_bearer_key() {
+    let body = r#"{"data":[{"id":"qwen2.5:7b"}]}"#;
+    let (address, server) = capture_chat_response("200 OK", "", body);
+
+    let response = get_openai_models(AiModelListRequest {
+        base_url: format!("http://{address}/"),
+        api_key: Some(" model-list-key ".to_string()),
+    })
+    .expect("model request succeeds");
+
+    let request = server.join().expect("join server");
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body, body);
+    assert!(request.starts_with("GET /models HTTP/1.1"));
+    assert!(request.contains("authorization: Bearer model-list-key"));
+}
+
+#[test]
+fn does_not_forward_the_model_list_bearer_key_across_an_origin_redirect() {
+    let destination_listener = TcpListener::bind("127.0.0.1:0").expect("bind destination server");
+    let destination_address = destination_listener
+        .local_addr()
+        .expect("read destination address");
+    let destination_server = thread::spawn(move || {
+        let (mut stream, _) = destination_listener
+            .accept()
+            .expect("accept redirected request");
+        let mut buffer = [0_u8; 2048];
+        let bytes = stream.read(&mut buffer).expect("read redirected request");
+        let request = String::from_utf8_lossy(&buffer[..bytes]).to_string();
+        let body = r#"{"data":[{"id":"redirected-model"}]}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body,
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write destination response");
+        request
+    });
+
+    let redirect_listener = TcpListener::bind("127.0.0.1:0").expect("bind redirect server");
+    let redirect_address = redirect_listener
+        .local_addr()
+        .expect("read redirect address");
+    let redirect_server = thread::spawn(move || {
+        let (mut stream, _) = redirect_listener
+            .accept()
+            .expect("accept model-list request");
+        let mut buffer = [0_u8; 2048];
+        let bytes = stream.read(&mut buffer).expect("read model-list request");
+        let request = String::from_utf8_lossy(&buffer[..bytes]).to_string();
+        let response = format!(
+            "HTTP/1.1 302 Found\r\nLocation: http://{destination_address}/models\r\nContent-Length: 0\r\n\r\n",
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write redirect response");
+        request
+    });
+
+    let response = get_openai_models(AiModelListRequest {
+        base_url: format!("http://{redirect_address}"),
+        api_key: Some("redirect-secret".to_string()),
+    })
+    .expect("redirected model request succeeds");
+
+    let initial_request = redirect_server.join().expect("join redirect server");
+    let redirected_request = destination_server.join().expect("join destination server");
+    assert_eq!(response.status, 200);
+    assert!(initial_request.contains("authorization: Bearer redirect-secret"));
+    assert!(!redirected_request.contains("authorization:"));
+    assert!(!redirected_request.contains("redirect-secret"));
+}
+
+#[test]
+fn rejects_an_oversized_model_list_before_buffering_the_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+    let address = listener.local_addr().expect("read test server address");
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept request");
+        let mut buffer = [0_u8; 2048];
+        let _ = stream.read(&mut buffer).expect("read request");
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            MAX_MODEL_LIST_RESPONSE_BYTES + 1,
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write response headers");
+    });
+
+    let error = get_openai_models(AiModelListRequest {
+        base_url: format!("http://{address}"),
+        api_key: None,
+    })
+    .expect_err("oversized response is rejected");
+
+    server.join().expect("join server");
+    assert_eq!(
+        error,
+        "AI provider model list response exceeded the 5 MB limit."
+    );
+}
 
 #[test]
 fn posts_openai_compatible_chat_body_with_headers() {

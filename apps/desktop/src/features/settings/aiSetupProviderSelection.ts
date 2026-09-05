@@ -1,5 +1,9 @@
 import type { AiSetupSection } from "./AiSetupSectionCards";
-import { isManagedLocalAiRoute, type LocalAiSetupState } from "./localAiSetup";
+import {
+  isManagedLocalAiRoute,
+  normalizeOpenAiCompatibleBaseUrl,
+  type LocalAiSetupState,
+} from "./localAiSetup";
 
 export function isActiveProviderTestable(setup: LocalAiSetupState): boolean {
   switch (setup.provider) {
@@ -7,9 +11,9 @@ export function isActiveProviderTestable(setup: LocalAiSetupState): boolean {
       return Boolean(setup.openRouterApiKey.trim());
     case "managed_local":
       if (!isManagedLocalAiRoute(setup)) return true;
-      return Boolean(setup.managedLocalBaseUrl.trim() && setup.managedLocalModel.trim());
+      return Boolean(normalizeOpenAiCompatibleBaseUrl(setup.managedLocalBaseUrl) && setup.managedLocalModel.trim());
     case "self_hosted":
-      return Boolean(setup.selfHostedBaseUrl.trim() && setup.selfHostedModel.trim());
+      return Boolean(normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl) && setup.selfHostedModel.trim());
     default:
       return assertNever(setup.provider);
   }

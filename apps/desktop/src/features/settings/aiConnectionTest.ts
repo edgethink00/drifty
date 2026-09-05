@@ -8,7 +8,9 @@ import {
   type NativeOpenAiChatResponse,
 } from "../classification/managedLocalAiChat";
 import {
+  DEFAULT_LOCAL_AI_SETUP,
   isManagedLocalAiRoute,
+  normalizeOpenAiCompatibleBaseUrl,
   OPENROUTER_PRIVACY_PROVIDER,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
@@ -27,6 +29,29 @@ import {
 export type AiConnectionTestResult =
   | { readonly kind: "success"; readonly message: string }
   | { readonly kind: "error"; readonly issueKind: AiConnectionIssueKind; readonly message: string; readonly retryAfterMs?: number };
+
+export type OpenAiCompatibleConnectionTestInput = {
+  readonly baseUrl: string;
+  readonly apiKey?: string;
+  readonly model: string;
+};
+
+/**
+ * Tests one OpenAI-compatible endpoint without coupling the caller to the
+ * Classification setup shape. Both task tabs use the same native/proxy path,
+ * response validation, and error mapping.
+ */
+export function testOpenAiCompatibleConnection(
+  input: OpenAiCompatibleConnectionTestInput,
+): Promise<AiConnectionTestResult> {
+  return testLocalAiConnection({
+    ...DEFAULT_LOCAL_AI_SETUP,
+    provider: "self_hosted",
+    selfHostedBaseUrl: input.baseUrl.trim(),
+    selfHostedApiKey: input.apiKey?.trim() ?? "",
+    selfHostedModel: input.model.trim(),
+  });
+}
 
 export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<AiConnectionTestResult> {
   const request = localAiConnectionRequest(setup);
@@ -57,6 +82,7 @@ export async function testLocalAiConnection(setup: LocalAiSetupState): Promise<A
     if (!hasAssistantContent(typeof response.body === "string" ? response.body : "")) {
       return { kind: "error", issueKind: "provider", message: "Provider responded, but no assistant message was returned." };
     }
+    if (response.previewMock === true) return { kind: "success", message: "Preview connection simulated." };
     const latencyMs = typeof response.latencyMs === "number" && Number.isFinite(response.latencyMs) ? response.latencyMs : 0;
     return { kind: "success", message: `Connected in ${latencyMs} ms.` };
   } catch (error) {
@@ -117,7 +143,11 @@ function localAiConnectionRequest(setup: LocalAiSetupState): Record<string, unkn
       };
     }
     case "self_hosted":
-      return openAiCompatibleConnectionRequest(setup.selfHostedBaseUrl, setup.selfHostedModel);
+      return openAiCompatibleConnectionRequest(
+        setup.selfHostedBaseUrl,
+        setup.selfHostedModel,
+        setup.selfHostedApiKey.trim() ? { apiKey: setup.selfHostedApiKey.trim() } : {},
+      );
     default:
       return assertNever(setup.provider);
   }
@@ -128,7 +158,7 @@ function openAiCompatibleConnectionRequest(
   modelValue: string,
   options: Record<string, unknown> = {},
 ): Record<string, unknown> | null {
-  const baseUrl = baseUrlValue.trim();
+  const baseUrl = normalizeOpenAiCompatibleBaseUrl(baseUrlValue);
   const model = modelValue.trim();
   if (!baseUrl || !model) return null;
   return {

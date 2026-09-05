@@ -25,7 +25,7 @@ use app_menu::{app_menu_set_dev_mode_checked, handle_app_menu_event, setup_app_m
 use quit_confirmation::{quit_confirmation_set_language, QuitConfirmationState};
 use commands::{
     accessibility_get_status, accessibility_request_access, ai_classification_anthropic_chat,
-    ai_classification_openai_chat, cloud_sync_http_post,
+    ai_classification_openai_chat, ai_list_openai_models, cloud_sync_http_post,
     companion_informational_moments_suppressed, correction_evidence_append,
     developer_check_pre_release_update, developer_install_pre_release_update,
     developer_tools_get_status, developer_tools_install_cli, developer_tools_install_codex_skill,
@@ -604,6 +604,7 @@ pub fn run() {
             share_card_save_png,
             ai_classification_anthropic_chat,
             ai_classification_openai_chat,
+            ai_list_openai_models,
             app_menu_set_dev_mode_checked,
             quit_confirmation_set_language,
             app_restart_after_update,

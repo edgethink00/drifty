@@ -67,6 +67,7 @@ export function localizeAiConnectionTestMessage(
   if (value === "Supabase is not configured.") return t("settings.ai.connection.supabaseMissing");
   if (value === "Drifty Cloud billing needs attention.") return t("settings.ai.connection.billingAttention");
   if (value === "Cloud AI connection test returned an invalid response.") return t("settings.ai.connection.invalidResponse");
+  if (value === "Preview connection simulated.") return t("settings.ai.connection.previewSimulated");
   if (value === "OpenRouter rejected the API key.") return t("settings.ai.connection.openRouterKeyRejected");
   if (value === "OpenRouter credits are required.") return t("settings.ai.connection.openRouterCreditsRequired");
   if (value === "OpenRouter blocked this request.") return t("settings.ai.connection.openRouterAccessBlocked");

@@ -3,6 +3,7 @@ import {
   ANALYSIS_RECOMMENDED_MODELS,
   DEFAULT_ANALYSIS_AI_SETUP,
   DEFAULT_ANALYSIS_MODEL,
+  resolveLegacyAnalysisCustomEndpointConnection,
   resolveInitialAnalysisAiSetup,
   toPersistedAnalysisAiSetup,
 } from "./analysisModelSetup";
@@ -39,6 +40,7 @@ describe("analysis model setup", () => {
     });
     expect(persisted).not.toHaveProperty("openRouterApiKey");
     expect(persisted).not.toHaveProperty("selfHostedApiKey");
+    expect(persisted).not.toHaveProperty("selfHostedBaseUrl");
     expect(persisted).not.toHaveProperty("openaiApiKey");
     expect(persisted).not.toHaveProperty("anthropicApiKey");
     expect(persisted.provider).toBe("cloud");
@@ -72,5 +74,18 @@ describe("analysis model setup", () => {
     expect(setup.provider).toBe("openrouter");
     expect(setup.openRouterModel).toBe("anthropic/claude-sonnet-5");
     expect(setup.openRouterApiKey).toBe("");
+  });
+
+  it("recovers a customized legacy endpoint even when another provider was last selected", () => {
+    stubLocalStorage({
+      "drifty.analysisAiSetup.v1": JSON.stringify({
+        provider: "openai",
+        selfHostedBaseUrl: "https://legacy-custom.example/v1",
+      }),
+    });
+
+    expect(resolveLegacyAnalysisCustomEndpointConnection()).toEqual({
+      baseUrl: "https://legacy-custom.example/v1",
+    });
   });
 });

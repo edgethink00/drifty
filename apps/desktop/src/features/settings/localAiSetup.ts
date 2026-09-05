@@ -11,10 +11,11 @@ export type LocalAiSetupState = {
   openRouterModel: string;
   openRouterFallbackModels: string[];
   selfHostedBaseUrl: string;
+  selfHostedApiKey: string;
   selfHostedModel: string;
 };
 
-export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiKey">;
+export type PersistedLocalAiSetupState = Omit<LocalAiSetupState, "openRouterApiKey" | "selfHostedApiKey">;
 
 export const LOCAL_AI_SETUP_STORAGE_KEY = "drifty.aiSetup.v1";
 export const DEFAULT_MANAGED_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
@@ -44,6 +45,7 @@ export const DEFAULT_LOCAL_AI_SETUP: LocalAiSetupState = {
   openRouterModel: "deepseek/deepseek-v4-flash",
   openRouterFallbackModels: [],
   selfHostedBaseUrl: "http://localhost:11434/v1",
+  selfHostedApiKey: "",
   selfHostedModel: "",
 };
 
@@ -117,7 +119,7 @@ export function toPersistedLocalAiSetup(setup: LocalAiSetupState): PersistedLoca
     managedLocalModel: setup.managedLocalModel.trim(),
     openRouterModel,
     openRouterFallbackModels: normalizeOpenRouterFallbackModels(openRouterModel, setup.openRouterFallbackModels),
-    selfHostedBaseUrl: setup.selfHostedBaseUrl,
+    selfHostedBaseUrl: setup.selfHostedBaseUrl.trim(),
     selfHostedModel: setup.selfHostedModel.trim(),
   };
 }
@@ -145,6 +147,7 @@ export function resolveInitialLocalAiSetup(): LocalAiSetupState {
         record.openRouterFallbackModels.filter((model): model is string => typeof model === "string"),
       ) : [],
       selfHostedBaseUrl: typeof record.selfHostedBaseUrl === "string" && record.selfHostedBaseUrl.trim() ? record.selfHostedBaseUrl : DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl,
+      selfHostedApiKey: "",
       selfHostedModel: typeof record.selfHostedModel === "string" ? record.selfHostedModel.trim() : "",
     };
   } catch {
@@ -159,6 +162,33 @@ export function normalizeManagedLocalModelId(modelId: string): string {
 
 export function isManagedLocalAiRoute(setup: LocalAiSetupState): boolean {
   return setup.provider === "managed_local" && setup.driftyRoute === "local";
+}
+
+export function normalizeOpenAiCompatibleBaseUrl(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return trimmed.replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A legacy Intelligence endpoint may seed the new shared connection only when
+ * the Classification custom slot is still untouched. A user-entered URL is
+ * meaningful even before they choose a model and must never be overwritten.
+ */
+export function shouldPreferLegacyAnalysisCustomConnection(
+  setup: Pick<LocalAiSetupState, "selfHostedBaseUrl" | "selfHostedModel">,
+): boolean {
+  return (
+    setup.selfHostedModel.trim().length === 0
+    && normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl)
+      === normalizeOpenAiCompatibleBaseUrl(DEFAULT_LOCAL_AI_SETUP.selfHostedBaseUrl)
+  );
 }
 
 function parseLocalAiProvider(value: unknown): LocalAiProvider {

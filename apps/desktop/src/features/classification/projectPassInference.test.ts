@@ -1,8 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_ANALYSIS_AI_SETUP } from "../settings/analysisModelSetup";
+import { localAiProviderConfigFromSetup } from "../settings/localAiClassificationOptions";
+import { DEFAULT_LOCAL_AI_SETUP } from "../settings/localAiSetup";
+import { toLocalProviderRequest, type MinimizedActivityPayload } from "./localAiProviderRequest";
 import { createProjectPassInference } from "./projectPassInference";
 
 const OUTPUT_JSON = JSON.stringify({ assignments: [{ id: "r0", projectId: "p1", confidence: 0.9 }], corrections: [] });
+
+const CLASSIFICATION_PAYLOAD: MinimizedActivityPayload = {
+  segmentId: "segment-1",
+  inputFingerprint: "fingerprint-1",
+  startedAt: "2026-09-05T09:00:00.000Z",
+  endedAt: "2026-09-05T09:05:00.000Z",
+  durationSeconds: 300,
+  appName: "Code",
+  bundleId: "com.microsoft.VSCode",
+  browserName: null,
+  siteDomain: null,
+  siteUrl: null,
+  siteTitle: null,
+  windowTitle: "Shared connection routing contract",
+  youtubeTitle: null,
+  youtubeChannelName: null,
+  youtubeCategory: null,
+  youtubeIsShorts: null,
+};
 
 function chatBody(content: string, promptTokens = 100, completionTokens = 20) {
   // The Tauri command returns `body` as a raw JSON string (reqwest text()).
@@ -123,6 +145,60 @@ describe("createProjectPassInference", () => {
     const request = invokeChat.mock.calls[0][0];
     expect(request).not.toHaveProperty("provider");
     expect(request).toMatchObject({ baseUrl: "http://localhost:11434/v1", model: "qwen" });
+  });
+
+  it("reuses one custom connection while routing Classification and Intelligence to independent models", async () => {
+    const sharedConnection = {
+      selfHostedBaseUrl: "https://models.example/v1",
+      selfHostedApiKey: "shared-session-key",
+    };
+    const classificationOptions = localAiProviderConfigFromSetup({
+      ...DEFAULT_LOCAL_AI_SETUP,
+      ...sharedConnection,
+      provider: "self_hosted",
+      selfHostedModel: "classification-fast-model",
+    });
+    expect(classificationOptions).not.toBeNull();
+    const classificationRequest = classificationOptions
+      ? toLocalProviderRequest(classificationOptions.localProvider, [CLASSIFICATION_PAYLOAD], null)
+      : null;
+
+    const invokeChat = vi.fn(async (_request: Record<string, unknown>) => chatBody(OUTPUT_JSON));
+    const intelligenceInference = createProjectPassInference({
+      ...DEFAULT_ANALYSIS_AI_SETUP,
+      ...sharedConnection,
+      provider: "self_hosted",
+      selfHostedModel: "intelligence-reasoning-model",
+    }, { invokeChat });
+    await intelligenceInference("project analysis prompt");
+
+    expect(classificationRequest?.request).toMatchObject({
+      baseUrl: sharedConnection.selfHostedBaseUrl,
+      apiKey: sharedConnection.selfHostedApiKey,
+      model: "classification-fast-model",
+    });
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+    expect(invokeChat.mock.calls[0][0]).toMatchObject({
+      baseUrl: sharedConnection.selfHostedBaseUrl,
+      apiKey: sharedConnection.selfHostedApiKey,
+      model: "intelligence-reasoning-model",
+    });
+    expect(classificationRequest?.request["model"]).not.toBe(invokeChat.mock.calls[0][0]["model"]);
+  });
+
+  it("does not invoke the Intelligence model for an invalid shared custom endpoint URL", async () => {
+    const invokeChat = vi.fn(async (_request: Record<string, unknown>) => chatBody(OUTPUT_JSON));
+    const inference = createProjectPassInference({
+      ...DEFAULT_ANALYSIS_AI_SETUP,
+      provider: "self_hosted",
+      selfHostedBaseUrl: "not-a-valid-url",
+      selfHostedModel: "qwen",
+    }, { invokeChat });
+
+    const result = await inference("prompt");
+
+    expect(result.output).toBeNull();
+    expect(invokeChat).not.toHaveBeenCalled();
   });
 
   it("routes cloud through the review-activity edge function", async () => {

@@ -9,7 +9,7 @@ import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
-import type { DriftyAiRoute, LocalAiSetupState } from "./localAiSetup";
+import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetupState } from "./localAiSetup";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../localization/aiStatusTranslations";
@@ -100,7 +100,7 @@ export function AiSetupModelBeingUsed({
   const providerOptions = [
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
-    { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(localAiSetup.selfHostedBaseUrl.trim().length > 0 && localAiSetup.selfHostedModel.trim().length > 0) },
+    { value: "custom", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !(normalizeOpenAiCompatibleBaseUrl(localAiSetup.selfHostedBaseUrl) && localAiSetup.selfHostedModel.trim().length > 0) },
   ] satisfies readonly SettingsSelectOption<AiSetupSection>[];
   const selectedModelValue = (() => {
     switch (selectedProvider) {
@@ -190,7 +190,7 @@ export function AiSetupModelBeingUsed({
     <>
     <ModelBeingUsedCard
       regionAriaLabel={t("settings.ai.modelBeingUsed")}
-      heading={t("settings.ai.modelBeingUsed")}
+      heading={t("settings.ai.classificationRoute")}
       headingAction={
         <button
           type="button"

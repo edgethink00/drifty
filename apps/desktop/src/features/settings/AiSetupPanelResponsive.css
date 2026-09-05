@@ -11,12 +11,12 @@
     grid-template-columns: 1fr;
   }
 
-  .ai-setup-current-model__controls {
+  .ai-setup-model-discovery-row {
     grid-template-columns: 1fr;
   }
 
-  .ai-setup-current-model__slash {
-    justify-self: center;
+  .ai-setup-current-model__controls {
+    grid-template-columns: 1fr;
   }
 
   .ai-managed-model {

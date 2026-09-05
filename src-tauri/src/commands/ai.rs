@@ -1,9 +1,12 @@
+use std::io::Read;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 const DEFAULT_CHAT_TIMEOUT: Duration = Duration::from_secs(60);
+const DEFAULT_MODEL_LIST_TIMEOUT: Duration = Duration::from_secs(15);
+const MAX_MODEL_LIST_RESPONSE_BYTES: u64 = 5_000_000;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +36,71 @@ pub struct AiClassificationChatResponse {
     pub body: String,
     pub latency_ms: u128,
     pub retry_after_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelListRequest {
+    pub base_url: String,
+    pub api_key: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiModelListResponse {
+    pub status: u16,
+    pub body: String,
+}
+
+#[tauri::command]
+pub async fn ai_list_openai_models(
+    request: AiModelListRequest,
+) -> Result<AiModelListResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || get_openai_models(request))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+pub fn get_openai_models(request: AiModelListRequest) -> Result<AiModelListResponse, String> {
+    let base_url = request.base_url.trim().trim_end_matches('/');
+    if base_url.is_empty() {
+        return Err("AI provider base URL is required.".to_string());
+    }
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(DEFAULT_MODEL_LIST_TIMEOUT)
+        .build()
+        .map_err(|error| error.to_string())?;
+    let mut builder = client.get(format!("{base_url}/models"));
+    if let Some(api_key) = request
+        .api_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        builder = builder.bearer_auth(api_key);
+    }
+
+    let mut response = builder.send().map_err(|error| error.to_string())?;
+    let status = response.status().as_u16();
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_MODEL_LIST_RESPONSE_BYTES)
+    {
+        return Err("AI provider model list response exceeded the 5 MB limit.".to_string());
+    }
+    let mut body_bytes = Vec::new();
+    response
+        .by_ref()
+        .take(MAX_MODEL_LIST_RESPONSE_BYTES + 1)
+        .read_to_end(&mut body_bytes)
+        .map_err(|error| error.to_string())?;
+    if body_bytes.len() as u64 > MAX_MODEL_LIST_RESPONSE_BYTES {
+        return Err("AI provider model list response exceeded the 5 MB limit.".to_string());
+    }
+    let body = String::from_utf8(body_bytes)
+        .map_err(|_| "AI provider model list response was not valid UTF-8.".to_string())?;
+    Ok(AiModelListResponse { status, body })
 }
 
 #[tauri::command]

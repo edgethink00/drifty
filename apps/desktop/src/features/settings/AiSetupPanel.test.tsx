@@ -109,6 +109,21 @@ describe("AiSetupPanel", () => {
     expect(screen.getByRole("group", { name: /OpenRouter BYOK settings/i })).toBeTruthy();
   });
 
+  it("keeps a custom endpoint visually unready when its Base URL is invalid", () => {
+    renderPanel({
+      initialSetup: {
+        ...DEFAULT_LOCAL_AI_SETUP,
+        selfHostedBaseUrl: "not-a-url",
+        selfHostedModel: "gpt-5-mini",
+      },
+    });
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI provider$/i }));
+
+    expect(within(modelBeingUsed).getByRole("option", { name: /^Custom endpoint$/i }).classList.contains("is-muted")).toBe(true);
+  });
+
   it("collapses the expanded provider when its bar is clicked again", () => {
     renderPanel();
 
@@ -376,6 +391,7 @@ describe("AiSetupPanel", () => {
         openRouterModel: "qwen/qwen3.6-flash",
         openRouterFallbackModels: ["deepseek/deepseek-v4-flash:free", "custom/provider-model"],
         selfHostedBaseUrl: "http://localhost:11434/v1",
+        selfHostedApiKey: "",
         selfHostedModel: "",
       },
     });
@@ -416,6 +432,7 @@ describe("AiSetupPanel", () => {
         openRouterModel: "deepseek/deepseek-v4-flash",
         openRouterFallbackModels: [],
         selfHostedBaseUrl: "http://localhost:11434/v1",
+        selfHostedApiKey: "",
         selfHostedModel: "",
       },
     });

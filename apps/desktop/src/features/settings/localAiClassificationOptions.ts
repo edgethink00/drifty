@@ -1,6 +1,7 @@
 import type { LocalAiProviderConfig } from "../classification/localAiProviderRequest";
 import {
   isManagedLocalAiRoute,
+  normalizeOpenAiCompatibleBaseUrl,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
   type LocalAiSetupState,
@@ -14,7 +15,7 @@ export function localAiProviderConfigFromSetup(setup: LocalAiSetupState): LocalA
   switch (setup.provider) {
     case "managed_local": {
       if (!isManagedLocalAiRoute(setup)) return null;
-      const baseUrl = setup.managedLocalBaseUrl.trim();
+      const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.managedLocalBaseUrl);
       const model = setup.managedLocalModel.trim();
       const modelId = setup.managedLocalModelId.trim();
       if (!baseUrl || !model || !modelId) return null;
@@ -28,10 +29,11 @@ export function localAiProviderConfigFromSetup(setup: LocalAiSetupState): LocalA
       return { localProvider: { provider: "openrouter_byok", apiKey, model, fallbackModels } };
     }
     case "self_hosted": {
-      const baseUrl = setup.selfHostedBaseUrl.trim();
+      const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
+      const apiKey = setup.selfHostedApiKey.trim();
       const model = setup.selfHostedModel.trim();
       if (!baseUrl || !model) return null;
-      return { localProvider: { provider: "self_hosted", baseUrl, model } };
+      return { localProvider: { provider: "self_hosted", baseUrl, ...(apiKey ? { apiKey } : {}), model } };
     }
     default:
       return assertNever(setup.provider);

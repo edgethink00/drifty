@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectPassAnalysisWindow, ProjectPassPromptInput } from "@drifty/domain";
-import { OPENROUTER_PRIVACY_PROVIDER, normalizeOpenRouterFallbackModels, normalizeOpenRouterPrimaryModel } from "../settings/localAiSetup";
+import {
+  OPENROUTER_PRIVACY_PROVIDER,
+  normalizeOpenAiCompatibleBaseUrl,
+  normalizeOpenRouterFallbackModels,
+  normalizeOpenRouterPrimaryModel,
+} from "../settings/localAiSetup";
 import type { AnalysisAiSetupState } from "../settings/analysisModelSetup";
 import { supabase } from "../../lib/supabase/client";
 import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
@@ -222,7 +227,7 @@ export function createProjectPassInference(setup: AnalysisAiSetupState, deps: Pr
         shape: "anthropic",
       });
     }
-    const baseUrl = setup.selfHostedBaseUrl.trim();
+    const baseUrl = normalizeOpenAiCompatibleBaseUrl(setup.selfHostedBaseUrl);
     const model = setup.selfHostedModel.trim();
     if (!baseUrl || !model) return { output: null, usage: { provider: "self_hosted" } };
     return dispatchProjectPassChat(invokeChat, {

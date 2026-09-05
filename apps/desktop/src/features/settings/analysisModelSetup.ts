@@ -31,7 +31,7 @@ export interface AnalysisAiSetupState {
 // they live in memory but are never written to localStorage (privacy boundary).
 export type PersistedAnalysisAiSetupState = Omit<
   AnalysisAiSetupState,
-  "openRouterApiKey" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey"
+  "openRouterApiKey" | "selfHostedBaseUrl" | "selfHostedApiKey" | "openaiApiKey" | "anthropicApiKey"
 >;
 
 export const ANALYSIS_AI_SETUP_STORAGE_KEY = "drifty.analysisAiSetup.v1";
@@ -105,11 +105,37 @@ export function toPersistedAnalysisAiSetup(setup: AnalysisAiSetupState): Persist
     provider: setup.provider,
     openRouterModel,
     openRouterFallbackModels: normalizeOpenRouterFallbackModels(openRouterModel, setup.openRouterFallbackModels),
-    selfHostedBaseUrl: setup.selfHostedBaseUrl.trim(),
     selfHostedModel: setup.selfHostedModel.trim(),
     openaiModel: setup.openaiModel.trim(),
     anthropicModel: setup.anthropicModel.trim(),
   };
+}
+
+export type LegacyAnalysisCustomEndpointConnection = {
+  readonly baseUrl: string;
+};
+
+/**
+ * Reads the pre-shared-connection copy once so it can be migrated into the
+ * Classification-owned connection. New writes deliberately omit this field,
+ * leaving one durable source of truth for the shared Base URL.
+ */
+export function resolveLegacyAnalysisCustomEndpointConnection(): LegacyAnalysisCustomEndpointConnection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const savedValue = window.localStorage.getItem(ANALYSIS_AI_SETUP_STORAGE_KEY);
+    if (!savedValue) return null;
+    const parsedValue: unknown = JSON.parse(savedValue);
+    if (!parsedValue || typeof parsedValue !== "object") return null;
+    const record = parsedValue as Record<string, unknown>;
+    if (!("selfHostedBaseUrl" in record)) return null;
+    const baseUrl = typeof record.selfHostedBaseUrl === "string" ? record.selfHostedBaseUrl.trim() : "";
+    const isSelectedCustomEndpoint = record.provider === "self_hosted";
+    const isCustomizedEndpoint = baseUrl.length > 0 && baseUrl !== DEFAULT_ANALYSIS_AI_SETUP.selfHostedBaseUrl;
+    return isSelectedCustomEndpoint || isCustomizedEndpoint ? { baseUrl } : { baseUrl: "" };
+  } catch {
+    return null;
+  }
 }
 
 /**

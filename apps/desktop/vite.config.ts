@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { previewAiProxyPlugin } from "./vitePreviewAiProxy";
 
 function resolveBuildCommit(): string {
   const envCommit = process.env.VITE_DRIFTY_BUILD_COMMIT ?? process.env.GITHUB_SHA ?? "";
@@ -38,6 +39,7 @@ export default defineConfig(({ command, mode }) => {
   const buildCommit = resolveBuildCommit();
   const appVersion = resolveAppVersion();
   const uploadSentrySourcemaps = shouldUploadSentrySourcemaps(command);
+  const enablePreviewAiProxy = command === "serve" && mode !== "production" && process.env.VITE_DRIFTY_PREVIEW === "1";
 
   return {
     define: {
@@ -50,6 +52,7 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       react(),
+      previewAiProxyPlugin(enablePreviewAiProxy),
       ...(uploadSentrySourcemaps
         ? [
             sentryVitePlugin({
