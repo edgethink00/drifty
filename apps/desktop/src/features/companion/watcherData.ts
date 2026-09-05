@@ -5,6 +5,7 @@ import type { ActivityCategory, ActivitySegment, ClassificationOptions, CurrentA
 import { isProductivityLabel } from "../../lib/activityLabels";
 import { formatCompactDurationFromSeconds } from "../../lib/formatting";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+import { resolveWatcherCurrentSegment } from "./watcherCurrentSegment";
 
 export type WatcherSnapshot = Omit<WatcherPeekEvent, "id" | "slotIndex"> & {
   /** Opaque local revision; it contains no raw app, site, or title text. */
@@ -142,10 +143,9 @@ export async function resolveWatcherSnapshot(segments: ActivitySegment[], driftR
 /**
  * Classify the frontmost app for overlay posture.
  *
- * Duration and today's totals still come from the supplied day segments, but
- * the productivity label that sits or chases the pet must come from `current`
- * itself. Mixing the dashboard day's fallback candidates here is how a
- * historical focus row can keep the cat seated during a live drift.
+ * Reuse the latest local segment only when its captured activity still matches
+ * `current`. This preserves its AI/manual verdict without inheriting a verdict
+ * from a different video, window, device, or historical dashboard day.
  */
 export function buildLiveWatcherSnapshot(
   current: CurrentActivitySnapshot,
@@ -153,10 +153,11 @@ export function buildLiveWatcherSnapshot(
   classificationOptions?: ClassificationOptions,
   driftReminderElapsedSeconds: number | null = null,
 ): WatcherSnapshot {
-  const liveIdentity = currentSnapshotToSegment(current, 0);
+  const active = resolveWatcherCurrentSegment(current, todaySegments, CURRENT_SNAPSHOT_FRESHNESS_SECONDS);
+  const liveIdentity = active?.segment ?? currentSnapshotToSegment(current, 0);
   return {
-    ...buildWatcherSnapshotFromCurrent(
-      current,
+    ...buildCurrentWatcherSnapshot(
+      liveIdentity,
       todaySegments,
       driftReminderElapsedSeconds,
       {
@@ -166,6 +167,7 @@ export function buildLiveWatcherSnapshot(
         rules: classificationOptions?.rules,
         fallbackCandidates: [liveIdentity],
       },
+      active?.uncapturedSeconds ?? 0,
     ),
     surfaceRevision: buildActivitySurfaceRevision(current),
   };
@@ -187,16 +189,29 @@ export function shouldReplacePetModeLiveSnapshot(
 export function buildWatcherSnapshotFromCurrent(current: CurrentActivitySnapshot, segments: ActivitySegment[], driftReminderElapsedSeconds: number | null = null, classificationOptions?: ClassificationOptions): WatcherSnapshot {
   const timing = getCurrentSnapshotTiming(current, segments);
   const segment = currentSnapshotToSegment(current, timing.durationSeconds);
+  return buildCurrentWatcherSnapshot(segment, segments, driftReminderElapsedSeconds, classificationOptions, timing.uncapturedSeconds);
+}
+
+function buildCurrentWatcherSnapshot(
+  segment: ActivitySegment,
+  segments: ActivitySegment[],
+  driftReminderElapsedSeconds: number | null,
+  classificationOptions: ClassificationOptions | undefined,
+  uncapturedSeconds: number,
+): WatcherSnapshot {
   const { category, productivity } = classifyActivity(segment, {
     ...classificationOptions,
     fallbackCandidates: [segment, ...(classificationOptions?.fallbackCandidates ?? segments)],
   });
   const recentWatcherResponse = getRecentWatcherResponse();
-  const uncapturedFocusSeconds = productivity === "focus" ? timing.uncapturedSeconds : 0;
+  const uncapturedFocusSeconds = productivity === "focus" ? uncapturedSeconds : 0;
   const focusSecondsToday = sumProductivitySeconds(segments, "focus", classificationOptions) + uncapturedFocusSeconds;
   const currentHourFocusSeconds = sumCurrentHourFocusSeconds(segments, classificationOptions) + uncapturedFocusSeconds;
-  const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds([...segments, segment], segment, classificationOptions);
-  const focusStrikeSeconds = computeCurrentFocusStrikeSeconds([...segments, segment], segment, classificationOptions);
+  // A matched live segment extends a stored row with the same ID; replace it
+  // so the run calculators see the current activity exactly once.
+  const currentSegments = [...segments.filter((candidate) => candidate.id !== segment.id), segment];
+  const preservedFocusStrikeSeconds = computePreservedFocusStrikeSeconds(currentSegments, segment, classificationOptions);
+  const focusStrikeSeconds = computeCurrentFocusStrikeSeconds(currentSegments, segment, classificationOptions);
 
   return {
     productivity,

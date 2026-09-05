@@ -4673,13 +4673,16 @@ export default function App() {
     const liveSegments = input.liveSegments;
     const evaluationToday = currentDriftAlarmDay();
     const baseSegments = driftAlarmBaseSegmentsRef.current;
+    const driftAlarmSegments = liveSegments.length > 0
+      ? mergeDriftAlarmSegments(baseSegments, liveSegments)
+      : baseSegments;
     if (petModeActive && alarmSnapshot) {
       const observedAtMs = snapshotObservedAtMs(alarmSnapshot);
       if (shouldReplacePetModeLiveSnapshot(observedAtMs, petModeLiveObservedAtMsRef.current) && observedAtMs !== null) {
         petModeLiveObservedAtMsRef.current = observedAtMs;
         const livePetSnapshot = buildLiveWatcherSnapshot(
           alarmSnapshot,
-          baseSegments,
+          driftAlarmSegments,
           {
             includeAiClassifications: showAiClassificationImpact,
             includeBuiltInHeuristics: allowBuiltInHeuristics,
@@ -4753,9 +4756,6 @@ export default function App() {
       : null;
 
     const systemTransientActivity = alarmSnapshot?.systemTransientActivity ?? null;
-    const driftAlarmSegments = liveSegments.length > 0
-      ? mergeDriftAlarmSegments(baseSegments, liveSegments)
-      : baseSegments;
     const driftAlarmClassificationOptions = {
       fallbackCandidates: driftAlarmSegments,
       includeAiClassifications: showAiClassificationImpact,
