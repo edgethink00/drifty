@@ -5,7 +5,7 @@ function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
-const modalSurfaces = [
+const sharedModalSurfaces = [
   ["Sign in", "./features/auth/AuthModal.tsx", /className="auth-modal modal-shell" data-modal-variant="standard"/],
   ["Send feedback", "./features/feedback/FeedbackModal.tsx", /className="auth-modal modal-shell feedback-modal"\s+data-modal-variant="standard"/],
   ["Delete account", "./features/auth/AccountDeletionModal.tsx", /className="auth-modal modal-shell account-deletion-modal"\s+data-modal-variant="compact"/],
@@ -30,6 +30,17 @@ const modalSurfaces = [
   ["Edit drift alarm copy", "./features/companion/DriftAlarmCopySettings.tsx", /className="auth-modal modal-shell drift-copy-modal"\s+data-modal-variant="workspace"/],
   ["Restore AI analysis", "./features/dashboard/DashboardAiRecoveryOverlay.tsx", /className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"/],
   ["Upgrade to Pro", "./features/billing/UpgradePlanModal.tsx", /className="dashboard-ai-recovery__panel modal-shell"\s+data-modal-variant="workspace"/],
+  ["Promo account handoff", "./features/billing/PromoHandoffAccountDialog.tsx", /className="auth-modal modal-shell"\s+data-modal-variant="standard"/],
+  ["SSH agent sources", "./features/dev-signals/SshAgentSourcesModal.tsx", /className="auth-modal modal-shell agents-ssh-modal"\s+data-modal-variant="standard"/],
+] as const;
+
+const purposeBuiltDialogSurfaces = [
+  ["Onboarding", "./features/onboarding/OnboardingModal.tsx", /className="onboarding-screen dc-onboarding-screen"\s+role="dialog"/],
+  ["First-day preparation failure", "./features/onboarding/FirstDayPreparationScreen.tsx", /className="first-day-prep__panel"\s+role="alertdialog"/],
+  ["Week activity inspector", "./features/dashboard/WeekActivityInspector.tsx", /className="week-activity-inspector"\s+style=\{layout\.style\}\s+role="dialog"/],
+  ["Share card", "./features/share/ShareCardModal.tsx", /className="auth-modal profile-modal share-card-modal"\s+role="dialog"/],
+  ["Companion drift alarm", "./features/companion/CompanionDriftAlarmCard.tsx", /function CompanionDriftAlarmCard[\s\S]*role=\{isPreview \? "group" : moment\.correctionStatus \? undefined : "alertdialog"\}/],
+  ["Companion automatic close", "./features/companion/CompanionDriftAlarmCard.tsx", /function CompanionAutomaticCloseCard[\s\S]*role=\{isPreview \? "group" : "alertdialog"\}/],
 ] as const;
 
 describe("modal system v2 contract", () => {
@@ -47,11 +58,19 @@ describe("modal system v2 contract", () => {
     expect(tokens).toContain("--modal-inset-expressive: 28px;");
   });
 
-  it("classifies every production popup surface under one explicit variant", () => {
-    expect(modalSurfaces).toHaveLength(24);
+  it("classifies every shared production modal surface under one explicit variant", () => {
+    expect(sharedModalSurfaces).toHaveLength(26);
 
-    for (const [name, path, pattern] of modalSurfaces) {
+    for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
+    }
+  });
+
+  it("keeps every purpose-built production dialog family explicit", () => {
+    expect(purposeBuiltDialogSurfaces).toHaveLength(6);
+
+    for (const [name, path, pattern] of purposeBuiltDialogSurfaces) {
+      expect(read(path), `${name} should remain an explicit purpose-built dialog`).toMatch(pattern);
     }
   });
 
@@ -68,6 +87,8 @@ describe("modal system v2 contract", () => {
     expect(chrome).toContain("border-radius: var(--modal-shell-radius);");
     expect(chrome).toContain("padding: var(--modal-shell-inset);");
     expect(chrome).toContain(".modal-shell .modal-x");
+    expect(chrome).toMatch(/\.modal-x\s*\{[^}]*border-radius:\s*999px;/);
+    expect(chrome).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);
     expect(chrome).toContain(".modal-shell .modal-head__copy h2");
     expect(chrome).toContain(".cloud-device-confirm__panel.modal-shell .cloud-device-confirm__eyebrow");
   });

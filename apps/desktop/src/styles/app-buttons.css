@@ -13,7 +13,7 @@
   background: transparent;
   color: inherit;
   border: 1px solid transparent;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--type-button-size);
   font-weight: 600;
@@ -102,6 +102,17 @@
   font-size: 0.75rem;
 }
 
+/* Icon-only tools use the same compact height on both axes. This keeps
+   directional controls visually distinct from labeled commands without
+   weakening their hit target or inventing a second radius. Quiet tools reveal
+   that shape through hover/focus chrome; the square hit area still applies at
+   rest. */
+.app-btn--icon {
+  width: var(--btn-h);
+  min-width: var(--btn-h);
+  padding-inline: 0;
+}
+
 /* Directional chevron for step controls. Inherits the shared `.app-btn > svg`
    14px box above; this rule only supplies the stroke rendering and the
    left-facing rotation. Stroke weight is deliberately independent of
@@ -129,10 +140,12 @@
 
 /* Page-header actions. A `.pg-head` action is a primary target in its row, so it
    keeps the default 2rem height rather than shrinking to the 1.75rem date-nav
-   size. Declaring it here keeps every header action on one measurement instead
-   of letting each feature restate its own. */
+   size and keeps its standalone pill silhouette. Declaring it here keeps every
+   header action on one measurement instead of letting each feature restate its
+   own. */
 .app-btn--header-action {
   --btn-h: 2rem;
   padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
   font-size: var(--type-button-size);
 }

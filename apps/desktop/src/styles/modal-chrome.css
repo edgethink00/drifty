@@ -1,12 +1,13 @@
 /* ──────────────────────────────────────────────────────────────────────────
    Shared modal chrome (redesign — "Drifty Modals" v1.3)
 
-   One unified chrome for every app dialog: a circular top-right close button,
-   a single-title header (no mono eyebrow / icon tile), and a standardized
-   footer of pill buttons. Ported from the design-system gallery
-   (Drifty Modals.dc.html), with the v1.2 header-unification and v1.3 UI/UX
-   polish folded in as the default. Every modal already carries `.auth-modal`,
-   so overrides here are scoped under it to leave settings pages untouched.
+   Shared chrome for surfaces that opt into `.modal-shell`: a circular
+   top-right close button, a single-title header (no mono eyebrow / icon tile),
+   and rounded-rectangle footer actions that use `.modal-btn`. Ported from the
+   design-system gallery (Drifty Modals.dc.html), with the v1.2 header-
+   unification and v1.3 UI/UX polish folded in as the default. Auth-family
+   overrides stay under `.auth-modal`; independent shells join through the
+   explicit selectors below.
 
    Loaded last in main.tsx so these win the cascade over the base + feature
    stylesheets (shared-surfaces, leaderboard, team, projects, rank-embeds).
@@ -204,7 +205,7 @@
   display: none;
 }
 
-/* ── Standardized footer: right-aligned pill buttons + optional note ─────── */
+/* ── Standardized footer: right-aligned action buttons + optional note ───── */
 .modal-foot {
   display: flex;
   justify-content: flex-end;
@@ -244,7 +245,7 @@
   height: var(--btn-h);
   min-height: var(--btn-h);
   padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   font-family: var(--font-sans);
   font-size: var(--type-button-size);

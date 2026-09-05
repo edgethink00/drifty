@@ -458,7 +458,7 @@
   min-height: var(--settings-control-height);
   padding: 0 var(--space-3);
   border: 1px solid var(--settings-control-border);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--settings-control-bg);
   color: var(--text);
   font-family: var(--font-mono);

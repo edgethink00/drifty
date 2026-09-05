@@ -353,7 +353,7 @@
   align-items: center;
   background: #5b6068;
   border-color: #5b6068;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   box-shadow: 0 5px 12px color-mix(in srgb, #5b6068 20%, transparent);
   color: #fff;
   display: inline-flex;
@@ -400,6 +400,7 @@
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon {
   background: color-mix(in srgb, var(--text) 8%, var(--surface));
   border-color: color-mix(in srgb, var(--text) 10%, transparent);
+  border-radius: var(--radius-pill);
   box-shadow: none;
   color: var(--text-soft);
   padding: 0;

@@ -179,7 +179,7 @@
   appearance: none;
   background: var(--text);
   border: 1px solid var(--text);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 14%, transparent);
   color: var(--surface);
   cursor: pointer;
@@ -266,7 +266,7 @@
   align-self: end;
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   cursor: pointer;
   display: flex;

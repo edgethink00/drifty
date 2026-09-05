@@ -227,6 +227,7 @@ describe("Settings content styles", () => {
     const selectSelectedOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option.is-selected");
     const selectActionOptionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option");
     const selectActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action");
+    const selectIconActionRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon");
     const selectActionsContainerRule = cssRule(aiSetupStyles, ".ai-setup-select-control .settings-select-control__option-actions");
 
     expectRuleToContain(tabListRule, ["background: color-mix(in srgb, var(--bg-2) 38%, transparent);", "gap: 0.16rem;", "padding: 0.16rem;", "width: fit-content;"]);
@@ -250,7 +251,8 @@ describe("Settings content styles", () => {
     expect(selectSelectedOptionRule).toContain("background: color-mix(in srgb, var(--text) 9%, transparent);");
     expect(aiSetupStyles).not.toContain(".settings-select-control__check");
     expect(selectActionOptionRule).toContain("padding-right: 6.7rem;");
-    expectRuleToContain(selectActionRule, ["background: #5b6068;", "border-radius: var(--radius-pill);", "color: #fff;"]);
+    expectRuleToContain(selectActionRule, ["background: #5b6068;", "border-radius: var(--radius-sm);", "color: #fff;"]);
+    expect(selectIconActionRule).toContain("border-radius: var(--radius-pill);");
     // The action buttons live in an absolutely-pinned flex container so a row can carry more than one.
     expectRuleToContain(selectActionsContainerRule, ["display: flex;", "position: absolute;"]);
   });

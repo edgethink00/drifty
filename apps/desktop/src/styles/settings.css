@@ -985,7 +985,7 @@
 /* Settings 전용의 조밀한 컨트롤 계약. 앱 표면 버튼은 `.app-btn`을 쓴다. */
 .settings-btn {
   font-size: var(--type-control-size);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
 }
 
 .settings-btn.danger {

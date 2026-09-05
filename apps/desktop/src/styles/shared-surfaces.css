@@ -581,7 +581,7 @@
 .auth-modal__callback-dismiss {
   flex: 0 0 auto;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-soft);
   cursor: pointer;
