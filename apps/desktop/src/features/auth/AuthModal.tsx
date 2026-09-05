@@ -153,7 +153,7 @@ export function AuthModal({
     : isSignUp ? t("auth.modal.signUpTitle") : t("auth.modal.signInTitle");
   const description = intent === "promo"
     ? t("auth.modal.promoDescription")
-    : isSignUp ? t("auth.modal.signUpDescription") : t("auth.modal.signInDescription");
+    : isSignUp ? t("auth.modal.signUpDescription") : null;
 
   const errorNotice = error ? (
     <div className="auth-modal__error" role="alert">{error}</div>
@@ -337,7 +337,7 @@ export function AuthModal({
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="auth-modal-title">{title}</h2>
-            <p>{description}</p>
+            {description ? <p>{description}</p> : null}
           </div>
         </div>
 

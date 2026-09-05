@@ -403,7 +403,7 @@ describe("App auth modal", () => {
     render(<App />);
 
     const dialog = await advanceRequiredOnboardingToAccountStep();
-    expect(within(dialog).getByText(/your account keeps focus and drift insights synced/i)).toBeTruthy();
+    expect(within(dialog).getByText(/sign in or create an account to get started\. you can use on-device ai for free/i)).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: /continue with google/i })).toBeTruthy();
     expect(screen.queryByRole("main", { name: /sign in required/i })).toBeNull();
     expect(screen.queryByRole("heading", { name: /sign in to use drifty/i })).toBeNull();
@@ -519,8 +519,8 @@ describe("App auth modal", () => {
 
     await openAuthModalFromAccountMenu();
 
-    expect(await screen.findByRole("heading", { name: /sign in to drifty/i })).toBeTruthy();
-    expect(screen.getByText(/use your drifty account to sync and publish/i)).toBeTruthy();
+    const heading = await screen.findByRole("heading", { name: /sign in to drifty/i });
+    expect(heading.parentElement?.querySelector("p")).toBeNull();
     expect(screen.getByRole("button", { name: /^sign in$/i })).toBeTruthy();
     expect(screen.getByText(/by continuing, you accept/i)).toBeTruthy();
     expect(screen.getByRole("link", { name: /terms/i }).getAttribute("href")).toBe("https://drifty.so/terms/");
