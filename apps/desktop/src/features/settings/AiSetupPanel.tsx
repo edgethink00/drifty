@@ -266,26 +266,13 @@ export function AiSetupPanel({
       ) : (
         <section id="ai-setup-panel-tab-profile" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.profile")}>
           <div className="ai-setup-support-zone" aria-label={t("settings.ai.promptSettings")}>
-            <div className="ai-setup-support-zone__header">
-              <div>
-                <span className="eyebrow">{t("settings.ai.promptSettings")}</span>
-                <strong>{t("settings.ai.workContextPrivacy")}</strong>
-              </div>
-              <p>{t("settings.ai.promptSettingsDescription")}</p>
-            </div>
-            <dl className="ai-setup-memory-summary" aria-label={t("settings.ai.memorySummaryAria")}>
-              <div>
-                <dt>{t("settings.ai.memoryWorkContextLabel")}</dt>
-                <dd>{t("settings.ai.memoryWorkContextDescription")}</dd>
-              </div>
-              <div>
-                <dt>{t("settings.ai.memoryCorrectionsLabel")}</dt>
-                <dd>{t("settings.ai.memoryCorrectionsDescription")}</dd>
-              </div>
-            </dl>
             <AiSetupSupportSections
+              workProfileUserId={workProfileUserId}
+              savedWorkProfile={workProfileSettings.savedWorkProfile}
               workProfileDraft={workProfileSettings.workProfileDraft}
               workProfileMessage={workProfileSettings.workProfileMessage}
+              workProfileSaving={workProfileSettings.workProfileSaving}
+              memorySnapshotVersion={workProfileSettings.memorySnapshotVersion}
               onSaveWorkProfile={workProfileSettings.handleSaveWorkProfile}
               onWorkProfileDraftChange={workProfileSettings.handleWorkProfileDraftChange}
             />

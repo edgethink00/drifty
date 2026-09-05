@@ -26,6 +26,41 @@ const PASSIVE_PRIOR_MEDIUM_CONFIDENCE_DAYS = 5;
 const PASSIVE_PRIOR_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const SHA_256 = /^[a-f0-9]{64}$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * The refinement prompt instructs the model never to store raw URLs, account
+ * names, or private titles, but a prompt is guidance rather than a guarantee.
+ * Learned summaries are shown verbatim in Settings and sent back to the
+ * provider on later refinements, so the host redacts identifiers instead of
+ * trusting the model to have followed instructions.
+ *
+ * A bare site domain is deliberately not redacted: Drifty's own fallback
+ * learning states rules like "example.com is not always drift", where the
+ * domain is the subject of the rule and is already visible in the timeline.
+ * What must never survive is anything that identifies a specific page,
+ * account, or person: full URLs with paths, emails, and social handles.
+ */
+const REDACTED_IDENTIFIER = "[removed]";
+const RAW_IDENTIFIER_PATTERNS: readonly RegExp[] = [
+  // Any URI with a scheme, including file:// paths.
+  /\b[a-z][a-z0-9+.-]*:\/\/\S+/gi,
+  /\bwww\.[^\s,;]+/gi,
+  // Email addresses, before bare-host matching can split them.
+  /\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b/gi,
+  // Absolute POSIX paths under a user or volume directory.
+  /(?:^|[\s("'])(?:\/(?:Users|home|Volumes|var|tmp|private|mnt|media)\/)\S+/gi,
+  // Windows paths such as C:\\Users\\name\\file.docx.
+  /\b[A-Za-z]:\\[^\s,;]+/g,
+  // Bare IPv4 hosts, with an optional port and path.
+  /\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?(?:\/\S*)?/g,
+  // Hostnames carrying a path, which point at one specific document.
+  /\b(?:[a-z0-9-]+\.)+(?:com|net|org|io|ai|co|dev|app|gg|tv|me|kr|jp|cn|uk|us|edu|gov|xyz)\/\S+/gi,
+  // Internal or deep subdomains such as mail.internal.acme.com. A plain
+  // second-level domain like example.com stays readable.
+  /\b(?:[a-z0-9-]+\.){2,}(?:com|net|org|io|ai|co|dev|app|gg|tv|me|kr|jp|cn|uk|us|edu|gov|xyz)\b/gi,
+  // Social handles. CSS at-rules and scoped package names are ordinary
+  // technical vocabulary, not identities, so they stay readable.
+  /(?:^|[\s("'])@(?!media\b|import\b|supports\b|keyframes\b|font-face\b|charset\b|layer\b|container\b|property\b|scope\b|page\b|namespace\b)[A-Za-z0-9_-]{2,}(?![\w-]*\/)/g,
+];
 const PASSIVE_COMMUNICATION_PRIOR_SUMMARY = "For this item only, the exact preceding communication selector is work-associated: on distinct days, communication with this same selector was followed by non-LLM work anchors.";
 
 const PURPOSE_LABELS: Record<OnboardingPurpose, string> = {
@@ -85,6 +120,39 @@ export async function resolveLivingSoulForClassification(
   if (!ownerId) return null;
   const state = readUserOnboardingState(ownerId);
   return loadOrCreateLivingSoul(ownerId, state);
+}
+
+/**
+ * Reads an existing Living Soul for display without creating one. Settings
+ * only observes state, so it must never materialize a Soul document as a side
+ * effect of opening a tab. The read joins the owner's serialization queue so
+ * it cannot settle on the revision an in-flight write is replacing.
+ *
+ * The three outcomes are deliberately distinct: an absent Soul is a legitimate
+ * "nothing learned yet" state, while stored-but-unreadable markdown means saved
+ * learning exists and cannot be used. Collapsing the second case into the first
+ * would tell the user their Memory is simply empty.
+ */
+export async function readLivingSoulForUser(
+  ownerId: string,
+): Promise<
+  | { readonly state: "absent" }
+  | { readonly state: "unreadable" }
+  | { readonly state: "ready"; readonly context: LivingSoulResolvedContext }
+> {
+  const normalizedOwnerId = ownerId.trim();
+  if (!normalizedOwnerId) return { state: "absent" };
+  const scope = await livingSoulScopeForOwner(normalizedOwnerId);
+  // Queue this read behind any in-flight write for the same owner so the panel
+  // cannot settle on the pre-write revision after a correction or a profile
+  // save. The queued operation only reads; it never creates or mutates a Soul.
+  return queueSoulWrite(normalizedOwnerId, async () => {
+    const markdown = await readSoulMarkdown(scope);
+    if (markdown === null || markdown.trim().length === 0) return { state: "absent" as const };
+    const document = parseLivingSoulMarkdown(markdown);
+    if (!document) return { state: "unreadable" as const };
+    return { state: "ready" as const, context: resolvedContext(normalizedOwnerId, scope, document) };
+  });
 }
 
 export async function synchronizeLivingSoulDeclaredContextForUser(
@@ -281,7 +349,7 @@ export function declaredContextFromOnboarding(
 }
 
 export function normalizeLivingSoulPattern(value: LivingSoulPattern): LivingSoulPattern | null {
-  const summary = cleanText(value.summary, MAX_PATTERN_SUMMARY_CHARACTERS);
+  const summary = cleanText(redactRawIdentifiers(value.summary), MAX_PATTERN_SUMMARY_CHARACTERS);
   const confidence = normalizeConfidence(value.confidence);
   const evidenceCount = Math.min(99, Math.max(1, Math.round(value.evidenceCount)));
   const lastObservedAt = validIsoTimestamp(value.lastObservedAt);
@@ -559,6 +627,22 @@ function cleanText(value: string | null | undefined, maxLength: number): string 
     .replace(/\s+/g, " ")
     .trim();
   return cleaned ? cleaned.slice(0, maxLength).trim() || null : null;
+}
+
+/**
+ * Replaces raw identifiers with a neutral marker so a learned pattern stays a
+ * generalization. Leading whitespace captured by the handle pattern is
+ * preserved so words do not run together after redaction.
+ */
+function redactRawIdentifiers(value: string | null | undefined): string | null {
+  if (!value) return value ?? null;
+  return RAW_IDENTIFIER_PATTERNS.reduce<string>(
+    (text, pattern) => text.replace(pattern, (match) => {
+      const leading = /^[\s(]/.test(match) ? match[0] : "";
+      return `${leading}${REDACTED_IDENTIFIER}`;
+    }),
+    value,
+  );
 }
 
 function validIsoTimestamp(value: string | null | undefined): string | null {

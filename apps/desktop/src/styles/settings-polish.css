@@ -330,8 +330,7 @@
 }
 
 .content--settings .settings-section--ai-setup .ai-setup-provider-heading,
-.content--settings .settings-section--ai-setup .ai-setup-current-model h4,
-.content--settings .settings-section--ai-setup .ai-setup-support-zone__header strong {
+.content--settings .settings-section--ai-setup .ai-setup-current-model h4 {
   color: var(--text-soft);
   font-size: 0.94rem;
   font-weight: 620;

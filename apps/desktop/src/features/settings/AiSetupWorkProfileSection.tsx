@@ -14,13 +14,15 @@ const WORK_DESCRIPTION_COUNT_REVEAL_THRESHOLD = 200;
 type AiSetupWorkProfileSectionProps = {
   readonly workProfileDraft: WorkProfileSettings;
   readonly workProfileMessage: string | null;
-  readonly onSaveWorkProfile: () => void;
+  readonly workProfileSaving: boolean;
+  readonly onSaveWorkProfile: () => void | Promise<void>;
   readonly onWorkProfileDraftChange: (value: WorkProfileSettings) => void;
 };
 
 export function AiSetupWorkProfileSection({
   workProfileDraft,
   workProfileMessage,
+  workProfileSaving,
   onSaveWorkProfile,
   onWorkProfileDraftChange,
 }: AiSetupWorkProfileSectionProps) {
@@ -117,7 +119,14 @@ export function AiSetupWorkProfileSection({
           </div>
           <div className="ai-setup-personalization__footer">
             {workProfileMessage ? <p role="status">{workProfileMessage}</p> : null}
-            <button type="button" className="settings-btn" onClick={onSaveWorkProfile}>{t("settings.ai.saveWorkProfile")}</button>
+            <button
+              type="button"
+              className="settings-btn"
+              disabled={workProfileSaving}
+              onClick={() => void onSaveWorkProfile()}
+            >
+              {workProfileSaving ? t("settings.ai.savingWorkProfile") : t("settings.ai.saveWorkProfile")}
+            </button>
           </div>
         </div>
       </div>

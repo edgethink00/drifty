@@ -14,6 +14,15 @@ vi.mock("./cloudAiConnectionTest", () => ({
 }));
 
 describe("AiSetupPanel", () => {
+  // Derived the same way the app derives it, so a change to the scope rule
+  // relocates these fixtures instead of silently making them dead files.
+  async function soulStorageKeyForUser(ownerId: string): Promise<string> {
+    const bytes = new TextEncoder().encode(`drifty-living-soul:${ownerId}`);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const scope = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+    return `drifty:living-soul:v1:${scope}`;
+  }
+
   beforeEach(() => {
     invokeMock.mockClear();
     resetManagedStatusMock();
@@ -143,14 +152,17 @@ describe("AiSetupPanel", () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
-    const memoryInputs = screen.getByLabelText(/Memory sources/i);
-    expect(within(memoryInputs).getByText("Work profile")).toBeTruthy();
-    expect(within(memoryInputs).getByText("Main activities and one description you can edit here.")).toBeTruthy();
-    expect(within(memoryInputs).getByText("Learned patterns")).toBeTruthy();
-    expect(within(memoryInputs).getByText("Short patterns from corrections and repeated context, not a copy of your timeline.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(screen.getByRole("button", { name: /^Work profile$/i }));
-    expect(screen.getByRole("button", { name: /^Work profile$/i }).getAttribute("aria-expanded")).toBe("true");
+    const memoryOverview = screen.getByLabelText(/Drifty Memory overview/i);
+    expect(within(memoryOverview).getByRole("heading", { name: /What Drifty remembers about your work/i })).toBeTruthy();
+    expect(within(memoryOverview).getByText("Stored on this Mac")).toBeTruthy();
+    expect(await within(memoryOverview).findByText("Ready to learn")).toBeTruthy();
+    expect(within(memoryOverview).getByText("Coding")).toBeTruthy();
+    expect(within(memoryOverview).getByText("Writing")).toBeTruthy();
+    expect(within(memoryOverview).getByRole("heading", { name: "Learned patterns" })).toBeTruthy();
+    const editButton = within(memoryOverview).getByRole("button", { name: /^Edit$/i });
+    expect(editButton.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(editButton);
+    expect(editButton.getAttribute("aria-expanded")).toBe("true");
     expect(screen.queryByRole("region", { name: /^Model being used$/i })).toBeNull();
     expect(screen.queryByText("Coding, Writing in Product development")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
@@ -185,8 +197,146 @@ describe("AiSetupPanel", () => {
       workDescription: "I build product features and help customers.",
     });
     expect(screen.getByRole("status").textContent).toContain("Memory updated");
+    // Collapsing the editor returns the row to its saved-value summary.
+    fireEvent.click(within(memoryOverview).getByRole("button", { name: /close editor/i }));
+    const savedActivities = within(memoryOverview).getByLabelText("Selected work activities");
+    expect(within(savedActivities).getByText("Data Analysis")).toBeTruthy();
+    expect(within(savedActivities).getByText("Designing")).toBeTruthy();
+    expect(await screen.findByText("Soul.md · rev. 1")).toBeTruthy();
     expect(screen.queryByText("Coding, Writing, Data Analysis in AI")).toBeNull();
     expect(screen.queryByText(/User work profile:/i)).toBeNull();
+  });
+
+  it("shows the current Living Soul revision and learned pattern summaries", async () => {
+    window.localStorage.setItem(await soulStorageKeyForUser("local"), [
+      "---",
+      "schema: drifty.soul/v1",
+      "revision: 7",
+      "created_at: 2026-09-01T00:00:00.000Z",
+      "updated_at: 2026-09-05T00:00:00.000Z",
+      "last_feedback_at: 2026-09-05T00:00:00.000Z",
+      "---",
+      "# Living Soul",
+      "",
+      "## Declared work context",
+      "- Work activities: Coding, Writing",
+      "- Work domain: Not provided",
+      "- Work description: I build product features.",
+      "- Drifty purpose: Protect focus",
+      "",
+      "## Learned work-support patterns",
+      "- [confidence=medium; evidence=4; last=2026-09-05T00:00:00.000Z] Product research before implementation is usually work support.",
+      "",
+      "## Learned drift patterns",
+      "- [confidence=low; evidence=2; last=2026-09-04T00:00:00.000Z] Long entertainment browsing is usually drift.",
+      "",
+      "## Ambiguities",
+      "- None yet.",
+      "",
+      "## Passive contextual priors",
+      "- None yet.",
+      "",
+    ].join("\n"));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+
+    expect(await screen.findByText("Soul.md · rev. 7")).toBeTruthy();
+    expect(screen.getByText("Used in classification")).toBeTruthy();
+    expect(screen.getByText("Product research before implementation is usually work support.")).toBeTruthy();
+    expect(screen.getByText("Long entertainment browsing is usually drift.")).toBeTruthy();
+    expect(screen.getByText("2 learned patterns")).toBeTruthy();
+    expect(screen.getByText("Work 1")).toBeTruthy();
+    expect(screen.getByText("Drift 1")).toBeTruthy();
+  });
+
+  it("exposes Memory regions to assistive technology", async () => {
+    window.localStorage.setItem(getUserOnboardingStorageKey("local"), JSON.stringify({
+      version: 2,
+      completed: true,
+      displayName: "",
+      workType: "Coding",
+      workTypeOther: "",
+      workDomain: "Product development",
+      workDomainOther: "",
+      jobType: "Coding, Writing",
+      jobTypeOther: "",
+      workDescription: "I build and write about product features.",
+      driftAlarmEnabled: false,
+      extremeNudgeEnabled: false,
+      petModeEnabled: false,
+      browserHistoryBootstrapEnabled: false,
+      focusGoalHours: null,
+      driftThresholdMinutes: null,
+      purpose: "protect_focus",
+      completedAt: "2026-06-15T00:00:00.000Z",
+    }));
+    window.localStorage.setItem(await soulStorageKeyForUser("local"), [
+      "---",
+      "schema: drifty.soul/v1",
+      "revision: 2",
+      "created_at: 2026-09-01T00:00:00.000Z",
+      "updated_at: 2026-09-05T00:00:00.000Z",
+      "last_feedback_at: null",
+      "---",
+      "# Living Soul",
+      "",
+      "## Declared work context",
+      "- Work activities: Coding",
+      "- Work domain: Not provided",
+      "- Work description: Not provided",
+      "- Drifty purpose: Protect focus",
+      "",
+      "## Learned work-support patterns",
+      "- [confidence=low; evidence=1; last=2026-09-05T00:00:00.000Z] Research before building is usually work.",
+      "",
+      "## Learned drift patterns",
+      "- None yet.",
+      "",
+      "## Ambiguities",
+      "- None yet.",
+      "",
+      "## Passive contextual priors",
+      "- None yet.",
+      "",
+    ].join("\n"));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+
+    // An aria-label on a plain div is dropped by screen readers, so these
+    // groupings must keep real roles rather than labels alone.
+    const overview = await screen.findByRole("region", { name: /Drifty Memory overview/i });
+    // Wait for the Soul read to resolve before asserting the loaded regions.
+    await within(overview).findByText("Research before building is usually work.");
+    expect(within(overview).getByRole("group", { name: /Memory status/i })).toBeTruthy();
+    expect(within(overview).getByRole("group", { name: /Learned pattern breakdown/i })).toBeTruthy();
+    expect(within(overview).getByRole("list", { name: /Selected work activities/i })).toBeTruthy();
+  });
+
+  it("does not present an unreadable Soul document as a healthy empty Memory", async () => {
+    // A Soul file exists but its frontmatter is corrupt, so the parser rejects it.
+    window.localStorage.setItem(await soulStorageKeyForUser("local"), [
+      "---",
+      "schema: drifty.soul/v1",
+      "revision: not-a-number",
+      "---",
+      "# Living Soul",
+      "",
+    ].join("\n"));
+
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
+
+    // Claiming "Ready to learn" here would tell the user nothing is stored yet,
+    // while saved learning actually exists on disk and cannot be read.
+    expect(await screen.findByText("Details unavailable")).toBeTruthy();
+    expect(screen.queryByText("Ready to learn")).toBeNull();
+    // The learned row must explain the failure rather than claim emptiness,
+    // and must not advertise a pattern count it cannot back up.
+    expect(screen.getByText("Saved learning cannot be read")).toBeTruthy();
+    expect(screen.queryByText("No learned patterns yet")).toBeNull();
+    expect(screen.queryByText(/learned patterns$/)).toBeNull();
   });
 
   it("tests the selected local provider connection without saving secret material", async () => {
@@ -286,7 +436,8 @@ describe("AiSetupPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: /^Memory$/i }));
     expect(screen.queryByRole("button", { name: /Privacy review/i })).toBeNull();
     expect(screen.queryByRole("region", { name: /AI privacy review/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /^Work profile$/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /What Drifty remembers about your work/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Edit$/i })).toBeTruthy();
   });
 });
 

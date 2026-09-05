@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   declaredContextFromOnboarding,
   livingSoulPromptContext,
+  normalizeLivingSoulPattern,
   parseLivingSoulMarkdown,
   renderLivingSoulMarkdown,
   type LivingSoulDocument,
@@ -131,5 +132,99 @@ describe("Living Soul document", () => {
       workDescription: "Works in AI productivity.",
       purpose: "Protect focus",
     });
+  });
+
+  it("strips raw identifiers a refiner may leak into a learned pattern", () => {
+    // The refinement prompt tells the model not to store raw URLs, account
+    // names, or private titles, but a prompt is guidance, not a guarantee.
+    // Memory now shows these summaries in Settings, so the host enforces it.
+    const leaked = normalizeLivingSoulPattern({
+      summary: "Visiting https://mail.internal.acme.com/thread/9182 after standup is usually work.",
+      confidence: "medium",
+      evidenceCount: 3,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    });
+
+    expect(leaked?.summary).not.toContain("https://");
+    expect(leaked?.summary).not.toContain("mail.internal.acme.com");
+
+    const emailLeak = normalizeLivingSoulPattern({
+      summary: "Email from alex@example.com usually precedes focused work.",
+      confidence: "low",
+      evidenceCount: 1,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    });
+
+    expect(emailLeak?.summary).not.toContain("alex@example.com");
+
+    const handleLeak = normalizeLivingSoulPattern({
+      summary: "Replies to @acme_support are work, not drift.",
+      confidence: "low",
+      evidenceCount: 1,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    });
+
+    expect(handleLeak?.summary).not.toContain("@acme_support");
+  });
+
+  it("keeps a generalized pattern untouched", () => {
+    const clean = normalizeLivingSoulPattern({
+      summary: "Product research before implementation is usually work support.",
+      confidence: "medium",
+      evidenceCount: 4,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    });
+
+    expect(clean?.summary).toBe("Product research before implementation is usually work support.");
+  });
+
+  it("keeps a bare site domain, which is the subject of Drifty's own site rules", () => {
+    // Fallback learning writes rules like this from a user correction. The
+    // domain is the rule, and it is already visible in the timeline, so
+    // redacting it here would destroy the pattern rather than protect anything.
+    const siteRule = normalizeLivingSoulPattern({
+      summary: "instagram.com is not always drift; classify it from the surrounding sequence.",
+      confidence: "low",
+      evidenceCount: 2,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    });
+
+    expect(siteRule?.summary).toBe(
+      "instagram.com is not always drift; classify it from the surrounding sequence.",
+    );
+  });
+
+  it("removes locations that identify one document, machine, or person", () => {
+    const summarize = (summary: string) => normalizeLivingSoulPattern({
+      summary,
+      confidence: "low",
+      evidenceCount: 1,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    })?.summary;
+
+    expect(summarize("Opening file:///Users/alex/Secret/report.pdf is work."))
+      .toBe("Opening [removed] is work.");
+    expect(summarize("Editing /Users/alex/Desktop/Client/spec.md is work."))
+      .toBe("Editing [removed] is work.");
+    expect(summarize("Editing C:\\Users\\alex\\Client\\spec.docx is work."))
+      .toBe("Editing [removed] is work.");
+    expect(summarize("Checking 192.168.1.20:8080/dashboard is work."))
+      .toBe("Checking [removed] is work.");
+  });
+
+  it("keeps technical vocabulary that only looks like a handle", () => {
+    const summarize = (summary: string) => normalizeLivingSoulPattern({
+      summary,
+      confidence: "low",
+      evidenceCount: 1,
+      lastObservedAt: "2026-08-14T01:00:00.000Z",
+    })?.summary;
+
+    // CSS at-rules and scoped package names are how developers describe work.
+    // Redacting them would corrupt an otherwise valid learned pattern.
+    expect(summarize("CSS @media query debugging is work."))
+      .toBe("CSS @media query debugging is work.");
+    expect(summarize("Reading @testing-library/react docs supports implementation."))
+      .toBe("Reading @testing-library/react docs supports implementation.");
   });
 });

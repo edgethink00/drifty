@@ -296,22 +296,57 @@ describe("Settings content styles", () => {
     expect(cloudActionRule).toContain("box-shadow: none;");
   });
 
-  it("separates AI providers from shared prompt settings", () => {
+  it("keeps Memory in the compact settings row language", () => {
     const aiSetupStyles = readAiSetupStyles();
     const supportZoneRule = cssRule(aiSetupStyles, ".ai-setup-support-zone");
-    const supportHeaderTitleRule = cssRule(aiSetupStyles, ".ai-setup-support-zone__header strong");
-    const supportToggleRule = cssRule(aiSetupStyles, ".ai-setup-support-section__toggle");
-    const supportTitleRule = cssRule(aiSetupStyles, ".ai-setup-support-section__copy strong");
+    const memoryRule = cssRule(aiSetupStyles, ".ai-memory");
+    const introTitleRule = cssRule(aiSetupStyles, ".ai-memory__intro h4");
+    const introCopyRule = cssRule(aiSetupStyles, ".ai-memory__intro > p");
+    const rowRule = cssRule(aiSetupStyles, ".ai-memory-row");
+    const rowHeadRule = cssRule(aiSetupStyles, ".ai-memory-row__head");
+    const rowBodyRule = cssRule(aiSetupStyles, ".ai-memory-row__body");
+    const editorRule = cssRule(aiSetupStyles, ".ai-memory-editor");
 
     expect(supportZoneRule).toContain("border-top: 0;");
     expect(supportZoneRule).toContain("margin-top: 0;");
     expect(supportZoneRule).toContain("padding-top: 0;");
-    expect(supportHeaderTitleRule).toContain("font-size: 0.94rem;");
-    expect(supportHeaderTitleRule).toContain("font-weight: 650;");
-    expect(supportToggleRule).toContain("min-height: 3.55rem;");
-    expect(supportToggleRule).toContain("padding: 0.72rem var(--space-3);");
-    expect(supportTitleRule).toContain("font-size: var(--type-setting-label-size);");
-    expect(supportTitleRule).toContain("font-weight: 650;");
+
+    // Settings content stays a readable single column instead of a wide
+    // marketing canvas. The exact value may be tuned; an unbounded or
+    // very wide column is the regression this guards.
+    const memoryMaxWidth = Number(/max-width:\s*([\d.]+)rem;/.exec(memoryRule)?.[1]);
+    expect(memoryMaxWidth).toBeGreaterThan(0);
+    expect(memoryMaxWidth).toBeLessThanOrEqual(52);
+
+    // Panel headings stay near the settings section scale, never hero scale.
+    // DESIGN.md forbids hero-scale text inside settings panels.
+    const introTitleSize = Number(/font-size:\s*([\d.]+)rem;/.exec(introTitleRule)?.[1]);
+    expect(introTitleSize).toBeGreaterThan(0);
+    expect(introTitleSize).toBeLessThanOrEqual(1.05);
+    expect(introCopyRule).toContain("color: var(--text-muted);");
+
+    // Rows reuse the existing settings row card shape and one border for elevation.
+    expect(rowRule).toContain("border-radius: var(--radius-md);");
+    expect(rowRule).toContain("border: 1px solid var(--line);");
+    expect(rowHeadRule).toContain("grid-template-columns: minmax(0, 1fr) auto;");
+
+    // Saved values sit in an inset tonal block. Reintroducing divider lines
+    // inside a bordered card stacks a second rule the card already implies.
+    expect(rowBodyRule).toContain("border-radius: var(--radius-sm);");
+    expect(rowBodyRule).toContain("background:");
+    expect(rowBodyRule).not.toContain("border-top:");
+    expect(cssRule(aiSetupStyles, ".ai-memory-breakdown")).not.toContain("border-top:");
+    expect(editorRule).not.toContain("border-top:");
+
+    // Memory radii come from the shared scale. The first implementation used
+    // one-off 20px / 17px radii, which DESIGN.md's radius tokens replace.
+    const memoryStyles = readFileSync("src/features/settings/AiSetupSupportSections.css", "utf8");
+    expect(/border-radius:\s*\d+px;/.test(memoryStyles.replace(/border-radius:\s*999px;/g, ""))).toBe(false);
+
+    // The redesign must not reintroduce the marketing hero, card grid, or numbered loop.
+    expect(aiSetupStyles).not.toContain(".ai-memory-hero");
+    expect(aiSetupStyles).not.toContain(".ai-memory-cards");
+    expect(aiSetupStyles).not.toContain(".ai-memory-loop");
   });
 
   it("keeps the first heading aligned to the active settings section label", () => {

@@ -195,7 +195,16 @@ fn validate_declared_section(section: &str) -> Result<(), String> {
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>();
-    let labels = ["Work activities", "Work domain", "Drifty purpose"];
+    // Must stay in sync with renderLivingSoulMarkdown in
+    // apps/desktop/src/features/classification/livingSoul.ts. The renderer emits
+    // Work description between the domain and the purpose; rejecting it here
+    // fails every declared-context write on the native runtime.
+    let labels = [
+        "Work activities",
+        "Work domain",
+        "Work description",
+        "Drifty purpose",
+    ];
     if lines.len() != labels.len() {
         return Err("Living Soul declared context contains unexpected lines.".to_string());
     }
@@ -311,10 +320,59 @@ mod tests {
         std::env::temp_dir().join(format!("drifty-living-soul-test-{}", temporary_file_name()))
     }
 
+    /// Mirrors renderLivingSoulMarkdown in the desktop app, including the
+    /// Work description line. Using a shorter declared block here previously
+    /// hid a validator mismatch that rejected every real write.
     fn soul_markdown(revision: u64) -> String {
         format!(
-            "---\nschema: drifty.soul/v1\nrevision: {revision}\ncreated_at: 2026-08-14T00:00:00.000Z\nupdated_at: 2026-08-14T01:00:00.000Z\nlast_feedback_at: null\n---\n# Living Soul\n\n## Declared work context\n- Work activities: Engineering\n- Work domain: AI productivity\n- Drifty purpose: Protect focus\n\n## Learned work-support patterns\n- None yet.\n\n## Learned drift patterns\n- None yet.\n\n## Ambiguities\n- None yet.\n"
+            "---\nschema: drifty.soul/v1\nrevision: {revision}\ncreated_at: 2026-08-14T00:00:00.000Z\nupdated_at: 2026-08-14T01:00:00.000Z\nlast_feedback_at: null\n---\n# Living Soul\n\n## Declared work context\n- Work activities: Engineering\n- Work domain: AI productivity\n- Work description: I build product features.\n- Drifty purpose: Protect focus\n\n## Learned work-support patterns\n- None yet.\n\n## Learned drift patterns\n- None yet.\n\n## Ambiguities\n- None yet.\n"
         )
+    }
+
+    #[test]
+    fn accepts_the_declared_context_the_desktop_app_actually_renders() {
+        let root = temporary_root();
+        // The desktop renderer always writes four declared lines. If this
+        // validator drops back to three, saving a work profile fails on the
+        // native runtime while jsdom tests keep passing.
+        let rendered = soul_markdown(1);
+        assert!(rendered.contains("- Work description: I build product features."));
+        write_living_soul(&root, SCOPE, &rendered).expect("declared context with a description");
+
+        assert_eq!(read_living_soul(&root, SCOPE).expect("read"), Some(rendered));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rejects_a_declared_context_that_is_missing_the_description_line() {
+        let root = temporary_root();
+        let legacy = soul_markdown(1).replace("- Work description: I build product features.\n", "");
+
+        assert!(write_living_soul(&root, SCOPE, &legacy).is_err());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn still_reads_a_legacy_three_line_declared_context_written_before_the_fix() {
+        let root = temporary_root();
+        // Files written by an older build have no Work description line. Reading
+        // is unvalidated by design, so an existing user's Soul must still load
+        // and be re-rendered by the app rather than becoming unreachable.
+        let legacy = soul_markdown(1).replace("- Work description: I build product features.\n", "");
+        let path = living_soul_path(&root, SCOPE).expect("path");
+        fs::create_dir_all(path.parent().expect("parent")).expect("create dir");
+        fs::write(&path, &legacy).expect("seed legacy file");
+
+        assert_eq!(read_living_soul(&root, SCOPE).expect("read"), Some(legacy));
+
+        // And the app can replace it with the current four-line format.
+        let migrated = soul_markdown(2);
+        write_living_soul(&root, SCOPE, &migrated).expect("migrating write");
+        assert_eq!(read_living_soul(&root, SCOPE).expect("read"), Some(migrated));
+
+        let _ = fs::remove_dir_all(root);
     }
 
     #[test]
