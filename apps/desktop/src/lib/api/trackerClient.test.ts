@@ -97,6 +97,7 @@ const trackerClientInvokeCommandLiterals: readonly TrackerClientCommand[] = [
   "tray_update_icon_style",
   "tray_update_display_mode",
   "tray_update_drift_alarm_status",
+  "tray_set_language",
 ];
 
 describe("trackerClient command registry", () => {
@@ -426,6 +427,15 @@ describe("trackerClient", () => {
       mode: "donutFocusTime",
       focusSeconds: 9_660,
     });
+  });
+
+  it("invokes tray_set_language with the selected language", async () => {
+    const { trackerClient } = await import("./trackerClient");
+    invoke.mockResolvedValueOnce(null);
+
+    await trackerClient.updateTrayLanguage("ko");
+
+    expect(invoke).toHaveBeenCalledWith("tray_set_language", { language: "ko" });
   });
 
   it("returns an empty dashboard week timeline outside Tauri", async () => {

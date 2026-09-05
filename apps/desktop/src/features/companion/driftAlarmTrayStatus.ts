@@ -21,20 +21,22 @@ export type DriftAlarmTrayStatusInput = {
   readonly checkedAt: Date | null;
   readonly result: DriftAlarmTrayResult;
   readonly trackerRunning?: boolean | null;
+  readonly locale?: "en" | "ko";
 };
 
 export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): DriftAlarmTrayStatus {
   const checkedAt = input.result.kind === "tracker_paused" ? null : checkedAtOrNull(input.checkedAt);
+  const ko = input.locale === "ko";
   const baseStatus = {
     enabled: input.enabled,
-    statusLabel: statusLabel(input.enabled, input.result),
+    statusLabel: statusLabel(input.enabled, input.result, ko),
     lastCheckedAt: checkedAt?.toISOString() ?? null,
     lastCheckedLabel: input.result.kind === "tracker_paused"
-      ? "Not checking"
+      ? (ko ? "확인 안 함" : "Not checking")
       : checkedAt
         ? formatDriftAlarmTrayCheckTime(checkedAt)
-        : input.enabled ? "Never" : "Off",
-    resultLabel: resultLabel(input.result),
+        : input.enabled ? (ko ? "없음" : "Never") : (ko ? "꺼짐" : "Off"),
+    resultLabel: resultLabel(input.result, ko),
     detailLabel: resultDetailLabel(input.result),
   };
 
@@ -58,61 +60,65 @@ function checkedAtOrNull(value: Date | null): Date | null {
   return Number.isFinite(value.getTime()) ? value : null;
 }
 
-function statusLabel(enabled: boolean, result: DriftAlarmTrayResult): string {
-  if (!enabled) return "Drift alerts: Off";
+function statusLabel(enabled: boolean, result: DriftAlarmTrayResult, ko: boolean): string {
+  if (!enabled) return ko ? "딴짓 알림: 꺼짐" : "Drift alerts: Off";
 
   switch (result.kind) {
     case "disabled":
-      return "Drift alerts: Off";
+      return ko ? "딴짓 알림: 꺼짐" : "Drift alerts: Off";
     case "not_today":
-      return "Drift alerts: Idle";
+      return ko ? "딴짓 알림: 대기" : "Drift alerts: Idle";
     case "tracker_paused":
-      return "Drift alerts: Paused";
+      return ko ? "딴짓 알림: 일시 정지됨" : "Drift alerts: Paused";
     case "no_candidate":
-      return "Drift alerts: Monitoring";
+      return ko ? "딴짓 알림: 감지 중" : "Drift alerts: Monitoring";
     case "snoozed":
-      return "Drift alerts: Snoozed";
+      return ko ? "딴짓 알림: 다시 알림" : "Drift alerts: Snoozed";
     case "checking":
-      return "Drift alerts: Checking";
+      return ko ? "딴짓 알림: 분석 중" : "Drift alerts: Checking";
     case "delivered":
-      return "Drift alerts: Delivered";
+      return ko ? "딴짓 알림: 전달됨" : "Drift alerts: Delivered";
     case "already_delivered":
-      return "Drift alerts: Already shown";
+      return ko ? "딴짓 알림: 이미 표시됨" : "Drift alerts: Already shown";
     case "suppressed":
-      return suppressionStatusLabel(result.reason);
+      return suppressionStatusLabel(result.reason, ko);
     case "deferred":
-      return "Drift alerts: Deferred";
+      return ko ? "딴짓 알림: 대기 중" : "Drift alerts: Deferred";
     case "error":
-      return "Drift alerts: Check failed";
+      return ko ? "딴짓 알림: 확인 실패" : "Drift alerts: Check failed";
     default:
       return assertNever(result);
   }
 }
 
-function resultLabel(result: DriftAlarmTrayResult): string {
+function resultLabel(result: DriftAlarmTrayResult, ko: boolean): string {
   switch (result.kind) {
     case "disabled":
-      return "Alerts disabled";
+      return ko ? "알림 꺼짐" : "Alerts disabled";
     case "not_today":
-      return "Not checking selected day";
+      return ko ? "선택한 요일 확인 안 함" : "Not checking selected day";
     case "tracker_paused":
-      return "Tracker paused";
+      return ko ? "트래커 일시 정지됨" : "Tracker paused";
     case "no_candidate":
-      return "No eligible drift";
+      return ko ? "알림 대상 없음" : "No eligible drift";
     case "snoozed":
-      return "Snoozed";
+      return ko ? "다시 알림 중" : "Snoozed";
     case "checking":
-      return "Checking drift candidate";
+      return ko ? "딴짓 후보 분석 중" : "Checking drift candidate";
     case "delivered":
-      return "Alarm delivered";
+      return ko ? "알림 전달됨" : "Alarm delivered";
     case "already_delivered":
-      return "Alarm already shown";
+      return ko ? "이미 알림 표시됨" : "Alarm already shown";
     case "suppressed":
-      return `Suppressed: ${suppressionReasonLabel(result.reason)}`;
+      return ko
+        ? `억제됨: ${suppressionReasonLabel(result.reason, ko)}`
+        : `Suppressed: ${suppressionReasonLabel(result.reason, ko)}`;
     case "deferred":
-      return `Waiting for ${systemTransientActivityLabel(result.reason)}`;
+      return ko
+        ? `${systemTransientActivityLabel(result.reason)} 대기 중`
+        : `Waiting for ${systemTransientActivityLabel(result.reason)}`;
     case "error":
-      return "Check failed";
+      return ko ? "확인 실패" : "Check failed";
     default:
       return assertNever(result);
   }
@@ -140,23 +146,23 @@ function resultDetailLabel(result: DriftAlarmTrayResult): string | null {
   }
 }
 
-function suppressionReasonLabel(reason: string): string {
+function suppressionReasonLabel(reason: string, ko: boolean = false): string {
   const normalized = reason.trim();
-  if (normalized === "ai-low-confidence") return "AI low confidence";
-  if (normalized === "ai-timeout") return "AI gate timed out";
-  if (normalized === "ai-deadline") return "AI gate timed out";
-  if (normalized === "ai-classified-focus") return "AI classified focus";
-  if (normalized === "ai-classified-neutral") return "AI classified neutral";
-  if (normalized.startsWith("ai-unavailable:")) return "AI unavailable";
-  return compactMenuLabel(normalized.replace(/[-_]+/g, " ")) ?? "suppressed";
+  if (normalized === "ai-low-confidence") return ko ? "AI 신뢰도 낮음" : "AI low confidence";
+  if (normalized === "ai-timeout") return ko ? "AI 시간 초과" : "AI gate timed out";
+  if (normalized === "ai-deadline") return ko ? "AI 시간 초과" : "AI gate timed out";
+  if (normalized === "ai-classified-focus") return ko ? "AI가 집중으로 분류" : "AI classified focus";
+  if (normalized === "ai-classified-neutral") return ko ? "AI가 중립으로 분류" : "AI classified neutral";
+  if (normalized.startsWith("ai-unavailable:")) return ko ? "AI 사용 불가" : "AI unavailable";
+  return compactMenuLabel(normalized.replace(/[-_]+/g, " ")) ?? (ko ? "억제됨" : "suppressed");
 }
 
-function suppressionStatusLabel(reason: string): string {
+function suppressionStatusLabel(reason: string, ko: boolean): string {
   const normalized = reason.trim();
-  if (normalized.startsWith("ai-unavailable:")) return "Drift alerts: AI unavailable";
-  if (normalized === "ai-timeout") return "Drift alerts: AI timed out";
-  if (normalized === "ai-deadline") return "Drift alerts: AI timed out";
-  return "Drift alerts: Suppressed";
+  if (normalized.startsWith("ai-unavailable:")) return ko ? "딴짓 알림: AI 사용 불가" : "Drift alerts: AI unavailable";
+  if (normalized === "ai-timeout") return ko ? "딴짓 알림: AI 시간 초과" : "Drift alerts: AI timed out";
+  if (normalized === "ai-deadline") return ko ? "딴짓 알림: AI 시간 초과" : "Drift alerts: AI timed out";
+  return ko ? "딴짓 알림: 억제됨" : "Drift alerts: Suppressed";
 }
 
 function systemTransientActivityLabel(reason: DriftAlarmDeferredReason): string {

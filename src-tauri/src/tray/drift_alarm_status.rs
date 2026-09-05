@@ -39,9 +39,9 @@ impl TrayDriftAlarmStatus {
     }
 }
 
-pub fn drift_alerts_status_label(status: &TrayDriftAlarmStatus) -> String {
+pub fn drift_alerts_status_label(status: &TrayDriftAlarmStatus, ko: bool) -> String {
     if status.enabled && status.tracker_running == Some(false) {
-        return "Drift alerts: Paused".to_string();
+        return if ko { "딴짓 알림: 일시 정지됨" } else { "Drift alerts: Paused" }.to_string();
     }
 
     let label = status.status_label.trim();
@@ -50,34 +50,42 @@ pub fn drift_alerts_status_label(status: &TrayDriftAlarmStatus) -> String {
     }
 
     if status.enabled {
-        "Drift alerts: Monitoring".to_string()
+        if ko { "딴짓 알림: 감지 중" } else { "Drift alerts: Monitoring" }.to_string()
     } else {
-        "Drift alerts: Off".to_string()
+        if ko { "딴짓 알림: 꺼짐" } else { "Drift alerts: Off" }.to_string()
     }
 }
 
-pub fn drift_summary_label(status: &TrayDriftAlarmStatus) -> Option<String> {
+pub fn drift_summary_label(status: &TrayDriftAlarmStatus, ko: bool) -> Option<String> {
     if !status.enabled || !status.developer_details_enabled {
         return None;
     }
 
     if status.enabled && status.tracker_running == Some(false) {
-        return Some("Last check: Not checking".to_string());
+        return Some(if ko { "최근 확인: 확인 안 함" } else { "Last check: Not checking" }.to_string());
     }
 
     let label = status.last_checked_label.trim();
     let display_label = if label.is_empty() && status.last_checked_at.is_some() {
-        "Recorded"
+        if ko { "기록됨" } else { "Recorded" }
     } else if label.is_empty() {
-        "Never"
+        if ko { "없음" } else { "Never" }
     } else {
         label
     };
     let result = status.result_label.trim();
     if result.is_empty() {
-        Some(format!("Last check: {display_label}"))
+        Some(if ko {
+            format!("최근 확인: {display_label}")
+        } else {
+            format!("Last check: {display_label}")
+        })
     } else {
-        Some(format!("Last check: {display_label} · {result}"))
+        Some(if ko {
+            format!("최근 확인: {display_label} · {result}")
+        } else {
+            format!("Last check: {display_label} · {result}")
+        })
     }
 }
 
@@ -98,7 +106,7 @@ mod tests {
         };
 
         assert_eq!(
-            drift_alerts_status_label(&status),
+            drift_alerts_status_label(&status, false),
             "Drift alerts: AI unavailable"
         );
     }
@@ -125,11 +133,11 @@ mod tests {
         };
 
         assert_eq!(
-            drift_alerts_status_label(&enabled_status),
+            drift_alerts_status_label(&enabled_status, false),
             "Drift alerts: Monitoring"
         );
         assert_eq!(
-            drift_alerts_status_label(&disabled_status),
+            drift_alerts_status_label(&disabled_status, false),
             "Drift alerts: Off"
         );
     }
@@ -146,7 +154,7 @@ mod tests {
         .expect("legacy drift alarm tray status should deserialize");
 
         assert_eq!(
-            drift_alerts_status_label(&status),
+            drift_alerts_status_label(&status, false),
             "Drift alerts: Monitoring"
         );
     }
@@ -165,7 +173,7 @@ mod tests {
         .expect("tray status with cached tracker state should deserialize");
 
         assert_eq!(status.tracker_running(), Some(true));
-        assert_eq!(drift_summary_label(&status), None);
+        assert_eq!(drift_summary_label(&status, false), None);
     }
 
     #[test]
@@ -181,7 +189,7 @@ mod tests {
         };
 
         assert_eq!(
-            drift_summary_label(&status).as_deref(),
+            drift_summary_label(&status, false).as_deref(),
             Some("Last check: Not checking")
         );
     }
@@ -198,7 +206,7 @@ mod tests {
             tracker_running: None,
         };
 
-        assert_eq!(drift_summary_label(&status), None);
+        assert_eq!(drift_summary_label(&status, false), None);
     }
 
     #[test]
@@ -213,7 +221,7 @@ mod tests {
             tracker_running: Some(true),
         };
 
-        assert_eq!(drift_summary_label(&status), None);
+        assert_eq!(drift_summary_label(&status, false), None);
     }
 
     #[test]
@@ -229,7 +237,7 @@ mod tests {
         };
 
         assert_eq!(
-            drift_summary_label(&status).as_deref(),
+            drift_summary_label(&status, false).as_deref(),
             Some("Last check: 9:00:00 AM · Suppressed: AI low confidence")
         );
     }
@@ -247,7 +255,7 @@ mod tests {
         };
 
         assert_eq!(
-            drift_summary_label(&status).as_deref(),
+            drift_summary_label(&status, false).as_deref(),
             Some("Last check: Never")
         );
     }

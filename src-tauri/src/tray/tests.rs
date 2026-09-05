@@ -14,11 +14,6 @@ fn app_version_label_formats_drifty_version() {
 }
 
 #[test]
-fn update_status_label_prompts_manual_update_checks() {
-    assert_eq!(update_status_label(), "Check for Updates...");
-}
-
-#[test]
 fn focused_time_title_uses_hours_and_zero_padded_minutes() {
     assert_eq!(format_focus_time(0.0), "0:00");
     assert_eq!(format_focus_time(9_660.0), "2:41");
@@ -33,7 +28,12 @@ fn focused_time_title_is_three_percent_larger_than_the_menu_bar_default() {
 #[test]
 fn focused_time_title_reduces_weight_by_four_percent_and_locates_secondary_copy() {
     assert!((reduced_tray_title_weight(680.0) - 652.8).abs() < f64::EPSILON);
-    assert_eq!(focused_label_start_utf16("2:41 focused"), Some(5));
+    assert_eq!(focused_label_start_utf16("2:41 focused", "focused"), Some(5));
+}
+
+#[test]
+fn focused_label_start_utf16_works_for_korean_suffix() {
+    assert_eq!(focused_label_start_utf16("2:41 집중", "집중"), Some(5));
 }
 
 #[test]
@@ -71,11 +71,11 @@ fn tray_icon_spacing_adds_only_transparent_pixels_after_the_indicator() {
 #[test]
 fn tracking_action_label_starts_when_stopped_or_unknown() {
     assert_eq!(
-        tracking_action_label(Some(false), TrackingPauseSnapshot::Inactive),
+        tracking_action_label(Some(false), TrackingPauseSnapshot::Inactive, TrayLanguage::English),
         "Start Tracking"
     );
     assert_eq!(
-        tracking_action_label(None, TrackingPauseSnapshot::Inactive),
+        tracking_action_label(None, TrackingPauseSnapshot::Inactive, TrayLanguage::English),
         "Start Tracking"
     );
 }
@@ -83,7 +83,7 @@ fn tracking_action_label_starts_when_stopped_or_unknown() {
 #[test]
 fn tracking_action_label_pauses_when_running() {
     assert_eq!(
-        tracking_action_label(Some(true), TrackingPauseSnapshot::Inactive),
+        tracking_action_label(Some(true), TrackingPauseSnapshot::Inactive, TrayLanguage::English),
         "Pause Tracking"
     );
 }
@@ -115,7 +115,7 @@ fn tracking_action_label_resumes_for_indefinite_timed_and_failed_pauses() {
             resumes_at_unix_seconds: 1_800_000_000,
         },
     ] {
-        assert_eq!(tracking_action_label(Some(false), pause), "Resume Tracking");
+        assert_eq!(tracking_action_label(Some(false), pause, TrayLanguage::English), "Resume Tracking");
         assert!(!pause_options_visible(Some(false), pause));
     }
 }
@@ -123,18 +123,18 @@ fn tracking_action_label_resumes_for_indefinite_timed_and_failed_pauses() {
 #[test]
 fn pause_status_labels_explain_indefinite_timed_and_failed_states() {
     assert_eq!(
-        pause_status_label(TrackingPauseSnapshot::Indefinite).as_deref(),
+        pause_status_label(TrackingPauseSnapshot::Indefinite, TrayLanguage::English).as_deref(),
         Some("Paused until you resume")
     );
     assert!(pause_status_label(TrackingPauseSnapshot::Timed {
         resumes_at_unix_seconds: 1_800_000_000,
-    })
+    }, TrayLanguage::English)
     .expect("timed label")
     .starts_with("Paused · resumes at "));
     assert_eq!(
         pause_status_label(TrackingPauseSnapshot::ResumeFailed {
             resumes_at_unix_seconds: 1_800_000_000,
-        })
+        }, TrayLanguage::English)
         .as_deref(),
         Some("Paused · automatic resume failed")
     );

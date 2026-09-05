@@ -590,4 +590,8 @@ export const trackerClient: TrackerApi = {
     if (shouldUsePreviewData()) return;
     await safeInvoke("tray_update_drift_alarm_status", { status });
   },
+  async updateTrayLanguage(language: string) {
+    if (shouldUsePreviewData()) return;
+    await safeInvoke("tray_set_language", { language });
+  },
 };

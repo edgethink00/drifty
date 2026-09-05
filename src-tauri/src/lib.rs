@@ -96,10 +96,10 @@ use tracker::{TrackerController, TrackerStartupState};
 use tracker_recovery::{setup_tracker_recovery, shutdown_tracker_recovery, TrackerRecoveryWorker};
 use tracking_pause::TrackingPauseState;
 use tray::{
-    setup_tray, shutdown_tray_refresh_worker, tray_update_display_mode,
+    setup_tray, shutdown_tray_refresh_worker, tray_set_language, tray_update_display_mode,
     tray_update_drift_alarm_status, tray_update_icon_style, tray_update_productivity_icon,
-    TrayDisplayState, TrayDriftAlarmState, TrayIconStyleState, TrayProductivityState,
-    TrayRefreshWorker,
+    TrayDisplayState, TrayDriftAlarmState, TrayIconStyleState, TrayLanguageState,
+    TrayProductivityState, TrayRefreshWorker,
 };
 
 pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
@@ -439,6 +439,7 @@ pub fn run() {
         .manage(TrayIconStyleState::default())
         .manage(TrayDisplayState::default())
         .manage(TrayRefreshWorker::default())
+        .manage(TrayLanguageState::default())
         .manage(TrackerRecoveryWorker::default())
         .manage(TrackingPauseState::default())
         .manage(QuitConfirmationState::default())
@@ -690,6 +691,7 @@ pub fn run() {
             tray_update_drift_alarm_status,
             tray_update_icon_style,
             tray_update_display_mode,
+            tray_set_language,
             auth_take_pending_deep_links,
             auth_load_saved_session,
             auth_save_session,

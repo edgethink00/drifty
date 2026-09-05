@@ -117,6 +117,7 @@
     "allow-tray-update-drift-alarm-status",
     "allow-tray-update-icon-style",
     "allow-tray-update-display-mode",
+    "allow-tray-set-language",
     "allow-auth-take-pending-deep-links",
     "allow-auth-load-saved-session",
     "allow-auth-save-session",

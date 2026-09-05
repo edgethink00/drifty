@@ -43,11 +43,68 @@ use crate::donut_icon::{self, DonutIconRenderInput, TrayDisplayMode, TrayIconSty
 use crate::shell_action::{self, tray_menu_id, ShellAction};
 use crate::tracker::TrackerController;
 use crate::tracking_pause::{self, TrackingPauseSnapshot, TrackingPauseState};
+use crate::app_menu;
 
 const TRAY_ID: &str = "drifty-menu";
 const UPDATE_STATUS_LABEL: &str = "Check for Updates...";
 const TRAY_REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const TRAY_TITLE_SCALE: f64 = 1.03;
+
+// ---------------------------------------------------------------------------
+// Tray display language
+// ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum TrayLanguage {
+    #[default]
+    English,
+    Korean,
+}
+
+impl TrayLanguage {
+    fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "en" => Ok(Self::English),
+            "ko" => Ok(Self::Korean),
+            _ => Err(format!("Unsupported tray language: {value}")),
+        }
+    }
+
+    pub(crate) fn is_korean(self) -> bool {
+        self == Self::Korean
+    }
+}
+
+#[derive(Default)]
+pub struct TrayLanguageState(Mutex<TrayLanguage>);
+
+pub(crate) fn latest_tray_language(app: &AppHandle) -> TrayLanguage {
+    app.try_state::<TrayLanguageState>()
+        .and_then(|state| state.0.lock().ok().map(|lang| *lang))
+        .unwrap_or_default()
+}
+
+#[tauri::command]
+pub fn tray_set_language(
+    app: AppHandle,
+    state: State<'_, TrayLanguageState>,
+    language: String,
+) -> Result<(), String> {
+    let parsed = TrayLanguage::parse(&language)?;
+    {
+        let mut latest = state
+            .0
+            .lock()
+            .map_err(|_| "tray language state lock poisoned".to_string())?;
+        *latest = parsed;
+    }
+    refresh_tray_menu(&app).map_err(|error| error.to_string())?;
+    let display = latest_tray_display(&app);
+    apply_tray_display_title(&app, display, parsed);
+    // Rebuild the application menu bar so its labels also reflect the new language.
+    let _ = app_menu::setup_app_menu(&app);
+    Ok(())
+}
 
 pub(crate) fn tray_icon_rect(app: &AppHandle) -> Option<tauri::Rect> {
     app.tray_by_id(TRAY_ID)
@@ -259,7 +316,7 @@ pub fn tray_update_display_mode(
     *latest = snapshot;
     drop(latest);
 
-    apply_tray_display_title(&app, snapshot);
+    apply_tray_display_title(&app, snapshot, latest_tray_language(&app));
     update_tray_icon(&app);
     Ok(())
 }
@@ -302,6 +359,8 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let drift_status = latest_tray_drift_alarm_status(app);
     let pause_snapshot = tracking_pause::snapshot(app);
     let tracker_running = drift_status.tracker_running();
+    let lang = latest_tray_language(app);
+    let ko = lang.is_korean();
     let app_info = MenuItem::with_id(
         app,
         tray_menu_id::APP_INFO,
@@ -312,18 +371,18 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let update_status = MenuItem::with_id(
         app,
         tray_menu_id::UPDATE_STATUS,
-        update_status_label(),
+        if ko { "업데이트 확인…" } else { UPDATE_STATUS_LABEL },
         true,
         None::<&str>,
     )?;
     let drift_alerts_status = MenuItem::with_id(
         app,
         tray_menu_id::DRIFT_ALERTS_STATUS,
-        drift_alerts_status_label(&drift_status),
+        drift_alerts_status_label(&drift_status, ko),
         false,
         None::<&str>,
     )?;
-    let drift_summary = drift_summary_label(&drift_status)
+    let drift_summary = drift_summary_label(&drift_status, ko)
         .map(|label| {
             MenuItem::with_id(app, tray_menu_id::DRIFT_SUMMARY, label, false, None::<&str>)
         })
@@ -332,39 +391,39 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let pause_header = MenuItem::with_id(
         app,
         tray_menu_id::PAUSE_HEADER,
-        "Pause Tracking",
+        if ko { "활동 기록 일시 정지" } else { "Pause Tracking" },
         false,
         None::<&str>,
     )?;
     let pause_15 = MenuItem::with_id(
         app,
         tray_menu_id::PAUSE_FOR_15,
-        "15 Minutes",
+        if ko { "15분 동안" } else { "15 Minutes" },
         show_pause_options,
         None::<&str>,
     )?;
     let pause_30 = MenuItem::with_id(
         app,
         tray_menu_id::PAUSE_FOR_30,
-        "30 Minutes",
+        if ko { "30분 동안" } else { "30 Minutes" },
         show_pause_options,
         None::<&str>,
     )?;
     let pause_60 = MenuItem::with_id(
         app,
         tray_menu_id::PAUSE_FOR_60,
-        "1 Hour",
+        if ko { "1시간 동안" } else { "1 Hour" },
         show_pause_options,
         None::<&str>,
     )?;
     let pause_forever = MenuItem::with_id(
         app,
         tray_menu_id::PAUSE_FOREVER,
-        "Forever",
+        if ko { "직접 다시 시작할 때까지" } else { "Forever" },
         show_pause_options,
         None::<&str>,
     )?;
-    let pause_status = pause_status_label(pause_snapshot)
+    let pause_status = pause_status_label(pause_snapshot, lang)
         .map(|label| MenuItem::with_id(app, tray_menu_id::PAUSE_STATUS, label, false, None::<&str>))
         .transpose()?;
 
@@ -381,7 +440,7 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     } else {
         builder = builder.text(
             tray_menu_id::TRACKING_TOGGLE,
-            tracking_action_label(tracker_running, pause_snapshot),
+            tracking_action_label(tracker_running, pause_snapshot, lang),
         );
     }
 
@@ -397,12 +456,12 @@ fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 
     builder
         .separator()
-        .text(tray_menu_id::OPEN_DASHBOARD, "Open Dashboard")
-        .text(tray_menu_id::SETTINGS, "Settings")
+        .text(tray_menu_id::OPEN_DASHBOARD, if ko { "대시보드 열기" } else { "Open Dashboard" })
+        .text(tray_menu_id::SETTINGS, if ko { "설정" } else { "Settings" })
         .separator()
         .items(&[&app_info, &update_status])
         .separator()
-        .text(tray_menu_id::QUIT, "Quit")
+        .text(tray_menu_id::QUIT, if ko { "Drifty 종료" } else { "Quit" })
         .build()
 }
 
@@ -418,20 +477,18 @@ fn app_version_label(version: &str) -> String {
     format!("Drifty {version}")
 }
 
-fn update_status_label() -> &'static str {
-    UPDATE_STATUS_LABEL
-}
-
 fn tracking_action_label(
     running: Option<bool>,
     pause_snapshot: TrackingPauseSnapshot,
+    lang: TrayLanguage,
 ) -> &'static str {
+    let ko = lang.is_korean();
     if pause_snapshot.is_active() {
-        "Resume Tracking"
+        if ko { "활동 기록 다시 시작" } else { "Resume Tracking" }
     } else if running.unwrap_or(false) {
-        "Pause Tracking"
+        if ko { "활동 기록 일시 정지" } else { "Pause Tracking" }
     } else {
-        "Start Tracking"
+        if ko { "활동 기록 시작" } else { "Start Tracking" }
     }
 }
 
@@ -439,18 +496,27 @@ fn pause_options_visible(running: Option<bool>, pause_snapshot: TrackingPauseSna
     !pause_snapshot.is_active() && running == Some(true)
 }
 
-fn pause_status_label(pause_snapshot: TrackingPauseSnapshot) -> Option<String> {
+fn pause_status_label(pause_snapshot: TrackingPauseSnapshot, lang: TrayLanguage) -> Option<String> {
+    let ko = lang.is_korean();
     match pause_snapshot {
         TrackingPauseSnapshot::Inactive => None,
-        TrackingPauseSnapshot::Indefinite => Some("Paused until you resume".to_string()),
+        TrackingPauseSnapshot::Indefinite => Some(
+            if ko { "일시 정지됨 · 직접 다시 시작 필요" } else { "Paused until you resume" }.to_string()
+        ),
         TrackingPauseSnapshot::Timed {
             resumes_at_unix_seconds,
-        } => Some(format!(
-            "Paused · resumes at {}",
-            local_clock_label(resumes_at_unix_seconds)
-        )),
+        } => {
+            let time = local_clock_label(resumes_at_unix_seconds);
+            Some(if ko {
+                format!("일시 정지됨 · {time}에 다시 시작")
+            } else {
+                format!("Paused · resumes at {time}")
+            })
+        }
         TrackingPauseSnapshot::ResumeFailed { .. } => {
-            Some("Paused · automatic resume failed".to_string())
+            Some(
+                if ko { "일시 정지됨 · 자동 재개 실패" } else { "Paused · automatic resume failed" }.to_string()
+            )
         }
     }
 }
@@ -844,10 +910,11 @@ fn latest_tray_display(app: &AppHandle) -> TrayDisplaySnapshot {
         .unwrap_or_default()
 }
 
-fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot) {
+fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot, lang: TrayLanguage) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
+    let ko = lang.is_korean();
     match display.mode {
         TrayDisplayMode::Donut => {
             let _ = tray.set_title(Some(""));
@@ -855,25 +922,39 @@ fn apply_tray_display_title(app: &AppHandle, display: TrayDisplaySnapshot) {
         }
         TrayDisplayMode::FocusTime => {
             let focused = format_focus_time(display.focus_seconds);
-            let title = format!("{focused} focused");
+            let title = if ko {
+                format!("{focused} 집중")
+            } else {
+                format!("{focused} focused")
+            };
             let _ = tray.set_title(Some(&title));
-            apply_tray_title_typography(&tray, title);
-            let _ = tray.set_tooltip(Some(format!("Drifty · {focused} focused today")));
+            apply_tray_title_typography(&tray, title, lang);
+            let _ = tray.set_tooltip(Some(if ko {
+                format!("Drifty · 오늘 {focused} 집중")
+            } else {
+                format!("Drifty · {focused} focused today")
+            }));
         }
         TrayDisplayMode::DonutFocusTime => {
             let focused = format_focus_time(display.focus_seconds);
-            let title = format!("{focused} focused");
+            let title = if ko {
+                format!("{focused} 집중")
+            } else {
+                format!("{focused} focused")
+            };
             let _ = tray.set_title(Some(&title));
-            apply_tray_title_typography(&tray, title);
-            let _ = tray.set_tooltip(Some(format!(
-                "Drifty · {focused} focused today · productivity mix"
-            )));
+            apply_tray_title_typography(&tray, title, lang);
+            let _ = tray.set_tooltip(Some(if ko {
+                format!("Drifty · 오늘 {focused} 집중 · 생산성 비율")
+            } else {
+                format!("Drifty · {focused} focused today · productivity mix")
+            }));
         }
     }
 }
 
 #[cfg(target_os = "macos")]
-fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String) {
+fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String, lang: TrayLanguage) {
     let _ = tray.with_inner_tray_icon(move |inner| {
         let Some(status_item) = inner.ns_status_item() else {
             return;
@@ -896,7 +977,8 @@ fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String) {
         let title = NSString::from_str(&title);
         let attributed = unsafe { NSAttributedString::new_with_attributes(&title, &attributes) };
         let attributed = NSMutableAttributedString::from_attributed_nsstring(&attributed);
-        if let Some(label_start) = focused_label_start_utf16(&title.to_string()) {
+        let suffix = if lang.is_korean() { "집중" } else { "focused" };
+        if let Some(label_start) = focused_label_start_utf16(&title.to_string(), suffix) {
             let secondary_color = NSColor::colorWithCalibratedWhite_alpha(0.88, 0.92)
                 .into_super()
                 .into_super();
@@ -905,7 +987,7 @@ fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String) {
                 attributed.addAttribute_value_range(
                     NSForegroundColorAttributeName,
                     &secondary_color,
-                    NSRange::new(label_start, "focused".len()),
+                    NSRange::new(label_start, suffix.encode_utf16().count()),
                 );
                 attributed.addAttribute_value_range(
                     NSKernAttributeName,
@@ -925,7 +1007,7 @@ fn apply_tray_title_typography(tray: &tauri::tray::TrayIcon, title: String) {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn apply_tray_title_typography(_tray: &tauri::tray::TrayIcon, _title: String) {}
+fn apply_tray_title_typography(_tray: &tauri::tray::TrayIcon, _title: String, _lang: TrayLanguage) {}
 
 fn scaled_tray_title_size(system_size: f64) -> f64 {
     system_size * TRAY_TITLE_SCALE
@@ -935,8 +1017,8 @@ fn reduced_tray_title_weight(weight: f64) -> f64 {
     weight * 0.96
 }
 
-fn focused_label_start_utf16(title: &str) -> Option<usize> {
-    let prefix = title.strip_suffix("focused")?;
+fn focused_label_start_utf16(title: &str, suffix: &str) -> Option<usize> {
+    let prefix = title.strip_suffix(suffix)?;
     Some(prefix.encode_utf16().count())
 }
 

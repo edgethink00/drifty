@@ -74,6 +74,7 @@ export const trayInvokeCommands = [
   "tray_update_icon_style",
   "tray_update_display_mode",
   "tray_update_drift_alarm_status",
+  "tray_set_language",
 ] as const;
 
 export const trackerClientInvokeCommands = [
@@ -206,6 +207,7 @@ export type TrayCommandMap = {
     result: void;
   };
   tray_update_drift_alarm_status: { args: { status: DriftAlarmTrayStatus }; result: void };
+  tray_set_language: { args: { language: string }; result: void };
 };
 
 export type TrackerCommand = keyof TrackerCommandMap;
@@ -907,6 +909,7 @@ export interface TrackerApi {
   updateTrayIconStyle(style: TrayIconStyle): Promise<void>;
   updateTrayDisplayMode(mode: TrayDisplayMode, focusSeconds: number): Promise<void>;
   updateTrayDriftAlarmStatus(status: DriftAlarmTrayStatus): Promise<void>;
+  updateTrayLanguage(language: string): Promise<void>;
 }
 
 export interface DeveloperDiagnosticsSettings {

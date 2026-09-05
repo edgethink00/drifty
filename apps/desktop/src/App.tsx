@@ -957,6 +957,7 @@ export default function App() {
       enabled,
       checkedAt: null,
       result: enabled ? { kind: "no_candidate" } : { kind: "disabled" },
+      locale: localization.effectiveLanguage,
     });
   });
   const [breakRecoveryAssessment, setBreakRecoveryAssessment] = useState<DriftAlarmBreakSnooze | null>(null);
@@ -2571,6 +2572,7 @@ export default function App() {
       enabled: driftAlertsRuntimeEnabled,
       checkedAt,
       result,
+      locale: localization.effectiveLanguage,
     });
     const nextNativeStatus = {
       ...nextStatus,
@@ -4369,6 +4371,13 @@ export default function App() {
       const message = error instanceof Error ? error.message : toErrorMessage(error);
       console.warn("Failed to sync quit confirmation language", message);
     });
+    const client = trackerClient as Partial<typeof trackerClient>;
+    if (typeof client.updateTrayLanguage === "function") {
+      void client.updateTrayLanguage(localization.effectiveLanguage).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : toErrorMessage(error);
+        console.warn("Failed to sync tray language", message);
+      });
+    }
   }, [localization.effectiveLanguage]);
 
   useEffect(() => {

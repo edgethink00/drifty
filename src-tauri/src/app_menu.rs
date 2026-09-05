@@ -2,6 +2,7 @@ use tauri::menu::{CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuIte
 use tauri::{AppHandle, Runtime};
 
 use crate::shell_action::{self, app_menu_id, ShellAction};
+use crate::tray::latest_tray_language;
 
 pub(crate) fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
     // Windows WebView2 surfaces Menu::default() as a native menubar
@@ -68,20 +69,21 @@ fn find_check_menu_item<R: Runtime>(
 }
 
 fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
+    let ko = latest_tray_language(app).is_korean();
     // Use AppKit's bundle-backed About panel directly, avoiding the custom
     // options path implicated in the observed native icon-encoding crash.
-    let about = PredefinedMenuItem::about(app, Some("About Drifty"), None)?;
+    let about = PredefinedMenuItem::about(app, Some(if ko { "Drifty에 관하여" } else { "About Drifty" }), None)?;
     let check_updates = MenuItem::with_id(
         app,
         app_menu_id::CHECK_FOR_UPDATES,
-        "Check for Updates...",
+        if ko { "업데이트 확인…" } else { "Check for Updates..." },
         true,
         None::<&str>,
     )?;
     let settings = MenuItem::with_id(
         app,
         app_menu_id::SETTINGS,
-        "Settings...",
+        if ko { "설정…" } else { "Settings..." },
         true,
         Some("CmdOrCtrl+,"),
     )?;
@@ -119,14 +121,14 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let app_services_separator = PredefinedMenuItem::separator(app)?;
     let app_hide_separator = PredefinedMenuItem::separator(app)?;
     let app_quit_separator = PredefinedMenuItem::separator(app)?;
-    let services = PredefinedMenuItem::services(app, Some("Services"))?;
-    let hide = PredefinedMenuItem::hide(app, Some("Hide Drifty"))?;
-    let hide_others = PredefinedMenuItem::hide_others(app, Some("Hide Others"))?;
-    let show_all = PredefinedMenuItem::show_all(app, Some("Show All"))?;
+    let services = PredefinedMenuItem::services(app, Some(if ko { "서비스" } else { "Services" }))?;
+    let hide = PredefinedMenuItem::hide(app, Some(if ko { "Drifty 가리기" } else { "Hide Drifty" }))?;
+    let hide_others = PredefinedMenuItem::hide_others(app, Some(if ko { "기타 가리기" } else { "Hide Others" }))?;
+    let show_all = PredefinedMenuItem::show_all(app, Some(if ko { "모두 보기" } else { "Show All" }))?;
     let quit = MenuItem::with_id(
         app,
         app_menu_id::QUIT,
-        "Quit Drifty",
+        if ko { "Drifty 종료" } else { "Quit Drifty" },
         true,
         Some("CmdOrCtrl+Q"),
     )?;
