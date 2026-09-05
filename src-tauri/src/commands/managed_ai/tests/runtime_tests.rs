@@ -60,7 +60,9 @@ fn start_spawns_runtime_for_downloaded_model() {
 
     let status =
         start_model_at_root(root.path(), "drifty-qwen3-5-4b-default").expect("start status");
+    let recorded = wait_for_runtime_record(&args_path);
     runtime::stop_runtime_for_tests();
+    recorded.expect("runtime records complete arguments before shutdown");
 
     assert!(matches!(
         status.state,
@@ -96,7 +98,9 @@ fn repeated_start_reuses_the_same_in_flight_runtime_child() {
 
     let first = start_model_at_root(root.path(), spec.id).expect("first start status");
     let second = start_model_at_root(root.path(), spec.id).expect("second start status");
+    let recorded = wait_for_runtime_record(&starts_path);
     runtime::stop_runtime_for_tests();
+    recorded.expect("runtime records startup before shutdown");
 
     assert!(matches!(first.state, ManagedAiInstallState::Starting));
     assert!(matches!(second.state, ManagedAiInstallState::Starting));
@@ -139,7 +143,9 @@ fn concurrent_start_creates_only_one_runtime_child() {
             .expect("second start thread")
             .expect("second start");
     });
+    let recorded = wait_for_runtime_record(&starts_path);
     runtime::stop_runtime_for_tests();
+    recorded.expect("runtime records startup before shutdown");
 
     let starts = std::fs::read_to_string(starts_path).expect("read runtime starts");
     assert_eq!(
@@ -245,6 +251,28 @@ fn write_counting_fake_runtime(root: &Path, starts_path: &Path) -> Result<(), Ma
     std::fs::set_permissions(runtime_path, permissions)?;
     runtime::write_runtime_completion_fixture(root)?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn wait_for_runtime_record(path: &Path) -> std::io::Result<()> {
+    // Spawning a child does not guarantee that its shell has run printf yet.
+    // Wait for the completed record before teardown, including on slow runners.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match std::fs::read_to_string(path) {
+            Ok(contents) if contents.contains('\n') => return Ok(()),
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        if Instant::now() >= deadline {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("runtime did not record startup at {}", path.display()),
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }
 
 fn wait_for_exit(child: &mut Child) -> bool {

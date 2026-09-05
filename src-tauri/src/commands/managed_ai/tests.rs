@@ -460,10 +460,11 @@ fn write_fake_runtime(root: &Path, args_path: &Path) -> Result<(), ManagedAiErro
     let runtime_dir = root.join("runtime");
     std::fs::create_dir_all(&runtime_dir)?;
     let runtime_path = runtime_dir.join("llama-server");
+    let temp_args_path = shell_quote(&args_path.with_extension("tmp"));
     let args_path = shell_quote(args_path);
     std::fs::write(
         &runtime_path,
-        format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {args_path}\nwhile true; do sleep 5; done\n"),
+        format!("#!/bin/sh\nprintf '%s\\n' \"$@\" > {temp_args_path}\nmv {temp_args_path} {args_path}\nwhile true; do sleep 5; done\n"),
     )?;
     let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
     #[cfg(unix)]
