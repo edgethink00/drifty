@@ -35,6 +35,9 @@ playwright-report/
 !.codex/skills/land/
 .codex/skills/land/*
 !.codex/skills/land/SKILL.md
+!.codex/skills/land/references/
+.codex/skills/land/references/*
+!.codex/skills/land/references/legacy-delegated-band.md
 .codegraph
 .debug-journal.md
 .debug-artifacts/
