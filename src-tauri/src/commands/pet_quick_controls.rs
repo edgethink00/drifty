@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::Duration;
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -9,13 +11,16 @@ use super::pet_mode::{current_pet_logical_position, PET_MODE_WINDOW_LABEL};
 use super::pet_panel::{configure_pet_panel, show_pet_panel_at_position};
 
 pub const PET_QUICK_CONTROLS_WINDOW_LABEL: &str = "pet-quick-controls";
-const PET_QUICK_CONTROLS_KO_WIDTH: f64 = 260.0;
-const PET_QUICK_CONTROLS_EN_WIDTH: f64 = 286.0;
+const PET_QUICK_CONTROLS_KO_WIDTH: f64 = 273.0;
+const PET_QUICK_CONTROLS_EN_WIDTH: f64 = 300.0;
 const PET_QUICK_CONTROLS_HEIGHT: f64 = 36.0;
 #[cfg(target_os = "macos")]
 const PET_QUICK_CONTROLS_MATERIAL_RADIUS: f64 = PET_QUICK_CONTROLS_HEIGHT / 2.0;
 const PET_QUICK_CONTROLS_GAP: f64 = 8.0;
 const PET_QUICK_CONTROLS_SCREEN_INSET: f64 = 8.0;
+const PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS: u64 = 5_000;
+static PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD: AtomicBool = AtomicBool::new(false);
+static PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -67,6 +72,7 @@ fn is_supported_quick_controls_action(action: &str) -> bool {
             | "automaticCloseExtendToday"
             | "menuOpened"
             | "menuClosed"
+            | "acknowledgeDismiss"
     )
 }
 
@@ -178,6 +184,38 @@ fn hide_pet_quick_controls_window(window: &WebviewWindow) -> Result<(), String> 
     window.hide().map_err(|error| error.to_string())
 }
 
+pub fn set_pet_quick_controls_acknowledgement_held(app: &AppHandle, held: bool) {
+    let generation = PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION
+        .fetch_add(1, Ordering::Relaxed)
+        .wrapping_add(1);
+    PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.store(held, Ordering::Relaxed);
+    if !held {
+        return;
+    }
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(
+            PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
+        ));
+        let app_for_main = app.clone();
+        let _ = app.run_on_main_thread(move || {
+            if PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION.load(Ordering::Relaxed) != generation
+                || !PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.swap(false, Ordering::Relaxed)
+            {
+                return;
+            }
+            if let Some(window) = app_for_main.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+                let _ = hide_pet_quick_controls_window(&window);
+            }
+        });
+    });
+}
+
+fn pet_quick_controls_acknowledgement_held() -> bool {
+    PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.load(Ordering::Relaxed)
+}
+
 #[cfg(target_os = "macos")]
 fn apply_pet_quick_controls_material(window: &WebviewWindow) {
     // This panel is exactly the visible pill size. Give only this panel a
@@ -250,6 +288,9 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
 }
 
 pub fn hide_pet_quick_controls(app: &AppHandle) -> Result<(), String> {
+    if pet_quick_controls_acknowledgement_held() {
+        return Ok(());
+    }
     let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
         return Ok(());
     };
@@ -262,6 +303,9 @@ pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<(
         return Ok(());
     };
     if !visible {
+        if pet_quick_controls_acknowledgement_held() {
+            return Ok(());
+        }
         return hide_pet_quick_controls_window(&window);
     }
 
@@ -438,6 +482,16 @@ pub fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), S
         hide_pet_quick_controls(&app)?;
     }
 
+    if action == "acknowledgeDismiss" {
+        set_pet_quick_controls_acknowledgement_held(&app, false);
+        hide_pet_quick_controls(&app)?;
+        if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
+            pet.emit("pet-quick-controls-action", json!({ "action": action }))
+                .map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    }
+
     if let Some(main) = app.get_webview_window("main") {
         main.emit("pet-quick-controls-action", json!({ "action": action }))
             .map_err(|error| error.to_string())?;
@@ -450,7 +504,8 @@ mod tests {
     use super::{
         is_supported_quick_controls_action, is_supported_quick_controls_state,
         layout_pet_quick_controls, point_inside_rect, PetQuickControlsAutomaticCloseOverride,
-        PetQuickControlsState, PET_QUICK_CONTROLS_KO_WIDTH,
+        PetQuickControlsState, PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
+        PET_QUICK_CONTROLS_EN_WIDTH, PET_QUICK_CONTROLS_KO_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
     };
     use serde_json::json;
 
@@ -548,7 +603,13 @@ mod tests {
         assert!(is_supported_quick_controls_action("menuClosed"));
         assert!(is_supported_quick_controls_action("automaticClosePause15"));
         assert!(is_supported_quick_controls_action("automaticCloseRestore"));
+        assert!(is_supported_quick_controls_action("acknowledgeDismiss"));
         assert!(!is_supported_quick_controls_action("menuMaybe"));
+    }
+
+    #[test]
+    fn bounds_the_acknowledgement_hold_with_a_native_failsafe() {
+        assert_eq!(PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS, 5_000);
     }
 
     #[test]
@@ -584,5 +645,41 @@ mod tests {
         );
         assert_eq!(layout.placement, "above");
         assert!((layout.y - (860.0 - 36.0 - 8.0)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn clamps_the_widest_bar_inside_a_narrow_negative_origin_work_area() {
+        let left = layout_pet_quick_controls(
+            -638.0,
+            160.0,
+            144.0,
+            99.0,
+            -640.0,
+            0.0,
+            640.0,
+            480.0,
+            PET_QUICK_CONTROLS_EN_WIDTH,
+        );
+        let right = layout_pet_quick_controls(
+            -100.0,
+            160.0,
+            144.0,
+            99.0,
+            -640.0,
+            0.0,
+            640.0,
+            480.0,
+            PET_QUICK_CONTROLS_EN_WIDTH,
+        );
+
+        assert!((left.x - (-632.0)).abs() < f64::EPSILON);
+        assert!((right.x - (-308.0)).abs() < f64::EPSILON);
+        for layout in [left, right] {
+            assert!(layout.x >= -640.0 + PET_QUICK_CONTROLS_SCREEN_INSET);
+            assert!(
+                layout.x + PET_QUICK_CONTROLS_EN_WIDTH
+                    <= -640.0 + 640.0 - PET_QUICK_CONTROLS_SCREEN_INSET
+            );
+        }
     }
 }

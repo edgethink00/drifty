@@ -140,6 +140,7 @@ const bridge = vi.hoisted(() => ({
   isNativePetCursorInside: vi.fn().mockResolvedValue(false),
   isNativePetQuickControlsCursorInside: vi.fn().mockResolvedValue(false),
   quickControlsMenuStateHandler: null as ((open: boolean) => void) | null,
+  listenToNativePetQuickControlsAction: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetQuickControlsMenuState: vi.fn().mockImplementation(async (handler) => {
     bridge.quickControlsMenuStateHandler = handler;
     return vi.fn();
@@ -205,6 +206,7 @@ vi.mock("./petModeBridge", () => ({
   sampleNativePetCursor: bridge.sampleNativePetCursor,
   isNativePetCursorInside: bridge.isNativePetCursorInside,
   isNativePetQuickControlsCursorInside: bridge.isNativePetQuickControlsCursorInside,
+  listenToNativePetQuickControlsAction: bridge.listenToNativePetQuickControlsAction,
   listenToNativePetQuickControlsMenuState: bridge.listenToNativePetQuickControlsMenuState,
   setNativePetQuickControlsVisible: bridge.setNativePetQuickControlsVisible,
   triggerNativePetQuickControlsAction: bridge.triggerNativePetQuickControlsAction,

@@ -1,8 +1,8 @@
 export const PET_QUICK_CONTROLS_WINDOW_LABEL = "pet-quick-controls";
 
 // Korean production width. The native host expands the English surface to
-// 286pt when it receives the localized quick-control state.
-export const PET_QUICK_CONTROLS_WIDTH = 260;
+// 300pt when it receives the localized quick-control state.
+export const PET_QUICK_CONTROLS_WIDTH = 273;
 export const PET_QUICK_CONTROLS_HEIGHT = 36;
 export const PET_QUICK_CONTROLS_GAP = 8;
 export const PET_QUICK_CONTROLS_SCREEN_INSET = 8;
@@ -13,6 +13,9 @@ export const PET_QUICK_CONTROLS_HOVER_CLOSE_MS = 250;
 export const PET_QUICK_CONTROLS_POLL_MS = 80;
 export const PET_QUICK_CONTROLS_STATIONARY_MOVE_PX = 2;
 export const PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS = 670;
+export const PET_QUICK_CONTROLS_ACKNOWLEDGE_MS = 1_100;
+export const PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS = 1_200;
+export const PET_QUICK_CONTROLS_STATE_CONFIRMATION_TIMEOUT_MS = 3_000;
 
 /**
  * Poses during which a hover may open the quick controls.

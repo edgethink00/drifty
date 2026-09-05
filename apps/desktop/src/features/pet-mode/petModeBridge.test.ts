@@ -370,6 +370,23 @@ describe("pet quick-controls bridge", () => {
     });
   });
 
+  it("can keep the quick-controls panel visible while the pet hide is acknowledged", async () => {
+    const { triggerNativePetVisibilityAction } = await import("./petModeBridge");
+
+    await triggerNativePetVisibilityAction("hideOneHour", {
+      keepQuickControlsVisible: true,
+    });
+    await triggerNativePetVisibilityAction("turnOff");
+
+    expect(tauri.invoke).toHaveBeenNthCalledWith(1, "pet_mode_visibility_action", {
+      action: "hideOneHour",
+      keepQuickControlsVisible: true,
+    });
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "pet_mode_visibility_action", {
+      action: "turnOff",
+    });
+  });
+
   it("normalizes the native menu-state event to a boolean", async () => {
     const values: boolean[] = [];
     tauriListen.listen.mockImplementationOnce(async (

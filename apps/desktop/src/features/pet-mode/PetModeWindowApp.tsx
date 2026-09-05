@@ -39,6 +39,7 @@ import {
   sampleNativePetCursor,
   isNativePetCursorInside,
   isNativePetQuickControlsCursorInside,
+  listenToNativePetQuickControlsAction,
   listenToNativePetQuickControlsMenuState,
   setNativePetQuickControlsVisible,
   setNativePetPresence,
@@ -50,6 +51,7 @@ import {
 import { openNativePetModeMenu } from "./petModeNativeMenu";
 import {
   EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
+  PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS,
   PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS,
   PET_QUICK_CONTROLS_POLL_MS,
   advancePetQuickControlsHoverIntent,
@@ -459,19 +461,29 @@ export function PetModeWindowApp() {
 
   useEffect(() => {
     let disposed = false;
-    let unlisten: (() => void) | null = null;
+    const unlisteners: Array<() => void> = [];
+    void listenToNativePetQuickControlsAction((action) => {
+      if (disposed || action !== "acknowledgeDismiss") return;
+      quickControlsInteractionCooldownUntilRef.current = Date.now()
+        + PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS;
+      quickControlsResumeAfterInteractionRef.current = false;
+      controlsHoldingRef.current = false;
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else if (nextUnlisten) unlisteners.push(nextUnlisten);
+    }).catch(() => undefined);
     void listenToNativePetQuickControlsMenuState((open) => {
       if (disposed) return;
       quickControlsMenuOpenRef.current = open;
       if (open) controlsHoldingRef.current = true;
     }).then((nextUnlisten) => {
       if (disposed) nextUnlisten?.();
-      else unlisten = nextUnlisten;
+      else if (nextUnlisten) unlisteners.push(nextUnlisten);
     }).catch(() => undefined);
     return () => {
       disposed = true;
       quickControlsMenuOpenRef.current = false;
-      unlisten?.();
+      for (const stop of unlisteners) stop();
     };
   }, []);
 

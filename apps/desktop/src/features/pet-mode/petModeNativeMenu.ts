@@ -50,6 +50,7 @@ function automaticCloseMenuCopy(language: "en" | "ko") {
       pause60: "1시간 멈추기",
       pauseToday: "자정까지 멈추기",
       pauseForever: "계속 멈추기",
+      pauseHeader: "자동 닫기 멈추기",
       turnOn: "자동 닫기 켜기",
       restoreOn: "지금 다시 켜기",
       restoreOff: "지금 다시 끄기",
@@ -61,6 +62,7 @@ function automaticCloseMenuCopy(language: "en" | "ko") {
     pause60: "Pause for 1 Hour",
     pauseToday: "Pause Until Midnight",
     pauseForever: "Pause Until Resumed",
+    pauseHeader: "Pause Auto-close",
     turnOn: "Turn On Auto-close",
     restoreOn: "Turn Back On Now",
     restoreOff: "Turn Back Off Now",
@@ -86,6 +88,7 @@ export async function openNativeAutomaticCloseMenu(
   if (!override) {
     if (state.savedEnabled) {
       items.push(
+        { id: "pet-auto-close-pause-header", text: copy.pauseHeader, enabled: false },
         item("pet-auto-close-pause-15", copy.pause15, "automaticClosePause15"),
         item("pet-auto-close-pause-60", copy.pause60, "automaticClosePause60"),
         item("pet-auto-close-pause-today", copy.pauseToday, "automaticClosePauseToday"),

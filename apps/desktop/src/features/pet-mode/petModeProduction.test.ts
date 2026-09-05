@@ -36,6 +36,7 @@ const petModeWindowContract = readFileSync("src/features/pet-mode/PetModeWindowA
 const petModeRustContract = readFileSync("../../src-tauri/src/commands/pet_mode.rs", "utf8");
 const petPanelRustContract = readFileSync("../../src-tauri/src/commands/pet_panel.rs", "utf8");
 const petQuickControlsCssContract = readFileSync("src/features/pet-mode/petModeQuickControls.css", "utf8");
+const petQuickControlsTsContract = readFileSync("src/features/pet-mode/petModeQuickControls.ts", "utf8");
 const petQuickControlsRustContract = readFileSync("../../src-tauri/src/commands/pet_quick_controls.rs", "utf8");
 const tokensContract = readFileSync("src/styles/tokens-base.css", "utf8");
 
@@ -70,7 +71,7 @@ describe("pet quick-controls material", () => {
       /\.pet-quick-controls\s*\{([\s\S]*?)\n\}/,
     );
     expect(surfaceRule?.[1]).toContain(
-      "box-shadow: inset 0 1px 0 color-mix(in srgb, white 46%, transparent);",
+      "box-shadow: inset 0 1px 0 color-mix(in srgb, white 30%, transparent);",
     );
     expect(surfaceRule?.[1]).not.toContain("0 10px 24px");
     expect(petQuickControlsRustContract).toContain(
@@ -84,6 +85,51 @@ describe("pet quick-controls material", () => {
     );
     expect(hoverRule?.[1]).toContain("background:");
     expect(hoverRule?.[1]).toContain("transform: none;");
+  });
+
+  it("keeps acknowledgement typography as compact as the quick-control actions", () => {
+    const acknowledgementRule = petQuickControlsCssContract.match(
+      /\.pet-quick-controls__ack\s*\{([\s\S]*?)\n\}/,
+    );
+    expect(acknowledgementRule?.[1]).toContain("font-size: 0.75rem;");
+    expect(acknowledgementRule?.[1]).toContain("line-height: 15px;");
+  });
+
+  it("gives the primary quick-control actions a 60:40 split", () => {
+    const idleLayoutRule = petQuickControlsCssContract.match(
+      /\.pet-quick-controls:not\(\[data-phase\]\)\s*\{([^}]*)\}/,
+    );
+    expect(petQuickControlsTsContract).toContain("export const PET_QUICK_CONTROLS_WIDTH = 273;");
+    expect(idleLayoutRule?.[1]).toContain(
+      "grid-template-columns: minmax(0, 3fr) 1px minmax(0, 2fr) 1px 28px;",
+    );
+    expect(petQuickControlsCssContract).toMatch(
+      /\.pet-quick-controls__toggle \{\n\s+flex: 1 1 0;\n\s+justify-content: center;/,
+    );
+    expect(petQuickControlsCssContract).toMatch(
+      /\.pet-quick-controls__action \{\n\s+flex: 1 1 0;\n\s+justify-content: center;/,
+    );
+    expect(petQuickControlsRustContract).toContain(
+      "const PET_QUICK_CONTROLS_KO_WIDTH: f64 = 273.0;",
+    );
+    expect(petQuickControlsRustContract).toContain(
+      "const PET_QUICK_CONTROLS_EN_WIDTH: f64 = 300.0;",
+    );
+    expect(petQuickControlsCssContract).toMatch(
+      /\.pet-quick-controls__text \{[\s\S]*?align-items: baseline;[\s\S]*?gap: 6px;/,
+    );
+    expect(petQuickControlsCssContract).toContain(
+      "--pet-quick-controls-muted: color-mix(in srgb, var(--text-soft) 90%, var(--text));",
+    );
+    expect(petQuickControlsCssContract).toContain(
+      "--pet-quick-controls-warn: color-mix(in srgb, var(--warn) 90%, var(--text));",
+    );
+    expect(petQuickControlsCssContract).toContain(
+      "--pet-quick-controls-warn: color-mix(in srgb, var(--warn-wash) 80%, white);",
+    );
+    expect(petQuickControlsCssContract).toContain(
+      "outline: 2px solid var(--pet-quick-controls-focus-ring);",
+    );
   });
 
   it("keeps the native material appearance aligned with the app theme", () => {
@@ -232,6 +278,10 @@ describe("pet promoted out of Dev", () => {
     expect(petModeRustContract).toContain("fn validate_pet_visibility_action");
     expect(petModeRustContract).toContain('"hideOneHour" | "turnOff" => Ok(())');
     expect(petModeRustContract).toContain('main.emit("pet-visibility-action"');
+    expect(petModeRustContract).toContain("keep_quick_controls_visible");
+    expect(petQuickControlsRustContract).toContain("PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD");
+    expect(petQuickControlsRustContract).toContain("PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS: u64 = 5_000");
+    expect(petQuickControlsRustContract).toContain("app.run_on_main_thread");
   });
 
   it("offers the visibility toggle in the account menu", () => {

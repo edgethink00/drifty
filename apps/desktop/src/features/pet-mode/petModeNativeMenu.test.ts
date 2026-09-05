@@ -103,6 +103,7 @@ describe("openNativeAutomaticCloseMenu", () => {
 
     const options = nativeMenu.create.mock.calls[0]?.[0];
     expect(options.items.map((item: { text?: string; item?: string }) => item.text ?? item.item)).toEqual([
+      "자동 닫기 멈추기",
       "15분 멈추기",
       "1시간 멈추기",
       "자정까지 멈추기",
@@ -110,7 +111,7 @@ describe("openNativeAutomaticCloseMenu", () => {
       "Separator",
       "시간이 끝나면 자동으로 다시 켜집니다.",
     ]);
-    options.items[0].action();
+    options.items[1].action();
     expect(onAction).toHaveBeenCalledWith("automaticClosePause15");
   });
 

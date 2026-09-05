@@ -555,9 +555,13 @@ export async function setNativePetModeGuides(enabled: boolean): Promise<void> {
 
 export async function triggerNativePetVisibilityAction(
   action: PetVisibilityAction,
+  options?: { keepQuickControlsVisible?: boolean },
 ): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("pet_mode_visibility_action", { action });
+  await invoke("pet_mode_visibility_action", {
+    action,
+    ...(options?.keepQuickControlsVisible ? { keepQuickControlsVisible: true } : {}),
+  });
 }
 
 export async function listenToNativePetVisibilityAction(
@@ -592,7 +596,8 @@ export type PetQuickControlsAction =
   | "automaticCloseEnableForever"
   | "automaticCloseRestore"
   | "automaticCloseExtend60"
-  | "automaticCloseExtendToday";
+  | "automaticCloseExtendToday"
+  | "acknowledgeDismiss";
 
 export type PetQuickControlsAutomaticCloseOverridePayload = {
   readonly enabled: boolean;
@@ -650,7 +655,8 @@ function isPetQuickControlsAction(value: unknown): value is PetQuickControlsActi
     || value === "automaticCloseEnableForever"
     || value === "automaticCloseRestore"
     || value === "automaticCloseExtend60"
-    || value === "automaticCloseExtendToday";
+    || value === "automaticCloseExtendToday"
+    || value === "acknowledgeDismiss";
 }
 
 export async function setNativePetQuickControlsVisible(visible: boolean): Promise<void> {

@@ -989,14 +989,25 @@ fn validate_pet_visibility_action(action: &str) -> Result<(), String> {
 }
 
 /// Hide the pet immediately, then let the main window persist the user's choice
-/// and own the one-hour restore timer. Like the Companion path this never
-/// reveals the dashboard: dismissing the cat from its own context menu should
-/// not replace one interruption with a bigger one.
+/// and own the one-hour restore timer. A one-hour hide may retain only the
+/// quick-controls panel long enough to acknowledge success. Like the Companion
+/// path this never reveals the dashboard: dismissing the cat from its own
+/// context menu should not replace one interruption with a bigger one.
 #[tauri::command]
-pub fn pet_mode_visibility_action(app: AppHandle, action: String) -> Result<(), String> {
+pub fn pet_mode_visibility_action(
+    app: AppHandle,
+    action: String,
+    keep_quick_controls_visible: Option<bool>,
+) -> Result<(), String> {
     validate_pet_visibility_action(&action)?;
     let _visibility_transition = begin_pet_visibility_transition()?;
     reset_anchor_clear_confirmation();
+    let keep_quick_controls_visible =
+        action == "hideOneHour" && keep_quick_controls_visible.unwrap_or(false);
+    super::pet_quick_controls::set_pet_quick_controls_acknowledgement_held(
+        &app,
+        keep_quick_controls_visible,
+    );
 
     if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
@@ -1006,7 +1017,9 @@ pub fn pet_mode_visibility_action(app: AppHandle, action: String) -> Result<(), 
         let _ = set_pet_window_interactive(&window, false);
         window.hide().map_err(|error| error.to_string())?;
     }
-    let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
+    if !keep_quick_controls_visible {
+        let _ = super::pet_quick_controls::hide_pet_quick_controls(&app);
+    }
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit("pet-visibility-action", json!({ "action": action }))

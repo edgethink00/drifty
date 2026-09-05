@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXTREME_NUDGE_STORAGE_KEY } from "../companion/extremeNudgeData";
 import { DRIFT_ALERTS_STORAGE_KEY } from "../companion/driftAlarmData";
 import { AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY } from "../companion/automaticCloseOverride";
@@ -32,6 +32,11 @@ vi.mock("./petModeNativeMenu", () => ({
 }));
 
 describe("PetModeQuickControlsWindowApp", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
   beforeEach(() => {
     window.localStorage.clear();
     vi.clearAllMocks();
@@ -53,9 +58,6 @@ describe("PetModeQuickControlsWindowApp", () => {
       { savedEnabled: true, override: null, language: "ko" },
     ));
 
-    fireEvent.click(screen.getByRole("button", { name: "펫 1시간 숨김" }));
-    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("hideOneHour");
-
     fireEvent.click(screen.getByRole("button", { name: "펫 옵션 더 보기" }));
     await waitFor(() => expect(nativeMenu.openNativePetModeMenu).toHaveBeenCalledTimes(1));
     expect(bridge.setNativePetQuickControlsMenuOpen.mock.calls).toEqual([
@@ -68,10 +70,66 @@ describe("PetModeQuickControlsWindowApp", () => {
       language: "ko",
     });
     const overflowActions = nativeMenu.openNativePetModeMenu.mock.calls[0][0];
-    overflowActions.onOpenDashboard();
-    overflowActions.onOpenSettings();
+    act(() => {
+      overflowActions.onOpenDashboard();
+      overflowActions.onOpenSettings();
+    });
     expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("openDashboard");
     expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("openSettings");
+  });
+
+  it("hides the pet before acknowledging the one-hour hide", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    render(<PetModeQuickControlsWindowApp />);
+
+    fireEvent.click(screen.getByRole("button", { name: "펫 1시간 숨김" }));
+    fireEvent.click(screen.getByRole("button", { name: "펫 1시간 숨김" }));
+
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("hideOneHour", {
+      keepQuickControlsVisible: true,
+    });
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.getAllByText("펫을 1시간 숨겼어요").length).toBeGreaterThan(0);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_099);
+    });
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalledWith("acknowledgeDismiss");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("acknowledgeDismiss");
+  });
+
+  it("never shows success and keeps the panel open with retry when hiding fails", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    bridge.triggerNativePetVisibilityAction.mockRejectedValueOnce(new Error("native failed"));
+    render(<PetModeQuickControlsWindowApp />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "펫 1시간 숨김" }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain("바꾸지 못했어요");
+    expect(screen.queryByText("펫을 1시간 숨겼어요")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+      await Promise.resolve();
+    });
+    expect(screen.getAllByText("펫을 1시간 숨겼어요").length).toBeGreaterThan(0);
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_100);
+    });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("acknowledgeDismiss");
   });
 
   it("keeps native menu presentation single-flight across rapid clicks", async () => {
@@ -95,6 +153,21 @@ describe("PetModeQuickControlsWindowApp", () => {
       await Promise.resolve();
     });
     expect(bridge.setNativePetQuickControlsMenuOpen.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it("retries the exact native menu that failed to open", async () => {
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    nativeMenu.openNativePetModeMenu
+      .mockRejectedValueOnce(new Error("menu failed"))
+      .mockResolvedValueOnce(true);
+    render(<PetModeQuickControlsWindowApp />);
+
+    fireEvent.click(screen.getByRole("button", { name: "펫 옵션 더 보기" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("바꾸지 못했어요"));
+
+    fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+    await waitFor(() => expect(nativeMenu.openNativePetModeMenu).toHaveBeenCalledTimes(2));
+    expect(nativeMenu.openNativeAutomaticCloseMenu).not.toHaveBeenCalled();
   });
 
   it("keeps the English bar labels on one line", () => {
@@ -152,9 +225,9 @@ describe("PetModeQuickControlsWindowApp", () => {
 
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     expect(document.documentElement.style.colorScheme).toBe("dark");
-    expect(screen.getByRole("button", { name: "자동 닫기: 멈춤" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /자동 닫기: .*까지/ })).toBeTruthy();
     expect(screen.getByText("멈춤")).toBeTruthy();
-    expect(screen.queryByText(/15분/)).toBeNull();
+    expect(screen.queryByText(/까지$/)).toBeNull();
   });
 
   it("does not render a stale paused state from an already-expired native event", async () => {
@@ -196,7 +269,7 @@ describe("PetModeQuickControlsWindowApp", () => {
       }));
     });
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "자동 닫기: 멈춤" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: /자동 닫기: .*까지/ })).toBeTruthy());
   });
 
   it("releases a listener that finishes registering after unmount", async () => {
@@ -214,5 +287,94 @@ describe("PetModeQuickControlsWindowApp", () => {
     });
 
     expect(unlisten).toHaveBeenCalledOnce();
+  });
+
+  it("shows the selected resume time after pausing auto-close", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-05T15:27:00+09:00"));
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, "1");
+    render(<PetModeQuickControlsWindowApp />);
+    await waitFor(() => expect(bridge.listenToNativePetQuickControlsState).toHaveBeenCalled());
+    const listenerCalls = bridge.listenToNativePetQuickControlsState.mock.calls;
+    const onState = listenerCalls[listenerCalls.length - 1]?.[0];
+    fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
+    await waitFor(() => expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled());
+    const onAction = nativeMenu.openNativeAutomaticCloseMenu.mock.calls[0][0];
+    act(() => {
+      onAction("automaticClosePause15");
+    });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("automaticClosePause15");
+    act(() => {
+      onState?.({
+        automaticCloseEnabled: false,
+        automaticCloseSavedEnabled: true,
+        automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: Date.now() + 15 * 60_000 },
+        language: "ko",
+        theme: "light",
+      });
+    });
+    expect(screen.queryByRole("button", { name: "자동 닫기: 켬" })).toBeNull();
+    expect(screen.getAllByText(/까지 멈췄어요$/).length).toBeGreaterThan(0);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_100);
+    });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("acknowledgeDismiss");
+  });
+
+  it("shows a recoverable failure when native state does not confirm a pause in time", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, "1");
+    render(<PetModeQuickControlsWindowApp />);
+    await waitFor(() => expect(bridge.listenToNativePetQuickControlsState).toHaveBeenCalled());
+    const listenerCalls = bridge.listenToNativePetQuickControlsState.mock.calls;
+    const onState = listenerCalls[listenerCalls.length - 1]?.[0];
+
+    fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
+    await waitFor(() => expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled());
+    act(() => {
+      nativeMenu.openNativeAutomaticCloseMenu.mock.calls[0][0]("automaticClosePause15");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_999);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(screen.getByRole("alert").textContent).toContain("바꾸지 못했어요");
+
+    act(() => {
+      onState?.({
+        automaticCloseEnabled: false,
+        automaticCloseSavedEnabled: true,
+        automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: Date.now() + 15 * 60_000 },
+        language: "ko",
+        theme: "light",
+      });
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByText(/까지 멈췄어요$/).length).toBeGreaterThan(0);
+  });
+
+  it("keeps the bar open and shows a visible failure when pause dispatch fails", async () => {
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, "1");
+    bridge.triggerNativePetQuickControlsAction.mockRejectedValueOnce(new Error("native failed"));
+    render(<PetModeQuickControlsWindowApp />);
+    fireEvent.click(screen.getByRole("button", { name: "자동 닫기: 켬" }));
+    await waitFor(() => expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled());
+    const onAction = nativeMenu.openNativeAutomaticCloseMenu.mock.calls[0][0];
+    await act(async () => {
+      onAction("automaticClosePause15");
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("alert").textContent).toContain("바꾸지 못했어요");
+    expect(screen.getByRole("button", { name: "다시 시도" })).toBeTruthy();
   });
 });

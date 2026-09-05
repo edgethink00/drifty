@@ -5,7 +5,10 @@ import {
   PET_QUICK_CONTROLS_HEIGHT,
   PET_QUICK_CONTROLS_HOVER_CLOSE_MS,
   PET_QUICK_CONTROLS_HOVER_OPEN_MS,
+  PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS,
+  PET_QUICK_CONTROLS_ACKNOWLEDGE_MS,
   PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS,
+  PET_QUICK_CONTROLS_STATE_CONFIRMATION_TIMEOUT_MS,
   isPetQuickControlsHoverablePhase,
   PET_QUICK_CONTROLS_WIDTH,
   advancePetQuickControlsHoverIntent,
@@ -27,6 +30,9 @@ describe("pointerMovedEnough", () => {
 describe("pet interaction cooldown", () => {
   it("suppresses controls for the configured 670ms after interaction", () => {
     expect(PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS).toBe(670);
+    expect(PET_QUICK_CONTROLS_ACKNOWLEDGE_MS).toBe(1_100);
+    expect(PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS).toBe(1_200);
+    expect(PET_QUICK_CONTROLS_STATE_CONFIRMATION_TIMEOUT_MS).toBe(3_000);
     expect(isPetQuickControlsInteractionCoolingDown(1_670, 1_669)).toBe(true);
     expect(isPetQuickControlsInteractionCoolingDown(1_670, 1_670)).toBe(false);
   });
