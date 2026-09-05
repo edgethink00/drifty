@@ -188,12 +188,23 @@
 
 .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 24%;
+  /* The toned surface is otherwise fully opaque (both mix inputs carry no
+     alpha). A 95% alpha lets a trace of the sidebar canvas through so the
+     card sits in the rail rather than on top of it, while staying above the
+     ~90% floor where the canvas starts greying the pastel out. Dark canvases
+     show the same alpha more strongly, so they run two points higher. */
+  --cta-surface-alpha: 95%;
   --cta-shadow-ambient: 16%;
   --cta-shadow-contact: 9%;
   --cta-shadow-ambient-hover: 21%;
   --cta-shadow-contact-hover: 12%;
   --cta-inset-strength: 62%;
-  background: color-mix(in srgb, var(--cta-tone-fill) var(--cta-tone-fill-strength), var(--surface));
+  --cta-surface: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--cta-tone-fill) var(--cta-tone-fill-strength), var(--surface)) var(--cta-surface-alpha),
+    transparent
+  );
+  background: var(--cta-surface);
   box-shadow:
     0 10px 24px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient), transparent),
     0 2px 7px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-contact), transparent),
@@ -230,7 +241,7 @@
 
 .sidebar-cta-slot[data-tone]:not(.sidebar-cta-slot--download):hover:not(:disabled),
 .sidebar-cta-slot[data-tone]:not(.sidebar-cta-slot--download):focus-within:not(:disabled) {
-  background: color-mix(in srgb, var(--cta-tone-fill) var(--cta-tone-fill-strength), var(--surface));
+  background: var(--cta-surface);
   box-shadow:
     0 12px 28px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient-hover), transparent),
     0 2px 8px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-contact-hover), transparent),
@@ -423,6 +434,7 @@
    reducing only its intensity. */
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 34%;
+  --cta-surface-alpha: 97%;
   --cta-shadow-ambient: 8%;
   --cta-shadow-contact: 5%;
   --cta-shadow-ambient-hover: 12%;
