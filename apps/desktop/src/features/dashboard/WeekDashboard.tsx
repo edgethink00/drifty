@@ -144,6 +144,7 @@ function buildWeekSideTrendChart(
 
   const columns = rows.map((row) => {
     const off = row.totalSeconds <= 0;
+    // .wt-bar stacks bottom-up; pin category-mode Unclassified above the classified slices.
     const slices = colorMode === "productivity"
       ? row.productivitySlices.map((slice) => ({
           key: slice.productivity,
@@ -156,7 +157,7 @@ function buildWeekSideTrendChart(
           seconds: slice.totalSeconds,
           color: CATEGORY_COLORS[slice.category],
           label: localizedCategoryLabel(slice.category, t),
-        }));
+        })).sort((left, right) => Number(left.key === "unknown") - Number(right.key === "unknown"));
     return {
       day: row.day,
       dayLabel: new Intl.DateTimeFormat(language === "ko" ? "ko-KR" : "en-US", { weekday: "short" }).format(new Date(`${row.day}T12:00:00`)),

@@ -1426,6 +1426,28 @@ describe("WeekDashboard time rail", () => {
 });
 
 describe("WeekDashboard breakdown panel", () => {
+  it.each([7200, 2700, 900, 3600])("pins %i seconds of Unclassified above classified time without changing the data", (unknownSeconds) => {
+    const totalSeconds = unknownSeconds + 5400;
+    const slices = ([
+      { category: "unknown", totalSeconds: unknownSeconds, ratio: unknownSeconds / totalSeconds },
+      { category: "workspace", totalSeconds: 3600, ratio: 3600 / totalSeconds },
+      { category: "learning", totalSeconds: 1800, ratio: 1800 / totalSeconds },
+    ] satisfies WeekDayRow["slices"]).sort((left, right) => right.totalSeconds - left.totalSeconds);
+    const originalSlices = slices.map((slice) => ({ ...slice }));
+    const rows = weekRows.map((row, index) => index === 2 ? { ...row, slices, totalSeconds } : row);
+    const { container } = renderWeekDashboard({ rows, totalSeconds });
+    const bar = container.querySelector<HTMLElement>(".week-v2-side-card--weekly-breakdown .wt-bar")!;
+    const segments = Array.from(bar.querySelectorAll<HTMLElement>(".wt-seg"));
+
+    // The real chart uses column-reverse: its last DOM segment is visually on top.
+    expect(segments.map((segment) => segment.getAttribute("aria-label")?.split(" · ")[0]))
+      .toEqual(["Wed Workspace", "Wed Learning", "Wed Unclassified"]);
+    expect(segments.map((segment) => Number.parseFloat(segment.style.height)))
+      .toEqual([3600, 1800, unknownSeconds].map((seconds) => Number(((seconds / totalSeconds) * 100).toFixed(2))));
+    expect(Number.parseFloat(bar.style.height)).toBe(93);
+    expect(slices).toEqual(originalSlices);
+  });
+
   it("follows the controlled sideOpen prop and reports toggles to the owner", () => {
     const onToggleSide = vi.fn();
     const { container } = renderWeekDashboard({ sideOpen: false, onToggleSide });
