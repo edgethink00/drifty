@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-finish-fullscreen-intervention"
+description = "Enables the pet_mode_finish_fullscreen_intervention command without any pre-configured scope."
+commands.allow = ["pet_mode_finish_fullscreen_intervention"]
+
+[[permission]]
+identifier = "deny-pet-mode-finish-fullscreen-intervention"
+description = "Denies the pet_mode_finish_fullscreen_intervention command without any pre-configured scope."
+commands.deny = ["pet_mode_finish_fullscreen_intervention"]

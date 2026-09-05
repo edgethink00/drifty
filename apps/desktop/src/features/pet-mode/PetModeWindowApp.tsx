@@ -21,6 +21,7 @@ import {
   listenToNativePetModeEvent,
   listenToNativePetModeLabStateRequest,
   moveNativePetToTarget,
+  finishNativePetFullscreenIntervention,
   probeNativePetAxSeat,
   prepareNativePetOutingHunt,
   reconcileNativePetPosition,
@@ -245,6 +246,7 @@ export function PetModeWindowApp() {
   // lets focus preserve deliberate Lab previews without allowing an automatic
   // nudge to retain motion ownership.
   const automaticInterventionRef = useRef(false);
+  const interventionSceneRef = useRef<{ id: string; token: number } | null>(null);
   // The action token says only that ownership changed. These refs retain why an
   // automatic intervention lost ownership so a focus transition or renderer
   // failure can never impersonate the one destructive-action veto the user
@@ -1074,6 +1076,7 @@ export function PetModeWindowApp() {
 
   const playIntervention = useCallback(async (target: PetModeInterventionTarget) => {
     const token = ++actionTokenRef.current;
+    interventionSceneRef.current = { id: target.id, token };
     let movedToTarget = false;
     let contacted = false;
     let terminalContactReported = false;
@@ -1155,6 +1158,7 @@ export function PetModeWindowApp() {
       technicalFailure = true;
       throw error;
     } finally {
+      if (interventionSceneRef.current?.token === token) interventionSceneRef.current = null;
       // Report exactly one terminal non-contact result. The old blanket
       // `user_intercepted` fallback also covered focus changes, native movement
       // errors, and the already-reported target-unavailable branch. That both
@@ -1168,7 +1172,7 @@ export function PetModeWindowApp() {
             : technicalFailure
               ? "renderer_intervention_failed"
               : "renderer_action_cancelled";
-        void reportNativePetContact(target.id, false, reason).catch(() => undefined);
+        await reportNativePetContact(target.id, false, reason).catch(() => undefined);
       }
       if (userInterceptedInterventionTokenRef.current === token) {
         userInterceptedInterventionTokenRef.current = null;
@@ -1176,8 +1180,11 @@ export function PetModeWindowApp() {
       if (contextChangedInterventionTokenRef.current === token) {
         contextChangedInterventionTokenRef.current = null;
       }
+      const fullscreenReturnHandled = await finishNativePetFullscreenIntervention(
+        target.id, token !== actionTokenRef.current,
+      ).catch(() => false);
       if (token !== actionTokenRef.current) return;
-      if (movedToTarget) {
+      if (movedToTarget && !fullscreenReturnHandled) {
         // Every real successful close earns the E04 face for the walk home.
         // Approaches, failed contacts, generic previews, and Show Pet stay
         // neutral.
@@ -1566,6 +1573,17 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
         return;
       }
+      if (event.kind === "fullscreen_beat") {
+        const scene = interventionSceneRef.current;
+        if (scene?.id === event.id
+          && scene.token === actionTokenRef.current
+          && activeLabActionRef.current === "intervention"
+          && petModeEnabledRef.current
+          && !manualDragRef.current) {
+          commitPhase(event.phase === "pause" ? "idle" : "notice");
+        }
+        return;
+      }
       if (event.kind === "facing") {
         commitFacing(event.facing);
         return;
@@ -1597,7 +1615,7 @@ export function PetModeWindowApp() {
         // Focus mode blocks autonomous wandering, but an AX safety correction
         // still needs to look like the cat noticed the obstruction and walked
         // away. Native marks only that bounded move with `seat_correction`.
-        if (focusRestingRef.current && !isSeatCorrection) return;
+        if (focusRestingRef.current && !isSeatCorrection && !automaticInterventionRef.current) return;
         if (event.motion === "entry") {
           // Native cancellation normally prevents stale entry events after the
           // toggle turns off. Re-check the shared setting here as a webview-side

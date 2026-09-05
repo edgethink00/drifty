@@ -147,6 +147,8 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         script = accessibility_address_bar_script("Safari")
 
         self.assertIn("UI element 3 of UI element 3 of toolbar 1 of targetWindow", script)
+        self.assertIn("text field 1 of group 3 of toolbar 1 of targetWindow", script)
+        self.assertLess(script.index("UI element 3 of UI element 3"), script.index("text field 1 of group 3"))
         self.assertNotIn("entire contents", script)
         self.assertNotIn('tell application "Safari"', script)
 
@@ -250,6 +252,31 @@ class BrowserAutomationDiagnosticsTests(unittest.TestCase):
         self.assertEqual(result.match_state, "accessibility-address-bar")
         self.assertEqual(result.browser_automation_status, "granted")
         mock_run.assert_called_once()
+
+    def test_safari_hidden_toolbar_uses_existing_focused_tab_automation(self) -> None:
+        with patch("app.tracker.macos_workspace._run_osascript", side_effect=[
+            "AX_NO_ADDRESS_FIELD", "https://example.com/current\nCurrent tab\nmatched\nCurrent tab",
+        ]) as run:
+            result = _browser_metadata("Safari")
+        self.assertEqual(result.site_url, "https://example.com/current")
+        self.assertEqual(result.site_domain, "example.com")
+        self.assertEqual(run.call_count, 2)
+        self.assertIn('tell application "Safari"', run.call_args_list[1].args[0])
+
+    def test_safari_readable_toolbar_does_not_request_tab_automation(self) -> None:
+        with patch("app.tracker.macos_workspace._run_osascript", return_value="example.com/current\nCurrent tab") as run:
+            result = _browser_metadata("Safari")
+        self.assertEqual(result.site_domain, "example.com")
+        self.assertEqual(run.call_count, 1)
+
+    def test_safari_hidden_toolbar_reports_denied_automation(self) -> None:
+        with patch("app.tracker.macos_workspace._run_osascript", side_effect=[
+            "AX_NO_ADDRESS_FIELD", RuntimeError("Not authorized to send Apple events to Safari. (-1743)"),
+            "AX_NO_ADDRESS_FIELD",
+        ]):
+            result = _browser_metadata("Safari")
+        self.assertIsNone(result.site_url)
+        self.assertEqual(result.browser_automation_status, "denied")
 
     def test_safari_technology_preview_uses_ax_address_bar_capture_directly(self) -> None:
         with patch(

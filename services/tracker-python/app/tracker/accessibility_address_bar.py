@@ -97,10 +97,19 @@ def accessibility_address_bar_script(app_name: str) -> str:
                 try
                   set addressField to UI element 3 of UI element 3 of toolbar 1 of targetWindow
                   set currentUrl to value of addressField as text
-                  if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
+                  if currentUrl is "" or currentUrl is "missing value" then error "Address field unavailable"
                   return currentUrl & linefeed & axTitle
                 on error
-                  return "{AX_NO_ADDRESS_FIELD}"
+                  -- Safari 17 exposes the address field directly in the third
+                  -- toolbar group; the third generic child is the reload button.
+                  try
+                    set addressField to text field 1 of group 3 of toolbar 1 of targetWindow
+                    set currentUrl to value of addressField as text
+                    if currentUrl is "" or currentUrl is "missing value" then return "{AX_NO_ADDRESS_FIELD}"
+                    return currentUrl & linefeed & axTitle
+                  on error
+                    return "{AX_NO_ADDRESS_FIELD}"
+                  end try
                 end try
               end tell
             end tell

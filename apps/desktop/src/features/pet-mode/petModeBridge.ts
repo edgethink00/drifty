@@ -337,7 +337,10 @@ export async function listenToNativePetModeLabStateRequest(
 export async function moveNativePetToTarget(
   target: PetModeInterventionTarget,
 ): Promise<PetModeResolvedTarget> {
-  return invoke<PetModeResolvedTarget>("pet_mode_move_to_target", { target });
+  return invoke<PetModeResolvedTarget>("pet_mode_move_to_target", {
+    target,
+    reducedMotion: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false,
+  });
 }
 
 export async function alignNativePetContact(request: {
@@ -719,4 +722,14 @@ export async function listenToNativePetQuickControlsState(
   return listen<unknown>("pet-quick-controls-state", ({ payload }) => {
     if (isPetQuickControlsStatePayload(payload)) onState(payload);
   });
+}
+
+export async function finishNativePetFullscreenIntervention(id: string, interrupted: boolean): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("pet_mode_finish_fullscreen_intervention", { id, interrupted });
+}
+
+export async function completeNativePetFullscreenClose(id: string): Promise<void> {
+  if (!isTauriRuntime()) return;
+  await invoke("pet_mode_complete_fullscreen_close", { id });
 }

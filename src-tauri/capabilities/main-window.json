@@ -151,6 +151,7 @@
     "allow-pet-mode-set-floor-home",
     "allow-pet-mode-update",
     "allow-pet-mode-intervene",
+    "allow-pet-mode-complete-fullscreen-close",
     "allow-pet-mode-preview-intervention",
     "allow-pet-mode-preview-action",
     "allow-pet-mode-lab-apply-target",

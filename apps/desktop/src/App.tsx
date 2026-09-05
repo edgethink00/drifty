@@ -312,6 +312,7 @@ import {
   listenToNativePetVisibilityAction,
   placeNativePetModeAtCenterForLab,
   playNativePetModeIntervention,
+  completeNativePetFullscreenClose,
   previewNativePetModeAction,
   previewNativePetModeIntervention,
   setNativePetModeEnabled,
@@ -5218,10 +5219,12 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
+      let petInterventionId: string | null = null;
       const runExtremeNudge = async () => {
         if (petModeActive) {
+          petInterventionId = `${alertKey}:pet:${crypto.randomUUID()}`;
           const intervention = await playNativePetModeIntervention(buildPetModeInterventionTarget({
-            id: alertKey,
+            id: petInterventionId,
             appName: segment.appName,
             browserName: segment.browserName,
           }));
@@ -5281,6 +5284,7 @@ export default function App() {
         }));
       };
       void runExtremeNudge().then(async (result) => {
+        if (petInterventionId) await completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
@@ -5344,6 +5348,7 @@ export default function App() {
           }, 120);
         }
       }).catch((error) => {
+        if (petInterventionId) void completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
         const failure = getExtremeNudgeFailure(error);
         console.warn("Failed to apply extreme nudge", failure.code);
         recordDriftAlarmDebugEvent({

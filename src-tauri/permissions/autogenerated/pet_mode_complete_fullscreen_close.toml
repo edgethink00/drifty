@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-pet-mode-complete-fullscreen-close"
+description = "Enables the pet_mode_complete_fullscreen_close command without any pre-configured scope."
+commands.allow = ["pet_mode_complete_fullscreen_close"]
+
+[[permission]]
+identifier = "deny-pet-mode-complete-fullscreen-close"
+description = "Denies the pet_mode_complete_fullscreen_close command without any pre-configured scope."
+commands.deny = ["pet_mode_complete_fullscreen_close"]

@@ -136,6 +136,8 @@ fn main() {
             "pet_mode_report_contact",
             "pet_mode_report_pointer",
             "pet_mode_return_home",
+            "pet_mode_finish_fullscreen_intervention",
+            "pet_mode_complete_fullscreen_close",
             "pet_mode_set_presence",
             "pet_mode_set_interactive",
             "pet_mode_cursor_inside",

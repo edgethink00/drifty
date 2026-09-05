@@ -38,6 +38,9 @@ use super::pet_panel::{
 #[cfg(target_os = "macos")]
 #[path = "pet_mode_native_ax.rs"]
 mod pet_mode_native_ax;
+#[cfg(target_os = "macos")]
+#[path = "pet_fullscreen.rs"]
+mod pet_fullscreen;
 
 pub const PET_MODE_WINDOW_LABEL: &str = "pet-mode";
 // Keep the approved 60% cat scale, but include the F12 action's transparent
@@ -659,6 +662,8 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
     .build()?;
 
     configure_pet_panel(&window)?;
+    #[cfg(target_os = "macos")]
+    pet_fullscreen::monitor_resident_visibility(app.handle().clone());
     install_pet_hit_region_monitor(app.handle())
         .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
     let hit_region_window = window.clone();
@@ -695,6 +700,8 @@ pub fn pet_mode_set_enabled(
     reset_anchor_clear_confirmation();
 
     if !enabled {
+        #[cfg(target_os = "macos")]
+        pet_fullscreen::clear(&app);
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
         PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
         cancel_pet_motion();
@@ -1010,6 +1017,8 @@ pub fn pet_mode_visibility_action(
     );
 
     if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
+        #[cfg(target_os = "macos")]
+        pet_fullscreen::clear(&app);
         PET_MODE_ENABLED.store(false, Ordering::Relaxed);
         PET_MODE_ENTRY_ACTIVE.store(false, Ordering::Relaxed);
         cancel_pet_motion();
@@ -1125,8 +1134,11 @@ pub fn pet_mode_cancel_motion(app: AppHandle) -> Result<(), String> {
 pub async fn pet_mode_move_to_target(
     app: AppHandle,
     target: PetModeInterventionTarget,
+    reduced_motion: Option<bool>,
 ) -> Result<PetModeResolvedTarget, String> {
-    async_runtime::spawn_blocking(move || move_pet_to_target(&app, &target))
+    async_runtime::spawn_blocking(move || {
+        move_pet_to_target(&app, &target, reduced_motion.unwrap_or(false))
+    })
         .await
         .map_err(|error| error.to_string())?
 }
@@ -1259,6 +1271,12 @@ pub fn pet_mode_report_contact(
     contacted: Option<bool>,
     reason: Option<String>,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        if !pet_fullscreen::accept_contact(&id, contacted.unwrap_or(true)) {
+            return Ok(());
+        }
+    }
     if let Some(main) = app.get_webview_window("main") {
         main.emit(
             "pet-mode-contact",
@@ -1284,6 +1302,31 @@ pub fn pet_mode_report_pointer(app: AppHandle) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn pet_mode_complete_fullscreen_close(id: String) {
+    #[cfg(target_os = "macos")]
+    pet_fullscreen::close_completed(&id);
+    #[cfg(not(target_os = "macos"))]
+    let _ = id;
+}
+
+#[tauri::command]
+pub async fn pet_mode_finish_fullscreen_intervention(
+    app: AppHandle,
+    id: String,
+    interrupted: bool,
+) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    return async_runtime::spawn_blocking(move || pet_fullscreen::finish(&app, &id, interrupted))
+        .await
+        .map_err(|error| error.to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, id, interrupted);
+        Ok(false)
+    }
 }
 
 #[tauri::command]
@@ -2232,6 +2275,7 @@ fn probe_current_pet_ax_seat(
 fn move_pet_to_target(
     app: &AppHandle,
     target: &PetModeInterventionTarget,
+    _reduced_motion: bool,
 ) -> Result<PetModeResolvedTarget, String> {
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
@@ -2243,6 +2287,16 @@ fn move_pet_to_target(
     }
     if target.lab_target == Some(PetModeLabTargetKind::BrowserTabX) {
         activate_lab_target_app(&target.app_name)?;
+    }
+    #[cfg(target_os = "macos")]
+    if target.lab_target.is_none() {
+        if let Some(frame) = pet_mode_native_ax::fullscreen_target_frame(
+            &target.app_name, target.browser_name.as_deref(),
+        ) {
+            return pet_fullscreen::approach(
+                app, &window, target, frame, _reduced_motion,
+            );
+        }
     }
     let point = if target.lab_target == Some(PetModeLabTargetKind::DriftyWindowX) {
         resolve_drifty_lab_window_close_point(app)?

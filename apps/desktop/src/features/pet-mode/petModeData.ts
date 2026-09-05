@@ -260,6 +260,7 @@ export type PetModeInterventionTarget = {
 export type PetModeWindowEvent =
   | { readonly kind: "snapshot"; readonly snapshot: PetModeSnapshot }
   | { readonly kind: "reveal" }
+  | { readonly kind: "fullscreen_beat"; readonly id: string; readonly phase: "pause" | "notice" }
   | { readonly kind: "facing"; readonly facing: "left" | "right" }
   | {
     readonly kind: "motion";

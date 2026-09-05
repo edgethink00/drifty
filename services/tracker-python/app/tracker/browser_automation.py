@@ -289,7 +289,9 @@ def browser_metadata(app_name: str | None, run_osascript: Callable[[str], str]) 
         "Zen",
     }:
         fallback = _accessibility_address_bar_metadata(app_name, run_osascript)
-        if fallback:
+        # Safari removes its toolbar from AX in full screen. A failed AX
+        # probe must not suppress the existing focused-tab automation path.
+        if fallback and (fallback.site_url or app_name != "Safari"):
             return fallback
 
     script = browser_script(app_name)

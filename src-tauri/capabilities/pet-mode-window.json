@@ -18,6 +18,7 @@
     "allow-pet-mode-report-contact",
     "allow-pet-mode-report-pointer",
     "allow-pet-mode-return-home",
+    "allow-pet-mode-finish-fullscreen-intervention",
     "allow-pet-mode-set-presence",
     "allow-pet-mode-set-interactive",
     "allow-pet-mode-update-hit-region",

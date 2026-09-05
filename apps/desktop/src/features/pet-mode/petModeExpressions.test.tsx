@@ -43,6 +43,7 @@ vi.mock("./petModeBridge", () => ({
   isNativePetCursorInside: vi.fn().mockResolvedValue(false),
   setNativePetQuickControlsVisible: vi.fn().mockResolvedValue(undefined),
   moveNativePetToTarget: bridge.moveNativePetToTarget,
+  finishNativePetFullscreenIntervention: vi.fn().mockResolvedValue(false),
   reportNativePetContact: vi.fn().mockResolvedValue(undefined),
   reportNativePetDragError: vi.fn().mockResolvedValue(undefined),
   reportNativePetModeLabState: vi.fn().mockResolvedValue(undefined),

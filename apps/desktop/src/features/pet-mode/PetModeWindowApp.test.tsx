@@ -132,6 +132,7 @@ const bridge = vi.hoisted(() => ({
   reportNativePetModeLabState: vi.fn().mockResolvedValue(undefined),
   reportNativePetPointer: vi.fn().mockResolvedValue(undefined),
   returnNativePetHome: vi.fn().mockResolvedValue(undefined),
+  finishNativePetFullscreenIntervention: vi.fn().mockResolvedValue(false),
   exitNativePetScreen: vi.fn().mockResolvedValue({ side: "left", generation: 1 }),
   prepareNativePetOutingHunt: vi.fn().mockResolvedValue({ facing: "right" }),
   returnNativePetFromOuting: vi.fn().mockResolvedValue(undefined),
@@ -199,6 +200,7 @@ vi.mock("./petModeBridge", () => ({
   reportNativePetModeLabState: bridge.reportNativePetModeLabState,
   reportNativePetPointer: bridge.reportNativePetPointer,
   returnNativePetHome: bridge.returnNativePetHome,
+  finishNativePetFullscreenIntervention: bridge.finishNativePetFullscreenIntervention,
   exitNativePetScreen: bridge.exitNativePetScreen,
   prepareNativePetOutingHunt: bridge.prepareNativePetOutingHunt,
   returnNativePetFromOuting: bridge.returnNativePetFromOuting,
@@ -253,6 +255,115 @@ describe("PetModeWindowApp", () => {
     window.localStorage.clear();
     vi.unstubAllGlobals();
     delete document.documentElement.dataset.surface;
+  });
+
+  it("shows fullscreen arrival beats only for the active, uninterrupted attempt", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishMove!: (result: object) => void;
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => { finishMove = resolve; }));
+    const { container } = render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "intervention", target: {
+      id: "arrival", appName: "Safari", browserName: "Safari", preview: false,
+    } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    await act(async () => { bridge.eventHandler?.({ kind: "motion", motion: "walk" }); });
+    act(() => bridge.eventHandler?.({ kind: "fullscreen_beat", id: "older", phase: "notice" }));
+    expect(container.querySelector(".pet-mode-cat--walk")).not.toBeNull();
+    await act(async () => { bridge.eventHandler?.({ kind: "fullscreen_beat", id: "arrival", phase: "pause" }); });
+    expect(container.querySelector(".pet-mode-cat--idle")).not.toBeNull();
+    await act(async () => { bridge.eventHandler?.({ kind: "fullscreen_beat", id: "arrival", phase: "notice" }); });
+    expect(container.querySelector(".pet-mode-cat--notice")).not.toBeNull();
+    await act(async () => {
+      dispatchPointer(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." }),
+        "pointerdown", { pointerId: 41, clientX: 60, clientY: 50 });
+      bridge.dragStartHandler?.();
+    });
+    await act(async () => { bridge.eventHandler?.({ kind: "fullscreen_beat", id: "arrival", phase: "notice" }); });
+    expect(container.querySelector(".pet-mode-cat--notice")).toBeNull();
+    await act(async () => {
+      finishMove({ motionOutcome: "cancelled" });
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(bridge.reportNativePetContact).not.toHaveBeenCalledWith("arrival");
+  });
+
+  it("finishes the full-screen scene after paw contact without running the ordinary return twice", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.finishNativePetFullscreenIntervention.mockResolvedValueOnce(true);
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "intervention", target: {
+      id: "fullscreen-contact", appName: "Safari", browserName: "Safari", preview: false,
+    } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("fullscreen-contact");
+    expect(bridge.finishNativePetFullscreenIntervention).toHaveBeenCalledWith("fullscreen-contact", false);
+    expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+  });
+
+  it("preserves a pickup after contact when fullscreen cleanup starts", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let acknowledgeContact!: () => void;
+    bridge.reportNativePetContact.mockImplementationOnce(() => new Promise<void>((resolve) => { acknowledgeContact = resolve; }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "intervention", target: {
+      id: "pickup-after-contact", appName: "Safari", browserName: "Safari", preview: false,
+    } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("pickup-after-contact");
+    await act(async () => { dispatchPointer(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." }), "pointerdown", { pointerId: 42, clientX: 60, clientY: 50 }); bridge.dragStartHandler?.(); });
+    await act(async () => { acknowledgeContact(); await vi.advanceTimersByTimeAsync(1000); });
+    expect(bridge.finishNativePetFullscreenIntervention).toHaveBeenCalledWith("pickup-after-contact", true);
+    expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+  });
+
+  it("delivers a catch result before retiring the fullscreen attempt", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishMove!: (result: object) => void;
+    let acknowledgeCatch!: () => void;
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => { finishMove = resolve; }));
+    bridge.reportNativePetContact.mockImplementationOnce(() => new Promise<void>((resolve) => { acknowledgeCatch = resolve; }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "intervention", target: {
+      id: "pending-catch", appName: "Safari", browserName: "Safari", preview: false,
+    } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); dispatchPointer(screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." }), "pointerdown", { pointerId: 42, clientX: 60, clientY: 50 }); bridge.dragStartHandler?.(); });
+    await act(async () => { finishMove({ motionOutcome: "cancelled" }); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("pending-catch", false, "user_intercepted");
+    expect(bridge.finishNativePetFullscreenIntervention).not.toHaveBeenCalled();
+    await act(async () => { acknowledgeCatch(); });
+    expect(bridge.finishNativePetFullscreenIntervention).toHaveBeenCalledWith("pending-catch", true);
   });
 
   it("rechecks the resident seat when the opaque app/window revision changes", async () => {

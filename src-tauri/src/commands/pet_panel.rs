@@ -225,7 +225,9 @@ fn pet_stroke_detected(samples: &[PetShakeSample]) -> bool {
 pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
     use objc2::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
     use objc2::sel;
-    use objc2_app_kit::{NSColor, NSStatusWindowLevel, NSWindow, NSWindowStyleMask};
+    use objc2_app_kit::{
+        NSColor, NSStatusWindowLevel, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask,
+    };
     use objc2_foundation::NSRect;
     use std::ffi::{c_char, c_void};
     use std::sync::OnceLock;
@@ -302,6 +304,10 @@ pub fn configure_pet_panel(window: &WebviewWindow) -> tauri::Result<()> {
     // NSPanel is an NSWindow subclass and retains the same object lifetime.
     let ns_window = unsafe { &*(ns_window.cast::<NSWindow>()) };
     ns_window.setStyleMask(ns_window.styleMask() | NSWindowStyleMask::NonactivatingPanel);
+    // Full-screen presence belongs to the intervention, not resident life.
+    let mut behavior = ns_window.collectionBehavior();
+    behavior.remove(NSWindowCollectionBehavior::FullScreenAuxiliary);
+    ns_window.setCollectionBehavior(behavior);
     ns_window.setLevel(NSStatusWindowLevel);
     // The versioned hit-region controller enables input only under a visible
     // cat pixel. Starting click-through prevents the transparent panel from

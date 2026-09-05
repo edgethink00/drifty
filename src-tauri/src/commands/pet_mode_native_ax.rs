@@ -105,6 +105,33 @@ pub(super) fn resolve_selected_browser_tab_close(
     }
 }
 
+/// Only the targeted, frontmost app can own a full-screen intervention.
+/// AX bounds are global logical points, including displays left of the primary.
+pub(super) fn fullscreen_target_frame(app_name: &str, browser_name: Option<&str>) -> Option<(f64, f64, f64, f64)> {
+    let pid = find_pid_by_app_name(app_name).or_else(|| browser_name.and_then(find_pid_by_app_name))?;
+    if NSWorkspace::sharedWorkspace().frontmostApplication()?.processIdentifier() != pid { return None; }
+    unsafe {
+        let app = AXUIElementCreateApplication(pid);
+        if app.is_null() { return None; }
+        let result = (|| {
+            let window = copy_attribute_value(app, "AXFocusedWindow")?;
+            let result = (|| {
+                let value = copy_attribute_value(window as AXUIElementRef, "AXFullScreen")?;
+                let fullscreen = CFType::wrap_under_create_rule(value)
+                    .downcast_into::<CFBoolean>()
+                    .is_some_and(|value| value == CFBoolean::true_value());
+                if !fullscreen { return None; }
+                let rect = element_frame(window as AXUIElementRef)?;
+                Some((rect.x, rect.y, rect.width, rect.height))
+            })();
+            CFRelease(window);
+            result
+        })();
+        CFRelease(app as CFTypeRef);
+        result
+    }
+}
+
 fn prefers_left_edge_close(app_name: &str, browser_name: Option<&str>) -> bool {
     [Some(app_name), browser_name]
         .into_iter()

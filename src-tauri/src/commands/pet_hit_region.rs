@@ -364,13 +364,26 @@ fn refresh_pet_hit_region_on_main_thread(window: &WebviewWindow) -> Result<(), S
         let mut state = HIT_REGION
             .lock()
             .map_err(|_| "Pet Mode hit-region state is unavailable".to_string())?;
-        let inside = hit_test_physical(
-            &state,
-            local_x,
-            local_y,
-            bounds.size.width,
-            bounds.size.height,
-        );
+        // The fullscreen edge entrance clips the portion on an adjacent
+        // display. Invisible pixels must also pass pointer input through.
+        let inside_mask = content_view
+            .layer()
+            .and_then(|layer| layer.mask())
+            .is_none_or(|mask| {
+                let frame = mask.frame();
+                point.x >= frame.origin.x
+                    && point.x < frame.origin.x + frame.size.width
+                    && point.y >= frame.origin.y
+                    && point.y < frame.origin.y + frame.size.height
+            });
+        let inside = inside_mask
+            && hit_test_physical(
+                &state,
+                local_x,
+                local_y,
+                bounds.size.width,
+                bounds.size.height,
+            );
         // Keep the state lock across the AppKit mutation. A renderer update
         // cannot interleave between the decision and the NSWindow property.
         set_macos_window_interactive(ns_window, inside);

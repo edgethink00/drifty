@@ -186,7 +186,7 @@ class MacosWorkspaceTests(unittest.TestCase):
                 browser_automation_error='Safari accessibility address bar fallback returned an empty result.',
             ),
         )
-        mock_run.assert_called_once()
+        self.assertTrue(any('tell application "Safari"' in call.args[0] for call in mock_run.call_args_list))
 
     def test_browser_metadata_marks_stale_when_frontmost_app_changed(self) -> None:
         with patch('app.tracker.macos_workspace._run_osascript', return_value='STALE') as mock_run:
