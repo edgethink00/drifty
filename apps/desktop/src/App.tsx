@@ -349,6 +349,7 @@ import {
   sendAutomaticCloseOverrideExpiredNotification,
   type AutomaticCloseOverrideKind,
 } from "./features/companion/automaticCloseOverride";
+import { buildPetModeHidePause } from "./features/pet-mode/petModeHidePause";
 import { getDashboardCurrentPeriodLabel, getDashboardPeriodRange, getInsightPeriodRange, getSafeClassificationNavigationDay, shiftDashboardPeriodDay, shiftInsightPeriodDay } from "./features/dashboard/dashboardPeriods";
 import type { ClassificationRange, InsightRange } from "./features/dashboard/dashboardPeriods";
 import { buildActivityRefreshPlan } from "./features/dashboard/activityRefreshPlan";
@@ -795,6 +796,11 @@ export default function App() {
     watcherPeriodicMinMinutes,
   } = useCompanionSettingsController();
   const [automaticCloseOverride, setAutomaticCloseOverride] = useState(resolveInitialAutomaticCloseOverride);
+  // Persist only the committed choice. Writing inside queued updaters can
+  // overwrite a newer explicit choice while leaving React on the newer state.
+  useEffect(() => {
+    persistAutomaticCloseOverride(automaticCloseOverride);
+  }, [automaticCloseOverride]);
   const activeAutomaticCloseOverride = automaticCloseOverride
     && !automaticCloseOverrideIsExpired(automaticCloseOverride)
     ? automaticCloseOverride
@@ -805,21 +811,23 @@ export default function App() {
     activeAutomaticCloseOverride,
   );
   const driftAlertsRuntimeEnabled = driftAlertsEnabled || automaticCloseEnabled;
+  const automaticCloseEnabledRef = useRef(automaticCloseEnabled);
+  automaticCloseEnabledRef.current = automaticCloseEnabled;
   const automaticCloseExpiryHandledRef = useRef<string | null>(null);
   const setTemporaryAutomaticClose = useCallback((enabled: boolean, kind: AutomaticCloseOverrideKind) => {
-    const next = persistAutomaticCloseOverride(buildAutomaticCloseOverride(enabled, kind));
+    const next = buildAutomaticCloseOverride(enabled, kind);
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride(next);
   }, []);
   const restoreSavedAutomaticClose = useCallback(() => {
     automaticCloseExpiryHandledRef.current = null;
-    setAutomaticCloseOverride(persistAutomaticCloseOverride(null));
+    setAutomaticCloseOverride(null);
   }, []);
   const extendTemporaryAutomaticClose = useCallback((extension: "60" | "today") => {
+    automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride((current) => {
       if (!current) return current;
-      automaticCloseExpiryHandledRef.current = null;
-      return persistAutomaticCloseOverride(extendAutomaticCloseOverride(current, extension));
+      return extendAutomaticCloseOverride(current, extension);
     });
   }, []);
   useEffect(() => {
@@ -829,7 +837,6 @@ export default function App() {
       if (!automaticCloseOverrideIsExpired(automaticCloseOverride)) return;
       if (automaticCloseExpiryHandledRef.current === expiryKey) return;
       automaticCloseExpiryHandledRef.current = expiryKey;
-      persistAutomaticCloseOverride(null);
       setAutomaticCloseOverride(null);
       void sendAutomaticCloseOverrideExpiredNotification(
         automaticCloseOverride,
@@ -884,7 +891,15 @@ export default function App() {
   }, []);
 
   const handleHidePetForOneHour = useCallback(() => {
-    setPetModeHiddenUntil(persistPetModeHiddenUntil(Date.now() + PET_MODE_HIDE_ONE_HOUR_MS));
+    const now = Date.now();
+    // Set the guard synchronously: an already-running approach can settle before
+    // React publishes the new override to the next alarm evaluation.
+    automaticCloseEnabledRef.current = false;
+    automaticCloseExpiryHandledRef.current = null;
+    // Native choices can arrive before the preceding state update commits.
+    // Preserve the newest queued pause rather than this render's snapshot.
+    setAutomaticCloseOverride((current) => buildPetModeHidePause(current, now));
+    setPetModeHiddenUntil(persistPetModeHiddenUntil(now + PET_MODE_HIDE_ONE_HOUR_MS));
   }, []);
 
   const handlePetVisibilityAction = useCallback((action: PetVisibilityAction) => {
@@ -5221,6 +5236,9 @@ export default function App() {
       });
       let petInterventionId: string | null = null;
       const runExtremeNudge = async () => {
+        if (!automaticCloseEnabledRef.current) {
+          return { applied: false, diagnostic: "automatic_close_paused" } as const;
+        }
         if (petModeActive) {
           petInterventionId = `${alertKey}:pet:${crypto.randomUUID()}`;
           const intervention = await playNativePetModeIntervention(buildPetModeInterventionTarget({
@@ -5278,6 +5296,9 @@ export default function App() {
           if (postInterventionGateResult !== "confirmed") {
             return { applied: false, diagnostic: "pet_target_changed" } as const;
           }
+        }
+        if (!automaticCloseEnabledRef.current) {
+          return { applied: false, diagnostic: "automatic_close_paused" } as const;
         }
         return applyNativeExtremeNudge(buildExtremeNudgeTarget(segment, {
           forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,

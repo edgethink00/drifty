@@ -93,7 +93,9 @@ describe("PetModeQuickControlsWindowApp", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getAllByText("펫을 1시간 숨겼어요").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("펫 1시간 숨김 · 자동 닫기 일시정지").length).toBeGreaterThan(0);
+    expect(screen.getByRole("status").textContent).toContain("펫 1시간 숨김 · 자동 닫기 일시정지");
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_099);
@@ -118,18 +120,94 @@ describe("PetModeQuickControlsWindowApp", () => {
     });
 
     expect(screen.getByRole("alert").textContent).toContain("바꾸지 못했어요");
-    expect(screen.queryByText("펫을 1시간 숨겼어요")).toBeNull();
+    expect(screen.queryByText("펫 1시간 숨김 · 자동 닫기 일시정지")).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
       await Promise.resolve();
     });
-    expect(screen.getAllByText("펫을 1시간 숨겼어요").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("펫 1시간 숨김 · 자동 닫기 일시정지").length).toBeGreaterThan(0);
     expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_100);
     });
     expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("acknowledgeDismiss");
+  });
+
+  it("starts the hide acknowledgement timer after the native hide finishes", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+    let finishHide!: () => void;
+    bridge.triggerNativePetVisibilityAction.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishHide = resolve;
+    }));
+    render(<PetModeQuickControlsWindowApp />);
+    fireEvent.click(screen.getByRole("button", { name: "Hide pet 1h" }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(screen.queryByText("Pet hidden for 1h · Auto-close paused")).toBeNull();
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalledWith("acknowledgeDismiss");
+
+    await act(async () => { finishHide(); });
+    expect(screen.getByRole("status").textContent).toContain("Pet hidden for 1h · Auto-close paused");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_099); });
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalledWith("acknowledgeDismiss");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledExactlyOnceWith("acknowledgeDismiss");
+  });
+
+  it("does not extend the hide acknowledgement when native state or pointer events arrive", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    render(<PetModeQuickControlsWindowApp />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "펫 1시간 숨김" }));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+    const listenerCalls = bridge.listenToNativePetQuickControlsState.mock.calls;
+    const onState = listenerCalls[listenerCalls.length - 1]?.[0];
+    act(() => {
+      onState?.({
+        automaticCloseEnabled: false,
+        automaticCloseSavedEnabled: true,
+        automaticCloseOverride: { enabled: false, kind: "60", endsAtMs: Date.now() + 3_600_000 },
+        language: "en",
+        theme: "dark",
+      });
+      fireEvent.mouseLeave(screen.getByRole("status"));
+      fireEvent.mouseEnter(screen.getByRole("status"));
+    });
+    expect(screen.getByRole("status").textContent).toContain("Pet hidden for 1h · Auto-close paused");
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    await act(async () => { await vi.advanceTimersByTimeAsync(999); });
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalledWith("acknowledgeDismiss");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledExactlyOnceWith("acknowledgeDismiss");
+  });
+
+  it("cancels the acknowledgement timer when the controls unmount", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+    const { unmount } = render(<PetModeQuickControlsWindowApp />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Hide pet 1h" }));
+    });
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalledWith("acknowledgeDismiss");
+  });
+
+  it("handles a failed acknowledgement dismissal without replaying the hide", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+    bridge.triggerNativePetQuickControlsAction.mockRejectedValueOnce(new Error("dismiss failed"));
+    render(<PetModeQuickControlsWindowApp />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Hide pet 1h" }));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_100); });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledExactlyOnceWith("acknowledgeDismiss");
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("Pet hidden for 1h · Auto-close paused")).toBeNull();
   });
 
   it("keeps native menu presentation single-flight across rapid clicks", async () => {

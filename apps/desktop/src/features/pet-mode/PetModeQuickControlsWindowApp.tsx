@@ -115,7 +115,9 @@ export function PetModeQuickControlsWindowApp() {
   }, [clearAcknowledgeTimer, clearPendingPauseTimer]);
 
   const dismissAfterAcknowledge = useCallback(() => {
-    void triggerNativePetQuickControlsAction("acknowledgeDismiss").finally(() => {
+    // The native hold has its own bounded failsafe. A failed dismissal must not
+    // reject unhandled or replay the already-completed visibility action.
+    void triggerNativePetQuickControlsAction("acknowledgeDismiss").catch(() => undefined).finally(() => {
       setAcknowledgement(null);
       setPhase("idle");
     });
@@ -199,7 +201,7 @@ export function PetModeQuickControlsWindowApp() {
     return () => {
       clearAcknowledgeTimer();
     };
-  }, [clearAcknowledgeTimer, dismissAfterAcknowledge, phase]);
+  }, [acknowledgement, clearAcknowledgeTimer, dismissAfterAcknowledge, phase]);
 
   const runNativeMenu = useCallback(async (
     kind: "automaticClose" | "more",

@@ -36,7 +36,7 @@ describe("petModeQuickControlsCopy", () => {
   });
 
   it("keeps the one-hour hide acknowledgement concise in both languages", () => {
-    expect(copyFor("ko", "pet.quickControls.hideOneHourConfirmed")).toBe("펫을 1시간 숨겼어요");
-    expect(copyFor("en", "pet.quickControls.hideOneHourConfirmed")).toBe("Pet hidden for 1 hour");
+    expect(copyFor("ko", "pet.quickControls.hideOneHourConfirmed")).toBe("펫 1시간 숨김 · 자동 닫기 일시정지");
+    expect(copyFor("en", "pet.quickControls.hideOneHourConfirmed")).toBe("Pet hidden for 1h · Auto-close paused");
   });
 });
