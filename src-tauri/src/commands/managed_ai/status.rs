@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    require_model, runtime, status_artifact_dir, ManagedAiError, ManagedAiInstallState,
-    ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL, MANAGED_MODELS,
+    is_install_active, require_model, runtime, status_artifact_dir, ManagedAiError,
+    ManagedAiInstallState, ManagedAiModelSpec, MANAGED_ASSETS_MISSING_MESSAGE, MANAGED_BASE_URL,
+    MANAGED_MODELS,
 };
 
 const STATUS_FILE_NAME: &str = "status.json";
@@ -203,14 +204,39 @@ pub(super) fn status_with_installed_models(
 
 fn normalize_status_artifact_dir(
     root: &Path,
+    status: ManagedAiStatus,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    normalize_status_with_artifact_lookup(root, status, status_artifact_dir)
+}
+
+pub(super) fn normalize_status_with_artifact_lookup(
+    root: &Path,
     mut status: ManagedAiStatus,
+    artifact_lookup: impl FnOnce(&Path, ManagedAiModelSpec) -> Result<Option<PathBuf>, ManagedAiError>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     if let Some(model_id) = status.selected_model_id.as_deref() {
         let spec = require_model(model_id)?;
-        let artifact_dir = status_artifact_dir(root, spec)?;
+        // Observe ownership before the artifact snapshot: completion may promote
+        // the file and release its guard immediately after an absent-file read.
+        let install_was_active = matches!(status.state, ManagedAiInstallState::Installing)
+            && is_install_active(root, model_id);
+        let artifact_dir = artifact_lookup(root, spec)?;
         status.artifact_dir = artifact_dir
             .as_ref()
             .map(|path| path.to_string_lossy().into_owned());
+        if matches!(status.state, ManagedAiInstallState::Installing) && !install_was_active {
+            status.progress = None;
+            if status.artifact_dir.is_some() {
+                status.state = ManagedAiInstallState::Installed;
+                status.message = "Managed local model downloaded.".to_string();
+                status.error_kind = None;
+            } else {
+                status.state = ManagedAiInstallState::Error;
+                status.message =
+                    "Managed local AI download was interrupted. Try downloading again.".to_string();
+                status.error_kind = Some(ManagedAiStatusErrorKind::DownloadFailed);
+            }
+        }
         if status.artifact_dir.is_none()
             && matches!(
                 status.state,

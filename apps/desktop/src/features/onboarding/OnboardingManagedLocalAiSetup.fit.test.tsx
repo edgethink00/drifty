@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { OnboardingManagedLocalAiSetup } from "./OnboardingManagedLocalAiSetup";
-import type { ManagedLocalAiModel } from "../settings/managedLocalAiClient";
+import { parseManagedLocalAiStatus, type ManagedLocalAiModel } from "../settings/managedLocalAiClient";
 
 const baseModel: ManagedLocalAiModel = {
   id: "drifty-qwen3-5-4b-default",
@@ -56,5 +56,45 @@ describe("OnboardingManagedLocalAiSetup hardware fit", () => {
     expect(within(unsupportedCard).getByText("Needs at least 36 GB of memory — this computer has 16 GB.")).toBeTruthy();
     expect(within(unsupportedCard).getByRole("button", { name: "Download" })).toHaveProperty("disabled", true);
     expect(unsupportedCard.className).toContain("is-unsupported");
+  });
+});
+
+describe("OnboardingManagedLocalAiSetup interrupted download", () => {
+  it("keeps an active download disabled and makes the recovered error retryable", () => {
+    const onInstallModel = vi.fn();
+    const props = {
+      actionModelId: null,
+      catalog: [baseModel],
+      loading: false,
+      onInstallModel,
+    };
+    const { rerender, container } = render(
+      <OnboardingManagedLocalAiSetup
+        {...props}
+        status={parseManagedLocalAiStatus({
+          state: "installing",
+          selectedModelId: baseModel.id,
+          progress: { percent: 42, downloadedBytes: 42, totalBytes: 100 },
+        })}
+      />,
+    );
+    expect(within(container).getByRole("button")).toHaveProperty("disabled", true);
+
+    rerender(
+      <OnboardingManagedLocalAiSetup
+        {...props}
+        status={parseManagedLocalAiStatus({
+          state: "error",
+          selectedModelId: baseModel.id,
+          message: "Managed local AI download was interrupted. Try downloading again.",
+          errorKind: "download_failed",
+          progress: null,
+        })}
+      />,
+    );
+    const retry = within(container).getByRole("button", { name: "Retry" });
+    expect(retry).toHaveProperty("disabled", false);
+    fireEvent.click(retry);
+    expect(onInstallModel).toHaveBeenCalledExactlyOnceWith(baseModel.id);
   });
 });

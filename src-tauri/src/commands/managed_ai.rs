@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{LazyLock, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{async_runtime, AppHandle, Emitter, Manager};
@@ -29,6 +31,9 @@ const MANAGED_BASE_URL: &str = "http://127.0.0.1:39217/v1";
 const MANAGED_ASSETS_MISSING_MESSAGE: &str =
     "Managed local model files are missing. Download again when model assets are available.";
 const MANAGED_AI_STATUS_EVENT: &str = "managed-ai-status";
+
+static ACTIVE_INSTALLS: LazyLock<Mutex<HashMap<PathBuf, ActiveInstall>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -130,12 +135,16 @@ fn install_model_at_root(
     app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    if let Some(status) = model_resource_error_status(root, spec, true, app)? {
-        return Ok(status);
-    }
-    install_model_at_root_with_downloader(root, model_id, download_model_artifact, app)
+    install_model_at_root_with_preflight_and_downloader(
+        root,
+        model_id,
+        || model_resource_error_status(root, spec, true, app),
+        download_model_artifact,
+        app,
+    )
 }
 
+#[cfg(test)]
 fn install_model_at_root_with_downloader(
     root: &Path,
     model_id: &str,
@@ -146,7 +155,48 @@ fn install_model_at_root_with_downloader(
     ) -> Result<PathBuf, ManagedAiError>,
     app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
+    install_model_at_root_with_preflight_and_downloader(
+        root,
+        model_id,
+        || Ok(None),
+        downloader,
+        app,
+    )
+}
+
+fn install_model_at_root_with_preflight_and_downloader(
+    root: &Path,
+    model_id: &str,
+    preflight: impl FnOnce() -> Result<Option<ManagedAiStatus>, ManagedAiError>,
+    downloader: impl FnOnce(
+        &Path,
+        ManagedAiModelSpec,
+        &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+    ) -> Result<PathBuf, ManagedAiError>,
+    app: Option<&AppHandle>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
+    // Own the root before preflight can write a resource error over another
+    // model's in-flight progress. status.json is shared by all local models.
+    let active_install = match ActiveInstallGuard::acquire(root, spec.id) {
+        Ok(guard) => guard,
+        Err(active) if active.status_ready => return read_status(root),
+        Err(active) => {
+            let active_spec = require_model(&active.model_id)?;
+            return status_with_installed_models(
+                root,
+                status_for_spec(
+                    ManagedAiInstallState::Installing,
+                    active_spec,
+                    None,
+                    "Downloading managed local model...",
+                ),
+            );
+        }
+    };
+    if let Some(status) = preflight()? {
+        return Ok(status);
+    }
     let installing = status_with_installed_models(
         root,
         status_for_spec(
@@ -157,6 +207,7 @@ fn install_model_at_root_with_downloader(
         ),
     )?;
     write_and_emit_status(root, &installing, app)?;
+    active_install.mark_status_ready();
 
     let mut progress_gate = DownloadProgressWriteGate::default();
     let mut report_progress = |progress: ManagedAiDownloadProgress| {
@@ -193,6 +244,73 @@ fn install_model_at_root_with_downloader(
     )?;
     write_and_emit_status(root, &status, app)?;
     Ok(status)
+}
+
+#[derive(Clone)]
+struct ActiveInstall {
+    model_id: String,
+    status_ready: bool,
+}
+
+struct ActiveInstallGuard {
+    key: (PathBuf, String),
+}
+
+impl ActiveInstallGuard {
+    fn acquire(root: &Path, model_id: &str) -> Result<Self, ActiveInstall> {
+        let root = root.to_path_buf();
+        let mut active = ACTIVE_INSTALLS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(existing) = active.get(&root) {
+            return Err(existing.clone());
+        }
+        active.insert(
+            root.clone(),
+            ActiveInstall {
+                model_id: model_id.to_string(),
+                status_ready: false,
+            },
+        );
+        Ok(Self {
+            key: (root, model_id.to_string()),
+        })
+    }
+
+    fn mark_status_ready(&self) {
+        let mut active = ACTIVE_INSTALLS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if let Some(install) = active.get_mut(&self.key.0) {
+            if install.model_id == self.key.1 {
+                install.status_ready = true;
+            }
+        }
+    }
+}
+
+impl Drop for ActiveInstallGuard {
+    fn drop(&mut self) {
+        let mut active = ACTIVE_INSTALLS
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let remove = active
+            .get(&self.key.0)
+            .map(|install| install.model_id == self.key.1)
+            .unwrap_or(false);
+        if remove {
+            active.remove(&self.key.0);
+        }
+    }
+}
+
+fn is_install_active(root: &Path, model_id: &str) -> bool {
+    ACTIVE_INSTALLS
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(root)
+        .map(|install| install.model_id == model_id)
+        .unwrap_or(false)
 }
 
 fn write_and_emit_status(

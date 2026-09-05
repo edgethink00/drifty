@@ -311,6 +311,113 @@ fn install_records_downloader_reported_progress_before_marking_installed() {
 }
 
 #[test]
+fn install_reuses_active_root_install_instead_of_starting_another_downloader() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let root_path = root.path().to_path_buf();
+    let first_root = root_path.clone();
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+
+    let first_install = std::thread::spawn(move || {
+        install_model_at_root_with_downloader(
+            &first_root,
+            "drifty-qwen3-5-4b-default",
+            move |download_root, spec, progress| {
+                progress(ManagedAiDownloadProgress::from_counts(
+                    spec.expected_size_bytes / 2,
+                    spec.expected_size_bytes,
+                ))?;
+                started_tx.send(()).expect("signal blocked download");
+                release_rx.recv().expect("release blocked download");
+                fake_download(download_root, spec, progress)
+            },
+            None,
+        )
+        .expect("complete first install")
+    });
+
+    started_rx
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("first downloader started");
+
+    for requested_model_id in ["drifty-qwen3-5-4b-default", "drifty-qwen3-5-2b-economy"] {
+        let duplicate = super::install_model_at_root_with_preflight_and_downloader(
+            &root_path,
+            requested_model_id,
+            || panic!("duplicate preflight must not overwrite active download status"),
+            unexpected_download,
+            None,
+        )
+        .expect("reuse active install status");
+
+        assert!(matches!(duplicate.state, ManagedAiInstallState::Installing));
+        assert_eq!(
+            duplicate.selected_model_id.as_deref(),
+            Some("drifty-qwen3-5-4b-default")
+        );
+        assert_eq!(
+            duplicate.progress.as_ref().map(|progress| progress.percent),
+            Some(50)
+        );
+    }
+
+    release_tx.send(()).expect("release first download");
+    let installed = first_install.join().expect("join first install");
+    assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    assert_eq!(
+        installed_model_ids(&installed),
+        vec!["drifty-qwen3-5-4b-default"]
+    );
+}
+
+#[test]
+fn duplicate_during_preflight_preserves_owner_before_status_is_written() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let owner = require_model("drifty-qwen3-5-4b-default").expect("owner spec");
+    let previous = require_model("drifty-qwen3-5-2b-economy").expect("previous spec");
+    let stale = super::status_for_model_error(
+        previous,
+        None,
+        "Previous download failed",
+        ManagedAiStatusErrorKind::DownloadFailed,
+    );
+    write_status(root.path(), &stale).expect("write previous model status");
+
+    let installed = super::install_model_at_root_with_preflight_and_downloader(
+        root.path(),
+        owner.id,
+        || {
+            for requested_model in [owner.id, previous.id] {
+                let duplicate = super::install_model_at_root_with_preflight_and_downloader(
+                    root.path(),
+                    requested_model,
+                    || panic!("duplicate request must not run preflight"),
+                    unexpected_download,
+                    None,
+                )?;
+                assert!(matches!(duplicate.state, ManagedAiInstallState::Installing));
+                assert_eq!(duplicate.selected_model_id.as_deref(), Some(owner.id));
+                assert!(duplicate.error_kind.is_none());
+                assert!(duplicate.progress.is_none());
+            }
+            // The duplicate response must not overwrite persisted status while
+            // the owner is still deciding whether its preflight can succeed.
+            let persisted = read_status(root.path())?;
+            assert_eq!(persisted.selected_model_id.as_deref(), Some(previous.id));
+            assert!(matches!(persisted.state, ManagedAiInstallState::Error));
+            Ok(None)
+        },
+        fake_download,
+        None,
+    )
+    .expect("finish owner install");
+
+    assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    assert_eq!(installed.selected_model_id.as_deref(), Some(owner.id));
+    assert!(!super::is_install_active(root.path(), owner.id));
+}
+
+#[test]
 fn install_tracks_multiple_downloaded_models() {
     let root = tempfile::tempdir().expect("create temp root");
     install_model_at_root_with_downloader(
@@ -378,6 +485,145 @@ fn read_status_downgrades_stale_installed_empty_model_dir() {
         Some(ManagedAiStatusErrorKind::ModelArtifactMissing)
     ));
     assert_eq!(status.message, MANAGED_ASSETS_MISSING_MESSAGE);
+}
+
+#[test]
+fn read_status_recovers_interrupted_install() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let stale_status =
+        super::status_for_download_progress(spec, ManagedAiDownloadProgress::from_counts(42, 100));
+    write_status(root.path(), &stale_status).expect("write stale status");
+
+    let status = read_status(root.path()).expect("read normalized status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert_eq!(
+        status.selected_model_id.as_deref(),
+        Some("drifty-qwen3-5-4b-default")
+    );
+    assert!(status.artifact_dir.is_none());
+    assert!(status.progress.is_none());
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::DownloadFailed)
+    ));
+    assert_eq!(
+        status.message,
+        "Managed local AI download was interrupted. Try downloading again."
+    );
+
+    let retried = install_model_at_root_with_downloader(root.path(), spec.id, fake_download, None)
+        .expect("retry interrupted install");
+    assert!(matches!(retried.state, ManagedAiInstallState::Installed));
+}
+
+#[test]
+fn failed_preflight_and_download_release_install_for_retry() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let blocked = super::install_model_at_root_with_preflight_and_downloader(
+        root.path(),
+        spec.id,
+        || {
+            let status = super::status_for_model_error(
+                spec,
+                None,
+                "Not enough free storage",
+                ManagedAiStatusErrorKind::InsufficientStorage,
+            );
+            write_status(root.path(), &status)?;
+            Ok(Some(status))
+        },
+        unexpected_download,
+        None,
+    )
+    .expect("preflight failure status");
+    assert!(matches!(
+        blocked.error_kind,
+        Some(ManagedAiStatusErrorKind::InsufficientStorage)
+    ));
+    assert!(!super::is_install_active(root.path(), spec.id));
+
+    let failed =
+        install_model_at_root_with_downloader(root.path(), spec.id, failing_download, None)
+            .expect("download failure status");
+    assert!(matches!(
+        failed.error_kind,
+        Some(ManagedAiStatusErrorKind::DownloadFailed)
+    ));
+    assert!(!super::is_install_active(root.path(), spec.id));
+
+    let retried = install_model_at_root_with_downloader(root.path(), spec.id, fake_download, None)
+        .expect("retry failed install");
+    assert!(matches!(retried.state, ManagedAiInstallState::Installed));
+    assert!(!super::is_install_active(root.path(), spec.id));
+}
+
+#[test]
+fn status_read_during_install_completion_does_not_report_interruption() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let active = super::ActiveInstallGuard::acquire(root.path(), spec.id)
+        .unwrap_or_else(|_| panic!("acquire install ownership"));
+    let installing = super::status_for_download_progress(
+        spec,
+        ManagedAiDownloadProgress::from_counts(90, 100),
+    );
+
+    let status = super::status::normalize_status_with_artifact_lookup(
+        root.path(),
+        installing,
+        |root, spec| {
+            let observed_artifact = super::status_artifact_dir(root, spec)?;
+            assert!(observed_artifact.is_none());
+            // Complete the download after the reader observed no final file,
+            // but before it can interpret that snapshot as an interruption.
+            let artifact = fake_download(root, spec, &mut |_| Ok(()))?;
+            write_status(
+                root,
+                &status_for_spec(
+                    ManagedAiInstallState::Installed,
+                    spec,
+                    Some(artifact),
+                    "Managed local model downloaded.",
+                ),
+            )?;
+            drop(active);
+            Ok(observed_artifact)
+        },
+    )
+    .expect("read during completion");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Installing));
+    assert!(status.error_kind.is_none());
+    let next = read_status(root.path()).expect("read completed install");
+    assert!(matches!(next.state, ManagedAiInstallState::Installed));
+}
+
+#[test]
+fn read_status_finishes_interrupted_install_when_artifact_was_promoted() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write artifact");
+    let stale_status = status_for_spec(
+        ManagedAiInstallState::Installing,
+        spec,
+        None,
+        "Downloading managed local model... (100%)",
+    );
+    write_status(root.path(), &stale_status).expect("write stale status");
+
+    let status = read_status(root.path()).expect("read normalized status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert_eq!(
+        status.artifact_dir.as_deref(),
+        Some(artifact_dir.to_string_lossy().as_ref())
+    );
+    assert!(status.progress.is_none());
+    assert!(status.error_kind.is_none());
+    assert_eq!(status.message, "Managed local model downloaded.");
 }
 
 #[test]
@@ -520,6 +766,14 @@ fn installed_model_ids(status: &super::ManagedAiStatus) -> Vec<&str> {
         .collect::<Vec<_>>();
     ids.sort_unstable();
     ids
+}
+
+fn unexpected_download(
+    _root: &Path,
+    _spec: ManagedAiModelSpec,
+    _progress: &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+) -> Result<PathBuf, ManagedAiError> {
+    panic!("duplicate install must not start another downloader")
 }
 
 fn failing_download(
