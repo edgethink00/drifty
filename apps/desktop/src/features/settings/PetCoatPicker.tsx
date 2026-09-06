@@ -5,11 +5,10 @@ import {
   type PetModeCoat,
   type PetModeSize,
 } from "../pet-mode/petModeData";
-import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 
-// The pet's user-facing settings, shown in Companion & Alerts. Visibility is
+// The pet's user-facing settings, shown in Desktop pet. Visibility is
 // also toggleable from the account menu; both write the same stored value.
 export function PetSettings({
   enabled,
@@ -18,9 +17,6 @@ export function PetSettings({
   onCoatChange,
   size,
   onSizeChange,
-  automaticCloseEnabled,
-  automaticClosePrerequisiteMissing,
-  onAutomaticCloseChange,
 }: {
   readonly enabled: boolean;
   readonly onEnabledChange: (enabled: boolean) => void;
@@ -28,14 +24,11 @@ export function PetSettings({
   readonly onCoatChange: (coat: PetModeCoat) => void;
   readonly size: PetModeSize;
   readonly onSizeChange: (size: PetModeSize) => void;
-  readonly automaticCloseEnabled: boolean;
-  readonly automaticClosePrerequisiteMissing: boolean;
-  readonly onAutomaticCloseChange: (enabled: boolean) => void;
 }) {
   const { t } = useLocalization();
   return (
     <>
-      <div className="settings-row settings-row--pet-mode" role="group" aria-label={t("settings.pet.title")}>
+      <div className="settings-row settings-row--pet-mode settings-row--group-start" role="group" aria-label={t("settings.pet.title")}>
         <div>
           {/* The block heading already says "Desktop pet"; this row names the
               action, matching "Drift alerts / Show drift alerts" next door and
@@ -47,21 +40,7 @@ export function PetSettings({
           <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel={t("settings.pet.toggleAria")} />
         </div>
       </div>
-      <AutomaticCloseSettingsRow
-        checked={automaticCloseEnabled}
-        prerequisiteMissing={automaticClosePrerequisiteMissing}
-        onChange={onAutomaticCloseChange}
-        availableDescription={enabled
-          ? t("settings.pet.automaticCloseOnDescription")
-          : t("settings.pet.automaticClosePetOffDescription")}
-        prerequisiteDescription={t("settings.pet.automaticCloseOffDescription")}
-        toggleAriaLabel={t("settings.pet.toggleAutomaticClose")}
-        className="settings-row--pet-automatic-close"
-      />
-      {/* Kept visible but inert while the pet is off, matching how Automatic
-          close dims under Drift alerts. Hiding them made the block change
-          height on every toggle and hid the fact that a coat is already
-          chosen. */}
+      {/* Preserve the chosen appearance while the pet is off. */}
       <PetCoatPicker value={coat} onChange={onCoatChange} disabled={!enabled} />
       <PetSizePicker value={size} onChange={onSizeChange} disabled={!enabled} />
     </>
@@ -172,7 +151,7 @@ function localizedPetCoatLabel(
 // swatch masks a solid fill with that exact bitmap: the silhouette is pixel
 // identical to the real pet, and the fill follows each coat's fur token. The
 // face is drawn on top from the same frame's ink positions.
-function PetCoatSwatchCat() {
+export function PetCoatSwatchCat() {
   return (
     <span className="pet-coat-swatch__cat" aria-hidden="true">
       <span className="pet-coat-swatch__body" />

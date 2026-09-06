@@ -123,6 +123,7 @@ import { DevSettingsSection } from "./features/settings/DevSettingsSection";
 import { DeveloperSettingsSection } from "./features/settings/DeveloperSettingsSection";
 import { GeneralSettingsSection } from "./features/settings/GeneralSettingsSection";
 import type { AppThemeColorKey } from "./features/settings/SettingsColorControls";
+import { PetSettingsSection } from "./features/settings/PetSettingsSection";
 import { NotificationsSettingsSection } from "./features/settings/NotificationsSettingsSection";
 import { PermissionsSettingsSection } from "./features/settings/PermissionsSettingsSection";
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
@@ -831,6 +832,14 @@ export default function App() {
   const automaticCloseEnabledRef = useRef(automaticCloseEnabled);
   automaticCloseEnabledRef.current = automaticCloseEnabled;
   const automaticCloseExpiryHandledRef = useRef<string | null>(null);
+  const handleAutomaticCloseSettingsChange = useCallback((enabled: boolean) => {
+    // A direct Settings choice replaces any temporary quick-control override.
+    automaticCloseEnabledRef.current = enabled;
+    automaticCloseExpiryHandledRef.current = null;
+    setAutomaticCloseOverride(null);
+    if (enabled) setDriftAlertsEnabled(true);
+    setExtremeNudgeEnabled(enabled);
+  }, [setDriftAlertsEnabled, setExtremeNudgeEnabled]);
   const setTemporaryAutomaticClose = useCallback((enabled: boolean, kind: AutomaticCloseOverrideKind) => {
     const next = buildAutomaticCloseOverride(enabled, kind);
     automaticCloseEnabledRef.current = enabled;
@@ -875,7 +884,7 @@ export default function App() {
     };
   }, [automaticCloseOverride, automaticCloseSavedEnabled, localization.effectiveLanguage]);
   // No Dev gate: the pet ships as a production surface and is controlled from
-  // the account menu and Companion settings.
+  // the account menu and Desktop pet settings.
   const [petModeHiddenUntil, setPetModeHiddenUntil] = useState(resolveInitialPetModeHiddenUntil);
   const clearPetModeTemporaryHide = useCallback(() => {
     setPetModeHiddenUntil((hiddenUntil) => (
@@ -1218,6 +1227,11 @@ export default function App() {
   }, [navigateToTab]);
   const openCompanionNotificationSettings = useCallback(() => {
     setSettingsSection("notifications");
+    navigateToTab("settings");
+    setAccountMenuOpen(false);
+  }, [navigateToTab]);
+  const openPetSettings = useCallback(() => {
+    setSettingsSection("pet");
     navigateToTab("settings");
     setAccountMenuOpen(false);
   }, [navigateToTab]);
@@ -6549,7 +6563,7 @@ export default function App() {
         return;
       }
       if (action === "openSettings") {
-        openCompanionNotificationSettings();
+        openPetSettings();
         return;
       }
       const temporaryActions: Partial<Record<typeof action, readonly [boolean, AutomaticCloseOverrideKind]>> = {
@@ -6594,7 +6608,7 @@ export default function App() {
     extendTemporaryAutomaticClose,
     handlePetVisibilityAction,
     navigateToTab,
-    openCompanionNotificationSettings,
+    openPetSettings,
     restoreSavedAutomaticClose,
     setDriftAlertsEnabled,
     setExtremeNudgeEnabled,
@@ -9906,25 +9920,33 @@ export default function App() {
                     onStartCloudSetup={handleStartDriftyCloudSetup}
                   />
                 )}
+                {settingsSection === "pet" && (
+                  <PetSettingsSection
+                    enabled={petModeEnabled}
+                    coat={petModeCoat}
+                    size={petModeSize}
+                    automaticCloseEnabled={automaticCloseEnabled}
+                    driftAlertsEnabled={driftAlertsEnabled}
+                    onAutomaticCloseChange={handleAutomaticCloseSettingsChange}
+                    showNewBadge={featureNewBadges.showPet}
+                    onEnabledChange={requestPetModeEnabled}
+                    onCoatChange={setPetModeCoat}
+                    onSizeChange={setPetModeSize}
+                    onOpenAlerts={openCompanionNotificationSettings}
+                  />
+                )}
                 {settingsSection === "notifications" && (
                   <NotificationsSettingsSection
                     companionHiddenUntil={companionHiddenUntil}
-                    petModeEnabled={petModeEnabled}
-                    petModeCoat={petModeCoat}
-                    petModeSize={petModeSize}
-                    showPetNewBadge={featureNewBadges.showPet}
-                    onPetModeEnabledChange={requestPetModeEnabled}
-                    onPetModeCoatChange={setPetModeCoat}
-                    onPetModeSizeChange={setPetModeSize}
                     companionSurfacePolicy={companionSurfacePolicy}
                     driftAlertDelaySeconds={driftAlertDelaySeconds}
                     driftAlertsEnabled={driftAlertsEnabled}
                     driftAlarmCopy={driftAlarmCopy}
-                    extremeNudgeEnabled={extremeNudgeEnabled}
+                    extremeNudgeEnabled={automaticCloseEnabled}
                     onDriftAlertDelaySecondsChange={setDriftAlertDelaySeconds}
                     onDriftAlarmCopyChange={setDriftAlarmCopy}
                     onDriftAlertsChange={setDriftAlertsEnabled}
-                    onExtremeNudgeChange={setExtremeNudgeEnabled}
+                    onExtremeNudgeChange={handleAutomaticCloseSettingsChange}
                     onHideCompanionForOneHour={handleHideCompanionForOneHour}
                     onShowCompanionNow={handleShowCompanionNow}
                     onCompanionSurfacePolicyChange={handleCompanionSurfacePolicyChange}

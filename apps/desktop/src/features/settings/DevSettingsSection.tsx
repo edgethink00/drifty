@@ -334,12 +334,12 @@ export function DevSettingsSection({
           <div className="settings-block settings-block--dev-preview">
             <h3>Pet Mode Lab</h3>
             {/* The pet itself, its coat, and its size are production settings
-                and live in Companion & Alerts. */}
+                and live in Desktop pet. */}
             <div className="pet-mode-lab" role="group" aria-label="Pet Mode Lab">
               <div className="pet-mode-lab__heading">
                 <div>
                   <div className="lbl">Native behavior harness</div>
-                  <div className="desc">Run production behaviors individually or leave the approved life loop on for observation. Turn the pet on in Companion &amp; Alerts first.</div>
+                  <div className="desc">Run production behaviors individually or leave the approved life loop on for observation. Turn the pet on in Desktop pet first.</div>
                 </div>
                 <span className="pet-mode-lab__status" data-active={petModeEnabled}>{petModeLabStatus}</span>
               </div>

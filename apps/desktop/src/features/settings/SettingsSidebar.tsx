@@ -1,3 +1,4 @@
+import { PetIcon } from "../../components/PetIcon";
 import { useLocalization } from "../localization/LocalizationContext";
 import { Fragment, useRef, useState } from "react";
 import {
@@ -7,7 +8,7 @@ import {
 
 export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
-export type SettingsSection = "account" | "general" | "permissions" | "appearance" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
+export type SettingsSection = "account" | "general" | "permissions" | "appearance" | "pet" | "classification" | "aiSetup" | "notifications" | "privacy" | "developer" | "dev";
 
 const SETTINGS_NAV_GROUPS = [
   {
@@ -15,9 +16,10 @@ const SETTINGS_NAV_GROUPS = [
     labelKey: "settings.sidebar.groupPersonal",
     items: [
       { id: "general", labelKey: "settings.section.general" },
-      { id: "permissions", labelKey: "settings.section.permissions" },
       { id: "appearance", labelKey: "settings.section.appearance" },
+      { id: "pet", labelKey: "settings.pet.title" },
       { id: "notifications", labelKey: "settings.section.notifications" },
+      { id: "permissions", labelKey: "settings.section.permissions" },
       { id: "account", labelKey: "settings.section.account" },
       { id: "privacy", labelKey: "settings.section.privacy" },
     ],
@@ -48,6 +50,8 @@ function SettingsSectionIcon({ section }: { section: SettingsSection }) {
   switch (section) {
     case "general":
       return (<svg {...props}><path d="M4 8h4M14 8h6" /><circle cx="11" cy="8" r="2" /><path d="M4 16h6M16 16h4" /><circle cx="13" cy="16" r="2" /></svg>);
+    case "pet":
+      return <PetIcon />;
     case "permissions":
       return (<svg {...props}><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /><circle cx="12" cy="15" r="1.2" /></svg>);
     case "account":

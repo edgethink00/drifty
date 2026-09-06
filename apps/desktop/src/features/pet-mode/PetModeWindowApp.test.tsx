@@ -51,6 +51,7 @@ import {
   PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS,
   PET_QUICK_CONTROLS_POLL_MS,
 } from "./petModeQuickControls";
+import { PET_OUTING_PREFERENCE_STORAGE_KEY } from "./petOutingPreference";
 
 const walkFrames = (JSON.parse(
   readFileSync("public/pet-mode/walk-frames-v2.json", "utf8"),
@@ -2840,6 +2841,216 @@ describe("PetModeWindowApp", () => {
     expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps autonomous and diagnostic outings disabled until the preference is re-enabled", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_OUTING_PREFERENCE_STORAGE_KEY, "0");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000); });
+    expect(bridge.exitNativePetScreen).not.toHaveBeenCalled();
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.exitNativePetScreen).not.toHaveBeenCalled();
+
+    window.localStorage.setItem(PET_OUTING_PREFERENCE_STORAGE_KEY, "1");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: "0",
+        newValue: "1",
+      }));
+    });
+    await act(async () => undefined);
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000); });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels an exit in flight through a rapid Off-On pair and reveals the resident pet", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishExit!: (ticket: PetModeOutingTicket) => void;
+    bridge.exitNativePetScreen.mockImplementationOnce(() => new Promise((resolve) => {
+      finishExit = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+
+    window.localStorage.setItem(PET_OUTING_PREFERENCE_STORAGE_KEY, "1");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: "1",
+        newValue: "0",
+      }));
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: "0",
+        newValue: "1",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(true);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+
+    await act(async () => {
+      finishExit({ side: "left", generation: 9 });
+      await Promise.resolve();
+    });
+    expect(bridge.setNativePetPresence.mock.calls.some(([visible]) => visible === false)).toBe(false);
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+  });
+
+  it("does not let deferred outing recovery overwrite a newer action", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishExit!: (ticket: PetModeOutingTicket) => void;
+    bridge.exitNativePetScreen.mockImplementationOnce(() => new Promise((resolve) => {
+      finishExit = resolve;
+    }));
+    let finishCancellation!: () => void;
+    bridge.cancelNativePetMotion.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishCancellation = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: null,
+        newValue: "0",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalledTimes(1);
+
+    act(() => bridge.eventHandler?.({
+      kind: "motion",
+      motion: "entry",
+      travelDistance: 180,
+      durationMs: 900,
+    }));
+    await act(async () => { await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+
+    await act(async () => { finishCancellation(); await Promise.resolve(); });
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(true);
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+
+    await act(async () => {
+      finishExit({ side: "left", generation: 11 });
+      await Promise.resolve();
+    });
+    expect(bridge.setNativePetPresence.mock.calls.some(([visible]) => visible === false)).toBe(false);
+    expect(cat.getAttribute("data-phase")).toBe("entry");
+  });
+
+  it("does not reveal an explicit Off that wins a race with an active outing opt-out", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "0");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: null,
+        newValue: "0",
+      }));
+    });
+    await act(async () => undefined);
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+  });
+
+  it("does not reveal a temporary manual hide that wins while outing cancellation is in flight", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishCancellation!: () => void;
+    bridge.cancelNativePetMotion.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishCancellation = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: null,
+        newValue: "0",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+
+    const hiddenUntil = Date.now() + 60_000;
+    window.localStorage.setItem(PET_MODE_HIDDEN_UNTIL_STORAGE_KEY, String(hiddenUntil));
+    act(() => {
+      // The manual hide wins while the outing cancellation command is still
+      // in flight. Its later completion must not reopen the native panel.
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
+        oldValue: null,
+        newValue: String(hiddenUntil),
+      }));
+    });
+    await act(async () => { finishCancellation(); await Promise.resolve(); });
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+  });
+
   it("cancels an in-flight outing from queued Off and On event snapshots", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
@@ -2909,6 +3120,42 @@ describe("PetModeWindowApp", () => {
       side: "left",
       generation: 1,
     });
+  });
+
+  it("cancels a return in flight and settles the pet visibly at home when outings turn off", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", vi.fn().mockReturnValue({ matches: true }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishReturn!: () => void;
+    bridge.returnNativePetFromOuting.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishReturn = resolve;
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "outing" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_600); });
+    expect(bridge.returnNativePetFromOuting).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", {
+        key: PET_OUTING_PREFERENCE_STORAGE_KEY,
+        oldValue: null,
+        newValue: "0",
+      }));
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(true);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+    await act(async () => { finishReturn(); await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
   });
 
   it("lets force reveal cancel an in-flight Dev outing return", async () => {

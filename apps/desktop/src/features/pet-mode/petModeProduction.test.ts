@@ -28,6 +28,7 @@ import {
 const app = readFileSync("src/App.tsx", "utf8");
 const accountMenu = readFileSync("src/features/auth/AccountMenu.tsx", "utf8");
 const devSettings = readFileSync("src/features/settings/DevSettingsSection.tsx", "utf8");
+const petSettings = readFileSync("src/features/settings/PetSettingsSection.tsx", "utf8");
 const notifications = readFileSync("src/features/settings/NotificationsSettingsSection.tsx", "utf8");
 const petModeCatContract = readFileSync("src/features/pet-mode/PetModeCat.tsx", "utf8");
 const petModeCssContract = readFileSync("src/features/pet-mode/petMode.css", "utf8");
@@ -294,8 +295,9 @@ describe("pet promoted out of Dev", () => {
     expect(petIndex).toBeLessThan(profileIndex);
   });
 
-  it("moves coat and size into Companion settings, leaving only the Lab in Dev", () => {
-    expect(notifications).toContain("PetSettings");
+  it("keeps pet appearance in its own settings section, leaving only the Lab in Dev", () => {
+    expect(notifications).not.toContain("PetSettings");
+    expect(petSettings).toContain("PetSettings");
     expect(devSettings).toContain("Pet Mode Lab");
     expect(devSettings).not.toContain("PetCoatPicker");
   });

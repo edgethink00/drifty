@@ -37,9 +37,10 @@ describe("SettingsSidebar", () => {
     const personalGroup = screen.getByRole("group", { name: /^Personal$/ });
     expect(within(personalGroup).getAllByRole("button").map((button) => button.textContent)).toEqual([
       "General",
-      "Permissions",
       "Appearance",
+      "Desktop pet",
       "Companion & Alerts",
+      "Permissions",
       "Account",
       "Privacy & Data",
     ]);

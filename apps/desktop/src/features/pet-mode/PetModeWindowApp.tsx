@@ -129,6 +129,7 @@ import {
   type PetModeGazeOffset,
 } from "./petModeGaze";
 import { isPetModeChaseMotionKind } from "./petModeChaseMotion";
+import { subscribePetOutingPreference, usePetOutingPreference } from "./petOutingPreference";
 import {
   EMPTY_PET_MODE_DRIFT_HUNT_STATE,
   PET_MODE_DRIFT_HUNT_ALERT_MS,
@@ -211,6 +212,7 @@ export function PetModeWindowApp() {
   const [hitRegionTransitionCount, setHitRegionTransitionCount] = useState(0);
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
+  const [petOutingsEnabled] = usePetOutingPreference();
   const [pawFrame, setPawFrame] = useState(0);
   // Only the return from a successful Drifty-window close wears the proud
   // lids; every approach and every other walk keeps the shipped neutral face.
@@ -268,6 +270,8 @@ export function PetModeWindowApp() {
   const quickControlsResumeAfterInteractionRef = useRef(false);
   const labLifeLoopEnabledRef = useRef(false);
   const petModeEnabledRef = useRef(initialAppearance.enabled);
+  const petOutingsEnabledRef = useRef(petOutingsEnabled);
+  const appliedPetOutingsEnabledRef = useRef(petOutingsEnabled);
   const autonomousCycleRef = useRef(0);
   // This tracks temporary outing visibility, not the product toggle. Feature
   // enablement has its own ref so Lab previews can still reveal the panel.
@@ -311,6 +315,7 @@ export function PetModeWindowApp() {
   const huntAlertTimerRef = useRef<number | null>(null);
   const driftCueTokenRef = useRef<number | null>(null);
   const outingTicketRef = useRef<PetModeOutingTicket | null>(null);
+  const activeOutingTokenRef = useRef<number | null>(null);
 
   const clearHuntAlert = useCallback(() => {
     if (huntAlertTimerRef.current !== null) {
@@ -538,6 +543,46 @@ export function PetModeWindowApp() {
     autonomousCycleRef.current = nextCycle;
     setAutonomousCycle(nextCycle);
   }, []);
+
+  const applyPetOutingPreference = useCallback((enabled: boolean) => {
+    petOutingsEnabledRef.current = enabled;
+    if (appliedPetOutingsEnabledRef.current === enabled) return;
+    appliedPetOutingsEnabledRef.current = enabled;
+    restartAutonomousCycle();
+    if (enabled) return;
+
+    const outingToken = activeOutingTokenRef.current;
+    if (outingToken === null || outingToken !== actionTokenRef.current) return;
+    activeOutingTokenRef.current = null;
+
+    const cancellationToken = ++actionTokenRef.current;
+    outingTicketRef.current = null;
+    void cancelNativePetMotion().catch(() => undefined).then(() => {
+      // The preference governs only autonomous departures. Re-check after the
+      // native cancellation so an explicit Off or one-hour hide that arrived
+      // in the meantime remains authoritative. A newer action owns both pose
+      // and native position, so stale outing recovery must leave it untouched.
+      if (
+        cancellationToken !== actionTokenRef.current
+        || !petModeEnabledRef.current
+        || !resolvePetModePresent()
+      ) return;
+      commitVisibility(true);
+      void setNativePetPresence(true).catch(() => undefined);
+      if (!manualDragRef.current && manualReleaseTokenRef.current === null) {
+        commitPhase(timedPauseRef.current !== null ? "sleep" : focusRestingRef.current ? "sit" : "idle");
+      }
+    });
+  }, [commitPhase, commitVisibility, restartAutonomousCycle]);
+
+  useEffect(() => {
+    applyPetOutingPreference(petOutingsEnabled);
+  }, [applyPetOutingPreference, petOutingsEnabled]);
+
+  // React can batch a rapid Off -> On pair into one final state. Listen to the
+  // ordered storage snapshots as well so the intermediate opt-out still owns
+  // and cancels an outing already in flight.
+  useEffect(() => subscribePetOutingPreference(applyPetOutingPreference), [applyPetOutingPreference]);
 
   const appliedTimedPauseRef = useRef(false);
   useEffect(() => {
@@ -1298,23 +1343,26 @@ export function PetModeWindowApp() {
   }, [commitFacing, commitPhase, revealForAction, stopMusicNote]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
+    if (!petOutingsEnabledRef.current) return;
     const token = ++actionTokenRef.current;
+    activeOutingTokenRef.current = token;
     try {
       await revealForAction();
-      if (token !== actionTokenRef.current) return;
+      if (token !== actionTokenRef.current || !petOutingsEnabledRef.current) return;
       commitPhase("walk");
       const outingTicket = await exitNativePetScreen();
-      if (token !== actionTokenRef.current) return;
+      if (token !== actionTokenRef.current || !petOutingsEnabledRef.current) return;
       outingTicketRef.current = outingTicket;
       commitVisibility(false);
       await setNativePetPresence(false, outingTicket.generation);
       await delay(awayMilliseconds);
-      if (token !== actionTokenRef.current) return;
+      if (token !== actionTokenRef.current || !petOutingsEnabledRef.current) return;
       outingTicketRef.current = null;
       commitVisibility(true);
       commitPhase("walk");
       await returnNativePetFromOuting(outingTicket);
     } finally {
+      if (activeOutingTokenRef.current === token) activeOutingTokenRef.current = null;
       if (token === actionTokenRef.current && visibleRef.current) {
         outingTicketRef.current = null;
         commitPhase(focusRestingRef.current ? "sit" : "idle");
@@ -2159,7 +2207,7 @@ export function PetModeWindowApp() {
   }, [labLifeLoopEnabled, playLifeAction]);
 
   useEffect(() => {
-    if (!petModeEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
+    if (!petModeEnabled || !petOutingsEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -2203,7 +2251,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, timedPauseUntil, petModeEnabled, playOuting, snapshot?.productivity]);
+  }, [autonomousCycle, timedPauseUntil, petModeEnabled, petOutingsEnabled, playOuting, snapshot?.productivity]);
 
   useEffect(() => {
     if (!petModeEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
