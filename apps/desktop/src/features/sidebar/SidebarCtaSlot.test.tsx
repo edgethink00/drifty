@@ -2,9 +2,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { SidebarCtaSlot, resolveSidebarCtaSlot } from "./SidebarCtaSlot";
 import { resolveClassificationAvailability } from "../classification/classificationAvailability";
+
+vi.mock("../../lib/analytics/useProFunnelExposure", () => ({ useProFunnelExposure: vi.fn(() => ({ current: null })) }));
 
 const activeEntitlement = {
   plan: "individual",
@@ -642,5 +645,22 @@ describe("SidebarCtaSlot", () => {
     );
 
     expect(screen.getByRole("button", { name: /무료 체험 종료까지 1일.*Pro로 업그레이드/ })).toBeTruthy();
+  });
+});
+
+
+it.each([
+  [true, null, "upgrade_local"],
+  [false, null, "upgrade"],
+  [false, { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "billing_missing" }, "upgrade"],
+] as const)("labels the rendered sidebar offer correctly (local=%s, entitlement=%j)", (localAiConfigured, billingEntitlement, offerContext) => {
+  const state = resolveSidebarCtaSlot({
+    ...baseInput, localAiConfigured, billingEntitlement,
+    aiStatus: { issueKind: null, label: "AI setup needed", providerLabel: "Open settings", tone: "error" },
+  });
+  expect(state).not.toBeNull();
+  render(<SidebarCtaSlot state={state!} onAction={vi.fn()} funnelEnabled={true} />);
+  expect(useProFunnelExposure).toHaveBeenLastCalledWith(true, {
+    step: "pro_offer_viewed", offer_surface: "sidebar", offer_context: offerContext,
   });
 });

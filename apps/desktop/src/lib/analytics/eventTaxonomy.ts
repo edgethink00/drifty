@@ -11,6 +11,7 @@ export const POSTHOG_EVENT_NAMES = [
   "auth_state_changed",
   "cloud_auth_action",
   "billing_action",
+  "pro_funnel_step",
   "leaderboard_action",
   "ai_setup_action",
   "ai_classification_run",
@@ -180,6 +181,13 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     entitlement_status: ENTITLEMENT_STATUSES,
     locked_reason: LOCKED_REASONS,
     error_kind: ERROR_KINDS,
+  },
+  pro_funnel_step: {
+    step: ["classified_result_viewed", "pro_offer_viewed", "checkout_opened"],
+    dashboard_period: ["day", "week"],
+    offer_surface: ["sidebar", "upgrade_modal", "recovery_overlay"],
+    offer_context: ["trial_active", "trial_ended", "upgrade", "upgrade_local"],
+    billing_interval: BILLING_INTERVALS,
   },
   leaderboard_action: {
     action: LEADERBOARD_ACTIONS,

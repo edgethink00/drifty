@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { FlowBlock } from "@drifty/domain";
+import type { ActivitySegment, FlowBlock } from "@drifty/domain";
+import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { DashboardPage } from "./DashboardPage";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
@@ -11,9 +12,15 @@ import { LocalizationTestProvider, type DisplayLanguage } from "../localization/
 // otherwise collide with a prior render's DOM. Tear down explicitly.
 afterEach(cleanup);
 
+vi.mock("../../lib/analytics/useProFunnelExposure", () => ({ useProFunnelExposure: vi.fn(() => ({ current: null })) }));
+
 const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
+  readonly funnelEnabled?: boolean;
+  readonly funnelResultEnabled?: boolean;
+  readonly dashboardSegments?: readonly ActivitySegment[];
+  readonly weekRefreshStatus?: "idle" | "loading" | "error";
   readonly browserHistoryBootstrapNotice?: ComponentProps<typeof DashboardPage>["browserHistoryBootstrapNotice"];
   readonly dashboardEffectiveProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardEffectiveProductivityTotals"];
   readonly dashboardDateNavigator?: ComponentProps<typeof DashboardPage>["dashboardDateNavigator"];
@@ -33,14 +40,16 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
   render(
     <LocalizationTestProvider language={options.language ?? "en"}>
     <DashboardPage
+      funnelEnabled={options.funnelEnabled}
+      funnelResultEnabled={options.funnelResultEnabled}
       appIcons={{}}
       appTheme="light"
       billingCheckoutLoadingInterval={null}
       currentMinuteOfDay={4 * 60}
       dashboardAiRecoveryState={null}
       dashboardAppUsage={[]}
-      dashboardSegments={[]}
-      dashboardClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: false }}
+      dashboardSegments={options.dashboardSegments ?? []}
+      dashboardClassificationOptions={{ fallbackCandidates: [], includeAiClassifications: true }}
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={options.dashboardCategoryTotals ?? []}
       dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}
@@ -68,7 +77,7 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       weekCurrentCalendarDay={null}
       weekCurrentMinuteOfDay={null}
       weekFocusDeltaSeconds={null}
-      weekRefreshStatus="idle"
+      weekRefreshStatus={options.weekRefreshStatus ?? "idle"}
       weekRows={[]}
       onDismissDashboardAiRecovery={noop}
       onFlowIntervalChange={noop}
@@ -414,5 +423,31 @@ describe("DashboardPage billing recovery overlay", () => {
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onSelectBillingPlan).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
+  });
+});
+
+
+describe("DashboardPage funnel integration", () => {
+  const classifiedSegment: ActivitySegment = {
+    id: "local-result", appName: "Editor", bundleId: "app.editor", source: "nsworkspace", platform: "macos",
+    durationSeconds: 60, startedAt: "2026-06-29T05:00:00Z", endedAt: "2026-06-29T05:01:00Z",
+    classification: { source: "llm", confidence: 1, category: "workspace", productivity: "focus", aiResult: true },
+  };
+  const eligible = { funnelEnabled: true, funnelResultEnabled: true, dashboardSegments: [classifiedSegment], dashboardReplay: null };
+  it.each(["Today", "Week"] as const)("observes the real %s result", (dashPeriod) => {
+    renderDashboardWithNoData({ ...eligible, dashPeriod });
+    expect(useProFunnelExposure).toHaveBeenLastCalledWith(true, { step: "classified_result_viewed", dashboard_period: dashPeriod === "Today" ? "day" : "week" });
+  });
+  it.each([
+    { initialDataLoading: true },
+    { funnelResultEnabled: false },
+    { dashboardSegments: [] },
+    { dashPeriod: "Month" as const },
+    { dashPeriod: "Week" as const, weekRefreshStatus: "loading" as const },
+    { dashPeriod: "Week" as const, weekRefreshStatus: "error" as const },
+    { dashboardReplay: { phase: "playing" as const, progress: 0, onRestart: noop, onStop: noop } },
+  ])("does not enable result exposure for excluded state %j", (state) => {
+    renderDashboardWithNoData({ ...eligible, ...state });
+    expect(useProFunnelExposure).toHaveBeenLastCalledWith(true, null);
   });
 });

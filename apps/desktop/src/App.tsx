@@ -8828,6 +8828,9 @@ export default function App() {
   const effectiveHasRequiredAccountAuth = activeDashboardAiUnavailablePreviewInput?.hasRequiredAccountAuth ?? hasRequiredAccountAuth;
   const isDeviceLimitLocked = effectiveBillingEntitlement?.lockedReason === "device_limit_reached";
   const isDashboardAiUnavailablePreviewActive = activeDashboardAiUnavailablePreviewInput !== null;
+  const funnelEnabled = !isPreviewSurface && !isDashboardDemoReplayActive
+    && !isSidebarCtaPreviewActive && !isDashboardAiUnavailablePreviewActive
+    && hasRequiredAccountAuth && Boolean(user) && user?.is_anonymous !== true;
   const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
   const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
     ? "Offline mode"
@@ -9291,6 +9294,7 @@ export default function App() {
         <div className="sidebar-foot">
           {shouldShowSidebarCtaSlot && sidebarCtaSlot ? (
             <SidebarCtaSlot
+              funnelEnabled={funnelEnabled}
               state={sidebarCtaSlot}
               onDismiss={sidebarCtaSlot.kind === "upgrade" && !isSidebarCtaPreviewActive
                 ? () => setSidebarUpgradeDismissedUntil(storeSidebarUpgradeDismissal())
@@ -9436,6 +9440,8 @@ export default function App() {
         {/* Dashboard */}
         {activeTab === "dashboard" ? (
           <DashboardPage
+            funnelEnabled={funnelEnabled}
+            funnelResultEnabled={!loading && !upgradePlanModalOpen && !onboardingOpen && !preparingFirstDay}
             appIcons={appIcons}
             appTheme={theme}
             billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
@@ -10110,6 +10116,7 @@ export default function App() {
 
       {shouldRenderUpgradePlanModal ? (
         <UpgradePlanModal
+          funnelEnabled={funnelEnabled}
           billingActionError={billingActionError}
           billingActionErrorCode={billingActionErrorCode}
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}

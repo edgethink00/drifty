@@ -41,6 +41,10 @@ import type {
 type EmptyPostHogProperties = Record<never, never>;
 
 export type PostHogEventPropertiesByName = {
+  readonly pro_funnel_step:
+    | { readonly step: "classified_result_viewed"; readonly dashboard_period: "day" | "week" }
+    | { readonly step: "pro_offer_viewed"; readonly offer_surface: "sidebar" | "upgrade_modal" | "recovery_overlay"; readonly offer_context: "trial_active" | "trial_ended" | "upgrade" | "upgrade_local" }
+    | { readonly step: "checkout_opened"; readonly billing_interval: (typeof BILLING_INTERVALS)[number] };
   readonly app_opened: EmptyPostHogProperties;
   readonly app_active: {
     readonly active_trigger: (typeof APP_ACTIVE_TRIGGERS)[number];

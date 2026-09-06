@@ -203,3 +203,13 @@ describe("FlowChartView color mode", () => {
     expect(hoverCard.querySelectorAll(".week-activity-inspector__heading strong")).toHaveLength(1);
   });
 });
+
+
+it("marks only rendered cells backed by classified segments for result exposure", () => {
+  const view = render(<FlowChartView blocks={[makeFlowBlock({ sourceSegmentIds: ["classified"] })]} appIcons={{}} classifiedResultIds={new Set(["classified"])} />);
+  expect(view.container.querySelector('[data-funnel-classified-result="true"]')).toBeTruthy();
+  view.rerender(<FlowChartView blocks={[makeFlowBlock({ sourceSegmentIds: ["raw"] })]} appIcons={{}} classifiedResultIds={new Set(["classified"])} />);
+  expect(view.container.querySelector('[data-funnel-classified-result="true"]')).toBeNull();
+  view.rerender(<FlowChartView blocks={[]} appIcons={{}} classifiedResultIds={new Set(["classified"])} showEmptyGrid />);
+  expect(view.container.querySelector('[data-funnel-classified-result="true"]')).toBeNull();
+});

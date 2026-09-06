@@ -1,3 +1,4 @@
+import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { useRef } from "react";
 import type { BillingInterval } from "../billing/billingService";
 import { IndividualPlanCards } from "../billing/IndividualPlanCards";
@@ -11,6 +12,7 @@ import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type DashboardAiRecoveryOverlayProps = {
+  readonly funnelEnabled?: boolean;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
   readonly billingPlansDisabled?: boolean;
   readonly billingPortalLoading?: boolean;
@@ -22,6 +24,7 @@ type DashboardAiRecoveryOverlayProps = {
 };
 
 export function DashboardAiRecoveryOverlay({
+  funnelEnabled = false,
   billingCheckoutLoadingInterval,
   billingPlansDisabled = false,
   billingPortalLoading = false,
@@ -37,6 +40,10 @@ export function DashboardAiRecoveryOverlay({
   useModalFocusTrap(dialogRef, { initialFocusSelector: ".modal-x" });
   const recoversExistingSubscription = state.variant === "cloud-billing";
   const showsTrialEndedDecision = state.variant === "trial-ended";
+  const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, recoversExistingSubscription ? null : {
+    step: "pro_offer_viewed", offer_surface: "recovery_overlay",
+    offer_context: showsTrialEndedDecision ? "trial_ended" : "upgrade",
+  });
 
   return (
     <div className={`dashboard-ai-recovery dashboard-ai-recovery--${state.variant}`}>
@@ -67,7 +74,7 @@ export function DashboardAiRecoveryOverlay({
             </button>
           </div>
         ) : showsTrialEndedDecision ? (
-          <div className="dashboard-ai-recovery__plans">
+          <div className="dashboard-ai-recovery__plans" ref={offerRef}>
             <UpgradeDecisionPanel
               context="trial-ended"
               disabled={billingPlansDisabled}
@@ -77,7 +84,7 @@ export function DashboardAiRecoveryOverlay({
             />
           </div>
         ) : (
-          <div className="dashboard-ai-recovery__plans">
+          <div className="dashboard-ai-recovery__plans" ref={offerRef}>
             <IndividualPlanCards
               disabled={billingPlansDisabled}
               loadingInterval={billingCheckoutLoadingInterval}

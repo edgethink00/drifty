@@ -1,3 +1,4 @@
+import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import type { BillingEntitlement } from "../billing/billingService";
@@ -466,15 +467,24 @@ class SidebarCtaSlotError extends Error {
 }
 
 export function SidebarCtaSlot({
+  funnelEnabled = false,
   onDismiss,
   onAction,
   state,
 }: {
+  readonly funnelEnabled?: boolean;
   readonly onDismiss?: () => void;
   readonly onAction: () => void;
   readonly state: SidebarCtaSlotState;
 }) {
   const { effectiveLanguage, t } = useLocalization();
+  const offerRef = useProFunnelExposure<HTMLButtonElement>(funnelEnabled,
+    state.kind === "upgrade" || state.kind === "trial" || state.kind === "trial-ended"
+      ? { step: "pro_offer_viewed", offer_surface: "sidebar",
+        offer_context: state.kind === "trial" ? "trial_active" : state.kind === "trial-ended" ? "trial_ended"
+          : state.titleKey === "sidebar.cta.upgrade.localTitle" ? "upgrade_local" : "upgrade" }
+      : null,
+  );
   if (state.kind === "download") {
     const title = t(state.titleKey);
     const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");
@@ -538,6 +548,7 @@ export function SidebarCtaSlot({
       <button
         type="button"
         className="sidebar-cta-slot"
+        ref={offerRef}
         data-kind={state.kind}
         data-tone={state.tone}
         data-alert={state.alert ?? undefined}

@@ -1,3 +1,5 @@
+import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
+import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
 import { useMemo, useState, type ReactNode } from "react";
 import { logicalMinuteOfDay, type ActivityCategory, type ActivitySegment, type AppIconMap, type CategoryDuration, type ClassificationOptions, type DeviceTimelineFilter, type FlowBlock, type FlowIntervalMinutes, type ProductivityDuration, type ProductivityLabel } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
@@ -38,6 +40,8 @@ const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjec
 const EMPTY_PROJECT_BY_SEGMENT_ID: ReadonlyMap<string, string | null> = new Map();
 
 type DashboardPageProps = {
+  readonly funnelEnabled?: boolean;
+  readonly funnelResultEnabled?: boolean;
   readonly appIcons: AppIconMap;
   readonly appTheme: ThemeMode;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
@@ -114,6 +118,8 @@ type DashboardPageProps = {
 };
 
 export function DashboardPage({
+  funnelEnabled = false,
+  funnelResultEnabled = false,
   appIcons,
   appTheme,
   billingCheckoutLoadingInterval,
@@ -190,6 +196,16 @@ export function DashboardPage({
       return !open;
     });
   };
+  const classifiedResultIds = useMemo(
+    () => classifiedDashboardSegmentIds(dashboardSegments, dashboardClassificationOptions),
+    [dashboardSegments, dashboardClassificationOptions],
+  );
+  const resultRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled,
+    funnelResultEnabled && !initialDataLoading && !dashboardReplay && !dashboardAiRecoveryState
+      && !shareCardOpen && dashPeriod !== "Month" && (dashPeriod !== "Week" || weekRefreshStatus === "idle") && classifiedResultIds.size > 0
+      ? { step: "classified_result_viewed", dashboard_period: dashPeriod === "Week" ? "week" : "day" }
+      : null,
+  );
   const pageClassName = [
     "page",
     dashPeriod === "Week" ? "page--week-dashboard" : null,
@@ -294,6 +310,7 @@ export function DashboardPage({
     <div className={pageClassName}>
       {dashboardAiRecoveryState ? (
         <DashboardAiRecoveryOverlay
+          funnelEnabled={funnelEnabled}
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
           billingPlansDisabled={billingPlansDisabled}
           billingPortalLoading={billingPortalLoading}
@@ -340,6 +357,8 @@ export function DashboardPage({
 
       {dashPeriod === "Week" ? (
         <WeekDashboard
+          funnelResultRef={resultRef}
+          classifiedResultIds={classifiedResultIds}
           header={headInsideBlock ? pageHead : null}
           initialDataLoading={initialDataLoading}
           rows={weekRows}
@@ -389,8 +408,9 @@ export function DashboardPage({
                 day (or a brief load) keeps the same block instead of collapsing
                 to a bare card. */}
             <div className="flow-breakdown-layout flow-breakdown-layout--full">
-              <div className="flow-breakdown-layout__chart">
+              <div className="flow-breakdown-layout__chart" ref={resultRef}>
                 <FlowChartView
+                  classifiedResultIds={classifiedResultIds}
                   blocks={flowBlocks}
                   appIcons={appIcons}
                   currentMinuteOfDay={currentMinuteOfDay}

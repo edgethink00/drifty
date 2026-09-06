@@ -24,7 +24,7 @@ describe("deferred PostHog client", () => {
         calls.push("auth");
       }),
     } as PostHogClientRuntime;
-    const client = createDeferredPostHogClient();
+    const client = createDeferredPostHogClient(100, () => true);
 
     client.capturePostHogEvent("app_surface_opened", { surface: "dashboard" });
     client.recordPostHogAuthState({ id: "account-1", is_anonymous: false });
@@ -35,7 +35,7 @@ describe("deferred PostHog client", () => {
 
   it("forwards analytics immediately after the runtime connects", () => {
     const runtime = createRuntime();
-    const client = createDeferredPostHogClient();
+    const client = createDeferredPostHogClient(100, () => true);
 
     client.connect(runtime);
     client.capturePostHogEvent("app_error", {
@@ -51,7 +51,7 @@ describe("deferred PostHog client", () => {
 
   it("bounds the startup queue and retains the most recent operations", () => {
     const runtime = createRuntime();
-    const client = createDeferredPostHogClient(2);
+    const client = createDeferredPostHogClient(2, () => true);
 
     client.capturePostHogEvent("app_surface_opened", { surface: "dashboard" });
     client.capturePostHogEvent("app_surface_opened", { surface: "history" });
@@ -65,5 +65,42 @@ describe("deferred PostHog client", () => {
     expect(runtime.capturePostHogEvent).toHaveBeenNthCalledWith(2, "app_surface_opened", {
       surface: "trends",
     });
+  });
+
+  it("drops deferred events across opt-out and restores only the latest auth state", () => {
+    let enabled = true;
+    const runtime = createRuntime();
+    const client = createDeferredPostHogClient(100, () => enabled);
+
+    client.capturePostHogEvent("app_surface_opened", { surface: "dashboard" });
+    client.recordPostHogAuthState({ id: "account-before-opt-out", is_anonymous: false });
+    enabled = false;
+    client.handlePreferenceChange(false);
+    client.capturePostHogEvent("app_surface_opened", { surface: "history" });
+    client.recordPostHogAuthState({ id: "account-after-opt-out", is_anonymous: false });
+
+    expect(client.connect(runtime)).toBe(false);
+    expect(runtime.initializePostHog).not.toHaveBeenCalled();
+    expect(runtime.capturePostHogEvent).not.toHaveBeenCalled();
+    expect(runtime.recordPostHogAuthState).not.toHaveBeenCalled();
+
+    enabled = true;
+    client.handlePreferenceChange(true);
+    expect(client.connect(runtime)).toBe(true);
+    expect(runtime.capturePostHogEvent).not.toHaveBeenCalled();
+    expect(runtime.recordPostHogAuthState).toHaveBeenCalledTimes(1);
+    expect(runtime.recordPostHogAuthState).toHaveBeenCalledWith({
+      id: "account-after-opt-out",
+      is_anonymous: false,
+    });
+  });
+
+  it("does not duplicate a queued auth state when the runtime first connects", () => {
+    const runtime = createRuntime();
+    const client = createDeferredPostHogClient(100, () => true);
+    client.recordPostHogAuthState({ id: "account-1", is_anonymous: false });
+
+    expect(client.connect(runtime)).toBe(true);
+    expect(runtime.recordPostHogAuthState).toHaveBeenCalledTimes(1);
   });
 });

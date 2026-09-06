@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import type { WeekCalendarEvent, WeekCalendarEventIdentity, WeekCalendarEventStyle, WeekCalendarNowMarkerStyle, WeekDayRow } from "./weekCalendar";
@@ -179,6 +180,8 @@ function buildWeekSideTrendChart(
 }
 
 type WeekDashboardProps = {
+  readonly classifiedResultIds?: ReadonlySet<string>;
+  readonly funnelResultRef?: Ref<HTMLElement>;
   /** Page header (title + date navigator) rendered inside the calendar block
    *  for the 2026-07 dashboard redesign. */
   readonly header?: ReactNode;
@@ -243,6 +246,8 @@ export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: Wee
 }
 
 export function WeekDashboard({
+  classifiedResultIds,
+  funnelResultRef,
   header,
   initialDataLoading = false,
   rows,
@@ -596,7 +601,7 @@ export function WeekDashboard({
       data-week-axis-scale-percent={effectiveAxisScalePercent}
     >
       <div className={`week-v2-grid week-v2-grid--calendar${sideOpen ? " week-v2-grid--side-open" : ""}`}>
-        <section className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
+        <section ref={funnelResultRef} className="week-v2-calendar editorial-panel editorial-panel--soft" aria-label={t("dashboard.week.calendarAria")}>
           {header}
           <div className="week-v2-calendar__legend" aria-label={t("dashboard.week.legendAria")}>
             {initialDataLoading ? (
@@ -733,6 +738,7 @@ export function WeekDashboard({
                       return (
                         <article
                           className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}${activityInspector?.event.id === event.id ? " is-inspected" : ""}`}
+                          data-funnel-classified-result={event.category !== "unknown" && event.segmentIds.some((id) => classifiedResultIds?.has(id)) ? "true" : undefined}
                           data-event-id={event.id}
                           key={event.id}
                           onContextMenu={(contextMenuEvent) => {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { PrivacySettingsSection } from "./PrivacySettingsSection";
 
@@ -17,6 +17,8 @@ function openAiDataSending() {
 }
 
 describe("PrivacySettingsSection AI review", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     window.localStorage.clear();
   });
@@ -70,6 +72,18 @@ describe("PrivacySettingsSection AI review", () => {
     expect(screen.queryByRole("button", { name: /Reset optional/i })).toBeNull();
     expect(screen.getByText(/Raw timeline rows/i)).toBeTruthy();
     expect(screen.getByText(/YouTube descriptions/i)).toBeTruthy();
+  });
+
+  it("provides one default-on product analytics opt-out", () => {
+    render(<PrivacySettingsSection />);
+    const preference = screen.getByRole("switch", { name: /share product analytics/i });
+    if (!(preference instanceof HTMLInputElement)) throw new Error("Product analytics preference should be a switch.");
+
+    expect(preference.checked).toBe(true);
+    fireEvent.click(preference);
+    expect(preference.checked).toBe(false);
+    expect(window.localStorage.getItem("drifty.privacy.productAnalytics.v1")).toBe("0");
+    expect(screen.getByText(/App names, sites, URLs, titles, segment IDs, and individual local activity times are never included/i)).toBeTruthy();
   });
 
   it("explains every receipt row and every never-sent claim in the two disclosure details", () => {

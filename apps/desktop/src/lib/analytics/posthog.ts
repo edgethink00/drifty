@@ -1,5 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { BUILD_INFO } from "../../buildInfo";
+import { readProductAnalyticsEnabled, createProductAnalyticsDeliveryGuard } from "./productAnalyticsPreference";
 import {
   sanitizePostHogEventProperties,
   type PostHogEventName,
@@ -262,7 +263,7 @@ async function deliverPostHogEvent(
   event: PostHogEventName,
   properties?: Readonly<Record<string, unknown>>,
 ): Promise<boolean> {
-  if (!posthogKey) return false;
+  if (!posthogKey || !readProductAnalyticsEnabled()) return false;
 
   const payload = createPostHogEventPayload({
     apiKey: posthogKey,
@@ -301,6 +302,14 @@ export function resolvePostHogEventIdentity(
   account: PostHogIdentity | null,
 ): PostHogIdentity | null {
   return event === "app_active" && account ? account : install;
+}
+
+/** Pro events always use the existing install identity, including when signed in. */
+export async function capturePostHogInstallFunnelStep(
+  properties: PostHogEventPropertiesByName["pro_funnel_step"],
+): Promise<boolean> {
+  if (!initializePostHog() || !installIdentity) return false;
+  return deliverPostHogEvent(installIdentity, "pro_funnel_step", properties);
 }
 
 function dailyActiveStorageKey(identity: PostHogIdentity): string {
@@ -350,7 +359,7 @@ async function recordPostHogDailyActive(
   trigger: PostHogEventPropertiesByName["app_active"]["active_trigger"],
   identity: PostHogIdentity | null = resolvePostHogEventIdentity("app_active", installIdentity, accountIdentity),
 ): Promise<void> {
-  if (!isPostHogReady || !identity) return;
+  if (!isPostHogReady || !identity || !readProductAnalyticsEnabled()) return;
   const storage = getPostHogStorage();
   const reportingDate = getPostHogReportingDateKey(new Date());
   await recordPostHogDailyActiveOnce({
@@ -372,6 +381,7 @@ function startDailyActiveTracking(): void {
 }
 
 export function initializePostHog(): boolean {
+  if (!readProductAnalyticsEnabled()) return false;
   if (isPostHogReady || !isPostHogConfigured()) return isPostHogReady;
 
   installIdentity = {
@@ -387,7 +397,8 @@ export function initializePostHog(): boolean {
 }
 
 export function recordPostHogAuthState(user: PostHogUser | null): void {
-  if (!isPostHogReady || !installIdentity) return;
+  if (!isPostHogReady || !installIdentity || !readProductAnalyticsEnabled()) return;
+  const canDeliver = createProductAnalyticsDeliveryGuard();
   const fallbackIdentity = installIdentity;
 
   const accountKind = user?.is_anonymous === true ? "anonymous_account" : user ? "account" : "none";
@@ -409,7 +420,10 @@ export function recordPostHogAuthState(user: PostHogUser | null): void {
 
   void postHogAccountIdentityResolver.resolve(user.id)
     .then((identity) => {
-      if (!identity) return;
+      if (!identity || !canDeliver()) {
+        if (authKey === lastRequestedAuthKey) lastRequestedAuthKey = null;
+        return;
+      }
       accountIdentity = identity;
       void recordPostHogDailyActive("auth_resolved", accountIdentity);
     })
@@ -424,7 +438,7 @@ export function capturePostHogEvent<Event extends PostHogEventName>(
   event: Event,
   ...[properties]: PostHogEventPropertiesArgument<Event>
 ): void {
-  if (!isPostHogReady) return;
+  if (!isPostHogReady || !readProductAnalyticsEnabled()) return;
   const identity = resolvePostHogEventIdentity(event, installIdentity, accountIdentity);
   if (!identity) return;
   sendPostHogEvent(identity, event, properties);

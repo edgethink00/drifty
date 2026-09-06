@@ -17,6 +17,7 @@ export type FlowChartReadOnlyPreview = {
 };
 
 type FlowChartGridProps = {
+  readonly classifiedResultIds?: ReadonlySet<string>;
   readonly blockByCell: ReadonlyMap<string, FlowBlock>;
   readonly boundaryMinutes: number;
   readonly colorMode: FlowColorMode;
@@ -43,6 +44,7 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 // hundreds of cells. All props are referentially stable across a hover: the maps are
 // memoized upstream and the hour/minute markers change only on the wall-clock tick.
 export const FlowChartGrid = memo(function FlowChartGrid({
+  classifiedResultIds,
   blockByCell,
   boundaryMinutes,
   colorMode,
@@ -166,6 +168,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                     type="button"
                     aria-label={cellAriaLabelsByMinute.get(block.minuteOfDay)}
                     data-flow-minute={block.minuteOfDay}
+                    data-funnel-classified-result={colorMode !== "project" && block.category !== "unknown" && block.sourceSegmentIds?.some((id) => classifiedResultIds?.has(id)) ? "true" : undefined}
                     data-activity-inspector-trigger="true"
                     aria-haspopup={onOpenActivity ? "dialog" : undefined}
                     aria-expanded={onOpenActivity ? inspectedGroup === hoverGroupsByCell.get(block.minuteOfDay) : undefined}

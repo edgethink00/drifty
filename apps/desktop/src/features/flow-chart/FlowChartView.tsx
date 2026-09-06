@@ -34,6 +34,7 @@ const FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM = 0.76;
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 
 export function FlowChartView({
+  classifiedResultIds,
   blocks,
   appIcons,
   currentMinuteOfDay,
@@ -55,6 +56,7 @@ export function FlowChartView({
   onDeleteActivity,
   classificationOptions,
 }: {
+  readonly classifiedResultIds?: ReadonlySet<string>;
   blocks: FlowBlock[];
   appIcons: Record<string, string | null>;
   currentMinuteOfDay?: number | null;
@@ -267,6 +269,7 @@ export function FlowChartView({
       />
 
       <FlowChartGrid
+        classifiedResultIds={classifiedResultIds}
         blockByCell={blockByCell}
         boundaryMinutes={boundaryMinutes}
         colorMode={effectiveColorMode}

@@ -10,6 +10,11 @@ import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { useLocalization } from "../localization/LocalizationContext";
 import { trackerClient } from "../../lib/api/trackerClient";
+import {
+  PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT,
+  readProductAnalyticsEnabled,
+  writeProductAnalyticsEnabled,
+} from "../../lib/analytics/productAnalyticsPreference";
 
 type PrivacySettingsSectionProps = {
   readonly onHistoryDeleted?: () => Promise<void> | void;
@@ -35,6 +40,7 @@ export function PrivacySettingsSection({
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [iconCacheClearing, setIconCacheClearing] = useState(false);
   const [iconCacheCleared, setIconCacheCleared] = useState<string | null>(null);
+  const [productAnalyticsEnabled, setProductAnalyticsEnabled] = useState(readProductAnalyticsEnabled);
 
   async function handleClearIconCache() {
     setIconCacheClearing(true);
@@ -59,6 +65,16 @@ export function PrivacySettingsSection({
     };
   }, []);
 
+  useEffect(() => {
+    const syncPreference = () => setProductAnalyticsEnabled(readProductAnalyticsEnabled());
+    window.addEventListener("storage", syncPreference);
+    window.addEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, syncPreference);
+    return () => {
+      window.removeEventListener("storage", syncPreference);
+      window.removeEventListener(PRODUCT_ANALYTICS_PREFERENCE_CHANGED_EVENT, syncPreference);
+    };
+  }, []);
+
   const optionalValues = Object.values(aiSettings.optional);
   const optionalOnCount = optionalValues.filter(Boolean).length;
 
@@ -79,6 +95,25 @@ export function PrivacySettingsSection({
             <div className="desc">{t("settings.privacy.cloudDescription")}</div>
           </div>
           <div className="ctrl"><span className="chip">{t("settings.privacy.aggregatesChip")}</span></div>
+        </div>
+        <div className="settings-row">
+          <label htmlFor="product-analytics-preference">
+            <div className="lbl">{t("settings.privacy.productAnalyticsTitle")}</div>
+            <div className="desc">{t("settings.privacy.productAnalyticsDescription")}</div>
+          </label>
+          <div className="ctrl">
+            <input
+              id="product-analytics-preference"
+              className="drifty-checkbox"
+              type="checkbox"
+              role="switch"
+              aria-label={t("settings.privacy.productAnalyticsTitle")}
+              checked={productAnalyticsEnabled}
+              onChange={(event) => {
+                setProductAnalyticsEnabled(writeProductAnalyticsEnabled(event.currentTarget.checked));
+              }}
+            />
+          </div>
         </div>
       </div>
       <SettingsCollapsibleCard

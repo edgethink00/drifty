@@ -1,3 +1,5 @@
+import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
+import type { ProOfferContext } from "../../lib/analytics/proFunnel";
 import { useId, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 
@@ -10,6 +12,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import type { BillingEntitlement, BillingInterval, CheckoutFailureCode } from "./billingService";
 
 export function UpgradePlanModal({
+  funnelEnabled = false,
   billingActionError,
   billingActionErrorCode = null,
   billingCheckoutLoadingInterval,
@@ -21,6 +24,7 @@ export function UpgradePlanModal({
   onCheckForUpdates,
   onSelectBillingPlan,
 }: {
+  readonly funnelEnabled?: boolean;
   readonly billingActionError: string | null;
   readonly billingActionErrorCode?: CheckoutFailureCode | null;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
@@ -49,6 +53,10 @@ export function UpgradePlanModal({
       : localAiConfigured
         ? "upgrade-local"
         : "upgrade";
+  const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, {
+    step: "pro_offer_viewed", offer_surface: "upgrade_modal",
+    offer_context: decisionContext.replace("-", "_") as ProOfferContext,
+  });
   const titleKey = decisionContext === "trial-active"
     ? "billing.upgradeModal.activeTitle"
     : decisionContext === "trial-ended"
@@ -88,6 +96,7 @@ export function UpgradePlanModal({
           <p id={descriptionId}>{t(descriptionKey)}</p>
         </div>
         <div
+          ref={offerRef}
           aria-busy={checkoutOpening}
           aria-live="polite"
           className="dashboard-ai-recovery__plans"

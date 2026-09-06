@@ -1,3 +1,5 @@
+import { recordProFunnelStep } from "../../lib/analytics/proFunnel";
+import { createProductAnalyticsDeliveryGuard } from "../../lib/analytics/productAnalyticsPreference";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthState } from "../auth/AuthContext";
 import { revokeCloudDevice, type CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
@@ -246,6 +248,7 @@ export function useCloudBillingController({
     setBillingActionError(null);
     setBillingActionErrorCode(null);
     cloudCheckoutPendingRef.current = true;
+    const canRecordCheckout = createProductAnalyticsDeliveryGuard();
     let openedCheckout = false;
     setBillingCheckoutLoadingInterval(billingInterval);
     try {
@@ -276,7 +279,10 @@ export function useCloudBillingController({
         result: "success",
         billing_interval: billingInterval,
       });
-      await openExternalUrl(checkoutResult.data.url);
+      const openedNatively = await openExternalUrl(checkoutResult.data.url);
+      if (openedNatively && user.is_anonymous !== true && canRecordCheckout()) {
+        void recordProFunnelStep({ step: "checkout_opened", billing_interval: billingInterval });
+      }
       // Payment happens in the browser. Hold duplicate attempts until the app
       // returns and finishes a bounded entitlement confirmation.
       setCloudCheckoutAwaitingBrowser(true);
@@ -544,14 +550,16 @@ export function useCloudBillingController({
   };
 }
 
-async function openExternalUrl(url: string): Promise<void> {
+async function openExternalUrl(url: string): Promise<boolean> {
   try {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
     await openUrl(url);
-    return;
+    return true;
   } catch (error) {
     if (typeof window === "undefined") throw error;
     window.open(url, "_blank", "noopener,noreferrer");
+    // noopener may return null even when opened; do not call this a confirmed checkout exposure.
+    return false;
   }
 }
 

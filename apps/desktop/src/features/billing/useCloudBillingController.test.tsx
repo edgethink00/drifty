@@ -2,6 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { recordProFunnelStep } from "../../lib/analytics/proFunnel";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +40,8 @@ vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../../lib/analytics/proFunnel", () => ({ recordProFunnelStep: vi.fn().mockResolvedValue(true) }));
+
 const signedInUser: NonNullable<AuthState["user"]> = {
   id: "user-1",
   aud: "authenticated",
@@ -55,7 +58,8 @@ describe("useCloudBillingController", () => {
     billingMocks.fetchBillingEntitlement.mockReset();
     billingMocks.redeemTrialCoupon.mockReset();
     cloudDeviceMocks.revokeCloudDevice.mockReset();
-    vi.mocked(openUrl).mockClear();
+    vi.mocked(openUrl).mockReset().mockResolvedValue(undefined);
+    vi.mocked(recordProFunnelStep).mockClear();
   });
 
   afterEach(() => {
@@ -336,6 +340,55 @@ describe("useCloudBillingController", () => {
 
     expect(billingMocks.createIndividualCheckout).toHaveBeenCalledWith("yearly");
     expect(openUrl).toHaveBeenCalledWith("https://checkout.example.test");
+    expect(recordProFunnelStep).toHaveBeenCalledWith({ step: "checkout_opened", billing_interval: "yearly" });
+  });
+
+  it.each(["creation", "native_open"] as const)("does not record checkout exposure after %s failure", async (failure) => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: {
+      plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null, lockedReason: "trial_expired",
+    } });
+    billingMocks.createIndividualCheckout.mockResolvedValue(failure === "creation"
+      ? { success: false, error: "Unavailable" }
+      : { success: true, data: { url: "https://checkout.example.test" } });
+    vi.mocked(openUrl).mockRejectedValueOnce(new Error("Native opener failed"));
+    const fallback = vi.spyOn(window, "open").mockReturnValue(null);
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user: signedInUser, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }));
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
+    await act(async () => { await result.current.startCloudCheckout("monthly"); });
+    expect(recordProFunnelStep).not.toHaveBeenCalled();
+    fallback.mockRestore();
+  });
+
+  it.each([false, true])("an async checkout carries no account ID; revoked=%s", async (revoke) => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: {
+      plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null, lockedReason: "trial_expired",
+    } });
+    let resolveCheckout!: (value: unknown) => void;
+    billingMocks.createIndividualCheckout.mockReturnValue(new Promise((resolve) => { resolveCheckout = resolve; }));
+    const { result, rerender } = renderHook(({ user }) => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }), { initialProps: { user: signedInUser } });
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
+    let checkout!: Promise<void>;
+    act(() => { checkout = result.current.startCloudCheckout("monthly"); });
+    rerender({ user: { ...signedInUser, id: "user-2" } });
+    if (revoke) {
+      const { writeProductAnalyticsEnabled } = await import("../../lib/analytics/productAnalyticsPreference");
+      act(() => {
+        writeProductAnalyticsEnabled(false);
+        writeProductAnalyticsEnabled(true);
+      });
+    }
+    await act(async () => {
+      resolveCheckout({ success: true, data: { url: "https://checkout.example.test" } });
+      await checkout;
+    });
+    if (revoke) expect(recordProFunnelStep).not.toHaveBeenCalled();
+    else expect(recordProFunnelStep).toHaveBeenCalledWith({ step: "checkout_opened", billing_interval: "monthly" });
   });
 
   it("blocks duplicate checkout attempts until the browser return is confirmed", async () => {
