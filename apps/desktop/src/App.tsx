@@ -816,13 +816,15 @@ export default function App() {
   const automaticCloseExpiryHandledRef = useRef<string | null>(null);
   const setTemporaryAutomaticClose = useCallback((enabled: boolean, kind: AutomaticCloseOverrideKind) => {
     const next = buildAutomaticCloseOverride(enabled, kind);
+    automaticCloseEnabledRef.current = enabled;
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride(next);
   }, []);
   const restoreSavedAutomaticClose = useCallback(() => {
+    automaticCloseEnabledRef.current = automaticCloseSavedEnabled;
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride(null);
-  }, []);
+  }, [automaticCloseSavedEnabled]);
   const extendTemporaryAutomaticClose = useCallback((extension: "60" | "today") => {
     automaticCloseExpiryHandledRef.current = null;
     setAutomaticCloseOverride((current) => {
@@ -5255,6 +5257,9 @@ export default function App() {
             appName: segment.appName,
             browserName: segment.browserName,
           }));
+          // A pause can arrive while the cat approaches. A sleeping renderer's
+          // cancellation is user intent, not a reason to close without the cat.
+          if (!automaticCloseEnabledRef.current) return { applied: false, diagnostic: "automatic_close_paused" } as const;
           // The paw contact frame is the stated cause of the close. When the
           // user catches the cat before that frame, nothing has pressed the X,
           // so closing anyway would make the whole animation a lie. Hand the
@@ -5295,6 +5300,7 @@ export default function App() {
           // approach (including an 8s timeout) so a tab/app that was current
           // before the animation can never be closed after the user moved on.
           const postInterventionGateResult = await confirmFreshDriftAlarmCandidate();
+          if (!automaticCloseEnabledRef.current) return { applied: false, diagnostic: "automatic_close_paused" } as const;
           if (postInterventionGateResult === "current-snapshot-unavailable") {
             // Fail closed when the tracker cannot prove the target is still
             // current, but keep the ordinary fallback alarm visible. Treating
@@ -5328,7 +5334,7 @@ export default function App() {
             const intercepted = result.diagnostic === "pet_intercepted";
             const targetChanged = result.diagnostic === "pet_context_changed"
               || result.diagnostic === "pet_target_changed";
-            if (targetChanged) {
+            if (targetChanged || result.diagnostic === "automatic_close_paused") {
               lastDriftAlertSegmentRef.current = null;
               petInterceptionGraceRef.current = null;
               publishEvaluationDriftAlarmTrayStatus({

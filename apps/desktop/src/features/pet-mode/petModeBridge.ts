@@ -667,11 +667,21 @@ export async function setNativePetQuickControlsVisible(visible: boolean): Promis
   await invoke("pet_quick_controls_set_visible", { visible });
 }
 
+let quickControlsStateSync = Promise.resolve();
+
 export async function syncNativePetQuickControlsState(
   state: PetQuickControlsStatePayload,
 ): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("pet_quick_controls_sync_state", { state });
+  const sync = quickControlsStateSync.then(() => invoke<void>("pet_quick_controls_sync_state", { state }));
+  quickControlsStateSync = sync.catch(() => undefined);
+  await sync;
+}
+
+export async function getNativePetQuickControlsState(): Promise<PetQuickControlsStatePayload | null> {
+  if (!isTauriRuntime()) return null;
+  const state = await invoke<unknown>("pet_quick_controls_get_state");
+  return isPetQuickControlsStatePayload(state) ? state : null;
 }
 
 export async function isNativePetQuickControlsCursorInside(): Promise<boolean> {

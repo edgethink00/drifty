@@ -49,7 +49,7 @@ use commands::{
     pet_mode_complete_fullscreen_close, pet_mode_roam, pet_mode_set_enabled, pet_mode_set_interactive,
     pet_mode_set_floor_home, pet_mode_set_presence, pet_mode_set_size, pet_mode_stalk_cursor, pet_mode_update,
     pet_mode_update_hit_region, pet_mode_visibility_action, pet_quick_controls_action,
-    pet_quick_controls_cursor_inside, pet_quick_controls_set_visible, pet_quick_controls_sync_state,
+    pet_quick_controls_cursor_inside, pet_quick_controls_set_visible, pet_quick_controls_sync_state, pet_quick_controls_get_state,
     sentry_capture_native_smoke, setup_companion_pill_window, setup_pet_mode_window,
     setup_pet_quick_controls_window, setup_watcher_window, share_card_save_png,
     startup_get_open_at_login_status, startup_set_open_at_login_enabled, system_open_settings_pane,
@@ -784,6 +784,7 @@ pub fn run() {
             pet_mode_resolve_drop,
             pet_quick_controls_set_visible,
             pet_quick_controls_sync_state,
+            pet_quick_controls_get_state,
             pet_quick_controls_cursor_inside,
             pet_quick_controls_action,
         ])

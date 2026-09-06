@@ -14,6 +14,8 @@ const bridge = vi.hoisted(() => ({
 }));
 
 vi.mock("./petModeBridge", () => ({
+  getNativePetQuickControlsState: vi.fn().mockResolvedValue(null),
+  listenToNativePetQuickControlsState: vi.fn().mockResolvedValue(vi.fn()),
   alignNativePetContact: vi.fn().mockResolvedValue(undefined),
   beginNativePetDrag: vi.fn().mockResolvedValue({ moved: false, startX: 0, startY: 0, endX: 0, endY: 0 }),
   cancelNativePetMotion: vi.fn().mockResolvedValue(undefined),

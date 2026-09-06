@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, buildAutomaticCloseOverride } from "../companion/automaticCloseOverride";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import {
@@ -168,6 +169,8 @@ const bridge = vi.hoisted(() => ({
   }),
   resolveNativePetDrop: vi.fn().mockResolvedValue({ kind: "hop", distance: 4, durationMs: 16, targetY: 0, ledge: "hop" }),
   setNativePetPresence: vi.fn().mockResolvedValue(undefined),
+  getNativePetQuickControlsState: vi.fn().mockResolvedValue(null),
+  listenToNativePetQuickControlsState: vi.fn().mockResolvedValue(vi.fn()),
   stalkNativePetCursor: vi.fn().mockResolvedValue({
     outcome: "completed",
     facing: "right",
@@ -217,6 +220,8 @@ vi.mock("./petModeBridge", () => ({
   probeNativePetAxSeat: bridge.probeNativePetAxSeat,
   resolveNativePetDrop: bridge.resolveNativePetDrop,
   setNativePetPresence: bridge.setNativePetPresence,
+  getNativePetQuickControlsState: bridge.getNativePetQuickControlsState,
+  listenToNativePetQuickControlsState: bridge.listenToNativePetQuickControlsState,
   stalkNativePetCursor: bridge.stalkNativePetCursor,
   returnWithNativePetCursor: bridge.returnWithNativePetCursor,
   triggerNativePetVisibilityAction: bridge.triggerNativePetVisibilityAction,
@@ -365,6 +370,245 @@ describe("PetModeWindowApp", () => {
     await act(async () => { acknowledgeCatch(); });
     expect(bridge.finishNativePetFullscreenIntervention).toHaveBeenCalledWith("pending-catch", true);
   });
+
+  it("renders native pause and restore even when disk keeps the opposite choice", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const until = Date.now() + 900_000;
+    const state = { automaticCloseEnabled: false, automaticCloseSavedEnabled: true,
+      automaticCloseOverride: { enabled: false, kind: "15" as const, endsAtMs: until },
+      language: "en" as const, theme: "light" as const };
+    let receive!: (nextState: { automaticCloseEnabled: boolean; automaticCloseSavedEnabled: boolean;
+      automaticCloseOverride: typeof state.automaticCloseOverride | null; language: "en"; theme: "light" }) => void;
+    bridge.getNativePetQuickControlsState.mockResolvedValueOnce(state);
+    bridge.listenToNativePetQuickControlsState.mockImplementationOnce(async (handler) => { receive = handler; return vi.fn(); });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+    await act(async () => receive({ ...state, automaticCloseEnabled: true, automaticCloseOverride: null }));
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  async function mountTimedPause(kind: "15" | "60" | "today" | "forever" = "15", enabled = false) {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(enabled, kind)));
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    await act(async () => bridge.eventHandler?.({ kind: "entry_complete" }));
+    return screen.getByLabelText("Drifty pet cat");
+  }
+
+  it.each(["15", "60", "today"] as const)("sleeps for the whole %s pause through focus, drift and touch", async (kind) => {
+    const cat = await mountTimedPause(kind);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    for (const productivity of ["focus", "drift", "neutral"] as const) {
+      await act(async () => bridge.eventHandler?.({ kind: "snapshot", snapshot: { productivity, contextLabel: "fixture", durationSeconds: 180 } }));
+      expect(cat.getAttribute("data-phase")).toBe("sleep");
+    }
+    const pet = screen.getByRole("button", { name: /Pet Drifty cat/ });
+    for (let i = 0; i < 3; i++) {
+      await act(async () => { dispatchPointer(pet, "pointerdown", { pointerId: i, clientX: 18, clientY: 18 }); });
+    }
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.querySelector(".pet-mode-cat__sleep-pose")).not.toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 60_000 + 1); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+    expect(bridge.exitNativePetScreen).not.toHaveBeenCalled();
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+  }, 20_000);
+
+  it.each([["forever", false], ["15", true]] as const)("does not force sleep for %s enabled=%s", async (kind, enabled) => {
+    const cat = await mountTimedPause(kind, enabled);
+    expect(cat.getAttribute("data-phase")).not.toBe("sleep");
+  });
+
+  it("keeps the same sleep artwork and facing through native pickup, shake and release", async () => {
+    const cat = await mountTimedPause();
+    let completeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise((resolve) => {
+      completeDrag = () => resolve({ moved: true, shakeDetected: true, startX: 120, startY: 80, endX: 180, endY: 96 });
+    }));
+    const pose = cat.querySelector(".pet-mode-cat__sleep-pose");
+    const facing = cat.classList.contains("is-mirrored");
+    await act(async () => { dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 31, clientX: 18, clientY: 18 }); });
+    await act(async () => bridge.dragStartHandler?.());
+    expect(bridge.beginNativePetDrag).toHaveBeenLastCalledWith(18, 18, 0);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => bridge.eventHandler?.({ kind: "facing", facing: facing ? "right" : "left" }));
+    expect(cat.classList.contains("is-mirrored")).toBe(facing);
+    await act(async () => completeDrag());
+    expect(cat.querySelector(".pet-mode-cat__sleep-pose")).toBe(pose);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.querySelector(".pet-mode-cat__drag-pending-rest")).toBeNull();
+    expect(bridge.resolveNativePetDrop).toHaveBeenLastCalledWith(false);
+    expect(bridge.rememberNativePetPosition).toHaveBeenLastCalledWith(true);
+    expect(bridge.roamNativePet).not.toHaveBeenCalled();
+  });
+
+  it("uses the existing pause deadline, extension and restore across webviews", async () => {
+    const cat = await mountTimedPause();
+    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 60_000); });
+    const extension = buildAutomaticCloseOverride(false, "60");
+    await act(async () => {
+      window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(extension));
+      window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_001); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => {
+      window.localStorage.removeItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY);
+      window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+    });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  }, 20_000);
+
+  it("keeps sleep through expiry during a drag and wakes only after placement", async () => {
+    const cat = await mountTimedPause();
+    let completeDrag!: () => void;
+    let completeDrop!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise((resolve) => {
+      completeDrag = () => resolve({ moved: true, startX: 120, startY: 80, endX: 180, endY: 96 });
+    }));
+    bridge.resolveNativePetDrop.mockImplementationOnce(() => new Promise((resolve) => {
+      completeDrop = () => resolve(null);
+    }));
+    const pet = screen.getByRole("button", { name: /Pet Drifty cat/ });
+    await act(async () => { dispatchPointer(pet, "pointerdown", { pointerId: 61, clientX: 18, clientY: 18 }); bridge.dragStartHandler?.(); });
+    await act(async () => {
+      vi.setSystemTime(Date.now() + 15 * 60_000);
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => completeDrag());
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    const calls = bridge.beginNativePetDrag.mock.calls.length;
+    await act(async () => { dispatchPointer(pet, "pointerdown", { pointerId: 62, clientX: 18, clientY: 18 }); });
+    expect(bridge.beginNativePetDrag.mock.calls.length).toBe(calls);
+    await act(async () => completeDrop());
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("releases sleep ownership when a pause begins and expires during an ordinary drop", async () => {
+    const cat = await mountTimedPause("forever");
+    let completeDrag!: () => void;
+    let completeDrop!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise((resolve) => {
+      completeDrag = () => resolve({ moved: true, startX: 120, startY: 80, endX: 180, endY: 96 });
+    }));
+    bridge.resolveNativePetDrop.mockImplementationOnce(() => new Promise((resolve) => {
+      completeDrop = () => resolve(null);
+    }));
+    await act(async () => { dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 71, clientX: 18, clientY: 18 }); bridge.dragStartHandler?.(); });
+    await act(async () => completeDrag());
+    expect(cat.getAttribute("data-phase")).toBe("release");
+    await act(async () => {
+      window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+      window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => {
+      vi.setSystemTime(Date.now() + 15 * 60_000);
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => completeDrop());
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledWith(true);
+  });
+
+  it("respects reduced motion while placing a sleeping cat", async () => {
+    const cat = await mountTimedPause();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    bridge.beginNativePetDrag.mockResolvedValueOnce({ moved: true, startX: 120, startY: 80, endX: 180, endY: 96 });
+    await act(async () => dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 91, clientX: 18, clientY: 18 }));
+    expect(bridge.resolveNativePetDrop).not.toHaveBeenCalled();
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledWith(true);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+  });
+
+  it("settles a sleeping drag once when native emits completion before resolving the invoke", async () => {
+    const cat = await mountTimedPause();
+    const result = { moved: true, startX: 120, startY: 80, endX: 180, endY: 96 };
+    let completeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise((resolve) => { completeDrag = () => resolve(result); }));
+    await act(async () => dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 92, clientX: 18, clientY: 18 }));
+    await act(async () => bridge.dragEndHandler?.(result));
+    await act(async () => completeDrag());
+    expect(bridge.resolveNativePetDrop).toHaveBeenCalledTimes(1);
+    expect(bridge.rememberNativePetPosition).toHaveBeenCalledTimes(1);
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+  });
+
+  it("enters sleep on a new cross-window pause and ignores queued motion and drift cues", async () => {
+    const cat = await mountTimedPause("forever");
+    expect(cat.getAttribute("data-phase")).not.toBe("sleep");
+    bridge.setNativePetPresence.mockClear();
+    await act(async () => {
+      window.localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+      window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalled();
+    const pose = cat.querySelector(".pet-mode-cat__sleep-pose");
+    await act(async () => {
+      bridge.eventHandler?.({ kind: "motion", motion: "walk" });
+      bridge.eventHandler?.({ kind: "snapshot", snapshot: { productivity: "drift", contextLabel: "fixture", durationSeconds: 180 } });
+    });
+    expect(cat.querySelector(".pet-mode-cat__sleep-pose")).toBe(pose);
+    expect(cat.classList.contains("has-sleep-drift-expression")).toBe(false);
+  });
+
+  it("discards a facing transition queued before a timed pause", async () => {
+    const cat = await mountTimedPause("forever");
+    const facing = cat.classList.contains("is-mirrored");
+    let completeFacing!: () => void;
+    bridge.stagePetModeHitRegionTransition.mockImplementationOnce(() => new Promise<void>((resolve) => { completeFacing = resolve; }));
+    await act(async () => bridge.eventHandler?.({ kind: "facing", facing: facing ? "right" : "left" }));
+    await act(async () => {
+      localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+      window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+    });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => completeFacing());
+    expect(cat.classList.contains("is-mirrored")).toBe(facing);
+  });
+
+  it("recovers when native drag fails after an intervening pause has expired", async () => {
+    const cat = await mountTimedPause("forever");
+    let failDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      failDrag = () => reject(new Error("native drag failed"));
+    }));
+    await act(async () => dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 81, clientX: 18, clientY: 18 }));
+    await act(async () => {
+      localStorage.setItem(AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, JSON.stringify(buildAutomaticCloseOverride(false, "15")));
+      window.dispatchEvent(new StorageEvent("storage", { key: AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY }));
+    });
+    await act(async () => {
+      vi.setSystemTime(Date.now() + 900_000);
+      window.dispatchEvent(new Event("focus"));
+    });
+    await act(async () => failDrag());
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("wakes at expiry without another activity snapshot", async () => {
+    const cat = await mountTimedPause();
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60_000); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  }, 20_000);
 
   it("rechecks the resident seat when the opaque app/window revision changes", async () => {
     vi.useFakeTimers();

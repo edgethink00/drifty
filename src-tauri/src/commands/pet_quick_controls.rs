@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
+use std::sync::Mutex;
 use tauri::{
     AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
@@ -21,6 +22,9 @@ const PET_QUICK_CONTROLS_SCREEN_INSET: f64 = 8.0;
 const PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS: u64 = 5_000;
 static PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD: AtomicBool = AtomicBool::new(false);
 static PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION: AtomicU64 = AtomicU64::new(0);
+// Session state remains available to a newly mounted pet even when the main
+// webview could not persist its temporary override.
+static PET_QUICK_CONTROLS_STATE: Mutex<Option<PetQuickControlsState>> = Mutex::new(None);
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -343,6 +347,13 @@ pub fn pet_quick_controls_sync_state(
     if !is_supported_quick_controls_state(&state) {
         return Err("unsupported pet quick controls state".to_string());
     }
+    *PET_QUICK_CONTROLS_STATE
+        .lock()
+        .map_err(|error| error.to_string())? = Some(state.clone());
+    if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
+        pet.emit("pet-quick-controls-state", &state)
+            .map_err(|error| error.to_string())?;
+    }
     let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
         return Ok(());
     };
@@ -368,6 +379,14 @@ pub fn pet_quick_controls_sync_state(
     }
     window
         .emit("pet-quick-controls-state", state)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn pet_quick_controls_get_state() -> Result<Option<PetQuickControlsState>, String> {
+    PET_QUICK_CONTROLS_STATE
+        .lock()
+        .map(|state| state.clone())
         .map_err(|error| error.to_string())
 }
 

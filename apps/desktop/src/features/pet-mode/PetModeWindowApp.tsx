@@ -49,6 +49,7 @@ import {
   triggerNativePetQuickControlsAction,
   triggerNativePetVisibilityAction,
 } from "./petModeBridge";
+import { usePetTimedPauseSleep } from "./usePetTimedPauseSleep";
 import { openNativePetModeMenu } from "./petModeNativeMenu";
 import {
   EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
@@ -184,7 +185,14 @@ export function PetModeWindowApp() {
       facing: entersOnLaunch ? "left" as const : "right" as const,
     };
   });
-  const initialPhase: PetModeCatPhase = initialAppearance.phase;
+  const timedPauseUntil = usePetTimedPauseSleep();
+  const timedPauseRef = useRef(timedPauseUntil);
+  timedPauseRef.current = timedPauseUntil;
+  const initialSleepNeedsPresenceRef = useRef(timedPauseUntil !== null);
+  // A pause expiring mid-drag may resume settings, but the held cat keeps its
+  // sleeping silhouette until native placement completes.
+  const sleepingDragRef = useRef(false);
+  const initialPhase: PetModeCatPhase = timedPauseUntil !== null ? "sleep" : initialAppearance.phase;
   const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
   const [dragPickupPose, setDragPickupPose] = useState<PetModeRestPose>("idle");
   const [dragReleasePose, setDragReleasePose] = useState<PetModeRestPose>("idle");
@@ -383,6 +391,7 @@ export function PetModeWindowApp() {
   }, []);
 
   const commitPhase = useCallback((nextPhase: PetModeCatPhase, onCommit?: () => void) => {
+    if (timedPauseRef.current !== null || sleepingDragRef.current) nextPhase = "sleep";
     phaseRef.current = nextPhase;
     reportLabState(nextPhase);
     const transition = ++poseTransitionRef.current;
@@ -430,6 +439,7 @@ export function PetModeWindowApp() {
   }, [beginHitRegionTransition, reportLabState]);
 
   const commitFacing = useCallback((nextFacing: "left" | "right") => {
+    if (timedPauseRef.current !== null || sleepingDragRef.current) return;
     facingRef.current = nextFacing;
     const transition = ++facingTransitionRef.current;
     const commit = () => {
@@ -529,6 +539,52 @@ export function PetModeWindowApp() {
     setAutonomousCycle(nextCycle);
   }, []);
 
+  const appliedTimedPauseRef = useRef(false);
+  useEffect(() => {
+    const sleeping = timedPauseUntil !== null;
+    if (!petModeEnabled) {
+      appliedTimedPauseRef.current = false;
+      return;
+    }
+    if (sleeping === appliedTimedPauseRef.current) return;
+    appliedTimedPauseRef.current = sleeping;
+    restartAutonomousCycle();
+    sleepTouchRef.current = 0;
+    petStreakRef.current = 0;
+    driftHuntRef.current = suppressPetModeDriftHunt(snapshotRef.current);
+    if (sleeping) {
+      if (manualDragRef.current || manualReleaseTokenRef.current !== null) sleepingDragRef.current = true;
+      actionTokenRef.current += 1;
+      cursorHuntRevisionRef.current += 1;
+      cursorHuntActiveRef.current = false;
+      // A staged facing change from before the pause must not flip the cat
+      // after it has fallen asleep.
+      facingTransitionRef.current += 1;
+      facingRef.current = renderedFacingRef.current;
+      clearHuntAlert();
+      stopMusicNote();
+      driftCueTokenRef.current = null;
+      setDriftCue("none");
+      setSleepDriftAnnoyedContext(null);
+      setSleepDriftPreviewExpression(false);
+      setManualGazeActive(false);
+      setGazeOffset({ x: 0, y: 0 });
+      setPreserveEntryLanding(false);
+      outingTicketRef.current = null;
+      void cancelNativePetMotion().catch(() => undefined);
+      const needsPresence = !visibleRef.current || phaseRef.current === "entry"
+        || initialSleepNeedsPresenceRef.current;
+      initialSleepNeedsPresenceRef.current = false;
+      commitVisibility(true);
+      // Revealing an outing also returns the panel home. A resident cat must
+      // fall asleep where it is, including while the user is carrying it.
+      if (needsPresence) void setNativePetPresence(true).catch(() => undefined);
+      commitPhase("sleep");
+    } else if (!sleepingDragRef.current) {
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+    }
+  }, [clearHuntAlert, commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, stopMusicNote, timedPauseUntil]);
+
   const updateDragReleasePose = useCallback((nextPose: PetModeRestPose) => {
     dragReleasePoseRef.current = nextPose;
     setDragReleasePose(nextPose);
@@ -555,6 +611,28 @@ export function PetModeWindowApp() {
     const releaseToken = ++actionTokenRef.current;
     manualReleaseTokenRef.current = releaseToken;
     manualReleaseSeatCheckPendingRef.current = rememberPosition;
+    if (sleepingDragRef.current || timedPauseRef.current !== null) {
+      sleepingDragRef.current = true;
+      void (async () => {
+        try {
+          // Keep the exact sleep drawing during native placement, including
+          // shake/drop and AX correction. No pickup, fall or random reaction.
+          if (!prefersReducedMotion()) await resolveNativePetDrop(false);
+          if (rememberPosition) await rememberNativePetPosition(true);
+        } catch (error) {
+          void reportNativePetDragError(error).catch(() => undefined);
+        } finally {
+          if (manualReleaseTokenRef.current === releaseToken) {
+            manualReleaseTokenRef.current = null;
+            manualReleaseSeatCheckPendingRef.current = false;
+            sleepingDragRef.current = false;
+            commitPhase(timedPauseRef.current !== null ? "sleep" : focusRestingRef.current ? "sit" : "idle");
+            restartAutonomousCycle();
+          }
+        }
+      })();
+      return;
+    }
     const reducedMotion = prefersReducedMotion();
     const forceFloorDrop = !reducedMotion
       && result?.shakeDetected === true;
@@ -568,6 +646,7 @@ export function PetModeWindowApp() {
     const airbornePose: PetModeRestPose = "idle";
     dragReleasePoseRef.current = airbornePose;
     releaseLandingRef.current = false;
+    let positionRemembered = false;
 
     void (async () => {
       try {
@@ -611,6 +690,7 @@ export function PetModeWindowApp() {
             void reportNativePetDragError(error).catch(() => undefined);
             return null;
           });
+          positionRemembered = true;
         }
         if (releaseToken !== actionTokenRef.current) return;
         if (seatResolution?.moved) {
@@ -666,12 +746,25 @@ export function PetModeWindowApp() {
           restartAutonomousCycle();
         }
       } finally {
+        // A pause can cancel the ordinary release before it remembers the
+        // user's drop. Finish that placement without a post-drop reaction.
+        if (manualReleaseTokenRef.current === releaseToken
+          && sleepingDragRef.current && rememberPosition && !positionRemembered) {
+          await rememberNativePetPosition(true).catch((error) => {
+            void reportNativePetDragError(error).catch(() => undefined);
+          });
+        }
         if (manualReleaseTokenRef.current === releaseToken) {
           setManualGazeActive(false);
           manualReleaseTokenRef.current = null;
           manualReleaseSeatCheckPendingRef.current = false;
           manualDropReactionRef.current = null;
           releaseLandingRef.current = false;
+          if (sleepingDragRef.current) {
+            sleepingDragRef.current = false;
+            commitPhase(timedPauseRef.current !== null ? "sleep" : focusRestingRef.current ? "sit" : "idle");
+            restartAutonomousCycle();
+          }
         }
       }
     })();
@@ -851,6 +944,7 @@ export function PetModeWindowApp() {
     let unlisten: (() => void) | null = null;
     void listenToNativePetDragStart(() => {
       if (!manualDragRef.current || strokeHoldRef.current || phaseRef.current === "drag") return;
+      if (timedPauseRef.current !== null || sleepingDragRef.current) return;
       sleepTouchRef.current = 0;
       const pickupPose: PetModeRestPose = phaseRef.current === "sit" ? "sit" : "idle";
       flushSync(() => {
@@ -1367,6 +1461,7 @@ export function PetModeWindowApp() {
       outingTicket?: PetModeOutingTicket | null;
     } = {},
   ) => {
+    if (timedPauseRef.current !== null || sleepingDragRef.current) return;
     const focusBlocksHunt = () => !options.allowWhileResting && focusRestingRef.current;
     if (!huntSettings.enabled || focusBlocksHunt()) return;
     const cursorHuntRevision = ++cursorHuntRevisionRef.current;
@@ -1606,6 +1701,7 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "motion") {
+        if (timedPauseRef.current !== null || sleepingDragRef.current) return;
         const isSeatCorrection = event.purpose === "seat_correction";
         if (
           manualDragRef.current
@@ -1660,6 +1756,7 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "preview_action") {
+        if (timedPauseRef.current !== null || sleepingDragRef.current) return;
         const previewAction = event.action;
         const isSleepDriftNoticePreview = previewAction === "sleep_drift_notice";
         const isSleepDriftFullPreview = previewAction === "sleep_drift_full_preview";
@@ -1794,6 +1891,10 @@ export function PetModeWindowApp() {
         })();
         return;
       }
+      if (timedPauseRef.current !== null || sleepingDragRef.current) {
+        if (!event.target.preview) void reportNativePetContact(event.target.id, false, "renderer_timed_pause").catch(() => undefined);
+        return;
+      }
       const isLabTarget = event.target.labTarget === "browser_tab_x"
         || event.target.labTarget === "drifty_window_x";
       // A seated focus pose is deliberately NOT a rejection reason. The alarm
@@ -1868,6 +1969,7 @@ export function PetModeWindowApp() {
     const resting = snapshot?.productivity === "focus";
     const wasResting = focusRestingRef.current;
     focusRestingRef.current = resting;
+    if (timedPauseRef.current !== null || sleepingDragRef.current) return;
 
     if (!petModeEnabled) {
       focusRestAppliedRef.current = false;
@@ -1937,6 +2039,10 @@ export function PetModeWindowApp() {
   }, [clearHuntAlert, commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, snapshot?.productivity, updateDragReleasePose]);
 
   useEffect(() => {
+    if (timedPauseRef.current !== null || sleepingDragRef.current) {
+      driftHuntRef.current = suppressPetModeDriftHunt(snapshot);
+      return;
+    }
     const next = advancePetModeDriftHunt(
       driftHuntRef.current,
       snapshot,
@@ -2053,7 +2159,7 @@ export function PetModeWindowApp() {
   }, [labLifeLoopEnabled, playLifeAction]);
 
   useEffect(() => {
-    if (!petModeEnabled || snapshot?.productivity === "focus") return;
+    if (!petModeEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -2097,10 +2203,10 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, petModeEnabled, playOuting, snapshot?.productivity]);
+  }, [autonomousCycle, timedPauseUntil, petModeEnabled, playOuting, snapshot?.productivity]);
 
   useEffect(() => {
-    if (!petModeEnabled || snapshot?.productivity === "focus") return;
+    if (!petModeEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -2151,7 +2257,7 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, petModeEnabled, playLifeAction, snapshot?.productivity]);
+  }, [autonomousCycle, timedPauseUntil, petModeEnabled, playLifeAction, snapshot?.productivity]);
 
   useEffect(() => {
     if (snapshot?.productivity === "focus") return undefined;
@@ -2408,12 +2514,13 @@ export function PetModeWindowApp() {
     // ownership: incrementing the token here would cancel the anger timer, and
     // the resolved tap would immediately replace the mark with a happy heart.
     if (phaseRef.current === "anger") return;
-    if (manualDragRef.current) return;
+    if (manualDragRef.current || sleepingDragRef.current) return;
     if (automaticInterventionRef.current && activeLabActionRef.current === "intervention") {
       userInterceptedInterventionTokenRef.current = actionTokenRef.current;
     }
     const dragToken = ++actionTokenRef.current;
     manualDragRef.current = true;
+    sleepingDragRef.current = timedPauseRef.current !== null;
     axSeatProbeLastStartedAtRef.current = Number.NEGATIVE_INFINITY;
     strokeHoldRef.current = false;
     void cancelNativePetMotion().catch(() => undefined);
@@ -2428,7 +2535,7 @@ export function PetModeWindowApp() {
         const result = await beginNativePetDrag(
           event.clientX,
           event.clientY,
-          prefersReducedMotion() ? 0 : PET_MODE_DRAG_PICKUP_MS,
+          sleepingDragRef.current || prefersReducedMotion() ? 0 : PET_MODE_DRAG_PICKUP_MS,
         );
         suppressQuickControlsAfterInteraction();
         // A real pointer drag owns the pet until release. Automatic/lab actions
@@ -2440,6 +2547,8 @@ export function PetModeWindowApp() {
           return;
         }
         manualDragRef.current = false;
+        const wasSleepingDrag = sleepingDragRef.current;
+        sleepingDragRef.current = false;
         axSeatProbeRevisionRef.current += 1;
         setAxSeatProbe(null);
         // Native movement never crossed the drag threshold, so this entire
@@ -2448,6 +2557,10 @@ export function PetModeWindowApp() {
         // deliberate two-touch wake behavior for a sleeping cat.
         // A recognized stroke is the same relationship: the cat stayed put
         // while the pointer moved back and forth on it.
+        if (wasSleepingDrag && timedPauseRef.current === null) {
+          commitPhase(focusRestingRef.current ? "sit" : "idle");
+          return;
+        }
         if (phaseRef.current !== "sleep") {
           commitPhase(focusRestingRef.current ? "sit" : "idle");
         }
@@ -2456,9 +2569,11 @@ export function PetModeWindowApp() {
         void reportNativePetDragError(error).catch(() => undefined);
         suppressQuickControlsAfterInteraction();
         manualDragRef.current = false;
+        const wasSleepingDrag = sleepingDragRef.current;
+        sleepingDragRef.current = false;
         axSeatProbeRevisionRef.current += 1;
         setAxSeatProbe(null);
-        if (dragToken === actionTokenRef.current) {
+        if (wasSleepingDrag || dragToken === actionTokenRef.current) {
           commitPhase(focusRestingRef.current ? "sit" : "idle");
         }
       }
@@ -2504,7 +2619,7 @@ export function PetModeWindowApp() {
   };
 
   const handlePet = () => {
-    if (manualDragRef.current) return;
+    if (manualDragRef.current || timedPauseRef.current !== null || sleepingDragRef.current) return;
     if (phaseRef.current === "sleep") {
       if (sleepTouchRef.current === 0) {
         sleepTouchRef.current = 1;
@@ -2555,7 +2670,7 @@ export function PetModeWindowApp() {
   // the normal Z until the episode clears or the upright stalk replaces it.
   // A transient wake cue still wins so the final committed beat keeps its
   // dedicated state without inserting a neutral sleeping frame.
-  const renderedDriftCue: PetModeDriftCue = driftCue !== "none"
+  const renderedDriftCue: PetModeDriftCue = timedPauseUntil !== null ? "none" : driftCue !== "none"
     ? driftCue
     : phase === "sleep" && activeSleepDriftExpression
       ? "sleep-notice"
@@ -2598,7 +2713,7 @@ export function PetModeWindowApp() {
             huntAlertVisible={huntAlertVisible}
             huntAlertDurationMs={huntAlertDurationMs}
             driftCue={renderedDriftCue}
-            sleepDriftExpression={activeSleepDriftExpression}
+            sleepDriftExpression={timedPauseUntil === null && activeSleepDriftExpression}
             dragPickupPose={dragPickupPose}
             dragReleasePose={dragReleasePose}
             proudWalk={proudWalk}

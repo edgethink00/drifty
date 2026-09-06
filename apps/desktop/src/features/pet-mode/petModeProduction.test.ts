@@ -439,8 +439,8 @@ describe("catching the cat cancels the close", () => {
     expect(terminalReport).toContain("reportNativePetContact(target.id, false, reason)");
   });
 
-  it("drops a context-changed target without closing it or spending a catch reprieve", () => {
-    const branch = app.slice(app.indexOf("if (targetChanged) {"));
+  it("drops a context-changed or paused target without closing it or spending a catch reprieve", () => {
+    const branch = app.slice(app.indexOf('if (targetChanged || result.diagnostic === "automatic_close_paused") {'));
     const body = branch.slice(0, branch.indexOf("if (intercepted) {"));
     expect(body).toContain("lastDriftAlertSegmentRef.current = null");
     expect(body).toContain("petInterceptionGraceRef.current = null");

@@ -427,6 +427,40 @@ describe("pet quick-controls bridge", () => {
     });
   });
 
+  it("serializes pause and restore state deliveries even after a native failure", async () => {
+    const { syncNativePetQuickControlsState } = await import("./petModeBridge");
+    const state = { automaticCloseEnabled: false, automaticCloseSavedEnabled: true,
+      automaticCloseOverride: { enabled: false, kind: "15" as const, endsAtMs: 1_800_000 },
+      language: "en" as const, theme: "light" as const };
+    let rejectFirst!: (error: Error) => void;
+    tauri.invoke.mockImplementationOnce(() => new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(undefined);
+    const pause = syncNativePetQuickControlsState(state);
+    const failedPause = expect(pause).rejects.toThrow("native unavailable");
+    const restore = syncNativePetQuickControlsState({ ...state, automaticCloseEnabled: true, automaticCloseOverride: null });
+    await Promise.resolve();
+    expect(tauri.invoke).toHaveBeenCalledTimes(1);
+    rejectFirst(new Error("native unavailable"));
+    await failedPause;
+    await restore;
+    expect(tauri.invoke).toHaveBeenNthCalledWith(2, "pet_quick_controls_sync_state", {
+      state: { ...state, automaticCloseEnabled: true, automaticCloseOverride: null },
+    });
+  });
+
+  it("validates cached native state before exposing it to a late pet window", async () => {
+    const { getNativePetQuickControlsState } = await import("./petModeBridge");
+    const state = { automaticCloseEnabled: false, automaticCloseSavedEnabled: true,
+      automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: 1_800_000 },
+      language: "en", theme: "light" };
+    tauri.invoke.mockResolvedValueOnce(state).mockResolvedValueOnce({ ...state, automaticCloseOverride: { enabled: false, kind: "15", endsAtMs: null } })
+      .mockResolvedValueOnce(null);
+    await expect(getNativePetQuickControlsState()).resolves.toEqual(state);
+    await expect(getNativePetQuickControlsState()).resolves.toBeNull();
+    await expect(getNativePetQuickControlsState()).resolves.toBeNull();
+    expect(tauri.invoke).toHaveBeenCalledWith("pet_quick_controls_get_state");
+  });
+
   it("accepts only fully valid quick-controls state payloads", async () => {
     const states: Array<{
       automaticCloseEnabled: boolean;
