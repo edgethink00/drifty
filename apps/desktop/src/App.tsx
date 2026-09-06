@@ -241,6 +241,12 @@ import {
   type PetInterceptionGrace,
 } from "./features/companion/petInterceptionGrace";
 import {
+  consumeDriftAlarmReminder,
+  isDriftAlarmReminderDue,
+  scheduleDriftAlarmReminder,
+  type DriftAlarmReminderState,
+} from "./features/companion/driftAlarmReminder";
+import {
   CloudTrialStartedNotice,
 } from "./features/billing/CloudTrialStartedNotice";
 import { useCloudBillingController } from "./features/billing/useCloudBillingController";
@@ -2287,6 +2293,10 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  // One card per episode used to be the whole intervention. The reminder
+  // ladder re-opens delivery for an episode that outlives its card; it is
+  // reset wherever the episode lock itself is cleared.
+  const driftAlarmReminderRef = useRef<DriftAlarmReminderState | null>(null);
   const driftAlarmSessionProtectionRef = useRef<DriftAlarmSessionProtection | null>(null);
   // A real catch is an explicit veto of this close attempt. Keep its short
   // grace on the stable drift episode so tracker segment rollover or an extra
@@ -2672,6 +2682,7 @@ export default function App() {
     lastEligibleDriftCandidateRef.current = null;
     pendingDriftAlarmTransientRef.current = null;
     lastDriftAlertSegmentRef.current = null;
+    driftAlarmReminderRef.current = null;
     driftAlarmSessionProtectionRef.current = null;
     clearPendingTransientRefresh();
   }
@@ -3100,6 +3111,8 @@ export default function App() {
     );
     pendingDriftAlarmGateRef.current = null;
     pendingDriftAlarmGateGenerationRef.current += 1;
+    // "Not a drift" ends the conversation about this episode; no reminder.
+    driftAlarmReminderRef.current = null;
 
     await trackerClient.saveClassifications([
       buildDriftAlarmManualCorrectionRecord({
@@ -3234,6 +3247,7 @@ export default function App() {
         // An explicit break starts a new intervention cycle at expiry. Do not
         // carry a catch grace across the break the user deliberately chose.
         petInterceptionGraceRef.current = null;
+        driftAlarmReminderRef.current = null;
         driftAlarmSnoozeRef.current = nextSnooze;
         setBreakRecoveryAssessment(null);
         setDriftAlarmSnooze(nextSnooze);
@@ -4434,6 +4448,7 @@ export default function App() {
         setBreakRecoveryAssessment(driftAlarmSnooze);
         setDriftAlarmSnooze(null);
         lastDriftAlertSegmentRef.current = null;
+        driftAlarmReminderRef.current = null;
       });
     }, delayMs);
 
@@ -5008,6 +5023,7 @@ export default function App() {
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
       lastDriftAlertSegmentRef.current = null;
+      driftAlarmReminderRef.current = null;
       petInterceptionGraceRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
         driftAlarmSnoozeRef.current = null;
@@ -5044,6 +5060,7 @@ export default function App() {
       pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
       lastDriftAlertSegmentRef.current = null;
+      driftAlarmReminderRef.current = null;
       petInterceptionGraceRef.current = null;
       clearPendingTransientDriftAlarm();
       publishEvaluationDriftAlarmTrayStatus({
@@ -5201,9 +5218,19 @@ export default function App() {
       ));
     };
     const markCurrentDriftAlarmDelivered = () => {
+      // Every real card or toast restarts the reminder clock for this episode.
+      const reminder = scheduleDriftAlarmReminder(
+        driftAlarmReminderRef.current,
+        episodeKey,
+        Date.now(),
+      );
+      driftAlarmReminderRef.current = reminder;
       recordDriftAlarmDebugEvent({
         kind: "delivery_delivered",
         alertKey,
+        message: reminder.nextReminderAtMs === null
+          ? null
+          : `reminder ${reminder.reminderCount} at ${new Date(reminder.nextReminderAtMs).toISOString()}`,
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
@@ -5467,6 +5494,7 @@ export default function App() {
       return result;
     }
 
+    let reminderDelivery = false;
     const deliverCurrentDriftAlarm = (aiConfirmedDrift = false) => {
       recordDriftAlarmDebugEvent({
         kind: "delivery_started",
@@ -5474,12 +5502,14 @@ export default function App() {
         candidate: summarizeDriftAlarmCandidate(latestDrift),
         evaluation,
       });
-      const shouldApplyExtremeNudge = automaticCloseEnabled && canApplyExtremeNudgeToSurface({
-        segment,
-        category,
-        aiConfirmedDrift,
-        classificationSource: confirmedDecisionClassification?.source ?? null,
-      });
+      const shouldApplyExtremeNudge = !reminderDelivery
+        && automaticCloseEnabled
+        && canApplyExtremeNudgeToSurface({
+          segment,
+          category,
+          aiConfirmedDrift,
+          classificationSource: confirmedDecisionClassification?.source ?? null,
+        });
       const pendingBreakReturnAlarm = pendingBreakReturnAlarmRef.current;
       if (pendingBreakReturnAlarm) {
         // Break expiry ends the exact snooze. The separate 10-minute recovery
@@ -5565,18 +5595,36 @@ export default function App() {
     };
 
     if (lastDriftAlertSegmentRef.current === alertKey && !pendingBreakReturnAlarmRef.current) {
-      if (driftAlarmEventRef.current?.id === alertKey) {
-        showCurrentDriftAlarm();
+      const reminderState = driftAlarmReminderRef.current;
+      if (reminderState && isDriftAlarmReminderDue(reminderState, episodeKey, Date.now())) {
+        // The card for this episode is long gone and the drift is still
+        // going. Re-open the delivery path as if this were a first delivery,
+        // except automatic close stays off: a reminder is a quiet card, not
+        // a second attempt to destroy the same tab.
+        driftAlarmReminderRef.current = consumeDriftAlarmReminder(reminderState);
+        lastDriftAlertSegmentRef.current = null;
+        reminderDelivery = true;
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_reminder_due",
+          alertKey,
+          result: String(reminderState.reminderCount + 1),
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+      } else {
+        if (driftAlarmEventRef.current?.id === alertKey) {
+          showCurrentDriftAlarm();
+        }
+        recordDriftAlarmDebugEvent({
+          kind: "delivery_suppressed",
+          alertKey,
+          reason: "already_delivered",
+          candidate: summarizeDriftAlarmCandidate(latestDrift),
+          evaluation,
+        });
+        publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
+        return;
       }
-      recordDriftAlarmDebugEvent({
-        kind: "delivery_suppressed",
-        alertKey,
-        reason: "already_delivered",
-        candidate: summarizeDriftAlarmCandidate(latestDrift),
-        evaluation,
-      });
-      publishEvaluationDriftAlarmTrayStatus({ kind: "already_delivered", candidateDetail }, checkedAt);
-      return;
     }
 
     if (pendingDriftAlarmGateRef.current === alertKey) {

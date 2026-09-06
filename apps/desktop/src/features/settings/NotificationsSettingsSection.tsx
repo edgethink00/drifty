@@ -149,6 +149,7 @@ export function NotificationsSettingsSection({
         <div className="settings-row">
           <div>
             <div className="lbl">{t("settings.notifications.timing")}</div>
+            <div className="desc">{t("settings.notifications.timingDescription")}</div>
           </div>
           <div className="ctrl">
             <SettingsSelect

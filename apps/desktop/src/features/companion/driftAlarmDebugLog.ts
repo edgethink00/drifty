@@ -37,6 +37,7 @@ const DRIFT_ALARM_DEBUG_EVENT_KINDS = [
   "delivery_started",
   "delivery_suppressed",
   "delivery_delivered",
+  "delivery_reminder_due",
   "renderer_show_non_tauri",
   "native_show_requested",
   "native_show_succeeded",
