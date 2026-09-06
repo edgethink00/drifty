@@ -7,6 +7,7 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { SpinnerIcon, SuccessIcon } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 import { localizedManagedModelDetail, localizedManagedModelFitDetail, localizedManagedModelTier } from "../../../localization/managedModelTranslations";
+import { AiResourceNote } from "../../../settings/AiResourceNote";
 
 const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 
@@ -27,6 +28,7 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
   const status = flow.managedLocalAi.status;
   const selectedModelId = flow.managedLocalAi.status?.selectedModelId
     ?? flow.managedLocalAi.actionModelId
+    ?? flow.managedLocalAi.catalog.find((model) => model.recommended)?.id
     ?? DEFAULT_LOCAL_MODEL_ID;
   const statusReady = isManagedLocalReady(status);
   const statusBusy = !statusReady && (
@@ -41,10 +43,11 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
 
   return (
     <div className="dc-onb-local">
-      <div className={statusReady ? "dc-onb-status dc-onb-status--ready" : "dc-onb-status"} role="status">
+      <AiResourceNote route="local" />
+      {statusBusy || statusReady || status?.state === "error" ? <div className={statusReady ? "dc-onb-status dc-onb-status--ready" : "dc-onb-status"} role="status">
         {statusBusy ? <SpinnerIcon /> : statusReady ? <SuccessIcon /> : null}
         {statusMessage}
-      </div>
+      </div> : null}
       <div className="dc-onb-local__cards">
         {flow.managedLocalAi.catalog.map((model) => (
           <LocalModelCard
@@ -55,6 +58,7 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
           />
         ))}
       </div>
+
     </div>
   );
 }
@@ -111,7 +115,7 @@ function LocalModelCard({
           </span>
         </div>
         <p>{description}</p>
-        {!ready && model.fitDetail ? <p className="dc-onb-local-card__fit-note">{localizedManagedModelFitDetail(model, effectiveLanguage, t)}</p> : null}
+        {!ready && model.fitDetail && model.fit !== "good" ? <p className="dc-onb-local-card__fit-note">{localizedManagedModelFitDetail(model, effectiveLanguage, t)}</p> : null}
       </div>
       <dl className="dc-onb-local-card__meta">
         <div>
@@ -120,7 +124,7 @@ function LocalModelCard({
         </div>
         {runtimeMemoryLabel ? (
           <div>
-            <dt>{t("onboarding.connection.ram")}</dt>
+            <dt>{t(status?.selectedModelId === model.id && status.state === "running" && (status.memoryUsageBytes ?? 0) > 0 ? "onboarding.connection.ram" : "ai.resources.estimatedRam")}</dt>
             <dd>{runtimeMemoryLabel}</dd>
           </div>
         ) : null}

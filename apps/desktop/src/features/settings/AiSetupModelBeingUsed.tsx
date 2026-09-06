@@ -13,6 +13,8 @@ import { normalizeOpenAiCompatibleBaseUrl, type DriftyAiRoute, type LocalAiSetup
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../localization/aiStatusTranslations";
+import { AiResourceNote } from "./AiResourceNote";
+import { managedModelResourceDescription } from "./managedModelPresentation";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {
@@ -144,6 +146,7 @@ export function AiSetupModelBeingUsed({
   const handleProviderChange = (provider: AiSetupSection) => {
     onProviderChange(provider);
   };
+  const selectedLocalModel = catalog.find((model) => model.id === localAiSetup.managedLocalModelId);
 
   const handleModelChange = (modelId: string) => {
     switch (selectedProvider) {
@@ -222,6 +225,14 @@ export function AiSetupModelBeingUsed({
         : connectionTestMessage}
       statusMessageKind={connectionTestKind}
     />
+    {selectedProvider === "drifty" ? (
+      <div className="ai-model-resource-summary">
+        {driftyRoute === "local" && selectedLocalModel ? (
+          <p className="ai-model-resource-summary__facts">{managedModelResourceDescription(selectedLocalModel, t)}</p>
+        ) : null}
+        <AiResourceNote route={driftyRoute} />
+      </div>
+    ) : null}
     {pendingDelete ? (
       <DeleteManagedModelModal
         modelLabel={pendingDelete.label}

@@ -2142,7 +2142,7 @@
   display: grid;
   align-items: stretch;
   gap: 0.75rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   margin: 0;
   width: 100%;
 }
@@ -2464,7 +2464,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 }
 
 @media (max-width: 1080px) {
-  .settings-row--cloud-pricing .individual-plan-cards,
   .dashboard-ai-recovery__plans .individual-plan-cards {
     grid-template-columns: 1fr;
   }

@@ -265,6 +265,67 @@
   min-width: 0;
 }
 
+.ai-setup-select-control--model .settings-select-control__option-label {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-1) / 2);
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.ai-setup-select-control--model .settings-select-control__option-description {
+  color: var(--text-soft);
+  font-size: 0.6875rem;
+  font-weight: 400;
+  line-height: 1.35;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+.ai-setup-select-control--model .settings-select-control__option-description:lang(ko) { word-break: keep-all; }
+
+.ai-setup-select-control--model .settings-select-control__option-title-with-status {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: var(--space-2);
+}
+
+.ai-setup-select-control--model .settings-select-control__option-status {
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ai-setup-select-control--model .settings-select-control__option:has(.settings-select-control__option-description) {
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+
+/* An uninstalled model cannot be selected yet, but its requirements must remain readable. */
+.ai-setup-select-control--model .settings-select-control__option.is-disabled:has(.settings-select-control__option-description) {
+  color: var(--text);
+  opacity: 1;
+}
+
+.ai-setup-select-control--model .settings-select-control__option-action:not(.settings-select-control__option-action--hover) {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.ai-setup-select-control--model .settings-select-control__option-row.has-action .settings-select-control__option-action:disabled {
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* Disabled styling must not reveal an idle action before its row is hovered. */
+.ai-setup-select-control--model .settings-select-control__option-row.has-action .settings-select-control__option-action:disabled:not(.settings-select-control__option-action--hover),
+.ai-setup-select-control--model .settings-select-control__option-row.has-action:is(:hover, :focus-within) .settings-select-control__option-action:disabled {
+  opacity: 0.45;
+}
+
 .ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option {
   padding-right: 6.7rem;
 }
@@ -370,6 +431,19 @@
   color: #fff;
 }
 
+/* Model setup is secondary to Upgrade (or a blocked plan's billing recovery). */
+.ai-setup-select-control--model .settings-select-control__option-row.has-action .settings-select-control__option-action:not(.settings-select-control__option-action--primary):not(.settings-select-control__option-action--icon) {
+  background: transparent;
+  border-color: var(--line-strong);
+  box-shadow: none;
+  color: var(--text-muted);
+}
+
+.ai-setup-select-control--model .settings-select-control__option-row.has-action .settings-select-control__option-action:not(.settings-select-control__option-action--primary):not(.settings-select-control__option-action--icon):hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
 /* Manage-style actions (Delete an installed model, Manage billing) reveal only on
    row hover / keyboard focus so the dropdown stays uncluttered. */
 .ai-setup-select-control .settings-select-control__option-action--hover {
@@ -412,11 +486,6 @@
   color: var(--text);
 }
 
-/* Danger-tone icon (Delete) keeps the warn fill from --danger but a soft-white glyph. */
-.ai-setup-select-control .settings-select-control__option-row.has-action .settings-select-control__option-action--icon.settings-select-control__option-action--danger {
-  color: #fff;
-}
-
 .ai-setup-select-control .settings-select-control__option-action--icon svg {
   height: 0.92rem;
   width: 0.92rem;
@@ -435,7 +504,11 @@
 }
 
 .ai-setup-select-control--model .settings-select-control__menu {
-  width: max(100%, 18rem);
+  left: auto;
+  right: 0;
+  width: max(100%, 26rem);
+  max-width: calc(100vw - 2rem);
+  max-height: min(28rem, 60vh);
 }
 
 .ai-setup-provider-heading {
@@ -452,4 +525,11 @@
     right: auto;
     width: min(100%, calc(100vw - 2rem));
   }
+}
+
+/* Progress remains readable while its action is temporarily unavailable. */
+.ai-setup-select-control--model .settings-select-control__option-row.has-action .settings-select-control__option-action:disabled[aria-busy="true"] {
+  opacity: 1;
+  color: var(--text);
+  cursor: progress;
 }

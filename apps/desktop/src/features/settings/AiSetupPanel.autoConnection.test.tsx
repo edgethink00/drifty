@@ -23,11 +23,11 @@ describe("AiSetupPanel automatic local connection test", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
 
     await waitFor(() => {
-      const option = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i });
+      const option = within(modelBeingUsed).getByRole("option", { name: /^Balanced · Qwen 3\.5 4B$/i });
       if (!(option instanceof HTMLButtonElement)) throw new Error("Installed managed model option should be a button.");
       expect(option.disabled).toBe(false);
     });
-    fireEvent.click(within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 4B$/i }));
+    fireEvent.click(within(modelBeingUsed).getByRole("option", { name: /^Balanced · Qwen 3\.5 4B$/i }));
 
     expect(modelSelect.textContent).toContain("Qwen 3.5 4B");
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_start", { modelId: "drifty-qwen3-5-4b-default" }));
@@ -70,7 +70,7 @@ describe("AiSetupPanel automatic local connection test", () => {
     const modelSelect = within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i });
     fireEvent.click(modelSelect);
     const option = await waitFor(() => {
-      const candidate = within(modelBeingUsed).getByRole("option", { name: /^Qwen 3\.5 2B$/i });
+      const candidate = within(modelBeingUsed).getByRole("option", { name: /^Lightweight · Qwen 3\.5 2B$/i });
       if (!(candidate instanceof HTMLButtonElement) || candidate.disabled) {
         throw new Error("Installed managed model option should be enabled.");
       }

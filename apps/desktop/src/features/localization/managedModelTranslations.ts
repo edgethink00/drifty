@@ -3,10 +3,10 @@ import type { DisplayLanguage, LocalizationController } from "./LocalizationCont
 
 export function localizedManagedModelDetail(
   model: ManagedLocalAiModel,
-  language: DisplayLanguage,
+  _language: DisplayLanguage,
   t: LocalizationController["t"],
 ): string {
-  if (language === "en") return model.detail;
+  // Known-model copy is owned by translations in both languages; native catalog text is the fallback.
   switch (model.id) {
     case "drifty-qwen3-5-2b-economy": return t("settings.ai.modelDetailEconomy");
     case "drifty-qwen3-5-4b-default": return t("settings.ai.modelDetailDefault");

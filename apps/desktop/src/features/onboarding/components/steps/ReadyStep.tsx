@@ -3,6 +3,7 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { ToggleButton } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
+import { INDIVIDUAL_PRICING } from "../../../billing/individualPricing";
 
 export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -19,6 +20,7 @@ export function ReadyStep({ flow }: { readonly flow: OnboardingFlow }) {
               <span className="dc-onb-ready-item__stack">
                 <strong>{item.label}</strong>
                 <span>{item.sub}</span>
+                {item.details?.map((detail) => <span key={detail}>{detail}</span>)}
               </span>
             ) : (
               <span className="dc-onb-ready-item__label">{item.label}</span>
@@ -50,7 +52,7 @@ function summaryItemsForFlow(
   flow: OnboardingFlow,
   t: LocalizationController["t"],
   language: LocalizationController["effectiveLanguage"],
-): ReadonlyArray<{ readonly label: string; readonly sub?: string }> {
+): ReadonlyArray<{ readonly label: string; readonly sub?: string; readonly details?: readonly string[] }> {
   const accountSummary = flow.accountSkippedForDev
     ? t("onboarding.ready.accountSkippedForDev")
     : t("onboarding.ready.accountConnected");
@@ -69,6 +71,13 @@ function summaryItemsForFlow(
   return [
     {
       label: t("onboarding.ready.cloudSelected"),
+      details: [
+        t("onboarding.ready.cloudPricing", {
+          monthly: INDIVIDUAL_PRICING.monthly.amount,
+          yearly: INDIVIDUAL_PRICING.yearly.amount,
+        }),
+        t("onboarding.ready.cloudData"),
+      ],
       sub: flow.promotionActive
         ? t("onboarding.ready.promoAccessUntil", {
           date: formatBillingAccessEndDate(flow.promotionEndsAt, language)

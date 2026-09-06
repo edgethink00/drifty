@@ -2,6 +2,7 @@ import type { SettingsSelectOption, SettingsSelectRowAction } from "./SettingsSe
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { isRetryableManagedModelError } from "./managedLocalAiLabels";
 import type { LocalizationController } from "../localization/LocalizationContext";
+import { managedModelChoiceTitle, managedModelResourceDescription } from "./managedModelPresentation";
 
 export const DRIFTY_CLOUD_MODEL_ID = "drifty_cloud";
 /**
@@ -34,7 +35,7 @@ export type DriftyModelOptionsParams = {
  * to manage Drifty AI (there is no separate provider card): the cloud entry
  * carries an Upgrade or hover-revealed Manage-billing action, not-installed local
  * models carry a Download action (with % progress / Retry), and installed local
- * models carry hover-revealed Show-in-Finder + Delete icon actions.
+ * models always show their Show-in-Finder + Delete icon actions.
  */
 export function driftyModelOptions({
   catalog,
@@ -67,6 +68,7 @@ export function driftyModelOptions({
       actionLabel: cloudSubscribeActionLabel ?? undefined,
       actionAriaLabel: cloudActionAriaLabel,
       actionDisabled: cloudSubscribeActionDisabled,
+      actionTone: "primary",
       onAction: () => {
         void onStartCloudSetup();
       },
@@ -82,6 +84,7 @@ export function driftyModelOptions({
         actionLabel: t("settings.account.manageBilling"),
         actionAriaLabel: t("settings.account.manageBilling"),
         actionOnHover: cloudSelectable,
+        actionTone: cloudSelectable ? undefined : "primary",
         onAction: () => {
           void onManageCloudBilling();
         },
@@ -89,8 +92,12 @@ export function driftyModelOptions({
       : { value: DRIFTY_CLOUD_MODEL_ID, label: DRIFTY_CLOUD_MODEL_LABEL };
 
   return [
-    cloudOption,
+    { ...cloudOption, description: t("ai.resources.cloudModelSummary") },
     ...catalog.map((model) => {
+      const presentation = {
+        displayLabel: `${managedModelChoiceTitle(model, t)} · ${model.label}`,
+        description: managedModelResourceDescription(model, t),
+      };
       const selectable = isSelectableManagedModel(model.id, status);
       if (selectable) {
         const busy = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
@@ -101,7 +108,6 @@ export function driftyModelOptions({
             key: "reveal",
             label: t("settings.ai.showManagedModelInFinderAria", { model: model.label }),
             icon: <FolderIcon />,
-            onHover: true,
             onAction: () => {
               void onRevealArtifact(artifactDir);
             },
@@ -111,7 +117,6 @@ export function driftyModelOptions({
           key: "delete",
           label: t("settings.ai.deleteManagedModelAria", { model: model.label }),
           icon: <TrashIcon />,
-          onHover: true,
           tone: "danger",
           disabled: busy,
           onAction: () => {
@@ -121,10 +126,12 @@ export function driftyModelOptions({
         return {
           value: model.id,
           label: model.label,
+          ...presentation,
+          statusLabel: t(status?.selectedModelId === model.id && status.state === "running" ? "ai.resources.modelInUse" : "ai.resources.modelInstalled"),
           // The managed action hook deliberately ignores overlapping work. Keep a
           // second model selection from changing the persisted identity while the
           // current install/start still owns that action slot.
-          disabled: busy,
+          disabled: busy || model.fit === "insufficient",
           actions,
         } satisfies SettingsSelectOption<string>;
       }
@@ -134,13 +141,14 @@ export function driftyModelOptions({
       return {
         value: model.id,
         label: model.label,
+        ...presentation,
         disabled: true,
         actionLabel: localizedDownloadButtonLabel(busy, failed, status?.progress?.percent ?? null, t),
         actionAriaLabel: t("settings.ai.downloadManagedModelAria", { model: model.label }),
-        // Idle Download buttons only appear on hover (like the other row actions);
-        // a download in progress or a retryable error stays visible so its status shows.
+        // Keep idle setup actions quiet; progress and errors stay visible.
         actionOnHover: !busy && !failed,
-        actionDisabled: Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
+        actionBusy: busy,
+        actionDisabled: model.fit === "insufficient" || Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting",
         onAction: (modelId: string) => {
           void onInstallModel(modelId);
         },

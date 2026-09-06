@@ -12,14 +12,20 @@ export type SettingsSelectRowAction = {
   readonly icon?: ReactNode;
   /** Reveal only on hover / focus (used for manage-style actions like Delete). */
   readonly onHover?: boolean;
-  readonly tone?: "danger";
+  readonly tone?: "danger" | "primary";
   readonly disabled?: boolean;
+  readonly busy?: boolean;
   readonly onAction: () => void;
 };
 
 export type SettingsSelectOption<TValue extends string> = {
   readonly value: TValue;
   readonly label: string;
+  /** Optional customer-facing title, also used as the accessible option name. */
+  readonly displayLabel?: string;
+  readonly description?: string;
+  /** Persistent state text beside the option title, separate from hover actions. */
+  readonly statusLabel?: string;
   readonly accentColor?: string;
   readonly disabled?: boolean;
   /** Greyed as "not ready" but still clickable (e.g. a provider that needs API keys). */
@@ -33,7 +39,8 @@ export type SettingsSelectOption<TValue extends string> = {
   /** Reveal the row action only on hover / focus (used for manage-style actions like Delete). */
   readonly actionOnHover?: boolean;
   /** Visual tone for the row action button. */
-  readonly actionTone?: "danger";
+  readonly actionBusy?: boolean;
+  readonly actionTone?: "danger" | "primary";
   readonly onAction?: (value: TValue) => void;
   /** Multiple trailing actions. Takes precedence over the single actionLabel/onAction pair. */
   readonly actions?: readonly SettingsSelectRowAction[];
@@ -50,6 +57,7 @@ function rowActionsFor<TValue extends string>(option: SettingsSelectOption<TValu
     onHover: option.actionOnHover,
     tone: option.actionTone,
     disabled: option.actionDisabled,
+    busy: option.actionBusy,
     onAction: () => onAction(option.value),
   }];
 }
@@ -216,7 +224,7 @@ export function SettingsSelect<TValue extends string>({
           <>
             <span className="settings-select-control__value">
               {showPlaceholder ? null : <OptionIcon option={selectedOption} />}
-              <span>{showPlaceholder ? placeholder : selectedOption.label}</span>
+              <span>{showPlaceholder ? placeholder : selectedOption.displayLabel ?? selectedOption.label}</span>
             </span>
             <span className="settings-select-control__chevron" aria-hidden="true" />
           </>
@@ -240,6 +248,11 @@ export function SettingsSelect<TValue extends string>({
                   id={optionId(option.value)}
                   type="button"
                   role="option"
+                  aria-label={option.description || option.statusLabel ? (option.displayLabel ?? option.label) : undefined}
+                  aria-describedby={[
+                    option.statusLabel ? `${optionId(option.value)}-status` : null,
+                    option.description ? `${optionId(option.value)}-description` : null,
+                  ].filter(Boolean).join(" ") || undefined}
                   aria-selected={showsSelectedState}
                   aria-disabled={optionDisabled}
                   tabIndex={-1}
@@ -253,7 +266,17 @@ export function SettingsSelect<TValue extends string>({
                   }}
                 >
                   <OptionIcon option={option} />
-                  <span className="settings-select-control__option-label">{option.label}</span>
+                  <span className="settings-select-control__option-label">
+                    <span className={option.statusLabel ? "settings-select-control__option-title-with-status" : undefined}>
+                      <span>{option.displayLabel ?? option.label}</span>
+                      {option.statusLabel ? (
+                        <span className="settings-select-control__option-status" id={`${optionId(option.value)}-status`}>
+                          {option.statusLabel}
+                        </span>
+                      ) : null}
+                    </span>
+                    {option.description ? <span className="settings-select-control__option-description" id={`${optionId(option.value)}-description`}>{option.description}</span> : null}
+                  </span>
                 </button>
                 {rowActions.length > 0 ? (
                   <span className="settings-select-control__option-actions">
@@ -261,13 +284,17 @@ export function SettingsSelect<TValue extends string>({
                       <button
                         key={action.key}
                         type="button"
-                        className={`settings-select-control__option-action${action.icon ? " settings-select-control__option-action--icon" : ""}${action.onHover ? " settings-select-control__option-action--hover" : ""}${action.tone === "danger" ? " settings-select-control__option-action--danger" : ""}`}
+                        className={`settings-select-control__option-action${action.icon ? " settings-select-control__option-action--icon" : ""}${action.onHover ? " settings-select-control__option-action--hover" : ""}${action.tone ? ` settings-select-control__option-action--${action.tone}` : ""}`}
                         aria-label={action.label}
                         title={action.label}
                         disabled={action.disabled}
+                        aria-busy={action.busy || undefined}
                         onFocus={() => setActiveIndex(index)}
                         onClick={(event) => {
                           event.stopPropagation();
+                          // Async actions can disable or replace this button. Keep
+                          // focus inside the control so blur does not dismiss progress.
+                          triggerRef.current?.focus({ preventScroll: true });
                           action.onAction();
                         }}
                       >

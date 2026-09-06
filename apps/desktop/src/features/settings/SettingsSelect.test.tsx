@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SettingsSelect, type SettingsSelectOption } from "./SettingsSelect";
@@ -44,6 +45,74 @@ function renderSelect() {
 }
 
 describe("SettingsSelect row actions", () => {
+  it("keeps focus and progress in the popup when a download action disables and is replaced", async () => {
+    const onChange = vi.fn();
+    let focusAtDownloadStart: Element | null = null;
+    let completeDownload!: () => void;
+    const download = new Promise<void>((resolve) => { completeDownload = resolve; });
+
+    function DownloadSelect() {
+      const [state, setState] = useState<"idle" | "downloading" | "installed">("idle");
+      return (
+        <SettingsSelect
+          ariaLabel="AI model"
+          value="current"
+          onChange={onChange}
+          options={[
+            { value: "current", label: "Current model" },
+            {
+              value: "local",
+              label: "Local model",
+              disabled: state !== "installed",
+              description: state === "installed" ? "Installed" : "Local AI",
+              actions: state === "installed"
+                ? [{ key: "reveal", label: "Show in Finder", text: "Show", onAction: vi.fn() }]
+                : [{
+                  key: "download",
+                  label: "Download Local model",
+                  text: state === "downloading" ? "Downloading 42%" : "Download",
+                  disabled: state === "downloading",
+                  busy: state === "downloading",
+                  onAction: () => {
+                    focusAtDownloadStart = document.activeElement;
+                    setState("downloading");
+                    void download.then(() => setState("installed"));
+                  },
+                }],
+            },
+          ]}
+        />
+      );
+    }
+
+    render(<DownloadSelect />);
+    const trigger = screen.getByRole("combobox", { name: "AI model" });
+    fireEvent.click(trigger);
+    const downloadAction = screen.getByRole("button", { name: "Download Local model" });
+    act(() => downloadAction.focus());
+    fireEvent.click(downloadAction);
+
+    // JSDOM does not reproduce native blur on disabling a focused button.
+    // Focus must leave that button before the action starts changing its state.
+    expect(focusAtDownloadStart).toBe(trigger);
+    expect(document.activeElement).toBe(trigger);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Downloading 42%")).toBeTruthy();
+    expect(downloadAction.hasAttribute("disabled")).toBe(true);
+    expect(downloadAction.getAttribute("aria-busy")).toBe("true");
+
+    await act(async () => completeDownload());
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.getByText("Installed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show in Finder" })).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("option", { name: "Local model" }));
+    expect(onChange).toHaveBeenCalledWith("local");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("marks the current value with a selected fill instead of a trailing check", () => {
     renderSelect();
     fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));

@@ -1313,7 +1313,12 @@
   color: var(--dc-onb-soft);
   font-size: 13px;
   line-height: 1.45;
+  text-wrap: pretty;
 }
+
+.dc-onb-setup-card__desc:lang(ko) { word-break: keep-all; }
+
+.dc-onb-local .ai-resource-note { margin: 0; color: var(--dc-onb-soft); }
 
 .dc-onb-setup-card__check {
   flex: none;
@@ -2114,4 +2119,17 @@
   background: var(--dc-onb-raised);
   border-color: color-mix(in srgb, var(--dc-onb-text) 16%, transparent);
   color: var(--dc-onb-text);
+}
+
+/* AI choice cards must inherit the same dark surfaces as their new resource copy. */
+:root[data-theme="dark"] .dc-onb-setup-card,
+:root[data-theme="dark"] .dc-onb-local-card,
+:root[data-theme="dark"] .dc-onb-secondary-button {
+  background: var(--dc-onb-raised);
+}
+
+:root[data-theme="dark"] .dc-onb-setup-card:not(.dc-onb-setup-card--selected),
+:root[data-theme="dark"] .dc-onb-local-card:not(.dc-onb-local-card--selected),
+:root[data-theme="dark"] .dc-onb-secondary-button {
+  border-color: color-mix(in srgb, var(--dc-onb-text) 20%, transparent);
 }

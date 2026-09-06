@@ -1,0 +1,25 @@
+.ai-resource-note {
+  margin: 10px 0 0;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+.ai-resource-note:lang(ko) { word-break: keep-all; }
+
+.ai-model-resource-summary {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-model-resource-summary__facts {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
