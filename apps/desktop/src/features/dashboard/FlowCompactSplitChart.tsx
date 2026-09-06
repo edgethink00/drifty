@@ -99,7 +99,6 @@ export function FlowCompactSplitChart({
             entries={productivityRingEntries}
             totalSeconds={totalSeconds}
             centerPercent={productivityCenterPercent}
-            meaning="productivity"
             flowBlocks={flowBlocks}
             appIcons={appIcons}
           />

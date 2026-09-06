@@ -477,7 +477,6 @@ export function DashboardPage({
                     entries={dayProductivityRingEntries}
                     totalSeconds={totalSeconds}
                     centerPercent={dayProductivityCenterPercent}
-                    meaning="productivity"
                     flowBlocks={summaryFlowBlocks}
                     appIcons={appIcons}
                     language={effectiveLanguage}

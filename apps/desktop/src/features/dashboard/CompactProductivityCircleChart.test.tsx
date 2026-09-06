@@ -53,7 +53,7 @@ describe("CompactProductivityCircleChart", () => {
     expect(within(legend).queryByText("5h 33m")).toBeNull();
   });
 
-  it("labels the classified-time denominator and reports classification coverage", () => {
+  it("keeps the classified-time focus percent without explanatory copy", () => {
     const totalSeconds = 4 * 3600;
     const entries = [
       { productivity: "focus", totalSeconds: 3600, segments: 2, ratio: 3600 / totalSeconds },
@@ -73,7 +73,7 @@ describe("CompactProductivityCircleChart", () => {
     const center = container.querySelector(".flow-compact-productivity-circle__center strong");
     // 1h focus of 2h classified = 50%, not 25% of the 4h tracked total.
     expect(center?.textContent).toBe("50%");
-    expect(container.querySelector(".flow-compact-productivity-circle__center span")?.textContent).toBe("focus");
-    expect(container.querySelector(".flow-compact-productivity-circle__coverage")?.textContent).toBe("Focus % uses classified time50% classified · 2h unclassified");
+    expect(container.querySelector(".flow-compact-productivity-circle__center span")).toBeNull();
+    expect(container.querySelector(".flow-compact-productivity-circle__coverage")).toBeNull();
   });
 });

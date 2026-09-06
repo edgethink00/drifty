@@ -133,7 +133,7 @@ describe("CompactRingChart", () => {
     expect(panel.querySelector(".flow-compact-productivity-circle__note")).toBeNull();
   });
 
-  it("keeps unclassified remainder out of the productivity ring and explains its denominator", () => {
+  it("keeps the classified-time percent without explanatory labels", () => {
     const totalSeconds = 4 * 3600;
     const classifiedSeconds = 2 * 3600;
     const entries: CompactRingEntry[] = [
@@ -161,15 +161,13 @@ describe("CompactRingChart", () => {
         entries={entries}
         totalSeconds={totalSeconds}
         centerPercent={50}
-        meaning="productivity"
         flowBlocks={[]}
         appIcons={appIcons}
       />,
     );
 
-    expect(container.querySelector(".flow-compact-productivity-circle__center span")?.textContent).toBe("focus");
-    expect(container.querySelector(".flow-compact-productivity-circle__coverage")?.textContent)
-      .toBe("Focus % uses classified time50% classified · 2h unclassified");
+    expect(container.querySelector(".flow-compact-productivity-circle__center span")).toBeNull();
+    expect(container.querySelector(".flow-compact-productivity-circle__coverage")).toBeNull();
     const segments = container.querySelectorAll(".flow-compact-productivity-circle__segment");
     expect(segments).toHaveLength(2);
   });

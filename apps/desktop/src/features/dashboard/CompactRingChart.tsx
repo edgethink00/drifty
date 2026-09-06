@@ -28,7 +28,6 @@ export interface CompactRingChartProps {
   readonly entries: readonly CompactRingEntry[];
   readonly totalSeconds: number;
   readonly centerPercent: number;
-  readonly meaning?: "generic" | "productivity";
   readonly flowBlocks: FlowBlock[];
   readonly appIcons: AppIconMap;
   readonly getAppBreakdown?: (entry: CompactRingEntry) => CompactClassificationBreakdownRow[];
@@ -47,7 +46,6 @@ export function CompactRingChart({
   entries,
   totalSeconds,
   centerPercent,
-  meaning = "generic",
   flowBlocks,
   appIcons,
   getAppBreakdown,
@@ -56,14 +54,9 @@ export function CompactRingChart({
   const [hoveredSegment, setHoveredSegment] = useState<CompactClassificationHoverState | null>(null);
   const activeEntries = entries.filter((entry) => entry.totalSeconds > 0 && entry.ratio > 0);
   const summaryEntries = activeEntries.length > 0 ? activeEntries : entries;
-  // Entries carry classified time only, so arc and hover shares use that total.
-  // Productivity mode surfaces the unclassified remainder separately as coverage.
+  // Entries carry classified time only; hover shares are a percentage of that
+  // classified total (the unclassified remainder is intentionally not shown).
   const classifiedSeconds = entries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
-  const unclassifiedSeconds = Math.max(0, totalSeconds - classifiedSeconds);
-  const classificationCoveragePercent = totalSeconds > 0
-    ? Math.min(100, Math.round((classifiedSeconds / totalSeconds) * 100))
-    : 0;
-  const isProductivity = meaning === "productivity";
   const circleLabel = formatCompactBarLabel(title, entries, (entry) => entry.label, language);
   const gap = activeEntries.length > 1 ? 1.6 : 0;
   // Morph the arcs from the previous render's ratios (keyed by title so the Day
@@ -119,31 +112,16 @@ export function CompactRingChart({
           </svg>
           <div className="flow-compact-productivity-circle__center" aria-hidden="true">
             <strong>{centerPercent}%</strong>
-            {isProductivity ? <span>{language === "ko" ? "집중" : "focus"}</span> : null}
           </div>
         </div>
-        <div className={isProductivity ? "flow-compact-productivity-circle__details" : undefined}>
-          <div className="flow-compact-split-chart__legend" aria-hidden="true">
-            {summaryEntries.map((entry) => (
-              <span className="flow-compact-split-chart__legend-item" key={entry.key}>
-                <span className="flow-compact-split-chart__swatch" style={{ background: entry.color }} />
-                <span className="flow-compact-split-chart__legend-label">{entry.label}</span>
-                <span className="flow-compact-split-chart__legend-value">{formatCompactRingLegendHours(entry.totalSeconds, language)}</span>
-              </span>
-            ))}
-          </div>
-          {isProductivity ? (
-            <div className="flow-compact-productivity-circle__coverage">
-              <span>{language === "ko" ? "집중 비율은 분류된 시간 기준" : "Focus % uses classified time"}</span>
-              {unclassifiedSeconds > 0 ? (
-                <span>
-                  {language === "ko"
-                    ? `${classificationCoveragePercent}% 분류됨 · ${formatLocalizedCompactDurationFromSeconds(unclassifiedSeconds, language)} 미분류`
-                    : `${classificationCoveragePercent}% classified · ${formatLocalizedCompactDurationFromSeconds(unclassifiedSeconds, language)} unclassified`}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
+        <div className="flow-compact-split-chart__legend" aria-hidden="true">
+          {summaryEntries.map((entry) => (
+            <span className="flow-compact-split-chart__legend-item" key={entry.key}>
+              <span className="flow-compact-split-chart__swatch" style={{ background: entry.color }} />
+              <span className="flow-compact-split-chart__legend-label">{entry.label}</span>
+              <span className="flow-compact-split-chart__legend-value">{formatCompactRingLegendHours(entry.totalSeconds, language)}</span>
+            </span>
+          ))}
         </div>
       </div>
       {hoveredSegment ? <CompactClassificationHoverCard hover={hoveredSegment} appIcons={appIcons} language={language} /> : null}
