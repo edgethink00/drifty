@@ -147,7 +147,7 @@ export function AgentsBreakdownComposed({ sources, dayModel, models, period }: A
   const repoSeconds = repoEntries.reduce((sum, entry) => sum + entry.totalSeconds, 0);
 
   const attentionMinutes = period === "Today" ? dayModel?.attentionMinutes ?? 0 : week.attentionMinutes;
-  const unattendedMinutes = period === "Today" ? dayModel?.unattendedMinutes ?? 0 : 0;
+  const unattendedMinutes = period === "Today" ? dayModel?.unattendedMinutes ?? 0 : week.unattendedMinutes;
   const ratio = attentionMinutes > 0 ? agentMinutes / attentionMinutes : 0;
 
   return (

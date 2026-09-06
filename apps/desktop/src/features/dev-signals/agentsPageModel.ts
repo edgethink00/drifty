@@ -146,6 +146,7 @@ export type AgentsWeekModel = {
   readonly days: readonly AgentsWeekDayColumn[];
   readonly agentMinutes: number;
   readonly attentionMinutes: number;
+  readonly unattendedMinutes: number;
   readonly commitCount: number;
   readonly insertions: number;
   readonly deletions: number;
@@ -187,6 +188,7 @@ export function buildAgentsWeekModel(models: readonly AgentsDayModel[]): AgentsW
     days,
     agentMinutes: models.reduce((sum, model) => sum + model.agentMinutes, 0),
     attentionMinutes: models.reduce((sum, model) => sum + model.attentionMinutes, 0),
+    unattendedMinutes: models.reduce((sum, model) => sum + model.unattendedMinutes, 0),
     commitCount: models.reduce((sum, model) => sum + model.commitCount, 0),
     insertions: models.reduce((sum, model) => sum + model.insertions, 0),
     deletions: models.reduce((sum, model) => sum + model.deletions, 0),

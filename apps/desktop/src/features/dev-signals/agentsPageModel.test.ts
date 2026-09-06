@@ -81,6 +81,7 @@ describe("buildAgentsWeekModel", () => {
     const dayB = buildAgentsDayModel({ ...source, day: "2026-08-21" });
     const week = buildAgentsWeekModel([dayB, dayA]);
     expect(week.agentMinutes).toBe(480);
+    expect(week.unattendedMinutes).toBe(280);
     expect(week.commitCount).toBe(6);
     expect(week.repos[0]).toMatchObject({ repo: "drifty_mac", commitCount: 4 });
     expect(week.peakDayAgentMinutes).toBe(240);

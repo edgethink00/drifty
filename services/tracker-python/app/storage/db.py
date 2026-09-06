@@ -2553,6 +2553,8 @@ class TrackerDatabase:
         return inserted
 
     def fetch_dev_commit_events(self, start: str, end: str) -> list[dict[str, Any]]:
+        norm_start = self._normalize_range_bound(start)
+        norm_end = self._normalize_range_bound(end)
         with self.connect() as conn:
             rows = conn.execute(
                 """
@@ -2562,7 +2564,7 @@ class TrackerDatabase:
                   AND datetime(authored_at) < datetime(?)
                 ORDER BY datetime(authored_at) ASC
                 """,
-                (start, end),
+                (norm_start, norm_end),
             ).fetchall()
         return [
             {
@@ -2642,6 +2644,8 @@ class TrackerDatabase:
         return sum(1 for key in keys if key not in existing)
 
     def fetch_agent_session_events(self, start: str, end: str) -> list[dict[str, Any]]:
+        norm_start = self._normalize_range_bound(start)
+        norm_end = self._normalize_range_bound(end)
         with self.connect() as conn:
             rows = conn.execute(
                 """
@@ -2653,7 +2657,7 @@ class TrackerDatabase:
                   AND datetime(ended_at) >= datetime(?)
                 ORDER BY datetime(started_at) ASC
                 """,
-                (end, start),
+                (norm_end, norm_start),
             ).fetchall()
         return [
             {

@@ -437,6 +437,26 @@ class StorageTests(GitRepoTestCase):
         self.assertEqual(rows[0]["totalTokens"], 40)
         self.assertEqual(rows[0]["turnIndex"], 7)
 
+    def test_range_queries_normalize_timezone(self) -> None:
+        database = self._database()
+        # A commit at 01:30 local time (which in KST UTC+9 is previous day 16:30 UTC)
+        # should be found when querying with local day bounds without timezone offset.
+        database.save_dev_commit_events(
+            [
+                {
+                    "repoKey": "k",
+                    "commitSha": "local-early",
+                    "authoredAt": "2026-08-21T01:30:00+09:00",
+                    "insertions": 1,
+                    "deletions": 0,
+                    "filesChanged": 1,
+                },
+            ]
+        )
+        # Querying with plain date bounds as passed by day_bounds("2026-08-21")
+        found = database.fetch_dev_commit_events("2026-08-21T00:00:00+09:00", "2026-08-21T23:59:59+09:00")
+        self.assertEqual([e["commitSha"] for e in found], ["local-early"])
+
     def test_range_queries_filter_by_time(self) -> None:
         database = self._database()
         database.save_dev_commit_events(
