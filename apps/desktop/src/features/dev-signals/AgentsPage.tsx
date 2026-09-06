@@ -543,7 +543,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
  * feature treatment, the rest become ranked rows with share meters. Share is
  * share of commits, mirroring how app usage shows share of tracked time.
  */
-function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProviders, startOfDayMinutes }: {
+function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProviders, startOfDayMinutes, topAgentRepo }: {
   readonly repos: readonly AgentsRepoRow[];
   readonly totalCommits: number;
   readonly showActive: boolean;
@@ -551,6 +551,7 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
   /** repo → agent provider that dominated it; drives the row icon. */
   readonly repoProviders: ReadonlyMap<string, string>;
   readonly startOfDayMinutes: number;
+  readonly topAgentRepo?: { readonly repo: string; readonly duration: string } | null;
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const [featured, ...rest] = repos;
@@ -561,8 +562,8 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
       <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={activityAria}>
         <div className="app-usage-empty empty-state">
           <span className="eyebrow">{t("agents.repo.noCommits")}</span>
-          <strong>{t("agents.repo.noActivity")}</strong>
-          <p>{t("agents.repo.noActivityDetail")}</p>
+          <strong>{topAgentRepo ? t("agents.repo.activeWithoutCommits", { repo: topAgentRepo.repo, duration: topAgentRepo.duration }) : t("agents.repo.noActivity")}</strong>
+          <p>{topAgentRepo ? t("agents.repo.activeWithoutCommitsDetail") : t("agents.repo.noActivityDetail")}</p>
         </div>
       </section>
     );
@@ -1084,7 +1085,7 @@ function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly source
         <span className="label-mono">{t("agents.rhythm.title")}</span>
         <div className="insight-panel-head__legend">
           <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />{t("agents.rhythm.agentTime")}</span>
-          <span className="chip"><span className="sw" style={{ background: "var(--text-soft)" }} />{t("agents.rhythm.commits")}</span>
+          <span className="chip"><span className="sw" style={{ background: "var(--text-soft)" }} />{t("agents.rhythm.commits")}{maxCommits > 0 ? ` · ${t("agents.rhythm.peakCount", { count: maxCommits })}` : ""}</span>
         </div>
       </div>
       <div className="focus-drift agents-rhythm-chart" aria-label={t("agents.rhythm.aria")}>
@@ -1189,6 +1190,12 @@ export function AgentsPage({
     : buildAgentsWeekModel(models).repos;
   const scopedSources = period === "Today" ? (daySource ? [daySource] : []) : days;
   const repoProviders = useMemo(() => repoDominantProviders(scopedSources), [scopedSources]);
+  const topAgentRepo = useMemo(() => {
+    const byRepo = [...agentMinutesByRepo(scopedSources).entries()].sort((a, b) => b[1] - a[1]);
+    const top = byRepo[0];
+    if (!top || top[1] <= 0) return null;
+    return { repo: top[0], duration: formatAgentDuration(top[1], effectiveLanguage) };
+  }, [effectiveLanguage, scopedSources]);
   const isCurrentPeriod = range.startDay <= todayDay && todayDay <= range.endDay;
   const nextSelectedDay = shiftDashboardPeriodDay(selectedDay, period, 1);
   const nextRange = getDashboardPeriodRange(nextSelectedDay, period, boundaryMinutes, startOfWeek);
@@ -1378,6 +1385,7 @@ export function AgentsPage({
             periodLabel={t("agents.period.today")}
             repoProviders={repoProviders}
             startOfDayMinutes={boundaryMinutes}
+            topAgentRepo={topAgentRepo}
           />
         </div>
         {breakdownPanel}

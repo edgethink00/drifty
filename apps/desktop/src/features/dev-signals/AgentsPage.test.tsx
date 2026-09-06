@@ -473,4 +473,25 @@ describe("AgentsPage shared dashboard controls", () => {
     fireEvent(event, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
     expect(document.querySelector(".agents-hover-card")?.textContent).toContain("Peak×50");
   });
+
+  it("displays peak commits in the rhythm chart legend", () => {
+    renderAgentsPage();
+    // source has 3 commits total, and rhythm histogram computes peak per hour
+    expect(screen.getByText(/Commits · peak/i)).toBeTruthy();
+  });
+
+  it("shows active agent repo notice when agent ran but no commits were created", () => {
+    const noCommitSource: AgentsDaySource = {
+      ...source,
+      commits: [],
+      turns: [
+        [60, 120, "codex", "drifty_mac"],
+      ],
+    };
+    vi.mocked(useAgentsData).mockReturnValue({ days: [noCommitSource], loading: false, live: true });
+
+    renderAgentsPage();
+
+    expect(screen.getByText(/Agents ran in drifty_mac/i)).toBeTruthy();
+  });
 });
