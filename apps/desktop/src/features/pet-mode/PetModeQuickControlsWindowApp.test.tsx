@@ -46,6 +46,16 @@ describe("PetModeQuickControlsWindowApp", () => {
     nativeMenu.openNativePetModeMenu.mockResolvedValue(true);
   });
 
+  it("refreshes the language when the main window saves the versioned preference", () => {
+    render(<PetModeQuickControlsWindowApp />);
+    expect(screen.queryByRole("button", { name: "펫 옵션 더 보기" })).toBeNull();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
+    act(() => {
+      window.dispatchEvent(new StorageEvent("storage", { key: DISPLAY_LANGUAGE_STORAGE_KEY }));
+    });
+    expect(screen.getByRole("button", { name: "펫 옵션 더 보기" })).toBeTruthy();
+  });
+
   it("opens the timed automatic-close menu and the native overflow menu", async () => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "ko");
     window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { THEME_STORAGE_KEY, resolveInitialTheme } from "../settings/settingsStorage";
-import { resolveInitialDisplayLanguage, type DisplayLanguage } from "../localization/languagePreference";
+import { DISPLAY_LANGUAGE_STORAGE_KEY, LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY, resolveInitialDisplayLanguage, type DisplayLanguage } from "../localization/languagePreference";
 import { EXTREME_NUDGE_STORAGE_KEY } from "../companion/extremeNudgeData";
 import { DRIFT_ALERTS_STORAGE_KEY } from "../companion/driftAlarmData";
 import {
@@ -159,7 +159,8 @@ export function PetModeQuickControlsWindowApp() {
         || event.key === EXTREME_NUDGE_STORAGE_KEY
         || event.key === DRIFT_ALERTS_STORAGE_KEY
         || event.key === AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY
-        || event.key === "drifty.displayLanguage"
+        || event.key === DISPLAY_LANGUAGE_STORAGE_KEY
+        || event.key === LEGACY_DISPLAY_LANGUAGE_STORAGE_KEY
       ) refresh();
     };
     window.addEventListener("storage", handleStorage);

@@ -68,6 +68,35 @@ function GeneralSettingsHarness() {
 }
 
 describe("display language preference", () => {
+  it.each(["en-US", "ja-JP", "de-DE"])("repairs the old implicit Korean default on a %s system", (language) => {
+    window.localStorage.setItem("drifty.displayLanguage", "ko");
+    expect(resolveInitialDisplayLanguage({ language, languages: [language] })).toBe("en");
+  });
+
+  it("preserves English from the unversioned preference on Korean systems", () => {
+    window.localStorage.setItem("drifty.displayLanguage", "en");
+    expect(resolveInitialDisplayLanguage({ language: "ko-KR" })).toBe("en");
+  });
+
+  it("preserves the safe v2 preference over the old implicit Korean value", () => {
+    window.localStorage.setItem("drifty.displayLanguage", "ko");
+    window.localStorage.setItem("drifty.displayLanguage.v2", "en");
+    expect(resolveInitialDisplayLanguage({ language: "ko-KR" })).toBe("en");
+  });
+
+  it("repairs an upgraded controller and keeps a subsequent Korean choice after restart", () => {
+    window.localStorage.setItem("drifty.displayLanguage", "ko");
+    const first = render(<ControllerHarness />);
+    expect(screen.getByText("Settings")).toBeTruthy();
+    expect(document.documentElement.lang).toBe("en");
+    fireEvent.click(screen.getByRole("button", { name: "Toggle language" }));
+    expect(screen.getByText("설정")).toBeTruthy();
+    first.unmount();
+    render(<ControllerHarness />);
+    expect(screen.getByText("설정")).toBeTruthy();
+    expect(document.documentElement.lang).toBe("ko");
+  });
+
   it("defaults Korean-system users to Korean on first launch", () => {
     expect(resolveInitialDisplayLanguage({
       language: "ko-KR",
