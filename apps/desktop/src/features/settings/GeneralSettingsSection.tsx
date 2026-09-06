@@ -8,10 +8,12 @@ import {
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { formatStartOfDayOptionLabel } from "../../lib/formatting";
 import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
+import { END_OF_DAY_REVIEW_MINUTE_OPTIONS } from "../companion/endOfDayReviewSchedule";
 
 type GeneralSettingsSectionProps = {
   readonly backgroundUpdatesEnabled: boolean;
   readonly backgroundUpdatesSupported: boolean;
+  readonly dayReviewTimeValue: string;
   readonly startOfDayValue: string;
   readonly startOfWeek: StartOfWeek;
   readonly updaterChecking: boolean;
@@ -20,6 +22,7 @@ type GeneralSettingsSectionProps = {
   readonly updaterMessage: string | null;
   readonly onBackgroundUpdatesEnabledChange: (enabled: boolean) => void;
   readonly onCheckForUpdates: () => void;
+  readonly onDayReviewTimeChange: (value: string) => void;
   readonly onStartOfDayChange: (value: string) => void;
   readonly onStartOfWeekChange: (value: StartOfWeek) => void;
 };
@@ -27,6 +30,7 @@ type GeneralSettingsSectionProps = {
 export function GeneralSettingsSection({
   backgroundUpdatesEnabled,
   backgroundUpdatesSupported,
+  dayReviewTimeValue,
   startOfDayValue,
   startOfWeek,
   updaterChecking,
@@ -35,6 +39,7 @@ export function GeneralSettingsSection({
   updaterMessage,
   onBackgroundUpdatesEnabledChange,
   onCheckForUpdates,
+  onDayReviewTimeChange,
   onStartOfDayChange,
   onStartOfWeekChange,
 }: GeneralSettingsSectionProps) {
@@ -52,6 +57,10 @@ export function GeneralSettingsSection({
     ...option,
     label: formatStartOfDayOptionLabel(option.minutes, effectiveLanguage === "ko" ? "ko-KR" : "en-US"),
   }));
+  const dayReviewTimeOptions = END_OF_DAY_REVIEW_MINUTE_OPTIONS.map((option) => ({
+    value: option.value,
+    label: formatStartOfDayOptionLabel(option.minutes, effectiveLanguage === "ko" ? "ko-KR" : "en-US"),
+  }));
 
   return (
     <div className="settings-section settings-section--general">
@@ -59,6 +68,7 @@ export function GeneralSettingsSection({
         <div className="settings-row"><div><div className="lbl">{t("settings.general.language")}</div><div className="desc">{t("settings.general.languageDescription")}</div></div><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.language")} value={effectiveLanguage} options={languageOptions} onChange={setDisplayLanguage} /></div></div>
         <div className="settings-row"><label><div className="lbl">{t("settings.general.startOfDay")}</div><div className="desc">{t("settings.general.startOfDayDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfDay")} value={startOfDayValue} options={startOfDayOptions} onChange={onStartOfDayChange} /></div></div>
         <div className="settings-row"><label><div className="lbl">{t("settings.general.startOfWeek")}</div><div className="desc">{t("settings.general.startOfWeekDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.startOfWeek")} value={startOfWeek} options={startOfWeekOptions} onChange={onStartOfWeekChange} /></div></div>
+        <div className="settings-row"><label><div className="lbl">{t("settings.general.dayReviewTime")}</div><div className="desc">{t("settings.general.dayReviewTimeDescription")}</div></label><div className="ctrl"><SettingsSelect ariaLabel={t("settings.general.dayReviewTime")} value={dayReviewTimeValue} options={dayReviewTimeOptions} onChange={onDayReviewTimeChange} /></div></div>
       </div>
       <div className="settings-block"><h3>{t("settings.general.startup")}</h3>
         <StartupSettingsRow />

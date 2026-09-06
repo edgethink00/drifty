@@ -50,6 +50,7 @@ function GeneralSettingsHarness() {
       <GeneralSettingsSection
         backgroundUpdatesEnabled={false}
         backgroundUpdatesSupported
+        dayReviewTimeValue="20:00"
         startOfDayValue="04:00"
         startOfWeek="monday"
         updaterChecking={false}
@@ -58,6 +59,7 @@ function GeneralSettingsHarness() {
         updaterMessage={null}
         onBackgroundUpdatesEnabledChange={() => undefined}
         onCheckForUpdates={() => undefined}
+        onDayReviewTimeChange={() => undefined}
         onStartOfDayChange={() => undefined}
         onStartOfWeekChange={() => undefined}
       />
@@ -159,6 +161,7 @@ describe("display language preference", () => {
         <GeneralSettingsSection
           backgroundUpdatesEnabled
           backgroundUpdatesSupported={false}
+          dayReviewTimeValue="20:00"
           startOfDayValue="04:00"
           startOfWeek="monday"
           updaterChecking={false}
@@ -167,6 +170,7 @@ describe("display language preference", () => {
           updaterMessage={null}
           onBackgroundUpdatesEnabledChange={() => undefined}
           onCheckForUpdates={() => undefined}
+          onDayReviewTimeChange={() => undefined}
           onStartOfDayChange={() => undefined}
           onStartOfWeekChange={() => undefined}
         />

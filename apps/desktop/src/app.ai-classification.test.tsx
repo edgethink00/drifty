@@ -1300,7 +1300,7 @@ describe("App AI classification controls", () => {
     });
     let livePollStarted = false;
     trackerClient.getTimeline.mockImplementation((query: ClassificationQuery) => {
-      if (query.start === `${today}T04:00:00`) return Promise.resolve([focusSegment]);
+      if (timelineQueryIncludesDay(query, today)) return Promise.resolve([focusSegment]);
       livePollStarted = true;
       return Promise.resolve([chromeSegment]);
     });

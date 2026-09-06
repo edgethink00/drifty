@@ -343,6 +343,16 @@ import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze,
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
 import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
+import {
+  END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY,
+  endOfDayReviewMinuteToValue,
+  endOfDayReviewValueToMinute,
+  isEndOfDayReviewDue,
+  persistEndOfDayReviewCatchUpHandledDay,
+  readEndOfDayReviewCatchUpHandledDay,
+  resolveEndOfDayReviewCatchUp,
+  resolveInitialEndOfDayReviewMinute,
+} from "./features/companion/endOfDayReviewSchedule";
 import { WATCHER_INITIAL_PEEK_DELAY_MS, WATCHER_STALE_EVENT_RECOVERY_MS, buildLiveWatcherSnapshot, buildWatcherSnapshot, getDefaultWatcherSnapshot, getWatcherContextLabel, getWatcherScheduleDelayMs, persistWatcherResponse, resolveWatcherSnapshot, sendDriftNotification, shouldReplacePetModeLiveSnapshot, showDueDriftWatcherPeek, snapshotObservedAtMs } from "./features/companion/watcherData";
 import type { DriftReminderState, WatcherSnapshot } from "./features/companion/watcherData";
 import {
@@ -776,6 +786,7 @@ export default function App() {
   const [forceChromiumAxExtremeNudgeEnabled, setForceChromiumAxExtremeNudgeEnabled] = useState(resolveInitialForceChromiumAxExtremeNudgeEnabled);
   const [startOfDayMinutes, setStartOfDayMinutes] = useState(resolveInitialStartOfDayMinutes);
   const [startOfWeek, setStartOfWeek] = useState<StartOfWeek>(resolveInitialStartOfWeek);
+  const [endOfDayReviewMinute, setEndOfDayReviewMinute] = useState(resolveInitialEndOfDayReviewMinute);
   const [demoDashboardReplaySettings, setDemoDashboardReplaySettings] = useState<DemoDashboardReplaySettings>(resolveInitialDemoDashboardReplaySettings);
   const [categoryColorOverrides, setCategoryColorOverrides] = useState<CategoryColorOverrides>(resolveInitialCategoryColorOverrides);
   const [appThemeColorOverrides, setAppThemeColorOverrides] = useState<AppThemeColorOverrides>(resolveInitialAppThemeColorOverrides);
@@ -1043,6 +1054,10 @@ export default function App() {
   const [dismissedDashboardAiRecoveryKey, setDismissedDashboardAiRecoveryKey] = useState<string | null>(null);
   const [watcherEvent, setWatcherEvent] = useState<WatcherPeekEvent | null>(null);
   const [endOfDayReviewEvent, setEndOfDayReviewEvent] = useState<EndOfDayReviewEvent | null>(null);
+  /* In Tauri the review card lives in the Companion window, so the main
+     window only knows which day it last sent. That day decides where the
+     card's "open dashboard" lands: a catch-up review opens yesterday. */
+  const presentedEndOfDayReviewDayRef = useRef<string | null>(null);
   const [driftAlarmEvent, setDriftAlarmEvent] = useState<DriftAlarmEvent | null>(null);
   const [cmdOpen, setCmdOpen] = useState(false);
 
@@ -1260,8 +1275,9 @@ export default function App() {
   }, [openCompanionNotificationSettings]);
 
   const openEndOfDayReviewDashboard = useCallback(() => {
+    const reviewDay = presentedEndOfDayReviewDayRef.current;
     setEndOfDayReviewEvent(null);
-    selectDay(logicalTodayIsoDate(startOfDayMinutes));
+    selectDay(reviewDay ?? logicalTodayIsoDate(startOfDayMinutes));
     navigateToTab("dashboard", "Today");
   }, [navigateToTab, startOfDayMinutes]);
 
@@ -2806,6 +2822,7 @@ export default function App() {
   }, [allowBuiltInHeuristics, armWatcherRecoveryTimer, builtInHeuristicsUnavailableSince, classificationRules, clearWatcherEvent, showAiClassificationImpact, status?.running]);
 
   const showEndOfDayReview = useCallback(async (event: EndOfDayReviewEvent): Promise<boolean> => {
+    if (!event.isMock) presentedEndOfDayReviewDayRef.current = event.day;
     if (!isTauriRuntime()) {
       setEndOfDayReviewEvent(event);
       return true;
@@ -4245,6 +4262,10 @@ export default function App() {
   }, [startOfDayMinutes]);
 
   useEffect(() => {
+    window.localStorage.setItem(END_OF_DAY_REVIEW_MINUTE_STORAGE_KEY, String(endOfDayReviewMinute));
+  }, [endOfDayReviewMinute]);
+
+  useEffect(() => {
     window.localStorage.setItem(START_OF_WEEK_STORAGE_KEY, startOfWeek);
   }, [startOfWeek]);
 
@@ -4623,6 +4644,7 @@ export default function App() {
 
     void listenToNativeEndOfDayReviewDisplayed((day) => {
       window.localStorage.setItem(END_OF_DAY_REVIEW_STORAGE_KEY, day);
+      persistEndOfDayReviewCatchUpHandledDay(day);
     }).then((unlisten) => {
       if (!unlisten) return;
       if (disposed) {
@@ -6898,14 +6920,20 @@ export default function App() {
     if (!hasLoadedOnce) return;
     if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
-    if (currentMinuteOfDay === null || currentMinuteOfDay < END_OF_DAY_REVIEW_TRIGGER_MINUTE) return;
+    if (currentMinuteOfDay === null) return;
+    /* Two clocks: the leaderboard checkpoint keeps its fixed evening slot so
+       every participant's daily score lands at the same time, while the
+       review itself fires at the user's own time. */
+    const checkpointDue = currentMinuteOfDay >= END_OF_DAY_REVIEW_TRIGGER_MINUTE;
+    const reviewTimeDue = isEndOfDayReviewDue(currentMinuteOfDay, endOfDayReviewMinute, startOfDayMinutes);
+    if (!checkpointDue && !reviewTimeDue) return;
     if (classificationAvailabilityGateEnabled
       && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
     if (endOfDayReviewAutomaticInFlightRef.current) return;
 
     const reviewShown = window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY) === todayDay;
     const leaderboardCheckpointDone =
-      window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay;
+      !checkpointDue || window.localStorage.getItem(END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY) === todayDay;
     if (reviewShown && leaderboardCheckpointDone) return;
     if (segments.length === 0) return;
 
@@ -6915,7 +6943,8 @@ export default function App() {
        are skipped silently. The leaderboard checkpoint keeps its own once-a-
        day marker so a skipped review never suppresses the publish. */
     const trackedSeconds = sumEndOfDayReviewTrackedSeconds(segments);
-    const reviewDue = !reviewShown
+    const reviewDue = reviewTimeDue
+      && !reviewShown
       && isInstallDayReviewEligible(onboardingCompletedAt, todayDay, startOfDayMinutes)
       && trackedSeconds >= END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS;
     if (!reviewDue && (leaderboardCheckpointDone || !classificationAssessmentReady)) return;
@@ -6980,7 +7009,71 @@ export default function App() {
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
+
+  /* Yesterday's review, once, if it never got shown: the machine was closed
+     before the review time, or Drifty was not running. It loads its own
+     timeline so the dashboard's selected day is untouched, and it runs at
+     most once per launch. Thin days close the slot without a card. */
+  const endOfDayReviewCatchUpAttemptedRef = useRef(false);
+  useEffect(() => {
+    if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
+    if (!hasLoadedOnce || shouldBlockLocalTrackerAccess) return;
+    if (!status?.running) return;
+    if (classificationAvailabilityGateEnabled
+      && (classificationAvailability.state === "checking" || classificationAvailability.state === "retrying")) return;
+    if (endOfDayReviewCatchUpAttemptedRef.current) return;
+    if (!isInstallDayReviewEligible(onboardingCompletedAt, shiftIsoDate(todayDay, -1), startOfDayMinutes)) return;
+    if (onboardingCompletedAt && logicalDayIsoDateForDate(new Date(onboardingCompletedAt), startOfDayMinutes) === todayDay) return;
+
+    const catchUp = resolveEndOfDayReviewCatchUp({
+      todayDay,
+      lastShownDay: window.localStorage.getItem(END_OF_DAY_REVIEW_STORAGE_KEY),
+      catchUpHandledDay: readEndOfDayReviewCatchUpHandledDay(),
+    });
+    if (!catchUp) return;
+    endOfDayReviewCatchUpAttemptedRef.current = true;
+
+    void (async () => {
+      const range = getLogicalDayRange(catchUp.day, catchUp.day, startOfDayMinutes);
+      let daySegments: ActivitySegment[] = [];
+      try {
+        daySegments = materializeBuiltInHeuristicTimeline(await trackerClient.getTimeline(range)).segments;
+      } catch {
+        /* No timeline means nothing to review; leave the slot open so the
+           next launch can try again. */
+        endOfDayReviewCatchUpAttemptedRef.current = false;
+        return;
+      }
+      if (sumEndOfDayReviewTrackedSeconds(daySegments) < END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS) {
+        persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
+        return;
+      }
+
+      let leaderboardCelebration: LeaderboardCelebration | undefined;
+      try {
+        if (classificationAssessmentReady && isSupabaseConfigured && isPolicySignedIn && !shouldUsePreviewData()) {
+          const checkpoint = await fetchOwnLeaderboardCheckpoint("daily", catchUp.day);
+          if (checkpoint?.success) {
+            leaderboardCelebration = toLeaderboardCelebration(checkpoint.data ?? null, "daily", catchUp.day) ?? undefined;
+          }
+        }
+      } catch {
+        leaderboardCelebration = undefined;
+      }
+
+      const event = await buildEndOfDayReviewEvent({
+        day: catchUp.day,
+        generatedAt: new Date().toISOString(),
+        segments: daySegments,
+        leaderboardCelebration,
+      });
+      const shown = await showEndOfDayReview(event);
+      /* Native overlay reports display separately. Persist here only for the
+         browser fallback, where a successful show is already visible. */
+      if (shown && !isTauriRuntime()) persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
+    })();
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
@@ -8443,6 +8536,10 @@ export default function App() {
   const handleStartOfWeekChange = useCallback((value: StartOfWeek) => {
     setStartOfWeek(value);
   }, []);
+  const dayReviewTimeValue = endOfDayReviewMinuteToValue(endOfDayReviewMinute);
+  const handleDayReviewTimeChange = useCallback((value: string) => {
+    setEndOfDayReviewMinute(endOfDayReviewValueToMinute(value));
+  }, []);
   const handleCategoryColorChange = useCallback((category: ActivityCategory, value: string) => {
     if (!isHexColor(value)) return;
     setCategoryColorOverrides((current) => ({ ...current, [category]: value }));
@@ -9751,6 +9848,7 @@ export default function App() {
                   <GeneralSettingsSection
                     backgroundUpdatesSupported={hostPlatform === "macos"}
                     backgroundUpdatesEnabled={backgroundUpdatesEnabled}
+                    dayReviewTimeValue={dayReviewTimeValue}
                     startOfDayValue={startOfDayValue}
                     startOfWeek={startOfWeek}
                     updaterChecking={updaterChecking}
@@ -9759,6 +9857,7 @@ export default function App() {
                     updaterMessage={updaterMessage}
                     onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
                     onCheckForUpdates={() => void handleCheckForUpdates()}
+                    onDayReviewTimeChange={handleDayReviewTimeChange}
                     onStartOfDayChange={handleStartOfDayChange}
                     onStartOfWeekChange={handleStartOfWeekChange}
                   />
