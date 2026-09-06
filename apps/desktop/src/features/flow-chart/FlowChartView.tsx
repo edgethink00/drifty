@@ -24,6 +24,7 @@ import type { FlowColorMode } from "./FlowChartTypes";
 import { FlowLegendHoverCard, type FlowLegendHoverState } from "./FlowChartHoverCards";
 import { buildFlowActivityInspectorEvent, FlowHoverLayer } from "./FlowHoverLayer";
 import { buildFlowBlockHoverGroups, type FlowBlockHoverGroup } from "./flowHoverGroups";
+import type { AnchoredFlowHoverState } from "./useFlowChartHoverDelegation";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -111,6 +112,7 @@ export function FlowChartView({
     readonly initialView: ActivityInspectorView;
   } | null>(null);
   const activityInspectorSessionIdRef = useRef(0);
+  const previewAnchorRef = useRef<AnchoredFlowHoverState | null>(null);
   const activityInspectorRef = useRef(activityInspector);
   activityInspectorRef.current = activityInspector;
   const hoveredLegendCardRef = useRef<HTMLDivElement>(null);
@@ -139,7 +141,9 @@ export function FlowChartView({
       return segment ? [segment] : [];
     }) ?? []
   ), [activityInspector, segmentsById]);
-  const closeActivityInspector = useCallback((restoreFocus = true) => {
+  const closeActivityInspector = useCallback((sessionId: number, restoreFocus = true) => {
+    // A previous session's async deletion must not dismiss a newly opened card.
+    if (activityInspectorRef.current?.sessionId !== sessionId) return;
     const restoreFocusTarget = activityInspectorRef.current?.restoreFocusTarget ?? null;
     setActivityInspector(null);
     if (!restoreFocus) return;
@@ -161,13 +165,14 @@ export function FlowChartView({
     initialView: ActivityInspectorView = "overview",
   ) => {
     activityInspectorSessionIdRef.current += 1;
+    const preview = previewAnchorRef.current;
     setActivityInspector({
       sessionId: activityInspectorSessionIdRef.current,
       group,
       event: buildFlowActivityInspectorEvent(group, { projectsById }),
       sourceSegmentIds: [...new Set(group.segmentIds)],
       regroupedBlockCount: 1,
-      anchorElement: target,
+      anchorElement: preview?.group === group && preview.anchorElement.isConnected ? preview.anchorElement : target,
       restoreFocusTarget: target,
       initialView,
     });
@@ -199,9 +204,16 @@ export function FlowChartView({
       if (!nextCandidate) return null;
 
       const nextGroup = nextCandidate.group;
-      const nextAnchor = flowGridElement?.querySelector<HTMLElement>(
-        `[data-flow-minute="${nextGroup.startMinuteOfDay}"]`,
-      ) ?? null;
+      const remainsInGroup = (element: HTMLElement | null) => Boolean(
+        element?.isConnected
+        && flowGridElement?.contains(element)
+        && hoverGroupsByCell.get(Number(element.dataset.flowMinute)) === nextGroup,
+      );
+      const nextAnchor = remainsInGroup(current.anchorElement)
+        ? current.anchorElement
+        : flowGridElement?.querySelector<HTMLElement>(
+            `[data-flow-minute="${nextGroup.startMinuteOfDay}"]`,
+          ) ?? null;
       if (!nextAnchor) return current;
       if (
         nextGroup === current.group
@@ -213,7 +225,7 @@ export function FlowChartView({
         group: nextGroup,
         regroupedBlockCount: candidates.length,
         anchorElement: nextAnchor,
-        restoreFocusTarget: nextAnchor,
+        restoreFocusTarget: remainsInGroup(current.restoreFocusTarget) ? current.restoreFocusTarget : nextAnchor,
       };
     });
   }, [flowGridElement, hoverGroupsByCell]);
@@ -268,6 +280,7 @@ export function FlowChartView({
       />
 
       <FlowHoverLayer
+        previewAnchorRef={previewAnchorRef}
         gridElement={flowGridElement}
         hoverGroupsByCell={hoverGroupsByCell}
         intervalMinutes={intervalMinutes}
@@ -279,10 +292,6 @@ export function FlowChartView({
         projectOptions={projectOptions}
         activityActionsEnabled={activityActionsEnabled}
         classificationOptions={classificationOptions}
-        hasAssignProjectAction={Boolean(onSaveActivityValues || onAssignProject)}
-        hasClassifyAction={Boolean(onSaveActivityValues || onClassifyActivity)}
-        hasDeleteAction={Boolean(onDeleteActivity)}
-        onOpenActivity={openActivityInspector}
         disabled={activityInspector !== null}
         pinnedGroup={activityInspector?.group ?? null}
       />
@@ -299,7 +308,7 @@ export function FlowChartView({
           projectOptions={projectOptions}
           initialView={activityInspector.initialView}
           regroupedBlockCount={activityInspector.regroupedBlockCount}
-          onClose={closeActivityInspector}
+          onClose={(restoreFocus) => closeActivityInspector(activityInspector.sessionId, restoreFocus)}
           onSaveValues={onSaveActivityValues}
           onAssignProject={onAssignProject}
           onClassify={onClassifyActivity}

@@ -3,14 +3,10 @@ import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty
 import {
   ActivityInspectorPreview,
   resolveActivityActionsDisabledReason,
-  type ActivityInspectorAttribute,
   type ActivityInspectorProjectOption,
-  type ActivityInspectorView,
 } from "./WeekActivityInspector";
 import {
   ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS,
-  ANCHORED_PREVIEW_CARD_SELECTOR,
-  ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR,
   readAnchoredPreviewCardRect,
   trackAnchoredHoverIntent,
   type AnchoredHoverIntent,
@@ -36,14 +32,6 @@ type WeekCalendarHoverLayerProps = {
   readonly classificationOptions?: ClassificationOptions;
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
   readonly projectBySegmentId?: ReadonlyMap<string, string | null>;
-  readonly hasAssignProjectAction?: boolean;
-  readonly hasClassifyAction?: boolean;
-  readonly hasDeleteAction?: boolean;
-  readonly onOpenActivity?: (
-    event: WeekCalendarEvent,
-    target: HTMLElement,
-    initialView: ActivityInspectorView,
-  ) => void;
   readonly disabled?: boolean;
 };
 
@@ -98,10 +86,6 @@ export function WeekCalendarHoverLayer({
   classificationOptions,
   projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   projectBySegmentId = EMPTY_PROJECT_BY_SEGMENT_ID,
-  hasAssignProjectAction = false,
-  hasClassifyAction = false,
-  hasDeleteAction = false,
-  onOpenActivity,
   disabled = false,
 }: WeekCalendarHoverLayerProps) {
   const { t } = useLocalization();
@@ -124,18 +108,12 @@ export function WeekCalendarHoverLayer({
   const isPointerInsideCurrentPreview = useCallback(() => {
     const pointerPosition = pointerPositionRef.current;
     if (!pointerPosition) return false;
-    const hitElement = typeof document.elementFromPoint === "function"
-      ? document.elementFromPoint(pointerPosition.x, pointerPosition.y)
-      : null;
-    if (hitElement?.closest(ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR)) return true;
-    return Array.from(document.querySelectorAll<HTMLElement>(ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR)).some((element) => {
-      const rect = element.getBoundingClientRect();
-      if (rect.width <= 0 || rect.height <= 0) return false;
-      return pointerPosition.x >= rect.left
-        && pointerPosition.x <= rect.right
-        && pointerPosition.y >= rect.top
-        && pointerPosition.y <= rect.bottom;
-    });
+    const rect = readAnchoredPreviewCardRect();
+    return rect !== null
+      && pointerPosition.x >= rect.left
+      && pointerPosition.x <= rect.right
+      && pointerPosition.y >= rect.top
+      && pointerPosition.y <= rect.bottom;
   }, []);
 
   const cancelPointerClear = useCallback(() => {
@@ -208,15 +186,9 @@ export function WeekCalendarHoverLayer({
       pendingPointerHoverRef.current = null;
       retargetTimerRef.current = null;
       if (!pendingHover?.anchorElement.isConnected) return;
-      if (isPointerInsideCurrentPreview()) return;
       commitPointerHover(pendingHover);
     }, WEEK_HOVER_RETARGET_SETTLE_DELAY_MS);
-  }, [cancelPointerClear, cancelPointerRetarget, commitPointerHover, isPointerInsideCurrentPreview]);
-
-  const holdPointerHover = useCallback(() => {
-    cancelPointerClear();
-    cancelPointerRetarget();
-  }, [cancelPointerClear, cancelPointerRetarget]);
+  }, [cancelPointerClear, cancelPointerRetarget, commitPointerHover]);
 
   const clearFocusHover = useCallback(() => {
     focusLiftRef.current = dropLiftedEventElement(focusLiftRef.current, pointerLiftRef.current);
@@ -265,17 +237,19 @@ export function WeekCalendarHoverLayer({
         commitPointerHover(nextHover);
         return;
       }
-      // Week columns can place another event directly in the pointer path to
-      // the portaled card. Keep the current card stable during that crossing;
-      // a genuine hover on the new event still takes over after a short pause.
+      // The read-only card passes input through. The underlying activity
+      // always wins, including cells visually beneath the preview.
       schedulePointerRetarget(nextHover);
     };
     const handleDocumentMouseMove = (moveEvent: MouseEvent) => {
       pointerPositionRef.current = { x: moveEvent.clientX, y: moveEvent.clientY };
-      if (moveEvent.target instanceof Element && moveEvent.target.closest(ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR)) {
-        holdPointerHover();
+      if (!eventElementFromTarget(moveEvent.target, bodyElement) && isPointerInsideCurrentPreview()) {
+        // Reading the preview over empty space must not require a precise
+        // pointer position, but it never blocks selecting another activity.
+        cancelPointerClear();
         return;
       }
+      if (!bodyElement.contains(moveEvent.target as Node) && pointerEventIdRef.current !== null) schedulePointerClear();
       trackPointerClearIntent(moveEvent.clientX, moveEvent.clientY);
     };
     const handlePointerWindowExit = () => clearPointerHover();
@@ -298,7 +272,6 @@ export function WeekCalendarHoverLayer({
       setFocusHover(nextHover);
     };
     const handleFocusOut = (focusEvent: FocusEvent) => {
-      if (focusEvent.relatedTarget instanceof Element && focusEvent.relatedTarget.closest(ANCHORED_PREVIEW_CARD_SELECTOR)) return;
       const nextEventElement = eventElementFromTarget(focusEvent.relatedTarget, bodyElement);
       if (nextEventElement) return;
       focusLiftRef.current = dropLiftedEventElement(focusLiftRef.current, pointerLiftRef.current);
@@ -329,7 +302,7 @@ export function WeekCalendarHoverLayer({
     commitPointerHover,
     disabled,
     dismissPreview,
-    holdPointerHover,
+    isPointerInsideCurrentPreview,
     schedulePointerClear,
     schedulePointerRetarget,
     trackPointerClearIntent,
@@ -358,22 +331,7 @@ export function WeekCalendarHoverLayer({
       actionsDisabledReason={actionsDisabledReason}
       classificationOptions={classificationOptions}
       projectOptions={projectOptions}
-      canAssignProject={hasAssignProjectAction}
-      canClassify={hasClassifyAction}
       onDismiss={dismissPreview}
-      onOpenAttribute={onOpenActivity
-        ? (field: ActivityInspectorAttribute) => {
-            if (field === "project" ? !hasAssignProjectAction : !hasClassifyAction) return;
-            onOpenActivity(hover.event, hover.anchorElement, field);
-          }
-        : undefined}
-      onRequestDelete={hasDeleteAction && onOpenActivity
-        ? () => onOpenActivity(hover.event, hover.anchorElement, "delete")
-        : undefined}
-      onPointerEnter={holdPointerHover}
-      onPointerLeave={schedulePointerClear}
-      onFocusEnter={holdPointerHover}
-      onFocusLeave={clearFocusHover}
     />
   ) : null;
 }

@@ -68,9 +68,11 @@ describe("flow hover groups", () => {
 
     fireNativePointerMove(groupedCells[4], 120, 80);
 
-    const hoverCard = document.querySelector(".flow-hover-card");
+    const hoverCard = document.querySelector('.week-activity-inspector[data-mode="peek"]');
     expect(hoverCard?.textContent).toContain("01:00–01:30");
     expect(hoverCard?.textContent).toContain("30m");
+    expect(hoverCard?.getAttribute("role")).toBe("tooltip");
+    expect(within(hoverCard as HTMLElement).queryByRole("button")).toBeNull();
     // The whole run is highlighted by a single overlay segment rather than per-cell
     // classes, so the grid never re-renders on hover (see FlowHoverLayer).
     for (const cell of groupedCells) expect(cell.classList.contains("flow-cell--hover-group")).toBe(false);

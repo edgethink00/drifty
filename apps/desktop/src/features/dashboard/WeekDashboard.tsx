@@ -468,7 +468,9 @@ export function WeekDashboard({
       return segment ? [segment] : [];
     }) ?? []
   ), [activityInspector, segmentsById]);
-  const closeActivityInspector = useCallback((restoreFocus = true) => {
+  const closeActivityInspector = useCallback((sessionId: number, restoreFocus = true) => {
+    // A previous session's async deletion must not dismiss a newly opened card.
+    if (activityInspectorRef.current?.sessionId !== sessionId) return;
     const restoreFocusTarget = activityInspectorRef.current?.restoreFocusTarget ?? null;
     setActivityInspector(null);
     if (!restoreFocus) return;
@@ -528,7 +530,13 @@ export function WeekDashboard({
         return best;
       }, null);
       const nextEvent = nextCandidate?.event ?? null;
-      if (!nextEvent) return null;
+      if (!nextEvent) {
+        // Cache invalidation briefly removes historical days during a save.
+        // Keep this selection only while its visible week is being reloaded.
+        return refreshStatus === "loading" && current.sourceDay >= startDay && current.sourceDay <= endDay
+          ? current
+          : null;
+      }
 
       const nextAnchor = Array.from(calendarBodyRef.current?.querySelectorAll<HTMLElement>(".week-v2-calendar__event[data-event-id]") ?? [])
         .find((element) => element.dataset.eventId === nextEvent?.id) ?? null;
@@ -546,7 +554,7 @@ export function WeekDashboard({
         restoreFocusTarget: nextAnchor.querySelector<HTMLElement>(".week-v2-calendar__event-open"),
       };
     });
-  }, [displayCalendarEvents, projectBySegmentId, projectsById, segmentsById]);
+  }, [displayCalendarEvents, endDay, projectBySegmentId, projectsById, refreshStatus, segmentsById, startDay]);
   const activityActionsDisabledReason = useMemo(() => {
     if (!activityInspector) return null;
     return resolveActivityActionsDisabledReason(
@@ -798,10 +806,6 @@ export function WeekDashboard({
           classificationOptions={classificationOptions}
           projectOptions={projectOptions}
           projectBySegmentId={projectBySegmentId}
-          hasAssignProjectAction={Boolean(onSaveActivityValues || onAssignProject)}
-          hasClassifyAction={Boolean(onSaveActivityValues || onClassifyActivity)}
-          hasDeleteAction={Boolean(onDeleteActivity)}
-          onOpenActivity={openActivityInspector}
           disabled={initialDataLoading || activityInspector !== null}
         />
         {activityInspector ? (
@@ -815,8 +819,9 @@ export function WeekDashboard({
             actionsDisabledReason={activityActionsDisabledReason}
             projectOptions={projectOptions}
             initialView={activityInspector.initialView}
+            anchorRefreshing={refreshStatus === "loading" && activityInspector.sourceDay >= startDay && activityInspector.sourceDay <= endDay}
             regroupedBlockCount={activityInspector.regroupedBlockCount}
-            onClose={closeActivityInspector}
+            onClose={(restoreFocus) => closeActivityInspector(activityInspector.sessionId, restoreFocus)}
             onSaveValues={onSaveActivityValues}
             onAssignProject={onAssignProject}
             onClassify={onClassifyActivity}

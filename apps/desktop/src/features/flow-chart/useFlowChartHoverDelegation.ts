@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { Dispatch, RefObject, SetStateAction } from "react";
-import { ANCHORED_PREVIEW_CARD_SELECTOR } from "../../components/anchoredCardPosition";
-import { moveFlowHoverCardToPointer, type FlowHoverState } from "./FlowChartHoverCards";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
 
 // Dense Flow cells can report several different groups inside one pointer
@@ -15,26 +14,18 @@ type FlowHoverBase = {
   readonly triggerElement: HTMLButtonElement;
 };
 
-export type AnchoredFlowHoverState =
-  | (FlowHoverBase & FlowHoverState & { readonly trigger: "pointer" })
-  | (FlowHoverBase & { readonly trigger: "focus" });
+export type AnchoredFlowHoverState = FlowHoverBase & { readonly trigger: "pointer" | "focus" };
 
 type FlowChartHoverDelegationArgs = {
   readonly gridElement: HTMLDivElement | null;
-  readonly cardRef: RefObject<HTMLDivElement | null>;
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly setHoveredBlock: Dispatch<SetStateAction<AnchoredFlowHoverState | null>>;
+  readonly previewAnchorRef: MutableRefObject<AnchoredFlowHoverState | null>;
   readonly disabled?: boolean;
 };
 
 type FlowHoverBridge = {
-  readonly clearFocusHover: () => void;
   readonly dismissHover: () => void;
-};
-
-type PointerPosition = {
-  readonly x: number;
-  readonly y: number;
 };
 
 function hoverCellFromTarget(target: EventTarget | null, grid: HTMLDivElement): HTMLButtonElement | null {
@@ -53,9 +44,9 @@ function minuteFromCell(cell: HTMLButtonElement): number | null {
 
 export function useFlowChartHoverDelegation({
   gridElement,
-  cardRef,
   hoverGroupsByCell,
   setHoveredBlock,
+  previewAnchorRef,
   disabled = false,
 }: FlowChartHoverDelegationArgs): FlowHoverBridge {
   const hoverGroupsRef = useRef(hoverGroupsByCell);
@@ -63,25 +54,18 @@ export function useFlowChartHoverDelegation({
   const focusHoverRef = useRef<AnchoredFlowHoverState | null>(null);
   const retargetTimerRef = useRef<number | null>(null);
   const pendingPointerHoverRef = useRef<AnchoredFlowHoverState | null>(null);
-  const latestPointerRef = useRef<PointerPosition | null>(null);
-  const frameRef = useRef<number | null>(null);
 
   const publishHover = useCallback(() => {
-    setHoveredBlock(focusHoverRef.current ?? pointerHoverRef.current);
-  }, [setHoveredBlock]);
+    const hover = focusHoverRef.current ?? pointerHoverRef.current;
+    previewAnchorRef.current = hover;
+    setHoveredBlock(hover);
+  }, [previewAnchorRef, setHoveredBlock]);
 
   const cancelPointerRetarget = useCallback(() => {
     pendingPointerHoverRef.current = null;
     if (retargetTimerRef.current === null) return;
     window.clearTimeout(retargetTimerRef.current);
     retargetTimerRef.current = null;
-  }, []);
-
-  const cancelPointerFrame = useCallback(() => {
-    latestPointerRef.current = null;
-    if (frameRef.current === null) return;
-    window.cancelAnimationFrame(frameRef.current);
-    frameRef.current = null;
   }, []);
 
   const commitPointerHover = useCallback((nextHover: AnchoredFlowHoverState) => {
@@ -91,10 +75,9 @@ export function useFlowChartHoverDelegation({
 
   const clearPointerHover = useCallback(() => {
     cancelPointerRetarget();
-    cancelPointerFrame();
     pointerHoverRef.current = null;
     publishHover();
-  }, [cancelPointerFrame, cancelPointerRetarget, publishHover]);
+  }, [cancelPointerRetarget, publishHover]);
 
   const schedulePointerRetarget = useCallback((nextHover: AnchoredFlowHoverState) => {
     if (pendingPointerHoverRef.current?.group === nextHover.group) return;
@@ -109,18 +92,12 @@ export function useFlowChartHoverDelegation({
     }, FLOW_HOVER_RETARGET_SETTLE_DELAY_MS);
   }, [cancelPointerRetarget, commitPointerHover]);
 
-  const clearFocusHover = useCallback(() => {
-    focusHoverRef.current = null;
-    publishHover();
-  }, [publishHover]);
-
   const dismissHover = useCallback(() => {
     cancelPointerRetarget();
-    cancelPointerFrame();
     pointerHoverRef.current = null;
     focusHoverRef.current = null;
     publishHover();
-  }, [cancelPointerFrame, cancelPointerRetarget, publishHover]);
+  }, [cancelPointerRetarget, publishHover]);
 
   useEffect(() => {
     hoverGroupsRef.current = hoverGroupsByCell;
@@ -137,16 +114,10 @@ export function useFlowChartHoverDelegation({
       const minute = minuteFromCell(cell);
       return minute === null ? null : hoverGroupsRef.current.get(minute) ?? null;
     };
-    const flushPointerMove = () => {
-      frameRef.current = null;
-      const pointer = latestPointerRef.current;
-      if (!pointer) return;
-      moveFlowHoverCardToPointer(cardRef.current, pointer.x, pointer.y);
-    };
-    const schedulePointerMove = (position: PointerPosition) => {
-      latestPointerRef.current = position;
-      if (frameRef.current !== null) return;
-      frameRef.current = window.requestAnimationFrame(flushPointerMove);
+    let pointerActivationCell: HTMLButtonElement | null = null;
+    const clearPointerActivation = () => { pointerActivationCell = null; };
+    const handlePointerDown = (event: PointerEvent) => {
+      pointerActivationCell = event.button === 0 ? hoverCellFromTarget(event.target, gridElement) : null;
     };
     const handlePointerMove = (event: PointerEvent) => {
       const cell = hoverCellFromTarget(event.target, gridElement);
@@ -155,8 +126,6 @@ export function useFlowChartHoverDelegation({
         clearPointerHover();
         return;
       }
-      const position = { x: event.clientX, y: event.clientY };
-      schedulePointerMove(position);
       if (pointerHoverRef.current?.group === group) {
         cancelPointerRetarget();
         return;
@@ -166,7 +135,6 @@ export function useFlowChartHoverDelegation({
         anchorElement: cell,
         triggerElement: cell,
         trigger: "pointer",
-        ...position,
       };
       if (pointerHoverRef.current === null) {
         cancelPointerRetarget();
@@ -175,16 +143,22 @@ export function useFlowChartHoverDelegation({
       }
       schedulePointerRetarget(nextHover);
     };
-    const handlePointerWindowExit = () => clearPointerHover();
+    const handlePointerWindowExit = () => {
+      clearPointerActivation();
+      clearPointerHover();
+    };
     const handleKeyDown = (event: KeyboardEvent) => {
+      clearPointerActivation();
       if (event.key !== "Escape" || event.defaultPrevented || focusHoverRef.current) return;
       clearPointerHover();
     };
     const handleFocusIn = (event: FocusEvent) => {
       cancelPointerRetarget();
-      cancelPointerFrame();
+      const pointerHover = pointerHoverRef.current;
       pointerHoverRef.current = null;
       const cell = hoverCellFromTarget(event.target, gridElement);
+      const isPointerActivation = cell !== null && cell === pointerActivationCell;
+      clearPointerActivation();
       if (cell?.dataset.activityPreviewFocusSuppressed === "true") {
         delete cell.dataset.activityPreviewFocusSuppressed;
         focusHoverRef.current = null;
@@ -193,12 +167,18 @@ export function useFlowChartHoverDelegation({
       }
       const group = cell ? groupForCell(cell) : null;
       focusHoverRef.current = cell && group
-        ? { group, anchorElement: cell, triggerElement: cell, trigger: "focus" }
+        ? {
+            group,
+            // Pointer activation focuses the clicked cell before its click
+            // handler. Keep the visible preview anchored through that step.
+            anchorElement: isPointerActivation && pointerHover?.group === group ? pointerHover.anchorElement : cell,
+            triggerElement: cell,
+            trigger: "focus",
+          }
         : null;
       publishHover();
     };
     const handleFocusOut = (event: FocusEvent) => {
-      if (event.relatedTarget instanceof Element && event.relatedTarget.closest(ANCHORED_PREVIEW_CARD_SELECTOR)) return;
       const nextCell = hoverCellFromTarget(event.relatedTarget, gridElement);
       const group = nextCell ? groupForCell(nextCell) : null;
       focusHoverRef.current = nextCell && group
@@ -211,6 +191,9 @@ export function useFlowChartHoverDelegation({
     gridElement.addEventListener("pointerleave", clearPointerHover);
     gridElement.addEventListener("focusin", handleFocusIn);
     gridElement.addEventListener("focusout", handleFocusOut);
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("pointerup", clearPointerActivation, true);
+    document.addEventListener("pointercancel", clearPointerActivation, true);
     document.addEventListener("mouseleave", handlePointerWindowExit);
     document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("blur", handlePointerWindowExit);
@@ -219,15 +202,16 @@ export function useFlowChartHoverDelegation({
       gridElement.removeEventListener("pointerleave", clearPointerHover);
       gridElement.removeEventListener("focusin", handleFocusIn);
       gridElement.removeEventListener("focusout", handleFocusOut);
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("pointerup", clearPointerActivation, true);
+      document.removeEventListener("pointercancel", clearPointerActivation, true);
       document.removeEventListener("mouseleave", handlePointerWindowExit);
       document.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("blur", handlePointerWindowExit);
       dismissHover();
     };
   }, [
-    cancelPointerFrame,
     cancelPointerRetarget,
-    cardRef,
     clearPointerHover,
     commitPointerHover,
     disabled,
@@ -237,5 +221,5 @@ export function useFlowChartHoverDelegation({
     schedulePointerRetarget,
   ]);
 
-  return { clearFocusHover, dismissHover };
+  return { dismissHover };
 }

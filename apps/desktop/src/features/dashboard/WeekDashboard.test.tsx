@@ -140,6 +140,9 @@ type WeekDashboardRenderOverrides = {
   readonly totalSeconds?: number;
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
   readonly projectBySegmentId?: ReadonlyMap<string, string | null>;
+  readonly refreshStatus?: "idle" | "loading" | "error";
+  readonly startDay?: string;
+  readonly endDay?: string;
   readonly onSaveActivityValues?: ActivityInspectorSaveHandler;
   readonly onToggleSide?: () => void;
   readonly onAssignProject?: (
@@ -372,7 +375,7 @@ describe("WeekDashboard activity inspector", () => {
     expect(styles).toMatch(/\.week-activity-inspector\s*\{[^}]*max-height:\s*calc\(100vh - 32px\)/);
     expect(styles).toMatch(/\.week-activity-inspector__attribute-trigger\s*\{[^}]*min-height:\s*34px/);
     expect(styles).toMatch(/\.week-activity-inspector__chip\s*\{[^}]*border-radius:\s*var\(--radius-pill\)/);
-    expect(styles).toMatch(/\.week-activity-inspector__hover-bridge\s*\{[^}]*pointer-events:\s*auto/);
+    expect(styles).toMatch(/\.week-activity-inspector--preview\s*\{[^}]*pointer-events:\s*none/);
     expect(styles).toMatch(/\.week-activity-inspector__picker-options\s*\{[^}]*overflow-y:\s*hidden/);
     expect(styles).toMatch(/\.week-activity-inspector__picker\[data-scrollable="true"\] \.week-activity-inspector__picker-options\s*\{[^}]*overflow-y:\s*auto/);
   });
@@ -569,6 +572,119 @@ describe("WeekDashboard activity inspector", () => {
     ]);
   });
 
+  it("keeps a historical week edit pinned while its source day reloads, then reanchors to the rebuilt block", async () => {
+    let resolveClassification: () => void = () => undefined;
+    const classificationPending = new Promise<void>((resolve) => {
+      resolveClassification = resolve;
+    });
+    const onClassifyActivity = vi.fn()
+      .mockImplementationOnce(() => classificationPending)
+      .mockImplementationOnce(() => classificationPending)
+      .mockResolvedValue(undefined);
+    const baseOverrides: WeekDashboardRenderOverrides = {
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+      onClassifyActivity,
+    };
+    const { rerender } = renderWeekDashboard(baseOverrides);
+
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    const inspector = screen.getByRole("dialog", { name: "Design review" });
+    fireEvent.click(within(inspector).getByRole("button", { name: /Change Category/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Learning" }));
+    // The fallback persistence path saves classification groups sequentially;
+    // the first pending group is enough to reproduce the cache-clear window.
+    await waitFor(() => expect(onClassifyActivity).toHaveBeenCalledTimes(1));
+
+    rerender(weekDashboardElement({
+      ...baseOverrides,
+      calendarEvents: new Map(),
+      segments: [],
+      refreshStatus: "loading",
+    }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBe(inspector);
+    expect(document.querySelector(".week-v2-calendar__event")).toBeNull();
+
+    const rebuiltEvent = makeWeekCalendarEvent({
+      id: "event-rebuilt-after-classification",
+      category: "learning",
+      segmentIds: weekSegments.map((segment) => segment.id),
+      sessionCount: 2,
+      isGroupedCluster: true,
+      hasMixedProductivity: true,
+    });
+    const rebuiltSegments = weekSegments.map((segment) => ({
+      ...segment,
+      classification: { ...segment.classification!, category: "learning" as const },
+    }));
+    await act(async () => {
+      resolveClassification();
+      rerender(weekDashboardElement({
+        ...baseOverrides,
+        calendarEvents: new Map([["2024-01-03", [rebuiltEvent]]]),
+        segments: rebuiltSegments,
+        refreshStatus: "idle",
+      }));
+      await classificationPending;
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("dialog", { name: "Design review" })).toBe(inspector);
+      expect(screen.getByRole("button", { name: "Undo Category change" })).toBeTruthy();
+    });
+    const rebuiltAnchor = document.querySelector<HTMLElement>('[data-event-id="event-rebuilt-after-classification"]');
+    expect(rebuiltAnchor?.classList.contains("is-inspected")).toBe(true);
+    expect(rebuiltAnchor?.querySelector(".week-v2-calendar__event-open")?.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo Category change" }));
+    await waitFor(() => expect(onClassifyActivity).toHaveBeenCalledTimes(4));
+  });
+
+  it.each(["idle", "error"] as const)("closes a pinned week inspector when its source is missing after a %s refresh", async (refreshStatus) => {
+    const baseOverrides: WeekDashboardRenderOverrides = {
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+    };
+    const { rerender } = renderWeekDashboard(baseOverrides);
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+
+    rerender(weekDashboardElement({
+      ...baseOverrides,
+      calendarEvents: new Map(),
+      segments: [],
+      refreshStatus,
+    }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull());
+  });
+
+  it("closes a pinned week inspector when navigation moves its source day outside a loading week", async () => {
+    const baseOverrides: WeekDashboardRenderOverrides = {
+      calendarEvents: groupedEvents,
+      activityActionsEnabled: true,
+    };
+    const { rerender } = renderWeekDashboard(baseOverrides);
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+
+    const nextWeekRows = weekRows.map((row, index) => ({
+      ...row,
+      day: `2024-01-${String(index + 8).padStart(2, "0")}`,
+    }));
+    rerender(weekDashboardElement({
+      ...baseOverrides,
+      calendarEvents: new Map(),
+      segments: [],
+      rows: nextWeekRows,
+      startDay: "2024-01-08",
+      endDay: "2024-01-14",
+      refreshStatus: "loading",
+    }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull());
+  });
+
   it("lets a mixed group adopt its displayed dominant value without rewriting already-matching records", async () => {
     const onClassifyActivity = vi.fn().mockResolvedValue(undefined);
     const mixedCategorySegments: ActivitySegment[] = [
@@ -646,7 +762,8 @@ describe("WeekDashboard activity inspector", () => {
 
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     if (!preview) throw new Error("expected the anchored activity preview");
-    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: No project/ })).toBeTruthy();
+    expect(within(preview).getByText("No project")).toBeTruthy();
+    expect(within(preview).queryByRole("button")).toBeNull();
     expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
   });
 
@@ -661,7 +778,7 @@ describe("WeekDashboard activity inspector", () => {
 
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     if (!preview) throw new Error("expected the anchored activity preview");
-    expect(within(preview).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(within(preview).queryByText("Project")).toBeNull();
     expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
   });
 
@@ -676,14 +793,14 @@ describe("WeekDashboard activity inspector", () => {
     fireEvent.mouseMove(document.querySelector(".week-v2-calendar__event")!);
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     if (!preview) throw new Error("expected the anchored activity preview");
-    expect(within(preview).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(within(preview).queryByText("Project")).toBeNull();
 
     rerender(weekDashboardElement({
       ...baseOverrides,
       projectOptions: [{ id: "drifty", name: "Drifty", color: "#688c35" }],
     }));
 
-    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: No project/ })).toBeTruthy();
+    expect(within(preview).getByText("No project")).toBeTruthy();
   });
 
   it("closes an open Project picker if the final real project disappears", async () => {
@@ -722,7 +839,7 @@ describe("WeekDashboard activity inspector", () => {
 
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     if (!preview) throw new Error("expected the anchored activity preview");
-    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: Unavailable project/ })).toBeTruthy();
+    expect(within(preview).getByText("Unavailable project")).toBeTruthy();
     expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
   });
 
@@ -741,7 +858,7 @@ describe("WeekDashboard activity inspector", () => {
 
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     if (!preview) throw new Error("expected the anchored activity preview");
-    expect(within(preview).getByRole("button", { name: /Change Project\. Current value: No project · dominant/ })).toBeTruthy();
+    expect(within(preview).getByText("No project")).toBeTruthy();
     expect(preview.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(3);
   });
 
@@ -791,22 +908,33 @@ describe("WeekDashboard activity inspector", () => {
     fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     expect(preview).toBeTruthy();
-    expect(within(preview!).getByRole("button", { name: /Change Category/ })).toBeTruthy();
-    expect(within(preview!).getByRole("button", { name: /Delete 2 activities/ })).toBeTruthy();
-    expect(within(preview!).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(preview?.getAttribute("role")).toBe("tooltip");
+    expect(within(preview!).queryByRole("button")).toBeNull();
+    expect(within(preview!).queryByRole("textbox")).toBeNull();
+    expect(within(preview!).queryByRole("listbox")).toBeNull();
+    expect(preview?.querySelector('a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]')).toBeNull();
     expect(preview?.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);
     expect(preview?.querySelectorAll(".week-activity-inspector__activity-row")).toHaveLength(2);
-    const previewText = preview?.textContent;
+    const previewHeading = preview?.querySelector(".week-activity-inspector__heading")?.textContent;
+    const previewAttributes = preview?.querySelector(".week-activity-inspector__attributes")?.textContent;
+    if (!previewHeading || !previewAttributes || !preview?.style.left || !preview.style.top) {
+      throw new Error("expected the anchored preview to preserve its populated card layout");
+    }
+    expect(preview.style.width).toBe("304px");
     fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
     const inspector = screen.getByRole("dialog", { name: "Design review" });
-    expect(inspector.textContent).toBe(previewText);
+    expect(inspector.querySelector(".week-activity-inspector__heading")?.textContent).toBe(previewHeading);
+    expect(inspector.querySelector(".week-activity-inspector__attributes")?.textContent).toBe(previewAttributes);
     expect(inspector.style.left).toBe(preview?.style.left);
     expect(inspector.style.top).toBe(preview?.style.top);
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
     expect(event.classList.contains("is-inspected")).toBe(true);
+    fireEvent.mouseMove(container.querySelector(".week-v2-calendar__body")!, { clientX: 10, clientY: 10 });
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBe(inspector);
+    expect(event.classList.contains("is-inspected")).toBe(true);
   });
 
-  it("pins the hover card directly into the selected action", () => {
+  it("keeps the hover card read-only until the block click opens editing", () => {
     const onClassifyActivity = vi.fn().mockResolvedValue(undefined);
     const onDeleteActivity = vi.fn().mockResolvedValue(undefined);
     const { container } = renderWeekDashboard({
@@ -820,14 +948,21 @@ describe("WeekDashboard activity inspector", () => {
     fireEvent.mouseMove(event);
     const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
     if (!preview) throw new Error("expected the anchored activity preview");
+    expect(preview.getAttribute("role")).toBe("tooltip");
+    expect(within(preview).queryByRole("button")).toBeNull();
+    expect(within(preview).queryByRole("textbox")).toBeNull();
+    expect(preview.querySelector('a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]')).toBeNull();
+    expect(onClassifyActivity).not.toHaveBeenCalled();
+    expect(onDeleteActivity).not.toHaveBeenCalled();
 
-    fireEvent.click(within(preview).getByRole("button", { name: /Change Category/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Open activity details/ }));
 
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    const pinnedInspector = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="pinned"][data-view="category"]');
+    const pinnedInspector = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="pinned"][data-view="overview"]');
     expect(pinnedInspector).toBeTruthy();
+    const categoryButton = within(pinnedInspector!).getByRole("button", { name: /Change Category/ });
+    fireEvent.click(categoryButton);
     expect(document.querySelector('.week-activity-inspector__picker[data-field="category"]')).toBeTruthy();
-    expect(within(pinnedInspector!).getByRole("button", { name: /Change Category/ }).getAttribute("aria-expanded")).toBe("true");
     expect(event.classList.contains("is-inspected")).toBe(true);
   });
 
@@ -897,7 +1032,7 @@ describe("WeekDashboard activity inspector", () => {
     }
   });
 
-  it("resets the editing session and destructive target when switching week blocks", async () => {
+  it.each(["editing", "deleting"] as const)("resets the editing session and destructive target when switching week blocks while %s", async (initialState) => {
     const firstSegment = { ...weekSegments[0]!, id: "week-first" };
     const secondSegment = {
       ...weekSegments[1]!,
@@ -920,7 +1055,10 @@ describe("WeekDashboard activity inspector", () => {
       endLabel: "11:15 AM",
       topMinutes: 11 * 60,
     });
+    let finishDeletion!: () => void;
+    const pendingDeletion = new Promise<void>((resolve) => { finishDeletion = resolve; });
     const onDeleteActivity = vi.fn().mockResolvedValue(undefined);
+    if (initialState === "deleting") onDeleteActivity.mockImplementationOnce(() => pendingDeletion);
     renderWeekDashboard({
       calendarEvents: new Map([["2024-01-03", [firstEvent, secondEvent]]]),
       segments: [firstSegment, secondSegment],
@@ -932,17 +1070,27 @@ describe("WeekDashboard activity inspector", () => {
     fireEvent.click(screen.getByRole("button", { name: /First review/ }));
     fireEvent.click(screen.getByRole("button", { name: /Change Category/ }));
     expect(document.querySelector('.week-activity-inspector__picker[data-field="category"]')).toBeTruthy();
+    if (initialState === "deleting") {
+      fireEvent.keyDown(document, { key: "Escape" });
+      fireEvent.click(screen.getByRole("button", { name: /Delete activity/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Delete activity…" }));
+      expect(onDeleteActivity).toHaveBeenCalledWith([firstSegment.id]);
+    }
     fireEvent.click(screen.getByRole("button", { name: /Second review/ }));
 
     const secondInspector = screen.getByRole("dialog", { name: "Second review" });
     expect(secondInspector.dataset.view).toBe("overview");
     expect(document.querySelector(".week-activity-inspector__picker")).toBeNull();
+    if (initialState === "deleting") {
+      await act(async () => { finishDeletion(); await pendingDeletion; });
+      expect(screen.getByRole("dialog", { name: "Second review" })).toBe(secondInspector);
+    }
     fireEvent.click(within(secondInspector).getByRole("button", { name: /Delete activity/ }));
     fireEvent.click(screen.getByRole("button", { name: "Delete activity…" }));
     await waitFor(() => expect(onDeleteActivity).toHaveBeenCalledWith([secondSegment.id]));
   });
 
-  it("keeps a keyboard-opened week preview alive while focus enters an action", () => {
+  it("opens the pinned week inspector from a keyboard-generated block activation", () => {
     const { container } = renderWeekDashboard({
       calendarEvents: groupedEvents,
       activityActionsEnabled: true,
@@ -951,20 +1099,15 @@ describe("WeekDashboard activity inspector", () => {
     const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
     const openButton = screen.getByRole("button", { name: /Open activity details/ });
     if (!event) throw new Error("expected a week calendar event");
-    fireEvent.focus(openButton);
-    const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-    if (!preview) throw new Error("expected the anchored activity preview");
-    const productivityButton = within(preview).getByRole("button", { name: /Change Productivity/ });
+    act(() => openButton.focus());
+    expect(screen.getByRole("tooltip", { name: "Design review" })).toBeTruthy();
 
-    fireEvent.focusOut(openButton, { relatedTarget: productivityButton });
-    fireEvent.focus(productivityButton);
-    expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-
-    fireEvent.click(productivityButton);
+    // jsdom does not synthesize button clicks from Enter/Space. detail=0 is
+    // the browser event shape produced by keyboard activation.
+    fireEvent.click(openButton, { detail: 0 });
 
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    expect(document.querySelector('.week-activity-inspector[data-mode="pinned"][data-view="productivity"]')).toBeTruthy();
-    expect(document.querySelector('.week-activity-inspector__picker[data-field="productivity"]')).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
     expect(event.classList.contains("is-inspected")).toBe(true);
   });
 
@@ -983,151 +1126,28 @@ describe("WeekDashboard activity inspector", () => {
     await waitFor(() => expect(event.style.zIndex).toBe("3"));
   });
 
-  it("keeps the preview open while the pointer crosses into the card", () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
-      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
-      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
-      if (!body || !event) throw new Error("expected the week calendar surface");
-      fireEvent.mouseMove(event);
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      if (!preview) throw new Error("expected the anchored activity preview");
+  it("keeps the week preview and its former bridge out of pointer hit testing", () => {
+    const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
+    const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
+    if (!event) throw new Error("expected a week calendar event");
 
-      fireEvent.mouseLeave(body);
-      act(() => vi.advanceTimersByTime(180));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
+    fireEvent.mouseMove(event);
 
-      fireEvent.pointerEnter(preview);
-      act(() => vi.advanceTimersByTime(180));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-
-      fireEvent.pointerLeave(preview);
-      act(() => vi.advanceTimersByTime(300));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
+    const preview = screen.getByRole("tooltip", { name: "Design review" });
+    expect(preview.classList.contains("week-activity-inspector--preview")).toBe(true);
+    expect(document.querySelector(".week-activity-inspector__hover-bridge")).toBeNull();
+    expect(styles).toMatch(/\.week-activity-inspector--preview\s*\{[^}]*pointer-events:\s*none;/);
   });
 
-  it("dismisses the preview as soon as the pointer moves away from the card", () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
-      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
-      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
-      if (!body || !event) throw new Error("expected the week calendar surface");
-      setElementRect(event, 80, 100, 120, 40);
-      fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 212, 100, 304, 320);
-
-      // Leaving the block through empty calendar space, heading left (away from the card).
-      fireEvent.mouseMove(body, { clientX: 176, clientY: 120 });
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-      fireEvent.mouseMove(body, { clientX: 160, clientY: 120 });
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps the preview while the pointer closes in on the card and dismisses it once it turns back", () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
-      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
-      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
-      if (!body || !event) throw new Error("expected the week calendar surface");
-      setElementRect(event, 80, 100, 120, 40);
-      fireEvent.mouseMove(event, { clientX: 150, clientY: 120 });
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 212, 100, 304, 320);
-
-      // A slow diagonal approach that cuts across empty space below the block.
-      fireEvent.mouseMove(body, { clientX: 170, clientY: 150 });
-      fireEvent.mouseMove(body, { clientX: 190, clientY: 160 });
-      act(() => vi.advanceTimersByTime(100));
-      fireEvent.mouseMove(body, { clientX: 205, clientY: 170 });
-      act(() => vi.advanceTimersByTime(100));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-
-      // Turning back and wandering off dismisses it without waiting out the grace window.
-      fireEvent.mouseMove(body, { clientX: 190, clientY: 180 });
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  it("still caps a pointer that stalls beside the card at the shared grace window", () => {
-    vi.useFakeTimers();
-    try {
-      const { container } = renderWeekDashboard({ calendarEvents: groupedEvents });
-      const body = container.querySelector<HTMLElement>(".week-v2-calendar__body");
-      const event = container.querySelector<HTMLElement>(".week-v2-calendar__event");
-      if (!body || !event) throw new Error("expected the week calendar surface");
-      setElementRect(event, 80, 100, 120, 40);
-      fireEvent.mouseMove(event, { clientX: 180, clientY: 120 });
-      const preview = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
-      if (!preview) throw new Error("expected the anchored activity preview");
-      setElementRect(preview, 212, 100, 304, 320);
-
-      fireEvent.mouseMove(body, { clientX: 200, clientY: 150 });
-      act(() => vi.advanceTimersByTime(219));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeTruthy();
-      act(() => vi.advanceTimersByTime(1));
-      expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
-    } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  it("bridges the full height of a tall week block so an adjacent block cannot steal the card crossing", () => {
-    const tallEvent = makeWeekCalendarEvent({
-      id: "event-tall-source",
-      segmentIds: [weekSegments[0]!.id],
-    });
-    const adjacentEvent = makeWeekCalendarEvent({
-      id: "event-adjacent-right",
-      appName: "Adjacent review",
-      segmentIds: [weekSegments[1]!.id],
-    });
-    const { container } = renderWeekDashboard({
-      calendarEvents: new Map([
-        ["2024-01-03", [tallEvent]],
-        ["2024-01-04", [adjacentEvent]],
-      ]),
-    });
-    const source = container.querySelector<HTMLElement>('[data-event-id="event-tall-source"]');
-    if (!source) throw new Error("expected the tall source event");
-    setElementRect(source, 100, 100, 100, 400);
-
-    fireEvent.mouseMove(source);
-
-    const bridge = document.querySelector<HTMLElement>(".week-activity-inspector__hover-bridge");
-    if (!bridge) throw new Error("expected the anchored preview bridge");
-    expect(bridge.style.left).toBe("200px");
-    expect(bridge.style.top).toBe("100px");
-    expect(bridge.style.width).toBe("12px");
-    expect(bridge.style.height).toBe("400px");
-  });
-
-  it("keeps the current week preview while crossing an adjacent block into the card", () => {
+  it("retargets the read-only week preview to the next block after the settled scan delay", () => {
     vi.useFakeTimers();
     try {
       const sourceEvent = makeWeekCalendarEvent({
-        id: "event-crossing-source",
+        id: "event-scan-source",
         segmentIds: [weekSegments[0]!.id],
       });
       const adjacentEvent = makeWeekCalendarEvent({
-        id: "event-crossing-adjacent",
+        id: "event-scan-adjacent",
         appName: "Adjacent review",
         detailTitle: "10:00 AM-10:15 AM\nAdjacent review",
         segmentIds: [weekSegments[1]!.id],
@@ -1138,68 +1158,26 @@ describe("WeekDashboard activity inspector", () => {
           ["2024-01-04", [adjacentEvent]],
         ]),
       });
-      const source = container.querySelector<HTMLElement>('[data-event-id="event-crossing-source"]');
-      const adjacent = container.querySelector<HTMLElement>('[data-event-id="event-crossing-adjacent"]');
+      const source = container.querySelector<HTMLElement>('[data-event-id="event-scan-source"]');
+      const adjacent = container.querySelector<HTMLElement>('[data-event-id="event-scan-adjacent"]');
       if (!source || !adjacent) throw new Error("expected adjacent week events");
+      setElementRect(source, 80, 100, 120, 40);
+      setElementRect(adjacent, 220, 100, 120, 40);
 
       fireEvent.mouseMove(source);
-      const preview = screen.getByRole("dialog", { name: "Design review" });
-
-      fireEvent.mouseMove(adjacent);
-      expect(screen.getByRole("dialog", { name: "Design review" })).toBe(preview);
-
-      fireEvent.pointerEnter(preview);
-      act(() => vi.advanceTimersByTime(300));
-      expect(screen.getByRole("dialog", { name: "Design review" })).toBe(preview);
-
-      fireEvent.pointerLeave(preview);
-      fireEvent.mouseMove(adjacent);
-      act(() => vi.advanceTimersByTime(20));
-      expect(screen.getByRole("dialog", { name: "Adjacent review" })).toBeTruthy();
+      expect(screen.getByRole("tooltip", { name: "Design review" }).style.left).toBe("212px");
+      act(() => {
+        fireEvent.mouseMove(adjacent);
+        vi.advanceTimersByTime(15);
+      });
+      expect(screen.getByRole("tooltip", { name: "Design review" })).toBeTruthy();
+      act(() => vi.advanceTimersByTime(1));
+      const adjacentPreview = screen.getByRole("tooltip", { name: "Adjacent review" });
+      expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+      expect(adjacentPreview.style.left).toBe("352px");
+      expect(adjacentPreview.style.top).toBe("100px");
     } finally {
-      vi.runOnlyPendingTimers();
-      vi.useRealTimers();
-    }
-  });
-
-  it("keeps the current preview when a fast pointer move lands inside the newly mounted card", () => {
-    vi.useFakeTimers();
-    try {
-      const sourceEvent = makeWeekCalendarEvent({
-        id: "event-fast-source",
-        segmentIds: [weekSegments[0]!.id],
-      });
-      const adjacentEvent = makeWeekCalendarEvent({
-        id: "event-fast-adjacent",
-        appName: "Adjacent review",
-        detailTitle: "10:00 AM-10:15 AM\nAdjacent review",
-        segmentIds: [weekSegments[1]!.id],
-      });
-      const { container } = renderWeekDashboard({
-        calendarEvents: new Map([
-          ["2024-01-03", [sourceEvent]],
-          ["2024-01-04", [adjacentEvent]],
-        ]),
-      });
-      const source = container.querySelector<HTMLElement>('[data-event-id="event-fast-source"]');
-      const adjacent = container.querySelector<HTMLElement>('[data-event-id="event-fast-adjacent"]');
-      if (!source || !adjacent) throw new Error("expected adjacent week events");
-
-      fireEvent.mouseMove(source, { clientX: 180, clientY: 140 });
-      const preview = screen.getByRole("dialog", { name: "Design review" });
-      setElementRect(preview, 220, 100, 332, 320);
-
-      // Model a queued calendar mousemove that lands where the portaled card
-      // is rendered before the browser can dispatch pointerenter to that card.
-      fireEvent.mouseMove(adjacent, { clientX: 260, clientY: 140 });
-      act(() => vi.advanceTimersByTime(300));
-      expect(screen.getByRole("dialog", { name: "Design review" })).toBe(preview);
-
-      fireEvent.mouseMove(adjacent, { clientX: 600, clientY: 140 });
-      act(() => vi.advanceTimersByTime(20));
-      expect(screen.getByRole("dialog", { name: "Adjacent review" })).toBeTruthy();
-    } finally {
-      vi.runOnlyPendingTimers();
+      vi.clearAllTimers();
       vi.useRealTimers();
     }
   });
@@ -1212,19 +1190,17 @@ describe("WeekDashboard activity inspector", () => {
       if (!event) throw new Error("expected a week calendar event");
 
       fireEvent.mouseMove(event, { clientX: 180, clientY: 140 });
-      const preview = screen.getByRole("dialog", { name: "Design review" });
-      setElementRect(preview, 220, 100, 332, 320);
-      fireEvent.mouseMove(preview, { clientX: 260, clientY: 140 });
+      expect(screen.getByRole("tooltip", { name: "Design review" })).toBeTruthy();
 
       fireEvent.mouseLeave(document);
       act(() => vi.advanceTimersByTime(300));
 
-      expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull();
+      expect(screen.queryByRole("tooltip", { name: "Design review" })).toBeNull();
 
       fireEvent.mouseMove(event, { clientX: 180, clientY: 140 });
-      expect(screen.getByRole("dialog", { name: "Design review" })).toBeTruthy();
+      expect(screen.getByRole("tooltip", { name: "Design review" })).toBeTruthy();
       fireEvent.blur(window);
-      expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull();
+      expect(screen.queryByRole("tooltip", { name: "Design review" })).toBeNull();
     } finally {
       vi.runOnlyPendingTimers();
       vi.useRealTimers();
@@ -1236,31 +1212,29 @@ describe("WeekDashboard activity inspector", () => {
     const openButton = screen.getByRole("button", { name: /Open activity details/ });
     openButton.setAttribute("aria-describedby", "existing-week-description");
     fireEvent.focus(openButton);
-    const preview = screen.getByRole("dialog", { name: "Design review" });
+    const preview = screen.getByRole("tooltip", { name: "Design review" });
+    expect(within(preview).queryByRole("button")).toBeNull();
     expect(openButton.getAttribute("aria-describedby")?.split(/\s+/)).toEqual([
       "existing-week-description",
-      preview.getAttribute("aria-describedby"),
+      preview.id,
     ]);
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull();
+    expect(screen.queryByRole("tooltip", { name: "Design review" })).toBeNull();
     expect(openButton.getAttribute("aria-describedby")).toBe("existing-week-description");
   });
 
-  it("restores focus to the week block when closing a focused preview", async () => {
+  it("keeps focus on the week block when Escape closes its focused preview", async () => {
     renderWeekDashboard({ calendarEvents: groupedEvents });
     const openButton = screen.getByRole("button", { name: /Open activity details/ });
     act(() => {
       openButton.focus();
       fireEvent.focusIn(openButton);
     });
-    const preview = screen.getByRole("dialog", { name: "Design review" });
-    const closeButton = within(preview).getByRole("button", { name: "Close activity inspector" });
-    act(() => closeButton.focus());
-
-    fireEvent.click(closeButton);
+    expect(screen.getByRole("tooltip", { name: "Design review" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
 
     await waitFor(() => {
-      expect(screen.queryByRole("dialog", { name: "Design review" })).toBeNull();
+      expect(screen.queryByRole("tooltip", { name: "Design review" })).toBeNull();
       expect(document.activeElement).toBe(openButton);
     });
   });
@@ -1321,8 +1295,12 @@ describe("WeekDashboard activity inspector", () => {
     const eventBlock = openButton.closest(".week-v2-calendar__event");
     if (!eventBlock) throw new Error("expected a week calendar event");
     setElementRect(eventBlock, 80, 90, 120, 40);
+    fireEvent.mouseMove(openButton, { clientX: 100, clientY: 100 });
+    const preview = screen.getByRole("tooltip", { name: "Design review" });
+    const previewPosition = { left: preview.style.left, top: preview.style.top };
     fireEvent.click(openButton);
     const inspector = screen.getByRole("dialog", { name: "Design review" });
+    expect({ left: inspector.style.left, top: inspector.style.top }).toEqual(previewPosition);
     expect(inspector.style.left).toBe("212px");
     expect(inspector.style.top).toBe("90px");
     setElementRect(eventBlock, 60, 70, 120, 40);

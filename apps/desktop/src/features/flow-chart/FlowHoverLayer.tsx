@@ -1,16 +1,13 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useState, type MutableRefObject } from "react";
 import { createPortal } from "react-dom";
 import type { ActivitySegment, ClassificationOptions, FlowIntervalMinutes } from "@drifty/domain";
 import {
   ActivityInspectorPreview,
   resolveActivityActionsDisabledReason,
-  type ActivityInspectorAttribute,
   type ActivityInspectorEvent,
   type ActivityInspectorProjectOption,
-  type ActivityInspectorView,
 } from "../dashboard/WeekActivityInspector";
 import { FlowHoverGroupHighlights } from "./FlowHoverGroupHighlights";
-import { FlowHoverCard, moveFlowHoverCardToPointer } from "./FlowChartHoverCards";
 import { buildFlowHoverGroupContributions, type FlowBlockHoverGroup } from "./flowHoverGroups";
 import type { ProjectLegendEntry } from "./projectFlowView";
 import { blockDetailLabel, blockDisplayName, formatGroupTimeRange } from "./flowChartFormat";
@@ -21,6 +18,7 @@ const EMPTY_ACTIVITY_SEGMENTS_BY_ID = new Map<string, ActivitySegment>();
 const EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS: readonly ActivityInspectorProjectOption[] = [];
 
 type FlowHoverLayerProps = {
+  readonly previewAnchorRef: MutableRefObject<AnchoredFlowHoverState | null>;
   readonly gridElement: HTMLDivElement | null;
   readonly hoverGroupsByCell: ReadonlyMap<number, FlowBlockHoverGroup>;
   readonly intervalMinutes: FlowIntervalMinutes;
@@ -32,14 +30,6 @@ type FlowHoverLayerProps = {
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
   readonly activityActionsEnabled?: boolean;
   readonly classificationOptions?: ClassificationOptions;
-  readonly hasAssignProjectAction?: boolean;
-  readonly hasClassifyAction?: boolean;
-  readonly hasDeleteAction?: boolean;
-  readonly onOpenActivity?: (
-    group: FlowBlockHoverGroup,
-    target: HTMLButtonElement,
-    initialView: ActivityInspectorView,
-  ) => void;
   readonly disabled?: boolean;
   readonly pinnedGroup?: FlowBlockHoverGroup | null;
 };
@@ -115,10 +105,10 @@ export function buildFlowActivityInspectorEvent(
   };
 }
 
-// Pointer inspection stays lightweight and non-interactive so it cannot cover
-// neighboring Flow cells. Keyboard focus keeps the accessible anchored preview;
-// clicking either path opens the full pinned inspector for editing.
+// Day and Week share the same anchored, read-only preview. Clicking a block
+// pins the editor; preview pointer events must never cover neighboring cells.
 export function FlowHoverLayer({
+  previewAnchorRef,
   gridElement,
   hoverGroupsByCell,
   intervalMinutes,
@@ -130,34 +120,21 @@ export function FlowHoverLayer({
   projectOptions = EMPTY_ACTIVITY_INSPECTOR_PROJECT_OPTIONS,
   activityActionsEnabled = false,
   classificationOptions,
-  hasAssignProjectAction = false,
-  hasClassifyAction = false,
-  hasDeleteAction = false,
-  onOpenActivity,
   disabled = false,
   pinnedGroup = null,
 }: FlowHoverLayerProps) {
   const { t } = useLocalization();
   const [hoveredBlock, setHoveredBlock] = useState<AnchoredFlowHoverState | null>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const { clearFocusHover, dismissHover } = useFlowChartHoverDelegation({
+  const { dismissHover } = useFlowChartHoverDelegation({
     gridElement,
-    cardRef,
     hoverGroupsByCell,
     setHoveredBlock,
+    previewAnchorRef,
     disabled,
   });
-  const pointerHover = hoveredBlock?.trigger === "pointer" ? hoveredBlock : null;
-  const focusHover = hoveredBlock?.trigger === "focus" ? hoveredBlock : null;
-
-  useLayoutEffect(() => {
-    if (!pointerHover) return;
-    moveFlowHoverCardToPointer(cardRef.current, pointerHover.x, pointerHover.y);
-  }, [pointerHover]);
-
   const highlightedGroup = disabled ? pinnedGroup : hoveredBlock?.group ?? null;
-  const previewEvent = focusHover
-    ? buildFlowActivityInspectorEvent(focusHover.group, { projectsById })
+  const previewEvent = hoveredBlock
+    ? buildFlowActivityInspectorEvent(hoveredBlock.group, { projectsById })
     : null;
   const previewSegments = previewEvent?.segmentIds.flatMap((segmentId) => {
     const segment = segmentsById.get(segmentId);
@@ -180,41 +157,19 @@ export function FlowHoverLayer({
             gridElement,
           )
         : null}
-      {!disabled && pointerHover ? (
-        <FlowHoverCard
-          hover={pointerHover}
-          appIcons={appIcons}
-          cardRef={cardRef}
-          deviceLabelById={deviceLabelById}
-          projectsById={projectsById}
-          showClassificationSource={false}
-        />
-      ) : null}
-      {!disabled && focusHover ? (
+      {!disabled && hoveredBlock ? (
         <ActivityInspectorPreview
           event={previewEvent!}
           segments={previewSegments}
           appIcons={appIcons}
           deviceLabelById={deviceLabelById}
-          anchorElement={focusHover.anchorElement}
-          descriptionTarget={focusHover.triggerElement}
-          restoreFocusOnDismiss
+          anchorElement={hoveredBlock.anchorElement}
+          descriptionTarget={hoveredBlock.triggerElement}
+          restoreFocusOnDismiss={hoveredBlock.trigger === "focus"}
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
           projectOptions={projectOptions}
-          canAssignProject={hasAssignProjectAction}
-          canClassify={hasClassifyAction}
           onDismiss={dismissHover}
-          onOpenAttribute={onOpenActivity
-            ? (field: ActivityInspectorAttribute) => {
-                if (field === "project" ? !hasAssignProjectAction : !hasClassifyAction) return;
-                onOpenActivity(focusHover.group, focusHover.triggerElement, field);
-              }
-            : undefined}
-          onRequestDelete={hasDeleteAction && onOpenActivity
-            ? () => onOpenActivity(focusHover.group, focusHover.triggerElement, "delete")
-            : undefined}
-          onFocusLeave={clearFocusHover}
         />
       ) : null}
     </>

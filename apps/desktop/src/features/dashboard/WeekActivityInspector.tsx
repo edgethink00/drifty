@@ -102,6 +102,7 @@ type WeekActivityInspectorProps = {
   readonly initialView?: ActivityInspectorView;
   readonly regroupedBlockCount?: number;
   readonly onClose: (restoreFocus?: boolean) => void;
+  readonly anchorRefreshing?: boolean;
   readonly onSaveValues?: ActivityInspectorSaveHandler;
   readonly onAssignProject?: (
     segments: readonly ActivitySegment[],
@@ -209,16 +210,32 @@ function useAnchoredCardLayout(
   cardRef: RefObject<HTMLDivElement | null>,
   layoutKey: string,
   onAnchorUnavailable: () => void,
+  anchorRefreshing = false,
 ): AnchoredCardLayout {
   const onAnchorUnavailableRef = useRef(onAnchorUnavailable);
   onAnchorUnavailableRef.current = onAnchorUnavailable;
+  const unavailableFrameRef = useRef<number | null>(null);
   const [layout, setLayout] = useState<AnchoredCardLayout>(() => calculateAnchoredLayout(anchorElement, null));
+
+  const cancelUnavailableCheck = useCallback(() => {
+    if (unavailableFrameRef.current === null) return;
+    window.cancelAnimationFrame(unavailableFrameRef.current);
+    unavailableFrameRef.current = null;
+  }, []);
 
   const updateLayout = useCallback(() => {
     if (!anchorElement.isConnected) {
-      onAnchorUnavailableRef.current();
+      // Reclassification can replace the block in this commit. Let the parent
+      // reconnect its source records before treating it as a removed activity.
+      if (!anchorRefreshing && unavailableFrameRef.current === null) {
+        unavailableFrameRef.current = window.requestAnimationFrame(() => {
+          unavailableFrameRef.current = null;
+          if (!anchorElement.isConnected) onAnchorUnavailableRef.current();
+        });
+      }
       return;
     }
+    cancelUnavailableCheck();
     const anchorRect = anchorElement.getBoundingClientRect();
     if (isAnchorOutsideViewport(anchorRect)) {
       onAnchorUnavailableRef.current();
@@ -233,9 +250,12 @@ function useAnchoredCardLayout(
         ? current
         : next
     ));
-  }, [anchorElement, cardRef]);
+  }, [anchorElement, anchorRefreshing, cancelUnavailableCheck, cardRef]);
 
-  useLayoutEffect(() => updateLayout(), [layoutKey, updateLayout]);
+  useLayoutEffect(() => {
+    updateLayout();
+    return cancelUnavailableCheck;
+  }, [cancelUnavailableCheck, layoutKey, updateLayout]);
 
   useEffect(() => {
     window.addEventListener("resize", updateLayout);
@@ -251,30 +271,6 @@ function useAnchoredCardLayout(
   }, [anchorElement, cardRef, updateLayout]);
 
   return layout;
-}
-
-function calculateHoverBridgeStyle(
-  anchorElement: HTMLElement,
-  layout: AnchoredCardLayout,
-): CSSProperties {
-  const anchorRect = anchorElement.getBoundingClientRect();
-  const cardLeft = Number(layout.style.left ?? 0);
-  const cardTop = Number(layout.style.top ?? 0);
-  const bridgeTop = Math.min(anchorRect.top, cardTop);
-  const bridgeBottom = Math.max(anchorRect.bottom, cardTop + layout.height);
-  const left = layout.side === "right" ? anchorRect.right : cardLeft + INSPECTOR_WIDTH_PX;
-  const width = layout.side === "right"
-    ? cardLeft - anchorRect.right
-    : anchorRect.left - left;
-  return {
-    left,
-    top: bridgeTop,
-    width: Math.max(0, Math.min(ANCHORED_CARD_GAP, width)),
-    // Week blocks can be taller than the preview. Cover the full vertical
-    // union so moving sideways from any point on the source block cannot hit
-    // a neighboring calendar event before reaching the portaled card.
-    height: Math.max(0, bridgeBottom - bridgeTop),
-  };
 }
 
 type DirectPickerLayout = {
@@ -459,12 +455,14 @@ function ActivityInspectorHeader({
   appIcons,
   titleId,
   closeDisabled = false,
+  readOnly = false,
   onClose,
 }: {
   readonly event: ActivityInspectorEvent;
   readonly appIcons: AppIconMap;
   readonly titleId: string;
   readonly closeDisabled?: boolean;
+  readonly readOnly?: boolean;
   readonly onClose: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
@@ -493,15 +491,19 @@ function ActivityInspectorHeader({
             : ""}
         </span>
       </div>
-      <button
-        type="button"
-        className="week-activity-inspector__icon-button"
-        aria-label={t("dashboard.week.inspector.close")}
-        onClick={onClose}
-        disabled={closeDisabled}
-      >
-        <CloseIcon />
-      </button>
+      {readOnly ? (
+        <span className="week-activity-inspector__icon-button" aria-hidden="true"><CloseIcon /></span>
+      ) : (
+        <button
+          type="button"
+          className="week-activity-inspector__icon-button"
+          aria-label={t("dashboard.week.inspector.close")}
+          onClick={onClose}
+          disabled={closeDisabled}
+        >
+          <CloseIcon />
+        </button>
+      )}
     </header>
   );
 }
@@ -528,6 +530,7 @@ function DirectAttributeRow({
   expanded,
   disabled,
   triggerRef,
+  readOnly = false,
   onToggle,
 }: {
   readonly field: ActivityInspectorAttribute;
@@ -538,6 +541,7 @@ function DirectAttributeRow({
   readonly recordCount: number;
   readonly expanded: boolean;
   readonly disabled: boolean;
+  readonly readOnly?: boolean;
   readonly triggerRef?: (element: HTMLButtonElement | null) => void;
   readonly onToggle?: (field: ActivityInspectorAttribute, trigger: HTMLButtonElement) => void;
 }) {
@@ -545,26 +549,35 @@ function DirectAttributeRow({
   const displayedValue = mixed
     ? `${valueLabel} · ${t("dashboard.week.inspector.dominant")}`
     : valueLabel;
+  const content = (
+    <>
+      <span className="week-activity-inspector__attribute-label">{label}</span>
+      <AttributeChip color={color} label={valueLabel} />
+      <span className="week-activity-inspector__attribute-chevron" aria-hidden="true"><ChevronIcon direction="down" /></span>
+    </>
+  );
   return (
     <div className="week-activity-inspector__attribute">
-      <button
-        ref={triggerRef}
-        type="button"
-        className="week-activity-inspector__attribute-trigger"
-        aria-label={t("dashboard.week.inspector.changeAttribute", {
-          attribute: label,
-          value: displayedValue,
-          scope: recordCount > 1 ? t("dashboard.week.inspector.allActivitiesScope", { count: recordCount }) : "",
-        })}
-        aria-haspopup="listbox"
-        aria-expanded={expanded}
-        disabled={disabled || !onToggle}
-        onClick={(clickEvent) => onToggle?.(field, clickEvent.currentTarget)}
-      >
-        <span className="week-activity-inspector__attribute-label">{label}</span>
-        <AttributeChip color={color} label={valueLabel} />
-        <span className="week-activity-inspector__attribute-chevron" aria-hidden="true"><ChevronIcon direction="down" /></span>
-      </button>
+      {readOnly ? (
+        <div className="week-activity-inspector__attribute-trigger">{content}</div>
+      ) : (
+        <button
+          ref={triggerRef}
+          type="button"
+          className="week-activity-inspector__attribute-trigger"
+          aria-label={t("dashboard.week.inspector.changeAttribute", {
+            attribute: label,
+            value: displayedValue,
+            scope: recordCount > 1 ? t("dashboard.week.inspector.allActivitiesScope", { count: recordCount }) : "",
+          })}
+          aria-haspopup="listbox"
+          aria-expanded={expanded}
+          disabled={disabled || !onToggle}
+          onClick={(clickEvent) => onToggle?.(field, clickEvent.currentTarget)}
+        >
+          {content}
+        </button>
+      )}
     </div>
   );
 }
@@ -749,6 +762,7 @@ function remoteDeviceLabels(
 }
 
 function ActivityInspectorBody({
+  readOnly = false,
   event,
   values,
   segments,
@@ -771,6 +785,7 @@ function ActivityInspectorBody({
   onUndo,
   onDelete,
 }: {
+  readonly readOnly?: boolean;
   readonly event: ActivityInspectorEvent;
   readonly values: InspectorValues;
   readonly segments: readonly ActivitySegment[];
@@ -863,6 +878,7 @@ function ActivityInspectorBody({
           <DirectAttributeRow
             key={row.field}
             {...row}
+            readOnly={readOnly}
             recordCount={count}
             expanded={expandedAttribute === row.field}
             disabled={
@@ -917,22 +933,32 @@ function ActivityInspectorBody({
       {error ? <p className="week-activity-inspector__error" role="alert">{error}</p> : null}
 
       <div className="week-activity-inspector__actions week-activity-inspector__actions--destructive">
-        <button
-          type="button"
-          className="week-activity-inspector__action week-activity-inspector__action--danger"
-          onClick={onDelete}
-          disabled={!canMutate || !onDelete || Boolean(busy)}
-        >
-          <span className="week-activity-inspector__action-icon"><TrashIcon /></span>
-          <span>
-            <strong>
-              {count > 1
-                ? t("dashboard.week.inspector.deleteActivities", { count })
-                : t("dashboard.week.inspector.delete")}
-            </strong>
-          </span>
-          <ChevronIcon />
-        </button>
+        {readOnly ? (
+          <div className="week-activity-inspector__action week-activity-inspector__action--danger">
+            <span className="week-activity-inspector__action-icon"><TrashIcon /></span>
+            <span><strong>{count > 1
+              ? t("dashboard.week.inspector.deleteActivities", { count })
+              : t("dashboard.week.inspector.delete")}</strong></span>
+            <ChevronIcon />
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="week-activity-inspector__action week-activity-inspector__action--danger"
+            onClick={onDelete}
+            disabled={!canMutate || !onDelete || Boolean(busy)}
+          >
+            <span className="week-activity-inspector__action-icon"><TrashIcon /></span>
+            <span>
+              <strong>
+                {count > 1
+                  ? t("dashboard.week.inspector.deleteActivities", { count })
+                  : t("dashboard.week.inspector.delete")}
+              </strong>
+            </span>
+            <ChevronIcon />
+          </button>
+        )}
       </div>
     </>
   );
@@ -961,15 +987,7 @@ export function ActivityInspectorPreview({
   actionsDisabledReason,
   classificationOptions,
   projectOptions = [],
-  canAssignProject = false,
-  canClassify = false,
   onDismiss,
-  onOpenAttribute,
-  onRequestDelete,
-  onPointerEnter,
-  onPointerLeave,
-  onFocusEnter,
-  onFocusLeave,
 }: {
   readonly event: ActivityInspectorEvent;
   readonly segments: readonly ActivitySegment[];
@@ -981,15 +999,7 @@ export function ActivityInspectorPreview({
   readonly actionsDisabledReason: string | null;
   readonly classificationOptions?: ClassificationOptions;
   readonly projectOptions?: readonly ActivityInspectorProjectOption[];
-  readonly canAssignProject?: boolean;
-  readonly canClassify?: boolean;
   readonly onDismiss: () => void;
-  readonly onOpenAttribute?: (field: ActivityInspectorAttribute) => void;
-  readonly onRequestDelete?: () => void;
-  readonly onPointerEnter?: () => void;
-  readonly onPointerLeave?: () => void;
-  readonly onFocusEnter?: () => void;
-  readonly onFocusLeave?: () => void;
 }) {
   const previewRef = useRef<HTMLDivElement>(null);
   const showProjectAttribute = shouldShowProjectAttribute(
@@ -1003,7 +1013,6 @@ export function ActivityInspectorPreview({
     `${event.id}:${showProjectAttribute ? "project" : "no-project"}`,
     onDismiss,
   );
-  const hoverBridgeStyle = calculateHoverBridgeStyle(anchorElement, layout);
   const dialogId = `activity-inspector-preview-${event.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const titleId = `${dialogId}-title`;
   const descriptionId = `${dialogId}-description`;
@@ -1038,7 +1047,7 @@ export function ActivityInspectorPreview({
   useEffect(() => {
     if (focusTarget) {
       const descriptionIds = (focusTarget.getAttribute("aria-describedby") ?? "").split(/\s+/).filter(Boolean);
-      if (!descriptionIds.includes(descriptionId)) focusTarget.setAttribute("aria-describedby", [...descriptionIds, descriptionId].join(" "));
+      if (!descriptionIds.includes(dialogId)) focusTarget.setAttribute("aria-describedby", [...descriptionIds, dialogId].join(" "));
     }
     const handleKeyDown = (keyEvent: KeyboardEvent) => {
       if (keyEvent.key !== "Escape" || keyEvent.defaultPrevented) return;
@@ -1051,41 +1060,28 @@ export function ActivityInspectorPreview({
       if (!focusTarget) return;
       const remainingIds = (focusTarget.getAttribute("aria-describedby") ?? "")
         .split(/\s+/)
-        .filter((descriptionIdValue) => descriptionIdValue && descriptionIdValue !== descriptionId);
+        .filter((descriptionIdValue) => descriptionIdValue && descriptionIdValue !== dialogId);
       if (remainingIds.length === 0) focusTarget.removeAttribute("aria-describedby");
       else focusTarget.setAttribute("aria-describedby", remainingIds.join(" "));
     };
-  }, [descriptionId, dismissWithFocusRestore, focusTarget]);
+  }, [dialogId, dismissWithFocusRestore, focusTarget]);
 
   return createPortal(
     <>
-      <div
-        className="week-activity-inspector__hover-bridge"
-        style={hoverBridgeStyle}
-        aria-hidden="true"
-        onPointerEnter={onPointerEnter}
-        onPointerLeave={onPointerLeave}
-      />
       <div
         id={dialogId}
         ref={previewRef}
         className="week-activity-inspector week-activity-inspector--preview"
         style={layout.style}
-        role="dialog"
-        aria-modal="false"
+        role="tooltip"
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         data-mode="peek"
         data-side={layout.side}
-        onPointerEnter={onPointerEnter}
-        onPointerLeave={onPointerLeave}
-        onFocusCapture={onFocusEnter}
-        onBlurCapture={(focusEvent) => {
-          if (!focusEvent.currentTarget.contains(focusEvent.relatedTarget)) onFocusLeave?.();
-        }}
       >
-        <ActivityInspectorHeader event={event} appIcons={appIcons} titleId={titleId} onClose={dismissWithFocusRestore} />
+        <ActivityInspectorHeader readOnly event={event} appIcons={appIcons} titleId={titleId} onClose={dismissWithFocusRestore} />
         <ActivityInspectorBody
+          readOnly
           event={event}
           values={values}
           segments={segments}
@@ -1095,12 +1091,6 @@ export function ActivityInspectorPreview({
           actionsDisabledReason={actionsDisabledReason}
           classificationOptions={classificationOptions}
           descriptionId={descriptionId}
-          canAssignProject={canAssignProject}
-          canClassify={canClassify}
-          onToggleAttribute={onOpenAttribute
-            ? (field) => onOpenAttribute(field)
-            : undefined}
-          onDelete={onRequestDelete}
         />
       </div>
     </>,
@@ -1118,6 +1108,7 @@ export function WeekActivityInspector({
   classificationOptions,
   projectOptions = [],
   initialView = "overview",
+  anchorRefreshing = false,
   regroupedBlockCount = 1,
   onClose,
   onSaveValues,
@@ -1154,6 +1145,7 @@ export function WeekActivityInspector({
     inspectorRef,
     `${event.id}:${view}:${error ?? ""}:${savedChange?.nextValueLabel ?? ""}:${showProjectAttribute ? "project" : "no-project"}`,
     () => onClose(false),
+    anchorRefreshing,
   );
   const count = targetSegments.length;
   const canMutate = !actionsDisabledReason && count > 0;

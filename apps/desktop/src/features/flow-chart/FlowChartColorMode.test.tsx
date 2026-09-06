@@ -80,7 +80,7 @@ describe("FlowChartView color mode", () => {
 
     fireEvent(cell, new MouseEvent("pointermove", { bubbles: true, clientX: 120, clientY: 80 }));
     const preview = await waitFor(() => {
-      const card = document.querySelector<HTMLElement>(".flow-hover-card");
+      const card = document.querySelector<HTMLElement>('.week-activity-inspector[data-mode="peek"]');
       if (!card) throw new Error("expected activity preview");
       return card;
     });
@@ -189,8 +189,11 @@ describe("FlowChartView color mode", () => {
     const detail = hoverCard.querySelector(".week-activity-inspector__context") as HTMLElement;
 
     expect(hoverCard).toBeTruthy();
+    expect(hoverCard.getAttribute("role")).toBe("tooltip");
+    expect(within(hoverCard).queryByRole("button")).toBeNull();
+    expect(within(hoverCard).queryByRole("textbox")).toBeNull();
     expect(hoverCard.textContent).toContain("docs.example.com");
-    expect(within(attributes).queryByRole("button", { name: /Change Project/ })).toBeNull();
+    expect(within(attributes).queryByText("Project")).toBeNull();
     expect(within(attributes).getByText("Workspace")).toBeTruthy();
     expect(within(attributes).getByText("Focus")).toBeTruthy();
     expect(attributes.querySelectorAll(".week-activity-inspector__attribute-trigger")).toHaveLength(2);

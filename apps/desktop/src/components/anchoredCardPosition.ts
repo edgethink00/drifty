@@ -2,19 +2,15 @@ import { clampHoverCoordinate, type FixedHoverPosition } from "./hoverCardPositi
 
 export const ANCHORED_CARD_GAP = 12;
 export const ANCHORED_CARD_VIEWPORT_PADDING = 16;
-// The transparent gap bridge handles the normal route into the card. While a
-// dismissal is pending, pointer travel decides early (see
-// trackAnchoredHoverIntent); this window only caps a pointer that stalls
-// outside the card, and it absorbs portal event-ordering differences.
+// While dismissal is pending, pointer travel decides early (see
+// trackAnchoredHoverIntent). This window caps a pointer that stalls outside
+// the read-only card and absorbs portal event-ordering differences.
 export const ANCHORED_CARD_HOVER_BRIDGE_DELAY_MS = 220;
 // Travel without getting any closer to the card that dismisses it right away.
 // Roughly one or two pointer samples at ordinary speeds, so a move away from
 // the card reads as immediate while jitter along an approach path is ignored.
 export const ANCHORED_CARD_HOVER_ABANDON_TRAVEL_PX = 10;
 export const ANCHORED_PREVIEW_CARD_SELECTOR = ".week-activity-inspector--preview";
-export const ANCHORED_PREVIEW_HOVER_BRIDGE_SELECTOR = ".week-activity-inspector__hover-bridge";
-// Everything the pointer may rest on without giving up the card.
-export const ANCHORED_PREVIEW_POINTER_SURFACE_SELECTOR = `${ANCHORED_PREVIEW_CARD_SELECTOR}, ${ANCHORED_PREVIEW_HOVER_BRIDGE_SELECTOR}`;
 
 export type CardAnchorRect = Pick<DOMRectReadOnly, "left" | "top" | "right" | "bottom" | "width" | "height">;
 
