@@ -6,12 +6,17 @@ import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
 /**
  * The day review as the pill shows it: one slab per idea, densest last.
  *
- * Work hours answers "how did today go" before anything else, and it means the
- * whole tracked day, not only focus — reading "3 minutes worked" off a
- * focus-only number under a work-hours label was a lie the card told thin
- * days. The ring then breaks that total into focus, drift, neutral, and any
- * explicitly unclassified time; the pair below names what a good stretch
- * looked like; top apps says where the time actually went.
+ * The head row is two short slabs: Focus, captioned with the tracked total so
+ * a thin day reads "0:03 of 0:12 tracked" instead of lying, and Longest
+ * streak, the same word the resident pill shows all day, captioned with the
+ * minute that run began. The ring then breaks the total into focus, drift and
+ * neutral; time the AI has not rated yet folds into neutral rather than
+ * appearing as a fourth kind of time (that is a system state, not a way the
+ * day was spent). The pair below names what a good stretch looked like; top
+ * apps says where the time actually went.
+ *
+ * A "vs yesterday" delta used to ride on the head. It was only ever populated
+ * by the Dev mock, so production never showed it and the row does without.
  */
 
 type RingStyle = CSSProperties & { "--seg"?: string };
@@ -32,23 +37,20 @@ export function CompanionPillDayReview({
   const totalSeconds = Math.max(0, event.totalSeconds);
   const focusSeconds = Math.max(0, event.focusSeconds);
   const driftSeconds = Math.max(0, event.driftSeconds);
-  const unclassifiedSeconds = Math.max(0, event.unclassifiedSeconds ?? 0);
-  const neutralSeconds = Math.max(
-    0,
-    event.neutralSeconds ?? totalSeconds - focusSeconds - driftSeconds - unclassifiedSeconds,
-  );
+  const neutralSeconds = Math.max(0, totalSeconds - focusSeconds - driftSeconds);
   const focusPercent = totalSeconds > 0 ? Math.round((focusSeconds / totalSeconds) * 100) : 0;
   const focusShare = totalSeconds > 0 ? (focusSeconds / totalSeconds) * 100 : 0;
   const driftShare = totalSeconds > 0 ? (driftSeconds / totalSeconds) * 100 : 0;
   const neutralShare = totalSeconds > 0 ? (neutralSeconds / totalSeconds) * 100 : 0;
-  const unclassifiedShare = totalSeconds > 0 ? (unclassifiedSeconds / totalSeconds) * 100 : 0;
-  const totalDeltaSeconds = event.comparison
-    ? event.comparison.focusDeltaSeconds + event.comparison.driftDeltaSeconds + event.comparison.otherDeltaSeconds
-    : 0;
   const sources = (event.sourceSummaries ?? []).slice(0, 3);
   const topShare = sources[0]?.percent ?? 0;
   const signals = event.dailySignals;
   const pendingAssessment = event.assessment?.state === "pending" ? event.assessment : null;
+  const longestRun = signals?.longestFocusRunSeconds ?? 0;
+  const longestRunStart = signals?.longestFocusRunStartedAt ? new Date(signals.longestFocusRunStartedAt) : null;
+  const longestRunStartLabel = longestRunStart && Number.isFinite(longestRunStart.getTime())
+    ? formatClockShort(longestRunStart)
+    : null;
 
   return (
     <>
@@ -67,20 +69,36 @@ export function CompanionPillDayReview({
       </div>
 
       <div className="eodv eodv--12" data-sensitive>
-        <div className="eodv12b eodv12b--head">
-          <span className="eodsec">{pendingAssessment ? "Tracked time" : "Work hours"}</span>
-          <b>{formatReviewClockDuration(totalSeconds)}</b>
-          {!pendingAssessment && event.comparison ? (
-            <ReviewDelta seconds={totalDeltaSeconds} tone="good" suffix=" vs yesterday" />
-          ) : null}
-        </div>
+        {pendingAssessment ? (
+          <div className="eodv12b eodv12b--head">
+            <span className="eodsec">Tracked time</span>
+            <b>{formatReviewClockDuration(totalSeconds)}</b>
+          </div>
+        ) : (
+          <div className="eodv12__split">
+            <div className="eodv12b eodv12b--head eodv12b--split" data-tone="focus">
+              <span className="eodsec">Focus</span>
+              <b>{formatReviewClockDuration(focusSeconds)}</b>
+              <em className="eodv12__sub">of {formatReviewClockDuration(totalSeconds)} tracked</em>
+            </div>
+            <div className="eodv12b eodv12b--head eodv12b--split">
+              <span className="eodsec">Longest streak</span>
+              <b>{formatReviewClockDuration(longestRun)}</b>
+              <em className="eodv12__sub">
+                {longestRun > 0
+                  ? (longestRunStartLabel ? `from ${longestRunStartLabel}` : "focus without a break")
+                  : "no focus run yet"}
+              </em>
+            </div>
+          </div>
+        )}
 
         {!pendingAssessment ? (
           <div className="eodv12b eodv12__ringrow">
             <div className="eodv6__donut" aria-hidden="true">
               <i
                 className="eodv6__ring"
-                style={buildDonutRingStyle(focusShare, driftShare, neutralShare, unclassifiedShare)}
+                style={buildDonutRingStyle(focusShare, driftShare, neutralShare)}
               />
               <b>
                 {focusPercent}
@@ -109,14 +127,6 @@ export function CompanionPillDayReview({
                 deltaSeconds={event.comparison?.otherDeltaSeconds}
                 deltaTone="flat"
               />
-              {unclassifiedSeconds > 0 ? (
-                <CategoryRow
-                  label="Unclassified"
-                  seconds={unclassifiedSeconds}
-                  tone="var(--p-unclassified)"
-                  deltaTone="flat"
-                />
-              ) : null}
             </div>
           </div>
         ) : null}
@@ -274,17 +284,24 @@ function formatReviewClockDuration(seconds: number): string {
   return `${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
+/** 09:00 → "9:00 AM", 14:05 → "2:05 PM"; minutes matter for a streak start. */
+function formatClockShort(date: Date): string {
+  const hour = date.getHours();
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const suffix = hour < 12 ? "AM" : "PM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${minutes} ${suffix}`;
+}
+
 function buildDonutRingStyle(
   focusPercent: number,
   driftPercent: number,
   neutralPercent: number,
-  unclassifiedPercent: number,
 ): DonutRingStyle {
   const shares = [
     ["var(--p-focus)", focusPercent],
     ["var(--p-drift)", driftPercent],
     ["var(--p-neutral)", neutralPercent],
-    ["var(--p-unclassified)", unclassifiedPercent],
   ] as const;
   let cursor = 0;
   const stops: string[] = [];

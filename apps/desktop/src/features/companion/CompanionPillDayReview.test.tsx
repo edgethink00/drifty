@@ -33,6 +33,7 @@ const reviewEvent: EndOfDayReviewEvent = {
   dailySignals: {
     deepSessionCount: 3,
     longestFocusRunSeconds: 6_480,
+    longestFocusRunStartedAt: "2026-08-02T10:20:00",
     peakHourLabel: "10:00",
     peakHourFocusSeconds: 3_120,
   },
@@ -51,10 +52,17 @@ describe("CompanionPillDayReview", () => {
     );
 
     expect(screen.getByText("Best this week")).toBeTruthy();
-    // The headline is the whole tracked day (6:34), not focus-only, and the
-    // delta sums all three buckets: +38m focus, -9m drift, +5m other.
-    expect(screen.getByText("6:34")).toBeTruthy();
-    expect(screen.getByText("▲34m vs yesterday")).toBeTruthy();
+    // The head row is Focus (4:12, captioned with the 6:34 tracked total) and
+    // Longest streak (1:48, from the minute that run actually began). The
+    // "vs yesterday" delta is gone: production never had comparison data.
+    expect(screen.getByText("Focus", { selector: ".eodsec" })).toBeTruthy();
+    expect(screen.getAllByText("4:12").length).toBeGreaterThan(0);
+    expect(screen.getByText("of 6:34 tracked")).toBeTruthy();
+    expect(screen.getByText("Longest streak")).toBeTruthy();
+    expect(screen.getByText("1:48")).toBeTruthy();
+    expect(screen.getByText("from 10:20 AM")).toBeTruthy();
+    expect(screen.queryByText(/vs yesterday/)).toBeNull();
+    expect(screen.queryByText("Work hours")).toBeNull();
     expect(screen.getByText("0:58")).toBeTruthy();
     expect(screen.getByText("0:44")).toBeTruthy();
     expect(screen.getByText("▼9m")).toBeTruthy();
@@ -67,10 +75,13 @@ describe("CompanionPillDayReview", () => {
 
     const ring = container.querySelector<HTMLElement>(".eodv6__ring");
     expect(ring?.style.background).toContain("conic-gradient");
-    expect(ring?.style.background).toContain("var(--p-unclassified)");
+    // Unrated time is a system state, not a fourth kind of time: Neutral is the
+    // whole non-focus, non-drift remainder (6:34 - 4:12 - 0:58 = 1:24) instead
+    // of splitting off an Unclassified slice/row.
+    expect(ring?.style.background).not.toContain("var(--p-unclassified)");
     expect(screen.getByText("Neutral")).toBeTruthy();
-    expect(screen.getByText("Unclassified")).toBeTruthy();
-    expect(screen.getByText("0:15")).toBeTruthy();
+    expect(screen.queryByText("Unclassified")).toBeNull();
+    expect(screen.getByText("1:24")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "See full day" }));
     expect(onOpenDashboard).toHaveBeenCalledOnce();

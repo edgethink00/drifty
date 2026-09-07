@@ -357,11 +357,11 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
     );
     assert_eq!(
         companion_pill_capsule_size("eodCompact").unwrap(),
-        (310.0, 284.0)
+        (310.0, 306.0)
     );
     assert_eq!(
         companion_pill_capsule_size("eodMinimal").unwrap(),
-        (310.0, 223.0)
+        (310.0, 245.0)
     );
 
     /* Every state shares the widest horizontal canvas. The capsule changes
@@ -405,14 +405,14 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
         companion_pill_dimensions("eodCompact").unwrap(),
         (
             COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
-            284.0 + COMPANION_PILL_GUTTER_Y * 2.0
+            306.0 + COMPANION_PILL_GUTTER_Y * 2.0
         )
     );
     assert_eq!(
         companion_pill_dimensions("eodMinimal").unwrap(),
         (
             COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
-            223.0 + COMPANION_PILL_GUTTER_Y * 2.0
+            245.0 + COMPANION_PILL_GUTTER_Y * 2.0
         )
     );
 }

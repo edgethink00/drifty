@@ -128,7 +128,7 @@ html[data-surface="companion"] #root {
 .companion-day-review-browser-surface {
   --pill-gutter-x: 0px;
   --pill-gutter-y: 0px;
-  height: 223px;
+  height: 245px;
   pointer-events: none;
   position: fixed;
   right: var(--space-4);
@@ -137,7 +137,7 @@ html[data-surface="companion"] #root {
   z-index: var(--z-companion-drift-card);
 }
 .companion-day-review-browser-surface[data-layout="compact"] {
-  height: 284px;
+  height: 306px;
 }
 .companion-day-review-browser-surface[data-layout="full"] {
   height: 480px;
@@ -600,11 +600,11 @@ html[data-surface="companion"] #root {
 }
 .companion-pill-surface .pill[data-card-state="eodCompact"] {
   --pill-card-width: 310px;
-  --pill-card-height: 284px;
+  --pill-card-height: 306px;
 }
 .companion-pill-surface .pill[data-card-state="eodMinimal"] {
   --pill-card-width: 310px;
-  --pill-card-height: 223px;
+  --pill-card-height: 245px;
 }
 .companion-pill-surface .pill[data-transition] .view:not(.view--collapsed) {
   inset: auto;
@@ -1254,6 +1254,27 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .eodv12b--head { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .companion-pill-surface .eodv12b--head b { font-family: var(--font-display); font-size: 24px; font-weight: 760; letter-spacing: -.02em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
 .companion-pill-surface .eodv12b--head .eod__delta { margin-left: 0; }
+/* The head row is two short slabs, Focus and Longest streak, each a plain
+   stack of label / number / caption. The compact rule further down lays a lone
+   head out as a label-over-value-and-delta grid, so the split slabs opt out of
+   that at the same specificity. */
+.companion-pill-surface .eodv12__split { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.companion-pill-surface .pill[data-eod-layout] .view--eod .eodv12b--head.eodv12b--split {
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: none;
+  align-items: start; align-content: start; row-gap: 3px;
+  padding: 9px 12px 9px; min-width: 0;
+}
+.companion-pill-surface .pill[data-eod-layout] .view--eod .eodv12b--head.eodv12b--split > .eodsec { grid-area: auto; }
+.companion-pill-surface .pill[data-eod-layout] .view--eod .eodv12b--head.eodv12b--split > b {
+  grid-area: auto; font-size: 22px; min-width: 0; max-width: 100%;
+}
+.companion-pill-surface .pill[data-eod-layout] .view--eod .eodv12b--head.eodv12b--split > .eodv12__sub { grid-area: auto; }
+.companion-pill-surface .eodv12b--split[data-tone="focus"] b { color: var(--p-focus); }
+.companion-pill-surface .eodv12__sub {
+  display: block; margin-top: 1px; max-width: 100%;
+  font-style: normal; font-size: 10px; font-weight: 500; color: var(--text-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 .companion-pill-surface .eodv12__ringrow {
   display: flex; align-items: center; gap: 14px;
   padding-top: 8px; padding-bottom: 8px;

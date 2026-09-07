@@ -122,10 +122,10 @@ describe("companion pill geometry", () => {
   });
 
   it("keeps Compact v2 aligned with the reviewed prototype geometry", () => {
-    expect(COMPANION_PILL_SIZES.eodCompact).toEqual({ width: 310, height: 284 });
+    expect(COMPANION_PILL_SIZES.eodCompact).toEqual({ width: 310, height: 306 });
   });
 
   it("removes the focus-pattern row from V3 geometry", () => {
-    expect(COMPANION_PILL_SIZES.eodMinimal).toEqual({ width: 310, height: 223 });
+    expect(COMPANION_PILL_SIZES.eodMinimal).toEqual({ width: 310, height: 245 });
   });
 });

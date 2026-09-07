@@ -128,6 +128,7 @@ describe("buildEndOfDayReviewDailySignals", () => {
 
     expect(signals.deepSessionCount).toBe(1);
     expect(signals.longestFocusRunSeconds).toBe(90 * 60);
+    expect(signals.longestFocusRunStartedAt).toBe(new Date(Date.UTC(2026, 3, 6, 9)).toISOString());
     const localPeakHour = String(new Date(Date.UTC(2026, 3, 6, 9)).getHours()).padStart(2, "0");
     expect(signals.peakHourLabel).toBe(`${localPeakHour}:00`);
     expect(signals.peakHourFocusSeconds).toBe(60 * 60);
@@ -156,6 +157,7 @@ describe("buildEndOfDayReviewDailySignals", () => {
     expect(preview.dailySignals).toEqual({
       deepSessionCount: 0,
       longestFocusRunSeconds: 0,
+      longestFocusRunStartedAt: null,
       peakHourLabel: null,
       peakHourFocusSeconds: 0,
     });

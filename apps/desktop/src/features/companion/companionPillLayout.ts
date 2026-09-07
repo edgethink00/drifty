@@ -33,8 +33,10 @@ export const COMPANION_PILL_SIZES: Record<CompanionPillState, CompanionPillSize>
      height while preserving the same edge and footer rhythm. */
   eod: { width: 331, height: 480 },
   eodPending: { width: 331, height: 300 },
-  eodCompact: { width: 310, height: 284 },
-  eodMinimal: { width: 310, height: 223 },
+  /* The head row is two stacked slabs (Focus / Longest streak) with a caption
+     line each, 22px taller than the single Work-hours slab it replaced. */
+  eodCompact: { width: 310, height: 306 },
+  eodMinimal: { width: 310, height: 245 },
 };
 
 export function resolveCompanionHorizontalAnchor({

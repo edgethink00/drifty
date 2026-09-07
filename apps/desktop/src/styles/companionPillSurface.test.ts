@@ -174,9 +174,9 @@ describe("companion pill surface", () => {
     expect(pendingReviewGeometry).toContain("--pill-card-width: 331px;");
     expect(pendingReviewGeometry).toContain("--pill-card-height: 300px;");
     expect(compactReviewGeometry).toContain("--pill-card-width: 310px;");
-    expect(compactReviewGeometry).toContain("--pill-card-height: 284px;");
+    expect(compactReviewGeometry).toContain("--pill-card-height: 306px;");
     expect(minimalReviewGeometry).toContain("--pill-card-width: 310px;");
-    expect(minimalReviewGeometry).toContain("--pill-card-height: 223px;");
+    expect(minimalReviewGeometry).toContain("--pill-card-height: 245px;");
     expect(compactReviewShell).toContain("width: 310px;");
     expect(pillStyles).toContain('.pill[data-eod-layout="compact"] .view--eod .eodv12b--apps { display: none; }');
     expect(pillStyles).toContain('.pill[data-eod-version="minimal"] .view--eod .eodv12__duo { display: none; }');
