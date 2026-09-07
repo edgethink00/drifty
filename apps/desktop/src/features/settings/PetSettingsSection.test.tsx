@@ -38,9 +38,9 @@ describe("PetSettingsSection", () => {
     expect(props.onEnabledChange).not.toHaveBeenCalled();
   });
 
-  it("keeps selected appearance visible while off and connects existing controls", () => {
+  it("shows the selected size and coat and connects existing controls", () => {
     const { props } = renderPet({ coat: "charcoal", size: 75 });
-    expect(screen.getByRole("img", { name: "외형 미리보기 · 75%" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "외형 미리보기 · 75% · 차콜" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "차콜" }).getAttribute("aria-checked")).toBe("true");
     fireEvent.click(screen.getByRole("radio", { name: "회색" }));
     fireEvent.click(screen.getByRole("radio", { name: "125%" }));

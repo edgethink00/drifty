@@ -1,11 +1,11 @@
-import type { CSSProperties } from "react";
 import { Toggle } from "../../components/Toggle";
 import { useLocalization } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
-import { getPetModeCoatSpec, type PetModeCoat, type PetModeSize } from "../pet-mode/petModeData";
+import { type PetModeCoat, type PetModeSize } from "../pet-mode/petModeData";
 import { usePetOutingPreference } from "../pet-mode/petOutingPreference";
-import { PetSettings, PetCoatSwatchCat } from "./PetCoatPicker";
+import { PetSettings } from "./PetCoatPicker";
 import "./PetSettingsSection.css";
+import { PetSettingsPreview } from "./PetSettingsPreview";
 import { AutomaticCloseSettingsRow } from "./AutomaticCloseSettingsRow";
 
 type PetSettingsSectionProps = {
@@ -28,20 +28,12 @@ export function PetSettingsSection({
 }: PetSettingsSectionProps) {
   const { t } = useLocalization();
   const [allowOutings, setAllowOutings] = usePetOutingPreference();
-  const coatSpec = getPetModeCoatSpec(coat);
 
   return (
     <div className="settings-section settings-section--pet">
       <div className="settings-block">
         <h3 className="settings-block__title-with-badge">{t("settings.pet.title")}{showNewBadge ? <FeatureNewBadge /> : null}</h3>
-        <div className="pet-settings-preview" role="img" aria-label={t("settings.pet.preview", { size })}>
-          <div className="pet-settings-preview__cat" style={{
-            "--pet-coat-fur": coatSpec.fur,
-            "--pet-coat-ink": coatSpec.ink,
-            width: `${144 * size / 100}px`,
-          } as CSSProperties}><PetCoatSwatchCat /></div>
-          <span className="pet-settings-preview__caption">{t("settings.pet.preview", { size })}</span>
-        </div>
+        <PetSettingsPreview enabled={enabled} coat={coat} size={size} />
         <PetSettings enabled={enabled} coat={coat} size={size}
           onEnabledChange={onEnabledChange} onCoatChange={onCoatChange} onSizeChange={onSizeChange} />
       </div>

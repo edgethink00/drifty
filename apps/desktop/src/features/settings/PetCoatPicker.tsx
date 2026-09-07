@@ -139,7 +139,7 @@ const PET_COAT_LABEL_KEYS: Readonly<Record<PetModeCoat, TranslationKey>> = {
   plum: "settings.pet.coatPlum",
 };
 
-function localizedPetCoatLabel(
+export function localizedPetCoatLabel(
   coat: PetModeCoat,
   t: LocalizationController["t"],
 ): string {

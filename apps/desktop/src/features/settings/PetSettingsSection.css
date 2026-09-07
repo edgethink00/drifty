@@ -12,8 +12,24 @@
   background: var(--surface-strong);
 }
 
-.pet-settings-preview__cat { max-width: 100%; }
-.content--settings .pet-settings-preview .pet-coat-swatch__cat { background: transparent; }
+.pet-settings-preview__stage {
+  position: relative;
+  width: 180px;
+  height: 140px;
+  max-width: 100%;
+  --pet-accent: var(--accent);
+  --pet-contact-shadow: rgba(0, 0, 0, .18);
+  --pet-drop-shadow: drop-shadow(0 3px 3px rgba(0, 0, 0, .18));
+}
+.pet-settings-preview__cat {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 144px;
+  height: 99px;
+  transform: translateX(-50%) scale(var(--pet-size-scale));
+  transform-origin: center bottom;
+}
 .pet-settings-preview__caption { color: var(--text-muted); font-size: 0.75rem; }
 .settings-section--pet .desc { word-break: keep-all; overflow-wrap: anywhere; }
 .pet-settings-details-link {
