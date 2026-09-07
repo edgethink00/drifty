@@ -39,6 +39,12 @@ html {
 }
 
 :root {
+  /* Shared danger action colors for page, dialog, and Settings buttons. */
+  --button-danger-bg: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
+  --button-danger-border: color-mix(in srgb, var(--warn) 14%, transparent);
+  --button-danger-ink: color-mix(in srgb, var(--warn) 82%, var(--text));
+  --button-danger-hover-bg: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
+  --button-danger-hover-border: color-mix(in srgb, var(--warn) 28%, transparent);
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
   --font-serif: "Iowan Old Style", "Georgia", serif;

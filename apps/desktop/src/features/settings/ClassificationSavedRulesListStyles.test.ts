@@ -35,8 +35,8 @@ describe("Classification saved rules list styles", () => {
     expect(textRule).toContain("min-width: 0;");
     expect(detailRule).toContain("text-overflow: ellipsis;");
     expect(detailRule).toContain("white-space: nowrap;");
-    expect(deleteActionRule).toContain("background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));");
-    expect(deleteActionRule).toContain("color: var(--warn);");
+    expect(deleteActionRule).toContain("background: var(--button-danger-bg);");
+    expect(deleteActionRule).toContain("color: var(--button-danger-ink);");
     expect(deleteActionRule).toContain("min-width: 6.25rem;");
   });
 });

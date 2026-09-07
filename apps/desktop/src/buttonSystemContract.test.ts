@@ -105,7 +105,8 @@ describe("app button system contract", () => {
     expect(styles).toMatch(/\.app-btn\s*\{[^}]*font-family:\s*var\(--font-sans\);[^}]*font-size:\s*var\(--type-button-size\);/);
     expect(styles).toMatch(/\.app-btn--secondary\s*\{[\s\S]*background:\s*var\(--surface\);/);
     expect(styles).toMatch(/\.app-btn--primary\s*\{[\s\S]*background:\s*var\(--text\);/);
-    expect(styles).toMatch(/\.app-btn--danger\s*\{[\s\S]*background:\s*var\(--warn\);/);
+    expect(styles).toMatch(/\.app-btn--danger\s*\{[^}]*background:\s*var\(--button-danger-bg\);/);
+    expect(styles).toMatch(/\.modal-btn--danger\s*\{[^}]*background:\s*var\(--button-danger-bg\);/);
     expect(styles).toMatch(/\.app-btn--header-action\s*\{[^}]*border-radius:\s*var\(--radius-pill\);/);
     expect(styles).toMatch(/\.app-btn:focus-visible\s*\{[\s\S]*outline:\s*2px solid/);
     expect(styles).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);

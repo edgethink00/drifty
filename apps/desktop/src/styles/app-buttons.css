@@ -71,16 +71,16 @@
   color: var(--on-accent);
 }
 
+/* Shared tinted danger treatment across page, dialog, and Settings actions. */
 .app-btn--danger {
-  background: var(--warn);
-  border-color: var(--warn);
-  color: var(--canvas);
+  background: var(--button-danger-bg);
+  border-color: var(--button-danger-border);
+  color: var(--button-danger-ink);
 }
 
 .app-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn) 88%, var(--text));
-  border-color: color-mix(in srgb, var(--warn) 88%, var(--text));
-  color: var(--canvas);
+  background: var(--button-danger-hover-bg);
+  border-color: var(--button-danger-hover-border);
 }
 
 .app-btn--quiet {

@@ -989,14 +989,14 @@
 }
 
 .settings-btn.danger {
-  background: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
-  border-color: color-mix(in srgb, var(--warn) 14%, transparent);
-  color: var(--warn);
+  background: var(--button-danger-bg);
+  border-color: var(--button-danger-border);
+  color: var(--button-danger-ink);
 }
 .settings-btn.danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn-soft) 96%, var(--surface));
-  border-color: color-mix(in srgb, var(--warn) 28%, transparent);
-  color: var(--warn);
+  background: var(--button-danger-hover-bg);
+  border-color: var(--button-danger-hover-border);
+  color: var(--button-danger-ink);
 }
 .settings-btn.danger:disabled { cursor: default; opacity: 0.5; }
 

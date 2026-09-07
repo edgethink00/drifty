@@ -318,21 +318,21 @@
 }
 
 .modal-btn--danger {
-  background: var(--warn);
-  border-color: var(--warn);
-  color: var(--canvas);
+  background: var(--button-danger-bg);
+  border-color: var(--button-danger-border);
+  color: var(--button-danger-ink);
 }
 
 .modal-btn--danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--warn) 88%, var(--text));
-  border-color: color-mix(in srgb, var(--warn) 88%, var(--text));
-  color: var(--canvas);
+  background: var(--button-danger-hover-bg);
+  border-color: var(--button-danger-hover-border);
+  color: var(--button-danger-ink);
 }
 
-/* Armed (second-click confirmation) danger state — darker fill + pulsing ring. */
+/* Armed (second-click confirmation) danger state — stronger tint + pulsing ring. */
 .modal-btn--danger.is-armed {
-  background: color-mix(in srgb, var(--warn) 82%, black);
-  border-color: color-mix(in srgb, var(--warn) 82%, black);
+  background: var(--button-danger-hover-bg);
+  border-color: var(--button-danger-hover-border);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 26%, transparent);
   animation: modal-btn-arm-pulse 1.1s ease-in-out infinite;
 }
