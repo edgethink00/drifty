@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 
 CommandRunner = Callable[[list[str]], str]
 OsascriptRunner = Callable[[str], str]
+
+_LSAPPINFO_ASN_RE = re.compile(
+    r"^ASN:(?:0x)?([0-9A-Fa-f]+)-(?:0x)?([0-9A-Fa-f]+):$"
+)
+
+
+def normalize_lsappinfo_asn(value: str) -> str:
+    cleaned = value.strip().strip("[]").strip()
+    matched = _LSAPPINFO_ASN_RE.fullmatch(cleaned)
+    if matched is None:
+        return cleaned
+    high, low = matched.groups()
+    return f"ASN:0x{high.lower()}-0x{low.lower()}:"
 
 
 def optional_text(value: str | None) -> str | None:
@@ -110,7 +124,7 @@ def frontmost_via_lsappinfo(run_command: CommandRunner) -> tuple[str | None, str
     if "NULL" in front:
         return None, None, "lsappinfo front returned NULL.", None
 
-    asn = front.strip().strip("[]").strip()
+    asn = normalize_lsappinfo_asn(front)
     info = run_command(["lsappinfo", "info", asn])
     app_name = None
     bundle_id = None

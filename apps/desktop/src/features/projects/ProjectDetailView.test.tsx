@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, Project } from "@drifty/domain";
 
@@ -56,6 +56,18 @@ function baseProps(overrides: Partial<ProjectDetailViewProps> = {}): ProjectDeta
 }
 
 describe("ProjectDetailView", () => {
+  it("restores the detail Edit button after cancelling the editor", async () => {
+    render(<ProjectDetailView {...baseProps()} />);
+    const trigger = screen.getByRole("button", { name: "Edit" });
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    expect(document.activeElement).toBe(within(dialog).getByLabelText("Name"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("shows the project header, window stats, and share", () => {
     render(<ProjectDetailView {...baseProps()} />);
 

@@ -108,10 +108,10 @@ export default defineConfig(({ command, mode }) => {
     test: {
       environment: "node",
       globals: true,
-      // Windows and the shared CI host have enough memory for two Vitest
-      // workers, but default parallelism starves long jsdom integration files
-      // and makes their per-test timeouts flaky. Keep native defaults locally.
-      maxWorkers: process.platform === "win32" || process.env.CI ? 2 : undefined,
+      // Use the same bounded concurrency locally and in CI. Default local
+      // worker counts caused Pet Mode integration timeouts and cascading
+      // failures on the shared host; the two-worker runs completed.
+      maxWorkers: 2,
       setupFiles: ["./src/test/setupTimezone.ts"],
     },
   };

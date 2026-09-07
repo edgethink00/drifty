@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
@@ -39,6 +39,31 @@ function props(): TeamProjectsViewProps {
 }
 
 describe("TeamProjectsView", () => {
+  it.each(["create", "row edit", "detail edit"])("focuses Name and restores the %s invoker", async (route) => {
+    render(<TeamProjectsView {...props()} projects={[{ ...project, can_manage: true }]} />);
+    let trigger: HTMLElement;
+    if (route === "create") {
+      trigger = screen.getByRole("button", { name: "New project" });
+      fireEvent.click(trigger);
+    } else if (route === "row edit") {
+      trigger = screen.getByRole("button", { name: "Options for Shared alpha" });
+      fireEvent.click(trigger);
+      const edit = screen.getByRole("menuitem", { name: "Edit" });
+      edit.focus();
+      fireEvent.click(edit);
+    } else {
+      fireEvent.click(screen.getByRole("button", { name: "Open Shared alpha project" }));
+      trigger = screen.getByRole("button", { name: "Edit" });
+      fireEvent.click(trigger);
+    }
+    const dialog = screen.getByRole("dialog");
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    expect(document.activeElement).toBe(within(dialog).getByLabelText("Name"));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("exposes a read-only shared project as a native primary action", () => {
     render(<TeamProjectsView {...props()} />);
 

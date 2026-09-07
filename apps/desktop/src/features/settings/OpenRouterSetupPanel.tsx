@@ -44,7 +44,16 @@ export function OpenRouterConnectionFields({ apiKey, onApiKeyChange, onChooseMod
             placeholder="sk-or-v1-..."
           />
         </label>
-        <button type="button" className="settings-btn ai-setup-model-action" aria-label={t("settings.ai.chooseOpenRouterModelsAria")} onClick={onChooseModels}>{t("settings.ai.chooseModels")}</button>
+        <button
+          type="button"
+          className="settings-btn ai-setup-model-action"
+          aria-label={t("settings.ai.chooseOpenRouterModelsAria")}
+          onClick={(event) => {
+            // WebKit pointer clicks may leave focus on the preceding field.
+            event.currentTarget.focus({ preventScroll: true });
+            onChooseModels();
+          }}
+        >{t("settings.ai.chooseModels")}</button>
       </div>
       {description ? <p className="ai-setup-route-description">{description}</p> : null}
     </div>

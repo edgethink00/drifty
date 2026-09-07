@@ -150,6 +150,7 @@ export function TeamProjectsView({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const menuTrigger = useRef<HTMLButtonElement | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const submittedRef = useRef(false);
 
@@ -298,7 +299,7 @@ export function TeamProjectsView({
             onChange={setStatusFilter}
           />
           <span className="projects-toolbar__spacer" />
-          <button type="button" className="app-btn app-btn--primary" disabled={actionLoading} onClick={startCreate}>
+          <button type="button" className="app-btn app-btn--primary" disabled={actionLoading} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); startCreate(); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
             {t("team.projects.new")}
           </button>
@@ -355,6 +356,7 @@ export function TeamProjectsView({
                         aria-expanded={menuFor === project.id}
                         onClick={(event) => {
                           event.stopPropagation();
+                          menuTrigger.current = event.currentTarget;
                           setMenuFor((current) => (current === project.id ? null : project.id));
                         }}
                       >
@@ -368,6 +370,8 @@ export function TeamProjectsView({
                           role="menuitem"
                           onClick={(event) => {
                             event.stopPropagation();
+                            // Keep the return target outside the disappearing menu.
+                            menuTrigger.current?.focus({ preventScroll: true });
                             startEdit(project);
                           }}
                         >

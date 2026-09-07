@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ModalPresence } from "../../components/ModalPresence";
@@ -63,6 +63,7 @@ export function ProjectsManager({
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const menuTrigger = useRef<HTMLButtonElement | null>(null);
   // null = closed; "new" = create; otherwise the project being edited.
   const [editing, setEditing] = useState<Project | "new" | null>(null);
 
@@ -96,6 +97,8 @@ export function ProjectsManager({
   }, [menuFor]);
 
   const handleStartEdit = (project: Project) => {
+    // The Edit item disappears with its menu; restore to the persistent trigger.
+    menuTrigger.current?.focus({ preventScroll: true });
     setMenuFor(null);
     setEditing(project);
   };
@@ -128,7 +131,7 @@ export function ProjectsManager({
               <li><span>3</span><strong>{t("projects.firstRun.stepRefresh")}</strong></li>
             </ol>
           </div>
-          <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
+          <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
             {t("projects.create")}
           </button>
@@ -159,7 +162,7 @@ export function ProjectsManager({
               onChange={setStatusFilter}
             />
             <span className="projects-toolbar__spacer" />
-            <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={() => setEditing("new")}>
+            <button type="button" className="app-btn app-btn--primary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditing("new"); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               {t("projects.new")}
             </button>
@@ -234,6 +237,7 @@ export function ProjectsManager({
                     aria-expanded={menuFor === project.id}
                     onClick={(event) => {
                       event.stopPropagation();
+                      menuTrigger.current = event.currentTarget;
                       setMenuFor((current) => (current === project.id ? null : project.id));
                     }}
                   >

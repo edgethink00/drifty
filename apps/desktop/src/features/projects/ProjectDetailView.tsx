@@ -123,7 +123,7 @@ export function ProjectDetailView({
         <div className="project-detail__head">
           <span className="label-mono">{t("projects.detail.overview")}</span>
           <div className="project-detail__actions">
-            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={() => setEditorOpen(true)}>{t("common.edit")}</button>
+            <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); setEditorOpen(true); }}>{t("common.edit")}</button>
             <button type="button" className="app-btn app-btn--secondary" disabled={busy} onClick={toggleArchive}>
               {t(isArchived ? "projects.unarchive" : "projects.archive")}
             </button>

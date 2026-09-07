@@ -44,7 +44,7 @@ export function ProjectEditorFields({
   const colorLabelId = `${idPrefix}-color-label`;
 
   return (
-    <div className="project-editor-fields">
+    <div className="project-editor-fields" data-modal-initial-selector={`#${nameId}`}>
       <label className="project-editor-field" htmlFor={nameId}>
         <span className="label-mono">{t("projects.editor.name")}</span>
         <input
@@ -53,7 +53,6 @@ export function ProjectEditorFields({
           type="text"
           value={name}
           maxLength={120}
-          autoFocus
           placeholder={t("projects.editor.namePlaceholder")}
           onChange={(event) => onNameChange(event.target.value)}
         />

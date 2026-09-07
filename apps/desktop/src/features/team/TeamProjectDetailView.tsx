@@ -140,7 +140,7 @@ export function TeamProjectDetailView({
           </div>
           {project.can_manage ? (
             <div className="project-detail__actions">
-              <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onEdit(project)}>{t("team.projects.edit")}</button>
+              <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); onEdit(project); }}>{t("team.projects.edit")}</button>
               <button type="button" className="app-btn app-btn--secondary" disabled={actionLoading} onClick={() => onArchive(project.id, !isArchived)}>
                 {isArchived ? t("team.projects.restore") : t("team.projects.archive")}
               </button>

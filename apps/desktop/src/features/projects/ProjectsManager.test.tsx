@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Project } from "@drifty/domain";
 
@@ -39,6 +39,56 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
 }
 
 describe("ProjectsManager", () => {
+  it("keeps initial focus on Name after the modal has entered", async () => {
+    render(<ProjectsManager {...baseProps()} />);
+    const trigger = screen.getByRole("button", { name: "New project" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    expect(document.activeElement).toBe(within(dialog).getByLabelText("Name"));
+    const close = within(dialog).getByRole("button", { name: "Close project editor" });
+    close.focus();
+    fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+    expect(document.activeElement).toBe(close);
+  });
+
+  it.each(["Escape", "Cancel", "Save"])("restores New project focus after %s", async (action) => {
+    render(<ProjectsManager {...baseProps({ onSave: vi.fn(async () => true) })} />);
+    const trigger = screen.getByRole("button", { name: "New project" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "New project" });
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    if (action === "Escape") fireEvent.keyDown(window, { key: "Escape" });
+    else if (action === "Cancel") fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    else {
+      fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "QA project" } });
+      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "Create project" })); });
+    }
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it.each(["Escape", "Cancel", "Save"])("restores the persistent row trigger after Edit %s", async (action) => {
+    render(<ProjectsManager {...baseProps({ onSave: vi.fn(async () => true) })} />);
+    const trigger = screen.getByRole("button", { name: "Options for Drifty" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const edit = screen.getByRole("menuitem", { name: "Edit" });
+    edit.focus();
+    fireEvent.click(edit);
+    const dialog = screen.getByRole("dialog", { name: "Edit project" });
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    expect(edit.isConnected).toBe(false);
+    if (action === "Escape") fireEvent.keyDown(window, { key: "Escape" });
+    else await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: action === "Save" ? "Save changes" : "Cancel" })); });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("renders a labeled project list with the fixed seven-day activity window", () => {
     render(<ProjectsManager {...baseProps()} />);
 

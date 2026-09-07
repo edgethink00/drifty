@@ -57,6 +57,11 @@ const walkFrames = (JSON.parse(
   readFileSync("public/pet-mode/walk-frames-v2.json", "utf8"),
 ) as { readonly frames: readonly string[] }).frames;
 
+// These long-clock cases exercise thousands of 80ms native-control polls.
+// Keep their full simulated duration and async ordering; the wall-clock budget
+// is a harness deadline, not an assertion about the pet's response latency.
+const LONG_CLOCK_TEST_TIMEOUT_MS = 20_000;
+
 function dispatchPointer(
   target: HTMLElement,
   type: "pointerdown" | "pointermove" | "pointerup",
@@ -927,7 +932,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 20_000); });
     expect(cat.getAttribute("data-phase")).toBe("sit");
     expect(bridge.roamNativePet).not.toHaveBeenCalled();
-  });
+  }, LONG_CLOCK_TEST_TIMEOUT_MS);
 
   it("keeps quick controls hoverable while focus seats the cat and retries a failed show", async () => {
     vi.useFakeTimers();
@@ -2954,7 +2959,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => undefined);
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000); });
     expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
-  });
+  }, LONG_CLOCK_TEST_TIMEOUT_MS);
 
   it("cancels an exit in flight through a rapid Off-On pair and reveals the resident pet", async () => {
     vi.useFakeTimers();
