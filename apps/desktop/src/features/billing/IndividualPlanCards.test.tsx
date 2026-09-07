@@ -37,7 +37,7 @@ describe("IndividualPlanCards", () => {
     expect(within(proPlan).getByText("$7")).toBeTruthy();
     expect(within(proPlan).getByText("/ month")).toBeTruthy();
     expect(within(proPlan).getByText("Recommended")).toBeTruthy();
-    expect(within(proPlan).getByText("Peak performance. Ready to use.")).toBeTruthy();
+    expect(within(proPlan).getByText("Peak performance. Zero setup.")).toBeTruthy();
     expect(within(proPlan).getByText("Includes all Free plan features")).toBeTruthy();
     expect(within(proPlan).getByText(/More accurate on ambiguous work/)).toBeTruthy();
     expect(within(proPlan).getByText(/No downloads, API keys, or models to manage/)).toBeTruthy();
