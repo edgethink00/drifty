@@ -90,7 +90,7 @@ html {
   );
   /* Shared row height for the main sidebar and the settings rail.
      Both nav surfaces read this single token so they stay in sync. */
-  --nav-item-height: 32px;
+  --nav-item-height: 30px;
   --sidebar-ease: cubic-bezier(0.4, 0, 0.2, 1);
   --sidebar-duration: 380ms;
   --sidebar-fade-duration: 180ms;
