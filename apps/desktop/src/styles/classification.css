@@ -170,7 +170,7 @@
 
 .classification-panel-view {
   --classification-row-height: 48px;
-  --classification-row-radius: 11.2px;
+  --classification-row-radius: 8px;
   --classification-row-gap: 3.2px;
 }
 
@@ -196,12 +196,6 @@
 
 .classification-panel-view__category-row {
   --classification-category-tone: var(--classification-selected-tone);
-  border-color: color-mix(in srgb, var(--classification-category-tone) 12%, var(--line));
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--classification-category-tone) 2%, var(--surface)),
-      color-mix(in srgb, var(--classification-category-tone) 1%, var(--surface)));
-  box-shadow: 0 2px 8px color-mix(in srgb, var(--classification-category-tone) 4%, transparent);
 }
 
 .classification-panel-view__category-row:has(.category-dot--workspace) {
@@ -246,42 +240,30 @@
 
 .classification-panel-view__category-row:hover,
 .classification-panel-view__source-row:hover {
-  background: color-mix(in srgb, var(--surface-strong) 78%, transparent);
-  border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
+  background: var(--surface-strong);
+  border-color: transparent;
   transform: none;
 }
 
 .classification-panel-view__category-row:hover {
-  border-color: color-mix(in srgb, var(--classification-category-tone) 20%, var(--line-strong));
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--classification-category-tone) 4%, var(--surface-strong)),
-      color-mix(in srgb, var(--classification-category-tone) 2%, var(--surface)));
-  box-shadow: 0 6px 14px color-mix(in srgb, var(--classification-category-tone) 10%, transparent);
+  background: color-mix(in srgb, var(--classification-category-tone) 6%, var(--surface));
 }
 
 .classification-panel-view__category-row[data-selected="true"] {
   border-color: transparent;
-  background:
-    linear-gradient(135deg,
-      color-mix(in srgb, var(--classification-category-tone) 34%, var(--surface-strong)),
-      color-mix(in srgb, var(--classification-category-tone) 15%, var(--surface)));
-  box-shadow:
-    0 10px 22px color-mix(in srgb, var(--classification-category-tone) 20%, transparent),
-    0 2px 8px color-mix(in srgb, var(--classification-category-tone) 14%, transparent);
+  background: color-mix(in srgb, var(--classification-category-tone) 16%, var(--surface));
+  box-shadow: none;
 }
 
 .classification-panel-view__source-row[data-selected="true"] {
   border-color: transparent;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--classification-selected-tone) 18%, transparent), transparent 0.24rem),
-    linear-gradient(135deg, color-mix(in srgb, var(--classification-selected-tone) 5%, transparent), color-mix(in srgb, var(--surface) 96%, transparent));
-  box-shadow: 0 8px 18px color-mix(in srgb, var(--classification-selected-tone) 12%, transparent);
+  background: color-mix(in srgb, var(--classification-selected-tone) 12%, var(--surface));
+  box-shadow: none;
 }
 
 .classification-panel-view__category-row:focus-visible,
 .classification-panel-view__source-row:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--classification-selected-tone) 42%, transparent);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -440,16 +422,26 @@
   display: grid;
   gap: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--classification-selected-tone) 18%, var(--line));
+  border: 1px solid transparent;
   border-radius: var(--classification-row-radius);
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  background: transparent;
+}
+
+/* Inset separators retain the reading rhythm without boxing each activity. */
+.classification-panel-view__activity-row + .classification-panel-view__activity-row::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  background: var(--line);
+  pointer-events: none;
 }
 
 .classification-panel-view__activity-row[data-expanded="true"] {
-  border-color: color-mix(in srgb, var(--classification-selected-tone) 30%, var(--line));
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--classification-selected-tone) 7%, transparent), transparent 8rem),
-    color-mix(in srgb, var(--surface) 96%, transparent);
+  border-color: var(--line);
+  background: color-mix(in srgb, var(--classification-selected-tone) 5%, var(--surface));
 }
 
 .classification-panel-view__activity-head {
@@ -492,8 +484,8 @@
 }
 
 .classification-panel-view__activity-toggle:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--classification-selected-tone) 42%, transparent);
-  outline-offset: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .classification-panel-view__activity-chevron {
