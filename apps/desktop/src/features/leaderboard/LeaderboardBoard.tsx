@@ -234,10 +234,6 @@ function LeaderboardToolbar({
             : participantCount?.toLocaleString(effectiveLanguage === "ko" ? "ko-KR" : "en-US") ?? "—"}</strong>
         </div>
         <div>
-          <span className="label-mono">{t("leaderboard.board")}</span>
-          <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value" /> : scopeLabel}</strong>
-        </div>
-        <div>
           <span className="label-mono">{t("leaderboard.scopeFocus", { scope: scopeLabel })}</span>
           <strong>{isLoading ? <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__toolbar-value leaderboard-loading-shell__toolbar-value--wide" /> : formatLocalizedDuration(topScopeFocusSeconds, effectiveLanguage)}</strong>
         </div>

@@ -99,7 +99,6 @@ export function LeaderboardView({
   const profileDraft = publicProfile?.draft ?? null;
   const profileAvatarUrl = profileDraft?.avatarUrl.trim() ?? "";
   const editProfile = publicProfile?.onEditProfile ?? null;
-  const profileHandle = resolveProfileHandle(email);
   const weekFocusSeconds = publicProfile?.focusSeconds7d ?? 0;
   const dailyAverageSeconds = Math.round(weekFocusSeconds / 7);
   const dailyProductivity = publicProfile?.dailyProductivity ?? null;
@@ -140,20 +139,19 @@ export function LeaderboardView({
             aria-label={t("leaderboard.yourParticipationAria")}
             style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", alignItems: "stretch" }}
           >
-            <div style={{ display: "grid", gridTemplateColumns: "40% minmax(0, 1fr)", alignItems: "center", gap: "clamp(1.5rem, 5vw, 3.2rem)" }}>
+            <div className="leaderboard-hero__summary-row">
               <div
-                style={{ position: "relative", display: "flex", alignItems: "center", gap: "var(--space-4)", minWidth: 0 }}
+                className="leaderboard-hero__identity-row"
               >
                 {isLoading ? (
                   <>
                     <span
                       className="leaderboard-hero__avatar leaderboard-loading-shell__bone"
-                      style={{ width: 77, height: 77, borderRadius: 18, flex: "0 0 auto" }}
+                      style={{ width: 69, height: 69, borderRadius: 16, flex: "0 0 auto" }}
                     />
                     <span className="leaderboard-loading-shell__identity-copy">
                       <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__rank" />
                       <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__name" />
-                      <span className="leaderboard-loading-shell__bone leaderboard-loading-shell__handle" />
                     </span>
                   </>
                 ) : (
@@ -162,7 +160,7 @@ export function LeaderboardView({
                       className="leaderboard-hero__avatar"
                       name={previewName}
                       src={profileAvatarUrl || null}
-                      style={{ width: 77, height: 77, borderRadius: 18, fontSize: "1.68rem", flex: "0 0 auto" }}
+                      style={{ width: 69, height: 69, borderRadius: 16, fontSize: "1.5rem", flex: "0 0 auto" }}
                     />
                     <div style={{ display: "grid", gap: "0.28rem", minWidth: 0 }}>
                       <span
@@ -178,7 +176,6 @@ export function LeaderboardView({
                             : t("leaderboard.notOnBoard")}
                       </span>
                       <h3 style={{ margin: 0, lineHeight: 1.15, fontSize: "1.15rem", whiteSpace: "normal" }}>{previewName}</h3>
-                      {profileHandle ? <span className="leaderboard-hero__handle">{profileHandle}</span> : null}
                     </div>
                     {editProfile ? (
                       <button
@@ -186,7 +183,7 @@ export function LeaderboardView({
                         className="leaderboard-profile-edit-button"
                         aria-label={t("leaderboard.editProfileAria")}
                         onClick={editProfile}
-                        style={{ position: "absolute", top: 0, right: 0, margin: 0 }}
+                        style={{ margin: 0, flex: "0 0 auto" }}
                       >
                         <PencilIcon />
                       </button>
@@ -198,7 +195,7 @@ export function LeaderboardView({
                 <>
                   <div
                     aria-label={t("leaderboard.focusTotalsAria")}
-                    style={{ display: "flex", flexWrap: "wrap", gap: "clamp(1.8rem, 5vw, 3.2rem)", justifyContent: "flex-end", alignSelf: "center", width: "100%" }}
+                    className="leaderboard-hero__totals-row"
                   >
                     {isLoading ? (
                       <>
@@ -387,13 +384,6 @@ function resolvePublicNamePreview(profileDisplayName?: string | null, email?: st
   if (trimmedName) return trimmedName;
   const emailPrefix = email?.split("@")[0]?.trim();
   return emailPrefix || (language === "ko" ? "멤버" : "member");
-}
-
-function resolveProfileHandle(email?: string | null): string | null {
-  const prefix = email?.split("@")[0]?.trim();
-  if (!prefix) return null;
-  const handle = prefix.toLowerCase().replace(/[^a-z0-9_.-]/g, "");
-  return handle ? `@${handle}` : null;
 }
 
 function PencilIcon() {

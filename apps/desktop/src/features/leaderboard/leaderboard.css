@@ -2399,24 +2399,18 @@
    only: theme/range/formats + the opt-in focus-card detail flags.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.leaderboard-hero__handle {
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
 /* Participation state is still unknown (e.g. session restore): hold the button's
    footprint so the hero doesn't reflow once the real control resolves. */
 .leaderboard-hero__participation-placeholder {
   display: inline-block;
   min-height: 1.95rem;
   width: 8.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--line) 38%, transparent);
   opacity: 0.55;
 }
 
-/* The Share pill is narrower than the join/leave control, so its stand-in
+/* The Share button is narrower than the join/leave control, so its stand-in
    matches that width instead of leaving an oversized gap in the action row. */
 .leaderboard-hero__participation-placeholder--share {
   width: 5.2rem;
@@ -2444,7 +2438,7 @@
   opacity: 0.6;
 }
 
-/* Hero action bar — polished pill buttons */
+/* Hero actions follow the shared app button shape. */
 .hero-action-btn {
   display: inline-flex;
   align-items: center;
@@ -2458,7 +2452,7 @@
   font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease, color .15s ease;
 }
 
@@ -2739,12 +2733,6 @@
   width: 72%;
 }
 
-.leaderboard-loading-shell__handle {
-  height: 0.62rem;
-  max-width: 6.5rem;
-  width: 52%;
-}
-
 .leaderboard-hero__focus-stat {
   min-width: 6.5rem;
 }
@@ -2839,8 +2827,7 @@
   }
 }
 
-/* Leaderboard operate layout: the existing personal profile remains unchanged while the ranking
-   list owns the only scroll area inside this page. */
+/* Keep profile context and board controls compact; only the ranking list scrolls. */
 .content--leaderboard {
   overflow-y: hidden;
 }
@@ -2871,6 +2858,7 @@
 }
 
 .content--leaderboard .leaderboard-board-block {
+  row-gap: var(--space-1);
   container-name: leaderboard-board;
   container-type: inline-size;
   display: grid;
@@ -2886,16 +2874,19 @@
 
 .content--leaderboard .leaderboard-board-block .leaderboard-toolbar {
   align-items: center;
-  display: grid;
-  gap: var(--space-2) var(--space-3);
-  grid-template-columns: max-content minmax(0, 1fr) minmax(11rem, 14rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
   min-width: 0;
   padding: 0;
 }
 
 .leaderboard-toolbar__control-row {
+  flex: 0 0 auto;
+  max-width: 100%;
   align-items: center;
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3);
   min-width: 0;
 }
@@ -2912,14 +2903,20 @@
 }
 
 .content--leaderboard .leaderboard-toolbar__stats {
-  display: grid;
-  gap: 3.25rem;
-  grid-template-columns: repeat(3, max-content);
+  display: flex;
+  flex: 1 0 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: var(--space-2) var(--space-5);
   justify-content: start;
   min-width: 0;
 }
 
 .content--leaderboard .leaderboard-toolbar__stats > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: start;
+  gap: var(--space-2);
   min-width: 0;
 }
 
@@ -2931,12 +2928,23 @@
 }
 
 .content--leaderboard .leaderboard-search {
+  flex: 0 0 14rem;
+  margin-left: auto;
   min-width: 0;
   width: 100%;
 }
 
 .content--leaderboard .leaderboard-toolbar__stats .label-mono {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
+}
+
+.content--leaderboard .leaderboard-toolbar__stats strong {
+  font-size: 0.8125rem;
 }
 
 .content--leaderboard .leaderboard-list-frame {
@@ -2944,7 +2952,7 @@
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   border-radius: var(--radius-md);
-  margin-top: 0.28rem;
+  margin-top: var(--space-1);
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -3045,13 +3053,46 @@
   width: 0.8rem;
 }
 
-@container leaderboard-board (max-width: 50rem) {
-  .content--leaderboard .leaderboard-board-block .leaderboard-toolbar {
-    grid-template-columns: max-content minmax(0, 1fr) minmax(11rem, 14rem);
+@container leaderboard-board (max-width: 35rem) {
+  .content--leaderboard .leaderboard-search {
+    flex-basis: 100%;
   }
+}
 
-  .content--leaderboard .leaderboard-refresh-status {
-    max-width: none;
+.content--leaderboard .leaderboard-profile-block {
+  container: leaderboard-profile / inline-size;
+}
+
+.leaderboard-hero__summary-row {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: var(--space-5);
+}
+
+.leaderboard-hero__identity-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.leaderboard-hero__identity-row h3 {
+  overflow-wrap: anywhere;
+}
+
+.leaderboard-hero__totals-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@container leaderboard-profile (max-width: 42rem) {
+  .leaderboard-hero__summary-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-3);
   }
 }
 

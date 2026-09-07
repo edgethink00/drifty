@@ -109,9 +109,8 @@ describe("LeaderboardView", () => {
     expect(screen.queryByText(/nothing is published until you join/i)).toBeNull();
     const hero = screen.getByLabelText(/your leaderboard participation/i);
     const heroJoin = within(hero).getByRole("button", { name: /join leaderboard/i });
-    const privacyNote = within(hero).getByText(/only your total focus time and public profile details are shared/i);
+    const privacyNote = within(hero).getByText(/only focus totals and your public profile are shared/i);
     expect(screen.getAllByRole("button", { name: /join leaderboard/i })).toHaveLength(1);
-    expect(privacyNote.textContent).toMatch(/activity details stay private/i);
     expect(heroJoin.getAttribute("aria-describedby")).toBe(privacyNote.id);
 
     fireEvent.click(heroJoin);
@@ -674,7 +673,7 @@ describe("LeaderboardView", () => {
 
     const scope = screen.getByLabelText(/leaderboard scope/i);
     expect(within(scope).getByText("2,858")).toBeTruthy();
-    expect(within(scope).getByText("Top 100")).toBeTruthy();
+    expect(within(scope).getByText("Top 100 focus")).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: /search leaderboard/i }).getAttribute("placeholder")).toBe("Search top 100…");
   });
 
@@ -691,7 +690,7 @@ describe("LeaderboardView", () => {
 
     const scope = screen.getByLabelText(/leaderboard scope/i);
     expect(within(scope).getByText("—")).toBeTruthy();
-    expect(within(scope).getByText("Top 100")).toBeTruthy();
+    expect(within(scope).getByText("Top 100 focus")).toBeTruthy();
     expect(screen.getByRole("searchbox", { name: /search leaderboard/i }).getAttribute("placeholder")).toBe("Search top 100…");
   });
 
@@ -706,7 +705,7 @@ describe("LeaderboardView", () => {
 
     const scope = screen.getByLabelText("Leaderboard scope");
     expect(within(scope).getByText("—")).toBeTruthy();
-    expect(within(scope).getByText("All ranked")).toBeTruthy();
+    expect(within(scope).getByText("All ranked focus")).toBeTruthy();
   });
 
   it("keeps an explicit zero participant total for an empty board", () => {
