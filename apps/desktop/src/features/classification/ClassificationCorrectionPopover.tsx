@@ -106,6 +106,7 @@ export function ClassificationCorrectionPopover({
 }: ClassificationCorrectionPopoverProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [placement, setPlacement] = useState<ClassificationCorrectionPopoverPlacement | null>(null);
+  const isPositioned = placement !== null;
   const categoryValues = CATEGORY_ORDER.filter((category) => category !== "unknown");
   const changed = draft.category !== originalCategory || draft.productivity !== originalProductivity;
 
@@ -141,9 +142,10 @@ export function ClassificationCorrectionPopover({
     };
   }, [updatePlacement, throttledUpdatePlacement, notice]);
 
-  // Focus lands on the selected category so arrow keys work immediately; the
-  // trigger gets focus back when the popover goes away.
+  // Wait until placement makes the card visible before focusing it. Coordinate
+  // updates and category edits must not move focus again.
   useEffect(() => {
+    if (!isPositioned) return;
     const card = cardRef.current;
     const selected = card?.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]');
     selected?.focus({ preventScroll: true });
@@ -152,9 +154,7 @@ export function ClassificationCorrectionPopover({
         anchorElement.focus({ preventScroll: true });
       }
     };
-  // Only on mount/unmount: refocusing on every draft change would fight the radio groups.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isPositioned, anchorElement]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {

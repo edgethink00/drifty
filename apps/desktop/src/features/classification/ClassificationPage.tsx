@@ -8,6 +8,7 @@ import type { ClassificationCorrectionDraft, ClassificationCorrectionNotice } fr
 import { useEffect, useRef, useState } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
+import { NavChevronIcon } from "../../components/NavChevronIcon";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedDuration, formatLocalizedTimeLabel } from "../../lib/formatting";
@@ -532,7 +533,7 @@ export function ClassificationPage({
                                 >
                                   {rowSummary}
                                   <span className="sr-only">{t("classification.captureDetailsState", { state: t(isExpanded ? "classification.expanded" : "classification.collapsed") })}</span>
-                                  <span className="classification-panel-view__activity-chevron" aria-hidden="true">{isExpanded ? "⌄" : ">"}</span>
+                                  <span className="classification-panel-view__activity-chevron" aria-hidden="true"><NavChevronIcon direction="right" /></span>
                                 </button>
                               ) : (
                                 <div className="classification-panel-view__activity-summary">
@@ -588,10 +589,7 @@ export function ClassificationPage({
                                         const segmentTitle = classificationActivityLabel(segment);
                                         return (
                                           <div key={segment.id} className="classification-panel-view__capture-slice" role="listitem" aria-label={t("classification.captureSliceAria", { index: index + 1, title: segmentTitle, range: segmentRange, duration: segmentDuration })}>
-                                            <div className="classification-panel-view__capture-slice-copy">
-                                              <strong className="classification-panel-view__capture-slice-title" title={segmentTitle}>{segmentTitle}</strong>
-                                              <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
-                                            </div>
+                                            <span className="classification-panel-view__capture-slice-time">{segmentRange}</span>
                                             <strong className="classification-panel-view__capture-slice-duration">{segmentDuration}</strong>
                                           </div>
                                         );
