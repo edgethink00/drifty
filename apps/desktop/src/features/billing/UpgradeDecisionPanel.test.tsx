@@ -69,7 +69,7 @@ describe("UpgradeDecisionPanel", () => {
       />,
     );
 
-    expect(screen.getByText("More accurate AI, ready to use")).toBeTruthy();
+    expect(screen.getByText("Peak performance. Ready to use.")).toBeTruthy();
     expect(screen.getByText(body)).toBeTruthy();
     expect(screen.getByText(badge)).toBeTruthy();
     expect(screen.getByRole("button", { name: action })).toBeTruthy();

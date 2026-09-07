@@ -450,7 +450,7 @@ export const ENGLISH_TRANSLATIONS = {
   "billing.plan.pro": "Drifty Pro",
   "billing.plan.proAria": "Drifty Pro plan",
   "billing.plan.proChooseAria": "Choose Drifty Pro plan",
-  "billing.plan.proNote": "More accurate AI, ready to use",
+  "billing.plan.proNote": "Peak performance. Ready to use.",
   "billing.plan.proFeature1": "Includes all Free plan features",
   "billing.plan.proFeature2": "More accurate on ambiguous work than the on-device model",
   "billing.plan.proFeature3": "No downloads, API keys, or models to manage",
