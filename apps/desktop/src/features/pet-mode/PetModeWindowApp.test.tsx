@@ -972,6 +972,87 @@ describe("PetModeWindowApp", () => {
     expect(bridge.setNativePetQuickControlsVisible.mock.calls.filter(([visible]) => visible)).toHaveLength(2);
   });
 
+  it.each([
+    { label: "within one animation frame", responseDelay: 0, wait: 32 },
+    { label: "when the native response crosses the exit deadline", responseDelay: 110, wait: 210 },
+  ])("resumes a fading HUD $label", async ({ responseDelay, wait }) => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let cursorX = 600;
+    bridge.sampleNativePetCursor.mockImplementation(async () => ({
+      cursorX: cursorX += 3, cursorY: 330, windowX: 560, windowY: 280,
+      windowWidth: 144, windowHeight: 99, visible: true,
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "entry_complete" });
+      bridge.eventHandler?.({ kind: "snapshot", snapshot: {
+        productivity: "focus", contextLabel: "editor", durationSeconds: 42,
+      } });
+    });
+    bridge.isNativePetCursorInside.mockResolvedValue(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(true);
+    bridge.isNativePetCursorInside.mockResolvedValue(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
+    bridge.isNativePetQuickControlsCursorInside.mockImplementation(() =>
+      new Promise<boolean>((resolve) => window.setTimeout(() => resolve(true), responseDelay)));
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    await act(async () => { await vi.advanceTimersByTimeAsync(wait); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it("samples the fading controls and reopens on the next poll without another dwell", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    let cursorX = 600;
+    bridge.sampleNativePetCursor.mockImplementation(async () => ({
+      cursorX: cursorX += 3, cursorY: 330, windowX: 560, windowY: 280,
+      windowWidth: 144, windowHeight: 99, visible: true,
+    }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({ kind: "entry_complete" });
+      bridge.eventHandler?.({ kind: "snapshot", snapshot: {
+        productivity: "focus", contextLabel: "editor", durationSeconds: 42,
+      } });
+    });
+    bridge.isNativePetCursorInside.mockResolvedValue(true);
+    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(true);
+    bridge.isNativePetCursorInside.mockResolvedValue(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
+    bridge.isNativePetQuickControlsCursorInside.mockResolvedValue(true);
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledExactlyOnceWith(true);
+    bridge.isNativePetQuickControlsCursorInside.mockResolvedValue(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenLastCalledWith(false);
+    act(() => bridge.quickControlsMenuStateHandler?.(true));
+    await act(async () => { await vi.advanceTimersByTimeAsync(80); });
+    bridge.setNativePetQuickControlsVisible.mockClear();
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    expect(bridge.setNativePetQuickControlsVisible).not.toHaveBeenCalled();
+    act(() => bridge.quickControlsMenuStateHandler?.(false));
+    await act(async () => { await vi.advanceTimersByTimeAsync(320); });
+    expect(bridge.setNativePetQuickControlsVisible).toHaveBeenCalledExactlyOnceWith(false);
+  });
+
   it("lets a bounded AX seat correction walk during focus", async () => {
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("matchMedia", () => ({ matches: false }));

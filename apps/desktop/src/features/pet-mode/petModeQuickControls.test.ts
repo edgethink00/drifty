@@ -39,6 +39,19 @@ describe("pet interaction cooldown", () => {
 });
 
 describe("advancePetQuickControlsHoverIntent", () => {
+  it("reverses an exit immediately on reentry, but never bypasses interaction blocks", () => {
+    for (const pointerOverPet of [true, false]) {
+      const input = { pointerOverPet, pointerOverControls: !pointerOverPet,
+        pointerMoved: false, resumeDuringExit: true, blocked: false };
+      expect(advancePetQuickControlsHoverIntent(EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT, input, 80).open).toBe(true);
+      expect(advancePetQuickControlsHoverIntent(EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
+        { ...input, blocked: true }, 80)).toEqual(EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT);
+    }
+    expect(advancePetQuickControlsHoverIntent(EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
+      { pointerOverPet: false, pointerOverControls: false, pointerMoved: false,
+        resumeDuringExit: true, blocked: false }, 80).open).toBe(false);
+  });
+
   it("keeps a roaming cat hoverable so the bar is reachable during autonomous walks", () => {
     // Regression: gait was excluded from the hoverable set, and because the pet
     // roams on its own for long stretches, a live hover over a walking cat

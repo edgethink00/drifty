@@ -4,12 +4,17 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 use std::sync::Mutex;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewWindow,
+    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
 
 use super::pet_mode::{current_pet_logical_position, PET_MODE_WINDOW_LABEL};
-use super::pet_panel::{configure_pet_panel, show_pet_panel_at_position};
+use super::pet_panel::configure_pet_panel;
+#[cfg(not(target_os = "macos"))]
+use {super::pet_panel::show_pet_panel_at_position, tauri::LogicalPosition};
+
+#[cfg(target_os = "macos")]
+mod motion;
 
 pub const PET_QUICK_CONTROLS_WINDOW_LABEL: &str = "pet-quick-controls";
 const PET_QUICK_CONTROLS_KO_WIDTH: f64 = 273.0;
@@ -184,8 +189,13 @@ fn resolve_quick_controls_layout(
 }
 
 fn hide_pet_quick_controls_window(window: &WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    return motion::hide_immediately(window);
+    #[cfg(not(target_os = "macos"))]
+    {
     let _ = window.set_ignore_cursor_events(true);
     window.hide().map_err(|error| error.to_string())
+    }
 }
 
 pub fn set_pet_quick_controls_acknowledgement_held(app: &AppHandle, held: bool) {
@@ -195,6 +205,10 @@ pub fn set_pet_quick_controls_acknowledgement_held(app: &AppHandle, held: bool) 
     PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD.store(held, Ordering::Relaxed);
     if !held {
         return;
+    }
+    #[cfg(target_os = "macos")]
+    if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+        let _ = motion::hold_visible(&window);
     }
 
     let app = app.clone();
@@ -310,6 +324,9 @@ pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<(
         if pet_quick_controls_acknowledgement_held() {
             return Ok(());
         }
+        #[cfg(target_os = "macos")]
+        return motion::hide(&window);
+        #[cfg(not(target_os = "macos"))]
         return hide_pet_quick_controls_window(&window);
     }
 
@@ -336,6 +353,9 @@ pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<(
         "pet-quick-controls-layout",
         json!({ "placement": layout.placement }),
     );
+    #[cfg(target_os = "macos")]
+    return motion::show(&window, layout);
+    #[cfg(not(target_os = "macos"))]
     show_pet_panel_at_position(&app, &window, LogicalPosition::new(layout.x, layout.y))
 }
 
@@ -367,6 +387,9 @@ pub fn pet_quick_controls_sync_state(
         if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
             if matches!(pet.is_visible(), Ok(true)) {
                 let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
+                #[cfg(target_os = "macos")]
+                motion::relocate(&window, layout)?;
+                #[cfg(not(target_os = "macos"))]
                 window
                     .set_position(LogicalPosition::new(layout.x, layout.y))
                     .map_err(|error| error.to_string())?;
@@ -487,6 +510,12 @@ pub fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), S
     }
 
     if action == "menuOpened" || action == "menuClosed" {
+        #[cfg(target_os = "macos")]
+        if action == "menuOpened" {
+            if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+                motion::hold_visible(&window)?;
+            }
+        }
         if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
             pet.emit(
                 "pet-quick-controls-menu-state",

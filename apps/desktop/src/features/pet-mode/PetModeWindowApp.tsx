@@ -53,6 +53,8 @@ import { usePetTimedPauseSleep } from "./usePetTimedPauseSleep";
 import { openNativePetModeMenu } from "./petModeNativeMenu";
 import {
   EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
+  PET_QUICK_CONTROLS_EXIT_MS,
+  PET_QUICK_CONTROLS_EXIT_POLL_MS,
   PET_QUICK_CONTROLS_ACKNOWLEDGE_COOLDOWN_MS,
   PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS,
   PET_QUICK_CONTROLS_POLL_MS,
@@ -2453,6 +2455,7 @@ export function PetModeWindowApp() {
     let previousPointer: PetQuickControlsPoint | null = null;
     let intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
     let publishedOpen = false;
+    let closingUntilMs = 0;
     const blockedNow = () => manualDragRef.current
       || menuOpenRef.current
       || isPetQuickControlsInteractionCoolingDown(
@@ -2464,7 +2467,10 @@ export function PetModeWindowApp() {
     const publishVisibility = async (requestedOpen: boolean) => {
       try {
         await setNativePetQuickControlsVisible(requestedOpen);
-        if (!disposed) publishedOpen = requestedOpen;
+        if (!disposed) {
+          publishedOpen = requestedOpen;
+          closingUntilMs = requestedOpen ? 0 : performance.now() + PET_QUICK_CONTROLS_EXIT_MS;
+        }
       } catch {
         // Leave the published state unchanged so a transient native-window
         // failure is retried on the next poll.
@@ -2472,6 +2478,7 @@ export function PetModeWindowApp() {
       }
     };
     const resetBlockedIntent = async () => {
+      closingUntilMs = 0;
       previousPointer = null;
       intent = advancePetQuickControlsHoverIntent(intent, {
         pointerOverPet: false,
@@ -2480,6 +2487,7 @@ export function PetModeWindowApp() {
         blocked: true,
       }, PET_QUICK_CONTROLS_POLL_MS);
       if (publishedOpen) await publishVisibility(false);
+      closingUntilMs = 0;
       controlsHoldingRef.current = false;
     };
     const poll = async () => {
@@ -2488,6 +2496,11 @@ export function PetModeWindowApp() {
       // geometry cannot tell us that the user is still interacting with it.
       // Keep both windows anchored until AppKit dismisses the menu.
       if (quickControlsMenuOpenRef.current) {
+        // Native menu ownership settles/reopens a fading HUD. Keep the local
+        // intent in sync so leaving after menu dismissal still closes it.
+        intent = { open: true, openElapsedMs: 0, closeElapsedMs: 0 };
+        publishedOpen = true;
+        closingUntilMs = 0;
         controlsHoldingRef.current = true;
         timerId = window.setTimeout(() => { void poll(); }, PET_QUICK_CONTROLS_POLL_MS);
         return;
@@ -2497,10 +2510,13 @@ export function PetModeWindowApp() {
         if (!disposed) timerId = window.setTimeout(() => { void poll(); }, PET_QUICK_CONTROLS_POLL_MS);
         return;
       }
+      // Preserve when the sample was requested: a native response delivered
+      // after the deadline must not turn an in-flight reentry into a new dwell.
+      const samplingDuringExit = performance.now() < closingUntilMs;
       const [sample, pointerOverPet, pointerOverControls] = await Promise.all([
         sampleNativePetCursor(),
         isNativePetCursorInside(),
-        (intent.open || publishedOpen)
+        (intent.open || publishedOpen || samplingDuringExit)
           ? isNativePetQuickControlsCursorInside()
           : Promise.resolve(false),
       ]);
@@ -2528,16 +2544,22 @@ export function PetModeWindowApp() {
         pointerOverControls,
         pointerMoved: moved,
         resumeAfterInteraction: resumeAfterInteraction && Boolean(pointerOverPet),
+        resumeDuringExit: samplingDuringExit,
         blocked: false,
       }, PET_QUICK_CONTROLS_POLL_MS);
-      // Arm the hold as soon as dwell begins so the cat cannot start walking
-      // out from under an intentional hover before the 220ms delay completes.
-      controlsHoldingRef.current = intent.open || intent.openElapsedMs > 0;
+      // Arm before the native call and retain the hold throughout its exit so
+      // the cat cannot walk away while the user is returning to the controls.
+      controlsHoldingRef.current = intent.open || intent.openElapsedMs > 0 || publishedOpen || performance.now() < closingUntilMs;
       if (intent.open !== publishedOpen) {
         const requestedOpen = intent.open;
         await publishVisibility(requestedOpen);
       }
-      if (!disposed) timerId = window.setTimeout(() => { void poll(); }, PET_QUICK_CONTROLS_POLL_MS);
+      if (disposed) return;
+      controlsHoldingRef.current = intent.open || intent.openElapsedMs > 0 || performance.now() < closingUntilMs;
+      const nextPollMs = performance.now() < closingUntilMs
+        ? PET_QUICK_CONTROLS_EXIT_POLL_MS
+        : PET_QUICK_CONTROLS_POLL_MS;
+      if (!disposed) timerId = window.setTimeout(() => { void poll(); }, nextPollMs);
     };
     void poll();
     return () => {

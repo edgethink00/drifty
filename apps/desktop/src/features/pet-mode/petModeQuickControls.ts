@@ -10,7 +10,11 @@ export const PET_QUICK_CONTROLS_HOVER_OPEN_MS = 220;
 // The bar sits one 8pt gap from the cat. A quarter-second grace covers both
 // that crossing and small accidental exits without making dismissal feel slow.
 export const PET_QUICK_CONTROLS_HOVER_CLOSE_MS = 250;
+// Matches EXIT_MS in the native pet_quick_controls/motion.rs presentation.
+export const PET_QUICK_CONTROLS_EXIT_MS = 90;
 export const PET_QUICK_CONTROLS_POLL_MS = 80;
+// Only the short exit needs frame-rate sampling; idle hover stays inexpensive.
+export const PET_QUICK_CONTROLS_EXIT_POLL_MS = 16;
 export const PET_QUICK_CONTROLS_STATIONARY_MOVE_PX = 2;
 export const PET_QUICK_CONTROLS_INTERACTION_COOLDOWN_MS = 670;
 export const PET_QUICK_CONTROLS_ACKNOWLEDGE_MS = 1_100;
@@ -65,6 +69,7 @@ export type PetQuickControlsHoverIntentInput = {
   readonly pointerOverControls: boolean;
   readonly pointerMoved: boolean;
   readonly resumeAfterInteraction?: boolean;
+  readonly resumeDuringExit?: boolean;
   readonly blocked: boolean;
 };
 
@@ -123,7 +128,7 @@ export function advancePetQuickControlsHoverIntent(
     };
   }
 
-  if (current.open) {
+  if (current.open || input.resumeDuringExit) {
     return {
       open: true,
       openElapsedMs: current.openElapsedMs,
