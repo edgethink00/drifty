@@ -25,6 +25,7 @@
     "tauri:build": "node scripts/run-tauri.mjs build"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tauri-apps/cli": "^2.4.1",
     "playwright": "^1.60.0"
   },
