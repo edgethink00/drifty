@@ -92,10 +92,10 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(screen.getByText("가장 활발한 저장소")).toBeTruthy();
     expect(screen.getByText("순 코드 줄")).toBeTruthy();
 
-    const dayRun = screen.getByRole("img", { name: /에이전트 실행, drifty_mac/i });
+    const dayRun = document.querySelector('[data-flow-minute="108"]')!;
     fireEvent(dayRun, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
-    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("최대×1");
-    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("도구Codex");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("최대 동시 실행×1");
+    expect(document.querySelector(".agents-hover-card__repos")?.textContent).toContain("drifty_macCodex");
     expect(document.querySelector(".agents-hover-card")?.textContent).toContain("모델gpt-5");
     expect(document.querySelector(".agents-hover-card")?.textContent).toContain("커밋1");
 
@@ -302,8 +302,8 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(heading.textContent).toBe("No agent activity");
     expect(heading.querySelector(".dashboard-page-head__focus-value")).toBeNull();
 
-    const dayRun = screen.getByRole("img", { name: /Agent run, drifty_mac/i });
-    expect(dayRun.getAttribute("aria-label")).toContain("01:00–01:01, <1m active");
+    const dayRun = screen.getByRole("img", { name: /Agent activity, drifty_mac/i });
+    expect(dayRun.getAttribute("aria-label")).toContain("01:00–01:03, <1m active");
     fireEvent(dayRun, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
     expect(document.querySelector(".agents-hover-card")?.textContent).toContain("<1m active");
 
@@ -312,13 +312,17 @@ describe("AgentsPage shared dashboard controls", () => {
       .toContain("01:00–01:01, <1m active");
   });
 
-  it("shows the same read-only run hover for Day cells and Week runs", async () => {
+  it("shows cell facts in Day and the whole run in Week", async () => {
     renderAgentsPage();
 
-    const dayCell = screen.getByRole("img", { name: /Agent run, drifty_mac/i });
+    const dayCell = screen.getByRole("img", { name: /Agent activity, drifty_mac, 01:00–01:03/i });
     fireEvent(dayCell, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
     await waitFor(() => expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac"));
-    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("Peak×1");
+    expect(document.querySelector(".agents-hover-card")?.textContent).toContain("Peak concurrent×1");
+    expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("01:00–01:03");
+    expect(document.querySelector(".agents-hover-card__context")?.textContent).toBe("Surrounding activity 01:00–02:00");
+    expect(document.querySelector(".agents-hover-card__head")?.textContent).toContain("3m active");
+    expect(document.querySelector(".agents-hover-card__facts")?.textContent).not.toContain("Commits");
     expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Workspace");
     expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Delete activity");
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
@@ -364,6 +368,68 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(weekPage?.querySelector(".agents-rhythm-chart")).toBeNull();
     expect(weekPage?.querySelector(".app-usage-panel")).toBeNull();
     expect(weekPage?.querySelector(".agents-week-calendar__foot")).toBeNull();
+  });
+
+  it("retargets a single highlighted cell across parallel repos and preserves its color", async () => {
+    vi.mocked(useAgentsData).mockReturnValue({ days: [{
+      ...source, attention: [],
+      turns: [
+        [600, 640, "codex", "alpha", "model-a", 0],
+        [620, 650, "claude", "beta", "model-b", 0],
+        [623, 624, "gemini", "gamma", "model-c", 0],
+      ],
+      commits: [[622, 1, 0, 1, "inside", "beta"], [624, 1, 0, 1, "outside", "gamma"]],
+    }], loading: false, live: true });
+    renderAgentsPage();
+    const mixed = document.querySelector<HTMLElement>('[data-flow-minute="621"]')!;
+    fireEvent(mixed, new MouseEvent("pointermove", { bubbles: true }));
+    expect(screen.getByRole("tooltip").textContent).toContain("Peak concurrent×3");
+    expect(document.querySelector(".agents-hover-card__repos")?.textContent).toContain("alphaCodexbetaClaude CodeAdditional repos: 1");
+    expect(screen.getByRole("tooltip").textContent).toContain("Commits in interval1");
+    const overlays = document.querySelectorAll<HTMLElement>(".flow-hover-group-highlight");
+    expect(overlays).toHaveLength(1);
+    expect(overlays[0]?.style.getPropertyValue("--flow-hover-row-span")).toBe("1");
+
+    const later = document.querySelector<HTMLElement>('[data-flow-minute="642"]')!;
+    fireEvent(later, new MouseEvent("pointermove", { bubbles: true }));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("10:42–10:45"));
+    expect(screen.getByRole("tooltip").textContent).toContain("Peak concurrent×1");
+    expect(screen.getByRole("tooltip").textContent).not.toMatch(/alpha|model-a|Commits in interval/);
+    act(() => later.focus());
+    fireEvent.click(screen.getByRole("button", { name: "Project" }));
+    expect(later.dataset.agentHoverId).toContain(":cell:642:3");
+    expect(document.querySelector<HTMLElement>(".agents-hover-card__tone")?.style.getPropertyValue("--agents-hover-tone"))
+      .toBe(later.style.getPropertyValue("--flow-project-color"));
+  });
+
+  it("offers one Day tab stop and navigates cells in logical time across midnight", () => {
+    vi.mocked(useAgentsData).mockReturnValue({ days: [{ ...source,
+      turns: [[1197, 1206, "codex", "alpha"]], commits: [],
+    }], loading: false, live: true });
+    renderAgentsPage({ startOfDayMinutes: 4 * 60 });
+    const first = screen.getByRole("img", { name: /23:57–00:00/ });
+    const next = screen.getByRole("img", { name: /00:00–00:03/ });
+    expect(document.querySelectorAll('.agents-flow-card [data-agent-hover-id][tabindex="0"]')).toHaveLength(1);
+    act(() => first.focus());
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(next);
+    expect(next.tabIndex).toBe(0);
+    expect(first.tabIndex).toBe(-1);
+    expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("00:00–00:03");
+    fireEvent.keyDown(next, { key: "End" });
+    expect(document.activeElement?.getAttribute("aria-label")).toContain("00:03–00:06");
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("does not invent one surrounding run for two separate runs inside a coarse cell", () => {
+    vi.mocked(useAgentsData).mockReturnValue({ days: [{ ...source,
+      turns: [[600, 600.1, "codex", "alpha"], [605.9, 610, "claude", "beta"]], commits: [],
+    }], loading: false, live: true });
+    renderAgentsPage({ flowIntervalMinutes: 6 });
+    fireEvent.focus(screen.getByRole("img", { name: /10:00–10:06/ }));
+    expect(screen.getByRole("tooltip").textContent).toContain("Peak concurrent×1");
+    expect(document.querySelector(".agents-hover-card__context")).toBeNull();
   });
 
   it("keeps one Week tab stop and moves between runs with arrow keys", () => {

@@ -206,6 +206,11 @@ export type AgentsGridCell = {
   readonly concurrency: number;
   /** Repo with the most turn-minutes inside the cell, or null. */
   readonly topRepo: string | null;
+  /** Wall-clock activity clipped to this cell, excluding gaps and overlap. */
+  readonly activeMinutes: number;
+  /** Repos ranked by turn-minutes, with only the tools observed on each repo. */
+  readonly repos: readonly { readonly repo: string | null; readonly providers: readonly string[] }[];
+  readonly models: readonly string[];
   /** Commits authored inside this cell. */
   readonly commitCount: number;
   /** True when any attention span overlaps the cell. */
@@ -383,16 +388,20 @@ type TimelineTurn = {
   readonly model: string;
 };
 
-function rankedRepo(
+function rankedRepoNames(
   repoMinutes: ReadonlyMap<string, number>,
   repoPriority: ReadonlyMap<string, number>,
-): string | null {
-  const winner = [...repoMinutes.entries()]
+): string[] {
+  return [...repoMinutes.entries()]
     .sort((left, right) => (
       right[1] - left[1]
       || (repoPriority.get(left[0]) ?? Number.MAX_SAFE_INTEGER) - (repoPriority.get(right[0]) ?? Number.MAX_SAFE_INTEGER)
       || left[0].localeCompare(right[0])
-    ))[0]?.[0];
+    )).map(([repo]) => repo);
+}
+
+function rankedRepo(repoMinutes: ReadonlyMap<string, number>, repoPriority: ReadonlyMap<string, number>): string | null {
+  const winner = rankedRepoNames(repoMinutes, repoPriority)[0];
   return winner?.trim() ? winner : null;
 }
 
@@ -483,7 +492,10 @@ export function buildAgentsGridCells(
 ): Map<number, AgentsGridCell> {
   const cells = new Map<number, {
     concurrency: number;
+    activeMinutes: number;
     repoMinutes: Map<string, number>;
+    repoProviders: Map<string, Set<string>>;
+    models: Set<string>;
     commitCount: number;
     attended: boolean;
   }>();
@@ -493,7 +505,7 @@ export function buildAgentsGridCells(
   const ensure = (index: number) => {
     let cell = cells.get(index);
     if (!cell) {
-      cell = { concurrency: 0, repoMinutes: new Map(), commitCount: 0, attended: false };
+      cell = { concurrency: 0, activeMinutes: 0, repoMinutes: new Map(), repoProviders: new Map(), models: new Set(), commitCount: 0, attended: false };
       cells.set(index, cell);
     }
     return cell;
@@ -505,7 +517,7 @@ export function buildAgentsGridCells(
   // cell, so sweep boundaries per cell instead.
   const eventsByCell = new Map<number, { at: number; delta: number }[]>();
   for (const turn of source.turns) {
-    const [start, end, , repo] = turn as readonly [number, number, string, string?];
+    const [start, end, provider, repo, model] = turn as readonly [number, number, string, string?, string?];
     if (end <= start) continue;
     const firstCell = Math.max(0, cellIndexFor(start));
     const lastCell = Math.min(cellCount - 1, cellIndexFor(Math.max(start, end - 0.001)));
@@ -518,6 +530,10 @@ export function buildAgentsGridCells(
       const cell = ensure(index);
       const normalizedRepo = repo?.trim() ?? "";
       cell.repoMinutes.set(normalizedRepo, (cell.repoMinutes.get(normalizedRepo) ?? 0) + (overlapEnd - overlapStart));
+      const providers = cell.repoProviders.get(normalizedRepo) ?? new Set<string>();
+      providers.add(provider);
+      cell.repoProviders.set(normalizedRepo, providers);
+      if (model?.trim()) cell.models.add(model.trim());
       let boundaries = eventsByCell.get(index);
       if (!boundaries) {
         boundaries = [];
@@ -530,11 +546,16 @@ export function buildAgentsGridCells(
     boundaries.sort((a, b) => a.at - b.at || a.delta - b.delta);
     let current = 0;
     let peak = 0;
+    let activeMinutes = 0;
+    let previousAt = boundaries[0]?.at ?? 0;
     for (const boundary of boundaries) {
+      if (current > 0) activeMinutes += boundary.at - previousAt;
       current += boundary.delta;
       peak = Math.max(peak, current);
+      previousAt = boundary.at;
     }
     ensure(index).concurrency = peak;
+    ensure(index).activeMinutes = activeMinutes;
   }
 
   for (const [minute] of source.commits) {
@@ -557,11 +578,15 @@ export function buildAgentsGridCells(
     // Commits remain a Breakdown signal. A commit without overlapping agent
     // time must not paint a fake ×1 activity cell in the Day timeline.
     if (cell.concurrency === 0) continue;
-    const topRepo = rankedRepo(cell.repoMinutes, repoPriority);
+    const repoNames = rankedRepoNames(cell.repoMinutes, repoPriority);
+    const topRepo = repoNames[0]?.trim() || null;
     result.set(index * intervalMinutes, {
       minuteOfDay: index * intervalMinutes,
       concurrency: cell.concurrency,
       topRepo,
+      activeMinutes: cell.activeMinutes,
+      repos: repoNames.map((repo) => ({ repo: repo || null, providers: [...(cell.repoProviders.get(repo) ?? [])].sort() })),
+      models: [...cell.models].sort(),
       commitCount: cell.commitCount,
       attended: cell.attended,
     });

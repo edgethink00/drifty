@@ -14,6 +14,8 @@ type FlowProjectCellStyle = CSSProperties & Record<"--flow-project-color", strin
 export type FlowChartReadOnlyPreview = {
   readonly idsByCell: ReadonlyMap<number, string>;
   readonly ariaLabelsById: ReadonlyMap<string, string>;
+  /** Opt-in roving tab stop; the caller owns arrow-key navigation. */
+  readonly tabStopId?: string;
 };
 
 type FlowChartGridProps = {
@@ -149,7 +151,7 @@ export const FlowChartGrid = memo(function FlowChartGrid({
                       className={`flow-cell ${colorClass}${unclassifiedClass}${remoteDeviceClass}${isCurrentHourCell ? " flow-cell--now-hour" : ""}`}
                       key={block.minuteOfDay}
                       role={isPreviewAnchor ? "img" : undefined}
-                      tabIndex={isPreviewAnchor ? 0 : undefined}
+                      tabIndex={isPreviewAnchor ? (!readOnlyPreview.tabStopId || readOnlyPreview.tabStopId === previewId ? 0 : -1) : undefined}
                       aria-label={isPreviewAnchor ? readOnlyPreview.ariaLabelsById.get(previewId) : undefined}
                       aria-hidden={isPreviewAnchor ? undefined : true}
                       data-flow-minute={block.minuteOfDay}

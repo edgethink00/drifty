@@ -204,9 +204,11 @@ function buildAgentsHoverDetails(
 }
 
 function agentsHoverAriaLabel(details: AgentsHoverDetails, language: DisplayLanguage, t: LocalizationController["t"]): string {
-  const repo = details.repo ?? t("agents.generic.noRepo");
+  const repo = details.cellSummary
+    ? details.cellSummary.repos.map((entry) => entry.repo ?? t("agents.generic.noRepo")).join(" + ")
+    : details.repo ?? t("agents.generic.noRepo");
   const tools = details.providerLabels.join(" + ") || t("agents.generic.unknownProvider");
-  return t("agents.hover.runAria", {
+  return t(details.cellSummary ? "agents.hover.cellAria" : "agents.hover.runAria", {
     repo,
     range: details.timeRangeLabel,
     duration: formatAgentRunDuration(details.activeSeconds / 60, language),
@@ -374,6 +376,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const [flowGridElement, setFlowGridElement] = useState<HTMLDivElement | null>(null);
+  const [activeKeyboardCellId, setActiveKeyboardCellId] = useState<string | null>(null);
   const boundaryMinutes = normalizeStartOfDayMinutes(startOfDayMinutes);
   const currentLogicalMinute = currentMinuteOfDay === null
     ? null
@@ -433,34 +436,47 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
     const ariaLabelsById = new Map<string, string>();
     const orderedCells = [...gridCells.values()].sort((left, right) => left.minuteOfDay - right.minuteOfDay);
 
-    for (const stretch of runStretches) {
-      const blocks = orderedCells
-        .filter((cell) => cell.minuteOfDay < stretch.end && cell.minuteOfDay + intervalMinutes > stretch.start)
-        .flatMap((cell) => {
-          const block = gridBlocks.get(`${clockMinuteForLogicalMinute(cell.minuteOfDay, boundaryMinutes)}`);
-          return block ? [block] : [];
-        });
-      const block = blocks[0];
+    for (const cell of orderedCells) {
+      const start = cell.minuteOfDay;
+      const end = start + intervalMinutes;
+      const block = gridBlocks.get(`${clockMinuteForLogicalMinute(start, boundaryMinutes)}`);
       if (!block) continue;
-      const id = `${model.day}:run:${stretch.start}`;
+      const id = `${model.day}:cell:${start}:${intervalMinutes}`;
       const flowGroup: FlowBlockHoverGroup = {
         block,
-        blocks,
+        blocks: [block],
         segmentIds: [],
-        startMinuteOfDay: clockMinuteForLogicalMinute(stretch.start, boundaryMinutes),
-        endMinuteOfDay: clockMinuteForLogicalMinute(stretch.end, boundaryMinutes),
-        durationSeconds: Math.round(stretch.activeMinutes * 60),
+        startMinuteOfDay: block.minuteOfDay,
+        endMinuteOfDay: clockMinuteForLogicalMinute(end, boundaryMinutes),
+        durationSeconds: Math.round(cell.activeMinutes * 60),
       };
-      const tone = colorMode === "repo"
-        ? (stretch.topRepo ? repoColors.get(stretch.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
-        : intensityBandColor(stretch.intensityBand);
-      const details = buildAgentsHoverDetails(stretch, id, boundaryMinutes, tone, effectiveLanguage, flowGroup);
+      const overlappingStretches = runStretches.filter((stretch) => start < stretch.end && end > stretch.start);
+      const surrounding = overlappingStretches.length === 1 ? overlappingStretches[0] : undefined;
+      // A coarse cell can touch two separate runs. Do not imply that either
+      // alone contains its activity, or that a run is one agent session.
+      const surroundingRangeLabel = surrounding && (surrounding.start < start || surrounding.end > end)
+        ? formatAgentRunTimeRange(surrounding.start, surrounding.end, boundaryMinutes, effectiveLanguage)
+        : undefined;
+      const details: AgentsHoverDetails = {
+        id,
+        repo: cell.topRepo,
+        timeRangeLabel: formatAgentRunTimeRange(start, end, boundaryMinutes, effectiveLanguage),
+        activeSeconds: Math.round(cell.activeMinutes * 60),
+        peakConcurrency: cell.concurrency,
+        providerLabels: [...new Set(cell.repos.flatMap((repo) => repo.providers).map(agentToolName))],
+        modelLabels: cell.models.map(shortModelName),
+        commitCount: cell.commitCount,
+        tone: block.projectColor ?? AGENTS_UNKNOWN_COLOR,
+        flowGroup,
+        cellSummary: {
+          repos: cell.repos.map(({ repo, providers }) => ({ repo, providerLabels: [...new Set(providers.map(agentToolName))] })),
+          ...(surroundingRangeLabel ? { surroundingRangeLabel } : {}),
+        },
+      };
       detailsById.set(id, details);
       ariaLabelsById.set(id, agentsHoverAriaLabel(details, effectiveLanguage, t));
-      for (const groupedBlock of blocks) {
-        groupsByCell.set(groupedBlock.minuteOfDay, flowGroup);
-        idsByCell.set(groupedBlock.minuteOfDay, id);
-      }
+      groupsByCell.set(block.minuteOfDay, flowGroup);
+      idsByCell.set(block.minuteOfDay, id);
     }
 
     return {
@@ -468,7 +484,12 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
       detailsById,
       readOnlyPreview: { idsByCell, ariaLabelsById },
     };
-  }, [boundaryMinutes, colorMode, effectiveLanguage, gridBlocks, gridCells, intervalMinutes, model.day, repoColors, runStretches, t]);
+  }, [boundaryMinutes, effectiveLanguage, gridBlocks, gridCells, intervalMinutes, model.day, runStretches, t]);
+  const keyboardCellIds = useMemo(() => [...dayHover.detailsById.keys()], [dayHover.detailsById]);
+  const keyboardTabStopId = activeKeyboardCellId && dayHover.detailsById.has(activeKeyboardCellId)
+    ? activeKeyboardCellId
+    : keyboardCellIds[0];
+  const readOnlyPreview = useMemo(() => ({ ...dayHover.readOnlyPreview, tabStopId: keyboardTabStopId }), [dayHover.readOnlyPreview, keyboardTabStopId]);
 
   const legendEntries = useMemo<ProjectLegendEntry[]>(() => {
     if (colorMode === "repo") {
@@ -501,6 +522,25 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
           aria-label={t("agents.timeline.aria")}
           data-flow-interval={intervalMinutes}
           data-flow-color-mode="project"
+          onFocusCapture={(event) => {
+            const id = (event.target as HTMLElement).dataset.agentHoverId;
+            if (id) setActiveKeyboardCellId(id);
+          }}
+          onKeyDown={(event) => {
+            const id = (event.target as HTMLElement).dataset.agentHoverId;
+            if (!id || event.altKey || event.ctrlKey || event.metaKey) return;
+            const index = keyboardCellIds.indexOf(id);
+            if (index < 0) return;
+            const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? keyboardCellIds.length - 1
+              : event.key === "ArrowDown" || event.key === "ArrowRight" ? Math.min(index + 1, keyboardCellIds.length - 1)
+                : event.key === "ArrowUp" || event.key === "ArrowLeft" ? Math.max(index - 1, 0) : null;
+            if (nextIndex === null) return;
+            event.preventDefault();
+            const nextId = keyboardCellIds[nextIndex];
+            const target = Array.from(flowGridElement?.querySelectorAll<HTMLElement>("[data-agent-hover-id]") ?? [])
+              .find((element) => element.dataset.agentHoverId === nextId);
+            target?.focus();
+          }}
           style={{
             "--flow-cell-min-height": `${(FLOW_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
             "--flow-breakdown-cell-min-height": `${(FLOW_BREAKDOWN_CELL_BASE_MIN_HEIGHT_REM * intervalMinutes) / BASE_FLOW_CELL_INTERVAL_MINUTES}rem`,
@@ -523,7 +563,7 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
             currentMinuteOffset={currentMinuteOffset}
             hoverGroupsByCell={dayHover.groupsByCell}
             intervalMinutes={intervalMinutes}
-            readOnlyPreview={dayHover.readOnlyPreview}
+            readOnlyPreview={readOnlyPreview}
             setFlowGridElement={setFlowGridElement}
           />
           <AgentsHoverLayer

@@ -155,6 +155,54 @@ describe("buildAgentsGridCells", () => {
     expect(cells.get(615)?.attended).toBe(false);
   });
 
+  it("clips hover facts to the cell and retains each repo's actual tools", () => {
+    const cells = buildAgentsGridCells({
+      day: "2026-08-22",
+      attention: [],
+      turns: [
+        [600, 640, "codex", "alpha", "model-a", 0],
+        [620, 650, "claude", "beta", "model-b", 0],
+        [623, 624, "gemini", "gamma", "model-c", 0],
+      ],
+      commits: [
+        [619, 1, 0, 1, "before", "alpha"],
+        [622, 1, 0, 1, "inside", "beta"],
+        [624, 1, 0, 1, "edge", "gamma"],
+      ],
+    }, 3, ["alpha", "beta", "gamma"]);
+    expect(cells.get(621)).toMatchObject({
+      concurrency: 3, activeMinutes: 3, commitCount: 1,
+      repos: [
+        { repo: "alpha", providers: ["codex"] },
+        { repo: "beta", providers: ["claude"] },
+        { repo: "gamma", providers: ["gemini"] },
+      ],
+      models: ["model-a", "model-b", "model-c"],
+    });
+    expect(cells.get(642)).toMatchObject({
+      concurrency: 1, activeMinutes: 3, commitCount: 0,
+      repos: [{ repo: "beta", providers: ["claude"] }], models: ["model-b"],
+    });
+    expect(cells.get(624)?.models).toEqual(["model-a", "model-b"]);
+    expect(cells.get(624)?.commitCount).toBe(1);
+  });
+
+  it.each([3, 4, 5, 6])("measures serial activity and gaps inside a %i-minute cell", (interval) => {
+    const cells = buildAgentsGridCells({
+      day: "2026-08-22", attention: [], commits: [],
+      turns: [
+        [0, 0.5, "codex", "alpha", "a", 0],
+        [1, 2, "claude", "   ", "b", 0],
+        [interval, interval + 1, "gemini", "later", "later", 0],
+      ],
+    }, interval);
+    expect(cells.get(0)).toMatchObject({
+      concurrency: 1, activeMinutes: 1.5, topRepo: null,
+      repos: [{ repo: null, providers: ["claude"] }, { repo: "alpha", providers: ["codex"] }],
+      models: ["a", "b"],
+    });
+  });
+
   it("keeps Project mode unlabelled when unlabelled time dominates a cell", () => {
     const cells = buildAgentsGridCells({
       ...gridSource,

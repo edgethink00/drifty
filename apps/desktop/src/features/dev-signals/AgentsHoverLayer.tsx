@@ -8,6 +8,7 @@ import { FlowHoverGroupHighlights } from "../flow-chart/FlowHoverGroupHighlights
 import { moveFlowHoverCardToPointer } from "../flow-chart/FlowChartHoverCards";
 import type { FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import { useLocalization } from "../localization/LocalizationContext";
+import { AgentToolLabel } from "./AgentToolLabel";
 
 const AGENTS_HOVER_CARD_ID = "agents-run-hover-card";
 // Match Flow hover's one-frame retarget buffer so crossing dense run cells
@@ -25,6 +26,10 @@ export type AgentsHoverDetails = {
   readonly commitCount: number;
   readonly tone: string;
   readonly flowGroup?: FlowBlockHoverGroup;
+  readonly cellSummary?: {
+    readonly repos: readonly { readonly repo: string | null; readonly providerLabels: readonly string[] }[];
+    readonly surroundingRangeLabel?: string;
+  };
 };
 
 type AgentsHoverState = {
@@ -41,15 +46,20 @@ function eventElementFromTarget(target: EventTarget | null, body: HTMLElement): 
   return element;
 }
 
-function compactList(values: readonly string[]): string {
-  if (values.length <= 2) return values.join(" + ");
-  return `${values.slice(0, 2).join(" + ")} +${values.length - 2}`;
+function AgentToolList({ labels }: { readonly labels: readonly string[] }) {
+  const { t } = useLocalization();
+  return (
+    <span className="agents-hover-card__tools">
+      {labels.length ? labels.slice(0, 2).map(label => <AgentToolLabel key={label} label={label} />) : <AgentToolLabel label={t("agents.generic.unknownProvider")} />}
+      {labels.length > 2 ? <span className="agents-hover-card__more">{t("agents.hover.moreTools", { count: labels.length - 2 })}</span> : null}
+    </span>
+  );
 }
 
 function AgentsHoverCard({ hover, cardRef }: { readonly hover: AgentsHoverState; readonly cardRef: RefObject<HTMLDivElement> }) {
   const { effectiveLanguage, t } = useLocalization();
-  const providerLabel = compactList(hover.details.providerLabels) || t("agents.generic.unknownProvider");
-  const modelLabel = compactList(hover.details.modelLabels);
+  const modelLabels = hover.details.modelLabels.slice(0, 2);
+  const cellSummary = hover.details.cellSummary;
   const durationLabel = hover.details.activeSeconds > 0 && hover.details.activeSeconds < 60
     ? effectiveLanguage === "ko" ? "1분 미만" : "<1m"
     : formatLocalizedCompactDurationFromSeconds(hover.details.activeSeconds, effectiveLanguage);
@@ -65,16 +75,41 @@ function AgentsHoverCard({ hover, cardRef }: { readonly hover: AgentsHoverState;
       <div className="agents-hover-card__head">
         <span className="agents-hover-card__tone" style={{ "--agents-hover-tone": hover.details.tone } as CSSProperties} aria-hidden="true" />
         <div>
-          <strong>{hover.details.repo ?? t("agents.hover.agentRun")}</strong>
-          <span>{hover.details.timeRangeLabel} · {t("agents.hover.active", { duration: durationLabel })}</span>
+          <strong>{cellSummary ? hover.details.timeRangeLabel : hover.details.repo ?? t("agents.hover.agentRun")}</strong>
+          <span>{cellSummary ? t("agents.hover.active", { duration: durationLabel }) : `${hover.details.timeRangeLabel} · ${t("agents.hover.active", { duration: durationLabel })}`}</span>
         </div>
+        <dl className="agents-hover-card__peak">
+          <dt>{t(cellSummary ? "agents.hover.concurrentPeak" : "agents.hover.peak")}</dt>
+          <dd>×{hover.details.peakConcurrency}</dd>
+        </dl>
       </div>
       <dl className="agents-hover-card__facts">
-        <div><dt>{t("agents.hover.peak")}</dt><dd>×{hover.details.peakConcurrency}</dd></div>
-        <div><dt>{t("agents.hover.tools")}</dt><dd>{providerLabel}</dd></div>
-        {modelLabel ? <div><dt>{t("agents.hover.models")}</dt><dd>{modelLabel}</dd></div> : null}
-        {hover.details.commitCount > 0 ? <div><dt>{t("agents.hover.commits")}</dt><dd>{hover.details.commitCount}</dd></div> : null}
+        {cellSummary ? (
+          <div className="agents-hover-card__repo-section">
+            <dt>{t("agents.hover.repos")}</dt>
+            <dd className="agents-hover-card__repos">
+              {cellSummary.repos.slice(0, 2).map(({ repo, providerLabels }) => (
+                <span className="agents-hover-card__repo" key={repo ?? ""}>
+                  <span className="agents-hover-card__repo-name">{repo ?? t("agents.generic.noRepo")}</span>
+                  <AgentToolList labels={providerLabels} />
+                </span>
+              ))}
+              {cellSummary.repos.length > 2 ? <span className="agents-hover-card__more">{t("agents.hover.moreRepos", { count: cellSummary.repos.length - 2 })}</span> : null}
+            </dd>
+          </div>
+        ) : <div className="agents-hover-card__repo-section"><dt>{t("agents.hover.tools")}</dt><dd><AgentToolList labels={hover.details.providerLabels} /></dd></div>}
+        {modelLabels.length > 0 ? (
+          <div>
+            <dt>{t("agents.hover.models")}</dt>
+            <dd className="agents-hover-card__models">
+              {modelLabels.map(model => <div key={model}>{model}</div>)}
+              {hover.details.modelLabels.length > 2 ? <span className="agents-hover-card__more">{t("agents.hover.moreModels", { count: hover.details.modelLabels.length - 2 })}</span> : null}
+            </dd>
+          </div>
+        ) : null}
+        {hover.details.commitCount > 0 ? <div><dt>{t(cellSummary ? "agents.hover.cellCommits" : "agents.hover.commits")}</dt><dd>{hover.details.commitCount}</dd></div> : null}
       </dl>
+      {cellSummary?.surroundingRangeLabel ? <p className="agents-hover-card__context">{t("agents.hover.surroundingActivity", { range: cellSummary.surroundingRangeLabel })}</p> : null}
     </div>
   );
 }
@@ -203,6 +238,9 @@ export function AgentsHoverLayer({
       }, AGENTS_HOVER_RETARGET_SETTLE_DELAY_MS);
     };
     const handlePointerMove = (event: PointerEvent) => {
+      // Focus owns both the content and its position until blur/Escape. A
+      // pointer over another cell must not drag the focused cell's card there.
+      if (focusHoverRef.current) return;
       const element = eventElementFromTarget(event.target, bodyElement);
       const id = element?.dataset.agentHoverId;
       const details = id ? detailsByIdRef.current.get(id) : undefined;
