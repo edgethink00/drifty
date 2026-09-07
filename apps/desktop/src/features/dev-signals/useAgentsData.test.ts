@@ -165,4 +165,31 @@ describe("Your Agents date ranges", () => {
 
     await waitFor(() => expect(trackerClient.syncDevSignals).toHaveBeenCalledTimes(2));
   });
+
+  it("labels remote SSH turns with the remote repository name", async () => {
+    trackerClient.getDevRepos.mockResolvedValue([]);
+    trackerClient.getDevSignals.mockResolvedValue({
+      agentTurns: [{
+        provider: "codex",
+        sessionKey: "ssh:host:session-1",
+        turnIndex: 0,
+        startedAt: "2026-08-28T10:00:00",
+        endedAt: "2026-08-28T11:00:00",
+        activeSeconds: 3600,
+        cwdKey: "remote:drifty_mac",
+        model: "gpt-5",
+        totalTokens: 200,
+      }],
+      commits: [],
+      agentSummary: { wallClockSeconds: 3600, cumulativeSeconds: 3600, concurrencyPeak: 1, parallelFactor: 1, spans: [] },
+    });
+    trackerClient.getTimeline.mockResolvedValue([]);
+
+    const hook = renderHook(() => useAgentsData("2026-08-28", "2026-08-28", 0));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    expect(hook.result.current.days[0]?.turns[0]).toEqual([
+      600, 660, "codex", "drifty_mac", "gpt-5", 200,
+    ]);
+  });
 });

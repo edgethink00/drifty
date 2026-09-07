@@ -1823,15 +1823,11 @@
   position: relative;
   z-index: 1;
   margin-left: 0;
-  min-width: 1.6rem;
-  /* Shorter than 1.6rem so the row can actually get 10% smaller (the button's
-     min-height, not the padding, was setting the row height). */
-  min-height: 1.4rem;
+  min-width: 1.85rem;
+  min-height: 1.75rem;
   border-radius: 7px;
-  /* Nudge the chevron right within its fixed-width button; the button width
-     is pinned by min-width so the title after it doesn't move. */
-  justify-content: flex-start;
-  padding-left: 4px;
+  justify-content: center;
+  padding: 0;
 }
 
 .week-v2-side__collapse:hover {

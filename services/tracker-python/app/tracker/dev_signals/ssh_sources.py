@@ -206,7 +206,19 @@ git_commits.resolve_primary_repo = lambda value: None
 sources = json.loads(zlib.decompress(base64.b64decode(SOURCE_BLOB)).decode("utf-8"))
 agent_sessions = module(package_name + ".agent_sessions")
 exec(compile(sources["agent_sessions.py"], agent_sessions.__file__, "exec"), agent_sessions.__dict__)
-agent_sessions._cwd_key = lambda value: None
+
+def remote_repo_name(value):
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        name = Path(value).expanduser().name.strip()
+        if name and all(c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-" for c in name) and len(name) <= 100:
+            return name
+    except Exception:
+        pass
+    return None
+
+agent_sessions._cwd_key = remote_repo_name
 adapters = module(package_name + ".adapters")
 exec(compile(sources["adapters.py"], adapters.__file__, "exec"), adapters.__dict__)
 
@@ -247,7 +259,8 @@ def public_turn(provider, value, cutoff):
         return None
     raw_key = str(value.session_key).encode("utf-8", errors="replace")
     remote_key = "remote-" + hashlib.sha256(provider.encode("utf-8") + b":" + raw_key).hexdigest()[:32]
-    return {
+    repo_name = remote_repo_name(value.cwd_key)
+    result = {
         "provider": provider,
         "sessionKey": remote_key,
         "turnIndex": index,
@@ -261,6 +274,9 @@ def public_turn(provider, value, cutoff):
         "tokensCacheRead": safe_int(value.tokens_cache_read),
         "tokensCacheWrite": safe_int(value.tokens_cache_write),
     }
+    if repo_name:
+        result["repo"] = repo_name
+    return result
 
 def candidate_files(root, cutoff, patterns):
     root = Path(root)
@@ -464,6 +480,11 @@ def _normalize_turns(host: str, payload: object) -> list[dict[str, Any]] | None:
             continue
         if model is not None and (not isinstance(model, str) or len(model) > 120 or not re.fullmatch(r"[A-Za-z0-9._:/+-]+", model)):
             model = None
+        repo = raw.get("repo")
+        if isinstance(repo, str) and re.fullmatch(r"[A-Za-z0-9._-]+", repo) and len(repo) <= 100:
+            cwd_key = f"remote:{repo}"
+        else:
+            cwd_key = None
         normalized.append(
             {
                 "provider": raw["provider"],
@@ -472,7 +493,7 @@ def _normalize_turns(host: str, payload: object) -> list[dict[str, Any]] | None:
                 "startedAt": started_at,
                 "endedAt": ended_at,
                 "activeSeconds": active_seconds,
-                "cwdKey": None,
+                "cwdKey": cwd_key,
                 "model": model,
                 "totalTokens": _bounded_int(raw.get("totalTokens")),
                 "tokensIn": _bounded_int(raw.get("tokensIn")),

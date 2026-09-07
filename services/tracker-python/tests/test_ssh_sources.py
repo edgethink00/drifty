@@ -217,6 +217,22 @@ class SshCollectionTests(unittest.TestCase):
         self.assertIsNone(event["cwdKey"])
         self.assertNotIn("prompt", event)
 
+        # Wire turn with repo name sets namespaced cwdKey
+        wire_with_repo = {
+            "version": 1,
+            "filesScanned": 1,
+            "truncated": False,
+            "turns": [
+                {
+                    **wire["turns"][0],
+                    "repo": "drifty_mac",
+                }
+            ],
+        }
+        database2 = CapturingDatabase()
+        collect_ssh_agent_source(database2, "worker", runner=lambda args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps(wire_with_repo), stderr=""))
+        self.assertEqual(database2.events[0]["cwdKey"], "remote:drifty_mac")
+
     def test_remote_exporter_uses_shared_providers_and_keeps_raw_content_and_paths_remote(self) -> None:
         secret = "TOP-SECRET-PROMPT-CONTENT"
         now = datetime.now(timezone.utc)

@@ -113,6 +113,7 @@ function clampSpan(start: number | null, end: number | null): SpanTuple | null {
 }
 
 function repoLabelFor(repoKey: string, reposByKey: ReadonlyMap<string, string>): string {
+  if (repoKey.startsWith("remote:")) return repoKey.slice(7);
   const path = reposByKey.get(repoKey);
   if (!path) return repoKey.slice(0, 8);
   const name = path.split("/").filter(Boolean).pop();
@@ -144,10 +145,14 @@ function toDaySource(
     );
     // Unlike commits (whose repo is always registered), a turn's cwd may be a
     // deleted worktree or a non-repo directory; those stay unlabelled rather
-    // than showing a hash prefix.
-    const turnRepo = turn.cwdKey ? reposByKey.get(turn.cwdKey) : undefined;
+    // than showing a hash prefix. Remote SSH turns carry remote:<repo-name>.
+    const turnRepo = turn.cwdKey
+      ? (turn.cwdKey.startsWith("remote:")
+          ? turn.cwdKey.slice(7)
+          : (reposByKey.get(turn.cwdKey)?.split("/").filter(Boolean).pop() ?? ""))
+      : "";
     if (span) {
-      turns.push([span[0], span[1], turn.provider, turnRepo ? (turnRepo.split("/").filter(Boolean).pop() ?? "") : "", turn.model ?? "", turn.totalTokens ?? 0]);
+      turns.push([span[0], span[1], turn.provider, turnRepo, turn.model ?? "", turn.totalTokens ?? 0]);
       // totalTokens is cumulative within a session; the session's figure is its max.
       tokensBySession.set(turn.sessionKey, Math.max(tokensBySession.get(turn.sessionKey) ?? 0, turn.totalTokens ?? 0));
     }
