@@ -362,6 +362,10 @@
   min-width: 0;
 }
 
+.classification-panel-view__source-copy > strong {
+  display: block;
+}
+
 .classification-panel-view__source-productivity {
   display: inline-flex;
   align-items: center;
