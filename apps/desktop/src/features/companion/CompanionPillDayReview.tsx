@@ -1,5 +1,8 @@
 import type { CSSProperties } from "react";
 import { AppGlyph } from "../../components/AppGlyph";
+import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { PillBrandMark, PillDismissIcon } from "./CompanionPillIcons";
 
@@ -34,6 +37,7 @@ export function CompanionPillDayReview({
   onOpenDashboard: () => void;
   onOpenAiSettings?: () => void;
 }) {
+  const { effectiveLanguage, t } = useLocalization();
   const totalSeconds = Math.max(0, event.totalSeconds);
   const focusSeconds = Math.max(0, event.focusSeconds);
   const driftSeconds = Math.max(0, event.driftSeconds);
@@ -49,46 +53,48 @@ export function CompanionPillDayReview({
   const longestRun = signals?.longestFocusRunSeconds ?? 0;
   const longestRunStart = signals?.longestFocusRunStartedAt ? new Date(signals.longestFocusRunStartedAt) : null;
   const longestRunStartLabel = longestRunStart && Number.isFinite(longestRunStart.getTime())
-    ? formatClockShort(longestRunStart)
+    ? formatClockShort(longestRunStart, effectiveLanguage)
     : null;
+  const trackedDuration = formatReviewClockDuration(totalSeconds);
+  const longestCaption = longestRun > 0
+    ? (longestRunStartLabel
+      ? t("companion.dayReview.fromTime", { time: longestRunStartLabel })
+      : t("companion.dayReview.unbrokenFocus"))
+    : t("companion.dayReview.noFocusRun");
 
   return (
     <>
-      <div className="card__head">
+      <div className="card__head" data-locale={effectiveLanguage}>
         <span className="eod__heading">
           <span className="moment-brand moment-brand--heading" aria-hidden="true">
             <PillBrandMark />
           </span>
-          Day review
-          {pendingAssessment ? <span className="eod__badge">AI disconnected</span> : null}
+          {t("companion.dayReview.title")}
+          {pendingAssessment ? <span className="eod__badge">{t("companion.dayReview.aiDisconnected")}</span> : null}
           {!pendingAssessment && event.highlightLabel ? <span className="eod__badge">{event.highlightLabel}</span> : null}
         </span>
-        <button className="card__close" type="button" title="Dismiss" onClick={onDismiss}>
+        <button className="card__close" type="button" title={t("companion.dayReview.dismiss")} onClick={onDismiss}>
           <PillDismissIcon />
         </button>
       </div>
 
-      <div className="eodv eodv--12" data-sensitive>
+      <div className="eodv eodv--12" data-sensitive data-locale={effectiveLanguage}>
         {pendingAssessment ? (
           <div className="eodv12b eodv12b--head">
-            <span className="eodsec">Tracked time</span>
-            <b>{formatReviewClockDuration(totalSeconds)}</b>
+            <span className="eodsec">{t("companion.dayReview.trackedTime")}</span>
+            <b>{trackedDuration}</b>
           </div>
         ) : (
           <div className="eodv12__split">
             <div className="eodv12b eodv12b--head eodv12b--split" data-tone="focus">
-              <span className="eodsec">Focus</span>
+              <span className="eodsec">{t("activity.productivity.focus")}</span>
               <b>{formatReviewClockDuration(focusSeconds)}</b>
-              <em className="eodv12__sub">of {formatReviewClockDuration(totalSeconds)} tracked</em>
+              <em className="eodv12__sub">{t("companion.dayReview.trackedOf", { duration: trackedDuration })}</em>
             </div>
             <div className="eodv12b eodv12b--head eodv12b--split">
-              <span className="eodsec">Longest streak</span>
+              <span className="eodsec">{t("companion.dayReview.longestStreak")}</span>
               <b>{formatReviewClockDuration(longestRun)}</b>
-              <em className="eodv12__sub">
-                {longestRun > 0
-                  ? (longestRunStartLabel ? `from ${longestRunStartLabel}` : "focus without a break")
-                  : "no focus run yet"}
-              </em>
+              <em className="eodv12__sub">{longestCaption}</em>
             </div>
           </div>
         )}
@@ -107,25 +113,28 @@ export function CompanionPillDayReview({
             </div>
             <div className="eodv12__cats">
               <CategoryRow
-                label="Focus"
+                label={t("activity.productivity.focus")}
                 seconds={focusSeconds}
                 tone="var(--p-focus)"
                 deltaSeconds={event.comparison?.focusDeltaSeconds}
                 deltaTone="good"
+                language={effectiveLanguage}
               />
               <CategoryRow
-                label="Drift"
+                label={t("activity.productivity.drift")}
                 seconds={driftSeconds}
                 tone="var(--p-drift)"
                 deltaSeconds={event.comparison?.driftDeltaSeconds}
                 deltaTone="good"
+                language={effectiveLanguage}
               />
               <CategoryRow
-                label="Neutral"
+                label={t("activity.productivity.neutral")}
                 seconds={neutralSeconds}
                 tone="var(--p-neutral)"
                 deltaSeconds={event.comparison?.otherDeltaSeconds}
                 deltaTone="flat"
+                language={effectiveLanguage}
               />
             </div>
           </div>
@@ -134,21 +143,25 @@ export function CompanionPillDayReview({
         {!pendingAssessment && signals ? (
           <div className="eodv12__duo">
             <div className="eodv12b">
-              <span>Deep sessions</span>
+              <span>{t("companion.dayReview.deepSessions")}</span>
               <b>{signals.deepSessionCount}</b>
               <i className="eod__delta" data-delta={signals.deepSessionCount > 0 ? "good" : "flat"}>
                 {signals.deepSessionCount > 0
-                  ? `45m+ each · best ${formatReviewClockDuration(signals.longestFocusRunSeconds)}`
-                  : "No 45m+ runs"}
+                  ? t("companion.dayReview.deepSessionsDetail", {
+                    duration: formatReviewClockDuration(signals.longestFocusRunSeconds),
+                  })
+                  : t("companion.dayReview.deepSessionsEmpty")}
               </i>
             </div>
             <div className="eodv12b">
-              <span>Peak hour</span>
+              <span>{t("companion.dayReview.peakHour")}</span>
               <b>{signals.peakHourLabel ?? "—"}</b>
               <i className="eod__delta" data-delta="flat">
                 {signals.peakHourFocusSeconds > 0
-                  ? `${formatFocusedMinutes(signals.peakHourFocusSeconds)} focused`
-                  : "No focus yet"}
+                  ? t("companion.dayReview.peakHourFocused", {
+                    duration: formatFocusedMinutes(signals.peakHourFocusSeconds, effectiveLanguage),
+                  })
+                  : t("companion.dayReview.peakHourEmpty")}
               </i>
             </div>
           </div>
@@ -157,10 +170,10 @@ export function CompanionPillDayReview({
         {sources.length > 0 ? (
           <div className="eodv12b eodv12b--apps">
             <div className="eodsec eodv12__apps-heading">
-              <span>Top apps</span>
+              <span>{t("companion.dayReview.topApps")}</span>
               {pendingAssessment ? (
                 <button className="eodv12__apps-link" type="button" onClick={onOpenDashboard}>
-                  See tracked day
+                  {t("companion.dayReview.seeTrackedDay")}
                 </button>
               ) : null}
             </div>
@@ -168,13 +181,13 @@ export function CompanionPillDayReview({
               {sources.map((source, index) => {
                 const relative = topShare > 0 ? Math.round((source.percent / topShare) * 100) : 0;
                 return (
-                  <div className="eodapp" key={`${source.appName}-${index}`}>
+                  <div className="eodapp" key={source.appName + "-" + index}>
                     <span className="eodapp__rank">{String(index + 1).padStart(2, "0")}</span>
                     <span className="eodapp__glyph">
                       <AppGlyph appName={source.appName} iconSrc={source.iconSrc ?? undefined} size="sm" />
                     </span>
                     <span className="eodapp__name">{source.appName}</span>
-                    <span className="eodapp__bar" style={{ "--w": `${relative}%` } as BarStyle}>
+                    <span className="eodapp__bar" style={{ "--w": relative + "%" } as BarStyle}>
                       <i />
                     </span>
                     <span className="eodapp__time">{formatReviewClockDuration(source.durationSeconds)}</span>
@@ -192,10 +205,10 @@ export function CompanionPillDayReview({
             data-tone={pendingAssessment.reason === "cloud_trial_expired" ? "trial-ended" : undefined}
           >
             <div className="eodv12__pending-head">
-              <b>{pendingAssessmentTitle(pendingAssessment.reason)}</b>
+              <b>{t(pendingAssessmentTitleKey(pendingAssessment.reason))}</b>
               {onOpenAiSettings ? (
                 <button className="act act--primary eodv12__pending-action" type="button" onClick={onOpenAiSettings}>
-                  {pendingAssessmentActionLabel(pendingAssessment.reason)}
+                  {pendingAssessmentActionLabel(pendingAssessment.reason, t)}
                 </button>
               ) : null}
             </div>
@@ -204,9 +217,9 @@ export function CompanionPillDayReview({
       </div>
 
       {!pendingAssessment ? (
-        <div className="card__actions">
+        <div className="card__actions" data-locale={effectiveLanguage}>
           <button className="act act--primary" type="button" onClick={onOpenDashboard}>
-            See full day
+            {t("companion.dayReview.seeFullDay")}
           </button>
         </div>
       ) : null}
@@ -214,18 +227,22 @@ export function CompanionPillDayReview({
   );
 }
 
-function pendingAssessmentTitle(reason: NonNullable<EndOfDayReviewEvent["assessment"]>["reason"]): string {
-  if (reason === "cloud_trial_expired") return "Your Pro trial ended";
-  if (reason === "cloud_payment_required" || reason === "cloud_billing_missing") return "Cloud classification needs attention";
-  if (reason === "provider_not_configured" || reason === "cloud_not_configured") return "Connect AI to finish this review";
-  return "AI disconnected before the day was classified";
+function pendingAssessmentTitleKey(reason: NonNullable<EndOfDayReviewEvent["assessment"]>["reason"]): TranslationKey {
+  if (reason === "cloud_trial_expired") return "companion.dayReview.pending.trialEnded";
+  if (reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
+    return "companion.dayReview.pending.cloudNeedsAttention";
+  }
+  if (reason === "provider_not_configured" || reason === "cloud_not_configured") {
+    return "companion.dayReview.pending.connectAi";
+  }
+  return "companion.dayReview.pending.disconnected";
 }
 
-function pendingAssessmentActionLabel(reason: string): string {
+function pendingAssessmentActionLabel(reason: string, t: LocalizationController["t"]): string {
   if (reason === "cloud_trial_expired" || reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
-    return "Upgrade to Pro";
+    return t("sidebar.cta.upgrade.action");
   }
-  return "AI settings";
+  return t("account.aiSettings");
 }
 
 function CategoryRow({
@@ -234,19 +251,21 @@ function CategoryRow({
   tone,
   deltaSeconds,
   deltaTone,
+  language,
 }: {
   label: string;
   seconds: number;
   tone: string;
   deltaSeconds?: number;
   deltaTone: "good" | "flat";
+  language: LocalizationController["effectiveLanguage"];
 }) {
   return (
     <div className="eod__row" style={{ "--seg": tone } as RingStyle}>
       <span>{label}</span>
       <b>{formatReviewClockDuration(seconds)}</b>
       {typeof deltaSeconds === "number" ? (
-        <ReviewDelta seconds={deltaSeconds} tone={deltaTone} />
+        <ReviewDelta seconds={deltaSeconds} tone={deltaTone} language={language} />
       ) : null}
     </div>
   );
@@ -255,42 +274,46 @@ function CategoryRow({
 function ReviewDelta({
   seconds,
   tone,
+  language,
   suffix = "",
 }: {
   seconds: number;
   tone: "good" | "flat";
+  language: LocalizationController["effectiveLanguage"];
   suffix?: string;
 }) {
   const direction = seconds < 0 ? "▼" : "▲";
   return (
     <i className="eod__delta" data-delta={tone}>
-      {direction}{formatFocusedMinutes(Math.abs(seconds))}{suffix}
+      {direction}{formatFocusedMinutes(Math.abs(seconds), language)}{suffix}
     </i>
   );
 }
 
-function formatFocusedMinutes(seconds: number): string {
+function formatFocusedMinutes(seconds: number, language: LocalizationController["effectiveLanguage"]): string {
+  if (language === "ko") return formatLocalizedCompactDurationFromSeconds(seconds, language);
   const minutes = Math.max(0, Math.round(seconds / 60));
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return minutes + "m";
   const hours = Math.floor(minutes / 60);
   const remainder = minutes % 60;
-  return remainder === 0 ? `${hours}h` : `${hours}h ${remainder}m`;
+  return remainder === 0 ? hours + "h" : hours + "h " + remainder + "m";
 }
 
 function formatReviewClockDuration(seconds: number): string {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
-  return `${hours}:${String(minutes).padStart(2, "0")}`;
+  return hours + ":" + String(minutes).padStart(2, "0");
 }
 
 /** 09:00 → "9:00 AM", 14:05 → "2:05 PM"; minutes matter for a streak start. */
-function formatClockShort(date: Date): string {
+function formatClockShort(date: Date, language: LocalizationController["effectiveLanguage"]): string {
   const hour = date.getHours();
   const minutes = String(date.getMinutes()).padStart(2, "0");
-  const suffix = hour < 12 ? "AM" : "PM";
   const hour12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${hour12}:${minutes} ${suffix}`;
+  if (language === "ko") return (hour < 12 ? "오전 " : "오후 ") + hour12 + ":" + minutes;
+  const suffix = hour < 12 ? "AM" : "PM";
+  return hour12 + ":" + minutes + " " + suffix;
 }
 
 function buildDonutRingStyle(
@@ -310,10 +333,10 @@ function buildDonutRingStyle(
     const end = Math.min(100, cursor + share);
     const gap = Math.min(1.4, share * 0.24);
     const colorEnd = Math.max(cursor, end - gap);
-    stops.push(`${color} ${cursor.toFixed(2)}% ${colorEnd.toFixed(2)}%`);
-    stops.push(`transparent ${colorEnd.toFixed(2)}% ${end.toFixed(2)}%`);
+    stops.push(color + " " + cursor.toFixed(2) + "% " + colorEnd.toFixed(2) + "%");
+    stops.push("transparent " + colorEnd.toFixed(2) + "% " + end.toFixed(2) + "%");
     cursor = end;
   }
-  if (cursor < 100) stops.push(`transparent ${cursor.toFixed(2)}% 100%`);
-  return { background: `conic-gradient(${stops.join(", ")})` };
+  if (cursor < 100) stops.push("transparent " + cursor.toFixed(2) + "% 100%");
+  return { background: "conic-gradient(" + stops.join(", ") + ")" };
 }

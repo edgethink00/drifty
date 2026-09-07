@@ -7,6 +7,7 @@
 
 import driftyWordmarkDataUrl from "../../assets/drifty-wordmark.png?inline";
 import { escapeXml, formatFocusDuration } from "./badgeSvg";
+import type { CommunityFocusPercentileModels } from "../companion/communityFocusPercentile";
 import type { ShareCardData, ShareWeekCardData } from "./shareCard";
 import {
   UNIFIED_STORY_OPTIONS,
@@ -38,6 +39,7 @@ export interface ShareCardRenderOptions {
   readonly background?: ShareCardBackground;
   readonly lookIndex?: number;
   readonly liveRanks?: ShareCardLiveRanks;
+  readonly communityModels?: CommunityFocusPercentileModels;
 }
 
 export interface ShareWeekCardRenderOptions {
@@ -48,6 +50,7 @@ export interface ShareWeekCardRenderOptions {
   readonly background?: ShareCardBackground;
   readonly lookIndex?: number;
   readonly liveRanks?: ShareCardLiveRanks;
+  readonly communityModels?: CommunityFocusPercentileModels;
 }
 
 export const SHARE_CARD_EXPORT_SIZES: Record<ShareCardFormat, { width: number; height: number }> = {
@@ -452,19 +455,19 @@ function isUnifiedStory(story: ShareCardStory): story is UnifiedShareStoryId {
   return UNIFIED_STORY_OPTIONS.some((entry) => entry.value === story);
 }
 
-export function renderShareCardSvg({ data, format, theme, story = "R1c", background = "quiet_wash", lookIndex, liveRanks }: ShareCardRenderOptions): string {
+export function renderShareCardSvg({ data, format, theme, story = "R1c", background = "quiet_wash", lookIndex, liveRanks, communityModels }: ShareCardRenderOptions): string {
   if (isUnifiedStory(story) || format === "landscape") {
     const unifiedStory = isUnifiedStory(story) ? story : "R1c";
-    return renderUnifiedShareCardSvg({ data, theme, story: unifiedStory, lookIndex, liveRanks });
+    return renderUnifiedShareCardSvg({ data, theme, story: unifiedStory, lookIndex, liveRanks, communityModels });
   }
   const legacyStory = story === "focus_share" || story === "deep_work" || story === "focus_time" ? story : "focus_time";
   return renderPoster(dayPosterContent(data, legacyStory), format, theme, background);
 }
 
-export function renderShareWeekCardSvg({ data, format, theme, story = "WR1", background = "quiet_wash", lookIndex, liveRanks }: ShareWeekCardRenderOptions): string {
+export function renderShareWeekCardSvg({ data, format, theme, story = "WR1", background = "quiet_wash", lookIndex, liveRanks, communityModels }: ShareWeekCardRenderOptions): string {
   if (isUnifiedStory(story) || format === "landscape") {
     const unifiedStory = isUnifiedStory(story) ? story : "WR1";
-    return renderUnifiedShareWeekCardSvg({ data, theme, story: unifiedStory, lookIndex, liveRanks });
+    return renderUnifiedShareWeekCardSvg({ data, theme, story: unifiedStory, lookIndex, liveRanks, communityModels });
   }
   const legacyStory = story === "focus_share" || story === "deep_work" || story === "focus_time" ? story : "focus_time";
   return renderPoster(weekPosterContent(data, legacyStory), format, theme, background);

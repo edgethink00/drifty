@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import type { OAuthCallbackStatus } from "./features/auth/AuthContext";
+import type { OAuthCallbackStatus, PasswordRecoveryState } from "./features/auth/AuthContext";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getUserOnboardingStorageKey } from "./features/onboarding/OnboardingModal";
 
@@ -27,6 +27,7 @@ const {
     session: null,
     status: "unauthenticated" as "loading" | "authenticated" | "unauthenticated",
     callbackStatus: null as OAuthCallbackStatus | null,
+    passwordRecoveryState: { phase: "idle", email: null } as PasswordRecoveryState,
     isEnabled: true,
     authMode: "optional" as "optional" | "required",
     isAuthRequired: false,
@@ -95,6 +96,7 @@ vi.mock("./appFeatureSwitches", async (importOriginal) => ({
 vi.mock("./features/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
   useAuth: () => authState,
+  useAuthConnectionStatus: () => ({ cloudConnectionStatus: "online" }),
 }));
 
 vi.mock("./features/leaderboard/leaderboardService", () => ({
@@ -170,6 +172,7 @@ describe("App auth modal", () => {
     authState.user = null;
     authState.status = "unauthenticated";
     authState.callbackStatus = null;
+    authState.passwordRecoveryState = { phase: "idle", email: null };
     authState.isEnabled = true;
     authState.authMode = "optional";
     authState.isAuthRequired = false;
@@ -205,6 +208,20 @@ describe("App auth modal", () => {
     expect(await screen.findByRole("navigation", { name: /primary navigation/i })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /sign in to drifty/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^unknown$/i })).toBeTruthy();
+  });
+
+  it("opens the password form when a recovery callback is restored before the modal is mounted", async () => {
+    authState.passwordRecoveryState = {
+      phase: "awaiting-new-password",
+      email: "alex@example.com",
+    };
+
+    render(<App />);
+
+    const dialog = await screen.findByRole("dialog", { name: /reset your password/i });
+    expect(within(dialog).getByLabelText(/^new password$/i)).toBeTruthy();
+    expect(within(dialog).getByLabelText(/^confirm new password$/i)).toBeTruthy();
+    expect(within(dialog).queryByRole("button", { name: /continue with google/i })).toBeNull();
   });
 
   it("opens a same-account sign-in prompt for a promotional billing handoff", async () => {

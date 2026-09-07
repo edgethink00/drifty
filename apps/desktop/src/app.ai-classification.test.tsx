@@ -104,6 +104,7 @@ const { authState, aiClassificationMocks, billingMocks, trackerClient } = vi.hoi
 vi.mock("./features/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
   useAuth: () => authState,
+  useAuthConnectionStatus: () => ({ cloudConnectionStatus: "online" }),
 }));
 
 vi.mock("./lib/api/trackerClient", () => ({ trackerClient }));

@@ -35,6 +35,7 @@ export type UpdateLifecycleStatus = "idle" | "available" | "downloading" | "inst
 type UseUpdateControllerResult = {
   readonly backgroundUpdatesEnabled: boolean;
   readonly availableUpdate: AvailableUpdate | null;
+  readonly availableUpdateSource: UpdateCheckMode | null;
   readonly currentUpdatePolicy: UpdatePolicy | null;
   readonly dismissAvailableUpdate: () => void;
   readonly handleCheckForUpdates: (mode?: UpdateCheckMode) => Promise<UpdateCheckResult | void>;
@@ -64,6 +65,7 @@ export function useUpdateController({
   backgroundPreparationSupported,
 }: UseUpdateControllerOptions): UseUpdateControllerResult {
   const updaterCheckingRef = useRef(false);
+  const manualCheckRequestedRef = useRef(false);
   const updaterOperatingRef = useRef(false);
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
   const availableUpdateRef = useRef<AvailableUpdate | null>(null);
@@ -170,11 +172,22 @@ export function useUpdateController({
   const handleCheckForUpdates = useCallback(async (
     mode: UpdateCheckMode = "manual",
   ): Promise<UpdateCheckResult | void> => {
-    if (updaterCheckingRef.current || updaterOperatingRef.current) return;
+    if (updaterOperatingRef.current) return;
+    if (updaterCheckingRef.current) {
+      // A click during the scheduled check upgrades that same request to a
+      // visible manual result instead of silently discarding the user's action.
+      if (mode === "manual") {
+        manualCheckRequestedRef.current = true;
+        setUpdaterChecking(true);
+        setUpdaterMessage("Checking for updates...");
+        setUpdaterError(null);
+      }
+      return;
+    }
 
-    const isManualCheck = mode === "manual";
+    manualCheckRequestedRef.current = mode === "manual";
     updaterCheckingRef.current = true;
-    if (isManualCheck) {
+    if (manualCheckRequestedRef.current) {
       setUpdaterChecking(true);
       setUpdaterMessage("Checking for updates...");
       setUpdaterError(null);
@@ -185,7 +198,7 @@ export function useUpdateController({
       if (nextUpdate) {
         if (preparedUpdateVersionRef.current === nextUpdate.version) {
           releaseUpdateResource(nextUpdate);
-          if (isManualCheck) setUpdaterMessage(`Drifty ${nextUpdate.version} is ready for the next launch.`);
+          if (manualCheckRequestedRef.current) setUpdaterMessage(`Drifty ${nextUpdate.version} is ready for the next launch.`);
           return { kind: "available", version: nextUpdate.version };
         }
 
@@ -193,18 +206,18 @@ export function useUpdateController({
         const nextPolicy = await fetchUpdatePolicy(nextUpdate.version);
         const nextInteractions = updateStoredInteractions((currentInteractions) => {
           const seenInteractions = upsertUpdateSeen(currentInteractions, nextUpdate.version, nowMs);
-          return isManualCheck ? markUpdateInteracted(seenInteractions, nextUpdate.version, nowMs) : seenInteractions;
+          return manualCheckRequestedRef.current ? markUpdateInteracted(seenInteractions, nextUpdate.version, nowMs) : seenInteractions;
         });
         const nextInteraction = nextInteractions[nextUpdate.version] ?? null;
         replaceAvailableUpdate(nextUpdate);
         setAvailableUpdatePolicy(nextPolicy);
-        setAvailableUpdateSource(mode);
+        setAvailableUpdateSource(manualCheckRequestedRef.current ? "manual" : "automatic");
         setDismissedPromptVersion(null);
         setUpdatePromptNowMs(nowMs);
-        if (isManualCheck) {
+        if (manualCheckRequestedRef.current) {
           setUpdaterMessage(`Drifty ${nextUpdate.version} is available.`);
         }
-        if (!isManualCheck && nextPolicy.urgency === "general" && shouldPrepareUpdateInBackground({
+        if (!manualCheckRequestedRef.current && nextPolicy.urgency === "general" && shouldPrepareUpdateInBackground({
           backgroundPreparationSupported,
           backgroundUpdatesEnabled,
           policy: nextPolicy,
@@ -228,11 +241,11 @@ export function useUpdateController({
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
       }
-      if (isManualCheck) setUpdaterMessage("Drifty is up to date.");
+      if (manualCheckRequestedRef.current) setUpdaterMessage("Drifty is up to date.");
       return { kind: "none" };
     } catch (nextError) {
       const message = `Update check failed: ${toErrorMessage(nextError)}`;
-      if (isManualCheck) {
+      if (manualCheckRequestedRef.current) {
         replaceAvailableUpdate(null);
         setAvailableUpdatePolicy(null);
         setAvailableUpdateSource(null);
@@ -241,7 +254,8 @@ export function useUpdateController({
       return { kind: "error", message };
     } finally {
       updaterCheckingRef.current = false;
-      if (isManualCheck) setUpdaterChecking(false);
+      if (manualCheckRequestedRef.current) setUpdaterChecking(false);
+      manualCheckRequestedRef.current = false;
     }
   }, [
     backgroundPreparationSupported,
@@ -358,6 +372,7 @@ export function useUpdateController({
   return {
     backgroundUpdatesEnabled,
     availableUpdate,
+    availableUpdateSource,
     currentUpdatePolicy,
     dismissAvailableUpdate,
     handleCheckForUpdates,

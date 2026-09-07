@@ -14,6 +14,10 @@ afterEach(cleanup);
 
 vi.mock("../../lib/analytics/useProFunnelExposure", () => ({ useProFunnelExposure: vi.fn(() => ({ current: null })) }));
 
+vi.mock("../share/useShareCardCommunityModels", () => ({
+  useShareCardCommunityModels: () => ({ models: { daily: null, weekly: null }, loading: false }),
+}));
+
 const noop = vi.fn();
 
 type DashboardPageFixtureOptions = {
@@ -22,7 +26,6 @@ type DashboardPageFixtureOptions = {
   readonly dashboardSegments?: readonly ActivitySegment[];
   readonly weekRefreshStatus?: "idle" | "loading" | "error";
   readonly browserHistoryBootstrapNotice?: ComponentProps<typeof DashboardPage>["browserHistoryBootstrapNotice"];
-  readonly dashboardEffectiveProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardEffectiveProductivityTotals"];
   readonly dashboardDateNavigator?: ComponentProps<typeof DashboardPage>["dashboardDateNavigator"];
   readonly dashboardCategoryTotals?: ComponentProps<typeof DashboardPage>["dashboardCategoryTotals"];
   readonly dashboardProductivityTotals?: ComponentProps<typeof DashboardPage>["dashboardProductivityTotals"];
@@ -53,7 +56,6 @@ function renderDashboardWithNoData(options: DashboardPageFixtureOptions = {}) {
       browserHistoryBootstrapNotice={options.browserHistoryBootstrapNotice ?? null}
       dashboardCategoryTotals={options.dashboardCategoryTotals ?? []}
       dashboardDateNavigator={options.dashboardDateNavigator ?? <div aria-label="date navigator" />}
-      dashboardEffectiveProductivityTotals={options.dashboardEffectiveProductivityTotals ?? []}
       dashboardProductivityTotals={options.dashboardProductivityTotals ?? []}
       dashboardReplay={options.dashboardReplay === undefined ? { phase: "playing", progress: 0, onRestart: noop, onStop: noop } : options.dashboardReplay}
       dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}
@@ -183,7 +185,6 @@ describe("DashboardPage demo replay empty data", () => {
       hasTimelineData: true,
       totalSeconds: 3_600,
       dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
-      dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
     });
 
     expect(screen.getByRole("heading", { name: "1시간 집중했습니다" })).toBeTruthy();
@@ -194,8 +195,9 @@ describe("DashboardPage demo replay empty data", () => {
     expect(screen.getByRole("button", { name: "이미지 복사" })).toBeTruthy();
     const preview = screen.getByRole("img", { name: /공유 카드 1/u }) as HTMLImageElement;
     const svg = decodeURIComponent(preview.src.split(",", 2)[1] ?? "");
-    expect(svg).toContain("Estimated focus percentile");
-    expect(svg).not.toContain("예상 집중 백분위");
+    expect(svg).toContain("Focus time");
+    expect(svg).not.toContain("집중 시간");
+    expect(svg).not.toContain("Estimated focus percentile");
   });
 });
 
@@ -230,7 +232,6 @@ describe("DashboardPage day metrics without measured activity", () => {
   it("preserves a measured zero focus value when other activity exists", () => {
     renderDashboardWithNoData({
       dashboardReplay: null,
-      dashboardEffectiveProductivityTotals: [{ productivity: "drift", totalSeconds: 1_800, segments: 1, ratio: 1 }],
       dashboardProductivityTotals: [{ productivity: "drift", totalSeconds: 1_800, segments: 1, ratio: 1 }],
       hasTimelineData: true,
       totalSeconds: 1_800,
@@ -241,6 +242,35 @@ describe("DashboardPage day metrics without measured activity", () => {
     // The breakdown Productivity donut is shown (measured activity exists); scope
     // to its panel label so it isn't confused with the flow chart's colour toggle.
     expect(screen.getByLabelText("Productivity compact classification")).toBeTruthy();
+  });
+});
+
+describe("DashboardPage Focus hours contract", () => {
+  it("uses direct classified Focus for the Day header, productivity ring, and share card", () => {
+    const classifiedSeconds = (5 * 3600 + 15 * 60) + (14 * 60) + (30 * 60);
+    renderDashboardWithNoData({
+      dashboardReplay: null,
+      language: "ko",
+      hasTimelineData: true,
+      totalSeconds: classifiedSeconds,
+      dashboardProductivityTotals: [
+        { productivity: "focus", totalSeconds: 5 * 3600 + 15 * 60, segments: 9, ratio: (5 * 3600 + 15 * 60) / classifiedSeconds },
+        { productivity: "neutral", totalSeconds: 14 * 60, segments: 2, ratio: (14 * 60) / classifiedSeconds },
+        { productivity: "drift", totalSeconds: 30 * 60, segments: 2, ratio: (30 * 60) / classifiedSeconds },
+      ],
+    });
+
+    expect(screen.getByRole("heading", { name: "5시간 15분 집중했습니다" })).toBeTruthy();
+    const ring = screen.getByLabelText("생산성 분류 차트");
+    expect(ring.textContent).toContain("5시간 15분");
+    expect(ring.textContent).not.toContain("5시간 29분");
+    expect(ring.querySelector(".flow-compact-productivity-circle__center")?.textContent).toBe("88%");
+
+    fireEvent.click(screen.getByRole("button", { name: "공유" }));
+    const preview = screen.getByRole("img", { name: /공유 카드 1/u }) as HTMLImageElement;
+    const svg = decodeURIComponent(preview.src.split(",", 2)[1] ?? "");
+    expect(svg).toContain("5h 15m");
+    expect(svg).not.toContain("5h 29m");
   });
 });
 
@@ -271,7 +301,6 @@ describe("DashboardPage stable summary detail", () => {
     renderDashboardWithNoData({
       dashboardReplay: null,
       dashboardCategoryTotals: [{ category: "workspace", totalSeconds: 300, segments: 1, ratio: 1 }],
-      dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 300, segments: 1, ratio: 1 }],
       dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 300, segments: 1, ratio: 1 }],
       flowBlocks: [displayBlock],
       summaryFlowBlocks: [summaryBlock],
@@ -327,7 +356,6 @@ describe("DashboardPage share card", () => {
   it("opens the aggregate share card from a measured day", () => {
     renderDashboardWithNoData({
       dashboardReplay: null,
-      dashboardEffectiveProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
       dashboardProductivityTotals: [{ productivity: "focus", totalSeconds: 3_600, segments: 1, ratio: 1 }],
       hasTimelineData: true,
       totalSeconds: 3_600,
@@ -384,7 +412,6 @@ describe("DashboardPage billing recovery overlay", () => {
         browserHistoryBootstrapNotice={null}
         dashboardCategoryTotals={[]}
         dashboardDateNavigator={<div aria-label="date navigator" />}
-        dashboardEffectiveProductivityTotals={[]}
         dashboardProductivityTotals={[]}
         dashboardReplay={null}
         dashboardRange={{ startDay: "2026-06-29", endDay: "2026-06-29" }}

@@ -1,7 +1,7 @@
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
 import { useMemo, useState, type ReactNode } from "react";
-import { logicalMinuteOfDay, type ActivityCategory, type ActivitySegment, type AppIconMap, type CategoryDuration, type ClassificationOptions, type DeviceTimelineFilter, type FlowBlock, type FlowIntervalMinutes, type ProductivityDuration, type ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, FlowIntervalMinutes, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
 import { AppUsagePanel, type AppUsagePanelItem } from "./AppUsagePanel";
@@ -23,7 +23,6 @@ import { DashboardLoadingSkeleton } from "./DashboardLoadingSkeleton";
 import { persistDashboardBreakdownOpen, resolveInitialDashboardBreakdownOpen, type ThemeMode } from "../settings/settingsStorage";
 import { ShareCardModal, type ShareCardModalCard } from "../share/ShareCardModal";
 import { buildShareCardData, buildShareWeekCardData } from "../share/shareCard";
-import { dailyFocusComparisonProgress, weeklyFocusComparisonProgress } from "../share/focusPercentile";
 import { WEEK_DASHBOARD_AXIS_SCALE_DEFAULT_PERCENT } from "./weekDashboardAxisScale";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
@@ -54,7 +53,6 @@ type DashboardPageProps = {
   readonly dashboardClassificationOptions: ClassificationOptions;
   readonly dashboardCategoryTotals: CategoryDuration[];
   readonly dashboardDateNavigator: ReactNode;
-  readonly dashboardEffectiveProductivityTotals: ProductivityDuration[];
   readonly dashboardProductivityTotals: ProductivityDuration[];
   readonly dashboardReplay: DashboardDemoReplayBannerState | null;
   readonly dashboardActivityActionsEnabled?: boolean;
@@ -132,7 +130,6 @@ export function DashboardPage({
   dashboardClassificationOptions,
   dashboardCategoryTotals,
   dashboardDateNavigator,
-  dashboardEffectiveProductivityTotals,
   dashboardProductivityTotals,
   dashboardReplay,
   dashboardActivityActionsEnabled = false,
@@ -224,11 +221,11 @@ export function DashboardPage({
       : effectiveLanguage === "ko" ? "0분" : "0m"
     : null;
   const dayActiveCategoryEntries = buildActiveCategoryEntries(dashboardCategoryTotals);
-  const dayProductivityRingEntries = buildProductivityRingEntries(dashboardEffectiveProductivityTotals).map((entry) => ({
+  const dayProductivityRingEntries = buildProductivityRingEntries(dashboardProductivityTotals).map((entry) => ({
     ...entry,
     label: localizedProductivityLabel(entry.key as ProductivityLabel, t),
   }));
-  const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardEffectiveProductivityTotals);
+  const dayProductivityCenterPercent = buildProductivityCenterPercent(dashboardProductivityTotals);
   const showProjectDonut = flowColorMode === "project" && (flowProjectRingEntries?.length ?? 0) > 0;
   // Week keeps the same integrated calendar header while loading so the shell
   // does not jump between the legacy top placement and the populated frame.
@@ -239,9 +236,7 @@ export function DashboardPage({
     || (dashPeriod === "Week" && totalSeconds > 0)
   );
   const logicalToday = logicalTodayIsoDate(startOfDayMinutes);
-  const currentLogicalMinute = currentMinuteOfDay === null
-    ? 24 * 60
-    : logicalMinuteOfDay(currentMinuteOfDay, startOfDayMinutes);
+
   // Share cards are assembled only after the modal opens. The shape is aggregate-only:
   // category/productivity totals and derived hourly/daily rhythm, never raw activity rows.
   // Exported card content stays English even when the surrounding app chrome is Korean.
@@ -260,12 +255,7 @@ export function DashboardPage({
           weekRows,
           calendarEvents: weekCalendarEvents,
           deltaSeconds: weekFocusDeltaSeconds,
-          comparisonProgress: weeklyFocusComparisonProgress(
-            dashboardRange.startDay,
-            dashboardRange.endDay,
-            logicalToday,
-            currentLogicalMinute,
-          ),
+          comparisonDay: logicalToday,
           isCurrentPeriod: logicalToday >= dashboardRange.startDay && logicalToday <= dashboardRange.endDay,
         }),
       };
@@ -281,11 +271,10 @@ export function DashboardPage({
         productivityTotals: dashboardProductivityTotals,
         flowBlocks: summaryFlowBlocks,
         deltaSeconds: dayFocusDeltaSeconds,
-        comparisonProgress: dailyFocusComparisonProgress(selectedDay, logicalToday, currentLogicalMinute),
         isCurrentPeriod: selectedDay === logicalToday,
       }),
     };
-  }, [currentLogicalMinute, dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, logicalToday, selectedDay, shareCardOpen, summaryFlowBlocks, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
+  }, [dashPeriod, dashboardCategoryTotals, dashboardProductivityTotals, dashboardRange.endDay, dashboardRange.startDay, dayFocusDeltaSeconds, logicalToday, selectedDay, shareCardOpen, summaryFlowBlocks, totalSeconds, weekCalendarEvents, weekFocusDeltaSeconds, weekRows]);
   const pageHead = (
     <DashboardPageHeader
       dashPeriod={dashPeriod}

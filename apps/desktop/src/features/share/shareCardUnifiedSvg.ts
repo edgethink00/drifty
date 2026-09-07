@@ -6,7 +6,8 @@
 
 import driftyWordmarkDataUrl from "../../assets/drifty-wordmark.png?inline";
 import { escapeXml } from "./badgeSvg";
-import { estimateFocusTopPercent } from "./focusPercentile";
+import { estimateShareCardFocusPercentile } from "./focusPercentile";
+import type { CommunityFocusPercentileModels } from "../companion/communityFocusPercentile";
 import type { ShareCardData, ShareWeekCardData } from "./shareCard";
 
 export const SHARE_CARD_UNIFIED_SIZE = { width: 1200, height: 900 } as const;
@@ -66,8 +67,10 @@ export const UNIFIED_STORY_OPTIONS: ReadonlyArray<{
 ];
 
 type UnifiedMetrics = {
-  RANK: number;
-  WEEK_RANK: number;
+  RANK: number | null;
+  WEEK_RANK: number | null;
+  RANK_SAMPLE_SIZE: number;
+  WEEK_RANK_SAMPLE_SIZE: number;
   RANK_IS_LIVE: boolean;
   WEEK_RANK_IS_LIVE: boolean;
   IS_CURRENT_PERIOD: boolean;
@@ -99,8 +102,8 @@ function finiteNonNegative(value: number | null | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-function validLiveRank(rank: ShareCardLiveRank | null | undefined): ShareCardLiveRank | null {
-  if (!rank) return null;
+function validLiveRank(rank: ShareCardLiveRank | null | undefined, startDay: string, endDay: string): ShareCardLiveRank | null {
+  if (!rank || rank.windowStartDay !== startDay || rank.windowEndDay !== endDay) return null;
   if (!Number.isFinite(rank.rank) || rank.rank < 1) return null;
   if (!Number.isFinite(rank.participantCount) || rank.participantCount < rank.rank) return null;
   if (!Number.isFinite(rank.topPercent) || rank.topPercent <= 0 || rank.topPercent > 100) return null;
@@ -132,12 +135,12 @@ function productivityPercentages(data: Pick<ShareCardData | ShareWeekCardData, "
   return { focus, neutral, drift };
 }
 
-function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks): UnifiedMetrics {
+function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks, communityModels?: CommunityFocusPercentileModels): UnifiedMetrics {
   const focusMinutes = minutesFromSeconds(data.focusSeconds);
   const totalMinutes = minutesFromSeconds(data.totalSeconds);
   const { focus: focusPct, neutral: neutralPct, drift: driftPct } = productivityPercentages(data);
-  const rank = validLiveRank(liveRanks?.daily);
-  const weekRank = validLiveRank(liveRanks?.weekly);
+  const rank = validLiveRank(liveRanks?.daily, data.day, data.day);
+  const estimate = estimateShareCardFocusPercentile(data, communityModels);
   const hours = data.hours ?? [];
   const sessionCount = hours.filter((h) => h.focusSeconds > 10 * 60).length;
   const categorySlices = (data.slices ?? []).slice(0, 5).map((s) => ({
@@ -153,18 +156,18 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks): 
     minutes: minutesFromSeconds(slice.seconds),
   }));
   return {
-    // Prefer a matching opted-in aggregate fact; otherwise label and render
-    // the elapsed-time comparison model as an estimate.
-    RANK: rank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "daily", data.comparisonProgress),
-    WEEK_RANK: weekRank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "weekly", data.comparisonProgress),
+    RANK: rank?.topPercent ?? estimate?.topPercent ?? null,
+    WEEK_RANK: null,
+    RANK_SAMPLE_SIZE: estimate?.sampleSize ?? 0,
+    WEEK_RANK_SAMPLE_SIZE: 0,
     RANK_IS_LIVE: Boolean(rank),
-    WEEK_RANK_IS_LIVE: Boolean(weekRank),
+    WEEK_RANK_IS_LIVE: false,
     IS_CURRENT_PERIOD: data.isCurrentPeriod,
     DATE_LABEL: data.dateLabel,
     WEEK_LABEL: "",
     LIVE_RANK_PERCENT: rank?.topPercent ?? 100,
     RANK_PLACE: rank?.rank ?? 0,
-    WEEK_RANK_PLACE: weekRank?.rank ?? 0,
+    WEEK_RANK_PLACE: 0,
     FOCUS_MINUTES: focusMinutes,
     TOTAL_MINUTES: totalMinutes,
     STREAK_DAYS: 0,
@@ -185,13 +188,12 @@ function deriveDayMetrics(data: ShareCardData, liveRanks?: ShareCardLiveRanks): 
   };
 }
 
-function deriveWeekMetrics(data: ShareWeekCardData, liveRanks?: ShareCardLiveRanks): UnifiedMetrics {
+function deriveWeekMetrics(data: ShareWeekCardData, liveRanks?: ShareCardLiveRanks, communityModels?: CommunityFocusPercentileModels): UnifiedMetrics {
   const day = deriveDayMetrics({
     focusSeconds: data.focusSeconds,
     totalSeconds: data.totalSeconds,
     focusPercent: data.focusPercent,
     productivitySlices: data.productivitySlices,
-    comparisonProgress: data.comparisonProgress,
     isCurrentPeriod: data.isCurrentPeriod,
     dateLabel: "",
     hours: [],
@@ -199,11 +201,14 @@ function deriveWeekMetrics(data: ShareWeekCardData, liveRanks?: ShareCardLiveRan
   } as ShareCardData, liveRanks);
   const weekMinutes = minutesFromSeconds(data.focusSeconds);
   const days = (data.days ?? []).map((d) => minutesFromSeconds(d.focusSeconds));
-  const weekRank = validLiveRank(liveRanks?.weekly);
+  const weekRank = validLiveRank(liveRanks?.weekly, data.startDay, data.endDay);
+  const estimate = estimateShareCardFocusPercentile(data, communityModels);
   return {
     ...day,
-    RANK: weekRank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "weekly", data.comparisonProgress),
-    WEEK_RANK: weekRank?.topPercent ?? estimateFocusTopPercent(data.focusSeconds, "weekly", data.comparisonProgress),
+    RANK: weekRank?.topPercent ?? estimate?.topPercent ?? null,
+    WEEK_RANK: weekRank?.topPercent ?? estimate?.topPercent ?? null,
+    RANK_SAMPLE_SIZE: estimate?.sampleSize ?? 0,
+    WEEK_RANK_SAMPLE_SIZE: estimate?.sampleSize ?? 0,
     RANK_IS_LIVE: Boolean(weekRank),
     WEEK_RANK_IS_LIVE: Boolean(weekRank),
     IS_CURRENT_PERIOD: data.isCurrentPeriod,
@@ -427,8 +432,10 @@ const formatDuration = (minutes) => {
   return `${h}h ${String(mm).padStart(2, '0')}m`;
 };
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-let RANK = 0.4; // today top-%
-let WEEK_RANK = 1.2; // week top-% (separate default)
+let RANK = null;
+let WEEK_RANK = null;
+let RANK_SAMPLE_SIZE = 0;
+let WEEK_RANK_SAMPLE_SIZE = 0;
 let RANK_IS_LIVE = false;
 let WEEK_RANK_IS_LIVE = false;
 let IS_CURRENT_PERIOD = false;
@@ -493,16 +500,27 @@ const youPill = (p, x, dotY, pillY, r = 12) => `
   <circle cx="${x}" cy="${dotY}" r="${r}" fill="${p.olive}"/>
   <rect x="${x - 52}" y="${pillY}" width="104" height="46" rx="23" fill="${p.olive}"/>
   ${tx(x, pillY + 33, localized('YOU', '나'), { font: F.mono, size: SIZE.label, floor: SIZE.label, fill: onField(p), weight: 700, spacing: 2.2, anchor: 'middle' })}`;
-function curveCard(p, id) { const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055); const pillMode = s.x < 640 && s.y < (652 + RANK_DY); return wrap(p, id, `${wash(id)}
+function curveCard(p, id) { if (RANK === null) return wideStatement(p, id); const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055); const pillMode = s.x < 900 && s.y < (680 + RANK_DY); return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, RANK_IS_LIVE ? localized("Today's focus percentile", "오늘의 집중 백분위") : localized("Estimated focus percentile", "예상 집중 백분위"))}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
-  ${tx(112, 420 + RANK_DY, `${pctLabel(RANK)}%`, { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 540 + RANK_DY, RANK_IS_LIVE ? localized('from today’s live leaderboard.', '오늘 실시간 리더보드 기준입니다.') : IS_CURRENT_PERIOD ? localized('from your focus pace so far today.', '지금까지의 오늘 집중 페이스 기준입니다.') : localized('from your focus time that day.', '해당 날짜의 집중 시간 기준입니다.'), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
+  ${tx(112, 420 + RANK_DY, localized(`Top ${pctLabel(RANK)}%`, `상위 ${pctLabel(RANK)}%`), { font: F.serif, size: 144, fill: p.ink, spacing: -9 })}
+  ${tx(120, 540 + RANK_DY, RANK_IS_LIVE ? localized('from today’s live leaderboard.', '오늘 실시간 리더보드 기준입니다.') : communityEstimateLabel(RANK_SAMPLE_SIZE), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY} L 1080 ${668 + RANK_DY} L 120 ${668 + RANK_DY} Z" fill="${p.pale}" opacity=".55"/>
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY}" fill="none" stroke="${p.olive}" stroke-opacity=".45" stroke-width="3"/>
   ${pillMode ? youPill(p, s.x, s.y - 8, Math.min(s.y + 18, 660 + RANK_DY), 11) : youLollipop(p, s.x, s.y, 50, 11)}
   ${footer(p)}`, localized('Curve Card', '집중 백분위 카드')); }
 
+
+function communityEstimateLabel(sampleSize) {
+  return localized(`From ${sampleSize.toLocaleString('en-US')} leaderboard participants`, `리더보드 참여자 ${sampleSize.toLocaleString('ko-KR')}명 기준 추정`);
+}
+
+function weeklyFocusStatement(p, id) { return wrap(p, id, `${wash(id)}
+  ${chromeTitle(p, localized('Focus time', '집중 시간'))}
+  ${panel(p, id, 70, 188, 1060, 510, 36)}
+  ${tx(600, 480, formatDuration(WEEK_MINUTES), { font: F.serif, size: 200, fill: p.ink, spacing: -10, anchor: 'middle' })}
+  ${tx(600, 640, IS_CURRENT_PERIOD ? localized('of focused work this week.', '이번 주 집중한 시간입니다.') : localized(`of focused work in ${WEEK_LABEL}.`, `${WEEK_LABEL}에 집중한 시간입니다.`), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: p.soft, anchor: 'middle' })}
+  ${footer(p)}`, localized('Weekly focus time', '주간 집중 시간')); }
 
 function wideStatement(p, id) { return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, localized('Focus time', '집중 시간'))}
@@ -532,11 +550,11 @@ function dayDots(p, id) {
   ${footer(p)}`, 'Day Dots'); }
 
 
-function rankStatement(p, id) { return wrap(p, id, `${wash(id)}
+function rankStatement(p, id) { if (RANK === null) return wideStatement(p, id); return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, RANK_IS_LIVE ? localized("Today's focus percentile", "오늘의 집중 백분위") : localized("Estimated focus percentile", "예상 집중 백분위"))}
   ${surfacePanel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
   ${tx(600, 450 + RANK_DY, localized(`Top ${pctLabel(RANK)}%`, `상위 ${pctLabel(RANK)}%`), { font: F.serif, size: 180, fill: surfaceInk(p), spacing: -8, anchor: 'middle' })}
-  ${tx(600, 600 + RANK_DY, RANK_IS_LIVE ? localized('from today’s live leaderboard', '오늘 실시간 리더보드 기준') : IS_CURRENT_PERIOD ? localized('from today’s focus pace', '오늘 집중 페이스 기준') : localized('from that day’s focus time', '해당 날짜의 집중 시간 기준'), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: surfaceSoft(p), anchor: 'middle', spacing: -.5 })}
+  ${tx(600, 600 + RANK_DY, RANK_IS_LIVE ? localized('from today’s live leaderboard', '오늘 실시간 리더보드 기준') : communityEstimateLabel(RANK_SAMPLE_SIZE), { font: F.sans, size: SIZE.body, floor: SIZE.body, fill: surfaceSoft(p), anchor: 'middle', spacing: -.5 })}
   ${footer(p)}`, localized('Rank Statement', '집중 백분위 카드')); }
 
 
@@ -597,13 +615,14 @@ function weekRange(p, id) { return wrap(p, id, `${wash(id)}
 // Unique paper variants kept after merge (others were near-duplicates of Current).
 
 function weeklyCurve(p, id) {
+  if (WEEK_RANK === null) return weeklyFocusStatement(p, id);
   const s = curveSpot(430, 668 + RANK_DY, 68, 245, 117, 150, 1055, WEEK_RANK);
-  const pillMode = s.x < 640 && s.y < (652 + RANK_DY);
+  const pillMode = s.x < 900 && s.y < (680 + RANK_DY);
   return wrap(p, id, `${wash(id)}
   ${chromeTitle(p, WEEK_RANK_IS_LIVE ? localized('This week’s focus percentile', '이번 주 집중 백분위') : localized('Estimated weekly percentile', '예상 주간 백분위'))}
   ${panel(p, id, 70, RANK_PANEL_Y, 1060, RANK_PANEL_H, 36)}
-  ${tx(112, 420 + RANK_DY, `${pctLabel(WEEK_RANK)}%`, { font: F.serif, size: 176, fill: p.ink, spacing: -9 })}
-  ${tx(120, 540 + RANK_DY, WEEK_RANK_IS_LIVE ? localized('from the live weekly leaderboard.', '실시간 주간 리더보드 기준입니다.') : IS_CURRENT_PERIOD ? localized('from your focus pace this week.', '이번 주 집중 페이스 기준입니다.') : localized('from your focus time that week.', '해당 주의 집중 시간 기준입니다.'), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
+  ${tx(112, 420 + RANK_DY, localized(`Top ${pctLabel(WEEK_RANK)}%`, `상위 ${pctLabel(WEEK_RANK)}%`), { font: F.serif, size: 144, fill: p.ink, spacing: -9 })}
+  ${tx(120, 540 + RANK_DY, WEEK_RANK_IS_LIVE ? localized('from the live weekly leaderboard.', '실시간 주간 리더보드 기준입니다.') : communityEstimateLabel(WEEK_RANK_SAMPLE_SIZE), { font: F.sans, size: SIZE.support, floor: SIZE.support, fill: p.soft })}
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY} L 1080 ${668 + RANK_DY} L 120 ${668 + RANK_DY} Z" fill="${p.pale}" opacity=".55"/>
   <path d="M120 ${668 + RANK_DY} C 240 ${664 + RANK_DY} 320 ${618 + RANK_DY} 430 ${600 + RANK_DY} C 560 ${580 + RANK_DY} 680 ${622 + RANK_DY} 810 ${648 + RANK_DY} C 910 ${664 + RANK_DY} 1000 ${668 + RANK_DY} 1080 ${668 + RANK_DY}" fill="none" stroke="${p.olive}" stroke-opacity=".45" stroke-width="3"/>
   ${pillMode ? youPill(p, s.x, s.y - 8, Math.min(s.y + 18, 660 + RANK_DY), 11) : youLollipop(p, s.x, s.y, 50, 11)}
@@ -612,6 +631,7 @@ function weeklyCurve(p, id) {
 
 
 function comboFocus(p, id) {
+  if (RANK === null) return wideStatement(p, id);
   // Hours stay the hero; rank becomes a compact olive seal.
   // Ink/Paper surface is controlled by the global toggle (not a separate card).
   const chipText = selectedLanguage === 'ko'
@@ -950,7 +970,7 @@ function richDrift(p, id) {
   ${chromeTitle(p, 'Focus drift')}
   ${panel(p, id, ox, oy, pw, ph, 40)}
   ${tx(ix, 284, formatDuration(FOCUS_MINUTES), { font: F.serif, size: 100, fill: p.ink, spacing: -3.2 })}
-  ${tx(ix + 380, 284, `TOP ${pctLabel(RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
+  ${tx(ix + 380, 284, RANK === null ? '' : `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
   ${statChip(p, ix, chipY, 'QUALITY', `${PROD_FOCUS}%`, 220)}
   ${statChip(p, ix + 244, chipY, 'DRIFT', `${PROD_DRIFT}%`, 200)}
   ${statChip(p, ix + 468, chipY, 'SESSIONS', String(SESSION_COUNT), 200)}
@@ -974,7 +994,7 @@ function richFlow(p, id) {
   ${chromeTitle(p, 'Flow chart')}
   ${panel(p, id, ox, oy, pw, ph, 40)}
   ${tx(ix, 284, metric(), { font: F.serif, size: 100, fill: p.ink, spacing: -3.2 })}
-  ${tx(ix + 380, 284, `TOP ${pctLabel(RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
+  ${tx(ix + 380, 284, RANK === null ? '' : `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
   ${statChip(p, ix, chipY, 'FOCUS', `${PROD_FOCUS}%`, 210)}
   ${statChip(p, ix + 234, chipY, 'DRIFT', `${PROD_DRIFT}%`, 200)}
   ${statChip(p, ix + 458, chipY, 'NEUTRAL', `${PROD_NEUTRAL}%`, 210)}
@@ -999,7 +1019,7 @@ function richWeekly(p, id) {
   ${chromeTitle(p, 'Weekly attention rhythm')}
   ${panel(p, id, ox, oy, pw, ph, 40)}
   ${tx(ix, 284, formatDuration(WEEK_MINUTES), { font: F.serif, size: 100, fill: p.ink, spacing: -3.2 })}
-  ${tx(ix + 380, 284, `WEEK TOP ${pctLabel(WEEK_RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
+  ${tx(ix + 380, 284, WEEK_RANK === null ? '' : `${WEEK_RANK_IS_LIVE ? 'WEEK TOP' : 'EST. WEEK TOP'} ${pctLabel(WEEK_RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
   ${statChip(p, ix, chipY, 'DAILY AVG', formatDuration(dailyAverageMinutes()), 230)}
   ${statChip(p, ix + 254, chipY, 'FOCUSED', `${HIT_DAYS}/7`, 180)}
   ${statChip(p, ix + 458, chipY, 'BEST DAY', formatDuration(PEAK_MINUTES), 220)}
@@ -1022,7 +1042,7 @@ function richBoard(p, id) {
     {
       title: 'FOCUS TIME',
       body: (x, y) => `${tx(x + 40, y + 170, metric(), { font: F.serif, size: 104, fill: p.ink, spacing: -3 })}
-      ${tx(x + 40, y + 250, `TOP ${pctLabel(RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
+      ${tx(x + 40, y + 250, RANK === null ? '' : `${RANK_IS_LIVE ? 'TOP' : 'EST. TOP'} ${pctLabel(RANK)}%`, { font: F.mono, size: 36, floor: 36, fill: p.olive, weight: 700, spacing: 1.4 })}
       ${tx(x + 40, y + 310, `#${rankPlace().toLocaleString('en-US')} / ${totalUsersLabel()}`, { font: F.mono, size: 30, floor: 30, fill: p.soft, spacing: 1.1 })}
       ${tx(x + 40, y + 360, `${SESSION_COUNT} sessions`, { font: F.sans, size: 30, floor: 30, fill: p.soft })}`,
     },
@@ -1040,7 +1060,7 @@ function richBoard(p, id) {
     {
       title: 'WEEK SNAPSHOT',
       body: (x, y) => `${tx(x + 40, y + 170, formatDuration(WEEK_MINUTES), { font: F.serif, size: 96, fill: p.ink, spacing: -2.8 })}
-      ${tx(x + 40, y + 250, `WEEK TOP ${pctLabel(WEEK_RANK)}%`, { font: F.mono, size: 34, floor: 34, fill: p.olive, weight: 700, spacing: 1.4 })}
+      ${tx(x + 40, y + 250, WEEK_RANK === null ? '' : `${WEEK_RANK_IS_LIVE ? 'WEEK TOP' : 'EST. WEEK TOP'} ${pctLabel(WEEK_RANK)}%`, { font: F.mono, size: 34, floor: 34, fill: p.olive, weight: 700, spacing: 1.4 })}
       ${tx(x + 40, y + 310, `${HIT_DAYS}/7 focused days`, { font: F.sans, size: 32, floor: 32, fill: p.soft })}
       ${tx(x + 40, y + 360, plural(STREAK_DAYS, 'day', 'days') + ' streak', { font: F.sans, size: 32, floor: 32, fill: p.soft })}
       ${tx(x + 40, y + 410, `+${CLIMB_PLACES} places · ${formatDuration(MONTH_MINUTES)} month`, { font: F.sans, size: 30, floor: 30, fill: p.soft })}`,
@@ -1143,6 +1163,8 @@ const RENDERERS: Record<UnifiedShareStoryId, (p: typeof light, id: string) => st
 
 function applyMetrics(metrics: UnifiedMetrics) {
   RANK = metrics.RANK;
+  RANK_SAMPLE_SIZE = metrics.RANK_SAMPLE_SIZE;
+  WEEK_RANK_SAMPLE_SIZE = metrics.WEEK_RANK_SAMPLE_SIZE;
   WEEK_RANK = metrics.WEEK_RANK;
   RANK_IS_LIVE = metrics.RANK_IS_LIVE;
   WEEK_RANK_IS_LIVE = metrics.WEEK_RANK_IS_LIVE;
@@ -1193,6 +1215,7 @@ export function renderUnifiedShareCardSvg(options: {
   readonly lookIndex?: number;
   readonly surface?: 'ink' | 'paper';
   readonly liveRanks?: ShareCardLiveRanks;
+  readonly communityModels?: CommunityFocusPercentileModels;
   readonly language?: ShareCardLanguage;
 }): string {
   const story = options.story ?? 'R1c';
@@ -1200,7 +1223,7 @@ export function renderUnifiedShareCardSvg(options: {
   const lookIndex = options.lookIndex ?? UNIFIED_STORY_OPTIONS.findIndex((entry) => entry.value === story);
   selectedSurface = options.surface ?? 'ink';
   selectedLanguage = options.language ?? options.data.language ?? 'en';
-  applyMetrics(deriveDayMetrics(options.data, options.liveRanks));
+  applyMetrics(deriveDayMetrics(options.data, options.liveRanks, options.communityModels));
   const palette = applyLook(theme, lookIndex < 0 ? 0 : lookIndex);
   const renderer = RENDERERS[story] ?? curveCard;
   return unwrapSvg(renderer(palette, `${story}-${theme}`));
@@ -1213,6 +1236,7 @@ export function renderUnifiedShareWeekCardSvg(options: {
   readonly lookIndex?: number;
   readonly surface?: 'ink' | 'paper';
   readonly liveRanks?: ShareCardLiveRanks;
+  readonly communityModels?: CommunityFocusPercentileModels;
   readonly language?: ShareCardLanguage;
 }): string {
   const story = options.story ?? 'WR1';
@@ -1220,7 +1244,7 @@ export function renderUnifiedShareWeekCardSvg(options: {
   const lookIndex = options.lookIndex ?? UNIFIED_STORY_OPTIONS.findIndex((entry) => entry.value === story);
   selectedSurface = options.surface ?? 'ink';
   selectedLanguage = options.language ?? options.data.language ?? 'en';
-  applyMetrics(deriveWeekMetrics(options.data, options.liveRanks));
+  applyMetrics(deriveWeekMetrics(options.data, options.liveRanks, options.communityModels));
   const palette = applyLook(theme, lookIndex < 0 ? 0 : lookIndex);
   const renderer = RENDERERS[story] ?? weeklyCurve;
   return unwrapSvg(renderer(palette, `${story}-${theme}`));

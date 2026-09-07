@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "./AuthContext";
 import { AUTH_PASSWORD_POLICY, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
 import { GoogleMark } from "../onboarding/components/GoogleMark";
@@ -6,8 +6,10 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import { useLocalization } from "../localization/LocalizationContext";
+import "./AuthModal.css";
 
 type AuthMode = "sign-in" | "sign-up";
+type AuthView = "credentials" | "forgot-password";
 
 export function AuthModal({
   onClose,
@@ -29,19 +31,48 @@ export function AuthModal({
     signUpWithEmail,
     signInWithGoogle,
     signInWithWebsite,
+    cloudConnectionStatus,
+    passwordRecoveryState,
+    requestPasswordReset,
+    updatePassword,
+    cancelPasswordRecovery,
+    retryCloudConnection,
     isEnabled,
   } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>("sign-in");
+  const [authView, setAuthView] = useState<AuthView>("credentials");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryPasswordVisible, setRecoveryPasswordVisible] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleSubmitting, setIsGoogleSubmitting] = useState(false);
   const [isWebsiteSubmitting, setIsWebsiteSubmitting] = useState(false);
+  const [isRecoverySubmitting, setIsRecoverySubmitting] = useState(false);
+  const [isConnectionRetrying, setIsConnectionRetrying] = useState(false);
   const [promoEmailOpen, setPromoEmailOpen] = useState(false);
   const promoOnboardingDialogRef = useRef<HTMLElement>(null);
-  useModalDismiss(() => onClose?.(), { disabled: !onClose || isSubmitting || isGoogleSubmitting || isWebsiteSubmitting });
+  const isRecoveryAwaiting = passwordRecoveryState?.phase === "awaiting-new-password";
+  const isRecoveryView = authView === "forgot-password" || isRecoveryAwaiting;
+  useEffect(() => {
+    if (!isRecoveryAwaiting) return;
+    setError(null);
+    setNotice(null);
+    setPassword("");
+    setConfirmPassword("");
+    setPasswordVisible(false);
+    setRecoveryPassword("");
+    setRecoveryPasswordVisible(false);
+  }, [isRecoveryAwaiting]);
+  const requestClose = () => {
+    if (isRecoveryAwaiting) void cancelPasswordRecovery?.();
+    onClose?.();
+  };
+  useModalDismiss(requestClose, { disabled: !onClose || isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting });
   useModalFocusTrap(promoOnboardingDialogRef, { initialFocusSelector: ".dc-onb-account__google" });
 
   if (!isEnabled) {
@@ -136,9 +167,88 @@ export function AuthModal({
     }
   }
 
+  async function handlePasswordRecoveryRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    const nextEmail = email.trim();
+    if (!nextEmail) {
+      setError(t("auth.modal.emailRequired"));
+      return;
+    }
+    if (!requestPasswordReset) {
+      setError(t("auth.modal.recoverySendError"));
+      return;
+    }
+
+    setIsRecoverySubmitting(true);
+    try {
+      const { error: recoveryError } = await requestPasswordReset(nextEmail);
+      if (recoveryError) {
+        setError(t("auth.modal.recoverySendError"));
+        return;
+      }
+      setNotice(t("auth.modal.recoveryEmailSent"));
+    } catch {
+      setError(t("auth.modal.recoverySendError"));
+    } finally {
+      setIsRecoverySubmitting(false);
+    }
+  }
+
+  async function handlePasswordUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setNotice(null);
+    if (!recoveryPassword) {
+      setError(t("auth.modal.passwordRequired"));
+      return;
+    }
+    if (!confirmPassword) {
+      setError(t("auth.modal.confirmPasswordRequired"));
+      return;
+    }
+    if (recoveryPassword !== confirmPassword) {
+      setError(t("auth.modal.passwordMismatch"));
+      return;
+    }
+    const passwordError = validateAuthPasswordForSignUp(recoveryPassword);
+    if (passwordError) {
+      setError(passwordError.message);
+      return;
+    }
+    if (!updatePassword) {
+      setError(t("auth.modal.resetPasswordError"));
+      return;
+    }
+
+    setIsRecoverySubmitting(true);
+    try {
+      const { error: updateError } = await updatePassword(recoveryPassword);
+      if (updateError) {
+        setError(t("auth.modal.resetPasswordError"));
+      }
+    } catch {
+      setError(t("auth.modal.resetPasswordError"));
+    } finally {
+      setIsRecoverySubmitting(false);
+    }
+  }
+
+  async function handleConnectionRetry() {
+    setError(null);
+    setIsConnectionRetrying(true);
+    try {
+      await retryCloudConnection?.();
+    } finally {
+      setIsConnectionRetrying(false);
+    }
+  }
+
   const isSignUp = authMode === "sign-up";
   const submitLabel = isSignUp ? t("auth.modal.createAccount") : t("auth.modal.signIn");
-  const isBusy = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || status === "loading";
+  const isCloudUnavailable = cloudConnectionStatus === "offline" || cloudConnectionStatus === "checking";
+  const isBusy = isSubmitting || isGoogleSubmitting || isWebsiteSubmitting || isRecoverySubmitting || status === "loading";
   const isGoogleCallbackBusy = callbackStatus?.googleAction === "opening"
     || callbackStatus?.phase === "received"
     || callbackStatus?.phase === "exchanging"
@@ -148,23 +258,34 @@ export function AuthModal({
     : callbackStatus?.googleAction === "retry"
       ? t("auth.modal.retryGoogle")
       : t("auth.modal.continueGoogle");
-  const title = intent === "promo"
+  const title = isRecoveryView
+    ? t("auth.modal.recoveryTitle")
+    : intent === "promo"
     ? t("auth.modal.promoTitle")
     : isSignUp ? t("auth.modal.signUpTitle") : t("auth.modal.signInTitle");
-  const description = intent === "promo"
+  const description = isRecoveryView
+    ? null
+    : intent === "promo"
     ? t("auth.modal.promoDescription")
     : isSignUp ? t("auth.modal.signUpDescription") : null;
 
-  const errorNotice = error ? (
-    <div className="auth-modal__error" role="alert">{error}</div>
+  const displayedError = passwordRecoveryState?.errorKind === "identity-mismatch"
+    ? t("auth.modal.recoveryIdentityMismatch")
+    : isRecoveryView && callbackStatus?.errorCode === "password-recovery-cancel-failed"
+      ? t("auth.modal.recoveryCancelCleanupError")
+      : error;
+  const errorNotice = displayedError ? (
+    <div className="auth-modal__error" role="alert">{displayedError}</div>
   ) : null;
-  const successNotice = notice ? (
+  const successNotice = notice && !isRecoveryAwaiting ? (
     <div className="auth-modal__success" role="status">{notice}</div>
   ) : null;
   const callbackNotice = callbackStatus ? (
     callbackStatus.phase === "failed" ? (
       <div className="auth-modal__callback-notice" role="status">
-        <span>{callbackStatus.message}</span>
+        <span>{callbackStatus.errorCode === "password-recovery-cancel-failed"
+          ? t("auth.modal.recoveryCancelCleanupError")
+          : callbackStatus.message}</span>
         <button
           type="button"
           className="auth-modal__callback-dismiss"
@@ -180,6 +301,67 @@ export function AuthModal({
       </div>
     )
   ) : null;
+  const activePasswordVisible = isRecoveryAwaiting ? recoveryPasswordVisible : passwordVisible;
+  const passwordToggleLabel = activePasswordVisible
+    ? t("auth.modal.hidePassword")
+    : t("auth.modal.showPassword");
+  const passwordInput = ({
+    id,
+    label,
+    value,
+    onChange,
+    autoComplete,
+  }: {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    autoComplete: "current-password" | "new-password";
+  }) => (
+    <div className="auth-modal__field">
+      <span id={`${id}-label`}>{label}</span>
+      <div className="auth-modal__password-control">
+        <input
+          id={id}
+          type={activePasswordVisible ? "text" : "password"}
+          aria-labelledby={`${id}-label`}
+          autoComplete={autoComplete}
+          minLength={autoComplete === "new-password" ? AUTH_PASSWORD_POLICY.minLength : undefined}
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          disabled={isBusy || isCloudUnavailable}
+          required
+        />
+        <button
+          type="button"
+          className="auth-modal__password-toggle"
+          aria-label={passwordToggleLabel}
+          aria-pressed={activePasswordVisible}
+          onClick={() => {
+            if (isRecoveryAwaiting) setRecoveryPasswordVisible((visible) => !visible);
+            else setPasswordVisible((visible) => !visible);
+          }}
+          disabled={isBusy}
+        >
+          {activePasswordVisible ? t("auth.modal.hidePassword") : t("auth.modal.showPassword")}
+        </button>
+      </div>
+    </div>
+  );
+  const offlineNotice = cloudConnectionStatus === "offline" ? (
+    <div className="auth-modal__offline" role="alert">
+      <strong>{t("auth.modal.offlineTitle")}</strong>
+      <span>{t("auth.modal.offlineDescription")}</span>
+      <button
+        type="button"
+        className="auth-modal__connection-retry"
+        onClick={() => void handleConnectionRetry()}
+        disabled={isConnectionRetrying}
+      >
+        {isConnectionRetrying ? t("auth.modal.checkingConnection") : t("auth.modal.retryConnection")}
+      </button>
+    </div>
+  ) : null;
   const emailAuthForm = (
     <>
       <form className="auth-modal__form" onSubmit={(event) => void handleEmailSubmit(event)} noValidate>
@@ -191,27 +373,37 @@ export function AuthModal({
             autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.currentTarget.value)}
-            disabled={isBusy}
+            disabled={isBusy || isCloudUnavailable}
             required
           />
         </label>
-        <label className="auth-modal__field" htmlFor="auth-password">
-          <span>{t("auth.modal.password")}</span>
-          <input
-            id="auth-password"
-            type="password"
-            autoComplete={isSignUp ? "new-password" : "current-password"}
-            minLength={isSignUp ? AUTH_PASSWORD_POLICY.minLength : undefined}
-            value={password}
-            onChange={(event) => setPassword(event.currentTarget.value)}
-            disabled={isBusy}
-            required
-          />
-        </label>
+        {passwordInput({
+          id: "auth-password",
+          label: t("auth.modal.password"),
+          value: password,
+          onChange: setPassword,
+          autoComplete: isSignUp ? "new-password" : "current-password",
+        })}
+        {!isSignUp ? (
+          <div className="auth-modal__forgot-row">
+            <button
+              type="button"
+              className="auth-modal__text-action"
+              onClick={() => {
+                setAuthView("forgot-password");
+                setError(null);
+                setNotice(null);
+              }}
+              disabled={isBusy}
+            >
+              {t("auth.modal.forgotPassword")}
+            </button>
+          </div>
+        ) : null}
         <button
           type="submit"
           className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
-          disabled={isBusy}
+          disabled={isBusy || isCloudUnavailable}
         >
           {isSubmitting ? (isSignUp ? t("auth.modal.creating") : t("auth.modal.signingIn")) : submitLabel}
         </button>
@@ -233,6 +425,75 @@ export function AuthModal({
       </p>
     </>
   );
+  const passwordRecoveryRequestForm = (
+    <>
+      <p className="auth-modal__recovery-copy">{t("auth.modal.recoveryDescription")}</p>
+      <form className="auth-modal__form" onSubmit={(event) => void handlePasswordRecoveryRequest(event)} noValidate>
+        <label className="auth-modal__field" htmlFor="auth-recovery-email">
+          <span>{t("auth.modal.email")}</span>
+          <input
+            id="auth-recovery-email"
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.currentTarget.value)}
+            disabled={isBusy || isCloudUnavailable}
+            required
+          />
+        </label>
+        <button
+          type="submit"
+          className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
+          disabled={isBusy || isCloudUnavailable}
+        >
+          {isRecoverySubmitting ? t("auth.modal.recoverySending") : t("auth.modal.recoverySend")}
+        </button>
+      </form>
+      <p className="auth-modal__mode-switch">
+        <button
+          type="button"
+          onClick={() => {
+            setAuthView("credentials");
+            setError(null);
+            setNotice(null);
+          }}
+          disabled={isBusy}
+        >
+          {t("auth.modal.backToSignIn")}
+        </button>
+      </p>
+    </>
+  );
+  const passwordResetForm = (
+    <form className="auth-modal__form" onSubmit={(event) => void handlePasswordUpdate(event)} noValidate>
+      {passwordInput({
+        id: "auth-new-password",
+        label: t("auth.modal.newPassword"),
+        value: recoveryPassword,
+        onChange: setRecoveryPassword,
+        autoComplete: "new-password",
+      })}
+      {passwordInput({
+        id: "auth-confirm-password",
+        label: t("auth.modal.confirmPassword"),
+        value: confirmPassword,
+        onChange: setConfirmPassword,
+        autoComplete: "new-password",
+      })}
+      <button
+        type="submit"
+        className="modal-btn modal-btn--primary modal-btn--block auth-modal__submit"
+        disabled={isBusy || isCloudUnavailable}
+      >
+        {isRecoverySubmitting ? t("auth.modal.resettingPassword") : t("auth.modal.resetPassword")}
+      </button>
+    </form>
+  );
+  const activeEmailForm = isRecoveryAwaiting
+    ? passwordResetForm
+    : authView === "forgot-password"
+      ? passwordRecoveryRequestForm
+      : emailAuthForm;
   const legal = (
     <span>
       {t("auth.modal.byContinuing")}
@@ -263,14 +524,15 @@ export function AuthModal({
 
                   {errorNotice}
                   {successNotice}
-                  {callbackNotice}
+                  {isRecoveryView ? null : callbackNotice}
+                  {offlineNotice}
 
-                  <div className="dc-onb-account__buttons">
+                  {!isRecoveryView ? <div className="dc-onb-account__buttons">
                     <button
                       type="button"
                       className="dc-onb-account__google"
                       onClick={() => void handleWebsiteSignIn()}
-                      disabled={isBusy || isGoogleCallbackBusy}
+                      disabled={isBusy || isGoogleCallbackBusy || isCloudUnavailable}
                     >
                       {isWebsiteSubmitting ? t("auth.modal.opening") : t("auth.modal.promoContinueBrowser")}
                     </button>
@@ -285,7 +547,7 @@ export function AuthModal({
                         type="button"
                         className="dc-onb-account__email promo-auth-screen__provider"
                         onClick={() => void handleGoogleSignIn()}
-                        disabled={isBusy || isGoogleCallbackBusy}
+                        disabled={isBusy || isGoogleCallbackBusy || isCloudUnavailable}
                       >
                         <GoogleMark />
                         {isGoogleSubmitting ? t("auth.modal.opening") : googleButtonLabel}
@@ -298,20 +560,20 @@ export function AuthModal({
                       aria-expanded={promoEmailOpen}
                       aria-controls="promo-auth-email-form"
                       onClick={() => setPromoEmailOpen((open) => !open)}
-                      disabled={isBusy}
+                      disabled={isBusy || isCloudUnavailable}
                     >
                       {t("onboarding.account.email")}
                     </button>
-                  </div>
+                  </div> : null}
 
-                  {promoEmailOpen ? (
+                  {isRecoveryView || promoEmailOpen ? (
                     <div className="promo-auth-screen__email-form" id="promo-auth-email-form">
-                      {emailAuthForm}
+                      {activeEmailForm}
                     </div>
                   ) : null}
 
                   {onClose ? (
-                    <button className="promo-auth-screen__later" type="button" onClick={onClose} disabled={isBusy}>
+                    <button className="promo-auth-screen__later" type="button" onClick={requestClose} disabled={isBusy}>
                       {t("auth.modal.promoLater")}
                     </button>
                   ) : null}
@@ -333,7 +595,7 @@ export function AuthModal({
   return (
     <div className="auth-modal__overlay">
       <div className="auth-modal modal-shell" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-        {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={onClose} /> : null}
+        {onClose ? <ModalCloseButton label={t("auth.modal.close")} onClick={requestClose} /> : null}
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="auth-modal-title">{title}</h2>
@@ -343,15 +605,16 @@ export function AuthModal({
 
         {errorNotice}
         {successNotice}
-        {callbackNotice}
+        {isRecoveryView ? null : callbackNotice}
+        {offlineNotice}
 
-        {intent === "promo" ? (
+        {intent === "promo" && !isRecoveryView ? (
           <>
             <button
               type="button"
               className="modal-btn modal-btn--primary modal-btn--block"
               onClick={() => void handleWebsiteSignIn()}
-              disabled={isBusy || isGoogleCallbackBusy}
+              disabled={isBusy || isGoogleCallbackBusy || isCloudUnavailable}
             >
               {isWebsiteSubmitting ? t("auth.modal.opening") : t("auth.modal.promoContinueBrowser")}
             </button>
@@ -362,9 +625,9 @@ export function AuthModal({
           </>
         ) : null}
 
-        {emailAuthForm}
+        {activeEmailForm}
 
-        {showGoogleSignIn ? (
+        {showGoogleSignIn && !isRecoveryView ? (
           <>
             <div className="auth-modal__separator"><span>{t("auth.modal.or")}</span></div>
 
@@ -372,7 +635,7 @@ export function AuthModal({
               type="button"
               className="modal-btn modal-btn--secondary modal-btn--block auth-modal__google"
               onClick={() => void handleGoogleSignIn()}
-              disabled={isBusy || isGoogleCallbackBusy}
+              disabled={isBusy || isGoogleCallbackBusy || isCloudUnavailable}
             >
               <GoogleMark />
               {isGoogleSubmitting ? t("auth.modal.opening") : googleButtonLabel}

@@ -36,6 +36,16 @@ import {
 } from "./authConnectionStatus";
 import { getOAuthCallbackResultFromUrl } from "./authCallback";
 import { normalizeAuthPasswordError, validateAuthPasswordForSignUp } from "./authPasswordPolicy";
+import {
+  clearPendingPasswordRecovery,
+  createPendingPasswordRecovery,
+  doesRecoverySessionMatchRequest,
+  hasPendingPasswordRecoveryMarker,
+  markPasswordRecoveryVerified,
+  readPendingPasswordRecovery,
+  writePendingPasswordRecovery,
+  type PendingPasswordRecovery,
+} from "./passwordRecovery";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 import { dispatchTeamInviteDeepLink } from "../team/teamInviteDeepLinks";
 import { readBillingSuccessDeepLink, storePendingPromoHandoff } from "../billing/promoHandoff";
@@ -66,11 +76,15 @@ const GOOGLE_CALENDAR_SKIPPED_MESSAGE = "Signed in. Google Calendar was skipped 
 const GOOGLE_CALENDAR_FALLBACK_MESSAGE = "Calendar setup is unavailable. Opening standard Google sign-in...";
 const GOOGLE_CALENDAR_IDENTITY_MISMATCH_MESSAGE = "Google sign-in could not be verified. Please try again.";
 const GOOGLE_SIGN_IN_EXPIRED_MESSAGE = "Google sign-in expired after 5 minutes. Try again.";
+const AUTH_OFFLINE_MESSAGE = "Drifty is offline. Connect to the internet and try again.";
+const PASSWORD_RECOVERY_IDENTITY_MISMATCH_MESSAGE = "This reset link belongs to a different account.";
+const PASSWORD_RECOVERY_CANCEL_FAILED_MESSAGE = "Password recovery could not be cancelled securely. Check your connection and try again.";
 const GOOGLE_OAUTH_URL_MAX_LENGTH = 8_192;
 const GOOGLE_OAUTH_CHALLENGE_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
 export const GOOGLE_OAUTH_HANDOFF_TIMEOUT_MS = 5 * 60 * 1000;
 export const GOOGLE_OAUTH_OPERATION_TIMEOUT_MS = 20 * 1000;
+export const AUTH_CONNECTION_PROBE_TIMEOUT_MS = 20 * 1000;
 
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
@@ -87,6 +101,15 @@ export interface OAuthCallbackStatus {
   message: string;
   method?: OAuthCallbackMethod;
   googleAction?: GoogleSignInAction;
+  errorCode?: "password-recovery-cancel-failed";
+}
+
+export type PasswordRecoveryPhase = "idle" | "email-sent" | "awaiting-new-password" | "completed" | "failed";
+
+export interface PasswordRecoveryState {
+  readonly phase: PasswordRecoveryPhase;
+  readonly email: string | null;
+  readonly errorKind?: "identity-mismatch";
 }
 
 interface GoogleOAuthAttempt {
@@ -159,6 +182,38 @@ function withGoogleOAuthOperationTimeout<T>(
   });
 }
 
+async function probeAuthServiceConnection(): Promise<Error | null> {
+  const authorizeUrl = getGoogleOAuthAuthorizeUrl();
+  if (!authorizeUrl) return new Error("Supabase is not configured");
+
+  const controller = new AbortController();
+  const timeoutError = new Error("Drifty Cloud connection check timed out");
+  let didTimeOut = false;
+  const timeoutId = window.setTimeout(() => {
+    didTimeOut = true;
+    controller.abort(timeoutError);
+  }, AUTH_CONNECTION_PROBE_TIMEOUT_MS);
+
+  try {
+    const healthUrl = new URL("/auth/v1/health", authorizeUrl);
+    const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? "").trim();
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (anonKey) headers.apikey = anonKey;
+    const response = await globalThis.fetch(healthUrl, {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return response.ok ? null : new Error(AUTH_OFFLINE_MESSAGE);
+  } catch (error) {
+    if (didTimeOut) return timeoutError;
+    return error instanceof Error ? error : new Error(AUTH_OFFLINE_MESSAGE);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 function isValidGoogleOAuthUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length === 0 || value.length > GOOGLE_OAUTH_URL_MAX_LENGTH) {
     return false;
@@ -209,6 +264,11 @@ export interface AuthState {
   signInAnonymously: () => Promise<{ error: Error | null; user: User | null }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null; needsEmailConfirmation: boolean }>;
+  passwordRecoveryState?: PasswordRecoveryState;
+  requestPasswordReset?: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword?: (password: string) => Promise<{ error: Error | null }>;
+  cancelPasswordRecovery?: () => Promise<void>;
+  retryCloudConnection?: () => Promise<{ error: Error | null }>;
   clearCallbackStatus: () => void;
   signOut: () => Promise<void>;
 }
@@ -237,6 +297,15 @@ export function useAuth(): AuthState {
   return context;
 }
 
+/** Optional for onboarding previews; live surfaces read the same provider state. */
+export function useAuthConnectionStatus() {
+  const context = useContext(AuthContext);
+  return {
+    cloudConnectionStatus: context?.cloudConnectionStatus ?? "online",
+    retryCloudConnection: context?.retryCloudConnection,
+  };
+}
+
 export function isAnonymousSupabaseUser(user: User | null): boolean {
   return user?.is_anonymous === true;
 }
@@ -253,7 +322,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isSupabaseEnabled() ? "checking" : "disabled",
   );
   const [callbackStatus, setCallbackStatus] = useState<OAuthCallbackStatus | null>(null);
+  const [passwordRecoveryState, setPasswordRecoveryState] = useState<PasswordRecoveryState>({
+    phase: "idle",
+    email: null,
+  });
   const sessionRef = useRef<Session | null>(null);
+  const cloudConnectionStatusRef = useRef<AuthConnectionStatus>(
+    isSupabaseEnabled() ? "checking" : "disabled",
+  );
+  const liveConnectionVerifiedRef = useRef(false);
+  const passwordRecoveryExchangeRef = useRef(false);
   const tauriInvokeRef = useRef<TauriInvoke | null>(null);
   const saveSequenceRef = useRef(0);
   const googleOAuthAttemptSequenceRef = useRef(0);
@@ -339,13 +417,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return attempt;
   }
 
+  function updateCloudConnectionStatus(nextStatus: AuthConnectionStatus) {
+    if (nextStatus !== "online") {
+      liveConnectionVerifiedRef.current = false;
+    }
+    cloudConnectionStatusRef.current = nextStatus;
+    setCloudConnectionStatus(nextStatus);
+  }
+
+  function confirmLiveCloudConnection() {
+    liveConnectionVerifiedRef.current = true;
+    cloudConnectionStatusRef.current = "online";
+    setCloudConnectionStatus("online");
+  }
+
+  function effectiveConnectionStatus(nextStatus: AuthConnectionStatus): AuthConnectionStatus {
+    if (
+      nextStatus === "online"
+      && !liveConnectionVerifiedRef.current
+      && typeof navigator !== "undefined"
+      && navigator.onLine === false
+    ) {
+      return "offline";
+    }
+    return nextStatus;
+  }
+
   function applySessionState(nextSession: Session | null, nextCloudConnectionStatus: AuthConnectionStatus = "online") {
     sessionRef.current = nextSession;
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
     setStatus(nextSession?.user ? "authenticated" : "unauthenticated");
-    setCloudConnectionStatus(nextCloudConnectionStatus);
+    updateCloudConnectionStatus(effectiveConnectionStatus(nextCloudConnectionStatus));
     recordPostHogAuthState(nextSession?.user ?? null);
+  }
+
+  function holdPasswordRecoverySession(
+    nextSession: Session,
+    nextCloudConnectionStatus: AuthConnectionStatus = "online",
+  ) {
+    sessionRef.current = nextSession;
+    setSession(nextSession);
+    setUser(null);
+    setStatus("unauthenticated");
+    updateCloudConnectionStatus(effectiveConnectionStatus(nextCloudConnectionStatus));
+    recordPostHogAuthState(null);
+  }
+
+  function stagePasswordRecoverySession(nextSession: Session, recovery: PendingPasswordRecovery | null): boolean {
+    const sessionEmail = nextSession.user.email?.trim();
+    if (!sessionEmail) {
+      failPasswordRecoveryIdentity();
+      return false;
+    }
+    const recoveryToVerify = recovery ?? createPendingPasswordRecovery(sessionEmail);
+    const verifiedRecovery = markPasswordRecoveryVerified(recoveryToVerify, nextSession);
+    if (!writePendingPasswordRecovery(verifiedRecovery)) {
+      setPasswordRecoveryState({ phase: "failed", email: null });
+      setCallbackStatus({
+        phase: "failed",
+        message: "Secure recovery storage is unavailable. Request a new reset link.",
+        method: "website",
+      });
+      return false;
+    }
+    holdPasswordRecoverySession(nextSession);
+    setPasswordRecoveryState({
+      phase: "awaiting-new-password",
+      email: verifiedRecovery.email,
+    });
+    setCallbackStatus(null);
+    return true;
+  }
+
+  function failPasswordRecoveryIdentity({ preserveGate = false }: { preserveGate?: boolean } = {}) {
+    if (!preserveGate) {
+      clearPendingPasswordRecovery();
+    }
+    setPasswordRecoveryState({
+      phase: "failed",
+      email: null,
+      errorKind: "identity-mismatch",
+    });
+    setCallbackStatus({
+      phase: "failed",
+      message: PASSWORD_RECOVERY_IDENTITY_MISMATCH_MESSAGE,
+      method: "website",
+    });
   }
 
   const saveDesktopSession = async (nextSession: Session | null, options: SaveDesktopSessionOptions = {}) => {
@@ -398,7 +556,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isSupabaseEnabled() || !supabase) {
       setStatus("unauthenticated");
-      setCloudConnectionStatus("disabled");
+      updateCloudConnectionStatus("disabled");
       recordPostHogAuthState(null);
       return;
     }
@@ -411,7 +569,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let initializationTimeout: number | null = null;
     let preserveNativeSessionAfterRestoreFailure = false;
 
-    setCloudConnectionStatus("checking");
+    updateCloudConnectionStatus(
+      typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "checking",
+    );
 
     recordAuthDiagnostic("auth.provider.start", {
       authMode: authModePolicy.mode,
@@ -493,6 +653,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applySession(null, nextCloudConnectionStatus);
     };
 
+    const rejectPasswordRecoverySession = async (
+      recovery: PendingPasswordRecovery,
+      rejectedSession: Session,
+      fallbackSession: Session | null = null,
+      { clearNativeSession = false }: { clearNativeSession?: boolean } = {},
+    ) => {
+      const recoveryGate = recovery.phase === "verified"
+        ? recovery
+        : markPasswordRecoveryVerified(recovery, rejectedSession);
+      writePendingPasswordRecovery(recoveryGate);
+      holdPasswordRecoverySession(rejectedSession);
+
+      let signOutError: unknown = null;
+      try {
+        const { error } = await client.auth.signOut({ scope: "local" });
+        signOutError = error;
+      } catch (error) {
+        signOutError = error;
+      }
+
+      if (signOutError) {
+        recordAuthDiagnostic(
+          "auth.password_recovery.identity_cleanup.error",
+          getAuthDiagnosticError(signOutError),
+        );
+        failPasswordRecoveryIdentity({ preserveGate: true });
+        if (clearNativeSession) {
+          await saveDesktopSession(null);
+        }
+        return false;
+      }
+
+      failPasswordRecoveryIdentity();
+      applySession(fallbackSession);
+      if (clearNativeSession) {
+        await saveDesktopSession(null);
+      }
+      return true;
+    };
+
     const clearInitializationTimeout = () => {
       if (initializationTimeout === null) {
         return;
@@ -562,6 +762,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
+      const hadRecoveryMarker = method === "website" && hasPendingPasswordRecoveryMarker();
+      const pendingRecovery = method === "website" ? readPendingPasswordRecovery() : null;
+      if (hadRecoveryMarker && !pendingRecovery) {
+        recordAuthDiagnostic("auth.password_recovery.callback_rejected", {
+          callbackKind: "code",
+          reason: "expired-or-invalid-request",
+        });
+        failPasswordRecoveryIdentity();
+        return true;
+      }
+      passwordRecoveryExchangeRef.current = pendingRecovery !== null;
       exchangedCodes.add(authCode);
       const previousSession = sessionRef.current;
       let googleOperationId: number | null = null;
@@ -649,9 +860,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           callbackKind: "code",
           ...getSessionDiagnosticSummary(exchangedSession),
         });
+        confirmLiveCloudConnection();
         if (method === "google") {
           clearGoogleOAuthAttempt({ cancelPending: false });
         }
+
+        if (pendingRecovery) {
+          if (!doesRecoverySessionMatchRequest(pendingRecovery, exchangedSession)) {
+            recordAuthDiagnostic("auth.password_recovery.identity_mismatch", {
+              callbackKind: "code",
+            });
+            await rejectPasswordRecoverySession(
+              pendingRecovery,
+              exchangedSession,
+              previousSession,
+            );
+            return true;
+          }
+
+          recordAuthDiagnostic("auth.password_recovery.callback_verified", {
+            callbackKind: "code",
+          });
+          if (!stagePasswordRecoverySession(exchangedSession, pendingRecovery)) {
+            await client.auth.signOut({ scope: "local" });
+            applySession(previousSession);
+          }
+          return true;
+        }
+
         applySession(exchangedSession);
         await saveDesktopSession(exchangedSession);
         setCallbackCompleted(method);
@@ -696,6 +932,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         return true;
       } finally {
+        passwordRecoveryExchangeRef.current = false;
         if (method === "website") {
           clearGoogleOAuthVerifier();
         }
@@ -789,6 +1026,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         source,
         ...getSessionDiagnosticSummary(callbackSession),
       });
+      confirmLiveCloudConnection();
       applySession(callbackSession);
       await saveDesktopSession(callbackSession);
       setCallbackCompleted(callbackResult.method);
@@ -874,7 +1112,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           source: "native",
           ...getSessionDiagnosticSummary(restoredSession),
         });
-        applySession(restoredSession);
+        const pendingRecovery = readPendingPasswordRecovery();
+        if (pendingRecovery) {
+          if (
+            pendingRecovery.phase === "verified"
+            && doesRecoverySessionMatchRequest(pendingRecovery, restoredSession)
+          ) {
+            if (!stagePasswordRecoverySession(restoredSession, pendingRecovery)) {
+              await client.auth.signOut({ scope: "local" });
+              clearSession("offline");
+            }
+          } else {
+            await rejectPasswordRecoverySession(
+              pendingRecovery,
+              restoredSession,
+              null,
+              { clearNativeSession: true },
+            );
+          }
+        } else {
+          applySession(restoredSession);
+        }
         return;
       }
 
@@ -884,9 +1142,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         source: "supabase-storage",
         ...getSessionDiagnosticSummary(session),
       });
-      applySession(session);
+      const pendingRecovery = session ? readPendingPasswordRecovery() : null;
+      if (session && pendingRecovery) {
+        if (
+          pendingRecovery.phase === "verified"
+          && doesRecoverySessionMatchRequest(pendingRecovery, session)
+        ) {
+          if (!stagePasswordRecoverySession(session, pendingRecovery)) {
+            await client.auth.signOut({ scope: "local" });
+            clearSession("offline");
+          }
+        } else {
+          await rejectPasswordRecoverySession(pendingRecovery, session);
+          recordAuthDiagnostic("auth.init.complete", {
+            source: "supabase-storage",
+            hasSession: false,
+            reason: "password-recovery-identity-mismatch",
+          });
+          return;
+        }
+      } else {
+        applySession(session);
+      }
       await saveDesktopSession(session, {
-        allowClear: !preserveNativeSessionAfterRestoreFailure,
+        allowClear: !preserveNativeSessionAfterRestoreFailure && !pendingRecovery,
         skipReason: "native-restore-failed",
       });
       recordAuthDiagnostic("auth.init.complete", {
@@ -925,10 +1204,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
+
+        if (passwordRecoveryExchangeRef.current && session) {
+          recordAuthDiagnostic("auth.state_change.skipped", {
+            eventType: event,
+            reason: "password-recovery-code-exchange",
+          });
+          return;
+        }
+
+        const pendingRecovery = session ? readPendingPasswordRecovery() : null;
+        if (session && pendingRecovery) {
+          if (
+            (event === "PASSWORD_RECOVERY" || pendingRecovery.phase === "verified")
+            && doesRecoverySessionMatchRequest(pendingRecovery, session)
+          ) {
+            if (!stagePasswordRecoverySession(session, pendingRecovery)) {
+              void client.auth.signOut({ scope: "local" }).finally(() => applySession(null, "offline"));
+            }
+          } else {
+            void rejectPasswordRecoverySession(pendingRecovery, session);
+          }
+          return;
+        }
+        if (session && event === "PASSWORD_RECOVERY") {
+          if (!stagePasswordRecoverySession(session, null)) {
+            void client.auth.signOut({ scope: "local" }).finally(() => applySession(null, "offline"));
+          }
+          return;
+        }
         applySession(session);
         void saveDesktopSession(session);
       }
     );
+
+    const handleOffline = () => updateCloudConnectionStatus("offline");
+    const handleOnline = () => {
+      void retryCloudConnection();
+    };
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
 
     return () => {
       isActive = false;
@@ -938,9 +1253,151 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         window.clearInterval(pendingDeepLinkInterval);
       }
       clearInitializationTimeout();
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
       subscription.unsubscribe();
     };
   }, []);
+
+  function offlineError(): Error | null {
+    if (
+      cloudConnectionStatusRef.current === "offline"
+    ) {
+      updateCloudConnectionStatus("offline");
+      return new Error(AUTH_OFFLINE_MESSAGE);
+    }
+    return null;
+  }
+
+  async function retryCloudConnection(): Promise<{ error: Error | null }> {
+    if (!supabase) {
+      updateCloudConnectionStatus("disabled");
+      return { error: new Error("Supabase is not configured") };
+    }
+
+    updateCloudConnectionStatus("checking");
+    const error = await probeAuthServiceConnection();
+    if (error) {
+      updateCloudConnectionStatus("offline");
+      return { error };
+    }
+    confirmLiveCloudConnection();
+    return { error: null };
+  }
+
+  async function requestPasswordReset(email: string): Promise<{ error: Error | null }> {
+    if (!supabase) return { error: new Error("Supabase is not configured") };
+    const connectionError = offlineError();
+    if (connectionError) return { error: connectionError };
+    const recoveryCleanupError = await clearBlockedPasswordRecoveryBeforeAuth();
+    if (recoveryCleanupError) return { error: recoveryCleanupError };
+
+    const pendingRecovery = createPendingPasswordRecovery(email);
+    if (!writePendingPasswordRecovery(pendingRecovery)) {
+      return { error: new Error("Secure recovery storage is unavailable") };
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(pendingRecovery.email, {
+        redirectTo: DESKTOP_EMAIL_AUTH_BRIDGE_URL,
+      });
+      if (error) {
+        clearPendingPasswordRecovery();
+        return { error };
+      }
+      setPasswordRecoveryState({ phase: "email-sent", email: pendingRecovery.email });
+      setCallbackStatus(null);
+      return { error: null };
+    } catch (error) {
+      clearPendingPasswordRecovery();
+      return { error: error instanceof Error ? error : new Error("Unable to send a password reset link") };
+    }
+  }
+
+  async function updatePassword(password: string): Promise<{ error: Error | null }> {
+    if (!supabase) return { error: new Error("Supabase is not configured") };
+    const connectionError = offlineError();
+    if (connectionError) return { error: connectionError };
+    if (passwordRecoveryState.phase !== "awaiting-new-password" || !sessionRef.current?.user) {
+      return { error: new Error("Password recovery session is missing or expired") };
+    }
+    const validationError = validateAuthPasswordForSignUp(password);
+    if (validationError) return { error: validationError };
+
+    const { error } = await supabase.auth.updateUser({ password });
+    const normalizedError = normalizeAuthPasswordError(error);
+    if (normalizedError) return { error: normalizedError };
+
+    clearPendingPasswordRecovery();
+    const currentSession = (await supabase.auth.getSession()).data.session ?? sessionRef.current;
+    setPasswordRecoveryState({ phase: "completed", email: currentSession.user.email ?? null });
+    applySessionState(currentSession);
+    await saveDesktopSession(currentSession);
+    return { error: null };
+  }
+
+  async function cancelPasswordRecovery(): Promise<void> {
+    const stagedSession = sessionRef.current;
+    const previousRecoveryState = passwordRecoveryState;
+    const recoveryGate = readPendingPasswordRecovery();
+    const hasGatedRecoverySession = Boolean(recoveryGate)
+      && Boolean(stagedSession?.user)
+      && !user;
+    setPasswordRecoveryState({ phase: "idle", email: null });
+    setCallbackStatus(null);
+    if (!hasGatedRecoverySession || !supabase || !stagedSession) {
+      clearPendingPasswordRecovery();
+      return;
+    }
+
+    let signOutError: unknown = null;
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      signOutError = error;
+    } catch (error) {
+      signOutError = error;
+    }
+
+    if (signOutError) {
+      recordAuthDiagnostic(
+        "auth.password_recovery.cancel_cleanup.error",
+        getAuthDiagnosticError(signOutError),
+      );
+      if (recoveryGate) {
+        writePendingPasswordRecovery(recoveryGate);
+      }
+      holdPasswordRecoverySession(stagedSession);
+      setPasswordRecoveryState(previousRecoveryState.phase === "awaiting-new-password"
+        ? {
+            phase: "awaiting-new-password",
+            email: recoveryGate?.email ?? stagedSession.user.email ?? null,
+          }
+        : previousRecoveryState);
+      setCallbackStatus({
+        phase: "failed",
+        message: PASSWORD_RECOVERY_CANCEL_FAILED_MESSAGE,
+        errorCode: "password-recovery-cancel-failed",
+        method: "website",
+      });
+      return;
+    }
+
+    clearPendingPasswordRecovery();
+    applySessionState(null);
+    await saveDesktopSession(null);
+  }
+
+  async function clearBlockedPasswordRecoveryBeforeAuth(): Promise<Error | null> {
+    if (!readPendingPasswordRecovery() || !sessionRef.current?.user || user) {
+      return null;
+    }
+
+    await cancelPasswordRecovery();
+    if (readPendingPasswordRecovery() && sessionRef.current?.user && !user) {
+      return new Error(PASSWORD_RECOVERY_CANCEL_FAILED_MESSAGE);
+    }
+    return null;
+  }
 
   async function signInWithEmail(email: string, password: string) {
     if (!supabase) {
@@ -953,6 +1410,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error };
     }
+    const connectionError = offlineError();
+    if (connectionError) return { error: connectionError };
+    const recoveryCleanupError = await clearBlockedPasswordRecoveryBeforeAuth();
+    if (recoveryCleanupError) return { error: recoveryCleanupError };
+    clearPendingPasswordRecovery();
+    setPasswordRecoveryState({ phase: "idle", email: null });
     clearGoogleOAuthAttempt();
     setCallbackStatus(null);
     const { error } = await supabase.auth.signInWithPassword({
@@ -991,6 +1454,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error, user: null };
     }
 
+    const recoveryCleanupError = await clearBlockedPasswordRecoveryBeforeAuth();
+    if (recoveryCleanupError) return { error: recoveryCleanupError, user: null };
+
     const { data, error } = await supabase.auth.signInAnonymously();
     if (error) {
       capturePostHogEvent("cloud_auth_action", {
@@ -1028,6 +1494,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error, needsEmailConfirmation: false };
     }
+    const connectionError = offlineError();
+    if (connectionError) return { error: connectionError, needsEmailConfirmation: false };
+    const recoveryCleanupError = await clearBlockedPasswordRecoveryBeforeAuth();
+    if (recoveryCleanupError) {
+      return { error: recoveryCleanupError, needsEmailConfirmation: false };
+    }
+    clearPendingPasswordRecovery();
+    setPasswordRecoveryState({ phase: "idle", email: null });
     clearGoogleOAuthAttempt();
     setCallbackStatus(null);
     const validationError = validateAuthPasswordForSignUp(password);
@@ -1074,6 +1548,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error };
     }
+    const connectionError = offlineError();
+    if (connectionError) return { error: connectionError };
+    const recoveryCleanupError = await clearBlockedPasswordRecoveryBeforeAuth();
+    if (recoveryCleanupError) return { error: recoveryCleanupError };
+    clearPendingPasswordRecovery();
+    setPasswordRecoveryState({ phase: "idle", email: null });
     const isDesktop = isTauriRuntime();
     clearGoogleOAuthAttempt();
 
@@ -1282,6 +1762,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signInWithGoogle(options: GoogleSignInOptions = {}) {
+    const connectionError = offlineError();
+    if (connectionError) return { error: connectionError };
+    const recoveryCleanupError = await clearBlockedPasswordRecoveryBeforeAuth();
+    if (recoveryCleanupError) return { error: recoveryCleanupError };
+    clearPendingPasswordRecovery();
+    setPasswordRecoveryState({ phase: "idle", email: null });
     if (options.requestCalendar && isGoogleCalendarOnboardingEnabled()) {
       return signInWithGoogleAndCalendar();
     }
@@ -1547,7 +2033,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     if (!supabase) return;
+    if (readPendingPasswordRecovery() && sessionRef.current?.user && !user) {
+      await cancelPasswordRecovery();
+      if (readPendingPasswordRecovery() && sessionRef.current?.user && !user) {
+        throw new Error(PASSWORD_RECOVERY_CANCEL_FAILED_MESSAGE);
+      }
+      return;
+    }
     clearGoogleOAuthAttempt();
+    clearPendingPasswordRecovery();
+    setPasswordRecoveryState({ phase: "idle", email: null });
     setCallbackStatus(null);
     recordAuthDiagnostic("auth.sign_out.start", getSessionDiagnosticSummary(sessionRef.current));
     try {
@@ -1590,6 +2085,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInAnonymously,
         signInWithEmail,
         signUpWithEmail,
+        passwordRecoveryState,
+        requestPasswordReset,
+        updatePassword,
+        cancelPasswordRecovery,
+        retryCloudConnection,
         clearCallbackStatus,
         signOut,
       }}

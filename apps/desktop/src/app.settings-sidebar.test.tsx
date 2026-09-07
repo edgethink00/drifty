@@ -80,6 +80,7 @@ const { accessibilityClient, accountStatsPublisherMock, authState, billingMocks,
 vi.mock("./features/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => children,
   useAuth: () => authState,
+  useAuthConnectionStatus: () => ({ cloudConnectionStatus: "online" }),
 }));
 
 vi.mock("./lib/api/accessibilityClient", () => ({ accessibilityClient }));

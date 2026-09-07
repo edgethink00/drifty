@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
 
@@ -39,17 +41,33 @@ const reviewEvent: EndOfDayReviewEvent = {
   },
 };
 
-describe("CompanionPillDayReview", () => {
-  it("reproduces every reviewed block from the prototype", () => {
-    const onDismiss = vi.fn();
-    const onOpenDashboard = vi.fn();
-    const { container } = render(
+function renderReview(
+  event: EndOfDayReviewEvent,
+  options?: {
+    language?: DisplayLanguage;
+    onDismiss?: () => void;
+    onOpenDashboard?: () => void;
+    onOpenAiSettings?: () => void;
+  },
+) {
+  const onDismiss = options?.onDismiss ?? vi.fn();
+  const onOpenDashboard = options?.onOpenDashboard ?? vi.fn();
+  const view = render(
+    <LocalizationTestProvider language={options?.language ?? "en"}>
       <CompanionPillDayReview
-        event={reviewEvent}
+        event={event}
         onDismiss={onDismiss}
         onOpenDashboard={onOpenDashboard}
-      />,
-    );
+        onOpenAiSettings={options?.onOpenAiSettings}
+      />
+    </LocalizationTestProvider>,
+  );
+  return { ...view, onDismiss, onOpenDashboard };
+}
+
+describe("CompanionPillDayReview", () => {
+  it("reproduces every reviewed block from the prototype", () => {
+    const { container, onDismiss, onOpenDashboard } = renderReview(reviewEvent);
 
     expect(screen.getByText("Best this week")).toBeTruthy();
     // The head row is Focus (4:12, captioned with the 6:34 tracked total) and
@@ -89,6 +107,70 @@ describe("CompanionPillDayReview", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it("keeps English copy when the display language is English", () => {
+    renderReview(reviewEvent, { language: "en" });
+    expect(screen.getByText("Day review")).toBeTruthy();
+    expect(screen.getByText("Focus", { selector: ".eodsec" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "See full day" })).toBeTruthy();
+    expect(screen.queryByText("하루 리뷰")).toBeNull();
+    expect(screen.queryByText("하루 전체 보기")).toBeNull();
+  });
+
+  it("renders Korean chrome from the display-language preference", () => {
+    const { container } = renderReview(reviewEvent, { language: "ko" });
+
+    expect(screen.getByText("하루 리뷰")).toBeTruthy();
+    expect(screen.getByText("집중", { selector: ".eodsec" })).toBeTruthy();
+    expect(screen.getByText("추적 6:34 중")).toBeTruthy();
+    expect(screen.getByText("최장 집중")).toBeTruthy();
+    expect(screen.getByText("오전 10:20부터")).toBeTruthy();
+    expect(screen.getByText("딴짓")).toBeTruthy();
+    expect(screen.getByText("중립")).toBeTruthy();
+    expect(screen.getByText("▼9분")).toBeTruthy();
+    expect(screen.getByText("깊은 세션")).toBeTruthy();
+    expect(screen.getByText("각 45분+ · 최장 1:48")).toBeTruthy();
+    expect(screen.getByText("최고 시간대")).toBeTruthy();
+    expect(screen.getByText("52분 집중")).toBeTruthy();
+    expect(screen.getByText("주요 앱")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "하루 전체 보기" })).toBeTruthy();
+    expect(screen.getByTitle("닫기")).toBeTruthy();
+    expect(container.querySelector("[data-locale='ko']")).toBeTruthy();
+    expect(screen.queryByText("Day review")).toBeNull();
+    expect(screen.queryByText("See full day")).toBeNull();
+    expect(screen.getByText("Best this week")).toBeTruthy();
+  });
+
+  it("updates copy when the language preference changes", () => {
+    function Harness() {
+      const [language, setLanguage] = useState<DisplayLanguage>("en");
+      return (
+        <>
+          <button type="button" onClick={() => setLanguage((current) => (current === "en" ? "ko" : "en"))}>
+            toggle language
+          </button>
+          <LocalizationTestProvider language={language}>
+            <CompanionPillDayReview
+              event={reviewEvent}
+              onDismiss={vi.fn()}
+              onOpenDashboard={vi.fn()}
+            />
+          </LocalizationTestProvider>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    expect(screen.getByText("Day review")).toBeTruthy();
+    expect(screen.getByText("of 6:34 tracked")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "toggle language" }));
+    expect(screen.getByText("하루 리뷰")).toBeTruthy();
+    expect(screen.getByText("추적 6:34 중")).toBeTruthy();
+    expect(screen.queryByText("Day review")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "toggle language" }));
+    expect(screen.getByText("Day review")).toBeTruthy();
+    expect(screen.queryByText("하루 리뷰")).toBeNull();
+  });
+
   it("keeps raw day facts but withholds AI-derived conclusions while classification is pending", () => {
     const onOpenAiSettings = vi.fn();
     const onOpenDashboard = vi.fn();
@@ -111,14 +193,7 @@ describe("CompanionPillDayReview", () => {
       },
     };
 
-    const { container } = render(
-      <CompanionPillDayReview
-        event={pendingEvent}
-        onDismiss={vi.fn()}
-        onOpenDashboard={onOpenDashboard}
-        onOpenAiSettings={onOpenAiSettings}
-      />,
-    );
+    const { container } = renderReview(pendingEvent, { onOpenDashboard, onOpenAiSettings });
 
     expect(screen.getByText("AI disconnected")).toBeTruthy();
     expect(screen.getByText("Tracked time")).toBeTruthy();
@@ -146,6 +221,29 @@ describe("CompanionPillDayReview", () => {
     expect(onOpenDashboard).toHaveBeenCalledOnce();
   });
 
+  it("localizes pending recovery copy in Korean", () => {
+    const pendingEvent: EndOfDayReviewEvent = {
+      ...reviewEvent,
+      focusSeconds: 0,
+      driftSeconds: 0,
+      dailySignals: undefined,
+      highlightLabel: undefined,
+      assessment: {
+        state: "pending",
+        route: "cloud",
+        reason: "cloud_trial_expired",
+        recoveryAction: "upgrade",
+      },
+    };
+
+    renderReview(pendingEvent, { language: "ko", onOpenAiSettings: vi.fn() });
+    expect(screen.getByText("AI 연결 끊김")).toBeTruthy();
+    expect(screen.getByText("추적 시간")).toBeTruthy();
+    expect(screen.getByText("Pro 체험이 끝났습니다")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pro로 업그레이드" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "추적된 하루 보기" })).toBeTruthy();
+  });
+
   it("keeps non-trial AI recovery notices visually neutral", () => {
     const pendingEvent: EndOfDayReviewEvent = {
       ...reviewEvent,
@@ -157,16 +255,10 @@ describe("CompanionPillDayReview", () => {
       },
     };
 
-    render(
-      <CompanionPillDayReview
-        event={pendingEvent}
-        onDismiss={vi.fn()}
-        onOpenDashboard={vi.fn()}
-        onOpenAiSettings={vi.fn()}
-      />,
-    );
+    renderReview(pendingEvent, { onOpenAiSettings: vi.fn() });
 
     const pendingNotice = screen.getByText("Connect AI to finish this review").closest(".eodv12__pending");
     expect(pendingNotice?.hasAttribute("data-tone")).toBe(false);
+    expect(screen.getByRole("button", { name: "AI settings" })).toBeTruthy();
   });
 });

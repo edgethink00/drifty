@@ -1,4 +1,6 @@
+import { useState } from "react";
 import type { OAuthCallbackStatus } from "../../../auth/AuthContext";
+import { useAuthConnectionStatus } from "../../../auth/AuthContext";
 import { GoogleMark } from "../GoogleMark";
 import { SpinnerIcon, SuccessIcon } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
@@ -18,6 +20,8 @@ export function AccountStep({
   onStartCloudTrialWithGoogle,
   onStartCloudTrialWithWebsite,
   onDeleteAnonymousAccount,
+  cloudConnectionStatusOverride,
+  onRetryCloudConnection,
 }: {
   readonly accountConnected: boolean;
   readonly accountAccessState: OnboardingAccountAccessState;
@@ -31,8 +35,15 @@ export function AccountStep({
   readonly onStartCloudTrialWithGoogle: () => void;
   readonly onStartCloudTrialWithWebsite?: () => void;
   readonly onDeleteAnonymousAccount?: () => void;
+  readonly cloudConnectionStatusOverride?: "disabled" | "checking" | "online" | "offline";
+  readonly onRetryCloudConnection?: () => Promise<{ error: Error | null }>;
 }) {
   const { effectiveLanguage, t } = useLocalization();
+  const authConnection = useAuthConnectionStatus();
+  const cloudConnectionStatus = cloudConnectionStatusOverride ?? authConnection.cloudConnectionStatus;
+  const retryCloudConnection = onRetryCloudConnection ?? authConnection.retryCloudConnection;
+  const [isConnectionRetrying, setIsConnectionRetrying] = useState(false);
+  const isCloudUnavailable = cloudConnectionStatus === "offline" || cloudConnectionStatus === "checking";
   const promotionEndLabel = formatBillingAccessEndDate(promotionEndsAt, effectiveLanguage);
   const isGoogleHandoffBusy = authCallbackStatus?.googleAction === "opening"
     || authCallbackStatus?.phase === "received"
@@ -81,12 +92,31 @@ export function AccountStep({
         </div>
       ) : (
         <div className="dc-onb-account__buttons">
+          {cloudConnectionStatus === "offline" ? (
+            <div className="dc-onb-account__offline" role="alert">
+              <span>{t("onboarding.account.offlineDescription")}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsConnectionRetrying(true);
+                  void (retryCloudConnection?.() ?? Promise.resolve({ error: null }))
+                    .finally(() => setIsConnectionRetrying(false));
+                }}
+                disabled={isConnectionRetrying}
+              >
+                {isConnectionRetrying
+                  ? t("onboarding.account.checkingConnection")
+                  : t("onboarding.account.retryConnection")}
+              </button>
+            </div>
+          ) : null}
           {showPromoEntry ? (
             <>
               <button
                 type="button"
                 className="dc-onb-account__google"
                 onClick={onStartCloudTrialWithWebsite}
+                disabled={isCloudUnavailable}
               >
                 {t("auth.modal.promoContinueBrowser")}
               </button>
@@ -99,7 +129,7 @@ export function AccountStep({
               type="button"
               className="dc-onb-account__google"
               onClick={onStartCloudTrialWithGoogle}
-              disabled={isGoogleHandoffBusy}
+              disabled={isGoogleHandoffBusy || isCloudUnavailable}
             >
               <GoogleMark />
               <span>{googleButtonLabel}</span>
@@ -115,7 +145,7 @@ export function AccountStep({
               type="button"
               className="dc-onb-account__email promo-auth-screen__provider"
               onClick={onStartCloudTrialWithGoogle}
-              disabled={isGoogleHandoffBusy}
+              disabled={isGoogleHandoffBusy || isCloudUnavailable}
             >
               <GoogleMark />
               <span>{googleButtonLabel}</span>
@@ -125,6 +155,7 @@ export function AccountStep({
             type="button"
             className="dc-onb-account__email"
             onClick={onStartCloudTrialWithEmail}
+            disabled={isCloudUnavailable}
           >
             {t("onboarding.account.email")}
           </button>

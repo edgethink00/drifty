@@ -1,3 +1,5 @@
+import type { LocalizationController } from "../localization/LocalizationContext";
+import { localizeUpdateMessage } from "../localization/settingsMessageTranslations";
 import { createPortal } from "react-dom";
 import type { PreReleaseUpdateStatus } from "./useDeveloperPreReleaseUpdateController";
 
@@ -15,7 +17,9 @@ export function buildManualUpdateStatusNotice({
   error,
   hasAvailableUpdate,
   message,
+  localization,
 }: {
+  readonly localization?: LocalizationController;
   readonly checking: boolean;
   readonly error: string | null;
   readonly hasAvailableUpdate: boolean;
@@ -27,7 +31,7 @@ export function buildManualUpdateStatusNotice({
         ? error.slice(MANUAL_UPDATE_CHECK_FAILED_PREFIX.length)
         : error,
       role: "alert",
-      title: "Update check failed",
+      title: localization?.t("updates.checkFailed") ?? "Update check failed",
     };
   }
 
@@ -35,9 +39,9 @@ export function buildManualUpdateStatusNotice({
 
   return {
     compact: true,
-    detail: message,
+    detail: localization ? localizeUpdateMessage(message, "status", localization.effectiveLanguage, localization.t) : message,
     role: "status",
-    title: "Update check complete",
+    title: localization?.t("updates.checkComplete") ?? "Update check complete",
   };
 }
 

@@ -9,6 +9,14 @@ import {
 } from "./shareCardSvg";
 import { renderLockedShareRankSvg } from "./shareCardUnifiedSvg";
 
+const dailyModel = {
+  version: 1 as const, source: "leaderboard" as const, period: "daily" as const,
+  sampleSize: 100, participantCount: 100,
+  logMeanMinutes: Math.log(100), logStandardDeviationMinutes: 0.5,
+  generatedAt: new Date().toISOString(),
+};
+const MODELS = { daily: dailyModel, weekly: { ...dailyModel, period: "weekly" as const } };
+
 const DAY: ShareCardData = {
   day: "2026-07-17",
   weekdayLabel: "Friday",
@@ -17,7 +25,6 @@ const DAY: ShareCardData = {
   focusSeconds: 5 * 3600 + 42 * 60,
   isCurrentPeriod: true,
   focusPercent: 72,
-  comparisonProgress: 1,
   productivitySlices: [
     { key: "focus", seconds: 5 * 3600 + 42 * 60, ratio: 0.72 },
     { key: "neutral", seconds: 4_320, ratio: 0.17 },
@@ -41,6 +48,7 @@ const DAY: ShareCardData = {
 const WEEK: ShareWeekCardData = {
   startDay: "2026-07-13",
   endDay: "2026-07-19",
+  comparisonDay: "2026-07-19",
   weekLabel: "Week 29",
   rangeLabel: "Jul 13–19",
   totalSeconds: 28 * 3600,
@@ -48,7 +56,6 @@ const WEEK: ShareWeekCardData = {
   isCurrentPeriod: true,
   avgDailyFocusSeconds: 3 * 3600 + 14 * 60,
   focusPercent: 74,
-  comparisonProgress: 1,
   productivitySlices: [
     { key: "focus", seconds: 22 * 3600 + 40 * 60, ratio: 0.74 },
     { key: "neutral", seconds: 6_480, ratio: 0.06 },
@@ -74,7 +81,7 @@ describe("renderShareCardSvg", () => {
   });
 
   it("renders the unified landscape card at 1200×900", () => {
-    const svg = renderShareCardSvg({ data: DAY, format: "landscape", theme: "dark", story: "R1c" });
+    const svg = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "dark", story: "R1c" });
     expect(svg).toContain(`width="${SHARE_CARD_EXPORT_SIZES.landscape.width}"`);
     expect(svg).toContain(`height="${SHARE_CARD_EXPORT_SIZES.landscape.height}"`);
     expect(svg).toContain(`viewBox="0 0 ${SHARE_CARD_UNIFIED_SIZE.width} ${SHARE_CARD_UNIFIED_SIZE.height}"`);
@@ -90,11 +97,11 @@ describe("renderShareCardSvg", () => {
       dateLabel: "7월 17일",
       slices: DAY.slices.map((slice) => ({ ...slice, label: slice.key === "workspace" ? "작업" : "커뮤니케이션" })),
     };
-    const percentile = renderShareCardSvg({ data: koreanDay, format: "landscape", theme: "light", story: "R1c" });
-    const productivity = renderShareCardSvg({ data: koreanDay, format: "landscape", theme: "light", story: "X5" });
+    const percentile = renderShareCardSvg({ communityModels: MODELS, data: koreanDay, format: "landscape", theme: "light", story: "R1c" });
+    const productivity = renderShareCardSvg({ communityModels: MODELS, data: koreanDay, format: "landscape", theme: "light", story: "X5" });
 
     expect(percentile).toContain("예상 집중 백분위");
-    expect(percentile).toContain("오늘 집중 페이스");
+    expect(percentile).toContain("리더보드 참여자 100명 기준 추정");
     expect(productivity).toContain("생산성");
     expect(productivity).toContain("집중");
     expect(productivity).toContain("시간");
@@ -118,9 +125,9 @@ describe("renderShareCardSvg", () => {
   });
 
   it("renders distinct unified stories with per-card accents", () => {
-    const curve = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "R1c", lookIndex: 0 });
-    const focus = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "F1", lookIndex: 4 });
-    const streak = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "S1", lookIndex: 8 });
+    const curve = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "R1c", lookIndex: 0 });
+    const focus = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "F1", lookIndex: 4 });
+    const streak = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "S1", lookIndex: 8 });
 
     expect(curve).toContain("Estimated focus percentile");
     expect(curve).toContain("%");
@@ -132,28 +139,28 @@ describe("renderShareCardSvg", () => {
   });
 
   it("cycles card looks when lookIndex changes", () => {
-    const a = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "R1c", lookIndex: 0 });
-    const b = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "R1c", lookIndex: 1 });
+    const a = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "R1c", lookIndex: 0 });
+    const b = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "R1c", lookIndex: 1 });
     expect(a).not.toEqual(b);
   });
 
   it("uses the official Drifty lockup and fixed site link", () => {
-    const svg = renderShareCardSvg({ data: DAY, format: "landscape", theme: "dark", story: "R1c" });
+    const svg = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "dark", story: "R1c" });
     expect(svg).toContain('viewBox="48 236 1680 471"');
     expect(svg).toContain('href="data:image/png;base64,');
     expect(svg).toContain("drifty.so");
   });
 
   it("supports both app themes", () => {
-    const dark = renderShareCardSvg({ data: DAY, format: "landscape", theme: "dark", story: "R1c" });
-    const light = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "R1c" });
+    const dark = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "dark", story: "R1c" });
+    const light = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "R1c" });
     expect(dark).toContain("#");
     expect(light).toContain("#");
     expect(dark).not.toEqual(light);
   });
 
   it("handles a zero-focus day without invalid SVG values", () => {
-    const svg = renderShareCardSvg({
+    const svg = renderShareCardSvg({ communityModels: MODELS,
       data: { ...DAY, focusSeconds: 0, focusPercent: 0 },
       format: "landscape",
       theme: "light",
@@ -165,7 +172,7 @@ describe("renderShareCardSvg", () => {
   });
 
   it("normalizes malformed aggregate numbers before rendering a share image", () => {
-    const svg = renderShareCardSvg({
+    const svg = renderShareCardSvg({ communityModels: MODELS,
       data: {
         ...DAY,
         focusSeconds: Number.NaN,
@@ -184,21 +191,21 @@ describe("renderShareCardSvg", () => {
     expect(svg).not.toContain("Infinity");
   });
 
-  it("uses elapsed-day progress for the estimated percentile", () => {
-    const svg = renderShareCardSvg({
-      data: { ...DAY, focusSeconds: 100 * 60, comparisonProgress: 0.5 },
+  it("uses the real community model without a separate elapsed-day adjustment", () => {
+    const svg = renderShareCardSvg({ communityModels: MODELS,
+      data: { ...DAY, focusSeconds: 100 * 60 },
       format: "landscape",
       theme: "light",
       story: "R1c",
     });
 
-    expect(svg).toContain(">50%<");
-    expect(svg).toContain("focus pace so far today");
+    expect(svg).toContain(">Top 50%<");
+    expect(svg).toContain("From 100 leaderboard participants");
   });
 
   it("prefers a matching live daily leaderboard percentile over the estimate", () => {
-    const svg = renderShareCardSvg({
-      data: { ...DAY, focusSeconds: 100 * 60, comparisonProgress: 0.5 },
+    const svg = renderShareCardSvg({ communityModels: MODELS,
+      data: { ...DAY, focusSeconds: 100 * 60 },
       format: "landscape",
       theme: "light",
       story: "R1c",
@@ -215,33 +222,34 @@ describe("renderShareCardSvg", () => {
     });
 
     expect(svg).toContain("Today's focus percentile");
-    expect(svg).toContain(">9%<");
+    expect(svg).toContain(">Top 9%<");
     expect(svg).toContain("live leaderboard");
     expect(svg).not.toContain("Estimated focus percentile");
   });
 
   it("uses historical copy for a completed selected day", () => {
-    const percentile = renderShareCardSvg({
+    const percentile = renderShareCardSvg({ communityModels: MODELS,
       data: { ...DAY, isCurrentPeriod: false },
       format: "landscape",
       theme: "light",
       story: "R1c",
     });
-    const focus = renderShareCardSvg({
+    const focus = renderShareCardSvg({ communityModels: MODELS,
       data: { ...DAY, isCurrentPeriod: false },
       format: "landscape",
       theme: "light",
       story: "F1",
     });
 
-    expect(percentile).toContain("focus time that day");
+    expect(percentile).toContain("focused work on Jul 17");
+    expect(percentile).not.toContain("Estimated focus percentile");
     expect(percentile).not.toContain("so far today");
     expect(focus).toContain("focused work on Jul 17");
   });
 
   it("rejects a malformed live percentile instead of labeling an estimate live", () => {
-    const svg = renderShareCardSvg({
-      data: { ...DAY, focusSeconds: 100 * 60, comparisonProgress: 0.5 },
+    const svg = renderShareCardSvg({ communityModels: MODELS,
+      data: { ...DAY, focusSeconds: 100 * 60 },
       format: "landscape",
       theme: "light",
       story: "R1c",
@@ -258,12 +266,12 @@ describe("renderShareCardSvg", () => {
     });
 
     expect(svg).toContain("Estimated focus percentile");
-    expect(svg).toContain(">50%<");
+    expect(svg).toContain(">Top 50%<");
     expect(svg).not.toContain("live leaderboard");
   });
 
   it("renders category durations from exact seconds instead of rounded shares", () => {
-    const svg = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "X4" });
+    const svg = renderShareCardSvg({ communityModels: MODELS, data: DAY, format: "landscape", theme: "light", story: "X4" });
 
     expect(svg).toContain(">4h<");
     expect(svg).toContain(">1h 30m<");
@@ -271,7 +279,7 @@ describe("renderShareCardSvg", () => {
   });
 
   it("renders productivity shares and durations against classified time", () => {
-    const svg = renderShareCardSvg({
+    const svg = renderShareCardSvg({ communityModels: MODELS,
       data: {
         ...DAY,
         totalSeconds: 10 * 3600,
@@ -297,7 +305,7 @@ describe("renderShareCardSvg", () => {
 
 describe("renderShareWeekCardSvg", () => {
   it("renders the weekly unified percentile curve card", () => {
-    const svg = renderShareWeekCardSvg({ data: WEEK, format: "landscape", theme: "dark", story: "WR1" });
+    const svg = renderShareWeekCardSvg({ communityModels: MODELS, data: WEEK, format: "landscape", theme: "dark", story: "WR1" });
     expect(svg).toContain(`viewBox="0 0 ${SHARE_CARD_UNIFIED_SIZE.width} ${SHARE_CARD_UNIFIED_SIZE.height}"`);
     expect(svg).toContain("Estimated weekly percentile");
     expect(svg).toContain("drifty.so");
@@ -310,40 +318,70 @@ describe("renderShareWeekCardSvg", () => {
       weekLabel: "29주차",
       rangeLabel: "7월 13일–19일",
     };
-    const percentile = renderShareWeekCardSvg({ data: koreanWeek, format: "landscape", theme: "light", story: "WR1" });
-    const average = renderShareWeekCardSvg({ data: koreanWeek, format: "landscape", theme: "light", story: "W5" });
+    const percentile = renderShareWeekCardSvg({ communityModels: MODELS, data: koreanWeek, format: "landscape", theme: "light", story: "WR1" });
+    const average = renderShareWeekCardSvg({ communityModels: MODELS, data: koreanWeek, format: "landscape", theme: "light", story: "W5" });
 
     expect(percentile).toContain("예상 주간 백분위");
-    expect(percentile).toContain("이번 주 집중 페이스");
+    expect(percentile).toContain("리더보드 참여자 100명 기준 추정");
     expect(average).toContain("이번 주");
     expect(average).toContain("기록일 평균");
   });
 
   it("renders weekly productivity and streak stories", () => {
-    const productivity = renderShareWeekCardSvg({ data: WEEK, format: "landscape", theme: "light", story: "X5", lookIndex: 11 });
-    const streak = renderShareWeekCardSvg({ data: WEEK, format: "landscape", theme: "light", story: "S1", lookIndex: 8 });
+    const productivity = renderShareWeekCardSvg({ communityModels: MODELS, data: WEEK, format: "landscape", theme: "light", story: "X5", lookIndex: 11 });
+    const streak = renderShareWeekCardSvg({ communityModels: MODELS, data: WEEK, format: "landscape", theme: "light", story: "S1", lookIndex: 8 });
     expect(productivity).toContain("Productivity");
     expect(streak).toContain("Focus streak");
     expect(productivity).not.toEqual(streak);
   });
 
   it("uses historical copy and an explicit tracked-day average", () => {
-    const percentile = renderShareWeekCardSvg({
+    const percentile = renderShareWeekCardSvg({ communityModels: MODELS,
       data: { ...WEEK, isCurrentPeriod: false },
       format: "landscape",
       theme: "light",
       story: "WR1",
     });
-    const average = renderShareWeekCardSvg({
+    const average = renderShareWeekCardSvg({ communityModels: MODELS,
       data: { ...WEEK, isCurrentPeriod: false },
       format: "landscape",
       theme: "light",
       story: "W5",
     });
 
-    expect(percentile).toContain("focus time that week");
+    expect(percentile).toContain("focused work in Week 29");
+    expect(percentile).not.toContain("Estimated weekly percentile");
     expect(average).toContain("Week 29");
     expect(average).toContain("TRACKED-DAY AVG");
     expect(average).toContain("tracked day that week");
+  });
+});
+
+
+describe("shareable focus-time fallback", () => {
+  it.each(["R1c", "R2", "C1"] as const)("keeps %s useful without claiming an unavailable rank", (story) => {
+    const svg = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story });
+    expect(svg).toContain("Focus time");
+    expect(svg).not.toMatch(/(?:Top|TOP|상위) [\d.]+%/);
+    expect(svg).not.toContain("Estimated focus percentile");
+    expect(svg).not.toContain("NaN");
+  });
+
+  it("omits a percentile for a mismatched calendar week even with fresh statistics", () => {
+    const svg = renderShareWeekCardSvg({
+      data: { ...WEEK, comparisonDay: "2026-07-17" }, communityModels: MODELS,
+      format: "landscape", theme: "dark", story: "WR1",
+    });
+    expect(svg).toContain("focused work this week");
+    expect(svg).not.toContain("Estimated weekly percentile");
+  });
+
+  it("rejects a rank from another day at the export boundary", () => {
+    const svg = renderShareCardSvg({ data: DAY, format: "landscape", theme: "light", story: "R1c",
+      liveRanks: { daily: { rank: 1, participantCount: 100, topPercent: 1,
+        windowStartDay: "2026-07-16", windowEndDay: "2026-07-16" }, weekly: null },
+    });
+    expect(svg).toContain("Focus time");
+    expect(svg).not.toContain("live leaderboard");
   });
 });

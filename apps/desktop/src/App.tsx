@@ -1,3 +1,4 @@
+import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -9,7 +10,6 @@ import {
   buildRollingFocusSeconds,
   buildCategoryDurations,
   buildProductivityDurations,
-  buildEffectiveProductivityDurations,
   classifyActivity,
   buildDailyTotals,
   buildDayRibbonSegments,
@@ -642,6 +642,7 @@ export default function App() {
   const {
     backgroundUpdatesEnabled,
     availableUpdate,
+    availableUpdateSource,
     currentUpdatePolicy,
     dismissAvailableUpdate,
     handleCheckForUpdates,
@@ -1260,17 +1261,21 @@ export default function App() {
 
   const handleManualCheckForUpdates = useCallback(() => {
     setAccountMenuOpen(false);
+    setManualUpdateNoticeVisible(true);
     void handleCheckForUpdates().then((result) => {
       if (!result) return;
       if (result.kind === "available") return;
       void invoke("update_status_show_native", {
-        title: result.kind === "error" ? "Update check failed" : "Drifty is up to date",
-        body: result.kind === "error" ? result.message : "No signed update is available.",
+        title: localization.t(result.kind === "error" ? "updates.checkFailed" : "settings.general.upToDate"),
+        body: result.kind === "error"
+          ? localizeUpdateMessage(result.message, "error", localization.effectiveLanguage, localization.t)
+          : localization.t("updates.noSignedUpdate"),
+        language: localization.effectiveLanguage,
       }).catch((error: unknown) => {
         console.warn("Failed to show update status window.", error);
       });
     });
-  }, [handleCheckForUpdates]);
+  }, [handleCheckForUpdates, localization]);
 
   const handleAppMenuCheckLatestBuild = useCallback(() => {
     setLatestBuildNoticeVisible(true);
@@ -1425,6 +1430,7 @@ export default function App() {
     status: authStatus,
     cloudConnectionStatus: reportedCloudConnectionStatus,
     callbackStatus,
+    passwordRecoveryState,
     signInWithGoogle,
     signInWithWebsite,
     signInAnonymously,
@@ -1435,6 +1441,13 @@ export default function App() {
     hasRequiredAccountAuth,
     hasBlockingAuthConfigurationError,
   } = useAuth();
+  useEffect(() => {
+    // Recovery links can reopen a closed app while onboarding owns the shell.
+    // Keep the required-account gate until the verified user sets a password.
+    if (passwordRecoveryState?.phase !== "awaiting-new-password") return;
+    setAuthModalIntent("default");
+    setAuthModalOpen(true);
+  }, [passwordRecoveryState?.phase]);
   const postOnboardingSidebarGuideReviewEnabled = isPostOnboardingSidebarGuideReviewEnabled(
     window.location.search,
     import.meta.env.DEV,
@@ -6406,7 +6419,10 @@ export default function App() {
     || isProfileEditorOpen
     || cmdOpen,
   );
-  const visibleUpdate = updateDialogBlocked || !shouldShowAvailableUpdateDialog ? null : availableUpdate;
+  // A user-requested native prompt must remain reachable through account and onboarding gates.
+  // Automatic prompts still respect the existing modal/first-run quiet policy.
+  const visibleUpdate = !shouldShowAvailableUpdateDialog
+    || (availableUpdateSource !== "manual" && updateDialogBlocked) ? null : availableUpdate;
   const titlebarUpdateVersion = updateDialogBlocked
     || visibleUpdate
     || updaterDownloading
@@ -7625,10 +7641,6 @@ export default function App() {
   const classificationTopApp = useMemo(() => buildAppUsageSummaries(classificationSegments, { limit: 1, groupBy: "app" })[0] ?? null, [classificationSegments]);
   const classificationTopAppLabel = classificationTopApp?.appName ?? "No activity";
   const dashboardProductivityTotals = useMemo(() => buildProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions), [dashboardClassificationOptions, effectiveDashboardSegments]);
-  const dashboardEffectiveProductivityTotals = useMemo(
-    () => buildEffectiveProductivityDurations(effectiveDashboardSegments, dashboardClassificationOptions),
-    [dashboardClassificationOptions, effectiveDashboardSegments],
-  );
   const dashboardFocusSeconds = dashboardProductivityTotals.find((entry) => entry.productivity === "focus")?.totalSeconds ?? 0;
   const previousWeekFocusSeconds = dashPeriod === "Week" && dashboardPreviousWeekFocusLoad?.key === dashboardPreviousWeekFocusKey
     ? dashboardPreviousWeekFocusLoad.focusSeconds
@@ -8681,6 +8693,7 @@ export default function App() {
       error: updaterError,
       hasAvailableUpdate: availableUpdate !== null,
       message: updaterMessage,
+      localization,
     })
     : null;
   const latestBuildStatusNotice = latestBuildNoticeVisible
@@ -8704,6 +8717,7 @@ export default function App() {
   // Keep developer update recovery available even when onboarding or account policy owns the app shell.
   const latestBuildPrompt = latestBuildPromptUpdate?.version ? (
     <AvailableUpdateDialog
+      updateChannel="developer"
       backgroundUpdatesEnabled={backgroundUpdatesEnabled}
       policy={fallbackUpdatePolicy(latestBuildPromptUpdate.version)}
       update={{
@@ -8717,6 +8731,21 @@ export default function App() {
       onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
       onDismiss={developerPreReleaseUpdateController.dismissPrompt}
       onInstall={() => void developerPreReleaseUpdateController.installLatestBuild()}
+    />
+  ) : null;
+
+  const availableUpdatePrompt = visibleUpdate ? (
+    <AvailableUpdateDialog
+      updateChannel="stable"
+      backgroundUpdatesEnabled={backgroundUpdatesEnabled}
+      policy={currentUpdatePolicy}
+      update={visibleUpdate}
+      updaterChecking={updaterChecking}
+      updaterError={updaterError}
+      updaterInstalling={updaterInstalling}
+      onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
+      onDismiss={dismissAvailableUpdate}
+      onInstall={() => void handleInstallUpdate()}
     />
   ) : null;
 
@@ -8778,7 +8807,6 @@ export default function App() {
   const isDayBreakdownLoading = dashPeriod === "Today" && hasLoadedOnce && segmentsLoadedDay !== selectedDay;
   const stickyDashboardCategoryTotals = useStickyDuringLoad(dashboardCategoryTotals, isDayBreakdownLoading);
   const stickyDashboardProductivityTotals = useStickyDuringLoad(dashboardProductivityTotals, isDayBreakdownLoading);
-  const stickyDashboardEffectiveProductivityTotals = useStickyDuringLoad(dashboardEffectiveProductivityTotals, isDayBreakdownLoading);
   const stickyDashboardAppUsage = useStickyDuringLoad(dashboardAppUsage, isDayBreakdownLoading);
   const stickyTotalSeconds = useStickyDuringLoad(totalSeconds, isDayBreakdownLoading);
   const stickyDayBreakdownTiles = useStickyDuringLoad(dayBreakdownTiles, isDayBreakdownLoading);
@@ -8790,6 +8818,7 @@ export default function App() {
           <>
             {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthConfigurationGate />
+            {availableUpdatePrompt}
             {latestBuildPrompt}
           </>
         </LocalizationProvider>
@@ -8802,7 +8831,9 @@ export default function App() {
       <SiteIconProvider value={siteIcons}>
         <LocalizationProvider controller={localization}>
           <>
+            {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthLoadingGate />
+            {availableUpdatePrompt}
             {latestBuildPrompt}
           </>
         </LocalizationProvider>
@@ -8818,6 +8849,7 @@ export default function App() {
             {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthRequiredGate onSignIn={openDefaultAuthModal} />
             {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+            {availableUpdatePrompt}
             {latestBuildPrompt}
           </>
         </LocalizationProvider>
@@ -8958,6 +8990,7 @@ export default function App() {
               onDelete={handleDeleteAccount}
             />
           ) : null}
+          {availableUpdatePrompt}
           {latestBuildPrompt}
         </>
       </LocalizationProvider>
@@ -9460,7 +9493,6 @@ export default function App() {
             browserHistoryBootstrapNotice={browserHistoryBootstrapNotice}
             dashboardCategoryTotals={stickyDashboardCategoryTotals}
             dashboardDateNavigator={dashboardDateNavigator}
-            dashboardEffectiveProductivityTotals={stickyDashboardEffectiveProductivityTotals}
             dashboardProductivityTotals={stickyDashboardProductivityTotals}
             dashboardReplay={dashboardReplay}
             dashboardActivityActionsEnabled={dashboardActivityActionsEnabled}
@@ -10198,19 +10230,7 @@ export default function App() {
         onSaveProfile={() => void handleSaveProfileFromModal()}
       />
 
-      {visibleUpdate ? (
-        <AvailableUpdateDialog
-          backgroundUpdatesEnabled={backgroundUpdatesEnabled}
-          policy={currentUpdatePolicy}
-          update={visibleUpdate}
-          updaterChecking={updaterChecking}
-          updaterError={updaterError}
-          updaterInstalling={updaterInstalling}
-          onBackgroundUpdatesEnabledChange={setBackgroundUpdatesEnabled}
-          onDismiss={dismissAvailableUpdate}
-          onInstall={() => void handleInstallUpdate()}
-        />
-      ) : null}
+      {availableUpdatePrompt}
 
       {latestBuildPrompt}
 

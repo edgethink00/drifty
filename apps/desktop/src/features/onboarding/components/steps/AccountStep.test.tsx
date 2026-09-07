@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../../../localization/LocalizationContext";
@@ -7,6 +7,7 @@ import { AccountStep } from "./AccountStep";
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
   vi.unstubAllEnvs();
   Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });
@@ -97,5 +98,38 @@ describe("AccountStep", () => {
     expect(status.getAttribute("aria-busy")).toBe("false");
     expect(status.textContent).toMatch(/check pro access again later/i);
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps required onboarding auth in place while offline and offers a retry", async () => {
+    const onStartCloudTrialWithWebsite = vi.fn();
+    const onStartCloudTrialWithGoogle = vi.fn();
+    const onStartCloudTrialWithEmail = vi.fn();
+    const onRetryCloudConnection = vi.fn().mockResolvedValue({ error: null });
+    renderAccountStep({
+      expectsPromotion: true,
+      cloudConnectionStatusOverride: "offline",
+      onStartCloudTrialWithWebsite,
+      onStartCloudTrialWithGoogle,
+      onStartCloudTrialWithEmail,
+      onRetryCloudConnection,
+    });
+
+    expect(screen.getByRole("alert").textContent).toMatch(/connect to the internet/i);
+    const providerButtons = [
+      screen.getByRole("button", { name: /drifty\.so account/i }),
+      screen.getByRole("button", { name: /continue with google/i }),
+      screen.getByRole("button", { name: /continue with email/i }),
+    ] as HTMLButtonElement[];
+    expect(providerButtons.every((button) => button.disabled)).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /retry connection/i }));
+      await Promise.resolve();
+    });
+    expect(onRetryCloudConnection).toHaveBeenCalledTimes(1);
+    expect(onStartCloudTrialWithWebsite).not.toHaveBeenCalled();
+    expect(onStartCloudTrialWithGoogle).not.toHaveBeenCalled();
+    expect(onStartCloudTrialWithEmail).not.toHaveBeenCalled();
+    expect(screen.queryByText(/continue without signing in/i)).toBeNull();
   });
 });

@@ -29,7 +29,8 @@ describe("IndividualPlanCards", () => {
     expect(within(freePlan).getAllByText("Current plan").length).toBeGreaterThan(0);
     expect(within(freePlan).getByText(/Custom classification rules you create/)).toBeTruthy();
     expect(within(freePlan).getAllByText(/API key/).length).toBeGreaterThan(0);
-    expect(within(freePlan).getAllByText(/On-device AI classification/).length).toBeGreaterThan(0);
+    expect(within(freePlan).getByText("On-device AI classification, no paid plan needed")).toBeTruthy();
+    expect(within(freePlan).queryByText(/no account needed/i)).toBeNull();
     expect(within(freePlan).queryByText(/^Local-first$/i)).toBeNull();
 
     expect(within(proPlan).getByText("Drifty Pro")).toBeTruthy();
@@ -154,6 +155,8 @@ it("keeps the Korean annual savings, invoice amount, and checkout interval consi
     </LocalizationTestProvider>,
   );
   expect(screen.getByText("$7")).toBeTruthy();
+  expect(screen.getByText("기기 내 AI 분류, 유료 요금제 없이 사용")).toBeTruthy();
+  expect(screen.queryByText(/계정 없이/)).toBeNull();
   fireEvent.click(screen.getByRole("radio", { name: "연간 28% 절약" }));
   expect(screen.getByText("$5")).toBeTruthy();
   expect(screen.getByText("월 기준 · 연 $60 결제")).toBeTruthy();

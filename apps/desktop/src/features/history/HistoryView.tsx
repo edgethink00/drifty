@@ -52,7 +52,7 @@ function HistoryDeleteConfirmation({ deleting, recordCount, onCancel, onConfirm 
     >
       <div className="history-confirm__panel modal-shell" data-modal-variant="compact">
         <h2 id="history-confirm-title">{t("history.deleteConfirmTitle")}</h2>
-        <p>{t("history.deleteConfirmDetail", { count: recordCount })}</p>
+        <p>{t(recordCount === 1 ? "history.deleteConfirmDetailSingle" : "history.deleteConfirmDetail", { count: recordCount })}</p>
         <div className="history-confirm__actions">
           <button
             type="button"

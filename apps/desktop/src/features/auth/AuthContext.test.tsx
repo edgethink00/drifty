@@ -33,6 +33,8 @@ const {
   hasUsableGoogleOAuthVerifier,
   signInWithPassword,
   signUp,
+  resetPasswordForEmail,
+  updateUser,
   signOut,
   invoke,
 } = vi.hoisted(() => {
@@ -64,6 +66,8 @@ const {
     hasUsableGoogleOAuthVerifier: vi.fn(() => true),
     signInWithPassword: vi.fn().mockResolvedValue({ data: {}, error: null }),
     signUp: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+    resetPasswordForEmail: vi.fn().mockResolvedValue({ data: {}, error: null }),
+    updateUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
     signOut: vi.fn().mockResolvedValue({ error: null }),
     invoke: vi.fn().mockResolvedValue([]),
   };
@@ -124,6 +128,8 @@ vi.mock("../../lib/supabase/client", () => ({
       signOut,
       signInWithPassword,
       signUp,
+      resetPasswordForEmail,
+      updateUser,
     },
   },
   isSupabaseEnabled: () => true,
@@ -162,7 +168,13 @@ function CaptureAuth({ onReady }: { onReady: (value: ReturnType<typeof useAuth>)
   return null;
 }
 
-function createSession({ isAnonymous = false }: { isAnonymous?: boolean } = {}): Session {
+function createSession({
+  isAnonymous = false,
+  email,
+}: {
+  isAnonymous?: boolean;
+  email?: string;
+} = {}): Session {
   return {
     access_token: "access-token",
     refresh_token: "refresh-token",
@@ -176,6 +188,7 @@ function createSession({ isAnonymous = false }: { isAnonymous?: boolean } = {}):
       aud: "authenticated",
       created_at: new Date().toISOString(),
       is_anonymous: isAnonymous,
+      email,
     },
   } as Session;
 }
@@ -199,6 +212,8 @@ describe("AuthContext", () => {
     hasUsableGoogleOAuthVerifier.mockReturnValue(true);
     signInWithPassword.mockResolvedValue({ data: {}, error: null });
     signUp.mockResolvedValue({ data: { session: null }, error: null });
+    resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+    updateUser.mockResolvedValue({ data: { user: null }, error: null });
     signOut.mockResolvedValue({ error: null });
     invoke.mockResolvedValue([]);
     authMocks.authChangeHandler = null;
@@ -212,7 +227,10 @@ describe("AuthContext", () => {
     clearAuthDiagnostics({ mirrorToConsole: false });
     window.history.replaceState({}, "", "/");
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
+    window.localStorage.clear();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   afterEach(() => {
@@ -221,7 +239,10 @@ describe("AuthContext", () => {
     clearAuthDiagnostics({ mirrorToConsole: false });
     window.history.replaceState({}, "", "/");
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    Object.defineProperty(window.navigator, "onLine", { value: true, configurable: true });
+    window.localStorage.clear();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   it("identifies Supabase anonymous users as insufficient for required account auth", () => {
@@ -2454,5 +2475,287 @@ describe("AuthContext", () => {
     });
     expect(authApi!.callbackStatus?.message).toBe("Sign-in could not be completed. Try again.");
     expect(authApi!.callbackStatus?.message).not.toContain("SECRET_TOKEN");
+  });
+
+  it("requests password recovery through the existing code-only desktop bridge", async () => {
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(authApi?.status).toBe("unauthenticated"));
+
+    await act(async () => {
+      await authApi!.requestPasswordReset!(" Person@Example.com ");
+    });
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith("person@example.com", {
+      redirectTo: "https://drifty.so/auth/callback/",
+    });
+    expect(authApi!.passwordRecoveryState).toEqual({
+      phase: "email-sent",
+      email: "person@example.com",
+    });
+  });
+
+  it("holds a verified recovery callback behind required auth until the password is updated", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const recoverySession = createSession({ email: "person@example.com" });
+    exchangeCodeForSession.mockResolvedValueOnce({ data: { session: recoverySession }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(tauriMocks.onOpenUrl).toHaveBeenCalled());
+
+    await act(async () => {
+      await authApi!.requestPasswordReset!("person@example.com");
+      tauriMocks.emitOpenUrl(["drifty://auth/callback?code=recovery-code"]);
+    });
+    await waitFor(() => expect(authApi?.passwordRecoveryState?.phase).toBe("awaiting-new-password"));
+
+    expect(authApi!.user).toBeNull();
+    expect(authApi!.status).toBe("unauthenticated");
+    expect(authApi!.hasRequiredAccountAuth).toBe(false);
+
+    getSession.mockResolvedValueOnce({ data: { session: recoverySession }, error: null });
+    await act(async () => {
+      await authApi!.updatePassword!("new-password-123");
+    });
+
+    expect(updateUser).toHaveBeenCalledWith({ password: "new-password-123" });
+    expect(authApi!.user?.email).toBe("person@example.com");
+    expect(authApi!.status).toBe("authenticated");
+    expect(authApi!.hasRequiredAccountAuth).toBe(true);
+  });
+
+  it("rejects a recovery callback whose account does not match the requested email", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const wrongSession = createSession({ email: "different@example.com" });
+    exchangeCodeForSession.mockResolvedValueOnce({ data: { session: wrongSession }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(tauriMocks.onOpenUrl).toHaveBeenCalled());
+
+    await act(async () => {
+      await authApi!.requestPasswordReset!("person@example.com");
+      tauriMocks.emitOpenUrl(["drifty://auth/callback?code=wrong-account-code"]);
+    });
+    await waitFor(() => expect(authApi?.passwordRecoveryState?.phase).toBe("failed"));
+
+    expect(authApi!.passwordRecoveryState?.errorKind).toBe("identity-mismatch");
+    expect(authApi!.user).toBeNull();
+    expect(signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("keeps a staged recovery session gated when cancellation cannot clear the stored session", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const recoverySession = createSession({ email: "person@example.com" });
+    exchangeCodeForSession.mockResolvedValueOnce({ data: { session: recoverySession }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(tauriMocks.onOpenUrl).toHaveBeenCalled());
+
+    await act(async () => {
+      await authApi!.requestPasswordReset!("person@example.com");
+      tauriMocks.emitOpenUrl(["drifty://auth/callback?code=recovery-cancel-code"]);
+    });
+    await waitFor(() => expect(authApi?.passwordRecoveryState?.phase).toBe("awaiting-new-password"));
+
+    signOut.mockResolvedValueOnce({ error: new Error("local sign-out failed") });
+    await act(async () => {
+      await authApi!.cancelPasswordRecovery!();
+    });
+
+    expect(authApi!.user).toBeNull();
+    expect(authApi!.status).toBe("unauthenticated");
+    expect(authApi!.passwordRecoveryState?.phase).toBe("awaiting-new-password");
+    expect(authApi!.callbackStatus).toMatchObject({
+      phase: "failed",
+      message: expect.stringMatching(/could not be cancelled securely/i),
+    });
+
+    act(() => {
+      authMocks.authChangeHandler?.("TOKEN_REFRESHED", recoverySession);
+    });
+    await waitFor(() => expect(authApi?.passwordRecoveryState?.phase).toBe("awaiting-new-password"));
+    expect(authApi!.user).toBeNull();
+    expect(authApi!.status).toBe("unauthenticated");
+
+    await act(async () => {
+      await authApi!.cancelPasswordRecovery!();
+    });
+    expect(authApi!.passwordRecoveryState?.phase).toBe("idle");
+    expect(authApi!.callbackStatus).toBeNull();
+    expect(authApi!.user).toBeNull();
+  });
+
+  it("keeps an identity-mismatched recovery session gated across a cold restore when local sign-out fails", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const wrongSession = createSession({ email: "different@example.com" });
+    exchangeCodeForSession.mockResolvedValueOnce({ data: { session: wrongSession }, error: null });
+    signOut.mockResolvedValue({ error: new Error("local sign-out failed") });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    const firstRender = render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(tauriMocks.onOpenUrl).toHaveBeenCalled());
+
+    await act(async () => {
+      await authApi!.requestPasswordReset!("person@example.com");
+      tauriMocks.emitOpenUrl(["drifty://auth/callback?code=recovery-wrong-account-code"]);
+    });
+    await waitFor(() => expect(authApi?.passwordRecoveryState?.phase).toBe("failed"));
+    expect(authApi!.user).toBeNull();
+
+    let blockedSignInResult!: { error: Error | null };
+    await act(async () => {
+      blockedSignInResult = await authApi!.signInWithEmail("person@example.com", "password-123");
+    });
+    expect(blockedSignInResult.error?.message).toMatch(/could not be cancelled securely/i);
+    expect(signInWithPassword).not.toHaveBeenCalled();
+    expect(authApi!.user).toBeNull();
+    firstRender.unmount();
+
+    getSession.mockResolvedValue({ data: { session: wrongSession }, error: null });
+    authApi = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+
+    await waitFor(() => expect(authApi?.status).toBe("unauthenticated"));
+    expect(authApi!.user).toBeNull();
+    expect(authApi!.hasRequiredAccountAuth).toBe(false);
+    expect(authApi!.passwordRecoveryState?.errorKind).toBe("identity-mismatch");
+  });
+
+  it("does not classify a fresh in-app Google sign-in as password recovery", async () => {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const googleSession = createSession({ email: "google-user@example.com" });
+    exchangeGoogleOAuthCodeForSession.mockResolvedValueOnce({ data: { session: googleSession }, error: null });
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(tauriMocks.onOpenUrl).toHaveBeenCalled());
+
+    await act(async () => {
+      await authApi!.requestPasswordReset!("person@example.com");
+      await authApi!.signInWithGoogle();
+      tauriMocks.emitOpenUrl(["drifty://auth/google-callback?code=google-after-recovery-request"]);
+    });
+    await waitFor(() => expect(authApi?.status).toBe("authenticated"));
+
+    expect(authApi!.user?.email).toBe("google-user@example.com");
+    expect(authApi!.passwordRecoveryState?.phase).toBe("idle");
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
+  it("blocks browser auth while offline and lets a live retry override a stale offline OS flag", async () => {
+    Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+    Object.defineProperty(window, "__TAURI_INTERNALS__", { value: {}, configurable: true });
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ name: "GoTrue" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    let authApi: ReturnType<typeof useAuth> | null = null;
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(authApi?.cloudConnectionStatus).toBe("offline"));
+
+    await act(async () => {
+      expect((await authApi!.signInWithGoogle()).error?.message).toMatch(/offline/i);
+      expect((await authApi!.signInWithWebsite()).error?.message).toMatch(/offline/i);
+    });
+    expect(signInWithOAuth).not.toHaveBeenCalled();
+    expect(tauriMocks.openUrl).not.toHaveBeenCalled();
+
+    getSession.mockClear();
+    await act(async () => {
+      expect((await authApi!.retryCloudConnection!()).error).toBeNull();
+    });
+    await waitFor(() => expect(authApi?.cloudConnectionStatus).toBe("online"));
+    expect(window.navigator.onLine).toBe(false);
+    expect(getSession).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe("https://project.supabase.co/auth/v1/health");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: "GET",
+      cache: "no-store",
+      signal: expect.any(AbortSignal),
+    });
+
+    const session = createSession({ email: "person@example.com" });
+    act(() => {
+      authMocks.authChangeHandler?.("SIGNED_IN", session);
+    });
+    await waitFor(() => expect(authApi?.status).toBe("authenticated"));
+    expect(authApi!.cloudConnectionStatus).toBe("online");
+  });
+
+  it("keeps retry offline when a cached session exists but the live auth probe fails", async () => {
+    Object.defineProperty(window.navigator, "onLine", { value: false, configurable: true });
+    const cachedSession = createSession({ email: "person@example.com" });
+    getSession.mockResolvedValue({ data: { session: cachedSession }, error: null });
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Network request failed"));
+    vi.stubGlobal("fetch", fetchMock);
+    let authApi: ReturnType<typeof useAuth> | null = null;
+
+    render(
+      <AuthProvider>
+        <CaptureAuth onReady={(value) => {
+          authApi = value;
+        }} />
+      </AuthProvider>
+    );
+    await waitFor(() => expect(authApi?.status).toBe("authenticated"));
+    await waitFor(() => expect(authApi?.cloudConnectionStatus).toBe("offline"));
+
+    getSession.mockClear();
+    let retryResult!: { error: Error | null };
+    await act(async () => {
+      retryResult = await authApi!.retryCloudConnection!();
+    });
+
+    expect(retryResult.error?.message).toMatch(/network request failed/i);
+    expect(authApi!.cloudConnectionStatus).toBe("offline");
+    expect(authApi!.user?.email).toBe("person@example.com");
+    expect(getSession).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

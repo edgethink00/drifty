@@ -97,3 +97,35 @@
 .onboarding-card .onb-account__legal a:hover {
   color: var(--onb-accent);
 }
+
+.dc-onb-account__offline {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--dc-onb-warn) 46%, var(--dc-onb-line));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dc-onb-warn) 9%, var(--dc-onb-surface));
+  color: var(--dc-onb-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.dc-onb-account__offline button {
+  appearance: none;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dc-onb-text);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.dc-onb-account__offline button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}

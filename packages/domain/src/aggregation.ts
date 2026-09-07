@@ -1153,6 +1153,12 @@ export function buildCategoryDurations(segments: ActivitySegment[], options?: Cl
   }));
 }
 
+/**
+ * Direct classified productivity totals. This is the canonical Focus hours
+ * metric for Day, Week, Trends, share, and leaderboard. Contextual smoothing
+ * of short utility/communication belongs in buildEffectiveProductivityDurations
+ * for timeline coloring, not this number.
+ */
 export function buildProductivityDurations(segments: ActivitySegment[], options?: ClassificationOptions): ProductivityDuration[] {
   const totals = PRODUCTIVITY_ORDER.map((productivity) => ({
     productivity,

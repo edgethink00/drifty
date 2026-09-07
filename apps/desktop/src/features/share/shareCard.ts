@@ -47,8 +47,6 @@ export interface ShareCardData {
   readonly focusSeconds: number;
   /** Whether the selected day is the current logical day. */
   readonly isCurrentPeriod: boolean;
-  /** Elapsed share of the comparison period, 0..1; 1 for completed periods. */
-  readonly comparisonProgress: number;
   /** Focus share of classified time, 0..100 rounded. */
   readonly focusPercent: number;
   /** Exact aggregate productivity mix for the selected day. */
@@ -72,7 +70,6 @@ export interface BuildShareCardDataInput {
   readonly productivityTotals: readonly ProductivityDuration[];
   readonly flowBlocks: readonly FlowBlock[];
   readonly deltaSeconds: number | null;
-  readonly comparisonProgress?: number;
   readonly isCurrentPeriod?: boolean;
 }
 
@@ -89,7 +86,6 @@ export function buildShareCardData({
   productivityTotals,
   flowBlocks,
   deltaSeconds,
-  comparisonProgress = 1,
   isCurrentPeriod = false,
 }: BuildShareCardDataInput): ShareCardData {
   const parsed = new Date(`${day}T12:00:00`);
@@ -114,7 +110,6 @@ export function buildShareCardData({
     totalSeconds: trackedSeconds,
     focusSeconds,
     isCurrentPeriod,
-    comparisonProgress,
     focusPercent,
     productivitySlices: buildProductivitySlices(productivityTotals),
     deltaSeconds,
@@ -257,7 +252,8 @@ export interface ShareWeekCardData {
   readonly focusSeconds: number;
   /** Whether the selected range contains the current logical day. */
   readonly isCurrentPeriod: boolean;
-  readonly comparisonProgress: number;
+  /** Logical today at capture time, to match a rolling-seven-day comparison. */
+  readonly comparisonDay?: string;
   /** Average focus per tracked day (including tracked zero-focus days). */
   readonly avgDailyFocusSeconds: number;
   readonly focusPercent: number;
@@ -282,8 +278,8 @@ export interface BuildShareWeekCardDataInput {
   readonly weekRows: readonly WeekDayRow[];
   readonly calendarEvents: ReadonlyMap<string, readonly WeekCalendarEvent[]>;
   readonly deltaSeconds: number | null;
-  readonly comparisonProgress?: number;
   readonly isCurrentPeriod?: boolean;
+  readonly comparisonDay?: string;
 }
 
 export function buildShareWeekCardData({
@@ -296,8 +292,8 @@ export function buildShareWeekCardData({
   weekRows,
   calendarEvents,
   deltaSeconds,
-  comparisonProgress = 1,
   isCurrentPeriod = false,
+  comparisonDay,
 }: BuildShareWeekCardDataInput): ShareWeekCardData {
   const trackedSeconds = Math.max(
     totalSeconds,
@@ -330,7 +326,7 @@ export function buildShareWeekCardData({
     totalSeconds: trackedSeconds,
     focusSeconds: focusEntry?.totalSeconds ?? 0,
     isCurrentPeriod,
-    comparisonProgress,
+    comparisonDay,
     avgDailyFocusSeconds: activeDays > 0 ? Math.round(dayFocusSum / activeDays) : 0,
     focusPercent: Math.round((focusEntry?.ratio ?? 0) * 100),
     productivitySlices: buildProductivitySlices(productivityTotals),

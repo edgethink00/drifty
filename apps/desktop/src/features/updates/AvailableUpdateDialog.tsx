@@ -1,3 +1,4 @@
+import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { UpdatePolicy } from "./updatePolicy";
@@ -8,7 +9,10 @@ type AvailableUpdateDialogUpdate = {
   version: string;
 };
 
+type UpdateChannel = "stable" | "developer";
+
 export type AvailableUpdateDialogProps = {
+  updateChannel: UpdateChannel;
   backgroundUpdatesEnabled: boolean;
   policy: UpdatePolicy | null;
   update: AvailableUpdateDialogUpdate;
@@ -26,6 +30,7 @@ type NativeUpdatePromptResult = {
 };
 
 type ActiveUpdateWindow = {
+  readonly owner: UpdateChannel;
   readonly prompt: Promise<NativeUpdatePromptResult | null>;
   readonly version: string;
 };
@@ -37,9 +42,11 @@ function showNativeUpdatePrompt(
   urgent: boolean,
   message: string | null,
   backgroundUpdatesEnabled: boolean,
+  language: DisplayLanguage,
 ) {
   return invoke<NativeUpdatePromptResult | null>("update_prompt_show_native", {
     backgroundUpdatesEnabled,
+    language,
     message,
     version,
     urgent,
@@ -47,21 +54,30 @@ function showNativeUpdatePrompt(
 }
 
 function getNativeUpdatePrompt(
+  owner: UpdateChannel,
   version: string,
   urgent: boolean,
   message: string | null,
   backgroundUpdatesEnabled: boolean,
+  language: DisplayLanguage,
 ) {
-  if (activeUpdateWindow?.version === version) return activeUpdateWindow.prompt;
+  // The channel survives auth/onboarding shell remounts and StrictMode.
+  // Another updater must never share its confirmation or open a competing window.
+  if (activeUpdateWindow) {
+    return activeUpdateWindow.owner === owner && activeUpdateWindow.version === version
+      ? activeUpdateWindow.prompt
+      : Promise.resolve(null);
+  }
 
-  const prompt = showNativeUpdatePrompt(version, urgent, message, backgroundUpdatesEnabled).finally(() => {
+  const prompt = showNativeUpdatePrompt(version, urgent, message, backgroundUpdatesEnabled, language).finally(() => {
     if (activeUpdateWindow?.prompt === prompt) activeUpdateWindow = null;
   });
-  activeUpdateWindow = { prompt, version };
+  activeUpdateWindow = { owner, prompt, version };
   return prompt;
 }
 
 export function AvailableUpdateDialog({
+  updateChannel,
   backgroundUpdatesEnabled,
   policy,
   update,
@@ -72,6 +88,7 @@ export function AvailableUpdateDialog({
   onDismiss,
   onInstall,
 }: AvailableUpdateDialogProps) {
+  const { effectiveLanguage } = useLocalization();
   const urgent = policy?.urgency === "urgent" || updaterError !== null;
   const message = policy?.message ?? update.body ?? null;
 
@@ -80,7 +97,7 @@ export function AvailableUpdateDialog({
 
     let subscribed = true;
 
-    void getNativeUpdatePrompt(update.version, urgent, message, backgroundUpdatesEnabled).then((result) => {
+    void getNativeUpdatePrompt(updateChannel, update.version, urgent, message, backgroundUpdatesEnabled, effectiveLanguage).then((result) => {
       if (!subscribed) return;
       if (!result) {
         onDismiss();
@@ -108,6 +125,8 @@ export function AvailableUpdateDialog({
     };
   }, [
     backgroundUpdatesEnabled,
+    updateChannel,
+    effectiveLanguage,
     message,
     onBackgroundUpdatesEnabledChange,
     onDismiss,

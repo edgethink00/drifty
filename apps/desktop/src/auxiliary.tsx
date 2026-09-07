@@ -1,3 +1,4 @@
+import { AuxiliaryLocalizationProvider } from "./features/localization/AuxiliaryLocalizationProvider";
 import React from "react";
 import ReactDOM from "react-dom/client";
 
@@ -109,7 +110,9 @@ if (root) {
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
       <AuxiliaryErrorBoundary>
-        {surface ? <AuxiliaryLoader surface={surface} /> : <AuxiliaryError message="Unknown auxiliary surface" />}
+        <AuxiliaryLocalizationProvider>
+          {surface ? <AuxiliaryLoader surface={surface} /> : <AuxiliaryError message="Unknown auxiliary surface" />}
+        </AuxiliaryLocalizationProvider>
       </AuxiliaryErrorBoundary>
     </React.StrictMode>,
   );

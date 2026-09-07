@@ -18,6 +18,7 @@ import {
 import { copyShareCardPng, openShareComposer, saveShareCardWithDialog, shareCardSvgDataUrl } from "./shareCardExport";
 import { buildShareCardCaption, buildShareComposerUrl, type ShareCardDestination } from "./shareCardSocial";
 import { useShareCardLiveRanks, type ShareCardLiveRanksState } from "./useShareCardLiveRanks";
+import { useShareCardCommunityModels } from "./useShareCardCommunityModels";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 
 export type ShareCardModalCard =
@@ -37,7 +38,7 @@ const SHARE_CARD_FORMAT = "landscape" as const;
 
 const DAY_STORIES = new Set<UnifiedShareStoryId>(["R1c", "R2", "R4", "F1", "C1", "X4", "X5"]);
 const WEEK_STORIES = new Set<UnifiedShareStoryId>(["WR1", "W5", "X4", "X5"]);
-// A modeled Top n% is available from local aggregates. Only Place Rank claims
+// Estimates require a fresh real-participant model. Only Place Rank claims
 // an exact live position and therefore needs leaderboard opt-in.
 const EXACT_RANK_STORY_PERIOD: Partial<Record<UnifiedShareStoryId, "daily" | "weekly">> = {
   R4: "daily",
@@ -113,8 +114,9 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
   const rankStoryPeriod = EXACT_RANK_STORY_PERIOD[storyOption.value];
   const liveRankStoryPeriod = LIVE_RANK_STORY_PERIOD[storyOption.value];
   // Rank stories prefer an opted-in aggregate leaderboard fact for the exact
-  // matching window. The local elapsed-time model remains the fallback.
+  // matching window. Estimates use the same model as achievement alerts.
   const { state: liveRankState, refresh: refreshLiveRanks } = useShareCardLiveRanks(Boolean(onJoinLeaderboard && liveRankStoryPeriod));
+  const { models: communityModels, loading: communityModelsLoading } = useShareCardCommunityModels();
   const rankGate = rankGateForStory(card, storyOption.value, liveRankState, t);
   const lockedRankPeriod = rankGate && rankStoryPeriod ? rankStoryPeriod : null;
   const matchingLiveRanks = useMemo<ShareCardLiveRanks>(() => ({
@@ -134,9 +136,9 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
       });
     }
     return card.kind === "week"
-      ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks })
-      : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks });
-  }, [card, defaultTheme, matchingLiveRanks, lockedRankPeriod, storyIndex, storyOption.value]);
+      ? renderShareWeekCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels })
+      : renderShareCardSvg({ data: card.data, format: SHARE_CARD_FORMAT, theme: defaultTheme, story: storyOption.value, lookIndex: storyIndex, liveRanks: matchingLiveRanks, communityModels });
+  }, [card, defaultTheme, matchingLiveRanks, communityModels, lockedRankPeriod, storyIndex, storyOption.value]);
   const previewAlt = card.kind === "week"
     ? t("share.previewWeekAria", { week: card.data.weekLabel, range: card.data.rangeLabel })
     : t("share.previewDayAria", { day: `${card.data.weekdayLabel} ${card.data.dateLabel}` });
@@ -147,7 +149,9 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
   const previewSrc = useMemo(() => shareCardSvgDataUrl(svg), [svg]);
   const exportSize = SHARE_CARD_EXPORT_SIZES[SHARE_CARD_FORMAT] ?? SHARE_CARD_UNIFIED_SIZE;
   const working = exportState.kind === "working";
-  const actionsDisabled = working || lockedRankPeriod !== null;
+  const comparisonLoading = communityModelsLoading && Boolean(liveRankStoryPeriod)
+    && !rankStoryPeriod && !matchingLiveRanks[liveRankStoryPeriod ?? "daily"];
+  const actionsDisabled = working || lockedRankPeriod !== null || comparisonLoading;
   const caption = buildShareCardCaption();
 
   useEffect(() => {
@@ -283,6 +287,10 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
                   </button>
                 ) : null}
               </div>
+            ) : null}
+
+            {comparisonLoading ? (
+              <div className="share-card-rank-gate" role="status">{t("share.loadingComparison")}</div>
             ) : null}
 
             <div className="share-card-options" aria-label={t("share.optionsAria")}>

@@ -73,6 +73,7 @@ const {
 vi.mock("./features/auth/AuthContext", () => ({
   AuthProvider: ({ children }: { readonly children: ReactNode }) => children,
   useAuth: () => authState,
+  useAuthConnectionStatus: () => ({ cloudConnectionStatus: "online" }),
 }));
 
 vi.mock("./features/profile/profileService", () => ({
