@@ -1102,46 +1102,61 @@
 /* ── Segmented control (period tabs) ── */
 .seg {
   display: inline-flex;
-  background: var(--bg-2);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 3px;
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+  border-radius: 9px;
+  padding: 2.5px;
+  gap: 2px;
   border: 1px solid var(--line);
 }
 
 .seg button {
   border: none;
   background: transparent;
-  padding: 6px 16px;
-  border-radius: 6px;
-  font-family: var(--font-mono);
+  padding: 4px 12px;
+  border-radius: 7px;
+  font-family: var(--font-sans);
   font-size: 0.75rem;
-  letter-spacing: .06em;
-  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  text-transform: capitalize;
   color: var(--text-soft);
-  font-weight: 500;
-  transition: all .15s;
+  font-weight: 550;
+  transition: all .15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .seg button small {
   display: block;
-  font-size: 0.75rem;
-  letter-spacing: .08em;
-  margin-top: 2px;
-  opacity: .58;
+  font-size: 0.6875rem;
+  letter-spacing: 0.02em;
+  margin-top: 1px;
+  opacity: .68;
 }
 
 .seg button.on {
-  background: var(--text);
-  color: var(--canvas);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--text) 18%, transparent);
-  font-weight: 600;
+  background: var(--seg-thumb-bg, var(--surface));
+  color: var(--text);
+  box-shadow: var(--seg-thumb-shadow, 0 1px 3px rgba(0, 0, 0, 0.08), 0 2px 5px rgba(0, 0, 0, 0.04));
+  font-weight: 650;
 }
 
 .seg button:hover:not(.on) {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
   color: var(--text);
   transform: none;
+}
+
+/* Dark theme: --surface matches the panel behind the control, so a plain
+   surface thumb would disappear and a black drop shadow adds no separation.
+   Lift the thumb with a lighter fill plus a top highlight edge instead. */
+:root[data-theme="dark"] .seg {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  --seg-thumb-bg: color-mix(in srgb, var(--text) 16%, var(--surface));
+  --seg-thumb-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--text) 14%, transparent),
+    0 1px 3px rgba(0, 0, 0, 0.45);
+}
+
+:root[data-theme="dark"] .seg button:hover:not(.on) {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 /* ── Chips ── */
