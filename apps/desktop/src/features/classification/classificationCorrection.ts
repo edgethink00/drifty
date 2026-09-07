@@ -29,6 +29,9 @@ export type ClassificationCorrectionDraft = {
   readonly displayLabel: string | null;
   readonly category: ActivityCategory;
   readonly productivity: ProductivityLabel;
+  /** Classification shown when the editor opened, so the editor can preview the change. */
+  readonly originalCategory: ActivityCategory;
+  readonly originalProductivity: ProductivityLabel;
 };
 
 export function classificationRuleTargetForSegment(segment: ActivitySegment): Pick<ClassificationRuleInput, "targetKind" | "targetValue"> | null {
@@ -90,6 +93,8 @@ export function buildClassificationCorrectionDraft({
     displayLabel,
     category: classification.category,
     productivity: classification.productivity,
+    originalCategory: classification.category,
+    originalProductivity: classification.productivity,
   };
 }
 
