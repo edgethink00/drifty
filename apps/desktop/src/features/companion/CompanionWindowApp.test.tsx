@@ -157,6 +157,10 @@ describe("CompanionWindowApp", () => {
     window.localStorage.clear();
     window.history.replaceState({}, "", "/");
     bridge.setNativeCompanionPillState.mockResolvedValue({ prepared: false, menuAnchorX: null });
+    /* `clearAllMocks` drops mock implementations as well as call history, so
+       the cursor poll would answer `undefined` instead of "not over the
+       capsule" and hover assertions would pass for the wrong reason. */
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(false);
     delete document.documentElement.dataset.surface;
     delete document.documentElement.dataset.theme;
     document.documentElement.style.colorScheme = "";
@@ -277,15 +281,98 @@ describe("CompanionWindowApp", () => {
     expect(milestone?.style.getPropertyValue("--auto-duration")).toBe("6000ms");
     expect(milestone?.querySelector(".card__close-ring")).not.toBeNull();
 
-    act(() => bridge.enteredHandler?.({ screenX: 100, screenY: 100 }));
+    /* Hover is reported by the capsule-accurate native poll, so the pause
+       follows the visible card rather than the panel's transparent gutter. */
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(64);
+    });
     expect(milestone?.dataset.auto).toBe("paused");
-    act(() => bridge.exitedHandler?.({ screenX: 500, screenY: 100 }));
+
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(64);
+    });
     expect(milestone?.dataset.auto).toBe("running");
 
     fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(160));
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard");
+  });
+
+  /* The panel is much larger than the capsule it draws: the card floats inside
+     a transparent gutter of 88pt to each side and 64pt above and below. AppKit's
+     tracking area covers that whole rectangle, so treating its events as hover
+     froze the countdown while the pointer was merely beside the card — and the
+     capsule-accurate poll, which only writes when its own answer changes, never
+     cleared a pause it had not set. */
+  it("keeps the countdown running while the pointer is in the gutter beside the card", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.(focusMilestone));
+    act(() => bridge.transitionHandler?.({ state: "milestone", phase: "started", anchor: "center" }));
+    act(() => vi.advanceTimersByTime(180));
+
+    const milestone = container.querySelector<HTMLElement>(".view--milestone");
+    expect(milestone?.dataset.auto).toBe("running");
+
+    /* The cursor is inside the panel but not over the capsule, so the native
+       tracking area reports movement while the poll keeps answering false. */
+    act(() => bridge.enteredHandler?.({ screenX: 20, screenY: 20 }));
+    act(() => bridge.movedHandler?.({ screenX: 24, screenY: 26 }));
+    expect(milestone?.dataset.auto).toBe("running");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(96);
+    });
+    expect(milestone?.dataset.auto).toBe("running");
+
+    /* Nothing latched, so the card still expires on its own budget without
+       needing the pointer to leave the window first. The dismissal runs after
+       the card's visual exit, exactly as a manual dismissal does. */
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    act(() => vi.advanceTimersByTime(160));
+    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("milestone");
+  });
+
+  /* The latch is not momentary: once the pointer has been over the capsule and
+     then slides out into the gutter, AppKit keeps reporting movement over the
+     panel while the poll has already settled on "not over the capsule". The
+     poll writes only on a change, so it cannot undo what those events set. */
+  it("resumes the countdown when the pointer slides off the card into the gutter", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+
+    act(() => bridge.showHandler?.(focusMilestone));
+    act(() => bridge.transitionHandler?.({ state: "milestone", phase: "started", anchor: "center" }));
+    act(() => vi.advanceTimersByTime(180));
+    const milestone = container.querySelector<HTMLElement>(".view--milestone");
+
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(true);
+    act(() => bridge.enteredHandler?.({ screenX: 200, screenY: 90 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(64);
+    });
+    expect(milestone?.dataset.auto).toBe("paused");
+
+    /* The pointer slides off the capsule but stays inside the panel, so the
+       tracking area keeps delivering movement. */
+    bridge.isNativeCompanionCursorOverCapsule.mockResolvedValue(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(64);
+    });
+    act(() => bridge.movedHandler?.({ screenX: 20, screenY: 20 }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+
+    expect(milestone?.dataset.auto).toBe("running");
   });
 
   it("opens View day from a one-hour focus milestone", async () => {

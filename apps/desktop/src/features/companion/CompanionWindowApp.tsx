@@ -39,9 +39,7 @@ import {
   listenToNativeCompanionPillClear,
   listenToNativeCompanionPillSnapshot,
   listenToNativeCompanionTransition,
-  listenToNativeCompanionPointerEntered,
   listenToNativeCompanionPointerExited,
-  listenToNativeCompanionPointerMoved,
   listenToNativeWatcherShow,
   presentPreparedNativeCompanionMoment,
   setNativeCompanionPillState,
@@ -52,7 +50,6 @@ import {
   triggerNativeExtremeNudgeAction,
   type CompanionPillDriftAlarmPayload,
   type CompanionPillWindowEvent,
-  type NativeCompanionPointerEvent,
   type NativeCompanionTransitionEvent,
 } from "./watcherBridge";
 
@@ -283,11 +280,18 @@ export function CompanionWindowApp() {
       setNativeTransition(event);
       setHorizontalAnchor(event.anchor);
     }));
-    const markPointerInside = (_event: NativeCompanionPointerEvent) => setIsPointerInside(true);
-    register(listenToNativeCompanionPointerEntered(markPointerInside));
-    register(listenToNativeCompanionPointerMoved(markPointerInside));
+    /* Hover state belongs to the capsule-accurate poll below, not to AppKit's
+       tracking area. That area covers the whole panel, including the
+       transparent gutter the capsule floats in — 88pt beside it and 64pt above
+       and below it. Entered/moved therefore fired while the pointer was merely
+       near the card, which paused the auto-dismiss countdown; and since the
+       poll only writes on a change, it never cleared a pause it had not set.
+       The card stayed frozen until the pointer left the entire window.
+
+       Exit is still worth listening to: it is the one moment the panel can be
+       certain no pointer is over it, so it restores the panel's ability to
+       take the mouse without waiting for the next poll. */
     register(listenToNativeCompanionPointerExited(() => {
-      setIsPointerInside(false);
       ignoreCompanionBridgePromise(setNativeCompanionClickThrough(false));
     }));
 
