@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::{
     tracker::{TrackerController, TrackerError, TrackerStartupState},
+    tracking_activation,
     tracking_pause::{self, TrackingPauseState},
     tray,
 };
@@ -230,6 +231,13 @@ fn recovery_tick(
         // not probe or restart the daemon while the user expects no tracking.
         return drive_recovery(schedule, true, false, || {
             unreachable!("paused tracking must never attempt recovery")
+        });
+    }
+    if !tracking_activation::is_activated(app) {
+        // A device that has never started tracking has nothing to recover.
+        // Treat it like a pause for scheduling so no probe or restart happens.
+        return drive_recovery(schedule, true, false, || {
+            unreachable!("inactive tracking must never attempt recovery")
         });
     }
     let tracker_running = match app.state::<TrackerController>().daemon_running(app) {

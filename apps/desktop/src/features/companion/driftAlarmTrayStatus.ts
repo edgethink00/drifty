@@ -24,6 +24,16 @@ export type DriftAlarmTrayStatusInput = {
   readonly locale?: "en" | "ko";
 };
 
+/**
+ * The language-independent part of a tray publication. Keeping this separate from
+ * the rendered {@link DriftAlarmTrayStatus} lets the labels be rebuilt whenever the
+ * display language changes, instead of freezing the language of the last check.
+ */
+export type DriftAlarmTrayState = {
+  readonly checkedAt: Date | null;
+  readonly result: DriftAlarmTrayResult;
+};
+
 export function buildDriftAlarmTrayStatus(input: DriftAlarmTrayStatusInput): DriftAlarmTrayStatus {
   const checkedAt = input.result.kind === "tracker_paused" ? null : checkedAtOrNull(input.checkedAt);
   const ko = input.locale === "ko";

@@ -13,6 +13,7 @@ mod shell_action;
 mod site_icons;
 mod tracker;
 mod tracker_recovery;
+mod tracking_activation;
 mod tracking_pause;
 mod tray;
 
@@ -550,10 +551,27 @@ pub fn run() {
             }
 
             let app_handle = app.handle().clone();
+            // Installs that were already tracking before activation existed keep
+            // running. A 1.10.8 database alone is not evidence, since that release
+            // captured at launch; see collect_prior_use_evidence.
+            tracking_activation::migrate_existing_install(
+                app.handle(),
+                tracking_activation::collect_prior_use_evidence(
+                    &tracker::resolve_db_path(app.handle()),
+                    &tracking_pause::state_path(app.handle()),
+                ),
+            );
+            let tracking_activated = tracking_activation::is_activated(app.handle());
             if tracking_pause_restored {
                 let _ = tauri::async_runtime::spawn_blocking(move || {
                     tracking_pause::enforce_restored_pause(&app_handle);
                 });
+            } else if !tracking_activated {
+                // First run: capture waits for the user to start tracking during
+                // onboarding. This is not a pause, so no pause state is written.
+                eprintln!(
+                    "[tracker] Tracking has not been activated on this device; waiting for onboarding to start it"
+                );
             } else {
                 let startup_state = app.state::<TrackerStartupState>();
                 let generation = startup_state.begin_start_attempt();

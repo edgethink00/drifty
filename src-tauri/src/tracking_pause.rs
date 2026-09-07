@@ -248,6 +248,10 @@ impl TrackingPauseState {
     }
 }
 
+pub(crate) fn state_path(app: &AppHandle) -> PathBuf {
+    pause_state_path(app).unwrap_or_else(|_| PathBuf::from(PAUSE_STATE_FILE_NAME))
+}
+
 fn pause_state_path(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_local_data_dir()

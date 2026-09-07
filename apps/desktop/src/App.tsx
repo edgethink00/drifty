@@ -284,7 +284,7 @@ import type { DriftAlarmCandidate } from "./features/companion/driftAlarmData";
 import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, resolveAvailableFocusTargets } from "./features/companion/driftAlarmFocusTargetAvailability";
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
-import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult } from "./features/companion/driftAlarmTrayStatus";
+import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult, type DriftAlarmTrayState } from "./features/companion/driftAlarmTrayStatus";
 import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
 import {
@@ -979,15 +979,18 @@ export default function App() {
     setPetModeFloorHomePt(next);
   }, []);
   const [driftAlarmSnooze, setDriftAlarmSnooze] = useState<DriftAlarmBreakSnooze | null>(null);
-  const [driftAlarmTrayStatus, setDriftAlarmTrayStatus] = useState<DriftAlarmTrayStatus>(() => {
-    const enabled = driftAlertsRuntimeEnabled;
-    return buildDriftAlarmTrayStatus({
-      enabled,
-      checkedAt: null,
-      result: enabled ? { kind: "no_candidate" } : { kind: "disabled" },
-      locale: localization.effectiveLanguage,
-    });
-  });
+  // Store the semantic check outcome, not rendered copy: the label must follow a
+  // live language change instead of freezing the language used at mount.
+  const [driftAlarmTrayState, setDriftAlarmTrayState] = useState<DriftAlarmTrayState>(() => ({
+    checkedAt: null,
+    result: driftAlertsRuntimeEnabled ? { kind: "no_candidate" } : { kind: "disabled" },
+  }));
+  const driftAlarmTrayStatus = useMemo(() => buildDriftAlarmTrayStatus({
+    enabled: driftAlertsRuntimeEnabled,
+    checkedAt: driftAlarmTrayState.checkedAt,
+    result: driftAlarmTrayState.result,
+    locale: localization.effectiveLanguage,
+  }), [driftAlarmTrayState, driftAlertsRuntimeEnabled, localization.effectiveLanguage]);
   const [breakRecoveryAssessment, setBreakRecoveryAssessment] = useState<DriftAlarmBreakSnooze | null>(null);
   const [driftAlarmInteractions, setDriftAlarmInteractions] = useState<DriftAlarmInteraction[]>(readDriftAlarmInteractions);
   const [showAiClassificationImpact, setShowAiClassificationImpact] = useState(resolveInitialAiClassificationVisibility);
@@ -2610,29 +2613,27 @@ export default function App() {
   }, []);
 
   const publishDriftAlarmTrayStatus = useCallback((result: DriftAlarmTrayResult, checkedAt: Date | null = new Date(), options?: DriftAlarmTrayPublishOptions) => {
-    const nextStatus = buildDriftAlarmTrayStatus({
-      enabled: driftAlertsRuntimeEnabled,
-      checkedAt,
-      result,
-      locale: localization.effectiveLanguage,
-    });
-    const nextNativeStatus = {
-      ...nextStatus,
-      developerDetailsEnabled: isDevModeActive,
-      trackerRunning: status?.running ?? null,
-    };
     recordDriftAlarmDebugEvent({
       kind: "tray_status_published",
       trayResult: summarizeDriftAlarmTrayResult(result),
     });
 
     if (options?.updateRendererState === false) {
-      publishNativeDriftAlarmTrayStatus(nextNativeStatus);
+      publishNativeDriftAlarmTrayStatus({
+        ...buildDriftAlarmTrayStatus({
+          enabled: driftAlertsRuntimeEnabled,
+          checkedAt,
+          result,
+          locale: localization.effectiveLanguage,
+        }),
+        developerDetailsEnabled: isDevModeActive,
+        trackerRunning: status?.running ?? null,
+      });
       return;
     }
 
-    setDriftAlarmTrayStatus(nextStatus);
-  }, [driftAlertsRuntimeEnabled, isDevModeActive, publishNativeDriftAlarmTrayStatus, status?.running]);
+    setDriftAlarmTrayState({ checkedAt, result });
+  }, [driftAlertsRuntimeEnabled, isDevModeActive, localization.effectiveLanguage, publishNativeDriftAlarmTrayStatus, status?.running]);
   const driftReminderStateRef = useRef<DriftReminderState | null>(null);
   const segmentsRef = useRef<ActivitySegment[]>([]);
   const petModeBrowserXRuntimeRef = useRef({ busy: false, lastTriggeredAt: 0 });
@@ -4135,6 +4136,10 @@ export default function App() {
       autoStartAttemptedRef.current = true;
       return;
     }
+    // Onboarding owns the first start on a new device: it explains what capture
+    // does and starts tracking when the user grants Accessibility. Recovering a
+    // stopped tracker here would begin recording before that explanation.
+    if (onboardingOpen) return;
     // A persisted pause is an explicit user choice, not a failed startup. Only
     // the Resume action may clear it; background recovery must leave it alone.
     if (status.trackingPaused) {
@@ -4145,7 +4150,7 @@ export default function App() {
 
     autoStartAttemptedRef.current = true;
     void handleBackgroundStartTracking();
-  }, [hasLoadedOnce, shouldBlockLocalTrackerAccess, status]);
+  }, [hasLoadedOnce, onboardingOpen, shouldBlockLocalTrackerAccess, status]);
 
   useEffect(() => {
     if (shouldBlockLocalTrackerAccess) return undefined;

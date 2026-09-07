@@ -683,6 +683,32 @@ describe("App onboarding", () => {
     expect(screen.queryByRole("button", { name: /byok \(bring your own key\)/i })).toBeNull();
   });
 
+  it("does not start tracking in the background while onboarding is open", async () => {
+    // Regression: on a build without required auth, the background auto-start
+    // recovered the stopped tracker and began recording on the welcome screen,
+    // before onboarding explained capture or the user granted Accessibility.
+    authState.user = null;
+    authState.status = "unauthenticated";
+    authState.isEnabled = true;
+    authState.hasRequiredAccountAuth = false;
+    // A genuinely new install has not granted Accessibility yet, so the
+    // onboarding early start must not fire either.
+    accessibilityGetStatus.mockResolvedValue({ granted: false, required: true });
+    trackerGetStatus.mockResolvedValue(makeTrackerStatus({
+      running: false,
+      accessibilityGranted: false,
+      trackerMode: "tracking",
+      message: null,
+    }));
+    trackerStart.mockClear();
+
+    render(<App />);
+
+    expect(await screen.findByRole("dialog", { name: /welcome to drifty/i })).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(trackerStart).not.toHaveBeenCalled();
+  });
+
   it("skips only the account step for dev onboarding auth bypass", async () => {
     appFeatureSwitches.devOnboardingAuthBypassEnabled = true;
     authState.user = null;

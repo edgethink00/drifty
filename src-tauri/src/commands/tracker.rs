@@ -8,6 +8,7 @@ use crate::tracker::{
     AppIdentity, DeveloperDiagnosticsSettings, TrackerController, TrackerStartupState,
     TrackerStatus,
 };
+use crate::tracking_activation;
 use crate::tracking_pause::{self, TrackingPauseState};
 use crate::tray;
 
@@ -358,6 +359,14 @@ pub async fn tracker_start(
         let pause_state = app.state::<TrackingPauseState>();
         let _operation = pause_state.lock_operation();
         let startup_state = app.state::<TrackerStartupState>();
+        // Record activation before starting. If this cannot be persisted, refuse
+        // to start so a restart cannot silently resume capturing without a
+        // durable record that the user asked for it.
+        if let Err(error) = tracking_activation::activate(&app) {
+            let activation_error = crate::tracker::TrackerError::TrackerReturnedError(error);
+            startup_state.record_start_failure(generation, &activation_error);
+            return Err(tracker_start_error_message());
+        }
         if let Err(error) = tracking_pause::clear_for_manual_start(&app) {
             let clear_error = crate::tracker::TrackerError::TrackerReturnedError(error);
             startup_state.record_start_failure(generation, &clear_error);

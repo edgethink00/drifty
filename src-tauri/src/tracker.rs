@@ -1661,7 +1661,7 @@ fn tracker_script_resource_candidates(resource_dir: &Path) -> Vec<PathBuf> {
     ]
 }
 
-fn resolve_db_path(app: &AppHandle) -> PathBuf {
+pub(crate) fn resolve_db_path(app: &AppHandle) -> PathBuf {
     app.path()
         .app_local_data_dir()
         .unwrap_or_else(|_| {
