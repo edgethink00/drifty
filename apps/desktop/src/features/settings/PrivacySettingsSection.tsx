@@ -7,6 +7,7 @@ import {
   type AiPrivacyRequestSettings,
 } from "./aiPrivacyRequestSettings";
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
+import { ModalPresence } from "../../components/ModalPresence";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { useLocalization } from "../localization/LocalizationContext";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -177,7 +178,8 @@ export function PrivacySettingsSection({
           </div>
         </div>
       </div>
-      {deleteModalOpen ? (
+      <ModalPresence>
+        {deleteModalOpen ? (
         <DeleteHistoryModal
           onClose={() => setDeleteModalOpen(false)}
           deviceSyncEnabled={deviceSyncEnabled}
@@ -185,7 +187,8 @@ export function PrivacySettingsSection({
             await onHistoryDeleted?.();
           }}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

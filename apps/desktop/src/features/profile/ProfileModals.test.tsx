@@ -3,6 +3,7 @@ import { useState } from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EditProfileModal, type ProfileDraft } from "./ProfileModals";
+import { ModalPresence } from "../../components/ModalPresence";
 
 const PROFILE_DRAFT: ProfileDraft = {
   displayName: "Alex",
@@ -77,7 +78,8 @@ function EditProfileModalHarness({
   return (
     <>
       <button type="button" onClick={() => setIsOpen(true)}>Edit public profile</button>
-      {isOpen ? (
+      <ModalPresence>
+        {isOpen ? (
         <EditProfileModal
           displayName="Alex"
           avatarUrl=""
@@ -95,7 +97,8 @@ function EditProfileModalHarness({
           onChange={vi.fn()}
           onSave={vi.fn()}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </>
   );
 }

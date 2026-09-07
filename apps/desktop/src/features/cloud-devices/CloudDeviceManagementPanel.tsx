@@ -5,7 +5,7 @@ import type { CloudDeviceRecord } from "./cloudDeviceService";
 import "./CloudDeviceManagementPanel.css";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeSettingsError } from "../localization/settingsMessageTranslations";
-import { useModalDismiss } from "../../lib/useModalDismiss";
+import { ModalPresence } from "../../components/ModalPresence";
 
 export type CloudDeviceManagementPanelProps = {
   readonly access: BillingEntitlement["deviceAccess"] | null;
@@ -30,7 +30,6 @@ export function CloudDeviceManagementPanel({
   const refreshLabel = isRefreshing ? t("settings.cloudDevices.refreshingAria") : t("settings.cloudDevices.refreshAria");
   const [pendingRemovalDevice, setPendingRemovalDevice] = useState<CloudDeviceRecord | null>(null);
   const accessMessage = access && !access.allowed && access.message ? access.message : null;
-  useModalDismiss(() => setPendingRemovalDevice(null), { disabled: pendingRemovalDevice === null || revokingId !== null });
 
   function confirmDeviceRemoval() {
     if (pendingRemovalDevice === null) return;
@@ -97,7 +96,11 @@ export function CloudDeviceManagementPanel({
         )}
       </div>
       {actionError ? <p className="cloud-device-management__message" role="status">{localizeSettingsError(actionError, effectiveLanguage, t)}</p> : null}
-      {pendingRemovalDevice ? (
+      <ModalPresence
+        onDismiss={() => setPendingRemovalDevice(null)}
+        dismissDisabled={revokingId !== null}
+      >
+        {pendingRemovalDevice ? (
         <div
           className="cloud-device-confirm"
           role="alertdialog"
@@ -130,7 +133,8 @@ export function CloudDeviceManagementPanel({
             </div>
           </div>
         </div>
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

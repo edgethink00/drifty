@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { formatRoundedDuration } from "../../lib/formatting";
+import { ModalPresence } from "../../components/ModalPresence";
 import type { LeaderboardPublicProfileControls } from "../leaderboard/LeaderboardView";
 import { ProfileEmbedsModal } from "../profile/ProfileEmbedsModal";
 import { ProfileSocialLinks, buildPublicProfileUrl } from "../profile/ProfileModals";
@@ -322,7 +323,8 @@ export function SocialProfileView({
         {card?.error ? <p className="capture-recency capture-recency--error">{card.error}</p> : null}
       </section>
 
-      {embedsOpen ? (
+      <ModalPresence>
+        {embedsOpen ? (
         <ProfileEmbedsModal
           card={publicProfile.card}
           dailyProductivity={publicProfile.dailyProductivity}
@@ -336,7 +338,8 @@ export function SocialProfileView({
           onCopyProfileLink={publicProfile.onCopyProfileLink}
           onEditProfile={publicProfile.onEditProfile}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

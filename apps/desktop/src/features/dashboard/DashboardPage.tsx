@@ -1,6 +1,7 @@
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { classifiedDashboardSegmentIds } from "./hasClassifiedDashboardResult";
 import { useMemo, useState, type ReactNode } from "react";
+import { ModalPresence } from "../../components/ModalPresence";
 import type { ActivityCategory, ActivitySegment, AppIconMap, CategoryDuration, ClassificationOptions, DeviceTimelineFilter, FlowBlock, FlowIntervalMinutes, ProductivityDuration, ProductivityLabel } from "@drifty/domain";
 import type { BillingInterval } from "../billing/billingService";
 import type { DashboardPeriod } from "./dashboardPeriods";
@@ -297,7 +298,8 @@ export function DashboardPage({
 
   return (
     <div className={pageClassName}>
-      {dashboardAiRecoveryState ? (
+      <ModalPresence>
+        {dashboardAiRecoveryState ? (
         <DashboardAiRecoveryOverlay
           funnelEnabled={funnelEnabled}
           billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
@@ -309,7 +311,8 @@ export function DashboardPage({
           onOpenAiSetup={onOpenDashboardAiSetup}
           onSelectBillingPlan={onSelectBillingPlan}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
 
       {headInsideBlock ? null : pageHead}
 
@@ -512,14 +515,14 @@ export function DashboardPage({
         </div>
       )}
 
-      {shareCardOpen && shareCard ? (
+      <ModalPresence>{shareCardOpen && shareCard ? (
         <ShareCardModal
           card={shareCard}
           defaultTheme={appTheme}
           onJoinLeaderboard={onJoinLeaderboard}
           onClose={() => setShareCardOpen(false)}
         />
-      ) : null}
+      ) : null}</ModalPresence>
     </div>
   );
 }

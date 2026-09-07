@@ -3,7 +3,7 @@ import type { ActivitySegment, AppIconMap, ClassificationOptions } from "@drifty
 import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
 import { HistoryRow } from "./HistoryRow";
-import { useModalDismiss } from "../../lib/useModalDismiss";
+import { ModalPresence } from "../../components/ModalPresence";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 import "./history.css";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -94,7 +94,6 @@ export function HistoryView({
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [renderLimit, setRenderLimit] = useState(HISTORY_RENDER_STEP);
-  useModalDismiss(() => setConfirmOpen(false), { disabled: !confirmOpen || deleting });
   const query = searchQuery ?? uncontrolledQuery;
   const normalizedQuery = query.trim().toLowerCase();
   const isSearching = normalizedQuery.length > 0;
@@ -274,14 +273,19 @@ export function HistoryView({
         </div>
       )}
 
-      {confirmOpen ? (
-        <HistoryDeleteConfirmation
-          deleting={deleting}
-          recordCount={selectedCount}
-          onCancel={() => setConfirmOpen(false)}
-          onConfirm={() => void confirmDelete()}
-        />
-      ) : null}
+      <ModalPresence
+        onDismiss={() => setConfirmOpen(false)}
+        dismissDisabled={deleting}
+      >
+        {confirmOpen ? (
+          <HistoryDeleteConfirmation
+            deleting={deleting}
+            recordCount={selectedCount}
+            onCancel={() => setConfirmOpen(false)}
+            onConfirm={() => void confirmDelete()}
+          />
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

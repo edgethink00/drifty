@@ -1,4 +1,6 @@
-import { useEffect } from "react";
+import { useContext, useEffect } from "react";
+
+import { ModalPresenceContext, isTopModal } from "./modalPresenceContext";
 
 /**
  * Shared Escape-to-close behavior for app modals (modal-chrome dialogs).
@@ -6,14 +8,20 @@ import { useEffect } from "react";
  * or when the modal is closed for components that render dialogs conditionally.
  */
 export function useModalDismiss(onDismiss: () => void, options?: { readonly disabled?: boolean }): void {
+  const presence = useContext(ModalPresenceContext);
   const disabled = options?.disabled ?? false;
 
   useEffect(() => {
     if (disabled) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onDismiss();
+      if (presence && (presence.exiting || !presence.root.current || !isTopModal(presence.root.current))) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        onDismiss();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onDismiss, disabled]);
+  }, [onDismiss, disabled, presence]);
 }

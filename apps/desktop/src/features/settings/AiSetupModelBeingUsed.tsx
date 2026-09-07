@@ -5,6 +5,7 @@ import { aiProviderBrandMark } from "./AiProviderBrandMark";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
 import { DRIFTY_CLOUD_MODEL_ID, driftyModelOptions, isSelectableManagedModel } from "./AiSetupDriftyModelOptions";
 import { DeleteManagedModelModal } from "./DeleteManagedModelModal";
+import { ModalPresence } from "../../components/ModalPresence";
 import type { AiModelOption } from "./AiSetupModelDialogs";
 import type { AiSetupSection } from "./AiSetupSectionCards";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
@@ -233,14 +234,16 @@ export function AiSetupModelBeingUsed({
         <AiResourceNote route={driftyRoute} />
       </div>
     ) : null}
-    {pendingDelete ? (
+    <ModalPresence>
+      {pendingDelete ? (
       <DeleteManagedModelModal
         modelLabel={pendingDelete.label}
         deleting={deleting}
         onCancel={() => (deleting ? undefined : setPendingDelete(null))}
         onConfirm={() => void confirmDeleteModel()}
       />
-    ) : null}
+      ) : null}
+    </ModalPresence>
     </>
   );
 }

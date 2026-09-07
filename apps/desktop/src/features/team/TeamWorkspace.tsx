@@ -9,9 +9,9 @@ import type { AcceptTeamInviteInput } from "./teamService";
 import type { TeamPeriod } from "./teamTypes";
 import { useTeamProjects, type TeamProjectsSubView } from "./useTeamProjects";
 import type { UseTeamControllerResult } from "./useTeamController";
+import { ModalPresence } from "../../components/ModalPresence";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { DateNavigator } from "../../components/DateNavigator";
-import { useModalDismiss } from "../../lib/useModalDismiss";
 import { formatLocalizedDateRangeLabel } from "../../lib/formatting";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { DisplayLanguage } from "../localization/languagePreference";
@@ -113,11 +113,6 @@ export function TeamWorkspace({
   const copyTimerRef = useRef<number | null>(null);
   const addSubmittedRef = useRef(false);
   const inviteRequestedRef = useRef(false);
-  useModalDismiss(() => {
-    if (inviteOpen) setInviteOpen(false);
-    else if (settingsOpen) setSettingsOpen(false);
-    else if (addOpen) setAddOpen(false);
-  }, { disabled: !inviteOpen && !settingsOpen && !addOpen });
 
   const {
     teams,
@@ -301,9 +296,15 @@ export function TeamWorkspace({
         </section>
       </div>
 
-      {inviteOpen && selectedTeam ? renderInviteModal() : null}
-      {settingsOpen && selectedTeam ? renderSettingsModal() : null}
-      {addOpen ? renderAddModal() : null}
+      <ModalPresence onDismiss={() => setInviteOpen(false)}>
+        {inviteOpen && selectedTeam ? renderInviteModal() : null}
+      </ModalPresence>
+      <ModalPresence onDismiss={() => setSettingsOpen(false)}>
+        {settingsOpen && selectedTeam ? renderSettingsModal() : null}
+      </ModalPresence>
+      <ModalPresence onDismiss={() => setAddOpen(false)}>
+        {addOpen ? renderAddModal() : null}
+      </ModalPresence>
     </>
   );
 

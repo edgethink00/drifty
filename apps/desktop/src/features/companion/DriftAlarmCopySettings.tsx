@@ -11,7 +11,7 @@ import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNud
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
-import { useModalDismiss } from "../../lib/useModalDismiss";
+import { ModalPresence } from "../../components/ModalPresence";
 import driftyIcon from "../../assets/drifty-icon.png";
 
 type AlarmPreviewSectionKey = Extract<DriftAlarmCopySectionKey, "drift" | "breakReturn">;
@@ -76,8 +76,6 @@ export function DriftAlarmCopySettings({
     setDraftCopy((currentValue) => ({ ...currentValue, [key]: nextValue }));
   };
 
-  useModalDismiss(cancelEditor, { disabled: !isEditorOpen });
-
   return (
     <div className="settings-row settings-row--drift-copy" role="group" aria-label={t("settings.alarmCopy.label")}>
       <div>
@@ -89,7 +87,8 @@ export function DriftAlarmCopySettings({
           {t("settings.alarmCopy.edit")}
         </button>
       </div>
-      {isEditorOpen ? (
+      <ModalPresence onDismiss={cancelEditor}>
+        {isEditorOpen ? (
         <div className="auth-modal__overlay drift-copy-modal__overlay" onClick={cancelEditor}>
           <section
             className="auth-modal modal-shell drift-copy-modal"
@@ -193,7 +192,8 @@ export function DriftAlarmCopySettings({
             </div>
           </section>
         </div>
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

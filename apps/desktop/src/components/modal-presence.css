@@ -1,0 +1,42 @@
+[data-modal-presence] {
+  display: contents;
+  --modal-motion-duration: 130ms;
+  --modal-motion-ease: cubic-bezier(.16, 1, .3, 1);
+  --modal-motion-transform: none;
+  --modal-motion-opacity: 1;
+}
+
+[data-modal-presence="entering"],
+[data-modal-presence="exiting"] {
+  --modal-motion-transform: scale(var(--modal-motion-start-scale, .93));
+  --modal-motion-opacity: 0;
+}
+
+[data-modal-presence="exiting"] {
+  --modal-motion-duration: 80ms;
+  --modal-motion-ease: cubic-bezier(.4, 0, 1, 1);
+}
+
+/* Each boundary resets its pose. Nested dialogs inherit their own state,
+   rather than an ancestor's open selector overriding their exit transform. */
+[data-modal-presence] > :not([data-modal-presence]) {
+  opacity: var(--modal-motion-opacity);
+  transition: opacity var(--modal-motion-duration) var(--modal-motion-ease);
+}
+
+[data-modal-presence] :is(.modal-shell, [data-modal-motion-panel]) {
+  transform: var(--modal-motion-transform);
+  opacity: var(--modal-motion-opacity);
+  transform-origin: center center;
+  transition: transform var(--modal-motion-duration) var(--modal-motion-ease),
+    opacity var(--modal-motion-duration) var(--modal-motion-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-modal-presence] > :not([data-modal-presence]),
+  [data-modal-presence] :is(.modal-shell, [data-modal-motion-panel]) {
+    transition: none;
+    transform: none;
+    opacity: 1;
+  }
+}

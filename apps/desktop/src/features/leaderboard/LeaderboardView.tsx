@@ -7,6 +7,7 @@ import { LeaderboardBoard } from "./LeaderboardBoard";
 import type { LeaderboardPeriod, LeaderboardRow } from "./leaderboardService";
 import { ProfileAvatar, StateBlock } from "./leaderboardViewHelpers";
 import { RankEmbedsModal } from "./RankEmbedsModal";
+import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export type LeaderboardPublicProfileControls = {
@@ -352,7 +353,8 @@ export function LeaderboardView({
         {!isLoading && publicProfile?.shareMessage ? <div className="leaderboard-share-toast" role="status">{publicProfile.shareMessage}</div> : null}
       </div>
 
-      {!isLoading && publicProfile && rankEmbedOpen ? (
+      <ModalPresence>
+        {!isLoading && publicProfile && rankEmbedOpen ? (
         <RankEmbedsModal
           avatarUrl={profileAvatarUrl}
           displayName={previewName}
@@ -364,7 +366,8 @@ export function LeaderboardView({
           rank={currentUserRank}
           onClose={() => setRankEmbedOpen(false)}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

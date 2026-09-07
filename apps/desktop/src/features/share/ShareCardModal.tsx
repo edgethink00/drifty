@@ -227,6 +227,7 @@ export function ShareCardModal({ card, defaultTheme, onJoinLeaderboard, onClose 
         <section
           className="auth-modal profile-modal share-card-modal"
           role="dialog"
+          data-modal-motion-panel
           aria-modal="true"
           aria-label={t(card.kind === "week" ? "share.dialog.weekAria" : "share.dialog.dayAria")}
           onClick={(event) => event.stopPropagation()}

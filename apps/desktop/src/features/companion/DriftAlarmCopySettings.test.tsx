@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DriftAlarmCopySettings } from "./DriftAlarmCopySettings";
 import { buildDefaultDriftAlarmCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 
 describe("DriftAlarmCopySettings", () => {
-  it("previews draft edits and saves production drift alarm copy on command", () => {
+  it("previews draft edits and saves production drift alarm copy on command", async () => {
     const onChange = renderSettings();
 
     const alarmCopy = screen.getByRole("group", { name: "Alert titles" });
@@ -66,6 +66,7 @@ describe("DriftAlarmCopySettings", () => {
     expect(automaticClosePreview.querySelector(".extreme-nudge-toast")).toBeNull();
     expect(automaticClosePreview.querySelector(".view--nudge")).toBeTruthy();
 
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(onChange).toHaveBeenLastCalledWith({
       ...buildDefaultDriftAlarmCopy(),
@@ -74,7 +75,8 @@ describe("DriftAlarmCopySettings", () => {
       notificationTitle: "Decision needed",
       extremeNudgeTitle: "Removed {closed}",
     });
-    expect(screen.queryByRole("dialog", { name: "Edit alert titles" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Edit alert titles" })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Edit alert titles" })).toBeNull());
   });
 
   it("resets and cancels draft alarm copy without saving", () => {

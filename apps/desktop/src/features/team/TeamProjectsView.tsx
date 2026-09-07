@@ -4,6 +4,7 @@ import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting"
 import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
+import { ModalPresence } from "../../components/ModalPresence";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -247,7 +248,8 @@ export function TeamProjectsView({
           onArchive={onArchive}
         />
         {actionError && !editor ? <p className="team-message team-message--error">{actionError}</p> : null}
-        {editor ? (
+        <ModalPresence>
+          {editor ? (
           <ProjectEditorModal
             state={editor}
             teamName={teamName}
@@ -263,7 +265,8 @@ export function TeamProjectsView({
               onUpdate(input);
             }}
           />
-        ) : null}
+          ) : null}
+        </ModalPresence>
       </section>
     );
   }
@@ -395,7 +398,8 @@ export function TeamProjectsView({
         </div>
       </div>
 
-      {editor ? (
+      <ModalPresence>
+        {editor ? (
         <ProjectEditorModal
           state={editor}
           teamName={teamName}
@@ -411,7 +415,8 @@ export function TeamProjectsView({
             onUpdate(input);
           }}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </section>
   );
 }

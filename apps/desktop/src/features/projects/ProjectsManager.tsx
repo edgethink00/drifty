@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { ModalPresence } from "../../components/ModalPresence";
 import { ProjectEditorModal } from "./ProjectEditorModal";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
@@ -295,7 +296,8 @@ export function ProjectsManager({
         </>
       )}
 
-      {editing !== null ? (
+      <ModalPresence>
+        {editing !== null ? (
         <ProjectEditorModal
           project={editing === "new" ? null : editing}
           projects={projects}
@@ -303,7 +305,8 @@ export function ProjectsManager({
           onSave={onSave}
           onClose={() => setEditing(null)}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

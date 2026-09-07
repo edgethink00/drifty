@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -17,13 +17,7 @@ type DeleteManagedModelModalProps = {
 export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConfirm }: DeleteManagedModelModalProps) {
   const { t } = useLocalization();
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !deleting) onCancel();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, deleting]);
+  useModalDismiss(onCancel, { disabled: deleting });
 
   return (
     <div className="auth-modal__overlay" onClick={() => (deleting ? undefined : onCancel())}>

@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { ModalPresence } from "../../components/ModalPresence";
 import type { LeaderboardRow } from "../leaderboard/leaderboardService";
 import { EditProfileModal, ProfileModal, type ProfileDraft } from "./ProfileModals";
 import type { PublicProfile } from "./profileService";
@@ -46,7 +47,8 @@ export function ProfileDialogs({
 }: ProfileDialogsProps) {
   return (
     <>
-      {selectedLeaderboardRow ? (
+      <ModalPresence>
+        {selectedLeaderboardRow ? (
         <ProfileModal
           row={selectedLeaderboardRow}
           profile={selectedPublicProfile}
@@ -54,9 +56,11 @@ export function ProfileDialogs({
           error={selectedProfileError}
           onClose={onCloseSelectedProfile}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
 
-      {isProfileEditorOpen ? (
+      <ModalPresence>
+        {isProfileEditorOpen ? (
         <EditProfileModal
           displayName={displayName}
           avatarUrl={avatarUrl}
@@ -71,7 +75,8 @@ export function ProfileDialogs({
           onChange={onDraftChange}
           onSave={onSaveProfile}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </>
   );
 }

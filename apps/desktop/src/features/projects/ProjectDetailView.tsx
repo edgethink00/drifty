@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { ActivitySegment, Project, ProjectInput } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
+import { ModalPresence } from "../../components/ModalPresence";
 import { ProjectEditorModal } from "./ProjectEditorModal";
 import { ProjectTrendChart } from "./ProjectTrendChart";
 import { ProjectTrendChartSkeleton } from "./ProjectTrendChartSkeleton";
@@ -196,7 +197,8 @@ export function ProjectDetailView({
         )}
       </section>
 
-      {editorOpen ? (
+      <ModalPresence>
+        {editorOpen ? (
         <ProjectEditorModal
           project={project}
           projects={projects}
@@ -204,7 +206,8 @@ export function ProjectDetailView({
           onSave={onSave}
           onClose={() => setEditorOpen(false)}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

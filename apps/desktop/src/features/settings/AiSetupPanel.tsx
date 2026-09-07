@@ -5,6 +5,7 @@ import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar"
 import type { BillingPlanId } from "../billing/IndividualPlanCards";
 import type { BillingEntitlement, BillingInterval } from "../billing/billingService";
 import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
+import { ModalPresence } from "../../components/ModalPresence";
 import "./AiSetupPanel.css";
 import {
   AI_SETUP_SECTIONS,
@@ -288,7 +289,8 @@ export function AiSetupPanel({
         </section>
       )}
 
-      {modelPickers.openRouterModelPickerOpen ? (
+      <ModalPresence>
+        {modelPickers.openRouterModelPickerOpen ? (
         <OpenRouterModelDialog
           customModel={modelPickers.openRouterCustomModel}
           openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
@@ -300,7 +302,8 @@ export function AiSetupPanel({
           onPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
           onToggleModel={modelPickers.handleOpenRouterModelToggle}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

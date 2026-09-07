@@ -1,5 +1,6 @@
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ModalPresence } from "./components/ModalPresence";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
@@ -5884,7 +5885,6 @@ export default function App() {
   useEffect(() => {
     function handleKeyDown(e: globalThis.KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmdOpen((v) => !v); }
-      if (e.key === "Escape") setCmdOpen(false);
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
@@ -8848,7 +8848,7 @@ export default function App() {
           <>
             {appStatusNotice ? <AppStatusNotice notice={appStatusNotice} /> : null}
             <AuthRequiredGate onSignIn={openDefaultAuthModal} />
-            {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
+            <ModalPresence>{authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}</ModalPresence>
             {availableUpdatePrompt}
             {latestBuildPrompt}
           </>
@@ -8978,19 +8978,19 @@ export default function App() {
               showGoogleSignIn={authModalShowsGoogle}
             />
           ) : onboardingModal}
-          {authModalOpen && !promoAuthOnboardingOpen ? (
+          <ModalPresence>{authModalOpen && !promoAuthOnboardingOpen ? (
             <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} />
-          ) : null}
-          {promoHandoffAccountDialog}
-          {accountDeletionModalOpen ? (
+          ) : null}</ModalPresence>
+          <ModalPresence>{promoHandoffAccountDialog}</ModalPresence>
+          <ModalPresence>{accountDeletionModalOpen ? (
             <AccountDeletionModal
               accountEmail={user?.email ?? null}
               isAnonymousAccount={user?.is_anonymous === true}
               onClose={() => setAccountDeletionModalOpen(false)}
               onDelete={handleDeleteAccount}
             />
-          ) : null}
-          {availableUpdatePrompt}
+          ) : null}</ModalPresence>
+            {availableUpdatePrompt}
           {latestBuildPrompt}
         </>
       </LocalizationProvider>
@@ -9012,7 +9012,7 @@ export default function App() {
             progress={firstDayPreparationProgress}
             workActivityLabel={firstDayWorkLabel}
           />
-          {promoHandoffAccountDialog}
+          <ModalPresence>{promoHandoffAccountDialog}</ModalPresence>
           {latestBuildPrompt}
         </>
       </LocalizationProvider>
@@ -10140,18 +10140,18 @@ export default function App() {
       ) : null}
 
       {/* Command Bar */}
-      {cmdOpen ? (
+      <ModalPresence>{cmdOpen ? (
         <CommandBar
           includeProjects={projectClassificationFeatureEnabled}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
         />
-      ) : null}
+      ) : null}</ModalPresence>
 
-      {authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}
-      {promoHandoffAccountDialog}
+      <ModalPresence>{authModalOpen ? <AuthModal intent={authModalIntent} onClose={handleCloseAuthModal} showGoogleSignIn={authModalShowsGoogle} /> : null}</ModalPresence>
+      <ModalPresence>{promoHandoffAccountDialog}</ModalPresence>
 
-      {shouldRenderUpgradePlanModal ? (
+      <ModalPresence>{shouldRenderUpgradePlanModal ? (
         <UpgradePlanModal
           funnelEnabled={funnelEnabled}
           billingActionError={billingActionError}
@@ -10171,32 +10171,32 @@ export default function App() {
             void startCloudCheckout(billingInterval);
           }}
         />
-      ) : null}
+      ) : null}</ModalPresence>
 
-      {accountDeletionModalOpen ? (
+      <ModalPresence>{accountDeletionModalOpen ? (
         <AccountDeletionModal
           accountEmail={user?.email ?? null}
           isAnonymousAccount={user?.is_anonymous === true}
           onClose={() => setAccountDeletionModalOpen(false)}
           onDelete={handleDeleteAccount}
         />
-      ) : null}
+      ) : null}</ModalPresence>
 
-      {feedbackModalOpen ? (
+      <ModalPresence>{feedbackModalOpen ? (
         <Suspense fallback={null}>
           <LazyFeedbackModal initialEmail={user?.email ?? ""} onClose={() => setFeedbackModalOpen(false)} />
         </Suspense>
-      ) : null}
-      {deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}
+      ) : null}</ModalPresence>
+      <ModalPresence>{deleteHistoryModalOpen ? <DeleteHistoryModal onClose={() => setDeleteHistoryModalOpen(false)} onDeleted={handleHistoryRangeDeleted} deviceSyncEnabled={deviceSyncActive} /> : null}</ModalPresence>
 
-      {deviceSyncPurgeConfirmOpen ? (
+      <ModalPresence>{deviceSyncPurgeConfirmOpen ? (
         <DeviceSyncPurgeConfirmation
           onCancel={cancelPurgeDeviceSyncData}
           onConfirm={confirmPurgeDeviceSyncData}
         />
-      ) : null}
+      ) : null}</ModalPresence>
 
-      {debugLogPreview ? (
+      <ModalPresence>{debugLogPreview ? (
         <Suspense fallback={null}>
           <LazyDebugLogModal
             text={debugLogPreview.text}
@@ -10206,7 +10206,7 @@ export default function App() {
             onDownload={handleDownloadDebugLogs}
           />
         </Suspense>
-      ) : null}
+      ) : null}</ModalPresence>
 
 
       <ProfileDialogs

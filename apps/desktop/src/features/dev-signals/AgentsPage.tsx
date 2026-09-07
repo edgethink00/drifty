@@ -31,6 +31,7 @@ import {
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
 import { MetricTile } from "../../components/MetricTile";
+import { ModalPresence } from "../../components/ModalPresence";
 import {
   clockHourForLogicalHour,
   formatLocalizedCalendarMinuteLabel,
@@ -1386,13 +1387,15 @@ export function AgentsPage({
             {breakdownPanel}
           </div>
         </section>
-        {sshModalOpen ? (
+        <ModalPresence>
+          {sshModalOpen ? (
           <SshAgentSourcesModal
             onClose={() => setSshModalOpen(false)}
             onCollected={() => setDataRefreshKey((key) => key + 1)}
             collectSource={syncSshHost}
           />
-        ) : null}
+          ) : null}
+        </ModalPresence>
       </div>
     );
   }
@@ -1430,13 +1433,15 @@ export function AgentsPage({
         </div>
         {breakdownPanel}
       </div>
-      {sshModalOpen ? (
+      <ModalPresence>
+        {sshModalOpen ? (
         <SshAgentSourcesModal
           onClose={() => setSshModalOpen(false)}
           onCollected={() => setDataRefreshKey((key) => key + 1)}
           collectSource={syncSshHost}
         />
-      ) : null}
+        ) : null}
+      </ModalPresence>
     </div>
   );
 }

@@ -1404,7 +1404,7 @@ describe("App onboarding", () => {
     fireEvent.keyDown(confirmDialog, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(allowClosingButton);
     fireEvent.keyDown(confirmDialog, { key: "Escape" });
-    expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: /let drifty close drift/i })).toBeNull());
     expect(document.activeElement).toBe(closeRadio);
     expect(alertRadio).toHaveProperty("checked", true);
     expect(closeRadio).toHaveProperty("checked", false);
@@ -1458,7 +1458,7 @@ describe("App onboarding", () => {
     expect(alertRadio).toHaveProperty("checked", true);
 
     fireEvent.click(within(confirmDialog).getByRole("button", { name: /keep off/i }));
-    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
     expect(offRadio).toHaveProperty("checked", false);
     expect(alertRadio).toHaveProperty("checked", true);
     expect(closeRadio).toHaveProperty("checked", false);

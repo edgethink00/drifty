@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ModalPresence } from "../../components/ModalPresence";
 import { ShareCardModal } from "./ShareCardModal";
 import type { CommunityFocusPercentileModels } from "../companion/communityFocusPercentile";
 import type { ShareCardLiveRanks } from "./shareCardUnifiedSvg";
@@ -105,6 +106,20 @@ function renderModal() {
 }
 
 describe("ShareCardModal feedback", () => {
+  it("retains the custom share panel until its exit completes", async () => {
+    const { rerender } = render(<ModalPresence><ShareCardModal card={card} defaultTheme="light" onClose={vi.fn()} /></ModalPresence>);
+    const panel = screen.getByRole("dialog");
+    expect(panel.hasAttribute("data-modal-motion-panel")).toBe(true);
+    await waitFor(() => expect(panel.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
+    rerender(<ModalPresence>{null}</ModalPresence>);
+    expect(screen.getByRole("dialog")).toBe(panel);
+    expect(panel.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("exiting");
+    const event = new Event("transitionend", { bubbles: true });
+    Object.defineProperty(event, "propertyName", { value: "transform" });
+    fireEvent(panel, event);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
   it("shows a copied-image toast outside the modal", async () => {
     renderModal();
 

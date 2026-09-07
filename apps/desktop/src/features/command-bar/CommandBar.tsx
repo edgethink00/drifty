@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { commandBarTabs, type TabId } from "../../app/navigation";
 import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
+import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
 
 export interface CommandBarProps {
@@ -13,6 +14,7 @@ export function CommandBar({ includeProjects, onDismiss, onNavigate }: CommandBa
   const { t } = useLocalization();
   const dialogRef = useRef<HTMLDivElement | null>(null);
   useModalFocusTrap(dialogRef, { initialFocusSelector: "[data-command-search]" });
+  useModalDismiss(onDismiss);
 
   return (
     <div className="cmd-overlay" onClick={onDismiss}>

@@ -1882,7 +1882,6 @@
   justify-content: center;
   padding: 24px;
   background: rgba(28, 28, 25, 0.42);
-  animation: dcOnbBackdrop 0.15s ease;
 }
 
 .dc-onb-confirm {
@@ -1893,7 +1892,6 @@
   background: var(--dc-onb-surface);
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
   text-align: center;
-  animation: dcOnbPop 0.18s ease;
 }
 
 .dc-onb-confirm__icon {

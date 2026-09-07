@@ -271,8 +271,10 @@ describe("HistoryView", () => {
     expect(within(dialog).getByText(/this removes 1 local activity record/i)).toBeTruthy();
     expect(deleteSelected).not.toHaveBeenCalled();
 
+    await waitFor(() => expect(dialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
     fireEvent.click(within(dialog).getByRole("button", { name: /^cancel$/i }));
-    expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull();
+    expect(screen.getByRole("dialog", { name: /delete history records/i })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
     expect(deleteSelected).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: /delete 1 selected/i }));
@@ -330,7 +332,8 @@ describe("HistoryView", () => {
       />,
     );
     fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull();
+    expect(screen.getByRole("dialog", { name: /delete history records/i })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /delete history records/i })).toBeNull());
     expect(document.activeElement).toBe(opener);
   });
 

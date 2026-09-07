@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState } from "react";
 import type { OAuthCallbackStatus } from "../auth/AuthContext";
 import type { OnboardingFlow } from "./useOnboardingFlow";
 import { WelcomeStep } from "./components/steps/WelcomeStep";
@@ -15,6 +15,9 @@ import { ReadyStep } from "./components/steps/ReadyStep";
 import { OnboardingLanguageToggle } from "./components/OnboardingLanguageToggle";
 import { useLocalization } from "../localization/LocalizationContext";
 import { DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
+import { ModalPresence } from "../../components/ModalPresence";
+import { useModalDismiss } from "../../lib/useModalDismiss";
+import { useModalFocusTrap } from "../../lib/useModalFocusTrap";
 
 type OnboardingDesignCodeContentProps = {
   readonly flow: OnboardingFlow;
@@ -209,12 +212,14 @@ export function OnboardingDesignCodeContent({
         ) : null}
       </form>
 
-      {confirmCloseOpen ? (
-        <ExtremeConfirmDialog
-          onCancel={() => setConfirmCloseOpen(false)}
-          onConfirm={handleConfirmClose}
-        />
-      ) : null}
+      <ModalPresence>
+        {confirmCloseOpen ? (
+          <ExtremeConfirmDialog
+            onCancel={() => setConfirmCloseOpen(false)}
+            onConfirm={handleConfirmClose}
+          />
+        ) : null}
+      </ModalPresence>
     </>
   );
 }
@@ -228,35 +233,8 @@ function ExtremeConfirmDialog({
 }) {
   const { t } = useLocalization();
   const dialogRef = useRef<HTMLElement | null>(null);
-  const cancelRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    cancelRef.current?.focus();
-    return () => previousFocus?.focus();
-  }, []);
-
-  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      onCancel();
-      return;
-    }
-    if (event.key !== "Tab") return;
-    const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
-    ) ?? [])];
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (!first || !last) return;
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
+  useModalFocusTrap(dialogRef, { initialFocusSelector: ".dc-onb-confirm__secondary" });
+  useModalDismiss(onCancel);
 
   return (
     <div className="dc-onb-confirm-backdrop">
@@ -268,7 +246,6 @@ function ExtremeConfirmDialog({
         aria-modal="true"
         aria-labelledby="dc-onb-confirm-title"
         aria-describedby="dc-onb-confirm-description"
-        onKeyDown={handleDialogKeyDown}
       >
         <div className="dc-onb-confirm__icon" aria-hidden="true">
           <ScissorsIcon />
@@ -277,7 +254,7 @@ function ExtremeConfirmDialog({
         <h2 id="dc-onb-confirm-title">{t("onboarding.extreme.title")}</h2>
         <p id="dc-onb-confirm-description">{t("onboarding.extreme.description")}</p>
         <div className="dc-onb-confirm__actions">
-          <button ref={cancelRef} type="button" className="dc-onb-confirm__secondary" onClick={onCancel}>{t("onboarding.extreme.keepOff")}</button>
+          <button type="button" className="dc-onb-confirm__secondary" onClick={onCancel}>{t("onboarding.extreme.keepOff")}</button>
           <button type="button" className="dc-onb-confirm__primary" onClick={onConfirm}>{t("onboarding.extreme.allowClosing")}</button>
         </div>
       </section>

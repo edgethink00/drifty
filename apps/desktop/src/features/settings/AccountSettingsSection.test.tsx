@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AccountSettingsSection, type AccountSettingsSectionProps } from "./AccountSettingsSection";
@@ -22,7 +22,7 @@ function desktopSourcePath(relativePath: string): string {
 }
 
 describe("AccountSettingsSection", () => {
-  it("shows active Cloud devices in Account settings and confirms before removing a non-current device", () => {
+  it("shows active Cloud devices in Account settings and confirms before removing a non-current device", async () => {
     const onRevokeCloudDevice = vi.fn();
     const onRefreshCloudStatus = vi.fn();
 
@@ -112,9 +112,11 @@ describe("AccountSettingsSection", () => {
     const cancelDialog = screen.getByRole("alertdialog", { name: /^Remove this device\?$/i });
     expect(within(cancelDialog).getAllByText(/Old MacBook/).length).toBeGreaterThan(0);
 
+    await waitFor(() => expect(cancelDialog.closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("open"));
     fireEvent.click(within(cancelDialog).getByRole("button", { name: /^Cancel$/i }));
 
-    expect(screen.queryByRole("alertdialog", { name: /^Remove this device\?$/i })).toBeNull();
+    expect(screen.getByRole("alertdialog", { name: /^Remove this device\?$/i })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole("alertdialog", { name: /^Remove this device\?$/i })).toBeNull());
 
     fireEvent.click(within(cloudDevices).getByRole("button", { name: /^Remove$/i }));
 
