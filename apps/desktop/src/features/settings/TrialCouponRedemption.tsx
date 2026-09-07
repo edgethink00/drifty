@@ -1,3 +1,4 @@
+import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import type {
   CouponRedemption,
@@ -31,6 +32,10 @@ export function TrialCouponRedemption({
   // Collapsed by default: a promo code is a rare, deliberate action, so it
   // should not compete with the plan cards for attention.
   const [expanded, setExpanded] = useState(false);
+  const { request } = useSettingsSearch();
+  useEffect(() => {
+    if (request?.entry.reveal === "coupon") setExpanded(true);
+  }, [request]);
   const normalizedCode = normalizeCouponCode(code);
   const codeReady = isCouponCodeReady(normalizedCode);
 
@@ -57,7 +62,7 @@ export function TrialCouponRedemption({
       : null;
 
   return (
-    <div className="settings-row settings-row--coupon">
+    <div data-setting-id="settings.account.couponTitle" className="settings-row settings-row--coupon">
       <div className="trial-coupon-form__layout">
         <button
           type="button"

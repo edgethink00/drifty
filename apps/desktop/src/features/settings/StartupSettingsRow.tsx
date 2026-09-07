@@ -59,7 +59,7 @@ export function StartupSettingsRow() {
   const disabled = status === "loading" || status === "saving" || status === "unavailable";
 
   return (
-    <div className="settings-row">
+    <div data-setting-id="settings.general.openAtLogin" className="settings-row">
       <label htmlFor="open-at-login">
         <div className="lbl">{t("settings.general.openAtLogin")}</div>
         <div className="desc">{t("settings.general.openAtLoginDescription")}</div>

@@ -39,7 +39,7 @@ export function PetSettingsSection({
       </div>
       <div className="settings-block">
         <h3>{t("settings.pet.behavior")}</h3>
-        <div className="settings-row">
+        <div data-setting-id="settings.pet.allowOutings" className="settings-row">
           <div>
             <div className="lbl">{t("settings.pet.allowOutings")}</div>
             <div className="desc" id="pet-outings-description">{t("settings.pet.allowOutingsDescription")}</div>

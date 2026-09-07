@@ -196,13 +196,13 @@ export function PermissionsSettingsSection({
         : "neutral";
 
   return (
-    <div className="settings-section settings-section--permissions">
+    <div data-setting-id="settings.permissions.title" className="settings-section settings-section--permissions">
       <div className="settings-block">
         <h3>{t("settings.permissions.title")}</h3>
         <p className="settings-permissions-intro">{t("settings.permissions.intro")}</p>
 
         {accessibilityRequired ? (
-          <div className="settings-row settings-row--group-start settings-permission-row">
+          <div data-setting-id="settings.permissions.accessibility" className="settings-row settings-row--group-start settings-permission-row">
             <div>
               <div className="settings-permission-title-line">
                 <div className="lbl">{t("settings.permissions.accessibility")}</div>
@@ -229,7 +229,7 @@ export function PermissionsSettingsSection({
           </div>
         ) : null}
 
-        <div className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show ? "" : " settings-row--group-end"}`}>
+        <div data-setting-id="settings.permissions.notifications" className={`settings-row settings-permission-row${accessibilityRequired ? "" : " settings-row--group-start"}${safariHistory.show ? "" : " settings-row--group-end"}`}>
           <div>
             <div className="settings-permission-title-line">
               <div className="lbl">{t("settings.permissions.notifications")}</div>

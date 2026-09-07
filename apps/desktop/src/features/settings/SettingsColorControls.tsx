@@ -152,7 +152,7 @@ export function CategoryColorControls({ options, overrides, onColorChange, onCol
   const { t } = useLocalization();
   const [openKey, setOpenKey] = useState<ActivityCategory | null>(null);
   return (
-    <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.categoryColors")}>
+    <div data-setting-id="settings.appearance.categoryColors" className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.categoryColors")}>
       <div>
         <div className="lbl">{t("settings.appearance.categoryColors")}</div>
         <div className="desc">{t("settings.appearance.categoryColorsDescription")}</div>
@@ -189,7 +189,7 @@ export function ThemeColorControls({
   const [openKey, setOpenKey] = useState<AppThemeColorKey | null>(null);
   return (
     <>
-      <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.accentColor")}>
+      <div data-setting-id="settings.appearance.accent" className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.accentColor")}>
         <div>
           <div className="lbl">{t("settings.appearance.accent")}</div>
           <div className="desc">{t("settings.appearance.accentDescription")}</div>
@@ -212,7 +212,7 @@ export function ThemeColorControls({
           </div>
         </div>
       </div>
-      <div className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.productivityColors")}>
+      <div data-setting-id="settings.appearance.productivityColors" className="settings-row settings-row--fallback settings-color-row" role="group" aria-label={t("settings.appearance.productivityColors")}>
         <div>
           <div className="lbl">{t("settings.appearance.productivityColors")}</div>
           <div className="desc">{t("settings.appearance.productivityColorsDescription")}</div>

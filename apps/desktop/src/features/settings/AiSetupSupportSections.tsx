@@ -1,3 +1,4 @@
+import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatRelativeTime } from "../../lib/formatting";
@@ -47,6 +48,10 @@ export function AiSetupSupportSections({
 }: AiSetupSupportSectionsProps) {
   const { effectiveLanguage, t } = useLocalization();
   const [editorExpanded, setEditorExpanded] = useState(false);
+  const { request } = useSettingsSearch();
+  useEffect(() => {
+    if (request?.entry.reveal === "work-profile") setEditorExpanded(true);
+  }, [request]);
   const [memory, setMemory] = useState<MemoryLoadState>({ status: "loading", document: null });
 
   useEffect(() => {
@@ -98,7 +103,7 @@ export function AiSetupSupportSections({
   return (
     // A plain div with only aria-label is ignored by screen readers, so the
     // Memory overview and its status line carry real grouping roles.
-    <section className="ai-memory" aria-label={t("settings.ai.memoryOverviewAria")}>
+    <section data-setting-id="settings.ai.memoryHeroTitle" className="ai-memory" aria-label={t("settings.ai.memoryOverviewAria")}>
       <header className="ai-memory__intro">
         <h4 id="ai-memory-title">{t("settings.ai.memoryHeroTitle")}</h4>
         <p>{t("settings.ai.memoryLoopDescription")}</p>
@@ -161,13 +166,15 @@ export function AiSetupSupportSections({
           id={editorPanelId}
           labelledBy={editorButtonId}
         >
-          <AiSetupWorkProfileSection
+          <div data-setting-id="settings.ai.workProfile">
+            <AiSetupWorkProfileSection
             workProfileDraft={workProfileDraft}
             workProfileMessage={workProfileMessage}
             workProfileSaving={workProfileSaving}
             onSaveWorkProfile={onSaveWorkProfile}
             onWorkProfileDraftChange={onWorkProfileDraftChange}
           />
+            </div>
         </CollapsiblePanel>
       </section>
 

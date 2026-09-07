@@ -53,6 +53,11 @@ export const ENGLISH_TRANSLATIONS = {
   "updates.checkFailed": "Update check failed",
   "updates.checkComplete": "Update check complete",
   "updates.noSignedUpdate": "No signed update is available.",
+  "settings.search.placeholder": "Search settings",
+  "settings.search.clear": "Clear search",
+  "settings.search.count": "{{count}} results",
+  "settings.search.empty": "No settings found",
+  "settings.search.results": "Settings search results",
 
   "classification.rules.removed": "Classification removed.",
   "classification.rules.saved": "Classification saved and applied.",
@@ -2477,6 +2482,11 @@ export const KOREAN_TRANSLATIONS: Record<TranslationKey, string> = {
   "updates.checkFailed": "업데이트 확인 실패",
   "updates.checkComplete": "업데이트 확인 완료",
   "updates.noSignedUpdate": "현재 설치할 수 있는 서명된 업데이트가 없습니다.",
+  "settings.search.placeholder": "설정 검색",
+  "settings.search.clear": "검색어 지우기",
+  "settings.search.count": "검색 결과 {{count}}개",
+  "settings.search.empty": "No settings found",
+  "settings.search.results": "설정 검색 결과",
 
   "classification.rules.removed": "분류 지정을 해제했습니다.",
   "classification.rules.saved": "분류를 저장하고 적용했습니다.",

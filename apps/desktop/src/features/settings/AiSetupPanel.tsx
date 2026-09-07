@@ -1,3 +1,4 @@
+import { useSettingsSearch } from "./SettingsSearchContext";
 import { useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -77,11 +78,18 @@ export function AiSetupPanel({
   onStartCloudSetup,
 }: AiSetupPanelProps) {
   const { t } = useLocalization();
+  const { request: searchRequest } = useSettingsSearch();
   const selectedSection = sectionForProvider(localAiSetup.provider);
   // Which provider panel is expanded. Defaults to the active provider — Drifty on
   // a fresh install, or OpenRouter once the user has switched their primary to it.
   const [expandedSection, setExpandedSection] = useState<AiSetupSection | null>(() => sectionForProvider(localAiSetup.provider));
   const [activePanelTab, setActivePanelTab] = useState<AiSetupPanelTab>("providers");
+  useEffect(() => {
+    if (!searchRequest || searchRequest.entry.section !== "aiSetup") return;
+    const { aiTab, aiProvider } = searchRequest.entry;
+    if (aiTab && (aiTab !== "intelligence" || showIntelligenceTab)) setActivePanelTab(aiTab);
+    if (aiProvider) setExpandedSection(aiProvider);
+  }, [searchRequest, showIntelligenceTab]);
   const driftyRoute = localAiSetup.driftyRoute;
   const modelPickers = useAiSetupModelPickers(localAiSetup, onLocalAiSetupChange);
   // The Drifty provider has no card any more — its cloud/local models are managed
@@ -198,6 +206,7 @@ export function AiSetupPanel({
 
       {activePanelTab === "providers" ? (
         <section id="ai-setup-panel-tab-providers" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.providers")}>
+          <div data-setting-id="settings.ai.modelBeingUsed">
           <AiSetupModelBeingUsed
             actionModelId={managedLocalAi.actionModelId}
             catalog={managedLocalAi.catalog}
@@ -228,9 +237,11 @@ export function AiSetupPanel({
             onTestConnection={handleTestConnection}
           />
 
+          </div>
           <h4 className="ai-setup-provider-heading">{t("settings.ai.connectionDetails")}</h4>
 
           <div className="ai-setup-choices" role="group" aria-label={t("settings.ai.setupChoicesAria")}>
+            <div data-setting-id="settings.ai.openRouterApiKey">
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
                 localAiSetup={localAiSetup}
@@ -238,6 +249,8 @@ export function AiSetupPanel({
                 onLocalAiSetupChange={onLocalAiSetupChange}
               />
             </AiSetupSectionCard>
+            </div>
+            <div data-setting-id="settings.ai.customEndpoint">
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[2]} expanded={expandedSection === "custom"} onToggle={handleToggleSection}>
               <CustomEndpointSetupPanel
                 baseUrl={localAiSetup.selfHostedBaseUrl}
@@ -252,10 +265,11 @@ export function AiSetupPanel({
                 onModelChange={(selfHostedModel) => onLocalAiSetupChange((current) => ({ ...current, provider: "self_hosted", selfHostedModel }))}
               />
             </AiSetupSectionCard>
+            </div>
           </div>
         </section>
       ) : activePanelTab === "intelligence" && showIntelligenceTab ? (
-        <section id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.intelligence")}>
+        <section data-setting-id="settings.ai.intelligence" id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.intelligence")}>
           <IntelligenceSetupPanel
             setup={analysisSetup}
             onChange={onAnalysisChange}

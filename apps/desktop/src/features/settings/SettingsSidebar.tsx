@@ -1,3 +1,4 @@
+import { SettingsSearch } from "./SettingsSearch";
 import { PetIcon } from "../../components/PetIcon";
 import { useLocalization } from "../localization/LocalizationContext";
 import { Fragment, useRef, useState } from "react";
@@ -161,6 +162,7 @@ export function SettingsSidebar({
         <span>{t("common.back")}</span>
       </button>
 
+      <SettingsSearch>
       <nav className="settings-nav" aria-label={t("settings.sidebar.sections")}>
         {visibleNavGroups.map((group) => {
           const groupLabel = t(group.labelKey);
@@ -238,6 +240,7 @@ export function SettingsSidebar({
         </button>
         {discordError ? <p className="settings-sidebar-links__error" role="alert">{t("settings.general.communityOpenFailed")}</p> : null}
       </div>
+      </SettingsSearch>
     </aside>
   );
 }

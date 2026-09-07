@@ -156,7 +156,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
         <h3>{t("settings.section.developer")}</h3>
         <h4 className="developer-subheading">{t("settings.developer.cliSectionTitle")}</h4>
         {/* Terminal figure sits above the copy and the install action. */}
-        <div className="settings-row settings-row--fallback settings-row--group-start developer-cli-row">
+        <div data-setting-id="settings.developer.cliTitle" className="settings-row settings-row--fallback settings-row--group-start developer-cli-row">
           <div className="developer-cli-row__figure">
             <CommandPreview t={t} />
           </div>
@@ -212,7 +212,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
         ))}
       </div>
 
-      <div className="settings-block">
+      <div data-setting-id="settings.developer.skillSectionTitle" className="settings-block">
         <h3>{t("settings.developer.skillSectionTitle")}</h3>
         <div className="settings-row">
           <div>
@@ -244,7 +244,7 @@ export function DeveloperSettingsSection({ client = developerToolsClient }: Deve
             ) : null}
           </div>
         </div>
-        <div className="settings-row">
+        <div data-setting-id="settings.developer.skillPathLabel" className="settings-row">
           <div>
             <div className="lbl">{t("settings.developer.skillPathLabel")}</div>
             <div className="desc">

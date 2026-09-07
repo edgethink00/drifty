@@ -31,7 +31,7 @@ export function AutomaticCloseSettingsRow({
     .filter(Boolean)
     .join(" ");
   return (
-    <div className={rowClassName}>
+    <div data-setting-id="settings.notifications.extreme" className={rowClassName}>
       <div>
         <div className="lbl settings-label-with-badge" id={labelId}>{label ?? t("settings.notifications.extreme")} <span className="status-badge status-badge--beta">{t("common.beta")}</span></div>
         <div className="desc" id={descriptionId}>{prerequisiteMissing ? prerequisiteDescription : availableDescription}</div>

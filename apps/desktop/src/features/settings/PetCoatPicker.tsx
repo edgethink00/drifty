@@ -28,7 +28,7 @@ export function PetSettings({
   const { t } = useLocalization();
   return (
     <>
-      <div className="settings-row settings-row--pet-mode settings-row--group-start" role="group" aria-label={t("settings.pet.title")}>
+      <div data-setting-id="settings.pet.show" className="settings-row settings-row--pet-mode settings-row--group-start" role="group" aria-label={t("settings.pet.title")}>
         <div>
           {/* The block heading already says "Desktop pet"; this row names the
               action, matching "Drift alerts / Show drift alerts" next door and
@@ -58,7 +58,7 @@ function PetSizePicker({
 }) {
   const { t } = useLocalization();
   return (
-    <div className={`settings-row settings-row--pet-size${disabled ? " settings-row--disabled" : ""}`}>
+    <div data-setting-id="settings.pet.size" className={`settings-row settings-row--pet-size${disabled ? " settings-row--disabled" : ""}`}>
       <div>
         <div className="lbl">{t("settings.pet.size")}</div>
       </div>
@@ -98,7 +98,7 @@ export function PetCoatPicker({
 }) {
   const { t } = useLocalization();
   return (
-    <div className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
+    <div data-setting-id="settings.pet.coat" className={`settings-row settings-row--pet-coat${disabled ? " settings-row--disabled" : ""}`}>
       <div>
         <div className="lbl">{t("settings.pet.coat")}</div>
       </div>

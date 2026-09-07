@@ -1,3 +1,5 @@
+import { useEffect, useRef } from "react";
+import { useSettingsSearch } from "./SettingsSearchContext";
 import type { FocusEvent, RefObject } from "react";
 import {
   CATEGORY_ORDER,
@@ -134,13 +136,18 @@ export function ClassificationRulesManager({
   onToggleClassificationRule,
 }: ClassificationRulesManagerProps) {
   const { effectiveLanguage, t } = useLocalization();
+  const { request } = useSettingsSearch();
+  const addDetailsRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    if (request?.entry.reveal === "classification-add" && addDetailsRef.current) addDetailsRef.current.open = true;
+  }, [request]);
   const exactUrlValue = canonicalizeClassificationRuleSiteUrl(domainRuleInput);
   const exactUrlAvailable = Boolean(exactUrlValue);
   const effectiveDomainRuleMode = domainRuleMode === "url" && exactUrlAvailable ? "url" : "domain";
   const domainRuleSaveLabel = effectiveDomainRuleMode === "url" ? t("settings.classification.saveUrl") : t("settings.classification.saveDomain");
 
   return (
-    <div className="settings-section settings-section--classification classification-rules-manager">
+    <div data-setting-id="classification.rules.title" className="settings-section settings-section--classification classification-rules-manager">
       <ClassificationSavedRulesList
         feedback={classificationRulesError ? (
           <div className="classification-rules-manager__notice classification-rules-manager__notice--error" role="alert">{localizeSettingsError(classificationRulesError, effectiveLanguage, t)}</div>
@@ -164,12 +171,12 @@ export function ClassificationRulesManager({
         onLoadClassificationRules={onLoadClassificationRules}
         onToggleClassificationRule={onToggleClassificationRule}
       />
-      <details className="classification-rules-manager__add">
+      <details ref={addDetailsRef} className="classification-rules-manager__add">
         <summary>{t("classification.rules.add")}</summary>
 
         <div className="settings-block cloud-overview">
           <h3 className="sr-only">{t("classification.rules.add")}</h3>
-          <div className="settings-row settings-row--fallback classification-rule-form">
+          <div data-setting-id="settings.classification.addDomain" className="settings-row settings-row--fallback classification-rule-form">
             <div>
               <div className="lbl">{t("settings.classification.addDomain")}</div>
               <div className="desc">{t("settings.classification.addDomainDescription")}</div>
@@ -218,7 +225,7 @@ export function ClassificationRulesManager({
             </div>
             {effectiveDomainRuleMode === "url" && exactUrlValue ? <p className="classification-rule-selected classification-rule-selected--url" role="status">{t("settings.classification.exactUrlSelected", { url: exactUrlValue })}</p> : null}
           </div>
-          <div className="settings-row settings-row--fallback settings-row--group-end classification-rule-form">
+          <div data-setting-id="settings.classification.addApp" className="settings-row settings-row--fallback settings-row--group-end classification-rule-form">
             <div>
               <div className="lbl">{t("settings.classification.addApp")}</div>
               <div className="desc">{t("settings.classification.addAppDescription")}</div>

@@ -295,7 +295,7 @@ export function DevSettingsSection({
   const subsectionTitle = t(activeSubsectionOption.labelKey);
 
   return (
-    <div className="settings-section settings-section--dev" aria-labelledby="dev-settings-page-title">
+    <div data-setting-id={`dev-${activeSubsection}`} className="settings-section settings-section--dev" aria-labelledby="dev-settings-page-title">
       <header className="dev-settings-page-header">
         <h2 id="dev-settings-page-title">{subsectionTitle}</h2>
       </header>

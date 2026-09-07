@@ -77,7 +77,7 @@ export function DriftAlarmCopySettings({
   };
 
   return (
-    <div className="settings-row settings-row--drift-copy" role="group" aria-label={t("settings.alarmCopy.label")}>
+    <div data-setting-id="settings.alarmCopy.label" className="settings-row settings-row--drift-copy" role="group" aria-label={t("settings.alarmCopy.label")}>
       <div>
         <div className="lbl">{t("settings.alarmCopy.label")}</div>
         <div className="desc">{t("settings.alarmCopy.description")}</div>

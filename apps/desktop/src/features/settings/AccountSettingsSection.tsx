@@ -154,7 +154,7 @@ export function AccountSettingsSection({
     <div className="settings-section settings-section--account">
       {/* Plans lead the page in every state: the card names the plan, states the
           price, and carries either the purchase or billing management. */}
-      <div className="settings-block settings-block--plans">
+      <div data-setting-id="settings.section.account" className="settings-block settings-block--plans">
         <h3>{t("settings.section.account")}</h3>
         {isDeviceLimitLocked || isPaymentRequiredLocked || billingEntitlementError ? (
           <div className="account-plan-notice" role="status">
@@ -175,7 +175,7 @@ export function AccountSettingsSection({
         onRedeem={onRedeemTrialCoupon}
       />
 
-      <div className="settings-block settings-block--cloud-account">
+      <div data-setting-id="settings.account.signedIn" className="settings-block settings-block--cloud-account">
         <h3>{t("settings.account.signedIn")}</h3>
         <div className="settings-row settings-row--stacked-action">
           <div>
@@ -205,7 +205,7 @@ export function AccountSettingsSection({
         ) : null}
       </div>
 
-      <div className="settings-block">
+      <div data-setting-id="settings.account.publicProfile" className="settings-block">
         <h3 className="settings-block__title-with-badge" aria-label={t("settings.account.publicProfile")}>
           <span>{t("settings.account.publicProfile")}</span>
           <span className="settings-beta-badge">{t("common.beta")}</span>
@@ -229,7 +229,7 @@ export function AccountSettingsSection({
       {onDeviceSyncEnabledChange ? (
         <div className="settings-block">
           <h3>{t("settings.account.deviceSync")}</h3>
-          <div className="settings-row">
+          <div data-setting-id="settings.account.syncMacs" className="settings-row">
             <div>
               <div className="lbl">{t("settings.account.syncMacs")}</div>
               <div className="desc">{t("settings.account.syncDescription")}</div>
@@ -277,7 +277,7 @@ export function AccountSettingsSection({
       {canDeleteAccount && onDeleteAccount ? (
         <div className="settings-block settings-block--danger-zone">
           <h3>{t("settings.account.dangerZone")}</h3>
-          <div className="settings-row settings-row--stacked-action">
+          <div data-setting-id="settings.account.deleteTitle" className="settings-row settings-row--stacked-action">
             <div>
               <div className="lbl">{t("settings.account.deleteTitle")}</div>
               <div className="desc">{t("settings.account.deleteSettingsDescription")}</div>

@@ -1,5 +1,6 @@
 import process from "node:process";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -51,6 +52,15 @@ export default defineConfig(({ command, mode }) => {
       __DRIFTY_DEV_ALLOW_ONBOARDING_AUTH_SKIP__: JSON.stringify(devAllowOnboardingAuthSkip),
     },
     plugins: [
+      {
+        name: "isolated-dependency-cache",
+        config(config, { command }) {
+          // node_modules can be symlinked across worktrees. Keep concurrent
+          // browser/Tauri servers from replacing each other's optimized React.
+          const instance = command === "serve" ? `serve-${config.server?.port ?? 1420}` : "build";
+          return { cacheDir: fileURLToPath(new URL(`../../.vite-cache/desktop/${instance}`, import.meta.url)) };
+        },
+      },
       react(),
       previewAiProxyPlugin(enablePreviewAiProxy),
       ...(uploadSentrySourcemaps

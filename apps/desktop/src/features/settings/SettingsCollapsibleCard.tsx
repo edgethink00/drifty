@@ -1,4 +1,5 @@
-import { useId, useState } from "react";
+import { useSettingsSearch } from "./SettingsSearchContext";
+import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 
 import { CollapsiblePanel } from "./CollapsiblePanel";
@@ -6,6 +7,8 @@ import "./SettingsCollapsibleCard.css";
 
 type SettingsCollapsibleCardProps = {
   readonly title: string;
+  readonly searchReveal?: string;
+  readonly settingId?: string;
   readonly subtitle?: string;
   readonly summary?: ReactNode;
   readonly defaultExpanded?: boolean;
@@ -14,18 +17,24 @@ type SettingsCollapsibleCardProps = {
 
 export function SettingsCollapsibleCard({
   title,
+  searchReveal,
+  settingId,
   subtitle,
   summary,
   defaultExpanded = false,
   children,
 }: SettingsCollapsibleCardProps) {
+  const { request } = useSettingsSearch();
   const [expanded, setExpanded] = useState(defaultExpanded);
+  useEffect(() => {
+    if (searchReveal && request?.entry.reveal === searchReveal) setExpanded(true);
+  }, [request, searchReveal]);
   const reactId = useId().replace(/:/g, "");
   const panelId = `settings-collapsible-${reactId}-panel`;
   const buttonId = `settings-collapsible-${reactId}-button`;
 
   return (
-    <section className={`settings-collapsible-card${expanded ? " is-expanded" : ""}`}>
+    <section data-setting-id={settingId} className={`settings-collapsible-card${expanded ? " is-expanded" : ""}`}>
       <button
         aria-controls={panelId}
         aria-expanded={expanded}

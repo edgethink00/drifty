@@ -75,7 +75,7 @@ export function NotificationsSettingsSection({
     <div className="settings-section">
       <div className="settings-block">
         <h3>{t("settings.section.notifications")}</h3>
-        <div className="settings-row settings-row--companion-visibility">
+        <div data-setting-id="settings.companion.visibility" className="settings-row settings-row--companion-visibility">
           <div>
             <div className="lbl">{t("settings.companion.visibility")}</div>
             <div className="desc">{companionVisibilityDescription}</div>
@@ -110,7 +110,7 @@ export function NotificationsSettingsSection({
 
       <div className="settings-block">
         <h3>{t("settings.notifications.driftAlerts")}</h3>
-        <div className="settings-row">
+        <div data-setting-id="settings.notifications.showDriftAlerts" className="settings-row">
           <div>
             <div className="lbl">{t("settings.notifications.showDriftAlerts")}</div>
             <div className="desc">{t("settings.notifications.driftAlertsDescription")}</div>
@@ -131,7 +131,7 @@ export function NotificationsSettingsSection({
           prerequisiteDescription={t("settings.notifications.extremeOffDescription")}
           toggleAriaLabel={t("settings.notifications.toggleExtreme")}
         />
-        <div className="settings-row">
+        <div data-setting-id="settings.notifications.timing" className="settings-row">
           <div>
             <div className="lbl">{t("settings.notifications.timing")}</div>
             <div className="desc">{t("settings.notifications.timingDescription")}</div>

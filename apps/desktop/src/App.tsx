@@ -1,4 +1,5 @@
 import { localizeUpdateMessage } from "./features/localization/settingsMessageTranslations";
+import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
 import { listen } from "@tauri-apps/api/event";
@@ -9023,6 +9024,15 @@ export default function App() {
   return (
     <SiteIconProvider value={siteIcons}>
       <LocalizationProvider controller={localization}>
+    <SettingsSearchProvider
+      activeSection={activeTab === "settings" ? settingsSection : null}
+      availability={{ dev: DEV_SETTINGS_ENABLED && devModeEnabled, intelligence: projectClassificationFeatureEnabled,
+        backgroundUpdates: hostPlatform === "macos", signedIn: hasRequiredAccountAuth, deviceSync: deviceSyncFeatureVisible, authenticated: Boolean(user), accessibility: accessibilityRequired }}
+      onNavigate={(entry) => {
+        setSettingsSection(entry.section);
+        if (entry.devSubsection) handleDevSettingsSubsectionChange(entry.devSubsection);
+      }}
+    >
     <div className={shellClassName}>
       <div className="window-chrome">
         <div className="window-nav-controls" aria-label={localization.t("shell.windowNavigation")}>
@@ -9798,7 +9808,7 @@ export default function App() {
         {activeTab === "settings" ? (
           <div className="page">
             <h1 className="sr-only">{localization.t("common.settings")}</h1>
-            <div className="settings-panel-stack">
+            <SettingsSearchDestination>
                 {settingsSection === "classification" && (
                   <ClassificationRulesManager
                     onSaveRule={saveClassificationRule}
@@ -10109,7 +10119,7 @@ export default function App() {
                     onResetDemoDashboardReplaySettings={handleResetDemoDashboardReplaySettings}
                   />
                 )}
-            </div>
+            </SettingsSearchDestination>
           </div>
         ) : null}
         </Suspense>
@@ -10235,6 +10245,7 @@ export default function App() {
       {latestBuildPrompt}
 
     </div>
+    </SettingsSearchProvider>
     </LocalizationProvider>
       </SiteIconProvider>
   );

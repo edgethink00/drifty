@@ -117,7 +117,7 @@ export function PrivacySettingsSection({
           </div>
         </div>
       </div>
-      <SettingsCollapsibleCard
+      <SettingsCollapsibleCard searchReveal="privacy-ai" settingId="settings.privacy.aiSending"
         subtitle={t("settings.privacy.aiSubtitle")}
         summary={
           <>
@@ -132,7 +132,7 @@ export function PrivacySettingsSection({
       </SettingsCollapsibleCard>
       <div className="settings-block">
         <h3>{t("settings.privacy.localData")}</h3>
-        <div className="settings-row">
+        <div data-setting-id="settings.data.database" className="settings-row">
           <div>
             <div className="lbl">{t("settings.data.database")}</div>
           </div>
@@ -144,7 +144,7 @@ export function PrivacySettingsSection({
           </div>
           <div className="ctrl ctrl--value">{t("settings.data.sessionsToday", { count: todaySessionCount })}</div>
         </div>
-        <div className="settings-row">
+        <div data-setting-id="settings.data.iconCache" className="settings-row">
           <div>
             <div className="lbl">{t("settings.data.iconCache")}</div>
             <div className="desc">{t("settings.data.iconCacheDescription")}</div>
@@ -166,7 +166,7 @@ export function PrivacySettingsSection({
       </div>
       <div className="settings-block">
         <h3>{t("settings.privacy.danger")}</h3>
-        <div className="settings-row">
+        <div data-setting-id="settings.privacy.deleteTitle" className="settings-row">
           <div>
             <div className="lbl">{t("settings.privacy.deleteTitle")}</div>
             <div className="desc">{t("settings.privacy.deleteDescription")}</div>
