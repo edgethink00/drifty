@@ -373,7 +373,7 @@ describe("WeekDashboard activity inspector", () => {
     expect(inspector.style.width).toBe("304px");
     expect(styles).toMatch(/\.week-activity-inspector\s*\{[^}]*max-width:\s*calc\(100vw - 32px\)/);
     expect(styles).toMatch(/\.week-activity-inspector\s*\{[^}]*max-height:\s*calc\(100vh - 32px\)/);
-    expect(styles).toMatch(/\.week-activity-inspector__attribute-trigger\s*\{[^}]*min-height:\s*34px/);
+    expect(styles).toMatch(/\.week-activity-inspector__attribute-trigger\s*\{[^}]*min-height:\s*32px/);
     expect(styles).toMatch(/\.week-activity-inspector__chip\s*\{[^}]*border-radius:\s*var\(--radius-pill\)/);
     expect(styles).toMatch(/\.week-activity-inspector--preview\s*\{[^}]*pointer-events:\s*none/);
     expect(styles).toMatch(/\.week-activity-inspector__picker-options\s*\{[^}]*overflow-y:\s*hidden/);

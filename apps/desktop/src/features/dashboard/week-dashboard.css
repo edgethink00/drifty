@@ -2619,11 +2619,13 @@
 
 .week-activity-inspector__header {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) 30px;
+  grid-template-columns: var(--inspector-rail-icon-size) minmax(0, 1fr) var(--inspector-rail-icon-size);
   align-items: center;
-  gap: 7px;
+  gap: var(--inspector-rail-gap);
   min-height: 40px;
-  padding: 2px 2px 7px;
+  /* Right inset is 4px narrower so the 28px close button's glyph sits on the
+     same trailing centerline as the 20px chevron cells below it. */
+  padding: 2px calc(var(--inspector-rail-inset) - 4px) 7px var(--inspector-rail-inset);
   border-bottom: 1px solid var(--week-inspector-divider);
 }
 
@@ -2726,22 +2728,24 @@
 }
 
 .week-activity-inspector__actions--destructive {
-  padding-top: 2px;
+  padding-top: 3px;
+  padding-bottom: 3px;
 }
 
 .week-activity-inspector__actions--destructive .week-activity-inspector__action {
-  min-height: 38px;
+  min-height: 34px;
+  padding-block: 3px;
 }
 
 .week-activity-inspector__action {
   appearance: none;
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 16px;
+  grid-template-columns: var(--inspector-rail-icon-size) minmax(0, 1fr) var(--inspector-rail-trailing-size);
   align-items: center;
-  gap: 8px;
+  gap: var(--inspector-rail-gap);
   width: 100%;
   min-height: 44px;
-  padding: 5px 7px;
+  padding: 5px var(--inspector-rail-inset);
   border: 0;
   border-radius: 9px;
   background: transparent;
@@ -2767,12 +2771,16 @@
 
 .week-activity-inspector__action strong {
   font-size: 0.75rem;
-  font-weight: 590;
+  font-weight: 560;
+}
+
+.week-activity-inspector__action > svg {
+  justify-self: center;
 }
 
 .week-activity-inspector__action-icon {
-  width: 28px;
-  height: 28px;
+  width: var(--inspector-rail-icon-size);
+  height: var(--inspector-rail-icon-size);
   border-radius: 8px;
   background: var(--surface-strong);
   color: var(--text-muted);
@@ -2783,8 +2791,11 @@
   color: var(--warn);
 }
 
+/* The destructive row keeps the shared rail and the warn color as its danger
+   signal, but no tinted icon box: it would be the only filled block in the
+   card and would outrank the attributes and list the card exists to show. */
 .week-activity-inspector__action--danger .week-activity-inspector__action-icon {
-  background: var(--danger-soft);
+  background: transparent;
 }
 
 .week-activity-inspector__confirmation {
@@ -2834,7 +2845,14 @@
    card can stay viewport-clamped without clipping the menu. */
 .week-activity-inspector {
   --inspector-attribute-label-width: 56px;
-  --inspector-attribute-column-gap: 8px;
+  --inspector-attribute-column-gap: var(--inspector-rail-gap);
+  /* One shared rail for every section: leading icon boxes start at the same
+     x, their centers share one line, text starts on one line, and trailing
+     chevrons/close share one centerline. */
+  --inspector-rail-inset: 7px;
+  --inspector-rail-icon-size: 28px;
+  --inspector-rail-gap: 8px;
+  --inspector-rail-trailing-size: 20px;
 }
 
 .week-activity-inspector__heading span {
@@ -2857,11 +2875,11 @@
 .week-activity-inspector__attributes {
   display: grid;
   gap: 1px;
-  padding: 4px 0 6px;
+  padding: 5px 0 5px;
 }
 
 .week-activity-inspector__mixed-summary {
-  margin: 1px 6px 2px;
+  margin: 1px var(--inspector-rail-inset) 2px;
   color: var(--text-soft);
   font-size: var(--type-caption-size);
   font-weight: 560;
@@ -2875,12 +2893,12 @@
 .week-activity-inspector__attribute-trigger {
   appearance: none;
   display: grid;
-  grid-template-columns: var(--inspector-attribute-label-width) minmax(0, 1fr) 20px;
+  grid-template-columns: var(--inspector-attribute-label-width) minmax(0, 1fr) var(--inspector-rail-trailing-size);
   align-items: center;
   column-gap: var(--inspector-attribute-column-gap);
   width: 100%;
-  min-height: 34px;
-  padding: 3px 6px;
+  min-height: 32px;
+  padding: 3px var(--inspector-rail-inset);
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -2960,8 +2978,8 @@
 .week-activity-inspector__attribute-chevron {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: var(--inspector-rail-trailing-size);
+  height: var(--inspector-rail-trailing-size);
   color: var(--text-soft);
   transition: color 140ms ease-out, transform 140ms ease-out;
 }
@@ -3159,21 +3177,27 @@
 .week-activity-inspector__activity-list {
   display: grid;
   gap: 1px;
-  margin: 0 6px 8px;
-  padding: 4px 0 2px;
+  margin: 0;
+  padding: 4px 0 5px;
   border-top: 1px solid var(--week-inspector-divider);
 }
 
 .week-activity-inspector__activity-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
+  grid-template-columns: var(--inspector-rail-icon-size) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--inspector-rail-gap);
   min-height: 31px;
-  padding: 2px 1px;
+  /* Trailing durations stop at the chevron glyphs' visual right edge instead
+     of the chevron cell edge, so the right column reads as one line. */
+  padding: 2px calc(var(--inspector-rail-inset) + 7px) 2px var(--inspector-rail-inset);
 }
 
-.week-activity-inspector__activity-row .usage-identity-icon--sm,
+.week-activity-inspector__activity-row .usage-identity-icon--sm {
+  width: var(--inspector-rail-icon-size);
+  height: var(--inspector-rail-icon-size);
+}
+
 .week-activity-inspector__activity-row .app-glyph--sm,
 .week-activity-inspector__activity-row .app-icon--sm,
 .week-activity-inspector__activity-row .site-favicon {
@@ -3196,7 +3220,7 @@
   color: var(--text);
   font-size: 0.71875rem;
   font-variant-numeric: tabular-nums;
-  font-weight: 670;
+  font-weight: 620;
   white-space: nowrap;
 }
 
@@ -3207,7 +3231,7 @@
 
 .week-activity-inspector__activity-more {
   min-height: 22px;
-  padding: 3px 1px 2px 31px;
+  padding: 3px var(--inspector-rail-inset) 2px calc(var(--inspector-rail-inset) + var(--inspector-rail-icon-size) + var(--inspector-rail-gap));
   color: var(--text-soft);
   font-size: var(--type-caption-size);
   font-weight: 580;
