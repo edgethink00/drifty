@@ -25,6 +25,7 @@ describe("billingService", () => {
 
     expect(result).toEqual({ success: true, data: { url: "https://checkout.example.test" } });
     expect(invoke).toHaveBeenCalledWith("create-polar-checkout", {
+      timeout: 30_000,
       body: { plan: "individual", billingInterval, pricingRevision: "pro-usd-2026-09" },
     });
   });
@@ -60,7 +61,7 @@ describe("billingService", () => {
     const result = await createBillingPortalSession(client);
 
     expect(result).toEqual({ success: true, data: { url: "https://portal.example.test" } });
-    expect(invoke).toHaveBeenCalledWith("create-polar-customer-portal", { body: {} });
+    expect(invoke).toHaveBeenCalledWith("create-polar-customer-portal", { timeout: 30_000, body: {} });
   });
 
   it("accepts the Polar customer portal URL response key", async () => {

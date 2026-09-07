@@ -362,7 +362,7 @@ describe("useCloudBillingController", () => {
     fallback.mockRestore();
   });
 
-  it.each([false, true])("an async checkout carries no account ID; revoked=%s", async (revoke) => {
+  it.each([false, true])("discards checkout from a previous account; analytics revoked=%s", async (revoke) => {
     billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: {
       plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null, lockedReason: "trial_expired",
     } });
@@ -375,7 +375,7 @@ describe("useCloudBillingController", () => {
     await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
     let checkout!: Promise<void>;
     act(() => { checkout = result.current.startCloudCheckout("monthly"); });
-    rerender({ user: { ...signedInUser, id: "user-2" } });
+    await act(async () => { rerender({ user: { ...signedInUser, id: "user-2" } }); });
     if (revoke) {
       const { writeProductAnalyticsEnabled } = await import("../../lib/analytics/productAnalyticsPreference");
       act(() => {
@@ -387,8 +387,94 @@ describe("useCloudBillingController", () => {
       resolveCheckout({ success: true, data: { url: "https://checkout.example.test" } });
       await checkout;
     });
-    if (revoke) expect(recordProFunnelStep).not.toHaveBeenCalled();
-    else expect(recordProFunnelStep).toHaveBeenCalledWith({ step: "checkout_opened", billing_interval: "monthly" });
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(recordProFunnelStep).not.toHaveBeenCalled();
+    expect(result.current.billingCheckoutLoadingInterval).toBeNull();
+  });
+
+  it.each(["checkout", "portal"] as const)("keeps the new account's %s request intact when the old one finishes", async (kind) => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: {
+      plan: "individual", status: kind === "portal" ? "active" : "locked", canUseApp: kind === "portal",
+      trialEndsAt: null, currentPeriodEnd: null, lockedReason: kind === "portal" ? undefined : "trial_expired",
+    } });
+    const resolvers: Array<(value: unknown) => void> = [];
+    const create = kind === "portal" ? billingMocks.createBillingPortalSession : billingMocks.createIndividualCheckout;
+    create.mockImplementation(() => new Promise(resolve => { resolvers.push(resolve); }));
+    const { result, rerender } = renderHook(({ user }) => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }), { initialProps: { user: signedInUser } });
+    await waitFor(() => expect(result.current.billingEntitlement).not.toBeNull());
+    const start = () => kind === "portal" ? result.current.handleManageCloudBilling() : result.current.startCloudCheckout("monthly");
+    let oldRequest!: Promise<void>; let newRequest!: Promise<void>;
+    act(() => { oldRequest = start(); });
+    rerender({ user: {...signedInUser, id: "user-2"} });
+    await waitFor(() => expect(result.current.billingEntitlementLoading).toBe(false));
+    act(() => { newRequest = start(); void start(); });
+    expect(create).toHaveBeenCalledTimes(2);
+    await act(async () => { resolvers[0]({success: true, data: {url: "https://old.example.test"}}); await oldRequest; });
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(kind === "portal" ? result.current.billingPortalLoading : result.current.billingCheckoutLoadingInterval === "monthly").toBe(true);
+    await act(async () => { resolvers[1]({success: true, data: {url: "https://new.example.test"}}); await newRequest; });
+    expect(openUrl).toHaveBeenCalledExactlyOnceWith("https://new.example.test");
+  });
+
+  it("clears the previous account's plan while the new entitlement is unresolved", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValueOnce({success: true, data: {
+      plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null,
+    }}).mockReturnValue(new Promise(() => {}));
+    const {result, rerender} = renderHook(({user}) => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }), {initialProps: {user: signedInUser}});
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
+    rerender({user: {...signedInUser, id: "user-2"}});
+    expect(result.current.billingEntitlement).toBeNull();
+    expect(result.current.billingEntitlementLoading).toBe(true);
+    await act(async () => { await result.current.handleManageCloudBilling(); });
+    expect(billingMocks.createBillingPortalSession).not.toHaveBeenCalled();
+  });
+
+  it("does not launch browser fallback after a pending native opener belongs to a previous account", async () => {
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({success: true, data: {
+      plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null,
+    }});
+    billingMocks.createBillingPortalSession.mockResolvedValue({success: true, data: {url: "https://old.example.test"}});
+    let rejectOpen!: (reason: Error) => void;
+    vi.mocked(openUrl).mockImplementation(() => new Promise((_resolve, reject) => {rejectOpen = reject;}));
+    const fallback = vi.spyOn(window, "open").mockReturnValue(null);
+    const {result, rerender} = renderHook(({user}) => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }), {initialProps: {user: signedInUser}});
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
+    let pending!: Promise<void>;
+    act(() => {pending = result.current.handleManageCloudBilling();});
+    await waitFor(() => expect(openUrl).toHaveBeenCalledTimes(1));
+    await act(async () => {rerender({user: {...signedInUser, id: "user-2"}});});
+    await act(async () => {rejectOpen(new Error("Native opener failed")); await pending;});
+    expect(fallback).not.toHaveBeenCalled();
+    expect(result.current.billingActionError).toBeNull();
+    fallback.mockRestore();
+  });
+
+  it("refreshes the plan once after returning from billing management", async () => {
+    const active = {plan: "individual", status: "active", canUseApp: true, trialEndsAt: null, currentPeriodEnd: null};
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({success: true, data: active});
+    billingMocks.createBillingPortalSession.mockResolvedValue({success: true, data: {url: "https://portal.example.test"}});
+    const {result} = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true, isSupabaseConfigured: true, shouldCheckBillingEntitlement: true,
+      user: signedInUser, onAuthRequired: vi.fn(), onOpenAiSetup: vi.fn(),
+    }));
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
+    await act(async () => {await result.current.handleManageCloudBilling();});
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({success: true, data: {...active, status: "locked", canUseApp: false, lockedReason: "payment_required"}});
+    const before = billingMocks.fetchBillingEntitlement.mock.calls.length;
+    await act(async () => {window.dispatchEvent(new Event("focus"));});
+    expect(result.current.billingEntitlement?.lockedReason).toBe("payment_required");
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(before + 1);
+    await act(async () => {window.dispatchEvent(new Event("focus"));});
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledTimes(before + 1);
   });
 
   it("blocks duplicate checkout attempts until the browser return is confirmed", async () => {

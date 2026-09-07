@@ -49,8 +49,10 @@ function PlanFeatureList({ items }: { readonly items: readonly string[] }) {
 
 export function IndividualPlanCards({
   billingInterval,
+  showBillingInterval = true,
   currentPlan = null,
   disabled = false,
+  freePlanDisabled = disabled,
   loadingInterval,
   mode = "checkout",
   planState = null,
@@ -61,9 +63,11 @@ export function IndividualPlanCards({
   manageCurrentPlanLabel,
   manageCurrentPlanLoading = false,
 }: {
+  readonly showBillingInterval?: boolean;
   readonly billingInterval?: VisibleBillingInterval;
   readonly currentPlan?: BillingPlanId | null;
   readonly disabled?: boolean;
+  readonly freePlanDisabled?: boolean;
   readonly loadingInterval: BillingInterval | null;
   /** `checkout` and `display` name the host surface for styling. */
   readonly mode?: "checkout" | "display";
@@ -132,7 +136,7 @@ export function IndividualPlanCards({
         <button
           type="button"
           className="individual-plan-card__cta individual-plan-card__cta--manage"
-          disabled={disabled || manageCurrentPlanLoading}
+          disabled={disabled || manageCurrentPlanLoading || loadingInterval !== null}
           onClick={onManageCurrentPlan}
         >
           {manageCurrentPlanLoading
@@ -153,7 +157,7 @@ export function IndividualPlanCards({
       className="individual-plan-card individual-plan-card--featured"
       aria-label={t("billing.plan.proChooseAria")}
       onClick={() => onSelectPlan?.(selectedInterval)}
-      disabled={disabled || loadingInterval !== null}
+      disabled={disabled || loadingInterval !== null || manageCurrentPlanLoading}
     >
       {individualContent}
     </button>
@@ -175,7 +179,16 @@ export function IndividualPlanCards({
           className={`individual-plan-interval${selectedInterval === option.id ? " is-active" : ""}`}
           role="radio"
           aria-checked={selectedInterval === option.id}
-          disabled={loadingInterval !== null}
+          tabIndex={selectedInterval === option.id ? 0 : -1}
+          onKeyDown={(event) => {
+            if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const nextInterval = event.key === "Home" ? "monthly" : event.key === "End" ? "yearly" : selectedInterval === "monthly" ? "yearly" : "monthly";
+            handleIntervalChange(nextInterval);
+            const controls = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
+            controls?.[nextInterval === "monthly" ? 0 : 1]?.focus();
+          }}
+          disabled={disabled || loadingInterval !== null || manageCurrentPlanLoading}
           onClick={() => handleIntervalChange(option.id)}
         >
           <span>{t(option.labelKey)}</span>
@@ -191,7 +204,7 @@ export function IndividualPlanCards({
 
   return (
     <div className={`individual-plan-suite individual-plan-suite--${mode}`} aria-label={t("billing.plan.suiteAria")}>
-      {intervalSwitch}
+      {showBillingInterval ? intervalSwitch : null}
       <div className="individual-plan-cards">
         <article
           className={`individual-plan-card${currentPlan === "free" && !isTrialing ? " individual-plan-card--current" : ""}`}
@@ -213,7 +226,7 @@ export function IndividualPlanCards({
           </span>
           <PlanFeatureList items={FREE_PLAN_FEATURE_KEYS.map((key) => t(key))} />
           {onSelectFreePlan ? (
-            <button type="button" className="individual-plan-card__cta" aria-label={t("billing.plan.freeCtaAria")} onClick={onSelectFreePlan}>
+            <button type="button" className="individual-plan-card__cta" aria-label={t("billing.plan.freeCtaAria")} disabled={freePlanDisabled || loadingInterval !== null || manageCurrentPlanLoading} onClick={onSelectFreePlan}>
               {t("billing.plan.freeCta")}
             </button>
           ) : (

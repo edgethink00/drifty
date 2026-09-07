@@ -124,6 +124,7 @@ export async function createIndividualCheckout(
 
   try {
     const { data, error } = await client.functions.invoke<CheckoutResponse>("create-polar-checkout", {
+      timeout: 30_000,
       body: {
         plan: "individual",
         billingInterval,
@@ -161,6 +162,7 @@ export async function createBillingPortalSession(client: BillingClient = supabas
 
   try {
     const { data, error } = await client.functions.invoke<BillingPortalResponse>("create-polar-customer-portal", {
+      timeout: 30_000,
       body: {},
     });
 

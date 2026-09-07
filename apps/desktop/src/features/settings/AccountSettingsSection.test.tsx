@@ -2,7 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { AccountSettingsSection, type AccountSettingsSectionProps } from "./AccountSettingsSection";
@@ -311,7 +311,7 @@ describe("AccountSettingsSection", () => {
     expect(codeInput.getAttribute("aria-describedby")).toBe(alert.id);
   });
 
-  it("keeps active subscription management visible beside an already-used coupon notice", () => {
+  it("keeps active subscription management visible beside an already-used coupon notice", async () => {
     const onManageCloudBilling = vi.fn();
     render(
       <AccountSettingsSection
@@ -348,7 +348,7 @@ describe("AccountSettingsSection", () => {
     );
 
     expect(screen.getByRole("status").textContent).toContain("already used a promo code");
-    fireEvent.click(screen.getByRole("button", { name: /^Manage billing$/i }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Manage billing$/i })); });
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
   });
 
@@ -416,7 +416,7 @@ describe("AccountSettingsSection", () => {
     expect(styles).not.toContain(".cloud-device-confirm__remove");
   });
 
-  it("recovers a blocked payment from the Pro card instead of starting checkout", () => {
+  it("recovers a blocked payment from the plan summary instead of starting checkout", async () => {
     const onManageCloudBilling = vi.fn();
     const onStartCloudSetup = vi.fn();
 
@@ -450,13 +450,13 @@ describe("AccountSettingsSection", () => {
     );
 
     expect(screen.getByText(/Update payment on this subscription to resume Cloud AI/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i })); });
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onStartCloudSetup).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
   });
 
-  it("keeps Promo code outside the Account heading block, directly under the plan cards", () => {
+  it("keeps Promo code outside the Account heading block, directly under the plan summary", () => {
     const markup = readFileSync(desktopSourcePath("src/features/settings/AccountSettingsSection.tsx"), "utf8");
     const plansClose = markup.indexOf("</div>", markup.indexOf("settings-block--plans"));
     const coupon = markup.indexOf("<TrialCouponRedemption");
@@ -473,7 +473,6 @@ describe("AccountSettingsSection", () => {
     const stackedRowRule = cssRule(styles, ".content--settings .settings-section--account .settings-row--stacked-action");
     const stackedControlRule = cssRule(styles, ".content--settings .settings-section--account .settings-row--stacked-action > .ctrl");
     const cloudDevicePanelRule = cssRule(styles, ".content--settings .settings-section--account .settings-block--cloud-account .cloud-device-management");
-    const planSuiteRule = cssRule(styles, ".content--settings .settings-section--account .individual-plan-suite--display");
     const sharedPlanSuiteRule = cssRule(sharedPlanStyles, ".individual-plan-suite");
     const sharedPlanIntervalsRule = cssRule(sharedPlanStyles, ".individual-plan-intervals");
     const sharedPlanCardsRule = cssRule(sharedPlanStyles, ".individual-plan-cards");
@@ -489,7 +488,6 @@ describe("AccountSettingsSection", () => {
     expect(cloudDevicePanelRule).toContain("background: transparent;");
     expect(cloudDevicePanelRule).toContain("border: 0;");
     expect(cloudDevicePanelRule).toContain("padding: 0;");
-    expect(planSuiteRule).toContain("flex: 0 1 42rem;");
     expect(sharedPlanSuiteRule).toContain("gap: var(--space-2);");
     expect(sharedPlanSuiteRule).toContain("max-width: 42rem;");
     expect(sharedPlanIntervalsRule).toContain("justify-self: start;");

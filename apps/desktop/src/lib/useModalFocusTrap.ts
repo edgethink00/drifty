@@ -13,10 +13,11 @@ const MODAL_FOCUSABLE_SELECTOR = [
  */
 export function useModalFocusTrap(
   dialogRef: { readonly current: HTMLElement | null },
-  options?: { readonly initialFocusSelector?: string; readonly enabled?: boolean },
+  options?: { readonly initialFocusSelector?: string; readonly enabled?: boolean; readonly explicitTabNavigation?: boolean },
 ): void {
   const initialFocusSelector = options?.initialFocusSelector;
   const enabled = options?.enabled ?? true;
+  const explicitTabNavigation = options?.explicitTabNavigation ?? false;
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!enabled || !dialog) return;
@@ -65,6 +66,16 @@ export function useModalFocusTrap(
         return;
       }
       const index = elements.indexOf(document.activeElement as HTMLElement);
+      // WebKit may skip buttons unless macOS full keyboard access is enabled.
+      if (explicitTabNavigation) {
+        event.preventDefault();
+        const nextIndex = index < 0
+          ? event.shiftKey ? elements.length - 1 : 0
+          : (index + (event.shiftKey ? -1 : 1) + elements.length) % elements.length;
+        elements[nextIndex].focus();
+        elements[nextIndex].scrollIntoView?.({ block: "nearest", inline: "nearest" });
+        return;
+      }
       if (event.shiftKey ? index <= 0 : index === -1 || index === elements.length - 1) {
         event.preventDefault();
         const target = elements[event.shiftKey ? elements.length - 1 : 0];
@@ -91,7 +102,7 @@ export function useModalFocusTrap(
         getModalFocusableElements(next)[0]?.focus({ preventScroll: true });
       }
     };
-  }, [dialogRef, initialFocusSelector, enabled]);
+  }, [dialogRef, initialFocusSelector, enabled, explicitTabNavigation]);
 }
 
 function getModalFocusableElements(dialog: HTMLElement): HTMLElement[] {

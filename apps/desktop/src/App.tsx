@@ -9862,6 +9862,10 @@ export default function App() {
                 )}
                 {settingsSection === "account" && (
                   <AccountSettingsSection
+                    key={user?.id ?? "signed-out"}
+                    billingCheckoutAwaitingConfirmation={billingCheckoutAwaitingConfirmation}
+                    billingActionErrorCode={billingActionErrorCode}
+                    onCheckForUpdates={() => void handleCheckForUpdates()}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementError={effectiveBillingSettingsError}
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}

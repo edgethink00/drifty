@@ -98,10 +98,30 @@ export function useCloudBillingController({
   const [cloudDeviceRevokingId, setCloudDeviceRevokingId] = useState<string | null>(null);
   const [cloudTrialStartedNotice, setCloudTrialStartedNotice] = useState<CloudTrialStartedNoticeModel | null>(null);
   const [cloudCheckoutAwaitingBrowser, setCloudCheckoutAwaitingBrowser] = useState(false);
+  const [billingPortalAwaitingBrowser, setBillingPortalAwaitingBrowser] = useState(false);
   const billingEntitlementRequestRef = useRef(0);
   const cloudCheckoutPendingRef = useRef(false);
   const cloudCheckoutConfirmationInFlightRef = useRef(false);
   const couponRedemptionRequestRef = useRef(0);
+  const billingActionGenerationRef = useRef(0);
+  const billingPortalPendingRef = useRef(false);
+
+  // Responses from a previous account (or an unmounted controller) must never
+  // open a billing URL or clear the current account's request state.
+  useEffect(() => {
+    billingActionGenerationRef.current += 1;
+    setBillingEntitlement(null);
+    billingPortalPendingRef.current = false;
+    cloudCheckoutPendingRef.current = false;
+    cloudCheckoutConfirmationInFlightRef.current = false;
+    setBillingPortalLoading(false);
+    setBillingPortalAwaitingBrowser(false);
+    setBillingCheckoutLoadingInterval(null);
+    setCloudCheckoutAwaitingBrowser(false);
+    setBillingActionError(null);
+    setBillingActionErrorCode(null);
+    return () => { billingActionGenerationRef.current += 1; };
+  }, [user?.id, hasRequiredAccountAuth, isSupabaseConfigured, shouldCheckBillingEntitlement]);
 
   const refreshBillingEntitlement = useCallback(async (): Promise<BillingEntitlement | null> => {
     if (!shouldCheckBillingEntitlement) {
@@ -182,9 +202,14 @@ export function useCloudBillingController({
       return;
     }
 
+    if (billingPortalPendingRef.current || cloudCheckoutPendingRef.current) return;
+    billingPortalPendingRef.current = true;
+    const generation = billingActionGenerationRef.current;
+    const isCurrentRequest = () => generation === billingActionGenerationRef.current;
     setBillingPortalLoading(true);
     try {
       const portalResult = await createBillingPortalSession();
+      if (!isCurrentRequest()) return;
       if (!portalResult.success) {
         setBillingActionError(portalResult.error);
         setBillingActionErrorCode(null);
@@ -204,7 +229,9 @@ export function useCloudBillingController({
         entitlement_status: billingEntitlement?.status ?? "unknown",
         ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
       });
-      await openExternalUrl(portalResult.data.url);
+      await openExternalUrl(portalResult.data.url, isCurrentRequest);
+      if (!isCurrentRequest()) return;
+      setBillingPortalAwaitingBrowser(true);
       capturePostHogEvent("billing_action", {
         action: "portal_opened",
         result: "success",
@@ -212,6 +239,7 @@ export function useCloudBillingController({
         ...(billingEntitlement?.lockedReason ? { locked_reason: billingEntitlement.lockedReason } : {}),
       });
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setBillingActionError(toErrorMessage(error));
       setBillingActionErrorCode(null);
       capturePostHogEvent("billing_action", {
@@ -222,7 +250,10 @@ export function useCloudBillingController({
         error_kind: toAnalyticsErrorKind(error),
       });
     } finally {
-      setBillingPortalLoading(false);
+      if (isCurrentRequest()) {
+        billingPortalPendingRef.current = false;
+        setBillingPortalLoading(false);
+      }
     }
   }, [billingEntitlement?.lockedReason, billingEntitlement?.status, hasRequiredAccountAuth, isSupabaseConfigured, onAuthRequired, refreshBillingEntitlement, user]);
 
@@ -232,7 +263,7 @@ export function useCloudBillingController({
       onAuthRequired();
       return;
     }
-    if (cloudCheckoutPendingRef.current) return;
+    if (cloudCheckoutPendingRef.current || billingPortalPendingRef.current) return;
 
     // A blocked payment already owns a subscription. Opening checkout here would
     // sell a second one instead of recovering the one Polar already has.
@@ -248,11 +279,14 @@ export function useCloudBillingController({
     setBillingActionError(null);
     setBillingActionErrorCode(null);
     cloudCheckoutPendingRef.current = true;
+    const generation = billingActionGenerationRef.current;
+    const isCurrentRequest = () => generation === billingActionGenerationRef.current;
     const canRecordCheckout = createProductAnalyticsDeliveryGuard();
     let openedCheckout = false;
     setBillingCheckoutLoadingInterval(billingInterval);
     try {
       const checkoutResult = await createIndividualCheckout(billingInterval);
+      if (!isCurrentRequest()) return;
       if (!checkoutResult.success) {
         const checkoutError = checkoutResult.code === "checkout_maintenance"
           ? t("billing.checkout.maintenance")
@@ -279,7 +313,8 @@ export function useCloudBillingController({
         result: "success",
         billing_interval: billingInterval,
       });
-      const openedNatively = await openExternalUrl(checkoutResult.data.url);
+      const openedNatively = await openExternalUrl(checkoutResult.data.url, isCurrentRequest);
+      if (!isCurrentRequest()) return;
       if (openedNatively && user.is_anonymous !== true && canRecordCheckout()) {
         void recordProFunnelStep({ step: "checkout_opened", billing_interval: billingInterval });
       }
@@ -293,6 +328,7 @@ export function useCloudBillingController({
         billing_interval: billingInterval,
       });
     } catch (error) {
+      if (!isCurrentRequest()) return;
       setBillingActionError(toErrorMessage(error));
       setBillingActionErrorCode(null);
       capturePostHogEvent("billing_action", {
@@ -302,8 +338,10 @@ export function useCloudBillingController({
         error_kind: toAnalyticsErrorKind(error),
       });
     } finally {
-      if (!openedCheckout) cloudCheckoutPendingRef.current = false;
-      setBillingCheckoutLoadingInterval(null);
+      if (isCurrentRequest()) {
+        if (!openedCheckout) cloudCheckoutPendingRef.current = false;
+        setBillingCheckoutLoadingInterval(null);
+      }
     }
   }, [
     billingEntitlement?.lockedReason,
@@ -467,27 +505,26 @@ export function useCloudBillingController({
     setCouponRedemptionLoading(false);
   }, [user?.id]);
 
-  useEffect(() => {
-    cloudCheckoutPendingRef.current = false;
-    cloudCheckoutConfirmationInFlightRef.current = false;
-    setCloudCheckoutAwaitingBrowser(false);
-  }, [shouldCheckBillingEntitlement, user?.id]);
-
   const confirmCloudCheckoutAfterBrowser = useCallback(async () => {
     if (cloudCheckoutConfirmationInFlightRef.current) return;
     cloudCheckoutConfirmationInFlightRef.current = true;
+    const generation = billingActionGenerationRef.current;
     try {
       // A focus event can beat Polar's webhook. Confirm a successful-but-stale
       // entitlement once more before allowing another checkout attempt.
       const firstEntitlement = await refreshBillingEntitlement();
+      if (generation !== billingActionGenerationRef.current) return;
       if (firstEntitlement?.status !== "active") {
         await cloudEntitlementRetryDelay();
+        if (generation !== billingActionGenerationRef.current) return;
         await refreshBillingEntitlement();
       }
     } finally {
-      cloudCheckoutPendingRef.current = false;
-      cloudCheckoutConfirmationInFlightRef.current = false;
-      setCloudCheckoutAwaitingBrowser(false);
+      if (generation === billingActionGenerationRef.current) {
+        cloudCheckoutPendingRef.current = false;
+        cloudCheckoutConfirmationInFlightRef.current = false;
+        setCloudCheckoutAwaitingBrowser(false);
+      }
     }
   }, [refreshBillingEntitlement]);
 
@@ -503,6 +540,18 @@ export function useCloudBillingController({
     window.addEventListener("drifty:billing-success", handleBillingSuccess);
     return () => window.removeEventListener("drifty:billing-success", handleBillingSuccess);
   }, [confirmCloudCheckoutAfterBrowser, refreshBillingEntitlement]);
+
+  // Portal changes do not necessarily emit the checkout-success deep link.
+  // Refresh once on the next app focus instead of leaving the old plan visible.
+  useEffect(() => {
+    if (!billingPortalAwaitingBrowser) return undefined;
+    function handlePortalReturn() {
+      setBillingPortalAwaitingBrowser(false);
+      void refreshBillingEntitlement();
+    }
+    window.addEventListener("focus", handlePortalReturn, { once: true });
+    return () => window.removeEventListener("focus", handlePortalReturn);
+  }, [billingPortalAwaitingBrowser, refreshBillingEntitlement]);
 
   // Payment completes in the browser, so run the bounded confirmation when the
   // app regains focus. A canceled or delayed checkout is then safe to retry.
@@ -550,12 +599,14 @@ export function useCloudBillingController({
   };
 }
 
-async function openExternalUrl(url: string): Promise<boolean> {
+async function openExternalUrl(url: string, isCurrentRequest: () => boolean): Promise<boolean> {
   try {
     const { openUrl } = await import("@tauri-apps/plugin-opener");
+    if (!isCurrentRequest()) return false;
     await openUrl(url);
     return true;
   } catch (error) {
+    if (!isCurrentRequest()) return false;
     if (typeof window === "undefined") throw error;
     window.open(url, "_blank", "noopener,noreferrer");
     // noopener may return null even when opened; do not call this a confirmed checkout exposure.

@@ -25,39 +25,11 @@
   gap: var(--space-2);
 }
 
-/* The plan cards carry their own frame, so the row that holds them drops the
-   settings card chrome instead of drawing a second box around them. */
-.content--settings .settings-section--account .settings-block--plans > .settings-row--cloud-pricing {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  justify-content: flex-start;
-  padding: 0;
-}
-
-/* Keep the pricing decision surface on the Account content axis. The switch
-   and cards use one explicit 8px gap with no inherited optical offset. */
-.content--settings .settings-section--account .individual-plan-suite--display {
-  flex: 0 1 42rem;
-}
-
-/* `h3 + .settings-row` and `:last-child` both add a card edge in the shared
-   settings rules; the plan row is the only child here, so both must be cleared. */
-.content--settings .settings-section--account .settings-block--plans > h3 + .settings-row--cloud-pricing,
-.content--settings .settings-section--account .settings-block--plans > .settings-row--cloud-pricing:last-child {
-  border: 0;
-  border-radius: 0;
-}
-
-.content--settings .settings-section--account .settings-block--plans > .settings-row--cloud-pricing::after {
-  content: none;
-}
-
 .content--settings .settings-section--account .settings-block:has(> h3) > .settings-row:not(:last-child):not(.settings-row--group-end)::after {
   content: none;
 }
 
-/* Promo code sits directly under the pricing cards, outside the Account block,
+/* Promo code sits directly under the plan summary, outside the Account block,
    so it must not pick up the shared settings-row card chrome. */
 .content--settings .settings-section--account > .settings-row--coupon {
   background: transparent;
@@ -110,3 +82,66 @@
 .content--settings .settings-section--account .settings-block--danger-zone .lbl {
   color: var(--warn);
 }
+
+.content--settings .account-plan-summary {
+  gap: var(--space-4);
+}
+.content--settings .account-plan-summary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.account-plan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-settings-popover);
+  display: grid;
+  place-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  padding: var(--space-5);
+  background: color-mix(in srgb, var(--canvas) 68%, transparent);
+}
+.account-plan-modal {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--modal-shell-radius);
+  box-shadow: var(--shadow);
+  width: min(46rem, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: var(--space-6);
+}
+.account-plan-modal__heading {
+  padding-inline-end: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.account-plan-modal__heading h2 { margin: 0; }
+
+.account-plan-modal .settings-row--cloud-pricing { display: block; padding: 0; border: 0; background: transparent; }
+.account-plan-modal .individual-plan-suite { max-width: none; width: 100%; gap: var(--space-4); }
+.account-plan-modal__error { color: var(--warn); margin-top: var(--space-4); }
+@media (max-width: 720px) {
+  .content--settings .account-plan-summary { align-items: flex-start; flex-direction: column; }
+  .account-plan-modal .individual-plan-cards { grid-template-columns: 1fr; }
+}
+
+.account-plan-progress {
+  color: var(--text-soft);
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  margin: 0 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+.account-plan-summary > div:first-child,
+.account-plan-summary__actions,
+.account-plan-modal {
+  min-width: 0;
+}
+.account-plan-summary .desc,
+.account-plan-modal__error,
+.account-plan-notice__error {
+  overflow-wrap: anywhere;
+}
+.account-plan-modal { overscroll-behavior: contain; }
