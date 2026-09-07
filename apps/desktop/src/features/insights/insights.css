@@ -35,8 +35,9 @@
   gap: var(--block-gap);
 }
 
-.insights-page__head {
-  margin-bottom: 0;
+.page.insights-page > .insights-page__head {
+  /* The grid already contributes its section gap below the header. */
+  margin-bottom: calc(var(--page-header-gap) - var(--block-gap));
 }
 
 .trends-range-controls {
@@ -1930,7 +1931,9 @@
 
 .attention-rhythm-radar-row .persona-radar {
   max-width: 14.8rem;
-  height: 10.4rem;
+  /* Reuse the 18px added above the page body; the neighboring heatmap
+     flexes with this row, preserving the page's original overall height. */
+  height: calc(10.4rem - 18px);
 }
 
 .attention-rhythm-radar-row .persona-radar-card__axis-list {

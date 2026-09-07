@@ -308,6 +308,11 @@
   width: 100%;
 }
 
+/* Page-level headers share the same breathing room across app surfaces. */
+.page > .pg-head {
+  margin-bottom: var(--page-header-gap);
+}
+
 /* Page header */
 .pg-head {
   display: flex;

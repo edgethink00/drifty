@@ -114,8 +114,9 @@ html {
   --space-8: 4rem;
   /* Canonical content/title anchor for standard desktop pages. Nested page
      headers must inherit this anchor instead of adding optical offsets. */
-  --page-content-block-start: 12px;
-  --page-content-inline: var(--space-4);
+  --page-content-block-start: 24px;
+  --page-content-inline: 24px;
+  --page-header-gap: 16px;
   --block-gap: 0.625rem;
   --block-gap-compact: var(--space-2);
   --radius-sm: 8px;
@@ -397,3 +398,8 @@ button {
 button:hover { transform: translateY(-1px); }
 button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 input, textarea { color: inherit; }
+
+/* Keep the original usable width in compact desktop windows. */
+@media (max-width: 1100px) {
+  :root { --page-content-inline: 16px; }
+}

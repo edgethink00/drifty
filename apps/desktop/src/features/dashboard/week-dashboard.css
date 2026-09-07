@@ -2090,6 +2090,39 @@
   box-shadow: none;
 }
 
+/* Day header breathing room reuses 20px from the two plots, keeping the
+   app-usage panel and page bottom at their original vertical positions.
+   Divide the flow reduction across its actual row count so every detail
+   interval retains the same total plot height. Other dashboard periods keep
+   their existing layout. */
+.content--dashboard:has(.day-split__main > .dashboard-page-head) {
+  --day-header-flow-height-reduction: 15px;
+  --day-header-focus-height-reduction: 5px;
+}
+
+.content--dashboard .day-split__main > .dashboard-page-head {
+  margin-bottom: var(--page-header-gap);
+}
+
+.content--dashboard .day-split__main .flow-breakdown-layout__chart .flow-cell {
+  min-height: calc(var(--flow-breakdown-cell-min-height) - var(--day-header-flow-height-reduction, 0px) / var(--flow-row-count));
+}
+
+/* In the densest grid the padded current-minute label sets its row's
+   minimum height. Reduce its layout footprint by the same per-row amount,
+   while keeping the visible label and text at their original size. */
+.content--dashboard .day-split__main .flow-chart-row--time-label .flow-chart-row-label {
+  margin-block: calc(var(--day-header-flow-height-reduction, 0px) / var(--flow-row-count) / -2);
+}
+
+.content--dashboard .day-split__main .focus-drift__svg {
+  height: calc(clamp(4.19rem, 8vw, 5.9rem) - var(--day-header-focus-height-reduction, 0px));
+}
+
+.content--dashboard .day-split__main .dashboard-insight-stack .empty-state {
+  height: calc(112px - var(--day-header-focus-height-reduction, 0px));
+}
+
 /* ── Your Day: header inside the left main block ── */
 .day-split__main > .pg-head {
   padding: 0;
@@ -2228,7 +2261,7 @@
 .page--week-dashboard .week-v2-calendar > .pg-head {
   grid-row: 1;
   padding: 0;
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--page-header-gap);
 }
 
 .page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__row {

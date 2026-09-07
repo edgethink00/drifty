@@ -2841,7 +2841,7 @@
 }
 
 .content--leaderboard .pg-head {
-  margin-bottom: 0.45rem;
+  margin-bottom: var(--page-header-gap);
 }
 
 .content--leaderboard .leaderboard-page-layout,

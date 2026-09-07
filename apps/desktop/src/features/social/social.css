@@ -3,8 +3,8 @@
   gap: var(--space-4);
 }
 
-.social-page__head {
-  margin-bottom: 0;
+.page.social-page > .social-page__head {
+  margin-bottom: calc(var(--page-header-gap) - var(--space-4));
 }
 
 .social-page__head .eyebrow {

@@ -11,15 +11,16 @@ function expectRuleToContain(rule: string, declarations: readonly string[]): voi
 }
 
 describe("Settings page width styles", () => {
-  it("keeps desktop settings page gutters wide enough to narrow the working block", () => {
+  it("aligns desktop settings with shared page gutters and limits form width", () => {
     const styles = readAppStyles();
     const pageRule = cssRules(styles, ".content--settings .page")
-      .find((rule) => rule.includes("max-width: 1120px;")) ?? "";
+      .find((rule) => rule.includes("max-width: none;")) ?? "";
 
     expectRuleToContain(pageRule, [
-      "max-width: 1120px;",
-      "margin: 0 auto;",
-      "padding: 24px clamp(var(--space-6), 5.35vw, 6.5rem) 40px;",
+      "max-width: none;",
+      "margin: 0;",
+      "padding: var(--page-content-block-start) var(--page-content-inline) 40px;",
     ]);
+    expect(cssRules(styles, ".content--settings .settings-panel-stack").some((rule) => rule.includes("max-width: 1000px;"))).toBe(true);
   });
 });
