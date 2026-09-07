@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { normalizeOpenAiCompatibleBaseUrl, type LocalAiProvider } from "./localAiSetup";
-import { loadOpenRouterApiKey } from "./openRouterApiKeyStore";
+import { loadOpenRouterApiKey, subscribeOpenRouterKeyPresence } from "./openRouterApiKeyStore";
 import {
   ANALYSIS_AI_SETUP_STORAGE_KEY,
   hasStoredAnalysisAiSetup,
@@ -88,8 +88,15 @@ export function useAnalysisModelSetup(
     }
   }, [legacyCustomEndpointConnection, sharedCustomEndpoint, storedSetup]);
 
+  const keyPresenceRevisionRef = useRef(0);
+  useEffect(() => subscribeOpenRouterKeyPresence((present) => {
+    keyPresenceRevisionRef.current += 1;
+    setOpenRouterKeyPresent(present);
+  }), []);
   const refreshOpenRouterKey = useCallback(async () => {
-    setOpenRouterKeyPresent(Boolean(await loadOpenRouterApiKey()));
+    const revision = keyPresenceRevisionRef.current;
+    const present = Boolean(await loadOpenRouterApiKey());
+    if (revision === keyPresenceRevisionRef.current) setOpenRouterKeyPresent(present);
   }, []);
 
   // Only read the Keychain to compute the OpenRouter "connected" badge when the

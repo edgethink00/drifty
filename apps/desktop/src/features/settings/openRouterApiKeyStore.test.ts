@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { useAnalysisModelSetup } from "./useAnalysisModelSetup";
+import { ANALYSIS_AI_SETUP_STORAGE_KEY } from "./analysisModelSetup";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearOpenRouterApiKey,
@@ -23,6 +26,24 @@ describe("openRouterApiKeyStore", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("updates Intelligence readiness after a shared key is saved and cleared without changing provider", async () => {
+    window.localStorage.setItem(ANALYSIS_AI_SETUP_STORAGE_KEY, JSON.stringify({ provider: "openrouter" }));
+    let storedKey: string | null = null;
+    invokeMock.mockImplementation(async (command: string, args?: { value: string }) => {
+      if (command === "openrouter_save_api_key") storedKey = args?.value ?? null;
+      if (command === "openrouter_clear_api_key") storedKey = null;
+      return command === "openrouter_load_api_key" ? storedKey : undefined;
+    });
+    const { result } = renderHook(() => useAnalysisModelSetup(false));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("openrouter_load_api_key"));
+    expect(result.current.analysisConnected).toBe(false);
+    await act(async () => { await saveOpenRouterApiKey("sample-native-key"); });
+    await waitFor(() => expect(result.current.analysisConnected).toBe(true));
+    await act(async () => { await clearOpenRouterApiKey(); });
+    await waitFor(() => expect(result.current.analysisConnected).toBe(false));
+    window.localStorage.clear();
   });
 
   it("loads the saved OpenRouter key from native Keychain storage", async () => {

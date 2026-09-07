@@ -12,6 +12,7 @@ const storeMocks = vi.hoisted(() => ({
 
 vi.mock("./openRouterApiKeyStore", () => ({
   loadOpenRouterApiKey: storeMocks.loadOpenRouterApiKey,
+  subscribeOpenRouterKeyPresence: () => () => undefined,
 }));
 
 describe("useAnalysisModelSetup OpenRouter key gating", () => {

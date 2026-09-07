@@ -6,12 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntelligenceSetupPanel, type IntelligenceSetupPanelProps } from "./IntelligenceSetupPanel";
 import { DEFAULT_ANALYSIS_AI_SETUP, type AnalysisAiSetupState } from "./analysisModelSetup";
 
-const { testOpenAiCompatibleConnectionMock } = vi.hoisted(() => ({
+const { testOpenAiCompatibleConnectionMock, testLocalAiConnectionMock } = vi.hoisted(() => ({
   testOpenAiCompatibleConnectionMock: vi.fn(),
+  testLocalAiConnectionMock: vi.fn(),
 }));
 
 vi.mock("./aiConnectionTest", () => ({
   testOpenAiCompatibleConnection: testOpenAiCompatibleConnectionMock,
+  testLocalAiConnection: testLocalAiConnectionMock,
 }));
 
 function buildSetup(overrides: Partial<AnalysisAiSetupState> = {}): AnalysisAiSetupState {
@@ -23,7 +25,6 @@ function renderPanel(overrides: Partial<IntelligenceSetupPanelProps> = {}) {
     setup: buildSetup(),
     onChange: vi.fn(),
     openRouterConnected: false,
-    onConnectOpenRouter: vi.fn(),
     // Default to a subscribed (active) plan so the Drifty Cloud model is selectable.
     cloudSelectable: true,
     cloudSubscribeActionLabel: null,
@@ -42,17 +43,20 @@ function summaryRegion() {
 
 describe("IntelligenceSetupPanel", () => {
   beforeEach(() => {
+    testLocalAiConnectionMock.mockReset();
+    testLocalAiConnectionMock.mockResolvedValue({ kind: "success", message: "Connected in 18 ms." });
     testOpenAiCompatibleConnectionMock.mockReset();
     testOpenAiCompatibleConnectionMock.mockResolvedValue({ kind: "success", message: "Connected in 18 ms." });
   });
 
-  it("explains the heavy project pass without naming a preferred model", () => {
-    const { container } = renderPanel({ setup: buildSetup({ provider: "cloud" }) });
-
-    expect(screen.getByText(/project pass/i)).toBeTruthy();
-    const hint = container.querySelector(".intelligence-setup-panel__hint");
-    expect(hint?.textContent).toContain("Use a strong model.");
-    expect(hint?.textContent).not.toContain("GPT-5 mini");
+  it("tests OpenRouter with the shared key and Intelligence primary and fallback models", async () => {
+    renderPanel({ setup: buildSetup({ provider: "openrouter", openRouterModel: "sample/analysis", openRouterFallbackModels: ["sample/fallback"] }), openRouterApiKey: "sample-shared-key" });
+    fireEvent.click(within(summaryRegion()).getByRole("button", { name: "Test AI connection" }));
+    await waitFor(() => expect(testLocalAiConnectionMock).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "openrouter_byok", openRouterApiKey: "sample-shared-key",
+      openRouterModel: "sample/analysis", openRouterFallbackModels: ["sample/fallback"],
+    })));
+    expect(await within(summaryRegion()).findByText("Connected in 18 ms.")).toBeTruthy();
   });
 
   it("summarizes the Drifty Cloud provider as always-available with a managed model", () => {
@@ -95,28 +99,24 @@ describe("IntelligenceSetupPanel", () => {
     expect(onStartCloudSetup).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the OpenRouter model picker seeded with the recommended default and never exposes a raw key", () => {
-    const { container } = renderPanel({ setup: buildSetup({ provider: "openrouter" }) });
-
-    const modelInput = screen.getByLabelText("OpenRouter model id") as HTMLInputElement;
-    expect(modelInput.value).toBe("openai/gpt-5-mini");
-    expect(container.querySelector('datalist option[value="openai/gpt-5-mini"]')).toBeTruthy();
-
-    // The selectable summary reflects OpenRouter + the friendly model label + a needs-setup pill when not connected.
-    const summary = summaryRegion();
-    expect(within(summary).getAllByText("OpenRouter").length).toBeGreaterThan(0);
-    expect(within(summary).getByText("GPT-5 mini")).toBeTruthy();
-    expect(within(summary).getByText("Needs setup")).toBeTruthy();
-
-    // The provisioned key is never rendered.
-    expect(screen.queryByLabelText(/OpenRouter API key/i)).toBeNull();
+  it("shows the OpenRouter model picker seeded with the recommended default and masks the shared key", () => {
+    renderPanel({ setup: buildSetup({ provider: "openrouter" }), openRouterApiKey: "shared-sample-key" });
+    const key = screen.getByLabelText("OpenRouter API key") as HTMLInputElement;
+    expect(key.type).toBe("password");
+    expect(key.value).toBe("shared-sample-key");
+    expect(screen.queryByText("shared-sample-key")).toBeNull();
+    expect(within(summaryRegion()).getByRole("combobox", { name: "Analysis model" }).textContent).toContain("GPT-5 mini");
+    fireEvent.click(screen.getByRole("button", { name: "Choose OpenRouter models" }));
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Select openai/gpt-5-mini" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("radio", { name: "Use openai/gpt-5-mini as primary" })).toHaveProperty("checked", true);
   });
 
-  it("labels the connect action Connected and shows a Connected pill once OpenRouter is connected", () => {
+  it("labels a saved OpenRouter key Configured without claiming verification", () => {
     renderPanel({ setup: buildSetup({ provider: "openrouter" }), openRouterConnected: true });
-
-    expect(screen.getByRole("button", { name: "Connected" })).toBeTruthy();
-    expect(within(summaryRegion()).getByText("Connected")).toBeTruthy();
+    expect(within(summaryRegion()).getByText("Configured")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Connected" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Choose OpenRouter models" })).toBeTruthy();
   });
 
   it("shows base URL, model, and optional API key inputs for the custom endpoint provider", () => {
@@ -226,14 +226,14 @@ describe("IntelligenceSetupPanel", () => {
     expect(testOpenAiCompatibleConnectionMock).toHaveBeenCalledTimes(1);
   });
 
-  it("commits to a configured provider when its card is opened", () => {
+  it("keeps the active provider when a configured card is opened, like Classification", () => {
     const onChange = vi.fn();
     renderPanel({ setup: buildSetup({ provider: "cloud" }), openRouterConnected: true, onChange });
 
     fireEvent.click(screen.getByRole("button", { name: /^OpenRouter setup row$/i }));
 
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter" }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("OpenRouter API key")).toBeTruthy();
   });
 
   it("does not commit to an unconfigured provider when its card is opened", () => {
@@ -258,7 +258,7 @@ describe("IntelligenceSetupPanel", () => {
     // OpenRouter isn't connected → don't switch the active provider; just expand its
     // Configure card so the user can set it up first.
     expect(onChange).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("OpenRouter model id")).toBeTruthy();
+    expect(screen.getByLabelText("OpenRouter API key")).toBeTruthy();
   });
 
   it("switches to a configured provider directly from the summary dropdown", () => {
@@ -281,25 +281,40 @@ describe("IntelligenceSetupPanel", () => {
     fireEvent.click(within(summary).getByRole("combobox", { name: "Analysis model" }));
     fireEvent.click(within(summary).getByRole("option", { name: "Claude Sonnet 5" }));
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "anthropic/claude-sonnet-5" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "anthropic/claude-sonnet-5", openRouterFallbackModels: ["openai/gpt-5-mini"] }));
+  });
+
+  it("offers a custom fallback in the summary and preserves the previous primary when selected", () => {
+    const onChange = vi.fn();
+    renderPanel({ setup: buildSetup({ provider: "openrouter", openRouterFallbackModels: ["sample/fallback"] }), onChange });
+    fireEvent.click(within(summaryRegion()).getByRole("combobox", { name: "Analysis model" }));
+    fireEvent.click(within(summaryRegion()).getByRole("option", { name: "sample/fallback" }));
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      openRouterModel: "sample/fallback", openRouterFallbackModels: ["openai/gpt-5-mini"],
+    }));
   });
 
   it("edits the OpenRouter analysis model immutably through onChange", () => {
     const onChange = vi.fn();
-    renderPanel({ setup: buildSetup({ provider: "openrouter" }), onChange });
-
-    fireEvent.change(screen.getByLabelText("OpenRouter model id"), { target: { value: "anthropic/claude-sonnet-5" } });
-
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "anthropic/claude-sonnet-5" }));
+    const setup = buildSetup({ provider: "openrouter" });
+    const rendered = renderPanel({ setup, onChange });
+    fireEvent.click(screen.getByRole("button", { name: "Choose OpenRouter models" }));
+    fireEvent.change(screen.getByLabelText("Other OpenRouter model"), { target: { value: "sample/analysis-model" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add model" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ openRouterModel: "openai/gpt-5-mini", openRouterFallbackModels: ["sample/analysis-model"] }));
+    rendered.rerender(<IntelligenceSetupPanel {...rendered.props} setup={onChange.mock.calls[0][0]} />);
+    fireEvent.click(screen.getByRole("radio", { name: "Use sample/analysis-model as primary" }));
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "sample/analysis-model" }));
+    expect(setup.openRouterModel).toBe("openai/gpt-5-mini");
   });
 
-  it("triggers the connect flow when Connect is clicked", () => {
-    const onConnectOpenRouter = vi.fn();
-    renderPanel({ setup: buildSetup({ provider: "openrouter" }), onConnectOpenRouter });
-
-    fireEvent.click(screen.getByRole("button", { name: /^Connect OpenRouter$/i }));
-
-    expect(onConnectOpenRouter).toHaveBeenCalledTimes(1);
+  it("edits the shared OpenRouter key within the existing card", () => {
+    const onOpenRouterApiKeyChange = vi.fn();
+    const onChange = vi.fn();
+    renderPanel({ setup: buildSetup({ provider: "openrouter" }), openRouterApiKey: "shared-key", onOpenRouterApiKeyChange, onChange });
+    fireEvent.change(screen.getByLabelText("OpenRouter API key"), { target: { value: "replacement-key" } });
+    expect(onOpenRouterApiKeyChange).toHaveBeenCalledWith("replacement-key");
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ provider: "openrouter", openRouterModel: "openai/gpt-5-mini" }));
   });
 
   it("no longer renders any Preview mockup chips", () => {

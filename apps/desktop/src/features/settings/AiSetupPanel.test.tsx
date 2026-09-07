@@ -32,6 +32,22 @@ describe("AiSetupPanel", () => {
     testCloudAiConnectionMock.mockResolvedValue({ kind: "success", message: "Cloud AI connected via Google in 42 ms." });
   });
 
+  it("editing the shared key in Intelligence preserves the Classification provider and model", () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole("tab", { name: "Intelligence" }));
+    fireEvent.click(screen.getByRole("button", { name: "OpenRouter setup row" }));
+    fireEvent.change(screen.getByLabelText("OpenRouter API key"), { target: { value: "shared-test-key" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Classification" }));
+    const summary = screen.getByRole("region", { name: "Model being used" });
+    expect(within(summary).getByRole("combobox", { name: "AI provider" }).textContent).toContain("Drifty");
+    expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("Drifty Cloud");
+    fireEvent.click(screen.getByRole("button", { name: "OpenRouter setup row" }));
+    expect(screen.getByLabelText("OpenRouter API key")).toHaveProperty("value", "shared-test-key");
+    fireEvent.click(within(summary).getByRole("combobox", { name: "AI provider" }));
+    fireEvent.click(within(summary).getByRole("option", { name: "OpenRouter" }));
+    expect(within(summary).getByRole("combobox", { name: "AI model" }).textContent).toContain("DeepSeek V4 Flash");
+  });
+
   it("switches between the OpenRouter and custom endpoint setup rows", () => {
     // Pre-configure OpenRouter + Custom so both are ready to become the active provider
     // (an unready provider only expands its card — covered by the test below).

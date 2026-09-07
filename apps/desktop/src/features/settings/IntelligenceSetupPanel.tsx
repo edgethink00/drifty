@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
 
 import { aiProviderBrandMark } from "./AiProviderBrandMark";
-import { testOpenAiCompatibleConnection, type AiConnectionTestResult } from "./aiConnectionTest";
-import { CollapsiblePanel } from "./CollapsiblePanel";
+import { testLocalAiConnection, testOpenAiCompatibleConnection, type AiConnectionTestResult } from "./aiConnectionTest";
+import { OpenRouterConnectionFields } from "./OpenRouterSetupPanel";
+import { OpenRouterModelDialog } from "./AiSetupModelDialogs";
+import { ModalPresence } from "../../components/ModalPresence";
+import { useAiSetupModelPickers } from "./useAiSetupModelPickers";
+import { AiSetupConnectionDetails, AiSetupSectionCard } from "./AiSetupSectionCards";
 import { CustomEndpointSetupPanel } from "./CustomEndpointSetupPanel";
 import { ModelBeingUsedCard } from "./ModelBeingUsedCard";
 import { type SettingsSelectOption } from "./SettingsSelect";
 import { ANALYSIS_ANTHROPIC_MODEL_SUGGESTIONS, ANALYSIS_OPENAI_MODEL_SUGGESTIONS, ANALYSIS_RECOMMENDED_MODELS, DEFAULT_ANALYSIS_MODEL, DEFAULT_ANALYSIS_ANTHROPIC_MODEL, DEFAULT_ANALYSIS_OPENAI_MODEL, analysisModelDisplayLabel } from "./analysisModelSetup";
 import type { AnalysisAiSetupState, AnalysisProvider } from "./analysisModelSetup";
-import { normalizeOpenAiCompatibleBaseUrl } from "./localAiSetup";
+import { DEFAULT_LOCAL_AI_SETUP, normalizeOpenAiCompatibleBaseUrl } from "./localAiSetup";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import { localizeAiConnectionTestMessage } from "../localization/aiStatusTranslations";
 
@@ -20,7 +23,9 @@ export interface IntelligenceSetupPanelProps {
   readonly setup: AnalysisAiSetupState;
   readonly onChange: (next: AnalysisAiSetupState) => void;
   readonly openRouterConnected: boolean;
-  readonly onConnectOpenRouter: () => void;
+  readonly openRouterApiKey?: string;
+  readonly onOpenRouterApiKeyChange?: (value: string) => void;
+  readonly onDialogOpenChange?: (open: boolean) => void;
   /** Whether the Drifty Cloud analysis model can be selected (active OR trialing plan). */
   readonly cloudSelectable: boolean;
   /** "Upgrade"/"Opening" label when the cloud plan needs upgrading (trialing OR no-sub); null for active/locked. */
@@ -52,15 +57,6 @@ type CloudBilling = {
  */
 type IntelligenceCardId = "drifty" | "openrouter" | "custom" | "anthropic" | "chatgpt";
 
-/** Each card selects a concrete analysis provider when opened. */
-const PROVIDER_FOR_CARD: Record<IntelligenceCardId, AnalysisProvider> = {
-  drifty: "cloud",
-  openrouter: "openrouter",
-  custom: "self_hosted",
-  anthropic: "anthropic",
-  chatgpt: "openai",
-};
-
 const CARD_FOR_PROVIDER: Record<AnalysisProvider, IntelligenceCardId> = {
   cloud: "drifty",
   openrouter: "openrouter",
@@ -69,7 +65,6 @@ const CARD_FOR_PROVIDER: Record<AnalysisProvider, IntelligenceCardId> = {
   openai: "chatgpt",
 };
 
-const ANALYSIS_MODEL_DATALIST_ID = "intelligence-analysis-model-options";
 const OPENAI_MODEL_DATALIST_ID = "intelligence-openai-model-options";
 const ANTHROPIC_MODEL_DATALIST_ID = "intelligence-anthropic-model-options";
 
@@ -86,6 +81,7 @@ type CustomEndpointTestConfiguration = {
   readonly baseUrl: string;
   readonly apiKey: string;
   readonly model: string;
+  readonly fallbackModels: string;
 };
 
 type TaggedConnectionTestResult = {
@@ -104,7 +100,7 @@ function summarizeAnalysisSetup(setup: AnalysisAiSetupState, openRouterConnected
     case "openrouter": {
       const modelLabel = analysisModelDisplayLabel(setup.openRouterModel.trim() || DEFAULT_ANALYSIS_MODEL);
       return openRouterConnected
-        ? { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.connected"), tone: "ok", ready: true }
+        ? { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.configured"), tone: "ok", ready: true }
         : { providerLabel: "OpenRouter", modelLabel, statusLabel: t("settings.intelligence.needsSetup"), tone: "warning", ready: false };
     }
     case "openai": {
@@ -186,12 +182,9 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
             }
             : {}),
       }];
-    case "openrouter": {
-      const options: SettingsSelectOption<string>[] = ANALYSIS_RECOMMENDED_MODELS.map((model) => ({ value: model.id, label: model.label }));
-      const current = setup.openRouterModel.trim();
-      if (current && !options.some((option) => option.value === current)) options.push({ value: current, label: analysisModelDisplayLabel(current) });
-      return options;
-    }
+    case "openrouter":
+      // OpenRouter options come from the same picker as the dialog below.
+      return [];
     case "openai": {
       const options: SettingsSelectOption<string>[] = ANALYSIS_OPENAI_MODEL_SUGGESTIONS.map((model) => ({ value: model, label: analysisModelDisplayLabel(model) }));
       const current = setup.openaiModel.trim();
@@ -211,8 +204,15 @@ function summaryModelOptions(setup: AnalysisAiSetupState, cloud: CloudBilling, t
   }
 }
 
-export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, onConnectOpenRouter, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
+export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, openRouterApiKey, onOpenRouterApiKeyChange, onDialogOpenChange, cloudSelectable, cloudSubscribeActionLabel, cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling }: IntelligenceSetupPanelProps): JSX.Element {
   const { effectiveLanguage, t } = useLocalization();
+  const sharedOpenRouterKey = openRouterApiKey ?? setup.openRouterApiKey;
+  const hasOpenRouterKey = openRouterApiKey !== undefined ? Boolean(openRouterApiKey.trim()) : Boolean(sharedOpenRouterKey.trim()) || openRouterConnected;
+  const pickerSetup = { ...DEFAULT_LOCAL_AI_SETUP, openRouterModel: setup.openRouterModel, openRouterFallbackModels: setup.openRouterFallbackModels };
+  const modelPickers = useAiSetupModelPickers(pickerSetup, (update) => {
+    const next = typeof update === "function" ? update(pickerSetup) : update;
+    onChange({ ...setup, provider: "openrouter", openRouterModel: next.openRouterModel, openRouterFallbackModels: next.openRouterFallbackModels });
+  }, ANALYSIS_RECOMMENDED_MODELS);
   const cloud: CloudBilling = { selectable: cloudSelectable, upgradeLabel: cloudSubscribeActionLabel, upgradeDisabled: cloudSubscribeActionDisabled, canManageBilling, onStartCloudSetup, onManageCloudBilling };
   // Whether a provider is ready to be the active analysis provider. Key-based
   // providers need their credentials first; Drifty Cloud is gated by subscription
@@ -222,7 +222,7 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
       case "cloud":
         return true;
       case "openrouter":
-        return openRouterConnected;
+        return hasOpenRouterKey;
       case "openai":
         return setup.openaiApiKey.trim().length > 0;
       case "anthropic":
@@ -236,14 +236,19 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
   const providerOptions = [
     { value: "cloud", label: "Drifty Cloud", icon: aiProviderBrandMark("drifty", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: !providerReady("openrouter") },
+    { value: "self_hosted", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !providerReady("self_hosted") },
     { value: "openai", label: "OpenAI", icon: aiProviderBrandMark("openai", { pick: true }), muted: !providerReady("openai") },
     { value: "anthropic", label: "Anthropic", icon: aiProviderBrandMark("anthropic", { pick: true }), muted: !providerReady("anthropic") },
-    { value: "self_hosted", label: t("settings.ai.customEndpoint"), icon: aiProviderBrandMark("custom", { pick: true }), muted: !providerReady("self_hosted") },
   ] satisfies readonly SettingsSelectOption<AnalysisProvider>[];
   // Which provider card is expanded. Defaults to the active provider so the tab
   // opens focused on whatever analysis model is currently in use.
   const [expandedCard, setExpandedCard] = useState<IntelligenceCardId | null>(() => CARD_FOR_PROVIDER[setup.provider]);
-  const summary = summarizeAnalysisSetup(setup, openRouterConnected, cloud, t);
+  useEffect(() => {
+    // Reuse the existing controller's on-demand Keychain loading when these fields are visible.
+    onDialogOpenChange?.(expandedCard === "openrouter" || modelPickers.openRouterModelPickerOpen);
+    return () => onDialogOpenChange?.(false);
+  }, [expandedCard, modelPickers.openRouterModelPickerOpen, onDialogOpenChange]);
+  const summary = summarizeAnalysisSetup(setup, hasOpenRouterKey, cloud, t);
   const [taggedConnectionTestResult, setTaggedConnectionTestResult] = useState<TaggedConnectionTestResult | null>(null);
   const [runningConfigurationRevision, setRunningConfigurationRevision] = useState<number | null>(null);
   const connectionTestRequestRef = useRef(0);
@@ -252,9 +257,10 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
   const customEndpointModel = setup.selfHostedModel.trim();
   const customEndpointConfiguration: CustomEndpointTestConfiguration = {
     provider: setup.provider,
-    baseUrl: customEndpointBaseUrl ?? "",
-    apiKey: setup.selfHostedApiKey.trim(),
-    model: customEndpointModel,
+    baseUrl: setup.provider === "openrouter" ? "https://openrouter.ai/api/v1" : customEndpointBaseUrl ?? "",
+    apiKey: setup.provider === "openrouter" ? sharedOpenRouterKey.trim() : setup.selfHostedApiKey.trim(),
+    model: setup.provider === "openrouter" ? setup.openRouterModel : customEndpointModel,
+    fallbackModels: JSON.stringify(setup.openRouterFallbackModels),
   };
   const customEndpointConfigurationRef = useRef({ configuration: customEndpointConfiguration, revision: 0 });
   if (!configurationsMatch(customEndpointConfigurationRef.current.configuration, customEndpointConfiguration)) {
@@ -264,8 +270,9 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
     };
   }
   const customEndpointConfigurationRevision = customEndpointConfigurationRef.current.revision;
-  const customEndpointTestable = setup.provider === "self_hosted"
-    && Boolean(customEndpointBaseUrl && customEndpointModel);
+  const connectionTestable = setup.provider === "openrouter"
+    ? Boolean(sharedOpenRouterKey.trim())
+    : setup.provider === "self_hosted" && Boolean(customEndpointBaseUrl && customEndpointModel);
   const connectionTestRunning = runningConfigurationRevision === customEndpointConfigurationRevision;
   const connectionTestResult = taggedConnectionTestResult
     && taggedConnectionTestResult.configurationRevision === customEndpointConfigurationRevision
@@ -282,7 +289,9 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
   // The "Model being used" summary is directly selectable (like the Classification
   // tab): a provider dropdown + a model dropdown that write straight to setup.
   const selectedModelValue = summaryModelValue(setup, cloud);
-  const modelOptions = summaryModelOptions(setup, cloud, t);
+  const modelOptions = setup.provider === "openrouter"
+    ? modelPickers.openRouterModelOptions.map(option => ({ value: option.id, label: option.label }))
+    : summaryModelOptions(setup, cloud, t);
 
   const handleProviderChange = (provider: AnalysisProvider) => {
     // Always reveal the provider's Configure card. Only commit to it as the active
@@ -294,26 +303,17 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
   const handleModelChange = (modelId: string) => {
     // cloud + custom expose a single, non-editable summary option; the custom
     // model id is edited inside the Custom endpoint card below.
-    if (setup.provider === "openrouter") onChange({ ...setup, provider: "openrouter", openRouterModel: modelId });
+    if (setup.provider === "openrouter") modelPickers.handleOpenRouterPrimaryModelChange(modelId);
     else if (setup.provider === "openai") onChange({ ...setup, provider: "openai", openaiModel: modelId });
     else if (setup.provider === "anthropic") onChange({ ...setup, provider: "anthropic", anthropicModel: modelId });
   };
 
   const handleToggle = (id: IntelligenceCardId) => {
-    const willExpand = expandedCard !== id;
-    setExpandedCard(willExpand ? id : null);
-    if (!willExpand) return;
-    // Opening a card only commits to that provider once it's ready (has its keys /
-    // config) — same rule as the summary dropdown, so an unconfigured provider is
-    // never made active just by expanding its card to set it up.
-    const provider = PROVIDER_FOR_CARD[id];
-    if (provider && providerReady(provider) && provider !== setup.provider) {
-      onChange({ ...setup, provider });
-    }
+    setExpandedCard(current => current === id ? null : id);
   };
 
-  const handleTestCustomEndpoint = async () => {
-    if (!customEndpointBaseUrl || !customEndpointTestable) return;
+  const handleTestConnection = async () => {
+    if (!connectionTestable) return;
     const configuration = customEndpointConfiguration;
     const configurationRevision = customEndpointConfigurationRevision;
     if (activeConnectionTestRef.current?.configurationRevision === configurationRevision) return;
@@ -322,7 +322,9 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
     setRunningConfigurationRevision(configurationRevision);
     setTaggedConnectionTestResult(null);
     try {
-      const result = await testOpenAiCompatibleConnection({
+      const result = configuration.provider === "openrouter"
+        ? await testLocalAiConnection({ ...pickerSetup, provider: "openrouter_byok", openRouterApiKey: configuration.apiKey })
+        : await testOpenAiCompatibleConnection({
         baseUrl: configuration.baseUrl,
         apiKey: configuration.apiKey,
         model: configuration.model,
@@ -365,14 +367,14 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
       <ModelBeingUsedCard
         regionAriaLabel={t("settings.intelligence.modelBeingUsedAria")}
         heading={t("settings.ai.intelligenceRoute")}
-        headingAction={setup.provider === "self_hosted" ? (
+        headingAction={setup.provider === "self_hosted" || setup.provider === "openrouter" ? (
           <button
             type="button"
             className="settings-btn ai-setup-current-model__test"
             aria-label={connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnectionAria")}
             aria-busy={connectionTestRunning ? "true" : undefined}
-            disabled={connectionTestRunning || !customEndpointTestable}
-            onClick={() => void handleTestCustomEndpoint()}
+            disabled={connectionTestRunning || !connectionTestable}
+            onClick={() => void handleTestConnection()}
           >
             {connectionTestRunning ? t("settings.ai.testing") : t("settings.ai.testConnection")}
           </button>
@@ -393,45 +395,34 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
         statusMessage={localizedConnectionTestMessage}
         statusMessageKind={connectionTestResult?.kind ?? null}
       />
-      <p className="ai-setup-route-description intelligence-setup-panel__hint">
-        {t("settings.intelligence.description")}
-      </p>
+      <AiSetupConnectionDetails ariaLabel={t("settings.intelligence.providersAria")}>
+        <AiSetupSectionCard section={{ id: "openrouter", title: "OpenRouter" }} brand="openrouter" expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
+          <OpenRouterConnectionFields
+            apiKey={sharedOpenRouterKey}
+            onApiKeyChange={(value) => {
+              if (onOpenRouterApiKeyChange) onOpenRouterApiKeyChange(value);
+              onChange({ ...setup, provider: "openrouter", ...(!onOpenRouterApiKeyChange ? { openRouterApiKey: value } : {}) });
+            }}
+            onChooseModels={() => modelPickers.setOpenRouterModelPickerOpen(true)}
+          />
+        </AiSetupSectionCard>
 
-      <h4 className="ai-setup-provider-heading">{t("settings.ai.connectionDetails")}</h4>
+        <AiSetupSectionCard section={{ id: "custom", title: t("settings.ai.customEndpoint") }} brand="custom" expanded={expandedCard === "custom"} onToggle={handleToggle}>
+          <CustomEndpointSetupPanel
+            baseUrl={setup.selfHostedBaseUrl}
+            apiKey={setup.selfHostedApiKey}
+            model={setup.selfHostedModel}
+            sharingPartner="classification"
+            baseUrlAriaLabel={t("settings.intelligence.endpointBaseUrlAria")}
+            apiKeyAriaLabel={t("settings.intelligence.customApiKeyAria")}
+            modelAriaLabel={t("settings.intelligence.endpointModelAria")}
+            onBaseUrlChange={(selfHostedBaseUrl) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl })}
+            onApiKeyChange={(selfHostedApiKey) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey })}
+            onModelChange={(selfHostedModel) => onChange({ ...setup, provider: "self_hosted", selfHostedModel })}
+          />
+        </AiSetupSectionCard>
 
-      <div className="ai-setup-choices" role="group" aria-label={t("settings.intelligence.providersAria")}>
-        <IntelligenceProviderCard id="openrouter" title="OpenRouter" brandMark={aiProviderBrandMark("openrouter")} expanded={expandedCard === "openrouter"} onToggle={handleToggle}>
-          <div className="ai-setup-detail" role="group" aria-label={t("settings.intelligence.openRouterModelAria")}>
-            <div className="ai-setup-key-row">
-              <label className="ai-setup-field">
-                <span>{t("settings.ai.model")}</span>
-                <input
-                  className="settings-input"
-                  aria-label={t("settings.intelligence.openRouterModelIdAria")}
-                  list={ANALYSIS_MODEL_DATALIST_ID}
-                  value={setup.openRouterModel}
-                  onChange={(event) => onChange({ ...setup, provider: "openrouter", openRouterModel: event.target.value })}
-                  placeholder={DEFAULT_ANALYSIS_MODEL}
-                />
-                <datalist id={ANALYSIS_MODEL_DATALIST_ID}>
-                  {ANALYSIS_RECOMMENDED_MODELS.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))}
-                </datalist>
-              </label>
-              <button type="button" className="settings-btn ai-setup-model-action" onClick={onConnectOpenRouter}>
-                {openRouterConnected ? t("settings.intelligence.connected") : t("settings.intelligence.connectOpenRouter")}
-              </button>
-            </div>
-            <p className="ai-setup-route-description">
-              {t("settings.intelligence.openRouterDescription")}
-            </p>
-          </div>
-        </IntelligenceProviderCard>
-
-        <IntelligenceProviderCard id="chatgpt" title="OpenAI" brandMark={aiProviderBrandMark("openai")} expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
+        <AiSetupSectionCard section={{ id: "chatgpt", title: "OpenAI" }} brand="openai" expanded={expandedCard === "chatgpt"} onToggle={handleToggle}>
           <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.openAiModelAria")}>
             <ApiKeyField
               ariaLabel={t("settings.intelligence.openAiApiKeyAria")}
@@ -461,9 +452,9 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
               {t("settings.intelligence.openAiDescription")}
             </p>
           </div>
-        </IntelligenceProviderCard>
+        </AiSetupSectionCard>
 
-        <IntelligenceProviderCard id="anthropic" title="Anthropic" brandMark={aiProviderBrandMark("anthropic")} expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
+        <AiSetupSectionCard section={{ id: "anthropic", title: "Anthropic" }} brand="anthropic" expanded={expandedCard === "anthropic"} onToggle={handleToggle}>
           <div className="ai-setup-detail ai-setup-detail--custom" role="group" aria-label={t("settings.intelligence.anthropicModelAria")}>
             <ApiKeyField
               ariaLabel={t("settings.intelligence.anthropicApiKeyAria")}
@@ -493,67 +484,22 @@ export function IntelligenceSetupPanel({ setup, onChange, openRouterConnected, o
               {t("settings.intelligence.anthropicDescription")}
             </p>
           </div>
-        </IntelligenceProviderCard>
-
-        <IntelligenceProviderCard id="custom" title={t("settings.ai.customEndpoint")} brandMark={aiProviderBrandMark("custom")} expanded={expandedCard === "custom"} onToggle={handleToggle}>
-          <CustomEndpointSetupPanel
-            baseUrl={setup.selfHostedBaseUrl}
-            apiKey={setup.selfHostedApiKey}
-            model={setup.selfHostedModel}
-            sharingPartner="classification"
-            baseUrlAriaLabel={t("settings.intelligence.endpointBaseUrlAria")}
-            apiKeyAriaLabel={t("settings.intelligence.customApiKeyAria")}
-            modelAriaLabel={t("settings.intelligence.endpointModelAria")}
-            onBaseUrlChange={(selfHostedBaseUrl) => onChange({ ...setup, provider: "self_hosted", selfHostedBaseUrl })}
-            onApiKeyChange={(selfHostedApiKey) => onChange({ ...setup, provider: "self_hosted", selfHostedApiKey })}
-            onModelChange={(selfHostedModel) => onChange({ ...setup, provider: "self_hosted", selfHostedModel })}
-          />
-        </IntelligenceProviderCard>
-      </div>
+        </AiSetupSectionCard>
+      </AiSetupConnectionDetails>
+      <ModalPresence>
+        {modelPickers.openRouterModelPickerOpen ? <OpenRouterModelDialog
+          customModel={modelPickers.openRouterCustomModel}
+          openRouterPrimaryModel={modelPickers.openRouterPrimaryModel}
+          options={modelPickers.openRouterModelOptions}
+          selectedModels={modelPickers.openRouterSelectedModels}
+          onAddCustomModel={modelPickers.handleAddOpenRouterCustomModel}
+          onClose={() => modelPickers.setOpenRouterModelPickerOpen(false)}
+          onCustomModelChange={modelPickers.setOpenRouterCustomModel}
+          onPrimaryModelChange={modelPickers.handleOpenRouterPrimaryModelChange}
+          onToggleModel={modelPickers.handleOpenRouterModelToggle}
+        /> : null}
+      </ModalPresence>
     </>
-  );
-}
-
-type IntelligenceProviderCardProps = {
-  readonly id: IntelligenceCardId;
-  readonly title: string;
-  readonly brandMark: ReactNode;
-  readonly expanded: boolean;
-  readonly children: ReactNode;
-  readonly onToggle: (id: IntelligenceCardId) => void;
-};
-
-/**
- * Replica of AiSetupSectionCard's `article.ai-setup-choice` markup so the
- * Intelligence cards read identically to the Classification providers, carrying
- * a custom title + brand mark.
- */
-function IntelligenceProviderCard({ id, title, brandMark, expanded, children, onToggle }: IntelligenceProviderCardProps): JSX.Element {
-  const { t } = useLocalization();
-  const panelId = `intelligence-provider-${id}`;
-  const buttonId = `intelligence-provider-button-${id}`;
-
-  return (
-    <article className={`ai-setup-choice${expanded ? " is-expanded" : ""}`}>
-      <button
-        id={buttonId}
-        type="button"
-        className="ai-setup-choice__toggle"
-        aria-label={t("settings.ai.setupRowAria", { provider: title })}
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        onClick={() => onToggle(id)}
-      >
-        {brandMark}
-        <span className="ai-setup-choice__copy">
-          <span className="ai-setup-choice__title">{title}</span>
-        </span>
-        <span className="ai-setup-choice__chevron" aria-hidden="true" />
-      </button>
-      <CollapsiblePanel contentClassName="ai-setup-choice__panel" expanded={expanded} id={panelId} labelledBy={buttonId}>
-        {children}
-      </CollapsiblePanel>
-    </article>
   );
 }
 
@@ -567,8 +513,8 @@ type ApiKeyFieldProps = {
 /**
  * Shared API-key input for the direct-key providers (Custom endpoint, OpenAI,
  * Anthropic) so all three read identically: same "API key" label, password
- * field, autocomplete-off, and a per-provider aria-label. OpenRouter keeps its
- * separate browser Connect flow and never renders a raw key here.
+ * field, autocomplete-off, and a per-provider aria-label. OpenRouter reuses
+ * the Classification fields and its shared Keychain-backed key.
  */
 function ApiKeyField({ ariaLabel, value, onValueChange, placeholder = "sk-..." }: ApiKeyFieldProps): JSX.Element {
   const { t } = useLocalization();
@@ -598,7 +544,8 @@ function configurationsMatch(
     && left.provider === right.provider
     && left.baseUrl === right.baseUrl
     && left.apiKey === right.apiKey
-    && left.model === right.model,
+    && left.model === right.model
+    && left.fallbackModels === right.fallbackModels,
   );
 }
 

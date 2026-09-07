@@ -5,7 +5,6 @@ import type { AiModelOption } from "./AiSetupModelDialogs";
 import {
   OPENROUTER_RECOMMENDED_MODELS,
   isForbiddenOpenRouterModel,
-  isRecommendedOpenRouterModel,
   openRouterModelMetadata,
   normalizeOpenRouterFallbackModels,
   normalizeOpenRouterPrimaryModel,
@@ -16,6 +15,7 @@ import type { LocalAiSetupState } from "./localAiSetup";
 export function useAiSetupModelPickers(
   localAiSetup: LocalAiSetupState,
   onLocalAiSetupChange: Dispatch<SetStateAction<LocalAiSetupState>>,
+  recommendedModels: readonly AiModelOption[] = OPENROUTER_RECOMMENDED_MODELS,
 ) {
   const [openRouterModelPickerOpen, setOpenRouterModelPickerOpen] = useState(false);
   const [openRouterCustomModel, setOpenRouterCustomModel] = useState("");
@@ -29,15 +29,15 @@ export function useAiSetupModelPickers(
     () => uniqueOpenRouterModels([openRouterPrimaryModel, ...openRouterFallbackModels]),
     [openRouterFallbackModels, openRouterPrimaryModel],
   );
-  const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !isRecommendedOpenRouterModel(model));
+  const openRouterCustomSelectedModels = openRouterSelectedModels.filter((model) => !recommendedModels.some(option => option.id === model));
   const openRouterModelOptions = useMemo((): readonly AiModelOption[] => [
-    ...OPENROUTER_RECOMMENDED_MODELS,
+    ...recommendedModels,
     ...openRouterCustomSelectedModels.map((model) => {
       const metadata = openRouterModelMetadata(model);
       if (metadata) return metadata;
       return { id: model, label: model, detail: "Other model" };
     }),
-  ], [openRouterCustomSelectedModels]);
+  ], [openRouterCustomSelectedModels, recommendedModels]);
   const openRouterSelectionSummary = openRouterFallbackModels.length > 0
     ? `${openRouterPrimaryModel} + ${openRouterFallbackModels.length} fallback${openRouterFallbackModels.length === 1 ? "" : "s"}`
     : openRouterPrimaryModel;

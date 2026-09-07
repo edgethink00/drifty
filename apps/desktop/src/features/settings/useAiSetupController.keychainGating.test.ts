@@ -60,6 +60,17 @@ describe("useAiSetupController OpenRouter key gating", () => {
     expect(storeMocks.loadOpenRouterApiKey).not.toHaveBeenCalled();
   });
 
+  it("does not overwrite a newly typed key with a delayed Keychain read", async () => {
+    let finishLoad: (key: string) => void = () => undefined;
+    storeMocks.loadOpenRouterApiKey.mockImplementation(() => new Promise(resolve => { finishLoad = resolve; }));
+    const { result } = renderHook(() => useAiSetupController());
+    act(() => result.current.setAiSetupDialogOpen(true));
+    await waitFor(() => expect(storeMocks.loadOpenRouterApiKey).toHaveBeenCalledTimes(1));
+    act(() => result.current.setLocalAiSetup(current => ({ ...current, openRouterApiKey: "sample-new-key" })));
+    await act(async () => finishLoad("sample-old-key"));
+    expect(result.current.localAiSetup.openRouterApiKey).toBe("sample-new-key");
+  });
+
   it("reads the Keychain once the BYOK provider becomes active", async () => {
     const { result } = renderHook(() => useAiSetupController());
 

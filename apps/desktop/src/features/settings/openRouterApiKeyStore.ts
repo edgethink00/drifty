@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 
+const keyPresenceListeners = new Set<(present: boolean) => void>();
+
+/** Publish only presence, after native persistence succeeds; never key material. */
+export function subscribeOpenRouterKeyPresence(listener: (present: boolean) => void): () => void {
+  keyPresenceListeners.add(listener);
+  return () => { keyPresenceListeners.delete(listener); };
+}
+
 function handleOpenRouterKeyStoreError(operation: string, error: unknown): null {
   const message = error instanceof Error
     ? error.message
@@ -24,9 +32,10 @@ export async function saveOpenRouterApiKey(value: string): Promise<void> {
   try {
     if (trimmedValue) {
       await invoke<void>("openrouter_save_api_key", { value: trimmedValue });
-      return;
+    } else {
+      await invoke<void>("openrouter_clear_api_key");
     }
-    await invoke<void>("openrouter_clear_api_key");
+    for (const listener of keyPresenceListeners) listener(Boolean(trimmedValue));
   } catch (error) {
     handleOpenRouterKeyStoreError(trimmedValue ? "save" : "clear", error);
   }

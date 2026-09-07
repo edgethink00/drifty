@@ -64,6 +64,10 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   const [aiSetupDialogOpen, setAiSetupDialogOpen] = useState(false);
   const [openRouterKeyLoaded, setOpenRouterKeyLoaded] = useState(false);
   const lastSavedOpenRouterKeyRef = useRef<string | null>(null);
+  const keyEditRef = useRef({ value: localAiSetup.openRouterApiKey, revision: 0 });
+  if (keyEditRef.current.value !== localAiSetup.openRouterApiKey) {
+    keyEditRef.current = { value: localAiSetup.openRouterApiKey, revision: keyEditRef.current.revision + 1 };
+  }
   const localAiRetryAfterMsRef = useRef<number | null>(null);
 
   const localAiClassificationOptions = useMemo(() => localAiProviderConfigFromSetup(localAiSetup), [localAiSetup]);
@@ -226,12 +230,15 @@ export function useAiSetupController(): UseAiSetupControllerResult {
   useEffect(() => {
     if (!shouldLoadOpenRouterKey || openRouterKeyLoaded) return;
     let cancelled = false;
+    const keyAtLoadStart = keyEditRef.current;
     void loadOpenRouterApiKey().then((savedApiKey) => {
       if (cancelled) return;
       const normalizedApiKey = savedApiKey?.trim() ?? "";
       lastSavedOpenRouterKeyRef.current = normalizedApiKey;
       if (normalizedApiKey) {
-        setLocalAiSetup((current) => current.openRouterApiKey.trim() === normalizedApiKey
+        setLocalAiSetup((current) => keyEditRef.current.revision !== keyAtLoadStart.revision
+          || current.openRouterApiKey !== keyAtLoadStart.value
+          || current.openRouterApiKey.trim() === normalizedApiKey
           ? current
           : { ...current, openRouterApiKey: normalizedApiKey });
       }

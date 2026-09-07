@@ -11,6 +11,7 @@ import "./AiSetupPanel.css";
 import {
   AI_SETUP_SECTIONS,
   AiSetupSectionCard,
+  AiSetupConnectionDetails,
   type AiSetupSection,
 } from "./AiSetupSectionCards";
 import { AiSetupModelBeingUsed } from "./AiSetupModelBeingUsed";
@@ -238,9 +239,7 @@ export function AiSetupPanel({
           />
 
           </div>
-          <h4 className="ai-setup-provider-heading">{t("settings.ai.connectionDetails")}</h4>
-
-          <div className="ai-setup-choices" role="group" aria-label={t("settings.ai.setupChoicesAria")}>
+          <AiSetupConnectionDetails ariaLabel={t("settings.ai.setupChoicesAria")}>
             <div data-setting-id="settings.ai.openRouterApiKey">
             <AiSetupSectionCard section={AI_SETUP_SECTIONS[1]} expanded={expandedSection === "openrouter"} onToggle={handleToggleSection}>
               <OpenRouterSetupPanel
@@ -266,17 +265,16 @@ export function AiSetupPanel({
               />
             </AiSetupSectionCard>
             </div>
-          </div>
+          </AiSetupConnectionDetails>
         </section>
       ) : activePanelTab === "intelligence" && showIntelligenceTab ? (
         <section data-setting-id="settings.ai.intelligence" id="ai-setup-panel-tab-intelligence" className="ai-setup-tab-panel" role="tabpanel" aria-label={t("settings.ai.intelligence")}>
           <IntelligenceSetupPanel
             setup={analysisSetup}
             onChange={onAnalysisChange}
-            onConnectOpenRouter={() => {
-              setActivePanelTab("providers");
-              setExpandedSection("openrouter");
-            }}
+            openRouterApiKey={localAiSetup.openRouterApiKey}
+            onOpenRouterApiKeyChange={(openRouterApiKey) => onLocalAiSetupChange(current => ({ ...current, openRouterApiKey }))}
+            onDialogOpenChange={onDialogOpenChange}
             openRouterConnected={analysisOpenRouterConnected}
             cloudSelectable={canUseCloudModel}
             cloudSubscribeActionLabel={cloudSubscribeActionLabel}
