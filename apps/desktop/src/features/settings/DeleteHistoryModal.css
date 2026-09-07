@@ -56,9 +56,16 @@
   padding: 0.3rem 0.55rem;
 }
 
-.delete-history-modal__custom-range input:focus-visible {
-  border-color: var(--accent);
-  outline: 2px solid var(--settings-focus-ring);
-  outline-offset: 1px;
+/* WebKit date controls do not consistently match :focus-visible. */
+.delete-history-modal__custom-range input:focus {
+  border-color: var(--field-focus-border);
+  outline: none;
+  box-shadow: var(--field-focus-shadow);
 }
 
+@media (forced-colors: active) {
+  .delete-history-modal__custom-range input:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

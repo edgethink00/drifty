@@ -1,5 +1,4 @@
-/* =========================================================
-   Drifty — design system  ·  light/dark · olive green
+/* ==================================================   Drifty — design system  ·  light/dark · olive green
    ========================================================= */
 
 /* ---------------------------------------------------------
@@ -39,6 +38,8 @@ html {
 }
 
 :root {
+  --field-focus-border: var(--line);
+  --field-focus-shadow: 0 0 6px 1px color-mix(in srgb, var(--text) 10%, transparent);
   /* Shared danger action colors for page, dialog, and Settings buttons. */
   --button-danger-bg: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
   --button-danger-border: color-mix(in srgb, var(--warn) 14%, transparent);

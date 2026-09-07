@@ -591,8 +591,8 @@
 
 .profile-page--v2 .profile-field:focus {
   background: var(--surface);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
 }
 
 .profile-page--v2 .profile-field:disabled {
@@ -1001,5 +1001,12 @@
 
   .profile-page--v2 .profile-share__rail {
     flex-basis: 100%;
+  }
+}
+
+@media (forced-colors: active) {
+  .profile-page--v2 .profile-field:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }

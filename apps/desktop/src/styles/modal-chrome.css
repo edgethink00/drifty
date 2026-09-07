@@ -416,12 +416,26 @@
 }
 
 .auth-modal .settings-input:focus-visible,
-.auth-modal .auth-modal__field input:focus-visible,
+.auth-modal .auth-modal__field input:focus-visible {
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+/* A soft neutral shadow marks focus without a second crisp outline. */
 .auth-modal .feedback-modal__input:focus-visible,
 .auth-modal .feedback-modal__textarea:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
-  outline-offset: 1px;
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
+@media (forced-colors: active) {
+  .auth-modal .feedback-modal__input:focus-visible,
+  .auth-modal .feedback-modal__textarea:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 1px;
+  }
 }
 
 /* Sign-in inputs run a touch shorter vertically to balance the taller shell. */
@@ -724,4 +738,12 @@
 
 .auth-modal .settings-color-preset.is-used:hover {
   opacity: 0.65;
+}
+
+@media (forced-colors: active) {
+  .auth-modal .settings-input:focus-visible,
+  .auth-modal .auth-modal__field input:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }

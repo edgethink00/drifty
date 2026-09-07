@@ -81,7 +81,7 @@
 }
 
 .history-search:focus-within {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 64%, transparent);
+  box-shadow: var(--field-focus-shadow);
 }
 
 .history-search input {
@@ -380,3 +380,10 @@
 .heatmap-cell--3 { background: color-mix(in srgb, var(--accent) 72%, var(--bg-2)); }
 .heatmap-cell--empty { visibility: hidden; }
 .heatmap-cell--selected { outline: 1.5px solid var(--text); outline-offset: 1px; }
+
+@media (forced-colors: active) {
+  .history-search:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}

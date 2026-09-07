@@ -568,7 +568,7 @@
   width: 160px;
 }
 
-.settings-input:focus { border-color: var(--accent); }
+.settings-input:focus { border-color: var(--field-focus-border); box-shadow: var(--field-focus-shadow); }
 
 .drifty-checkbox {
   appearance: none;
@@ -785,10 +785,9 @@
 }
 
 .settings-select-control__trigger:focus-visible {
-  outline: 2px solid var(--settings-focus-ring, color-mix(in srgb, var(--accent) 30%, transparent));
-  outline-offset: 2px;
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-soft) 48%, transparent);
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
 }
 
 .settings-select-control__value,

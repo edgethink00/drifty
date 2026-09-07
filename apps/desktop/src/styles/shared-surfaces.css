@@ -601,7 +601,8 @@
 }
 
 .auth-modal__field input:focus {
-  border-color: var(--accent);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
 }
 
 .auth-modal__submit {
@@ -809,18 +810,22 @@
   resize: vertical;
 }
 
+.feedback-modal__input:focus,
 .feedback-modal__textarea:focus {
-  border-color: var(--accent);
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
 }
 
 .feedback-modal__input.is-invalid,
 .feedback-modal__textarea.is-invalid {
+  box-shadow: none;
   border-color: color-mix(in srgb, var(--warn) 62%, var(--line));
 }
 
 .auth-modal .feedback-modal__input.is-invalid:focus-visible,
 .auth-modal .feedback-modal__textarea.is-invalid:focus-visible {
   border-color: color-mix(in srgb, var(--warn) 62%, var(--line));
+  box-shadow: none;
   outline: 2px solid color-mix(in srgb, var(--warn) 30%, transparent);
   outline-offset: 1px;
 }

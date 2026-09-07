@@ -538,7 +538,12 @@
 
 .content--settings .settings-input:focus-visible,
 .content--settings .settings-select:focus-visible,
-.content--settings .settings-select-control__trigger:focus-visible,
+.content--settings .settings-select-control__trigger:focus-visible {
+  outline: none;
+  border-color: var(--field-focus-border);
+  box-shadow: var(--field-focus-shadow);
+}
+
 .content--settings .settings-mode-option:focus-visible,
 .content--settings .settings-color-preset:focus-visible,
 .content--settings .settings-color-more:has(input:focus-visible) {
@@ -2980,5 +2985,17 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   .classification-rule-form__grid,
   .classification-rule-form__grid--app {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (forced-colors: active) {
+  .content--settings .settings-input:focus-visible,
+  .content--settings .settings-select:focus-visible,
+  .content--settings .settings-select-control__trigger:focus-visible,
+  .settings-input:focus-visible,
+  .settings-select:focus-visible,
+  .settings-select-control__trigger:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }
