@@ -681,7 +681,26 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
 }
 
 #[tauri::command]
-pub fn pet_mode_set_enabled(
+pub async fn pet_mode_set_enabled(
+    app: AppHandle,
+    enabled: bool,
+    snapshot: Option<Value>,
+    reduced_motion: bool,
+    width: f64,
+    height: f64,
+    force_reveal: bool,
+) -> Result<(), String> {
+    // AX can synchronously message Drifty's own window. Keep both the scan
+    // and the visibility-lock wait off AppKit so it can answer those messages
+    // and service this worker's window mutations.
+    async_runtime::spawn_blocking(move || {
+        set_pet_mode_enabled(app, enabled, snapshot, reduced_motion, width, height, force_reveal)
+    })
+    .await
+    .map_err(|error| format!("Pet Mode visibility task failed: {error}"))?
+}
+
+fn set_pet_mode_enabled(
     app: AppHandle,
     enabled: bool,
     snapshot: Option<Value>,
@@ -1001,7 +1020,21 @@ fn validate_pet_visibility_action(action: &str) -> Result<(), String> {
 /// path this never reveals the dashboard: dismissing the cat from its own
 /// context menu should not replace one interruption with a bigger one.
 #[tauri::command]
-pub fn pet_mode_visibility_action(
+pub async fn pet_mode_visibility_action(
+    app: AppHandle,
+    action: String,
+    keep_quick_controls_visible: Option<bool>,
+) -> Result<(), String> {
+    // This shares the enable transaction's mutex. Waiting on it from AppKit
+    // would deadlock a worker that is waiting for a main-thread window update.
+    async_runtime::spawn_blocking(move || {
+        apply_pet_visibility_action(app, action, keep_quick_controls_visible)
+    })
+    .await
+    .map_err(|error| format!("Pet Mode visibility action failed: {error}"))?
+}
+
+fn apply_pet_visibility_action(
     app: AppHandle,
     action: String,
     keep_quick_controls_visible: Option<bool>,
@@ -1657,7 +1690,13 @@ pub async fn pet_mode_carry_cursor(
 }
 
 #[tauri::command]
-pub fn pet_mode_lab_place_center(app: AppHandle) -> Result<PetModeInputBounds, String> {
+pub async fn pet_mode_lab_place_center(app: AppHandle) -> Result<PetModeInputBounds, String> {
+    async_runtime::spawn_blocking(move || place_pet_mode_at_center_for_lab(app))
+        .await
+        .map_err(|error| format!("Pet Mode lab placement failed: {error}"))?
+}
+
+fn place_pet_mode_at_center_for_lab(app: AppHandle) -> Result<PetModeInputBounds, String> {
     if !PET_MODE_ENABLED.load(Ordering::Relaxed) {
         return Err("Pet Mode is disabled".to_string());
     }

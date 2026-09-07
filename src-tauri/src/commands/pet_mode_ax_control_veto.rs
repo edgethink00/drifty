@@ -10,6 +10,8 @@
 use serde::Serialize;
 use tauri::WebviewWindow;
 
+use std::time::{Duration, Instant};
+
 const CONTROL_NUDGE_STEP: f64 = 24.0;
 const CONTROL_NUDGE_MAX: f64 = 240.0;
 const CONTROL_SAFETY_INSET: f64 = 12.0;
@@ -18,7 +20,19 @@ const MAX_AX_VISITED: usize = 400;
 const MAX_AX_CONTROLS: usize = 80;
 const MAX_SCANNED_PROCESSES: usize = 4;
 const MAX_WINDOWS_PER_PROCESS: usize = 4;
+// Whole-scan wall-clock budget shared across every process, window
+// discovery path, and traversal, including the first enhanced-UI and
+// AXWindows requests. Individual AX IPCs are capped by remaining time.
 const AX_SCAN_BUDGET_MS: u64 = 120;
+// AXUIElementSetMessagingTimeout(0) restores the default multi-second
+// timeout, so remaining-time caps must never pass 0.
+const AX_MIN_TIMEOUT_SECONDS: f32 = 0.001;
+const KAX_ERROR_SUCCESS: i32 = 0;
+const KAX_ERROR_CANNOT_COMPLETE: i32 = -25204;
+const KAX_ERROR_API_DISABLED: i32 = -25211;
+
+#[cfg(target_os = "macos")]
+const NATIVE_WINDOW_NUMBER_MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(250);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -365,13 +379,133 @@ fn choose_scan_targets(seat: SeatRect, candidates: &[WindowCandidate]) -> Vec<Pr
     targets
 }
 
+/// Shared wall-clock bound for one resident-seat AX scan.
+/// One deadline covers every process, window discovery, and traversal,
+/// including the first enhanced-UI and AXWindows requests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct AxScanDeadline {
+    started: Instant,
+    budget: Duration,
+}
+
+impl AxScanDeadline {
+    fn whole_scan() -> Self {
+        Self::from_budget_ms(AX_SCAN_BUDGET_MS)
+    }
+
+    fn from_budget_ms(budget_ms: u64) -> Self {
+        Self {
+            started: Instant::now(),
+            budget: Duration::from_millis(budget_ms),
+        }
+    }
+
+    #[cfg(test)]
+    fn from_started(started: Instant, budget: Duration) -> Self {
+        Self { started, budget }
+    }
+
+    fn expired(self) -> bool {
+        self.started.elapsed() >= self.budget
+    }
+
+    fn remaining(self) -> Duration {
+        self.budget.saturating_sub(self.started.elapsed())
+    }
+
+    /// Seconds for `AXUIElementSetMessagingTimeout`.
+    /// A timeout of 0 restores the default multi-second wait, so this never
+    /// returns 0 even after the deadline has elapsed.
+    fn messaging_timeout_seconds(self) -> f32 {
+        Self::timeout_from_remaining(self.remaining())
+    }
+
+    fn timeout_from_remaining(remaining: Duration) -> f32 {
+        remaining.as_secs_f32().max(AX_MIN_TIMEOUT_SECONDS)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AxCopyOutcome {
+    Success,
+    Missing,
+    Truncated,
+}
+
+fn ax_copy_outcome(error: i32, deadline_expired: bool) -> AxCopyOutcome {
+    if deadline_expired
+        || error == KAX_ERROR_CANNOT_COMPLETE
+        || error == KAX_ERROR_API_DISABLED
+    {
+        AxCopyOutcome::Truncated
+    } else if error == KAX_ERROR_SUCCESS {
+        AxCopyOutcome::Success
+    } else {
+        AxCopyOutcome::Missing
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct WindowControlScan {
+    controls: Vec<SeatRect>,
+    truncated: bool,
+}
+
+fn collect_process_scans<F>(
+    targets: &[ProcessScanTarget],
+    deadline: AxScanDeadline,
+    mut scan_process: F,
+) -> ControlScan
+where
+    F: FnMut(&ProcessScanTarget, AxScanDeadline) -> WindowControlScan,
+{
+    let mut obstacles = Vec::new();
+    let mut truncated = deadline.expired();
+    for target in targets {
+        if deadline.expired() {
+            truncated = true;
+            break;
+        }
+        let scan = scan_process(target, deadline);
+        truncated |= scan.truncated;
+        for control in scan.controls {
+            obstacles.push(control.inflate(CONTROL_SAFETY_INSET));
+        }
+    }
+    ControlScan {
+        obstacles,
+        truncated,
+        failure: None,
+    }
+}
+
 #[cfg(target_os = "macos")]
 pub(crate) fn native_window_number(window: &WebviewWindow) -> Option<i64> {
     use objc2_app_kit::NSWindow;
-    window.ns_window().ok().map(|pointer| unsafe {
-        let native: &NSWindow = &*pointer.cast::<NSWindow>();
-        native.windowNumber() as i64
-    })
+    use objc2::MainThreadMarker;
+
+    fn read_window_number(window: &WebviewWindow) -> Option<i64> {
+        window.ns_window().ok().map(|pointer| unsafe {
+            let native: &NSWindow = &*pointer.cast::<NSWindow>();
+            native.windowNumber() as i64
+        })
+    }
+
+    if MainThreadMarker::new().is_some() {
+        return read_window_number(window);
+    }
+
+    let window_for_main = window.clone();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    window
+        .run_on_main_thread(move || {
+            let _ = sender.send(read_window_number(&window_for_main));
+        })
+        .ok()?;
+    receiver
+        .recv_timeout(NATIVE_WINDOW_NUMBER_MAIN_THREAD_TIMEOUT)
+        .ok()
+        .flatten()
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -491,30 +625,19 @@ fn control_obstacles_near_seat(
             break;
         }
     }
-    let mut obstacles = Vec::new();
-    let mut truncated = false;
     if candidates.is_empty() {
         return ControlScan {
-            obstacles,
-            truncated,
+            obstacles: Vec::new(),
+            truncated: false,
             failure: Some(SeatDecisionReason::NoCandidateWindow),
         };
     }
-    for target in choose_scan_targets(seat, &candidates) {
-        let scan = macos_ax::scan_controls(target.pid, &target.frames, search);
-        truncated |= scan.truncated;
-        if !scan.controls.is_empty() {
-            for control in scan.controls {
-                obstacles.push(control.inflate(CONTROL_SAFETY_INSET));
-            }
-            continue;
-        }
-    }
-    ControlScan {
-        obstacles,
-        truncated,
-        failure: None,
-    }
+    let deadline = AxScanDeadline::whole_scan();
+    collect_process_scans(
+        &choose_scan_targets(seat, &candidates),
+        deadline,
+        |target, deadline| macos_ax::scan_controls(target.pid, &target.frames, search, deadline),
+    )
 }
 
 #[cfg(target_os = "macos")]
@@ -542,8 +665,8 @@ fn is_system_owner(owner: &str) -> bool {
 #[cfg(target_os = "macos")]
 mod macos_ax {
     use super::{
-        control_attached_to_window, intersects, SeatRect, AX_SCAN_BUDGET_MS, MAX_AX_CONTROLS,
-        MAX_AX_VISITED,
+        ax_copy_outcome, control_attached_to_window, intersects, AxCopyOutcome, AxScanDeadline,
+        SeatRect, WindowControlScan, MAX_AX_CONTROLS, MAX_AX_VISITED,
     };
     use core_foundation::array::{CFArray, CFArrayRef};
     use core_foundation::base::{CFType, CFTypeRef, TCFType};
@@ -552,13 +675,9 @@ mod macos_ax {
     use std::collections::HashSet;
     use std::ffi::c_void;
     use std::ptr;
-    use std::time::{Duration, Instant};
 
     const KAX_VALUE_CGPOINT: u32 = 1;
     const KAX_VALUE_CGSIZE: u32 = 2;
-    // A single unresponsive AX request must not exceed the per-process scan
-    // budget before the traversal gets a chance to stop.
-    const AX_TIMEOUT_SECONDS: f32 = AX_SCAN_BUDGET_MS as f32 / 1_000.0;
 
     type AXUIElementRef = *const c_void;
     type AXValueRef = *const c_void;
@@ -609,22 +728,56 @@ mod macos_ax {
         truncated: bool,
         seen: HashSet<usize>,
         controls: Vec<SeatRect>,
-        started: Instant,
+        deadline: AxScanDeadline,
     }
 
-    pub(super) struct WindowControlScan {
-        pub controls: Vec<SeatRect>,
-        pub truncated: bool,
+    impl ScanState {
+        fn budget_exhausted(&mut self) -> bool {
+            if self.visited >= MAX_AX_VISITED
+                || self.controls.len() >= MAX_AX_CONTROLS
+                || self.deadline.expired()
+            {
+                self.truncated = true;
+                true
+            } else {
+                false
+            }
+        }
     }
 
-    unsafe fn enable_enhanced_ui(app: AXUIElementRef) {
+    unsafe fn prepare_ax_ipc(element: AXUIElementRef, state: &mut ScanState) -> bool {
+        if state.deadline.expired() {
+            state.truncated = true;
+            return false;
+        }
+        let error = AXUIElementSetMessagingTimeout(
+            element,
+            state.deadline.messaging_timeout_seconds(),
+        );
+        if error != 0 {
+            state.truncated = true;
+            return false;
+        }
+        true
+    }
+
+    unsafe fn enable_enhanced_ui(app: AXUIElementRef, state: &mut ScanState) {
         use core_foundation::boolean::CFBoolean;
+        if !prepare_ax_ipc(app, state) {
+            return;
+        }
         let key = CFString::new("AXEnhancedUserInterface");
-        let _ = AXUIElementSetAttributeValue(
+        let error = AXUIElementSetAttributeValue(
             app,
             key.as_concrete_TypeRef(),
             CFBoolean::true_value().as_CFTypeRef(),
         );
+        if matches!(
+            ax_copy_outcome(error, state.deadline.expired()),
+            AxCopyOutcome::Truncated
+        ) {
+            state.truncated = true;
+        }
     }
 
     pub(super) fn is_trusted() -> bool {
@@ -635,8 +788,22 @@ mod macos_ax {
         pid: i32,
         window_targets: &[SeatRect],
         search: SeatRect,
+        deadline: AxScanDeadline,
     ) -> WindowControlScan {
         unsafe {
+            let mut state = ScanState {
+                visited: 0,
+                truncated: false,
+                seen: HashSet::new(),
+                controls: Vec::new(),
+                deadline,
+            };
+            if state.budget_exhausted() {
+                return WindowControlScan {
+                    controls: Vec::new(),
+                    truncated: true,
+                };
+            }
             let app = AXUIElementCreateApplication(pid);
             if app.is_null() {
                 return WindowControlScan {
@@ -646,40 +813,29 @@ mod macos_ax {
             }
             let app = CFType::wrap_under_create_rule(app as CFTypeRef);
             let app_ref = app.as_CFTypeRef() as AXUIElementRef;
-            let _ = AXUIElementSetMessagingTimeout(app_ref, AX_TIMEOUT_SECONDS);
-            enable_enhanced_ui(app_ref);
-            let windows = copy_attribute_array(app_ref, "AXWindows");
-            let mut state = ScanState {
-                visited: 0,
-                truncated: false,
-                seen: HashSet::new(),
-                controls: Vec::new(),
-                started: Instant::now(),
-            };
+            enable_enhanced_ui(app_ref, &mut state);
+            let windows = copy_attribute_array(app_ref, "AXWindows", &mut state);
             for window_target in window_targets {
-                if state.visited >= MAX_AX_VISITED
-                    || state.controls.len() >= MAX_AX_CONTROLS
-                    || state.started.elapsed() >= Duration::from_millis(AX_SCAN_BUDGET_MS)
-                {
+                if state.budget_exhausted() {
                     state.truncated = true;
                     break;
                 }
                 let window = windows
                     .as_ref()
-                    .and_then(|windows| matching_window(windows, *window_target))
-                    .or_else(|| first_window_in_children(app_ref, *window_target))
+                    .and_then(|windows| matching_window(windows, *window_target, &mut state))
+                    .or_else(|| first_window_in_children(app_ref, *window_target, &mut state))
                     .or_else(|| {
                         windows
                             .as_ref()
-                            .and_then(|windows| nested_window(windows, *window_target, 0))
+                            .and_then(|windows| nested_window(windows, *window_target, 0, &mut state))
                     })
-                    .or_else(|| element_in_rect(pid, *window_target));
+                    .or_else(|| element_in_rect(pid, *window_target, &mut state));
                 let Some(window) = window else {
                     state.truncated = true;
                     continue;
                 };
                 let window_ref = window.as_CFTypeRef() as AXUIElementRef;
-                let window_frame = element_frame(window_ref);
+                let window_frame = element_frame(window_ref, &mut state);
                 // AppKit exposes the standard traffic-light controls as
                 // dedicated window attributes. Some apps do not also include
                 // them in AXChildren, so collect these four explicitly before
@@ -707,20 +863,25 @@ mod macos_ax {
     unsafe fn matching_window(
         windows: &CFArray<*const c_void>,
         target: SeatRect,
+        state: &mut ScanState,
     ) -> Option<CFType> {
         let mut best: Option<(f64, AXUIElementRef)> = None;
         for index in 0..windows.len() {
+            if state.deadline.expired() {
+                state.truncated = true;
+                break;
+            }
             let Some(window) = windows
                 .get(index as isize)
                 .map(|value| *value as AXUIElementRef)
             else {
                 continue;
             };
-            let role = copy_attribute_string(window, "AXRole").unwrap_or_default();
+            let role = copy_attribute_string(window, "AXRole", state).unwrap_or_default();
             if role != "AXWindow" {
                 continue;
             }
-            let Some(frame) = element_frame(window) else {
+            let Some(frame) = element_frame(window, state) else {
                 continue;
             };
             let overlap_x = (frame.right().min(target.right()) - frame.x.max(target.x)).max(0.0);
@@ -729,8 +890,8 @@ mod macos_ax {
             if overlap <= 1.0 {
                 continue;
             }
-            let subrole = copy_attribute_string(window, "AXSubrole").unwrap_or_default();
-            let child_count = copy_attribute_array(window, "AXChildren")
+            let subrole = copy_attribute_string(window, "AXSubrole", state).unwrap_or_default();
+            let child_count = copy_attribute_array(window, "AXChildren", state)
                 .map(|children| children.len())
                 .unwrap_or(0);
             let score = overlap
@@ -753,39 +914,62 @@ mod macos_ax {
         elements: &CFArray<*const c_void>,
         target: SeatRect,
         depth: usize,
+        state: &mut ScanState,
     ) -> Option<CFType> {
         if depth >= 2 {
             return None;
         }
-        if let Some(window) = matching_window(elements, target) {
+        if state.deadline.expired() {
+            state.truncated = true;
+            return None;
+        }
+        if let Some(window) = matching_window(elements, target, state) {
             return Some(window);
         }
         for index in 0..elements.len() {
+            if state.deadline.expired() {
+                state.truncated = true;
+                return None;
+            }
             let Some(element) = elements
                 .get(index as isize)
                 .map(|value| *value as AXUIElementRef)
             else {
                 continue;
             };
-            let Some(children) = copy_attribute_array(element, "AXChildren") else {
+            let Some(children) = copy_attribute_array(element, "AXChildren", state) else {
                 continue;
             };
-            if let Some(window) = nested_window(&children, target, depth + 1) {
+            if let Some(window) = nested_window(&children, target, depth + 1, state) {
                 return Some(window);
             }
         }
         None
     }
 
-    unsafe fn first_window_in_children(app: AXUIElementRef, target: SeatRect) -> Option<CFType> {
-        let children = copy_attribute_array(app, "AXChildren")?;
-        matching_window(&children, target)
+    unsafe fn first_window_in_children(
+        app: AXUIElementRef,
+        target: SeatRect,
+        state: &mut ScanState,
+    ) -> Option<CFType> {
+        let children = copy_attribute_array(app, "AXChildren", state)?;
+        matching_window(&children, target, state)
     }
 
-    unsafe fn element_pid(element: AXUIElementRef) -> Option<i32> {
+    unsafe fn element_pid(element: AXUIElementRef, state: &mut ScanState) -> Option<i32> {
+        if !prepare_ax_ipc(element, state) {
+            return None;
+        }
         let mut pid = 0;
         let error = AXUIElementGetPid(element, &mut pid);
-        (error == 0).then_some(pid)
+        match ax_copy_outcome(error, state.deadline.expired()) {
+            AxCopyOutcome::Truncated => {
+                state.truncated = true;
+                None
+            }
+            AxCopyOutcome::Missing => None,
+            AxCopyOutcome::Success => Some(pid),
+        }
     }
 
     fn sample_points(target: SeatRect) -> [(f64, f64); 5] {
@@ -800,35 +984,56 @@ mod macos_ax {
         ]
     }
 
-    unsafe fn element_in_rect(pid: i32, target: SeatRect) -> Option<CFType> {
+    unsafe fn element_in_rect(
+        pid: i32,
+        target: SeatRect,
+        state: &mut ScanState,
+    ) -> Option<CFType> {
         let system = AXUIElementCreateSystemWide();
         if system.is_null() {
             return None;
         }
         let system = CFType::wrap_under_create_rule(system as CFTypeRef);
         let system_ref = system.as_CFTypeRef() as AXUIElementRef;
-        let _ = AXUIElementSetMessagingTimeout(system_ref, AX_TIMEOUT_SECONDS);
         for (x, y) in sample_points(target) {
+            if !prepare_ax_ipc(system_ref, state) {
+                return None;
+            }
             let mut hit: AXUIElementRef = ptr::null();
             let error = AXUIElementCopyElementAtPosition(system_ref, x as f32, y as f32, &mut hit);
-            if error != 0 || hit.is_null() {
+            match ax_copy_outcome(error, state.deadline.expired()) {
+                AxCopyOutcome::Truncated => {
+                    state.truncated = true;
+                    if !hit.is_null() {
+                        let _ = CFType::wrap_under_create_rule(hit as CFTypeRef);
+                    }
+                    return None;
+                }
+                AxCopyOutcome::Missing | AxCopyOutcome::Success if hit.is_null() => continue,
+                AxCopyOutcome::Missing | AxCopyOutcome::Success => {}
+            }
+            if hit.is_null() {
                 continue;
             }
             let mut current = CFType::wrap_under_create_rule(hit as CFTypeRef);
-            if element_pid(current.as_CFTypeRef() as AXUIElementRef) != Some(pid) {
+            if element_pid(current.as_CFTypeRef() as AXUIElementRef, state) != Some(pid) {
                 continue;
             }
             for _ in 0..12 {
+                if state.deadline.expired() {
+                    state.truncated = true;
+                    return None;
+                }
                 let current_ref = current.as_CFTypeRef() as AXUIElementRef;
-                let role = copy_attribute_string(current_ref, "AXRole").unwrap_or_default();
+                let role = copy_attribute_string(current_ref, "AXRole", state).unwrap_or_default();
                 if role == "AXWindow" {
                     return Some(current);
                 }
-                let Some(parent) = copy_attribute_value(current_ref, "AXParent") else {
+                let Some(parent) = copy_attribute_value(current_ref, "AXParent", state) else {
                     break;
                 };
                 let parent = CFType::wrap_under_create_rule(parent);
-                if element_pid(parent.as_CFTypeRef() as AXUIElementRef) != Some(pid) {
+                if element_pid(parent.as_CFTypeRef() as AXUIElementRef, state) != Some(pid) {
                     break;
                 }
                 current = parent;
@@ -839,9 +1044,7 @@ mod macos_ax {
 
     unsafe fn scan_element(element: AXUIElementRef, search: SeatRect, state: &mut ScanState) {
         if element.is_null()
-            || state.visited >= MAX_AX_VISITED
-            || state.controls.len() >= MAX_AX_CONTROLS
-            || state.started.elapsed() >= Duration::from_millis(AX_SCAN_BUDGET_MS)
+            || state.budget_exhausted()
         {
             state.truncated = true;
             return;
@@ -851,10 +1054,10 @@ mod macos_ax {
             return;
         }
         state.visited += 1;
-        let role = copy_attribute_string(element, "AXRole").unwrap_or_default();
-        let frame = element_frame(element);
+        let role = copy_attribute_string(element, "AXRole", state).unwrap_or_default();
+        let frame = element_frame(element, state);
         if is_control_role(&role) {
-            if attribute_is_true(element, "AXHidden") {
+            if attribute_is_true(element, "AXHidden", state) {
                 return;
             }
             if let Some(frame) = frame {
@@ -876,7 +1079,7 @@ mod macos_ax {
         // reach an on-screen button before the fixed node/time budgets expire.
         // `seen` makes overlapping AX child collections safe to traverse.
         for attribute in ["AXVisibleChildren", "AXChildren", "AXContents"] {
-            let Some(children) = copy_attribute_array(element, attribute) else {
+            let Some(children) = copy_attribute_array(element, attribute, state) else {
                 continue;
             };
             for index in 0..children.len() {
@@ -901,22 +1104,20 @@ mod macos_ax {
         search: SeatRect,
         state: &mut ScanState,
     ) {
-        if state.controls.len() >= MAX_AX_CONTROLS
-            || state.started.elapsed() >= Duration::from_millis(AX_SCAN_BUDGET_MS)
-        {
+        if state.budget_exhausted() {
             state.truncated = true;
             return;
         }
-        let Some(control) = copy_attribute_value(window, attribute) else {
+        let Some(control) = copy_attribute_value(window, attribute, state) else {
             return;
         };
         let control = CFType::wrap_under_create_rule(control);
         let control_ref = control.as_CFTypeRef() as AXUIElementRef;
-        if !attribute_is_true(control_ref, "AXHidden") {
+        if !attribute_is_true(control_ref, "AXHidden", state) {
             let address = control_ref as usize;
             if state.seen.insert(address) {
                 state.visited += 1;
-                if let Some(frame) = element_frame(control_ref) {
+                if let Some(frame) = element_frame(control_ref, state) {
                     if control_attached_to_window(window_frame, frame)
                         && frame.is_valid()
                         && intersects(frame, search)
@@ -947,9 +1148,9 @@ mod macos_ax {
         )
     }
 
-    unsafe fn element_frame(element: AXUIElementRef) -> Option<SeatRect> {
-        let position = CFType::wrap_under_create_rule(copy_attribute_value(element, "AXPosition")?);
-        let size = CFType::wrap_under_create_rule(copy_attribute_value(element, "AXSize")?);
+    unsafe fn element_frame(element: AXUIElementRef, state: &mut ScanState) -> Option<SeatRect> {
+        let position = CFType::wrap_under_create_rule(copy_attribute_value(element, "AXPosition", state)?);
+        let size = CFType::wrap_under_create_rule(copy_attribute_value(element, "AXSize", state)?);
         let mut point = CGPoint::default();
         let mut extent = CGSize::default();
         let ok_point = AXValueGetValue(
@@ -974,18 +1175,30 @@ mod macos_ax {
     unsafe fn copy_attribute_array(
         element: AXUIElementRef,
         attribute: &str,
+        state: &mut ScanState,
     ) -> Option<CFArray<*const c_void>> {
-        let value = copy_attribute_value(element, attribute)?;
+        let value = copy_attribute_value(element, attribute, state)?;
         Some(CFArray::wrap_under_create_rule(value as CFArrayRef))
     }
 
-    unsafe fn copy_attribute_string(element: AXUIElementRef, attribute: &str) -> Option<String> {
-        let value = copy_attribute_value(element, attribute)?;
+    unsafe fn copy_attribute_string(
+        element: AXUIElementRef,
+        attribute: &str,
+        state: &mut ScanState,
+    ) -> Option<String> {
+        let value = copy_attribute_value(element, attribute, state)?;
         let string = CFString::wrap_under_create_rule(value as _);
         Some(string.to_string())
     }
 
-    unsafe fn copy_attribute_value(element: AXUIElementRef, attribute: &str) -> Option<CFTypeRef> {
+    unsafe fn copy_attribute_value(
+        element: AXUIElementRef,
+        attribute: &str,
+        state: &mut ScanState,
+    ) -> Option<CFTypeRef> {
+        if !prepare_ax_ipc(element, state) {
+            return None;
+        }
         let key = CFString::new(attribute);
         let mut value: CFTypeRef = ptr::null();
         let error = AXUIElementCopyAttributeValue(
@@ -993,11 +1206,31 @@ mod macos_ax {
             key.as_concrete_TypeRef(),
             &mut value as *mut CFTypeRef,
         );
-        (error == 0 && !value.is_null()).then_some(value)
+        match ax_copy_outcome(error, state.deadline.expired()) {
+            AxCopyOutcome::Truncated => {
+                state.truncated = true;
+                if !value.is_null() {
+                    let _ = CFType::wrap_under_create_rule(value);
+                }
+                None
+            }
+            AxCopyOutcome::Missing => {
+                if !value.is_null() {
+                    let _ = CFType::wrap_under_create_rule(value);
+                }
+                None
+            }
+            AxCopyOutcome::Success if value.is_null() => None,
+            AxCopyOutcome::Success => Some(value),
+        }
     }
 
-    unsafe fn attribute_is_true(element: AXUIElementRef, attribute: &str) -> bool {
-        let Some(value) = copy_attribute_value(element, attribute) else {
+    unsafe fn attribute_is_true(
+        element: AXUIElementRef,
+        attribute: &str,
+        state: &mut ScanState,
+    ) -> bool {
+        let Some(value) = copy_attribute_value(element, attribute, state) else {
             return false;
         };
         CFType::wrap_under_create_rule(value)
@@ -1371,5 +1604,112 @@ mod tests {
             vec![5, 3, 4]
         );
         assert_eq!(chosen[0].frames.len(), MAX_WINDOWS_PER_PROCESS);
+    }
+
+    fn process_target(pid: i32) -> ProcessScanTarget {
+        ProcessScanTarget {
+            pid,
+            frames: vec![rect(0.0, 0.0, 100.0, 100.0)],
+        }
+    }
+
+    #[test]
+    fn messaging_timeout_never_returns_zero_and_is_capped_by_remaining() {
+        assert_eq!(
+            AxScanDeadline::timeout_from_remaining(Duration::ZERO),
+            AX_MIN_TIMEOUT_SECONDS
+        );
+        assert!(AxScanDeadline::timeout_from_remaining(Duration::ZERO) > 0.0);
+        let remaining = AxScanDeadline::timeout_from_remaining(Duration::from_millis(30));
+        assert!((remaining - 0.03).abs() < 1e-4);
+        assert!(remaining <= AX_SCAN_BUDGET_MS as f32 / 1000.0);
+        let expired = AxScanDeadline::from_started(
+            Instant::now() - Duration::from_secs(1),
+            Duration::from_millis(AX_SCAN_BUDGET_MS),
+        );
+        assert!(expired.expired());
+        assert_eq!(expired.messaging_timeout_seconds(), AX_MIN_TIMEOUT_SECONDS);
+    }
+
+    #[test]
+    fn timeout_and_unavailable_ax_errors_are_truncated_not_clear() {
+        assert_eq!(
+            ax_copy_outcome(KAX_ERROR_CANNOT_COMPLETE, false),
+            AxCopyOutcome::Truncated
+        );
+        assert_eq!(
+            ax_copy_outcome(KAX_ERROR_API_DISABLED, false),
+            AxCopyOutcome::Truncated
+        );
+        assert_eq!(
+            ax_copy_outcome(KAX_ERROR_SUCCESS, true),
+            AxCopyOutcome::Truncated
+        );
+        assert_eq!(ax_copy_outcome(-25205, false), AxCopyOutcome::Missing);
+        assert_eq!(
+            ax_copy_outcome(KAX_ERROR_SUCCESS, false),
+            AxCopyOutcome::Success
+        );
+        let resolution = seat_from_scan(
+            1272.0,
+            14.0,
+            144.0,
+            99.0,
+            0.0,
+            1440.0,
+            ControlScan {
+                obstacles: Vec::new(),
+                truncated: true,
+                failure: None,
+            },
+        );
+        assert!(!resolution.moved);
+        assert_eq!(resolution.reason, SeatDecisionReason::ScanTruncated);
+    }
+
+    #[test]
+    fn expired_deadline_skips_process_scans_and_stays_truncated() {
+        let deadline = AxScanDeadline::from_started(
+            Instant::now() - Duration::from_millis(AX_SCAN_BUDGET_MS + 5),
+            Duration::from_millis(AX_SCAN_BUDGET_MS),
+        );
+        let mut scanned = Vec::new();
+        let scan = collect_process_scans(&[process_target(1), process_target(2)], deadline, |target, _| {
+            scanned.push(target.pid);
+            WindowControlScan {
+                controls: vec![rect(10.0, 10.0, 20.0, 20.0)],
+                truncated: false,
+            }
+        });
+        assert!(scanned.is_empty());
+        assert!(scan.truncated);
+        assert!(scan.obstacles.is_empty());
+        let resolution = seat_from_scan(1272.0, 14.0, 144.0, 99.0, 0.0, 1440.0, scan);
+        assert_eq!(resolution.reason, SeatDecisionReason::ScanTruncated);
+        assert_eq!((resolution.x, resolution.y), (1272.0, 14.0));
+    }
+
+    #[test]
+    fn delayed_process_fixture_stops_later_scans_and_keeps_found_controls() {
+        let deadline = AxScanDeadline::from_budget_ms(25);
+        let mut scanned = Vec::new();
+        let scan = collect_process_scans(
+            &[process_target(1), process_target(2)],
+            deadline,
+            |target, deadline| {
+                scanned.push(target.pid);
+                std::thread::sleep(Duration::from_millis(40));
+                WindowControlScan {
+                    controls: vec![rect(1290.0, 8.0, 48.0, 28.0)],
+                    truncated: deadline.expired(),
+                }
+            },
+        );
+        assert_eq!(scanned, vec![1]);
+        assert!(scan.truncated);
+        assert_eq!(scan.obstacles.len(), 1);
+        let resolution = seat_from_scan(1272.0, 14.0, 144.0, 99.0, 0.0, 1440.0, scan);
+        assert!(resolution.moved);
+        assert_eq!(resolution.reason, SeatDecisionReason::ControlOverlap);
     }
 }
