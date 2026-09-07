@@ -92,7 +92,6 @@ export function ProjectEditorModal({ project, projects, busy = false, onSave, on
         <div className="modal-head">
           <div className="modal-head__copy">
             <h2 id="projects-editor-title">{t(isEditing ? "projects.editor.editTitle" : "projects.editor.newTitle")}</h2>
-            <p>{t("projects.editor.personal")}</p>
           </div>
         </div>
         <ProjectEditorFields

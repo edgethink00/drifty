@@ -1,4 +1,5 @@
 import { ProjectColorToken } from "./ProjectColorToken";
+import { AiSparkIcon } from "./AiSparkIcon";
 import "./project-editor-fields.css";
 import { useLocalization } from "../features/localization/LocalizationContext";
 
@@ -58,7 +59,12 @@ export function ProjectEditorFields({
         />
       </label>
       <label className="project-editor-field" htmlFor={descriptionId}>
-        <span className="label-mono">{t("projects.editor.description")}</span>
+        <span className="label-mono project-editor-field__label-mono">
+          <span className="project-editor-field__ai-icon" aria-hidden="true">
+            <AiSparkIcon />
+          </span>
+          {t("projects.editor.description")}
+        </span>
         <textarea
           id={descriptionId}
           className="settings-input project-editor-field__textarea"
