@@ -156,9 +156,12 @@ describe("pet mode coat rendering contract", () => {
   it("binds the walk and run eyes to the ink token", () => {
     // These eyes previously relied on SVG's default black fill, which left
     // black eyes on a charcoal coat.
-    const walkFace = cat.slice(cat.indexOf('cx="120.4"'), cat.indexOf('cx="140.3"') + 200);
+    const walkFace = cat.slice(cat.indexOf('cx="120.4" cy="46.2"'), cat.indexOf('cx="140.3" cy="46.2"') + 200);
     expect(walkFace).toContain('cx="120.4" cy="46.2" r="2.2" fill="currentColor"');
     expect(walkFace).toContain('cx="140.3" cy="46.2" r="2.2" fill="currentColor"');
+    // The sleepwalk lids ride the same ink token.
+    const drowsyStart = cat.indexOf('className="pet-mode-cat__walk-eyes--drowsy"');
+    expect(cat.slice(drowsyStart, drowsyStart + 400)).toContain('stroke="currentColor"');
   });
 
   it("keeps alpha untouched so silhouettes and edges survive the recolor", () => {

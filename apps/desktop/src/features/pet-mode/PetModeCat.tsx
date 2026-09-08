@@ -90,6 +90,7 @@ export function PetModeCat({
   dragPickupPose = "idle",
   dragReleasePose = "idle",
   proudWalk = false,
+  drowsyWalk = false,
   musicNoteVisible = false,
   quietNotice = false,
   devForceLiveBlink = false,
@@ -118,6 +119,8 @@ export function PetModeCat({
   readonly dragReleasePose?: PetModeRestPose;
   /** Wears the E04 lids while walking home after closing Drifty's window. */
   readonly proudWalk?: boolean;
+  /** Heavy half-closed lids while a woken cat walks off a control it was covering. */
+  readonly drowsyWalk?: boolean;
   /** Shows the reviewed one-shot good-mood note without replacing the body pose. */
   readonly musicNoteVisible?: boolean;
   /** Hides the drift-notice bang when the same pose is reused as a drop greeting. */
@@ -465,7 +468,7 @@ export function PetModeCat({
   const usesLiveD = selectedSitVariant.kind === "live-raster";
   const hasLiveDSitGaze = phase === "sit" && usesLiveD && (gazeOffset.x !== 0 || gazeOffset.y !== 0);
   const hasLiveDNeutralSit = phase === "sit" && usesLiveD && !hasLiveDSitGaze;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy"
     || phase === "drowsy";
@@ -543,6 +546,7 @@ export function PetModeCat({
             biting={phase === "bite" || phase === "return"}
             gazing={gazeOffset.x !== 0 || gazeOffset.y !== 0}
             proud={proudWalk}
+            drowsy={drowsyWalk}
           />
         </g>
       </g>
@@ -990,18 +994,33 @@ function PetModeWalkFace({
   gazing = false,
   biting = false,
   proud = false,
+  drowsy = false,
 }: {
   readonly transform?: string;
   readonly animatedBlink?: boolean;
   readonly gazing?: boolean;
   readonly biting?: boolean;
   readonly proud?: boolean;
+  readonly drowsy?: boolean;
 }) {
   return (
     <g className="pet-mode-cat__face" transform={transform}>
       {/* Keep one canonical copy of the shipped walk face. The sitting pose
           translates this entire group without redrawing or rescaling it. */}
-      {proud ? (
+      {drowsy ? (
+        /* Sleepwalk: the same drowsy lids the petting sequence shows before
+           sleep (PetModeExpression's eyes--drowsy), scaled from the 797-wide
+           expression face to the walk face so the cat wakes with the eyes the
+           user already knows. */
+        <path
+          className="pet-mode-cat__walk-eyes--drowsy"
+          d="M118.3 45.0 Q120.4 47.6 122.5 45.0 M138.2 45.0 Q140.3 47.6 142.4 45.0"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      ) : proud ? (
         /* E04: the lids curve down over the eyes. Quiet satisfaction reads as
            the opposite arc of an excited smile, which is why the walk-away at
            the end of a session uses this instead of the happy face. */
@@ -1019,7 +1038,7 @@ function PetModeWalkFace({
         <circle className={`${animatedBlink ? "pet-mode-cat__sit-eye-open" : ""}${gazing ? " pet-mode-cat__vector-eye--gaze" : ""}`.trim() || undefined} cx="140.3" cy="46.2" r="2.2" fill="currentColor" />
       </g>
       )}
-      {animatedBlink && !proud ? (
+      {animatedBlink && !proud && !drowsy ? (
         <path
           className="pet-mode-cat__sit-eye-closed"
           d="M117.8 46.2 Q120.4 48.6 123 46.2 M137.7 46.2 Q140.3 48.6 142.9 46.2"

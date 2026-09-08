@@ -21,6 +21,7 @@ import {
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
   PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_SEAT_CLEAR_CONFIRM_MS,
+  PET_MODE_DROWSY_RESETTLE_MS,
   PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   PET_MODE_STORAGE_KEY,
@@ -616,6 +617,173 @@ describe("PetModeWindowApp", () => {
     expect(cat.getAttribute("data-phase")).toBe("idle");
   }, 20_000);
 
+  it("holds the sleeping seat during a pause and returns home only after waking", async () => {
+    const cat = await mountTimedPause();
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => bridge.eventHandler?.({
+      kind: "snapshot",
+      snapshot: { productivity: "neutral", contextLabel: "browser", durationSeconds: 1, surfaceRevision: 1 },
+    }));
+    await act(async () => bridge.eventHandler?.({
+      kind: "snapshot",
+      snapshot: { productivity: "neutral", contextLabel: "editor", durationSeconds: 1, surfaceRevision: 2 },
+    }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    // Asleep, the cat may still step off a covered control, but it must not
+    // wander back to its remembered home.
+    expect(bridge.reconcileNativePetPosition).toHaveBeenLastCalledWith(false, true);
+    bridge.reconcileNativePetPosition.mockClear();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60_000); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false, false);
+  }, 20_000);
+
+  it("gets up and walks off a covered control with drowsy eyes, then lies back down while paused", async () => {
+    const cat = await mountTimedPause();
+    let arrive!: () => void;
+    bridge.reconcileNativePetPosition.mockImplementationOnce(() => new Promise((resolve) => {
+      arrive = () => resolve({ x: 900, y: 47, moved: true, reason: "control_overlap" });
+    }));
+    await act(async () => bridge.eventHandler?.({
+      kind: "snapshot",
+      snapshot: { productivity: "neutral", contextLabel: "browser", durationSeconds: 1, surfaceRevision: 1 },
+    }));
+    await act(async () => bridge.eventHandler?.({
+      kind: "snapshot",
+      snapshot: { productivity: "neutral", contextLabel: "editor", durationSeconds: 1, surfaceRevision: 2 },
+    }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    expect(bridge.reconcileNativePetPosition).toHaveBeenLastCalledWith(false, true);
+
+    // Native announces the facing first, then the drowsy seat correction.
+    const mirroredBefore = cat.classList.contains("is-mirrored");
+    await act(async () => bridge.eventHandler?.({ kind: "facing", facing: mirroredBefore ? "right" : "left" }));
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    await act(async () => bridge.eventHandler?.({ kind: "motion", motion: "walk", purpose: "drowsy_seat_correction" }));
+    // Up and walking in the same beat, eyes still heavy.
+    expect(cat.getAttribute("data-phase")).toBe("walk");
+    expect(cat.classList.contains("is-mirrored")).toBe(!mirroredBefore);
+    // Walk frames do not load under jsdom; the drowsy walk face itself is
+    // covered in petModeDrowsyWalkFace.test.tsx. Here the flag is enough.
+    expect(cat.classList.contains("is-sleepwalking")).toBe(true);
+
+    await act(async () => { arrive(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("drowsy");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DROWSY_RESETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleepwalking")).toBe(false);
+  }, 20_000);
+
+  it("ignores a plain seat correction while the timed pause keeps the cat asleep", async () => {
+    const cat = await mountTimedPause();
+    await act(async () => bridge.eventHandler?.({ kind: "motion", motion: "walk", purpose: "seat_correction" }));
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+  });
+
+  async function beginPausedSleepwalk() {
+    const cat = await mountTimedPause();
+    let settle!: (resolution: { x: number; y: number; moved: boolean; reason: string }) => void;
+    bridge.reconcileNativePetPosition.mockImplementationOnce(() => new Promise((resolve) => { settle = resolve; }));
+    await act(async () => bridge.eventHandler?.({
+      kind: "snapshot",
+      snapshot: { productivity: "neutral", contextLabel: "browser", durationSeconds: 1, surfaceRevision: 1 },
+    }));
+    await act(async () => bridge.eventHandler?.({
+      kind: "snapshot",
+      snapshot: { productivity: "neutral", contextLabel: "editor", durationSeconds: 1, surfaceRevision: 2 },
+    }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    await act(async () => bridge.eventHandler?.({ kind: "motion", motion: "walk", purpose: "drowsy_seat_correction" }));
+    expect(cat.getAttribute("data-phase")).toBe("walk");
+    expect(cat.classList.contains("is-sleepwalking")).toBe(true);
+    return { cat, settle: (resolution: { x: number; y: number; moved: boolean; reason: string }) => settle(resolution) };
+  }
+
+  it("lies back down when the sleepwalk is superseded under a timed pause", async () => {
+    const { cat, settle } = await beginPausedSleepwalk();
+    await act(async () => { settle({ x: 120, y: 80, moved: false, reason: "motion_superseded" }); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleepwalking")).toBe(false);
+    // The sleep lock is back: nothing else can stand the cat up mid-pause.
+    await act(async () => bridge.eventHandler?.({ kind: "motion", motion: "walk", purpose: "seat_correction" }));
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+  });
+
+  it("keeps the sleeping pose when the user grabs a sleepwalking cat", async () => {
+    const { cat } = await beginPausedSleepwalk();
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise(() => undefined));
+    await act(async () => dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 82, clientX: 18, clientY: 18 }));
+    expect(cat.classList.contains("is-sleepwalking")).toBe(false);
+    await act(async () => bridge.dragStartHandler?.());
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+  });
+
+  it("wakes upright when the pause ends mid-sleepwalk and stays awake once the walk resolves", async () => {
+    const { cat, settle } = await beginPausedSleepwalk();
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60_000); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+    expect(cat.classList.contains("is-sleepwalking")).toBe(false);
+    // The old walk's answer arrives after the pause is over: an awake cat
+    // must not lie back down because of it.
+    await act(async () => { settle({ x: 900, y: 47, moved: true, reason: "control_overlap" }); await Promise.resolve(); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DROWSY_RESETTLE_MS + 50); });
+    expect(cat.getAttribute("data-phase")).not.toBe("sleep");
+  }, 20_000);
+
+  it("drops a grabbed sleepwalker asleep, then wakes it normally when the pause ends", async () => {
+    const { cat } = await beginPausedSleepwalk();
+    const result = { moved: true, startX: 120, startY: 80, endX: 180, endY: 96 };
+    let completeDrag!: () => void;
+    bridge.beginNativePetDrag.mockImplementationOnce(() => new Promise((resolve) => { completeDrag = () => resolve(result); }));
+    await act(async () => dispatchPointer(screen.getByRole("button", { name: /Pet Drifty cat/ }), "pointerdown", { pointerId: 83, clientX: 18, clientY: 18 }));
+    await act(async () => bridge.dragEndHandler?.(result));
+    await act(async () => completeDrag());
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    expect(cat.classList.contains("is-sleepwalking")).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(15 * 60_000); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  }, 20_000);
+
+  it("sleepwalks a naturally sleeping cat too and lets a later wake stand it up", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let arrive!: () => void;
+    bridge.reconcileNativePetPosition.mockImplementationOnce(() => new Promise((resolve) => {
+      arrive = () => resolve({ x: 900, y: 47, moved: true, reason: "control_overlap" });
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "sleep" }));
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+
+    await act(async () => bridge.eventHandler?.({ kind: "snapshot", snapshot: { productivity: "neutral", contextLabel: "a", durationSeconds: 1, surfaceRevision: 1 } }));
+    await act(async () => bridge.eventHandler?.({ kind: "snapshot", snapshot: { productivity: "neutral", contextLabel: "b", durationSeconds: 1, surfaceRevision: 2 } }));
+    await act(async () => { await vi.advanceTimersByTimeAsync(150); });
+    // A naturally sleeping cat holds its seat the same way.
+    expect(bridge.reconcileNativePetPosition).toHaveBeenLastCalledWith(false, true);
+    await act(async () => bridge.eventHandler?.({ kind: "motion", motion: "walk", purpose: "drowsy_seat_correction" }));
+    expect(cat.getAttribute("data-phase")).toBe("walk");
+    await act(async () => { arrive(); await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("drowsy");
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DROWSY_RESETTLE_MS); });
+    expect(cat.getAttribute("data-phase")).toBe("sleep");
+    // Without a pause there is no lock: the usual wake still works.
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "wake" }));
+    await act(async () => { await Promise.resolve(); });
+    expect(cat.getAttribute("data-phase")).toBe("idle");
+  });
+
   it("rechecks the resident seat when the opaque app/window revision changes", async () => {
     vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
@@ -657,7 +825,7 @@ describe("PetModeWindowApp", () => {
       await vi.advanceTimersByTimeAsync(150);
       await Promise.resolve();
     });
-    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false);
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false, false);
   });
 
   it("periodically rechecks a still cat when controls change without a new window title", async () => {
@@ -686,7 +854,7 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
     });
 
-    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false);
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false, false);
   });
 
   it("quickly confirms a clear anchor without trusting one transient AX miss", async () => {
@@ -898,7 +1066,7 @@ describe("PetModeWindowApp", () => {
       await vi.advanceTimersByTimeAsync(120);
       await Promise.resolve();
     });
-    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false);
+    expect(bridge.reconcileNativePetPosition).toHaveBeenCalledWith(false, false);
   });
 
   it("hard-stops automatic motion while focus is active", async () => {

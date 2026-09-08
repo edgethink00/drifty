@@ -104,6 +104,10 @@ const PET_MODE_CARRY_YANK_DISTANCE: f64 = 34.0;
 const PET_MODE_CARRY_MAX_GRIP_MS: f64 = 420.0;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
+const PET_MODE_SEAT_CORRECTION_PURPOSE: &str = "seat_correction";
+// Same bounded walk as a seat correction, but announced separately so the
+// webview knows the cat was asleep and wakes it with drowsy eyes.
+const PET_MODE_DROWSY_SEAT_CORRECTION_PURPOSE: &str = "drowsy_seat_correction";
 // Native translation duration only. The hidden pre-paint hold and renderer
 // handoff below happen before this clock starts. Default-home travel at the
 // 144-point panel is one short run at PET_MODE_RUN_SPEED; remembered homes
@@ -2139,9 +2143,14 @@ pub async fn pet_mode_remember_position(
 pub async fn pet_mode_reconcile_position(
     app: AppHandle,
     reduced_motion: Option<bool>,
+    hold_seat: Option<bool>,
 ) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
     async_runtime::spawn_blocking(move || {
-        reconcile_resident_pet_position(&app, reduced_motion.unwrap_or(false))
+        reconcile_resident_pet_position(
+            &app,
+            reduced_motion.unwrap_or(false),
+            hold_seat.unwrap_or(false),
+        )
     })
     .await
     .map_err(|error| format!("Pet Mode seat reconcile task failed: {error}"))?
@@ -2198,12 +2207,20 @@ fn remember_and_resolve_pet_position(
         work_size.width,
         work_size.height,
     );
-    apply_pet_seat_resolution(&window, position, resolution, reduced_motion, None)
+    apply_pet_seat_resolution(
+        &window,
+        position,
+        resolution,
+        reduced_motion,
+        None,
+        PET_MODE_SEAT_CORRECTION_PURPOSE,
+    )
 }
 
 fn reconcile_resident_pet_position(
     app: &AppHandle,
     reduced_motion: bool,
+    hold_seat: bool,
 ) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
     use super::pet_mode_ax_control_veto::{SeatDecisionReason, SeatResolution};
 
@@ -2242,7 +2259,13 @@ fn reconcile_resident_pet_position(
     // home has become clear. Elsewhere, the current temporary seat is the AX
     // target so a surface change can move the cat off a new button without
     // pulling it vertically back to its long-term home.
-    let anchor = resident_seat_anchor_for_current_position(
+    //
+    // A sleeping cat holds its seat: the only motion it still accepts is the
+    // bounded move off a control it is covering. Returning to the remembered
+    // home while asleep reads as the cat wandering in its sleep, so that
+    // return waits until it wakes and the next reconcile runs without the hold.
+    let anchor = resident_seat_anchor_for_reconcile(
+        hold_seat,
         current,
         resident_home,
         work_position,
@@ -2263,6 +2286,11 @@ fn reconcile_resident_pet_position(
         resolution,
         reduced_motion,
         Some(observed_motion_revision),
+        if hold_seat {
+            PET_MODE_DROWSY_SEAT_CORRECTION_PURPOSE
+        } else {
+            PET_MODE_SEAT_CORRECTION_PURPOSE
+        },
     )
 }
 
@@ -3041,6 +3069,7 @@ fn apply_pet_seat_resolution(
     resolution: super::pet_mode_ax_control_veto::SeatResolution,
     reduced_motion: bool,
     expected_motion_revision: Option<u64>,
+    purpose: &'static str,
 ) -> Result<super::pet_mode_ax_control_veto::SeatResolution, String> {
     if expected_motion_revision
         .is_some_and(|expected| PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != expected)
@@ -3083,7 +3112,7 @@ fn apply_pet_seat_resolution(
                 PET_MODE_WALK_SPEED,
                 PET_MODE_WALK_MAX_SECONDS,
                 "walk",
-                "seat_correction",
+                purpose,
                 expected,
             )?
         };
@@ -3105,7 +3134,7 @@ fn apply_pet_seat_resolution(
             PET_MODE_WALK_SPEED,
             PET_MODE_WALK_MAX_SECONDS,
             "walk",
-            "seat_correction",
+            purpose,
         )?;
     }
     Ok(resolution)
@@ -3401,6 +3430,30 @@ fn resident_seat_anchor_for_current_position(
         clamp_pet_position(resident_home, work_position, work_width, work_height)
     } else {
         current
+    }
+}
+
+/// A held seat (sleeping cat) is its own anchor, so the only move the AX
+/// resolver can produce is stepping off a control. Otherwise the usual
+/// resident-band rule decides whether the remembered home is the target.
+fn resident_seat_anchor_for_reconcile(
+    hold_seat: bool,
+    current: LogicalPosition<f64>,
+    resident_home: LogicalPosition<f64>,
+    work_position: LogicalPosition<f64>,
+    work_width: f64,
+    work_height: f64,
+) -> LogicalPosition<f64> {
+    if hold_seat {
+        clamp_pet_position(current, work_position, work_width, work_height)
+    } else {
+        resident_seat_anchor_for_current_position(
+            current,
+            resident_home,
+            work_position,
+            work_width,
+            work_height,
+        )
     }
 }
 
@@ -4347,6 +4400,8 @@ fn begin_pet_window_motion(
         return Ok(None);
     };
     emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
+    #[cfg(debug_assertions)]
+    eprintln!("[pet-mode-motion] motion={motion} purpose={purpose:?} facing={facing}");
     let motion_event = if let Some(purpose) = purpose {
         json!({ "kind": "motion", "motion": motion, "purpose": purpose })
     } else {
@@ -5481,6 +5536,50 @@ mod tests {
             ),
             lower_temporary_seat,
         );
+    }
+
+    #[test]
+    fn a_held_seat_never_targets_the_remembered_home() {
+        let work_position = LogicalPosition::new(0.0, 25.0);
+        let resident_home = LogicalPosition::new(320.0, 60.0);
+        let upper_visible_seat = LogicalPosition::new(560.0, 120.0);
+
+        // Awake in the resident band: the remembered home is the target.
+        assert_eq!(
+            resident_seat_anchor_for_reconcile(
+                false,
+                upper_visible_seat,
+                resident_home,
+                work_position,
+                1440.0,
+                775.0,
+            ),
+            resident_home,
+        );
+        // Asleep in the same spot: the cat anchors where it lies, so a clear
+        // scan yields no move and only a control overlap can shift it.
+        assert_eq!(
+            resident_seat_anchor_for_reconcile(
+                true,
+                upper_visible_seat,
+                resident_home,
+                work_position,
+                1440.0,
+                775.0,
+            ),
+            upper_visible_seat,
+        );
+        // A held seat outside the work area is still clamped into it.
+        let off_screen = LogicalPosition::new(-80.0, 120.0);
+        let clamped = resident_seat_anchor_for_reconcile(
+            true,
+            off_screen,
+            resident_home,
+            work_position,
+            1440.0,
+            775.0,
+        );
+        assert!(clamped.x >= work_position.x);
     }
 
     #[cfg(target_os = "macos")]

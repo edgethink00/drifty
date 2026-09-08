@@ -732,6 +732,12 @@
 }
 .pet-mode-cat--happy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
 .pet-mode-cat--drowsy .pet-mode-cat__heart { animation: pet-mode-heart 760ms cubic-bezier(.22, 1, .36, 1); }
+/* The heart and the lean into the hand are petting rewards. A sleepwalking
+   cat passes through drowsy twice (waking up, settling back down) without
+   anyone petting it, so it just sits still with heavy eyes. */
+.pet-mode-cat.is-sleepwalking .pet-mode-cat__heart,
+.pet-mode-cat--drowsy.is-sleepwalking .pet-mode-cat__motion,
+.pet-mode-cat--drowsy.is-sleepwalking .pet-mode-cat__expression { animation: none; }
 .pet-mode-cat--sleep .pet-mode-cat__zzz { opacity: .8; animation: pet-mode-zzz 1.8s ease-in-out infinite; }
 .pet-mode-cat.is-mirrored .pet-mode-cat__zzz { transform: scaleX(-1); }
 

@@ -219,6 +219,7 @@ describe("pet mode enabled bridge", () => {
     });
     expect(tauri.invoke).toHaveBeenNthCalledWith(2, "pet_mode_reconcile_position", {
       reducedMotion: false,
+      holdSeat: false,
     });
     expect(tauri.invoke).toHaveBeenNthCalledWith(3, "pet_mode_probe_ax_seat");
   });

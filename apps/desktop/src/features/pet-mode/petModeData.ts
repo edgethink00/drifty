@@ -29,6 +29,8 @@ export const PET_MODE_SEAT_RECONCILE_INTERVAL_MS = 6_000;
 // clear scans. Retry quickly enough to feel responsive when a button genuinely
 // disappears, while filtering one-frame AX omissions that would cause a bounce.
 export const PET_MODE_SEAT_CLEAR_CONFIRM_MS = 650;
+/** How long a sleepwalking cat sits with drowsy eyes before it lies back down. */
+export const PET_MODE_DROWSY_RESETTLE_MS = 900;
 export const PET_MODE_SIT_MIN_MS = 2.5 * 60 * 1000;
 export const PET_MODE_SIT_MAX_MS = 7 * 60 * 1000;
 export const PET_MODE_SLEEP_MIN_MS = 5 * 60 * 1000;
@@ -265,7 +267,7 @@ export type PetModeWindowEvent =
   | {
     readonly kind: "motion";
     readonly motion: PetModeMotionKind;
-    readonly purpose?: "seat_correction";
+    readonly purpose?: "seat_correction" | "drowsy_seat_correction";
     readonly travelDistance?: number;
     readonly durationMs?: number;
   }

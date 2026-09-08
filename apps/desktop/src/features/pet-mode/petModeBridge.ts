@@ -521,8 +521,9 @@ export async function rememberNativePetPosition(
 
 export async function reconcileNativePetPosition(
   reducedMotion = false,
+  holdSeat = false,
 ): Promise<PetModeSeatResolution> {
-  return invoke<PetModeSeatResolution>("pet_mode_reconcile_position", { reducedMotion });
+  return invoke<PetModeSeatResolution>("pet_mode_reconcile_position", { reducedMotion, holdSeat });
 }
 
 export async function probeNativePetAxSeat(): Promise<PetModeSeatResolution> {

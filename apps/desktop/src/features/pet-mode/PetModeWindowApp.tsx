@@ -95,6 +95,7 @@ import {
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
   PET_MODE_SEAT_CLEAR_CONFIRM_MS,
+  PET_MODE_DROWSY_RESETTLE_MS,
   PET_MODE_GUIDES_STORAGE_KEY,
   PET_MODE_SIT_MAX_MS,
   PET_MODE_SIT_MIN_MS,
@@ -195,6 +196,16 @@ export function PetModeWindowApp() {
   // A pause expiring mid-drag may resume settings, but the held cat keeps its
   // sleeping silhouette until native placement completes.
   const sleepingDragRef = useRef(false);
+  // A sleeping cat that must step off a control wakes drowsily, walks, and
+  // lies back down. While this runs, the timed-pause sleep lock yields to the
+  // walk and drowsy poses; every other path still sees the cat as asleep.
+  const sleepwalkRef = useRef(false);
+  const sleepwalkTokenRef = useRef(0);
+  const sleepwalkResettleTimerRef = useRef<number | null>(null);
+  const [sleepwalking, setSleepwalking] = useState(false);
+  // Native announces facing before the seat-correction motion. The sleep lock
+  // refuses the flip, so keep the last one for when the sleepwalk begins.
+  const heldSleepFacingRef = useRef<"left" | "right" | null>(null);
   const initialPhase: PetModeCatPhase = timedPauseUntil !== null ? "sleep" : initialAppearance.phase;
   const [phase, setPhase] = useState<PetModeCatPhase>(initialPhase);
   const [dragPickupPose, setDragPickupPose] = useState<PetModeRestPose>("idle");
@@ -398,7 +409,7 @@ export function PetModeWindowApp() {
   }, []);
 
   const commitPhase = useCallback((nextPhase: PetModeCatPhase, onCommit?: () => void) => {
-    if (timedPauseRef.current !== null || sleepingDragRef.current) nextPhase = "sleep";
+    if ((timedPauseRef.current !== null || sleepingDragRef.current) && !sleepwalkRef.current) nextPhase = "sleep";
     phaseRef.current = nextPhase;
     reportLabState(nextPhase);
     const transition = ++poseTransitionRef.current;
@@ -446,7 +457,10 @@ export function PetModeWindowApp() {
   }, [beginHitRegionTransition, reportLabState]);
 
   const commitFacing = useCallback((nextFacing: "left" | "right") => {
-    if (timedPauseRef.current !== null || sleepingDragRef.current) return;
+    if ((timedPauseRef.current !== null || sleepingDragRef.current) && !sleepwalkRef.current) {
+      heldSleepFacingRef.current = nextFacing;
+      return;
+    }
     facingRef.current = nextFacing;
     const transition = ++facingTransitionRef.current;
     const commit = () => {
@@ -587,6 +601,17 @@ export function PetModeWindowApp() {
   useEffect(() => subscribePetOutingPreference(applyPetOutingPreference), [applyPetOutingPreference]);
 
   const appliedTimedPauseRef = useRef(false);
+  const cancelSleepwalk = useCallback(() => {
+    sleepwalkTokenRef.current += 1;
+    sleepwalkRef.current = false;
+    setSleepwalking(false);
+    heldSleepFacingRef.current = null;
+    if (sleepwalkResettleTimerRef.current !== null) {
+      window.clearTimeout(sleepwalkResettleTimerRef.current);
+      sleepwalkResettleTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => cancelSleepwalk, [cancelSleepwalk]);
   useEffect(() => {
     const sleeping = timedPauseUntil !== null;
     if (!petModeEnabled) {
@@ -595,6 +620,7 @@ export function PetModeWindowApp() {
     }
     if (sleeping === appliedTimedPauseRef.current) return;
     appliedTimedPauseRef.current = sleeping;
+    cancelSleepwalk();
     restartAutonomousCycle();
     sleepTouchRef.current = 0;
     petStreakRef.current = 0;
@@ -628,9 +654,54 @@ export function PetModeWindowApp() {
       if (needsPresence) void setNativePetPresence(true).catch(() => undefined);
       commitPhase("sleep");
     } else if (!sleepingDragRef.current) {
+      // The seat was held while asleep. Let the awake cat return home once
+      // the upright pose has rendered.
+      seatReconcilePendingRef.current = true;
       commitPhase(focusRestingRef.current ? "sit" : "idle");
     }
-  }, [clearHuntAlert, commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, stopMusicNote, timedPauseUntil]);
+  }, [cancelSleepwalk, clearHuntAlert, commitPhase, commitVisibility, petModeEnabled, restartAutonomousCycle, stopMusicNote, timedPauseUntil]);
+
+  /** The sleepwalk arrived (or was cut short): sit up drowsily, then lie back down. */
+  const finishSleepwalk = useCallback((settle: boolean) => {
+    if (!sleepwalkRef.current) return;
+    const token = ++sleepwalkTokenRef.current;
+    heldSleepFacingRef.current = null;
+    if (sleepwalkResettleTimerRef.current !== null) {
+      window.clearTimeout(sleepwalkResettleTimerRef.current);
+      sleepwalkResettleTimerRef.current = null;
+    }
+    if (!settle) {
+      sleepwalkRef.current = false;
+      setSleepwalking(false);
+      commitPhase("sleep");
+      return;
+    }
+    commitPhase("drowsy");
+    sleepwalkResettleTimerRef.current = window.setTimeout(() => {
+      sleepwalkResettleTimerRef.current = null;
+      if (token !== sleepwalkTokenRef.current) return;
+      sleepwalkRef.current = false;
+      setSleepwalking(false);
+      commitPhase("sleep");
+    }, PET_MODE_DROWSY_RESETTLE_MS);
+  }, [commitPhase]);
+
+  /** Native is about to walk the sleeping cat off a control: wake it drowsily first. */
+  const beginSleepwalk = useCallback(() => {
+    if (sleepwalkResettleTimerRef.current !== null) {
+      window.clearTimeout(sleepwalkResettleTimerRef.current);
+      sleepwalkResettleTimerRef.current = null;
+    }
+    sleepwalkTokenRef.current += 1;
+    sleepwalkRef.current = true;
+    setSleepwalking(true);
+    const facing = heldSleepFacingRef.current;
+    heldSleepFacingRef.current = null;
+    if (facing !== null) commitFacing(facing);
+    // The cat gets up and walks in the same beat, eyes still heavy. The walk
+    // pose stays until the seat reconcile reports arrival.
+    commitPhase("walk");
+  }, [commitFacing, commitPhase]);
 
   const updateDragReleasePose = useCallback((nextPose: PetModeRestPose) => {
     dragReleasePoseRef.current = nextPose;
@@ -838,11 +909,25 @@ export function PetModeWindowApp() {
     seatReconcilePendingRef.current = false;
     seatReconcileInFlightRef.current = true;
     const token = actionTokenRef.current;
+    // A sleeping cat only moves off a control it is covering. Returning to
+    // the remembered home while asleep looked like sleepwalking, so that
+    // return waits for the wake-up reconcile.
     void reconcileNativePetPosition(
       prefersReducedMotion(),
+      startingPhase === "sleep",
     )
       .then((resolution) => {
         if (seatReconcileDisposedRef.current) return;
+        if (
+          sleepwalkRef.current
+          && (resolution.reason === "motion_superseded" || token !== actionTokenRef.current)
+        ) {
+          // Something else took over the native window mid-sleepwalk. Under a
+          // timed pause nothing else will commit a pose, so lie back down;
+          // otherwise the superseding action owns the next pose.
+          if (timedPauseRef.current !== null) finishSleepwalk(false);
+          else cancelSleepwalk();
+        }
         if (resolution.reason === "motion_superseded") {
           // The AX answer belongs to an older resting pose. Keep the request
           // pending, but let the foreground action finish before checking its
@@ -862,12 +947,17 @@ export function PetModeWindowApp() {
           return;
         }
         if (!resolution.moved) return;
+        if (sleepwalkRef.current) {
+          finishSleepwalk(true);
+          return;
+        }
         if (startingPhase === "sleep" && phaseRef.current === "sleep") return;
         const finalPose: PetModeRestPose = focusRestingRef.current ? "sit" : "idle";
         focusRestAppliedRef.current = finalPose === "sit";
         commitPhase(finalPose);
       })
       .catch((error) => {
+        finishSleepwalk(false);
         void reportNativePetDragError(error).catch(() => undefined);
       })
       .finally(() => {
@@ -883,7 +973,7 @@ export function PetModeWindowApp() {
           }, 0);
         }
       });
-  }, [commitPhase]);
+  }, [cancelSleepwalk, commitPhase, finishSleepwalk]);
 
   useEffect(() => {
     flushSeatReconcileRef.current = flushSeatReconcile;
@@ -1759,6 +1849,14 @@ export function PetModeWindowApp() {
         return;
       }
       if (event.kind === "motion") {
+        if (event.purpose === "drowsy_seat_correction") {
+          // Native only sends this for a seat it was asked to hold, i.e. the
+          // cat was asleep. A carried cat keeps sleeping in the user's hand.
+          if (manualDragRef.current || sleepingDragRef.current) return;
+          if (phaseRef.current !== "sleep" && !sleepwalkRef.current) return;
+          beginSleepwalk();
+          return;
+        }
         if (timedPauseRef.current !== null || sleepingDragRef.current) return;
         const isSeatCorrection = event.purpose === "seat_correction";
         if (
@@ -2021,7 +2119,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
+  }, [beginSleepwalk, clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
 
   useEffect(() => {
     const resting = snapshot?.productivity === "focus";
@@ -2599,6 +2697,13 @@ export function PetModeWindowApp() {
     const dragToken = ++actionTokenRef.current;
     manualDragRef.current = true;
     sleepingDragRef.current = timedPauseRef.current !== null;
+    // Grabbing a sleepwalking cat ends the walk. Under a pause the drag
+    // handler deliberately leaves the pose alone, so restore the sleeping
+    // silhouette here: the carried cat looks exactly like one picked up mid-nap.
+    if (sleepwalkRef.current) {
+      cancelSleepwalk();
+      if (sleepingDragRef.current) commitPhase("sleep");
+    }
     axSeatProbeLastStartedAtRef.current = Number.NEGATIVE_INFINITY;
     strokeHoldRef.current = false;
     void cancelNativePetMotion().catch(() => undefined);
@@ -2795,6 +2900,7 @@ export function PetModeWindowApp() {
             dragPickupPose={dragPickupPose}
             dragReleasePose={dragReleasePose}
             proudWalk={proudWalk}
+            drowsyWalk={sleepwalking}
             musicNoteVisible={musicNoteVisible}
             quietNotice={phase === "notice" && manualGazeActive}
           />
