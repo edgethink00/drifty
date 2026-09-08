@@ -2610,11 +2610,33 @@ fn resolve_macos_accessibility_target(
     let search_selected_tab = target.browser_name.as_deref().is_some()
         || target.lab_target == Some(PetModeLabTargetKind::BrowserTabX);
     if search_selected_tab {
-        if let Some(point) = pet_mode_native_ax::resolve_selected_browser_tab_close(
+        if let Some(resolved) = pet_mode_native_ax::resolve_selected_browser_tab_close(
             &target.app_name,
             target.browser_name.as_deref(),
         ) {
-            return Some(point);
+            // The tab strip's selected radio button is only a hotspot
+            // candidate. The automatic close acts on the browser's scripted
+            // active tab, and Chromium forks such as Aside can leave the strip
+            // highlighting a different tab while an Agent Tab or side-panel
+            // session is the page actually showing. Observed 2026-09-08: the
+            // strip reported "StayFree" selected while the active tab was an
+            // admin page, so the paw ran to the far-right tab edge and then
+            // wore the proud face for a close it never touched. Only a
+            // hotspot proven to belong to the active tab may be pointed at.
+            if let Some(mismatch) = selected_tab_mismatch_diagnostic(
+                &target.app_name,
+                target.browser_name.as_deref(),
+                resolved.selected_tab_label.as_deref(),
+            ) {
+                return Some(PetModeTargetPoint {
+                    x: resolved.point.x,
+                    y: resolved.point.y,
+                    kind: PetModeTargetKind::Fallback,
+                    confidence: PetModeTargetConfidence::Low,
+                    diagnostic: mismatch,
+                });
+            }
+            return Some(resolved.point);
         }
     }
 
@@ -2627,6 +2649,127 @@ fn resolve_macos_accessibility_target(
         return None;
     }
     parse_pet_target_output(String::from_utf8_lossy(&output.stdout).trim())
+}
+
+/// Cross-checks the AX selected-tab label against the browser's own scripted
+/// active tab. Returns a fail-closed diagnostic when the two disagree or when
+/// the active tab cannot be read at all. `None` means the hotspot is safe to
+/// use. Only Chromium-class browsers expose `active tab` through AppleScript
+/// under that name; Safari (`current tab`) and the Firefox family keep
+/// today's AX-only behaviour until they get their own verified adapter.
+#[cfg(target_os = "macos")]
+fn selected_tab_mismatch_diagnostic(
+    app_name: &str,
+    browser_name: Option<&str>,
+    selected_tab_label: Option<&str>,
+) -> Option<String> {
+    let scripted_name = [browser_name, Some(app_name)]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .find(|name| supports_scripted_active_tab(name))?;
+    let script = format!(
+        r#"tell application "{}"
+  try
+    if not (exists front window) then return "no_front_window"
+    return "title:" & (title of active tab of front window as text)
+  on error
+    return "unavailable"
+  end try
+end tell"#,
+        applescript_string_literal(scripted_name),
+    );
+    let output = run_osascript_with_timeout(&script, Duration::from_millis(1500));
+    classify_selected_tab_cross_check(output.as_deref(), selected_tab_label)
+}
+
+/// Browsers whose scripting dictionary exposes `active tab of front window`
+/// with a `title`. This mirrors the Chromium adapter used by the automatic
+/// close. Safari names the same thing `current tab` and is deliberately not
+/// listed until its own live probe has been run.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn supports_scripted_active_tab(app_name: &str) -> bool {
+    matches!(
+        app_name,
+        "Google Chrome"
+            | "Google Chrome Canary"
+            | "Microsoft Edge"
+            | "Arc"
+            | "Aside"
+            | "Brave Browser"
+            | "Chromium"
+            | "Opera"
+            | "Vivaldi"
+            | "Whale"
+    )
+}
+
+/// Pure decision for the cross-check so it can be unit tested without AX.
+/// `scripted` is the raw osascript stdout (`None` when the script failed or
+/// timed out); `selected_tab_label` is the AX label of the tab that claimed
+/// selection. Titles are compared after trimming, and a browser that appends
+/// a window suffix (`" - Aside"`) still matches on the shared prefix.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn classify_selected_tab_cross_check(
+    scripted: Option<&str>,
+    selected_tab_label: Option<&str>,
+) -> Option<String> {
+    let scripted = scripted.map(str::trim);
+    let active_title = match scripted {
+        Some(value) if value.starts_with("title:") => value["title:".len()..].trim(),
+        Some("no_front_window") => return Some("browser_tab_active_no_front_window".to_string()),
+        _ => return Some("browser_tab_active_unavailable".to_string()),
+    };
+    let selected = selected_tab_label.map(str::trim).unwrap_or_default();
+    if selected.is_empty() {
+        return Some("browser_tab_selected_label_missing".to_string());
+    }
+    if active_title.is_empty() {
+        // A blank active title is common on new-tab pages; the strip label is
+        // then the only identity available and both usually read the same.
+        // Keep today's behaviour rather than inventing a mismatch.
+        return None;
+    }
+    let matches = active_title == selected
+        || active_title.starts_with(selected)
+        || selected.starts_with(active_title);
+    if matches {
+        None
+    } else {
+        Some("browser_tab_selected_mismatch".to_string())
+    }
+}
+
+/// Runs an AppleScript with a hard deadline. The pet target resolver sits on
+/// the contact-timeout critical path, so a hung browser must not turn a
+/// cross-check into an 8-second silence.
+#[cfg(target_os = "macos")]
+fn run_osascript_with_timeout(script: &str, timeout: Duration) -> Option<String> {
+    use std::process::Stdio;
+    let mut child = Command::new("osascript")
+        .args(["-e", script])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let output = child.wait_with_output().ok()?;
+                if !status.success() {
+                    return None;
+                }
+                return Some(String::from_utf8_lossy(&output.stdout).into_owned());
+            }
+            Ok(None) if Instant::now() < deadline => thread::sleep(Duration::from_millis(20)),
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
+            }
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -4502,6 +4645,118 @@ return "closed_browser_tab""#
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn selected_tab_cross_check_accepts_a_matching_active_tab() {
+        assert_eq!(classify_selected_tab_cross_check(Some("title:StayFree\n"), Some("StayFree")), None);
+        // Chromium appends memory/window suffixes to the strip label only.
+        assert_eq!(
+            classify_selected_tab_cross_check(
+                Some("title:Billing • PostHog"),
+                Some("Billing • PostHog - 메모리 사용량 - 276MB"),
+            ),
+            None,
+        );
+        // Safari reports the full window title while the strip keeps the page title.
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("title:Apple - Safari"), Some("Apple")),
+            None,
+        );
+        // New-tab pages have no scripted title; keep the AX hotspot.
+        assert_eq!(classify_selected_tab_cross_check(Some("title:"), Some("새 탭")), None);
+    }
+
+    #[test]
+    fn selected_tab_cross_check_fails_closed_on_the_observed_aside_agent_tab_shape() {
+        // 2026-09-08: AX strip said "StayFree" while the browser's active tab
+        // was the Agent Tab page "Content desk › drifty".
+        assert_eq!(
+            classify_selected_tab_cross_check(
+                Some("title:Content desk › drifty"),
+                Some("StayFree"),
+            ),
+            Some("browser_tab_selected_mismatch".to_string()),
+        );
+    }
+
+    #[test]
+    fn selected_tab_cross_check_fails_closed_when_the_active_tab_is_unreadable() {
+        assert_eq!(
+            classify_selected_tab_cross_check(None, Some("StayFree")),
+            Some("browser_tab_active_unavailable".to_string()),
+        );
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("unavailable"), Some("StayFree")),
+            Some("browser_tab_active_unavailable".to_string()),
+        );
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("no_front_window"), Some("StayFree")),
+            Some("browser_tab_active_no_front_window".to_string()),
+        );
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("title:StayFree"), None),
+            Some("browser_tab_selected_label_missing".to_string()),
+        );
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("title:StayFree"), Some("  ")),
+            Some("browser_tab_selected_label_missing".to_string()),
+        );
+    }
+
+    #[test]
+    fn scripted_active_tab_support_mirrors_the_chromium_close_adapter() {
+        for name in ["Aside", "Google Chrome", "Arc", "Whale"] {
+            assert!(supports_scripted_active_tab(name), "{name}");
+        }
+        for name in ["Safari", "Safari Technology Preview", "Firefox", "Zen", "Floorp", "Finder", ""] {
+            assert!(!supports_scripted_active_tab(name), "{name}");
+        }
+    }
+
+    /// Opt-in native probe against a running browser. It only reads AX and
+    /// the browser's scripting dictionary; it never moves the pet or closes
+    /// anything. Run with the browser in the state under test, for example
+    /// Aside showing an Agent Tab while the strip highlights another tab:
+    ///
+    /// `DRIFTY_NATIVE_QA_TAB_TARGET_BROWSER=Aside DRIFTY_NATIVE_QA_TAB_TARGET_EXPECT=mismatch \\`
+    /// `  cargo test --manifest-path src-tauri/Cargo.toml qa_selected_tab_cross_check -- --ignored --nocapture`
+    ///
+    /// `EXPECT` is `mismatch` (resolver must return a Fallback target with a
+    /// `browser_tab_selected_mismatch` diagnostic) or `match` (resolver must
+    /// keep a BrowserTabClose target).
+    #[test]
+    #[ignore = "reads a real browser's AX tree after an explicit local QA opt-in"]
+    #[cfg(target_os = "macos")]
+    fn qa_selected_tab_cross_check_against_live_browser() {
+        let browser = std::env::var("DRIFTY_NATIVE_QA_TAB_TARGET_BROWSER")
+            .expect("set DRIFTY_NATIVE_QA_TAB_TARGET_BROWSER to the running browser's app name");
+        let expect = std::env::var("DRIFTY_NATIVE_QA_TAB_TARGET_EXPECT")
+            .expect("set DRIFTY_NATIVE_QA_TAB_TARGET_EXPECT to match or mismatch");
+        let target = PetModeInterventionTarget {
+            id: "qa-selected-tab-cross-check".to_string(),
+            app_name: browser.clone(),
+            browser_name: Some(browser.clone()),
+            preview: false,
+            lab_target: None,
+        };
+        let point = resolve_macos_accessibility_target(&target)
+            .expect("browser exposed no AX target at all; is it running with a window?");
+        println!(
+            "qa_selected_tab_cross_check: kind={:?} confidence={:?} diagnostic={} at=({:.1},{:.1})",
+            point.kind, point.confidence, point.diagnostic, point.x, point.y
+        );
+        match expect.as_str() {
+            "mismatch" => {
+                assert_eq!(point.kind, PetModeTargetKind::Fallback);
+                assert_eq!(point.diagnostic, "browser_tab_selected_mismatch");
+            }
+            "match" => {
+                assert_eq!(point.kind, PetModeTargetKind::BrowserTabClose);
+                assert!(point.diagnostic.starts_with("ax_selected_tab"), "{}", point.diagnostic);
+            }
+            other => panic!("unknown DRIFTY_NATIVE_QA_TAB_TARGET_EXPECT={other}"),
+        }
+    }
 
     #[test]
     fn current_background_motion_claim_advances_exactly_once() {

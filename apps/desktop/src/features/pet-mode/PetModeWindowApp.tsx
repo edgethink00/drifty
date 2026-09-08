@@ -1239,8 +1239,16 @@ export function PetModeWindowApp() {
       if (token !== actionTokenRef.current) return;
       if (resolved.targetKind === "fallback" && !target.preview) {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
-        // Not a user catch: the AX scan never produced a real X to point at.
-        await reportNativePetContact(target.id, false, "target_unavailable");
+        // Not a user catch: the AX scan never produced a real X to point at,
+        // or native refused a hotspot it could not prove belongs to the tab
+        // about to be closed. Carry the native diagnostic so the alarm's
+        // debug log can distinguish "no AX geometry" from "AX highlighted a
+        // different tab than the browser's active tab" after the fact.
+        await reportNativePetContact(
+          target.id,
+          false,
+          formatTargetUnavailableReason(resolved.diagnostic),
+        );
         terminalContactReported = true;
         return;
       }
@@ -2829,6 +2837,18 @@ export function PetModeWindowApp() {
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+/**
+ * The alarm classifies every non-contact reason that is not a user catch or
+ * a context change as a technical rejection, so the base token must stay
+ * `target_unavailable`. The native diagnostic rides behind a colon purely for
+ * the Dev debug log; it never carries page titles, URLs, or window names.
+ */
+export function formatTargetUnavailableReason(diagnostic: string | null | undefined): string {
+  const trimmed = diagnostic?.trim() ?? "";
+  if (trimmed === "" || !/^[a-z0-9_]+$/i.test(trimmed)) return "target_unavailable";
+  return `target_unavailable:${trimmed}`;
 }
 
 function randomBetween(minimum: number, maximum: number): number {

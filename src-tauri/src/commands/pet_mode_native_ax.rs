@@ -68,12 +68,24 @@ struct ScanState {
     visited: usize,
     found: Option<PetModeTargetPoint>,
     inferred: Option<PetModeTargetPoint>,
+    /// Visible label of the AX tab that claimed selection. The tab strip's
+    /// `AXSelected` flag is not the browser's active tab: Aside keeps it on the
+    /// last ordinary tab while an Agent Tab or side-panel session is showing.
+    selected_tab_label: Option<String>,
+}
+
+/// A selected-tab close hotspot together with the label of the tab it was
+/// derived from, so the caller can prove the hotspot belongs to the tab that
+/// the automatic close is about to act on.
+pub(super) struct SelectedBrowserTabClose {
+    pub(super) point: PetModeTargetPoint,
+    pub(super) selected_tab_label: Option<String>,
 }
 
 pub(super) fn resolve_selected_browser_tab_close(
     app_name: &str,
     browser_name: Option<&str>,
-) -> Option<PetModeTargetPoint> {
+) -> Option<SelectedBrowserTabClose> {
     let pid = find_pid_by_app_name(app_name).or_else(|| {
         browser_name
             .filter(|name| !name.trim().is_empty())
@@ -96,9 +108,14 @@ pub(super) fn resolve_selected_browser_tab_close(
                 visited: 0,
                 found: None,
                 inferred: None,
+                selected_tab_label: None,
             };
             scan_for_selected_tab_close(window, prefer_left_edge, false, &mut state);
-            state.found.or(state.inferred)
+            let point = state.found.or(state.inferred)?;
+            Some(SelectedBrowserTabClose {
+                point,
+                selected_tab_label: state.selected_tab_label,
+            })
         })();
         CFRelease(app as CFTypeRef);
         result
@@ -247,6 +264,7 @@ unsafe fn scan_for_selected_tab_close(
     let is_tab_like = role == "AXRadioButton" || role == "AXTab";
     if is_tab_like && is_selected_tab(element) {
         selected_here = true;
+        state.selected_tab_label = Some(tab_label(element));
         if let Some(frame) = element_frame(element) {
             let close_x = if prefer_left_edge {
                 frame.x + TAB_CLOSE_EDGE_INSET.min(frame.width.max(1.0) / 2.0)
@@ -327,6 +345,17 @@ unsafe fn is_selected_tab(element: AXUIElementRef) -> bool {
         return selected;
     }
     false
+}
+
+/// Chromium exposes the tab title as `AXDescription` on the tab button;
+/// other engines use `AXTitle`. Either is the same string the scripting
+/// interface reports as the tab's title.
+unsafe fn tab_label(element: AXUIElementRef) -> String {
+    let description = copy_attribute_string(element, "AXDescription").unwrap_or_default();
+    if !description.trim().is_empty() {
+        return description;
+    }
+    copy_attribute_string(element, "AXTitle").unwrap_or_default()
 }
 
 unsafe fn cf_truthy(value: CFTypeRef) -> bool {

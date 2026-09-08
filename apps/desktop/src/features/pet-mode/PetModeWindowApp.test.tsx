@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AUTOMATIC_CLOSE_OVERRIDE_STORAGE_KEY, buildAutomaticCloseOverride } from "../companion/automaticCloseOverride";
 import { DEV_MODE_STORAGE_KEY } from "../settings/settingsStorage";
-import { PetModeWindowApp } from "./PetModeWindowApp";
+import { PetModeWindowApp, formatTargetUnavailableReason } from "./PetModeWindowApp";
 import {
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_DRAG_PICKUP_MS,
@@ -3829,8 +3829,67 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
-    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-without-geometry", false, "target_unavailable");
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "drift-without-geometry",
+      false,
+      "target_unavailable:accessibility_target_unavailable",
+    );
     expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+  });
+
+  it("refuses to point at a tab strip hotspot native could not tie to the active tab", async () => {
+    // Observed 2026-09-08 on Aside: the tab strip still reported "StayFree"
+    // as AXSelected while the browser's active tab was an Agent Tab page. The
+    // old resolver ran the cat to that far-right tab edge, the automatic
+    // close removed the real active tab, and the cat came home proud.
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    bridge.moveNativePetToTarget.mockResolvedValueOnce({
+      facing: "right",
+      targetKind: "fallback",
+      motionOutcome: "not_attempted",
+      confidence: "low",
+      diagnostic: "browser_tab_selected_mismatch",
+      targetX: 1482,
+      targetY: 52,
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-aside-agent-tab",
+          appName: "Aside",
+          browserName: "Aside",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+    expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "drift-aside-agent-tab",
+      false,
+      "target_unavailable:browser_tab_selected_mismatch",
+    );
+    expect(bridge.alignNativePetContact).not.toHaveBeenCalled();
+    expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+  });
+
+  it("keeps the target_unavailable base token and never forwards free-form text", () => {
+    expect(formatTargetUnavailableReason("browser_tab_selected_mismatch"))
+      .toBe("target_unavailable:browser_tab_selected_mismatch");
+    expect(formatTargetUnavailableReason("")).toBe("target_unavailable");
+    expect(formatTargetUnavailableReason(null)).toBe("target_unavailable");
+    expect(formatTargetUnavailableReason(undefined)).toBe("target_unavailable");
+    expect(formatTargetUnavailableReason("StayFree - Aside")).toBe("target_unavailable");
+    expect(formatTargetUnavailableReason("title:https://example.com")).toBe("target_unavailable");
   });
 
   it("reports native movement failures as technical rejections instead of user catches", async () => {
@@ -3903,7 +3962,11 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
-    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("browser-x-fallback", false, "target_unavailable");
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith(
+      "browser-x-fallback",
+      false,
+      "target_unavailable:accessibility_target_unavailable",
+    );
   });
 
   it("returns home even when the native contact signal fails", async () => {
