@@ -287,7 +287,7 @@ import { filterDefinitelyAvailableFocusTargets, haveSameDriftAlarmFocusTargets, 
 import { buildDriftAlarmCandidateProbe } from "./features/companion/driftAlarmCandidateProbe";
 import { buildDriftAlarmDebugEvaluationSummary, readRecentDriftAlarmDebugEvents, recordDriftAlarmDebugEvent, summarizeDriftAlarmCandidate, summarizeDriftAlarmEvent, summarizeDriftAlarmSegment, summarizeDriftAlarmSnapshot, summarizeDriftAlarmTrayResult, summarizeLiveAiClassificationResult, summarizeYouTubeDriftAlarmGateResult } from "./features/companion/driftAlarmDebugLog";
 import { buildDriftAlarmTrayCandidateDetail, buildDriftAlarmTrayStatus, type DriftAlarmTrayResult, type DriftAlarmTrayState } from "./features/companion/driftAlarmTrayStatus";
-import { resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
+import { getUnconfirmedDriftAlarmReason, resolveFreshDriftAlarmCandidate } from "./features/companion/driftAlarmFreshCandidate";
 import { resolveLiveDriftAlarmAiCandidate } from "./features/companion/liveDriftAlarmAiCandidate";
 import {
   resolveDriftAlarmTransientDefer,
@@ -2341,6 +2341,7 @@ export default function App() {
   const autoSelectedLatestDayRef = useRef(false);
   const userSelectedDayRef = useRef(false);
   const lastDriftAlertSegmentRef = useRef<string | null>(null);
+  const pendingExtremeNudgeRef = useRef<{ readonly alertKey: string; readonly candidate: DriftAlarmCandidate } | null>(null);
   // One card per episode used to be the whole intervention. The reminder
   // ladder re-opens delivery for an episode that outlives its card; it is
   // reset wherever the episode lock itself is cleared.
@@ -5074,11 +5075,19 @@ export default function App() {
         evaluation,
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
+      const pendingClose = pendingExtremeNudgeRef.current;
+      const preservePendingClose = pendingClose !== null
+        && automaticCloseEnabledRef.current
+        && lastDriftAlertSegmentRef.current === pendingClose.alertKey
+        && getUnconfirmedDriftAlarmReason(pendingClose.candidate, alarmSnapshot) === "current-snapshot-unavailable";
       pendingDriftAlarmGateRef.current = null;
       pendingDriftAlarmGateGenerationRef.current += 1;
       lastEligibleDriftCandidateRef.current = null;
       clearPendingTransientDriftAlarm();
-      lastDriftAlertSegmentRef.current = null;
+      // Missing capture is not proof that the pending target changed. Retain
+      // only its delivery key until that attempt settles; a verified change or
+      // pause still retires it and later capture loss cannot resurrect it.
+      if (!preservePendingClose) lastDriftAlertSegmentRef.current = null;
       driftAlarmReminderRef.current = null;
       petInterceptionGraceRef.current = null;
       if (driftAlarmSnoozeRef.current !== null) {
@@ -5322,6 +5331,8 @@ export default function App() {
       breakReturnAlarm: DriftAlarmBreakSnooze | null = null,
     ) => {
       lastDriftAlertSegmentRef.current = alertKey;
+      const pendingClose = { alertKey, candidate: latestDrift };
+      pendingExtremeNudgeRef.current = pendingClose;
       recordDriftAlarmDebugEvent({
         kind: "extreme_nudge_started",
         alertKey,
@@ -5402,8 +5413,11 @@ export default function App() {
           forceChromiumAxTabClose: DEV_SETTINGS_ENABLED && devModeEnabled && forceChromiumAxExtremeNudgeEnabled,
         }));
       };
-      void runExtremeNudge().then(async (result) => {
+      void runExtremeNudge().then(async (nativeResult) => {
         if (petInterventionId) await completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
+        const result = !nativeResult.applied && !automaticCloseEnabledRef.current
+          ? { applied: false, diagnostic: "automatic_close_paused" } as const
+          : nativeResult;
         recordDriftAlarmDebugEvent({
           kind: "extreme_nudge_result",
           alertKey,
@@ -5466,8 +5480,8 @@ export default function App() {
             if (lastDriftAlertSegmentRef.current === alertKey) returnToFocusTarget(latestFocusTarget);
           }, 120);
         }
-      }).catch((error) => {
-        if (petInterventionId) void completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
+      }).catch(async (error) => {
+        if (petInterventionId) await completeNativePetFullscreenClose(petInterventionId).catch(() => undefined);
         const failure = getExtremeNudgeFailure(error);
         console.warn("Failed to apply extreme nudge", failure.code);
         recordDriftAlarmDebugEvent({
@@ -5479,8 +5493,20 @@ export default function App() {
           evaluation,
         });
         if (lastDriftAlertSegmentRef.current === alertKey) {
+          if (!automaticCloseEnabledRef.current) {
+            lastDriftAlertSegmentRef.current = null;
+            petInterceptionGraceRef.current = null;
+            publishEvaluationDriftAlarmTrayStatus({
+              kind: "suppressed",
+              reason: "automatic_close_paused",
+              candidateDetail,
+            }, new Date());
+            return;
+          }
           showFallbackDriftAlarm(notifyOnFallback, false, breakReturnAlarm);
         }
+      }).finally(() => {
+        if (pendingExtremeNudgeRef.current === pendingClose) pendingExtremeNudgeRef.current = null;
       });
     };
 
@@ -5538,7 +5564,7 @@ export default function App() {
         deliverySourceSegmentId = deliveryCandidate.sourceSegmentId;
         confirmedDecisionClassification = deliveryCandidate.classification;
       }
-      const result = freshCandidate ? "confirmed" : freshSnapshot ? "current-window-changed" : "current-snapshot-unavailable";
+      const result = freshCandidate ? "confirmed" : getUnconfirmedDriftAlarmReason(latestDrift, freshSnapshot);
       recordDriftAlarmDebugEvent({
         kind: "fresh_candidate_result",
         alertKey,

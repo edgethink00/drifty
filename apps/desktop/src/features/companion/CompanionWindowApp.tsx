@@ -430,7 +430,9 @@ export function CompanionWindowApp() {
     let secondWarmupFrame = 0;
     let presentationFrame = 0;
     let warmupFallbackTimer = 0;
+    let presentationFallbackTimer = 0;
     let presentationStarted = false;
+    let presentationReleased = false;
     const preparedKey = currentMomentKey;
     const presentAfterWarmup = () => {
       if (cancelled || presentationStarted) return;
@@ -442,12 +444,19 @@ export function CompanionWindowApp() {
          animations together on its next visible frame. */
       void presentPreparedNativeCompanionMoment().then(() => {
         if (cancelled || !preparedKey) return;
-        presentationFrame = window.requestAnimationFrame(() => {
-          if (cancelled) return;
+        const releasePresentation = () => {
+          if (cancelled || presentationReleased) return;
+          presentationReleased = true;
+          window.clearTimeout(presentationFallbackTimer);
+          if (presentationFrame) window.cancelAnimationFrame(presentationFrame);
           const current = momentEventRef.current;
           if (!current || companionMomentIdentity(current) !== preparedKey) return;
           setPresentedMomentKey(preparedKey);
-        });
+        };
+        presentationFrame = window.requestAnimationFrame(releasePresentation);
+        // Native show completion does not guarantee another rendering frame.
+        // Keep a presented card from waiting indefinitely in its origin pose.
+        presentationFallbackTimer = window.setTimeout(releasePresentation, 50);
       }).catch(ignoreCompanionBridgeRejection);
     };
 
@@ -462,6 +471,7 @@ export function CompanionWindowApp() {
     return () => {
       cancelled = true;
       window.clearTimeout(warmupFallbackTimer);
+      window.clearTimeout(presentationFallbackTimer);
       if (warmupFrame) window.cancelAnimationFrame(warmupFrame);
       if (secondWarmupFrame) window.cancelAnimationFrame(secondWarmupFrame);
       if (presentationFrame) window.cancelAnimationFrame(presentationFrame);

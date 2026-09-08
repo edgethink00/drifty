@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionWindowApp } from "./CompanionWindowApp";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
-import { buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
+import { buildCompanionDriftAlarmPreview, buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
 import { DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS } from "./driftAlarmEvent";
 import type { WatcherPeekEvent } from "./WatcherPeek";
@@ -447,6 +447,106 @@ describe("CompanionWindowApp", () => {
     await act(async () => undefined);
     expect(pill?.dataset.directEntry).toBe("pending");
     animationFrameSpy.mockRestore();
+  });
+
+  it("releases a presented drift card when animation frames stop arriving", async () => {
+    vi.useFakeTimers();
+    let resolveNativePresentation: (() => void) | undefined;
+    bridge.presentPreparedNativeCompanionMoment.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveNativePresentation = resolve;
+    }));
+    bridge.setNativeCompanionPillState.mockImplementation(async (state: string) => ({
+      prepared: state === "drift",
+      menuAnchorX: state === "drift" ? 294 : null,
+    }));
+    // Model a live bridge and timers with no rendering frames. Native visibility
+    // alone must not leave the card in its nearly invisible pending CSS pose.
+    const animationFrameSpy = vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+    try {
+      const { container, getByTitle } = render(<CompanionWindowApp />);
+      await act(async () => undefined);
+      await act(async () => bridge.showHandler?.({
+        kind: "companionDriftAlarm",
+        alarm: buildCompanionDriftAlarmPreview("drift-alarm"),
+        __companionPresentation: "menuBar",
+      }));
+      const pill = container.querySelector<HTMLElement>(".pill");
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(bridge.presentPreparedNativeCompanionMoment).toHaveBeenCalledOnce();
+      expect(pill?.dataset.directEntry).toBe("pending");
+
+      await act(async () => resolveNativePresentation?.());
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(pill?.dataset.directEntry).toBe("true");
+      expect(pill?.dataset.state).toBe("drift");
+      fireEvent.click(getByTitle("Dismiss"));
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledOnce();
+    } finally {
+      animationFrameSpy.mockRestore();
+    }
+  });
+
+  it.each(["before", "after"] as const)("does not release a replacement card cleared %s native show completion", async (clearWhen) => {
+    vi.useFakeTimers();
+    let resolveFirstPresentation: (() => void) | undefined;
+    const animationFrames: FrameRequestCallback[] = [];
+    bridge.presentPreparedNativeCompanionMoment
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { resolveFirstPresentation = resolve; }))
+      .mockImplementationOnce(() => new Promise<void>(() => undefined));
+    bridge.setNativeCompanionPillState.mockImplementation(async (state: string) => ({
+      prepared: state === "drift",
+      menuAnchorX: state === "drift" ? 294 : null,
+    }));
+    const animationFrameSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    });
+    try {
+      const { container } = render(<CompanionWindowApp />);
+      await act(async () => undefined);
+      const payload: CompanionPillWindowEvent = {
+        kind: "companionDriftAlarm",
+        alarm: buildCompanionDriftAlarmPreview("drift-alarm"),
+        __companionPresentation: "menuBar",
+      };
+      await act(async () => bridge.showHandler?.(payload));
+      await act(async () => vi.advanceTimersByTimeAsync(50));
+      expect(bridge.presentPreparedNativeCompanionMoment).toHaveBeenCalledOnce();
+      if (clearWhen === "after") await act(async () => resolveFirstPresentation?.());
+      await act(async () => bridge.clearHandler?.());
+      await act(async () => bridge.showHandler?.(payload));
+      if (clearWhen === "before") await act(async () => resolveFirstPresentation?.());
+      // Even a late callback from the old attempt must not unlock a new card
+      // with the same identity before its own native show has completed.
+      await act(async () => { animationFrames.splice(0).forEach((frame) => frame(0)); });
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(bridge.presentPreparedNativeCompanionMoment).toHaveBeenCalledTimes(2);
+      expect(container.querySelector<HTMLElement>(".pill")?.dataset.directEntry).toBe("pending");
+    } finally {
+      animationFrameSpy.mockRestore();
+    }
+  });
+
+  it("keeps a drift card pending when native presentation fails", async () => {
+    vi.useFakeTimers();
+    bridge.presentPreparedNativeCompanionMoment.mockRejectedValueOnce(new Error("native show failed"));
+    bridge.setNativeCompanionPillState.mockResolvedValue({ prepared: true, menuAnchorX: 294 });
+    const animationFrameSpy = vi.spyOn(window, "requestAnimationFrame").mockReturnValue(1);
+    try {
+      const { container } = render(<CompanionWindowApp />);
+      await act(async () => undefined);
+      await act(async () => bridge.showHandler?.({
+        kind: "companionDriftAlarm",
+        alarm: buildCompanionDriftAlarmPreview("drift-alarm"),
+        __companionPresentation: "menuBar",
+      }));
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(bridge.presentPreparedNativeCompanionMoment).toHaveBeenCalledOnce();
+      expect(container.querySelector<HTMLElement>(".pill")?.dataset.directEntry).toBe("pending");
+    } finally {
+      animationFrameSpy.mockRestore();
+    }
   });
 
   it("queues distinct milestones instead of replacing the celebration on screen", async () => {
