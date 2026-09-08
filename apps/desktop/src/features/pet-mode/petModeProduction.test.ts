@@ -285,6 +285,21 @@ describe("pet promoted out of Dev", () => {
     expect(petQuickControlsRustContract).toContain("app.run_on_main_thread");
   });
 
+  it("protects pause feedback from hover requests before delivering the action", () => {
+    const action = petQuickControlsRustContract.slice(petQuickControlsRustContract.indexOf("pub async fn pet_quick_controls_action"));
+    const pauseHold = action.indexOf("if is_automatic_close_pause_action(&action)");
+    expect(pauseHold).toBeGreaterThan(-1);
+    expect(action.slice(pauseHold, pauseHold + 200)).toContain("set_pet_quick_controls_acknowledgement_held(&app, true)");
+    expect(pauseHold).toBeLessThan(action.indexOf('main.emit("pet-quick-controls-action"'));
+    const visibility = petQuickControlsRustContract.slice(petQuickControlsRustContract.indexOf("pub fn pet_quick_controls_set_visible"));
+    // A late open sample also used to hide feedback when the pet was hidden.
+    const heldGuard = visibility.indexOf("if pet_quick_controls_acknowledgement_held()");
+    const hideBranch = visibility.indexOf("if !visible");
+    expect(heldGuard).toBeGreaterThan(-1);
+    expect(hideBranch).toBeGreaterThan(-1);
+    expect(heldGuard).toBeLessThan(hideBranch);
+  });
+
   it("offers the visibility toggle in the account menu", () => {
     expect(accountMenu).toContain('t("settings.pet.show")');
     expect(accountMenu).toContain('role="menuitemcheckbox"');

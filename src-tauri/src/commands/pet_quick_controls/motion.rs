@@ -8,6 +8,7 @@ use objc2_app_kit::{NSWindow, NSWorkspace};
 use objc2_foundation::NSPoint;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{channel, Sender};
 use std::time::{Duration, Instant};
 use tauri::{LogicalPosition, Manager, WebviewWindow};
 
@@ -99,12 +100,28 @@ pub(super) fn show(window: &WebviewWindow, layout: PetQuickControlsLayout) -> Re
             visible: true,
         };
         PRESENTATION.with(|stored| *stored.borrow_mut() = Some(state));
-        animate(&window, state)
+        animate(&window, state, None)
     })
 }
 
 pub(super) fn hide(window: &WebviewWindow) -> Result<(), String> {
-    on_main(window, |window| {
+    hide_with_completion(window, None)
+}
+
+// Run on a worker: the renderer retains its confirmation until AppKit has
+// actually hidden the last animation frame, rather than guessing with a timer.
+pub(super) fn hide_and_wait(window: &WebviewWindow) -> Result<(), String> {
+    let (send, recv) = channel();
+    hide_with_completion(window, Some(send))?;
+    recv.recv_timeout(Duration::from_secs(1))
+        .map_err(|_| "Pet feedback dismissal did not finish".to_string())?
+}
+
+fn hide_with_completion(
+    window: &WebviewWindow,
+    completion: Option<Sender<Result<(), String>>>,
+) -> Result<(), String> {
+    on_main(window, move |window| {
         let state = PRESENTATION.with(|stored| {
             let mut stored = stored.borrow_mut();
             let state = stored.as_mut()?;
@@ -115,8 +132,17 @@ pub(super) fn hide(window: &WebviewWindow) -> Result<(), String> {
             Some(*state)
         });
         match state {
-            Some(state) => animate(&window, state),
-            None => Ok(()),
+            Some(state) => animate(&window, state, completion),
+            None => {
+                // Feedback owns this dismissal. An earlier hover exit may
+                // already have cleared presentation; settle it before replying.
+                if let Some(completion) = completion {
+                    let result = hide_immediately(&window);
+                    let _ = completion.send(result.clone());
+                    return result;
+                }
+                Ok(())
+            }
         }
     })
 }
@@ -170,7 +196,11 @@ pub(super) fn relocate(
     })
 }
 
-fn animate(window: &WebviewWindow, state: Presentation) -> Result<(), String> {
+fn animate(
+    window: &WebviewWindow,
+    state: Presentation,
+    completion: Option<Sender<Result<(), String>>>,
+) -> Result<(), String> {
     let ns = native(window)?;
     let generation = GENERATION.fetch_add(1, Ordering::Relaxed).wrapping_add(1);
     let start_alpha = ns.alphaValue();
@@ -197,7 +227,11 @@ fn animate(window: &WebviewWindow, state: Presentation) -> Result<(), String> {
         ns.setAlphaValue(target_alpha);
         ns.setFrameOrigin(NSPoint::new(state.anchor.0, state.anchor.1));
         if !state.visible {
-            return hide_immediately(window);
+            let result = hide_immediately(window);
+            if let Some(completion) = completion {
+                let _ = completion.send(result.clone());
+            }
+            return result;
         }
         return Ok(());
     }
@@ -213,6 +247,7 @@ fn animate(window: &WebviewWindow, state: Presentation) -> Result<(), String> {
             let progress = eased_progress(elapsed, duration);
             let finished = elapsed >= duration;
             let owned = window.clone();
+            let frame_completion = completion.clone();
             if window
                 .run_on_main_thread(move || {
                     if GENERATION.load(Ordering::Relaxed) != generation {
@@ -237,7 +272,10 @@ fn animate(window: &WebviewWindow, state: Presentation) -> Result<(), String> {
                             + (target_offset - start_offset.1) * progress,
                     ));
                     if finished && !current.visible {
-                        let _ = hide_immediately(&owned);
+                        let result = hide_immediately(&owned);
+                        if let Some(completion) = frame_completion {
+                            let _ = completion.send(result);
+                        }
                     }
                 })
                 .is_err()

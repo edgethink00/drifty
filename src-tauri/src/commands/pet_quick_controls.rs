@@ -85,6 +85,11 @@ fn is_supported_quick_controls_action(action: &str) -> bool {
     )
 }
 
+fn is_automatic_close_pause_action(action: &str) -> bool {
+    matches!(action, "automaticClosePause15" | "automaticClosePause60"
+        | "automaticClosePauseToday" | "automaticClosePauseForever")
+}
+
 fn is_supported_quick_controls_state(state: &PetQuickControlsState) -> bool {
     let override_supported = state
         .automatic_close_override
@@ -317,13 +322,15 @@ pub fn hide_pet_quick_controls(app: &AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+    // Feedback owns the panel in both directions. A stale hover-open request
+    // must not hide it because hideOneHour has already hidden the cat.
+    if pet_quick_controls_acknowledgement_held() {
+        return Ok(());
+    }
     let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
         return Ok(());
     };
     if !visible {
-        if pet_quick_controls_acknowledgement_held() {
-            return Ok(());
-        }
         #[cfg(target_os = "macos")]
         return motion::hide(&window);
         #[cfg(not(target_os = "macos"))]
@@ -504,7 +511,7 @@ fn macos_cursor_inside_window_on_main_thread(window: &WebviewWindow) -> Result<b
 }
 
 #[tauri::command]
-pub fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), String> {
+pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), String> {
     if !is_supported_quick_controls_action(&action) {
         return Err(format!("unknown pet quick controls action: {action}"));
     }
@@ -531,18 +538,50 @@ pub fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), S
     }
 
     if action == "acknowledgeDismiss" {
-        set_pet_quick_controls_acknowledgement_held(&app, false);
-        hide_pet_quick_controls(&app)?;
-        if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
+        // Keep the native hold until the final exit frame, and notify the pet
+        // first so a stationary hover cannot reopen the panel after dismissal.
+        let cooldown_result = if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
             pet.emit("pet-quick-controls-action", json!({ "action": action }))
-                .map_err(|error| error.to_string())?;
-        }
-        return Ok(());
+                .map_err(|error| error.to_string())
+        } else {
+            Ok(())
+        };
+        return tauri::async_runtime::spawn_blocking(move || {
+            let result = if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+                #[cfg(target_os = "macos")]
+                let result = motion::hide_and_wait(&window);
+                #[cfg(not(target_os = "macos"))]
+                let result = hide_pet_quick_controls_window(&window);
+                // Even if presentation failed, never expose idle buttons in
+                // the renderer while an old confirmation panel stays visible.
+                if result.is_err() {
+                    let _ = hide_pet_quick_controls_window(&window);
+                }
+                result
+            } else {
+                Ok(())
+            };
+            set_pet_quick_controls_acknowledgement_held(&app, false);
+            result.and(cooldown_result)
+        }).await.map_err(|error| error.to_string())?;
     }
 
+    // Acquire before emitting the pause, including its asynchronous state
+    // confirmation. Otherwise the hover poll can dismiss the success message
+    // after just its 250ms leave grace while the renderer still counts 1.1s.
+    if is_automatic_close_pause_action(&action) {
+        set_pet_quick_controls_acknowledgement_held(&app, true);
+    }
     if let Some(main) = app.get_webview_window("main") {
-        main.emit("pet-quick-controls-action", json!({ "action": action }))
-            .map_err(|error| error.to_string())?;
+        if let Err(error) = main.emit("pet-quick-controls-action", json!({ "action": action })) {
+            if is_automatic_close_pause_action(&action) {
+                set_pet_quick_controls_acknowledgement_held(&app, false);
+            }
+            return Err(error.to_string());
+        }
+    } else if is_automatic_close_pause_action(&action) {
+        set_pet_quick_controls_acknowledgement_held(&app, false);
+        return Err("Pet quick-controls action window is unavailable".to_string());
     }
     Ok(())
 }
@@ -550,7 +589,7 @@ pub fn pet_quick_controls_action(app: AppHandle, action: String) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::{
-        is_supported_quick_controls_action, is_supported_quick_controls_state,
+        is_automatic_close_pause_action, is_supported_quick_controls_action, is_supported_quick_controls_state,
         layout_pet_quick_controls, point_inside_rect, PetQuickControlsAutomaticCloseOverride,
         PetQuickControlsState, PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
         PET_QUICK_CONTROLS_EN_WIDTH, PET_QUICK_CONTROLS_KO_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
@@ -658,6 +697,18 @@ mod tests {
     #[test]
     fn bounds_the_acknowledgement_hold_with_a_native_failsafe() {
         assert_eq!(PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS, 5_000);
+    }
+
+    #[test]
+    fn holds_all_pause_confirmations_but_not_enable_or_navigation_actions() {
+        for action in ["automaticClosePause15", "automaticClosePause60",
+            "automaticClosePauseToday", "automaticClosePauseForever"] {
+            assert!(is_automatic_close_pause_action(action), "{action}");
+        }
+        for action in ["automaticCloseEnable15", "automaticCloseRestore",
+            "automaticCloseExtend60", "openSettings", "menuClosed", "acknowledgeDismiss"] {
+            assert!(!is_automatic_close_pause_action(action), "{action}");
+        }
     }
 
     #[test]

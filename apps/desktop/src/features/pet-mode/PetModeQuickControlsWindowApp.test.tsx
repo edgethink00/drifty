@@ -220,6 +220,32 @@ describe("PetModeQuickControlsWindowApp", () => {
     expect(screen.queryByText("Pet hidden for 1h · Auto-close paused")).toBeNull();
   });
 
+  it("keeps the confirmation text until native dismissal finishes, even after pointer leave", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+    let finishDismiss!: () => void;
+    bridge.triggerNativePetQuickControlsAction.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishDismiss = resolve;
+    }));
+    render(<PetModeQuickControlsWindowApp />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Hide pet 1h" }));
+    });
+    fireEvent.pointerLeave(screen.getByRole("toolbar"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_099); });
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalled();
+    expect(screen.getByRole("status").textContent).toContain("Pet hidden for 1h");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("acknowledgeDismiss");
+    // The renderer must not replace the text with buttons while the native
+    // panel is still fading out, including a delayed final AppKit frame.
+    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+    expect(screen.getByRole("status").textContent).toContain("Pet hidden for 1h");
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    await act(async () => { finishDismiss(); });
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("keeps native menu presentation single-flight across rapid clicks", async () => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
     let closeMenu!: (value: boolean) => void;
@@ -405,10 +431,21 @@ describe("PetModeQuickControlsWindowApp", () => {
     });
     expect(screen.queryByRole("button", { name: "자동 닫기: 켬" })).toBeNull();
     expect(screen.getAllByText(/까지 멈췄어요$/).length).toBeGreaterThan(0);
+    let finishDismiss!: () => void;
+    bridge.triggerNativePetQuickControlsAction.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      finishDismiss = resolve;
+    }));
+    fireEvent.pointerLeave(screen.getByRole("toolbar"));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_100);
+      await vi.advanceTimersByTimeAsync(1_099);
     });
+    expect(screen.getByRole("status").textContent).toMatch(/까지 멈췄어요$/);
+    expect(bridge.triggerNativePetQuickControlsAction).not.toHaveBeenCalledWith("acknowledgeDismiss");
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("acknowledgeDismiss");
+    expect(screen.getByRole("status").textContent).toMatch(/까지 멈췄어요$/);
+    await act(async () => { finishDismiss(); });
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("shows a recoverable failure when native state does not confirm a pause in time", async () => {
