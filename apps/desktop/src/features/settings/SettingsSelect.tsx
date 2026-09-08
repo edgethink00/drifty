@@ -68,6 +68,8 @@ type SettingsSelectProps<TValue extends string> = {
   readonly options: readonly SettingsSelectOption<TValue>[];
   readonly onChange: (value: TValue) => void;
   readonly className?: string;
+  /** Greys the whole control and blocks opening (e.g. a prerequisite is off). */
+  readonly disabled?: boolean;
   /** Optional compact visual for icon-only triggers. The accessible name still comes from `ariaLabel`. */
   readonly triggerVisual?: ReactNode;
   /** Shown (greyed) in the trigger when `value` matches no option — a "nothing selected yet" state. */
@@ -92,6 +94,7 @@ export function SettingsSelect<TValue extends string>({
   options,
   onChange,
   className,
+  disabled = false,
   triggerVisual,
   placeholder,
   placement = triggerVisual ? "below" : "selected",
@@ -110,6 +113,12 @@ export function SettingsSelect<TValue extends string>({
   const selectedOption = matchedOption ?? options[0];
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(() => activeIndexForOptions(options, selectedIndex));
+
+  useEffect(() => {
+    // A prerequisite turning off while the menu is open must not leave a
+    // floating listbox over a control the user can no longer act on.
+    if (disabled) setIsOpen(false);
+  }, [disabled]);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -243,6 +252,7 @@ export function SettingsSelect<TValue extends string>({
   const optionId = (optionValue: TValue) => `${controlId}-option-${optionValue}`;
 
   function openMenu() {
+    if (disabled) return;
     setActiveIndex(activeIndexForOptions(options, selectedIndex));
     setIsOpen(true);
   }
@@ -261,7 +271,7 @@ export function SettingsSelect<TValue extends string>({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (options.length === 0) return;
+    if (options.length === 0 || disabled) return;
 
     const rowActionHasFocus = event.target instanceof Element
       && event.target.closest(".settings-select-control__option-action") != null;
@@ -326,6 +336,7 @@ export function SettingsSelect<TValue extends string>({
       className={rootClassName}
       data-placement={placement}
       data-open={isOpen ? "true" : undefined}
+      data-disabled={disabled ? "true" : undefined}
       data-has-accent={selectedOption.accentColor ? "true" : undefined}
       data-placeholder={showPlaceholder ? "true" : undefined}
       style={optionStyle(selectedOption.accentColor)}
@@ -343,6 +354,7 @@ export function SettingsSelect<TValue extends string>({
         aria-expanded={isOpen}
         aria-controls={listboxId}
         aria-activedescendant={isOpen ? optionId(activeOption.value) : undefined}
+        disabled={disabled}
         onClick={() => (isOpen ? setIsOpen(false) : openMenu())}
       >
         {triggerVisual ? (

@@ -790,6 +790,17 @@
   box-shadow: var(--field-focus-shadow);
 }
 
+/* A disabled select keeps its shape so the remembered choice stays readable;
+   only the affordance goes away. The surrounding row supplies the dimming. */
+.settings-select-control__trigger:disabled {
+  cursor: default;
+}
+
+.settings-select-control__trigger:disabled:hover {
+  border-color: var(--settings-control-border, var(--line));
+  background: var(--settings-control-bg, var(--bg-2));
+}
+
 .settings-select-control__value,
 .settings-select-control__option {
   display: inline-flex;

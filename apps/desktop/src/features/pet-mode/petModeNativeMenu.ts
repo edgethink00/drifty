@@ -2,6 +2,7 @@ import { Menu, type MenuOptions } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { isTauriRuntime } from "../companion/watcherBridge";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
+import type { PetPresenceMode } from "./petPresenceMode";
 import type {
   PetQuickControlsAction,
   PetQuickControlsAutomaticCloseOverridePayload,
@@ -11,11 +12,13 @@ export type PetModeNativeMenuActions = {
   readonly onOpenDashboard: () => void;
   readonly onOpenSettings: () => void;
   readonly onHideForOneHour: () => void;
+  readonly onPresenceModeChange: (mode: PetPresenceMode) => void;
   readonly onTurnOffPet: () => void;
 };
 
 export type PetModeNativeMenuState = {
   readonly language?: "en" | "ko";
+  readonly presenceMode?: PetPresenceMode;
 };
 
 export type PetModeAutomaticCloseMenuState = {
@@ -31,7 +34,12 @@ function petModeMenuCopy(language: "en" | "ko") {
       openSettings: "펫 설정…",
       automaticCloseSettings: "자동 닫기 설정…",
       hideOneHour: "펫 1시간 숨기기",
+      showOnlyOnDrift: "딴짓할 때만 나타나기",
+      stayAlways: "항상 함께 있기",
       turnOffPet: "펫 끄기",
+      turnOffSuggestionHeader: "펫을 완전히 끌까요?",
+      turnOffSuggestionDriftOnly: "딴짓할 때만 나타나기",
+      turnOffSuggestionConfirm: "완전히 끄기",
     };
   }
   return {
@@ -39,7 +47,12 @@ function petModeMenuCopy(language: "en" | "ko") {
     openSettings: "Pet Settings…",
     automaticCloseSettings: "Auto-close Settings…",
     hideOneHour: "Hide Pet for 1 Hour",
+    showOnlyOnDrift: "Show Only When Drifting",
+    stayAlways: "Stay On Screen",
     turnOffPet: "Turn Off Pet",
+    turnOffSuggestionHeader: "Turn the pet off completely?",
+    turnOffSuggestionDriftOnly: "Show Only When Drifting",
+    turnOffSuggestionConfirm: "Turn Off",
   };
 }
 
@@ -138,6 +151,7 @@ export async function openNativePetModeMenu(
   if (!isTauriRuntime()) return false;
 
   const copy = petModeMenuCopy(state.language ?? resolveInitialDisplayLanguage());
+  const presenceMode = state.presenceMode ?? "always";
   const menu = await Menu.new({
     items: [
       {
@@ -161,11 +175,63 @@ export async function openNativePetModeMenu(
         text: copy.hideOneHour,
         action: actions.onHideForOneHour,
       },
+      // The ladder reads top to bottom as escalating quiet: hide for an hour,
+      // only come when needed, off. Each step keeps drift alerts working.
+      presenceMode === "drift_only"
+        ? {
+          id: "pet-presence-always",
+          text: copy.stayAlways,
+          action: () => actions.onPresenceModeChange("always"),
+        }
+        : {
+          id: "pet-presence-drift-only",
+          text: copy.showOnlyOnDrift,
+          action: () => actions.onPresenceModeChange("drift_only"),
+        },
       { item: "Separator" },
       {
         id: "pet-turn-off",
         text: copy.turnOffPet,
         action: actions.onTurnOffPet,
+      },
+    ],
+  });
+
+  try {
+    await menu.popup(undefined, getCurrentWindow());
+    return true;
+  } finally {
+    await menu.close();
+  }
+}
+
+/**
+ * A one-time follow-up to the pet menu's Turn Off: offer the quieter middle
+ * step before the cat disappears for good. Native so it lands at the same
+ * pointer the user just used; the caller decides when it has been shown.
+ */
+export async function openNativePetTurnOffSuggestionMenu(
+  actions: {
+    readonly onChooseDriftOnly: () => void;
+    readonly onConfirmTurnOff: () => void;
+  },
+  state: PetModeNativeMenuState = {},
+): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+
+  const copy = petModeMenuCopy(state.language ?? resolveInitialDisplayLanguage());
+  const menu = await Menu.new({
+    items: [
+      { id: "pet-turn-off-suggestion-header", text: copy.turnOffSuggestionHeader, enabled: false },
+      {
+        id: "pet-turn-off-suggestion-drift-only",
+        text: copy.turnOffSuggestionDriftOnly,
+        action: actions.onChooseDriftOnly,
+      },
+      {
+        id: "pet-turn-off-suggestion-confirm",
+        text: copy.turnOffSuggestionConfirm,
+        action: actions.onConfirmTurnOff,
       },
     ],
   });

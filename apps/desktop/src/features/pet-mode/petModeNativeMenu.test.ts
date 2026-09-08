@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { openNativeAutomaticCloseMenu, openNativePetModeMenu } from "./petModeNativeMenu";
+import {
+  openNativeAutomaticCloseMenu,
+  openNativePetModeMenu,
+  openNativePetTurnOffSuggestionMenu,
+} from "./petModeNativeMenu";
 
 const runtime = vi.hoisted(() => ({ isTauri: true }));
 const nativeWindow = vi.hoisted(() => ({ label: "pet-mode" }));
@@ -38,6 +42,7 @@ describe("openNativePetModeMenu", () => {
       onOpenDashboard: vi.fn(),
       onOpenSettings: vi.fn(),
       onHideForOneHour: vi.fn(),
+      onPresenceModeChange: vi.fn(),
       onTurnOffPet: vi.fn(),
     };
 
@@ -54,11 +59,31 @@ describe("openNativePetModeMenu", () => {
       { text: "Separator" },
       { text: "Auto-close Settings…" },
       { text: "Hide Pet for 1 Hour" },
+      { text: "Show Only When Drifting" },
       { text: "Separator" },
       { text: "Turn Off Pet" },
     ]);
     options.items[3].action();
     expect(actions.onOpenSettings).toHaveBeenCalledOnce();
+    options.items[5].action();
+    expect(actions.onPresenceModeChange).toHaveBeenCalledWith("drift_only");
+  });
+
+  it("offers the way back once the pet only appears when drifting", async () => {
+    const actions = {
+      onOpenDashboard: vi.fn(),
+      onOpenSettings: vi.fn(),
+      onHideForOneHour: vi.fn(),
+      onPresenceModeChange: vi.fn(),
+      onTurnOffPet: vi.fn(),
+    };
+
+    await openNativePetModeMenu(actions, { language: "ko", presenceMode: "drift_only" });
+
+    const options = nativeMenu.create.mock.calls[0]?.[0];
+    expect(options.items[5].text).toBe("항상 함께 있기");
+    options.items[5].action();
+    expect(actions.onPresenceModeChange).toHaveBeenCalledWith("always");
   });
 
   it("localizes the native menu in Korean", async () => {
@@ -66,6 +91,7 @@ describe("openNativePetModeMenu", () => {
       onOpenDashboard: vi.fn(),
       onOpenSettings: vi.fn(),
       onHideForOneHour: vi.fn(),
+      onPresenceModeChange: vi.fn(),
       onTurnOffPet: vi.fn(),
     }, { language: "ko" });
 
@@ -76,9 +102,27 @@ describe("openNativePetModeMenu", () => {
       "Separator",
       "자동 닫기 설정…",
       "펫 1시간 숨기기",
+      "딴짓할 때만 나타나기",
       "Separator",
       "펫 끄기",
     ]);
+  });
+
+  it("puts the quieter step before a full turn-off in the one-time suggestion", async () => {
+    const actions = { onChooseDriftOnly: vi.fn(), onConfirmTurnOff: vi.fn() };
+
+    await expect(openNativePetTurnOffSuggestionMenu(actions, { language: "ko" })).resolves.toBe(true);
+
+    const options = nativeMenu.create.mock.calls[0]?.[0];
+    expect(options.items.map((item: { text?: string; enabled?: boolean }) => [item.text, item.enabled ?? true])).toEqual([
+      ["펫을 완전히 끌까요?", false],
+      ["딴짓할 때만 나타나기", true],
+      ["완전히 끄기", true],
+    ]);
+    options.items[1].action();
+    expect(actions.onChooseDriftOnly).toHaveBeenCalledOnce();
+    options.items[2].action();
+    expect(actions.onConfirmTurnOff).toHaveBeenCalledOnce();
   });
 });
 

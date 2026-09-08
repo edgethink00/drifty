@@ -1,15 +1,27 @@
 import { Toggle } from "../../components/Toggle";
+import { SettingsSelect } from "./SettingsSelect";
 import {
   PET_MODE_COAT_SPECS,
   PET_MODE_SIZES,
   type PetModeCoat,
   type PetModeSize,
 } from "../pet-mode/petModeData";
+import { usePetPresenceMode, type PetPresenceMode } from "../pet-mode/petPresenceMode";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
 import type { TranslationKey } from "../localization/translations";
 
-// The pet's user-facing settings, shown in Desktop pet. Visibility is
-// also toggleable from the account menu; both write the same stored value.
+// Power and style are separate controls on purpose: the account menu already
+// presents the pet as an on/off checkbox, and a disabled style segment while
+// off shows that the choice survives a turn-off.
+const PET_PRESENCE_MODES: ReadonlyArray<{
+  readonly value: PetPresenceMode;
+  readonly labelKey: TranslationKey;
+  readonly descriptionKey: TranslationKey;
+}> = [
+  { value: "always", labelKey: "settings.pet.presenceAlways", descriptionKey: "settings.pet.presenceAlwaysDescription" },
+  { value: "drift_only", labelKey: "settings.pet.presenceDriftOnly", descriptionKey: "settings.pet.presenceDriftOnlyDescription" },
+];
+
 export function PetSettings({
   enabled,
   onEnabledChange,
@@ -26,6 +38,15 @@ export function PetSettings({
   readonly onSizeChange: (size: PetModeSize) => void;
 }) {
   const { t } = useLocalization();
+  const [presenceMode, setPresenceMode] = usePetPresenceMode();
+  // Plain options, matching every other settings select. The row description
+  // below the label carries the current choice's sentence instead.
+  const presenceOptions = PET_PRESENCE_MODES.map((option) => ({
+    value: option.value,
+    label: t(option.labelKey),
+  }));
+  const description = PET_PRESENCE_MODES.find((option) => option.value === presenceMode)?.descriptionKey
+    ?? "settings.pet.presenceAlwaysDescription";
   return (
     <>
       <div data-setting-id="settings.pet.show" className="settings-row settings-row--pet-mode settings-row--group-start" role="group" aria-label={t("settings.pet.title")}>
@@ -38,6 +59,21 @@ export function PetSettings({
         </div>
         <div className="ctrl">
           <Toggle checked={enabled} onChange={onEnabledChange} ariaLabel={t("settings.pet.toggleAria")} />
+        </div>
+      </div>
+      <div data-setting-id="settings.pet.presence" className={`settings-row settings-row--pet-presence${enabled ? "" : " settings-row--disabled"}`}>
+        <label>
+          <div className="lbl">{t("settings.pet.presence")}</div>
+          <div className="desc">{t(description)}</div>
+        </label>
+        <div className="ctrl">
+          <SettingsSelect
+            ariaLabel={t("settings.pet.presence")}
+            value={presenceMode}
+            options={presenceOptions}
+            disabled={!enabled}
+            onChange={setPresenceMode}
+          />
         </div>
       </div>
       {/* Preserve the chosen appearance while the pet is off. */}

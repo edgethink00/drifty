@@ -3,6 +3,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 import { type PetModeCoat, type PetModeSize } from "../pet-mode/petModeData";
 import { usePetOutingPreference } from "../pet-mode/petOutingPreference";
+import { usePetPresenceMode } from "../pet-mode/petPresenceMode";
 import { PetSettings } from "./PetCoatPicker";
 import "./PetSettingsSection.css";
 import { PetSettingsPreview } from "./PetSettingsPreview";
@@ -28,6 +29,8 @@ export function PetSettingsSection({
 }: PetSettingsSectionProps) {
   const { t } = useLocalization();
   const [allowOutings, setAllowOutings] = usePetOutingPreference();
+  const [presenceMode] = usePetPresenceMode();
+  const outingsUnused = enabled && presenceMode === "drift_only";
 
   return (
     <div className="settings-section settings-section--pet">
@@ -39,12 +42,14 @@ export function PetSettingsSection({
       </div>
       <div className="settings-block">
         <h3>{t("settings.pet.behavior")}</h3>
-        <div data-setting-id="settings.pet.allowOutings" className="settings-row">
+        <div data-setting-id="settings.pet.allowOutings" className={`settings-row${outingsUnused ? " settings-row--disabled" : ""}`}>
           <div>
             <div className="lbl">{t("settings.pet.allowOutings")}</div>
-            <div className="desc" id="pet-outings-description">{t("settings.pet.allowOutingsDescription")}</div>
+            <div className="desc" id="pet-outings-description">
+              {t(outingsUnused ? "settings.pet.allowOutingsDriftOnlyDescription" : "settings.pet.allowOutingsDescription")}
+            </div>
           </div>
-          <div className="ctrl"><Toggle checked={allowOutings} onChange={setAllowOutings}
+          <div className="ctrl"><Toggle checked={allowOutings} onChange={setAllowOutings} disabled={outingsUnused}
             ariaLabel={t("settings.pet.allowOutings")} ariaDescribedBy="pet-outings-description" /></div>
         </div>
       </div>

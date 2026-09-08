@@ -120,6 +120,13 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     keywords: "고양이 펫 켜기 끄기 cat pet on off hide show",
   },
   {
+    id: "settings.pet.presence",
+    section: "pet",
+    titleKey: "settings.pet.presence",
+    keywords: "고양이 펫 항상 딴짓할 때만 화면 밖 숨기기 cat pet always drift only off screen",
+    descriptionKey: "settings.pet.presenceDriftOnlyDescription",
+  },
+  {
     id: "settings.pet.coat",
     section: "pet",
     titleKey: "settings.pet.coat",

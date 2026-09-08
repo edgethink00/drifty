@@ -50,7 +50,7 @@ import {
   triggerNativePetVisibilityAction,
 } from "./petModeBridge";
 import { usePetTimedPauseSleep } from "./usePetTimedPauseSleep";
-import { openNativePetModeMenu } from "./petModeNativeMenu";
+import { openNativePetModeMenu, openNativePetTurnOffSuggestionMenu } from "./petModeNativeMenu";
 import {
   EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT,
   PET_QUICK_CONTROLS_EXIT_MS,
@@ -133,6 +133,15 @@ import {
 } from "./petModeGaze";
 import { isPetModeChaseMotionKind } from "./petModeChaseMotion";
 import { subscribePetOutingPreference, usePetOutingPreference } from "./petOutingPreference";
+import {
+  PET_PRESENCE_DISMISS_RETREAT_MS,
+  PET_PRESENCE_INITIAL_RETREAT_MS,
+  PET_PRESENCE_RETREAT_AFTER_FOCUS_MS,
+  hasSeenPetTurnOffSuggestion,
+  markPetTurnOffSuggestionSeen,
+  persistPetPresenceMode,
+  usePetPresenceMode,
+} from "./petPresenceMode";
 import {
   EMPTY_PET_MODE_DRIFT_HUNT_STATE,
   PET_MODE_DRIFT_HUNT_ALERT_MS,
@@ -226,6 +235,14 @@ export function PetModeWindowApp() {
   const [hitRegionCommitRevision, setHitRegionCommitRevision] = useState(0);
   const [autonomousCycle, setAutonomousCycle] = useState(0);
   const [petOutingsEnabled] = usePetOutingPreference();
+  const [presenceMode] = usePetPresenceMode();
+  // True while the "drift only" cat is away off screen with no return
+  // scheduled. It is the renderer-side twin of `outingTicketRef`: the ticket
+  // says how to come back, this says that nobody scheduled a return.
+  const [watching, setWatching] = useState(false);
+  // Bumped when the retreat wait should be re-evaluated without disturbing
+  // the other autonomous schedulers.
+  const [retreatRevision, setRetreatRevision] = useState(0);
   const [pawFrame, setPawFrame] = useState(0);
   // Only the return from a successful Drifty-window close wears the proud
   // lids; every approach and every other walk keeps the shipped neutral face.
@@ -285,6 +302,15 @@ export function PetModeWindowApp() {
   const petModeEnabledRef = useRef(initialAppearance.enabled);
   const petOutingsEnabledRef = useRef(petOutingsEnabled);
   const appliedPetOutingsEnabledRef = useRef(petOutingsEnabled);
+  const presenceModeRef = useRef(presenceMode);
+  presenceModeRef.current = presenceMode;
+  const watchingRef = useRef(false);
+  // When the cat last had a reason to be on screen: a drift episode or a pat
+  // that called it in. The retreat timer counts from here.
+  const lastOnDutyAtMsRef = useRef<number | null>(null);
+  // A pat on the visiting cat while focus holds asks it to leave soon.
+  const dismissRequestedRef = useRef(false);
+  const pendingTurnOffSuggestionRef = useRef(false);
   const autonomousCycleRef = useRef(0);
   // This tracks temporary outing visibility, not the product toggle. Feature
   // enablement has its own ref so Lab previews can still reveal the panel.
@@ -329,6 +355,11 @@ export function PetModeWindowApp() {
   const driftCueTokenRef = useRef<number | null>(null);
   const outingTicketRef = useRef<PetModeOutingTicket | null>(null);
   const activeOutingTokenRef = useRef<number | null>(null);
+
+  const setWatchingState = useCallback((next: boolean) => {
+    watchingRef.current = next;
+    setWatching(next);
+  }, []);
 
   const clearHuntAlert = useCallback(() => {
     if (huntAlertTimerRef.current !== null) {
@@ -643,8 +674,11 @@ export function PetModeWindowApp() {
       setManualGazeActive(false);
       setGazeOffset({ x: 0, y: 0 });
       setPreserveEntryLanding(false);
-      outingTicketRef.current = null;
+      // An away drift-only cat keeps its return ticket so the pause can end
+      // without popping it home; it simply stays away.
+      if (!watchingRef.current) outingTicketRef.current = null;
       void cancelNativePetMotion().catch(() => undefined);
+      if (watchingRef.current) return;
       const needsPresence = !visibleRef.current || phaseRef.current === "entry"
         || initialSleepNeedsPresenceRef.current;
       initialSleepNeedsPresenceRef.current = false;
@@ -653,7 +687,9 @@ export function PetModeWindowApp() {
       // fall asleep where it is, including while the user is carrying it.
       if (needsPresence) void setNativePetPresence(true).catch(() => undefined);
       commitPhase("sleep");
-    } else if (!sleepingDragRef.current) {
+      // An away drift-only cat has no seat to reconcile and no pose to show;
+      // waking from the pause must not pull it back onto the screen.
+    } else if (!sleepingDragRef.current && !watchingRef.current) {
       // The seat was held while asleep. Let the awake cat return home once
       // the upright pose has rendered.
       seatReconcilePendingRef.current = true;
@@ -1470,6 +1506,75 @@ export function PetModeWindowApp() {
     }
   }, [commitPhase, commitVisibility, revealForAction]);
 
+  /**
+   * Drift-only presence: walk off the nearest edge and stay away, exactly
+   * like an outing without a return timer. If an outing already has the cat
+   * away, keep it away; the retained ticket still brings it back.
+   */
+  const retreatToWatch = useCallback(async () => {
+    if (
+      watchingRef.current
+      || !petModeEnabledRef.current
+      || timedPauseRef.current !== null
+      || manualDragRef.current
+      || sleepingDragRef.current
+    ) return;
+    const token = ++actionTokenRef.current;
+    activeOutingTokenRef.current = null;
+    dismissRequestedRef.current = false;
+    restartAutonomousCycle();
+    clearHuntAlert();
+    stopMusicNote();
+    setWatchingState(true);
+    if (!visibleRef.current && outingTicketRef.current !== null) return;
+    try {
+      await revealForAction();
+      // A superseding action owns the cat and left it on screen. Clearing the
+      // flag matters more than the retreat: a stuck `watching` would disable
+      // both the retreat scheduler and the hover controls until the next drift.
+      if (token !== actionTokenRef.current) return void setWatchingState(false);
+      commitPhase("walk");
+      const ticket = await exitNativePetScreen();
+      if (token !== actionTokenRef.current) return void setWatchingState(false);
+      outingTicketRef.current = ticket;
+      commitVisibility(false);
+      await setNativePetPresence(false, ticket.generation);
+    } catch {
+      if (token !== actionTokenRef.current) return;
+      // Native declined (visibility changing, no monitor). Stay resident and
+      // let the scheduler try again after the next quiet stretch.
+      setWatchingState(false);
+      commitVisibility(true);
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+    }
+  }, [clearHuntAlert, commitPhase, commitVisibility, restartAutonomousCycle, revealForAction, setWatchingState, stopMusicNote]);
+
+  /** Bring the away cat home along the outing return path. */
+  const returnFromWatch = useCallback(async () => {
+    if (!watchingRef.current) return;
+    const ticket = outingTicketRef.current;
+    const token = ++actionTokenRef.current;
+    setWatchingState(false);
+    lastOnDutyAtMsRef.current = Date.now();
+    dismissRequestedRef.current = false;
+    restartAutonomousCycle();
+    outingTicketRef.current = null;
+    try {
+      commitVisibility(true);
+      commitPhase("walk");
+      if (ticket !== null) {
+        await returnNativePetFromOuting(ticket);
+      } else {
+        await setNativePetPresence(true);
+      }
+    } catch {
+      // Fall through to the resident pose; native reconciles its own position.
+    }
+    if (token === actionTokenRef.current) {
+      commitPhase(focusRestingRef.current ? "sit" : "idle");
+    }
+  }, [commitPhase, commitVisibility, restartAutonomousCycle, setWatchingState]);
+
   const playLifeAction = useCallback(async (action: LifeAction, preview = true) => {
     if (action === "stop") {
       actionTokenRef.current += 1;
@@ -1795,6 +1900,13 @@ export function PetModeWindowApp() {
         // cat after native has already replayed the entry motion.
         actionTokenRef.current += 1;
         outingTicketRef.current = null;
+        // An explicit Show also ends a drift-only watch: the user asked to
+        // see the cat, so it visits now and the retreat timer restarts.
+        if (watchingRef.current) {
+          setWatchingState(false);
+          lastOnDutyAtMsRef.current = Date.now();
+          dismissRequestedRef.current = false;
+        }
         driftHuntRef.current = {
           ...driftHuntRef.current,
           noticed: true,
@@ -2159,6 +2271,9 @@ export function PetModeWindowApp() {
     }
     if (resting) {
       if (focusRestAppliedRef.current) return;
+      // An away drift-only cat is off duty during focus; do not resurrect it
+      // at home just to sit.
+      if (watchingRef.current) return;
       restartAutonomousCycle();
       gazeEngagedRef.current = false;
       setGazeOffset({ x: 0, y: 0 });
@@ -2207,13 +2322,15 @@ export function PetModeWindowApp() {
     driftHuntRef.current = next.state;
     if (!next.action) return;
     const huntSettings = resolvePetModeDriftHuntSettings();
+    const watchingAway = watchingRef.current;
     const naturallyOuting = !visibleRef.current && outingTicketRef.current !== null;
-    const explicitHidden = !visibleRef.current && !naturallyOuting;
+    const explicitHidden = !visibleRef.current && !naturallyOuting && !watchingAway;
     if (!PET_MODE_DRIFT_REACTION_ENABLED || !petModeEnabled || explicitHidden) {
       driftHuntRef.current = suppressPetModeDriftHunt(snapshot);
       return;
     }
     const stablePhase = naturallyOuting
+      || watchingAway
       || phaseRef.current === "idle"
       || phaseRef.current === "sit"
       || phaseRef.current === "sleep";
@@ -2228,8 +2345,31 @@ export function PetModeWindowApp() {
     ) return;
 
     const action: Exclude<PetModeDriftHuntAction, null> = next.action;
+    // Reduced Motion never escalates to a stalk, so the away drift-only cat
+    // uses the notice as its cue to come in; there is no other beat to wait for.
+    const entersFromWatch = watchingAway
+      && (action === "stalk" || (action === "notice" && prefersReducedMotion()));
+    if (entersFromWatch) {
+      driftHuntRef.current = commitPetModeDriftHuntAction(next.state, action);
+      if (action === "stalk") {
+        driftHuntRef.current = { ...driftHuntRef.current, noticed: true };
+      }
+      lastOnDutyAtMsRef.current = Date.now();
+      if (huntSettings.enabled && action === "stalk") {
+        const ticket = outingTicketRef.current;
+        setWatchingState(false);
+        dismissRequestedRef.current = false;
+        void playCursorHunt(huntSettings, { outingTicket: ticket });
+        return;
+      }
+      void returnFromWatch().then(() => {
+        if (action === "stalk") void playPassiveDriftReaction();
+      });
+      return;
+    }
     driftHuntRef.current = commitPetModeDriftHuntAction(next.state, action);
     if (action === "stalk") {
+      lastOnDutyAtMsRef.current = Date.now();
       if (huntSettings.enabled) {
         void playCursorHunt(huntSettings, {
           outingTicket: visibleRef.current ? null : outingTicketRef.current,
@@ -2267,7 +2407,7 @@ export function PetModeWindowApp() {
         commitPhase(restingPhase === "sit" ? "sit" : "idle");
       }
     })();
-  }, [clearDriftCue, commitPhase, driftRetryRevision, petModeEnabled, playCursorHunt, playPassiveDriftReaction, restartAutonomousCycle, showDriftCue, snapshot]);
+  }, [clearDriftCue, commitPhase, driftRetryRevision, petModeEnabled, playCursorHunt, playPassiveDriftReaction, restartAutonomousCycle, returnFromWatch, setWatchingState, showDriftCue, snapshot]);
 
   useEffect(() => {
     if (phase !== "entry") return;
@@ -2315,7 +2455,8 @@ export function PetModeWindowApp() {
   }, [labLifeLoopEnabled, playLifeAction]);
 
   useEffect(() => {
-    if (!petModeEnabled || !petOutingsEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
+    // Drift-only presence has no spontaneous outings; away is its default.
+    if (!petModeEnabled || !petOutingsEnabled || presenceMode === "drift_only" || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -2359,7 +2500,84 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, timedPauseUntil, petModeEnabled, petOutingsEnabled, playOuting, snapshot?.productivity]);
+  }, [autonomousCycle, timedPauseUntil, petModeEnabled, petOutingsEnabled, playOuting, presenceMode, snapshot?.productivity]);
+
+  // Drift-only presence, leaving the mode: an away cat comes home.
+  useEffect(() => {
+    if (presenceMode === "drift_only" || !watchingRef.current) return;
+    void returnFromWatch();
+  }, [presenceMode, returnFromWatch]);
+
+  // Drift-only presence, the retreat scheduler. While a drift episode is
+  // live the cat stays; once focus (or neutral) has held long enough after
+  // its last reason to be on screen, it walks back off screen. A pat while
+  // it is visiting and off duty shortens that wait.
+  useEffect(() => {
+    if (
+      presenceMode !== "drift_only"
+      || !petModeEnabled
+      || watching
+      || timedPauseUntil !== null
+    ) return;
+    if (snapshot?.productivity === "drift") {
+      // The visiting cat is on duty for the whole episode. Count the retreat
+      // wait from the moment drift ends, not from when it walked in.
+      return () => {
+        lastOnDutyAtMsRef.current = Date.now();
+        dismissRequestedRef.current = false;
+      };
+    }
+    let disposed = false;
+    let timerId = 0;
+    const cycle = autonomousCycle;
+    const isCurrentCycle = () => (
+      !disposed
+      && petModeEnabledRef.current
+      && presenceModeRef.current === "drift_only"
+      && !watchingRef.current
+      && autonomousCycleRef.current === cycle
+    );
+    const interruptible = () => (
+      (phaseRef.current === "idle" || phaseRef.current === "sit" || phaseRef.current === "sleep")
+      && !menuOpenRef.current
+      && !manualDragRef.current
+      && manualReleaseTokenRef.current === null
+      && !controlsHoldingRef.current
+      && activeLabActionRef.current === null
+      && !cursorHuntActiveRef.current
+    );
+    // Anchor the wait when this evaluation starts; a pat re-arms through
+    // `retreatRevision`, so "now" here is the moment of the request.
+    const armedAt = Date.now();
+    if (lastOnDutyAtMsRef.current === null) {
+      // First evaluation in this mode: leave after a short settle. Pin the
+      // anchor so productivity flips cannot keep restarting that short wait.
+      lastOnDutyAtMsRef.current = armedAt + PET_PRESENCE_INITIAL_RETREAT_MS - PET_PRESENCE_RETREAT_AFTER_FOCUS_MS;
+    }
+    const dueAt = () => {
+      if (dismissRequestedRef.current) return armedAt + PET_PRESENCE_DISMISS_RETREAT_MS;
+      return (lastOnDutyAtMsRef.current ?? armedAt) + PET_PRESENCE_RETREAT_AFTER_FOCUS_MS;
+    };
+    const arm = (delayMs: number) => {
+      timerId = window.setTimeout(() => {
+        if (!isCurrentCycle()) return;
+        if (Date.now() < dueAt() - 250) {
+          arm(Math.max(250, dueAt() - Date.now()));
+          return;
+        }
+        if (!interruptible()) {
+          arm(1_000);
+          return;
+        }
+        void retreatToWatch();
+      }, delayMs);
+    };
+    arm(Math.max(0, dueAt() - Date.now()));
+    return () => {
+      disposed = true;
+      window.clearTimeout(timerId);
+    };
+  }, [autonomousCycle, petModeEnabled, presenceMode, retreatRevision, retreatToWatch, snapshot?.productivity, timedPauseUntil, watching]);
 
   useEffect(() => {
     if (!petModeEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
@@ -2564,6 +2782,7 @@ export function PetModeWindowApp() {
     let closingUntilMs = 0;
     const blockedNow = () => manualDragRef.current
       || menuOpenRef.current
+      || watchingRef.current
       || isPetQuickControlsInteractionCoolingDown(
         quickControlsInteractionCooldownUntilRef.current,
         Date.now(),
@@ -2789,12 +3008,41 @@ export function PetModeWindowApp() {
       onHideForOneHour: () => {
         void triggerNativePetVisibilityAction("hideOneHour").catch(() => undefined);
       },
+      onPresenceModeChange: (mode) => {
+        persistPetPresenceMode(mode);
+      },
       onTurnOffPet: () => {
+        // Once, before the cat disappears for good, offer the quieter middle
+        // step. The follow-up opens after this menu has fully closed.
+        if (presenceModeRef.current === "always" && !hasSeenPetTurnOffSuggestion()) {
+          pendingTurnOffSuggestionRef.current = true;
+          return;
+        }
         void triggerNativePetVisibilityAction("turnOff").catch(() => undefined);
       },
     }, {
       language: resolveInitialDisplayLanguage(),
+      presenceMode: presenceModeRef.current,
     }).catch(() => undefined).finally(() => {
+      if (pendingTurnOffSuggestionRef.current) {
+        pendingTurnOffSuggestionRef.current = false;
+        markPetTurnOffSuggestionSeen();
+        void openNativePetTurnOffSuggestionMenu({
+          onChooseDriftOnly: () => {
+            persistPetPresenceMode("drift_only");
+          },
+          onConfirmTurnOff: () => {
+            void triggerNativePetVisibilityAction("turnOff").catch(() => undefined);
+          },
+        }, {
+          language: resolveInitialDisplayLanguage(),
+        }).catch(() => undefined).finally(() => {
+          menuOpenRef.current = false;
+          setMenuHolding(false);
+          setDriftRetryRevision((revision) => revision + 1);
+        });
+        return;
+      }
       menuOpenRef.current = false;
       setMenuHolding(false);
       setDriftRetryRevision((revision) => revision + 1);
@@ -2803,6 +3051,13 @@ export function PetModeWindowApp() {
 
   const handlePet = () => {
     if (manualDragRef.current || timedPauseRef.current !== null || sleepingDragRef.current) return;
+    if (watchingRef.current) return;
+    // A pat on a visiting cat that is already off duty asks it to head back
+    // out once this reaction finishes.
+    if (presenceModeRef.current === "drift_only" && snapshotRef.current?.productivity !== "drift") {
+      dismissRequestedRef.current = true;
+      setRetreatRevision((revision) => revision + 1);
+    }
     if (phaseRef.current === "sleep") {
       if (sleepTouchRef.current === 0) {
         sleepTouchRef.current = 1;

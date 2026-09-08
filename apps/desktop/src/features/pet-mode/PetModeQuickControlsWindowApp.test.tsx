@@ -78,6 +78,7 @@ describe("PetModeQuickControlsWindowApp", () => {
     ]);
     expect(nativeMenu.openNativePetModeMenu.mock.calls[0][1]).toEqual({
       language: "ko",
+      presenceMode: "always",
     });
     const overflowActions = nativeMenu.openNativePetModeMenu.mock.calls[0][0];
     act(() => {

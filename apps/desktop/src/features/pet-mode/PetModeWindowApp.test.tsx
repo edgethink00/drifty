@@ -53,6 +53,10 @@ import {
   PET_QUICK_CONTROLS_POLL_MS,
 } from "./petModeQuickControls";
 import { PET_OUTING_PREFERENCE_STORAGE_KEY } from "./petOutingPreference";
+import {
+  PET_PRESENCE_MODE_STORAGE_KEY,
+  PET_TURN_OFF_SUGGESTION_SEEN_STORAGE_KEY,
+} from "./petPresenceMode";
 
 const walkFrames = (JSON.parse(
   readFileSync("public/pet-mode/walk-frames-v2.json", "utf8"),
@@ -188,6 +192,7 @@ const bridge = vi.hoisted(() => ({
   returnWithNativePetCursor: vi.fn().mockResolvedValue({ outcome: "completed", movedDistance: 128 }),
   triggerNativePetVisibilityAction: vi.fn().mockResolvedValue(undefined),
   openNativePetModeMenu: vi.fn().mockResolvedValue(true),
+  openNativePetTurnOffSuggestionMenu: vi.fn().mockResolvedValue(true),
   preloadPetModeHitRegions: vi.fn().mockResolvedValue(undefined),
   stagePetModeHitRegionTransition: vi.fn().mockResolvedValue(undefined),
   publishPetModeHitRegion: vi.fn().mockResolvedValue(undefined),
@@ -236,6 +241,7 @@ vi.mock("./petModeBridge", () => ({
 
 vi.mock("./petModeNativeMenu", () => ({
   openNativePetModeMenu: bridge.openNativePetModeMenu,
+  openNativePetTurnOffSuggestionMenu: bridge.openNativePetTurnOffSuggestionMenu,
 }));
 
 vi.mock("./petModeHitRegions", () => ({
@@ -2201,6 +2207,169 @@ describe("PetModeWindowApp", () => {
     expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
   });
 
+  it("leaves the screen in drift-only presence, walks in for a sustained drift, and walks back out after focus holds", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "drift_only");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    // The retreat waits for the entry to settle, then walks straight out.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+      await Promise.resolve();
+    });
+    // The exit is the ordinary outing walk, hidden afterwards, with no return timer.
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+    // Drift-only presence never schedules spontaneous outings or returns.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(PET_MODE_PRESENT_MS + 5_000);
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+
+    // Focus does not drag the parked cat home just to sit.
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "code", durationSeconds: 30 },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+
+    // An early notice is silent; the sustained stalk beat brings it in along
+    // the outing return path (Cursor control is off, so no native pursuit).
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_NOTICE_SECONDS },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "drift", contextLabel: "video", durationSeconds: PET_MODE_DRIFT_STALK_SECONDS },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(bridge.returnNativePetFromOuting).toHaveBeenCalledWith({ side: "left", generation: 1 });
+    expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stalk");
+
+    // It stays for the whole episode, then leaves only after focus has held.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "code", durationSeconds: 5 },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(2);
+    expect(bridge.setNativePetPresence).toHaveBeenLastCalledWith(false, 1);
+  });
+
+  it("brings the away cat home when presence returns to always", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "drift_only");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "always");
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_PRESENCE_MODE_STORAGE_KEY, newValue: "always" }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(bridge.returnNativePetFromOuting).toHaveBeenCalledWith({ side: "left", generation: 1 });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
+  });
+
+  it("retries the retreat when another action supersedes it mid-walk", async () => {
+    // A stuck "away" flag would silently disable both the retreat scheduler
+    // and the hover controls while the cat is actually still on screen.
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "drift_only");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishExit!: (ticket: { side: string; generation: number }) => void;
+    bridge.exitNativePetScreen.mockImplementationOnce(() => new Promise((resolve) => {
+      finishExit = resolve;
+    }));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+
+    // Something else takes the cat over while the walk-off is still in flight.
+    act(() => bridge.eventHandler?.({ kind: "preview_action", action: "stop" }));
+    await act(async () => {
+      finishExit({ side: "left", generation: 1 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // The superseded attempt must not leave the cat hidden or flagged away.
+    expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(false, 1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(2);
+  });
+
   it("enters a natural outing from the cursor display edge before stalking", async () => {
     vi.useFakeTimers();
     vi.spyOn(Math, "random").mockReturnValue(0.5);
@@ -2490,6 +2659,9 @@ describe("PetModeWindowApp", () => {
     actions.onHideForOneHour();
     expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("hideOneHour");
 
+    // The one-time quieter-step suggestion has already been shown here; the
+    // first Turn Off is covered separately.
+    window.localStorage.setItem(PET_TURN_OFF_SUGGESTION_SEEN_STORAGE_KEY, "1");
     actions.onTurnOffPet();
     expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("turnOff");
 
@@ -2499,6 +2671,42 @@ describe("PetModeWindowApp", () => {
     actions.onOpenSettings();
     expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledWith("openSettings");
 
+  });
+
+  it("offers drift-only presence once before the first Turn Off", async () => {
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let resolveMenu: (() => void) | null = null;
+    bridge.openNativePetModeMenu.mockImplementationOnce(() => new Promise<boolean>((resolve) => {
+      resolveMenu = () => resolve(true);
+    }));
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
+    pet.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 }));
+    await act(async () => undefined);
+
+    const actions = bridge.openNativePetModeMenu.mock.calls[0][0];
+    actions.onTurnOffPet();
+    // Nothing is turned off yet; the follow-up waits for this menu to close.
+    expect(bridge.triggerNativePetVisibilityAction).not.toHaveBeenCalledWith("turnOff");
+    expect(bridge.openNativePetTurnOffSuggestionMenu).not.toHaveBeenCalled();
+
+    act(() => resolveMenu?.());
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(bridge.openNativePetTurnOffSuggestionMenu).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(PET_TURN_OFF_SUGGESTION_SEEN_STORAGE_KEY)).toBe("1");
+
+    const suggestion = bridge.openNativePetTurnOffSuggestionMenu.mock.calls[0][0];
+    suggestion.onChooseDriftOnly();
+    expect(window.localStorage.getItem(PET_PRESENCE_MODE_STORAGE_KEY)).toBe("drift_only");
+    expect(bridge.triggerNativePetVisibilityAction).not.toHaveBeenCalledWith("turnOff");
+
+    suggestion.onConfirmTurnOff();
+    expect(bridge.triggerNativePetVisibilityAction).toHaveBeenCalledWith("turnOff");
   });
 
   it("stays away on a restart that lands inside a temporary hide", async () => {

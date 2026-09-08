@@ -9,6 +9,7 @@ import {
   resolveInitialAutomaticCloseOverride,
 } from "../companion/automaticCloseOverride";
 import { openNativeAutomaticCloseMenu, openNativePetModeMenu } from "./petModeNativeMenu";
+import { persistPetPresenceMode, usePetPresenceMode } from "./petPresenceMode";
 import {
   listenToNativePetQuickControlsState,
   setNativePetQuickControlsMenuOpen,
@@ -53,6 +54,7 @@ function activeOverride(
 
 export function PetModeQuickControlsWindowApp() {
   const [language, setLanguage] = useState<DisplayLanguage>(resolveInitialDisplayLanguage);
+  const [presenceMode] = usePetPresenceMode();
   const [theme, setTheme] = useState(resolveInitialTheme);
   const [automaticCloseSavedEnabled, setAutomaticCloseSavedEnabled] = useState(resolveAutomaticCloseEnabled);
   const [automaticCloseOverride, setAutomaticCloseOverride] = useState<PetQuickControlsAutomaticCloseOverridePayload | null>(
@@ -294,9 +296,10 @@ export function PetModeQuickControlsWindowApp() {
             handleQuickControlsAction("openSettings");
           },
           onHideForOneHour: handleHideOneHour,
+          onPresenceModeChange: persistPetPresenceMode,
           onTurnOffPet: handleTurnOffPet,
-        }, { language }));
-  }, [handleHideOneHour, handleQuickControlsAction, handleTurnOffPet, language, runNativeMenu]);
+        }, { language, presenceMode }));
+  }, [handleHideOneHour, handleQuickControlsAction, handleTurnOffPet, language, presenceMode, runNativeMenu]);
 
   const handleOpenAutomaticCloseMenu = useCallback(() => {
     void runNativeMenu("automaticClose", () => openNativeAutomaticCloseMenu((action) => {
