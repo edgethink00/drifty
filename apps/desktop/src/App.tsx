@@ -228,6 +228,7 @@ import {
 } from "./features/companion/driftAlarmBridge";
 import { getExtremeNudgeFailure } from "./features/companion/extremeNudgeFailure";
 import { evaluateYouTubeDriftAlarmGate, type YouTubeDriftAlarmGateSettledResult } from "./features/companion/youtubeDriftAlarmGate";
+import { selectedYouTubeDriftReason } from "./features/companion/youtubeDeterministicDrift";
 import {
   buildDriftAlarmManualCorrectionRecord,
   buildDriftAlarmManualCorrectionRuleInput,
@@ -2353,6 +2354,11 @@ export default function App() {
   const petInterceptionGraceRef = useRef<PetInterceptionGrace | null>(null);
   const pendingDriftAlarmGateRef = useRef<string | null>(null);
   const pendingDriftAlarmGateGenerationRef = useRef(0);
+  const unavailableYouTubeDriftAlarmGateRef = useRef<{
+    alertKey: string;
+    videoId: string;
+    reason: string;
+  } | null>(null);
   const lastEligibleDriftCandidateRef = useRef<DriftAlarmCandidate | null>(null);
   const pendingDriftAlarmTransientRef = useRef<DriftAlarmTransientPending | null>(null);
   const pendingDriftAlarmTransientRefreshRef = useRef(0);
@@ -2720,6 +2726,7 @@ export default function App() {
   }
 
   function resetDriftAlarmRuntimeForDay(nextAlarmDay: string) {
+    unavailableYouTubeDriftAlarmGateRef.current = null;
     driftAlarmDayRef.current = nextAlarmDay;
     driftAlarmBaseSegmentsRef.current = [];
     driftAlarmHistorySegmentsRef.current = [];
@@ -5075,6 +5082,7 @@ export default function App() {
         evaluation,
       });
       publishEvaluationDriftAlarmTrayStatus({ kind: "no_candidate" }, checkedAt);
+      unavailableYouTubeDriftAlarmGateRef.current = null;
       const pendingClose = pendingExtremeNudgeRef.current;
       const preservePendingClose = pendingClose !== null
         && automaticCloseEnabledRef.current
@@ -5709,6 +5717,25 @@ export default function App() {
       }
     }
 
+    const unavailableGate = unavailableYouTubeDriftAlarmGateRef.current;
+    if (unavailableGate?.alertKey === alertKey
+      && (unavailableGate.videoId !== segment.youtubeVideoId || !selectedYouTubeDriftReason(segment))) {
+      // A quota/availability failure is not a delivered alarm. Keep it quiet
+      // until this same video gains metadata eligible for the AI-free gate;
+      // ordinary polls must not retry AI or override an explicit AI verdict.
+      recordDriftAlarmDebugEvent({
+        kind: "delivery_suppressed",
+        alertKey,
+        reason: unavailableGate.reason,
+        candidate: summarizeDriftAlarmCandidate(latestDrift),
+        evaluation,
+      });
+      publishEvaluationDriftAlarmTrayStatus({
+        kind: "suppressed", reason: unavailableGate.reason, candidateDetail,
+      }, checkedAt);
+      return;
+    }
+
     if (pendingDriftAlarmGateRef.current === alertKey) {
       recordDriftAlarmDebugEvent({
         kind: "delivery_suppressed",
@@ -5724,6 +5751,7 @@ export default function App() {
       pendingDriftAlarmGateGenerationRef.current += 1;
     }
 
+    unavailableYouTubeDriftAlarmGateRef.current = null;
     pendingDriftAlarmGateRef.current = alertKey;
     const gateGeneration = pendingDriftAlarmGateGenerationRef.current;
     const isCurrentGateAttempt = () => (
@@ -5761,7 +5789,15 @@ export default function App() {
         if (settledResult.kind === "suppress") {
           pendingDriftAlarmGateRef.current = null;
           pendingDriftAlarmGateGenerationRef.current += 1;
-          lastDriftAlertSegmentRef.current = alertKey;
+          if (settledResult.reason.startsWith("ai-unavailable:")
+            && segment.youtubeVideoId
+            && !selectedYouTubeDriftReason(segment)) {
+            unavailableYouTubeDriftAlarmGateRef.current = {
+              alertKey, videoId: segment.youtubeVideoId, reason: settledResult.reason,
+            };
+          } else {
+            lastDriftAlertSegmentRef.current = alertKey;
+          }
           recordDriftAlarmDebugEvent({
             kind: "delivery_suppressed",
             alertKey,

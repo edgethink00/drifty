@@ -15,6 +15,7 @@ import {
   type AiClassificationRunOptions,
   type LiveAiClassificationResult,
 } from "../classification/aiClassificationService";
+import { selectedYouTubeDriftReason } from "./youtubeDeterministicDrift";
 
 const DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS = 12_000;
 export const YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS = DEFAULT_YOUTUBE_DRIFT_ALARM_GATE_TIMEOUT_MS;
@@ -24,6 +25,9 @@ const AI_DRIFT_ALARM_MINIMUM_CONFIDENCE = 0.85;
 export type YouTubeDriftAlarmGateSettledResult =
   | { kind: "allow_drift"; reason: string; aiConfirmed: boolean }
   | { kind: "suppress"; reason: string }
+  // No extra AI veto. This does not classify a segment as drift: callers must
+  // select a drift candidate first and revalidate the current surface before
+  // delivery (including manual/user rules and stored focus/music exceptions).
   | { kind: "skipped"; reason: string };
 
 export type YouTubeDriftAlarmGateResult =
@@ -112,6 +116,8 @@ function resolveDriftAlarmGateSubject(segment: ActivitySegment): DriftAlarmGateS
   if (deterministicClassification.source !== "youtube" || deterministicClassification.productivity !== "drift") {
     return { kind: "skip", reason: "not-deterministic-youtube-drift" };
   }
+  const selectedReason = selectedYouTubeDriftReason(segment);
+  if (selectedReason) return { kind: "skip", reason: selectedReason };
   return { kind: "check" };
 }
 

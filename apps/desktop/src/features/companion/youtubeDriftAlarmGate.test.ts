@@ -55,6 +55,107 @@ describe("evaluateYouTubeDriftAlarmGate", () => {
     classifyLiveActivityWithAi.mockReset();
   });
 
+  function selectedVideo(overrides: Partial<ActivitySegment> = {}): ActivitySegment {
+    return createYouTubeVideoSegment({
+      youtubeVideoId: "gamingQA001",
+      siteUrl: "https://www.youtube.com/watch?v=gamingQA001",
+      youtubeTitle: "Minecraft survival episode 12",
+      youtubeCategory: "Gaming",
+      ...overrides,
+    });
+  }
+
+  it.each([
+    ["Gaming", "Minecraft survival episode 12", "gaming"],
+    ["  GAMING  ", "오늘의 게임 플레이", "gaming"],
+    ["Comedy", "스케치 코미디: 출근 첫날", "comedy"],
+    ["Comedy", "A stand-up comedy special", "comedy"],
+    ["Film & Animation", "Movie recap: the lost island", "recap"],
+    ["Film & Animation", "외계인의 침공 (결말 포함)", "recap"],
+  ])("bypasses AI for selected %s metadata (%s), even when AI is unavailable", async (youtubeCategory, youtubeTitle, suffix) => {
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: selectedVideo({ youtubeCategory, youtubeTitle }),
+      category: "entertainment",
+      allowAiClassification: false,
+    });
+    expect(result).toEqual({ kind: "skipped", reason: `youtube-selected-${suffix}` });
+    expect(classifyLiveActivityWithAi).not.toHaveBeenCalled();
+  });
+
+  it.each<Partial<ActivitySegment>>([
+    { youtubeTitle: "Study with Minecraft" },
+    { youtubeTitle: "Minecraft OST" },
+    { youtubeTitle: "Minecraft modding tutorial" },
+    { youtubeTitle: "게임 개발 강의" },
+    { youtubeDescription: "Learn game development with Unity" },
+    { youtubeKeywords: ["공부", "배경음악"] },
+    { youtubeCategory: "Comedy", youtubeTitle: "스케치 코미디 노래" },
+    { youtubeCategory: "Comedy", youtubeTitle: "Interview with a comedian" },
+    { youtubeCategory: "Film & Animation", youtubeTitle: "Movie recap analysis" },
+    { youtubeCategory: "Film & Animation", youtubeTitle: "Drawing a character" },
+    { youtubeCategory: "Entertainment", youtubeTitle: "결말 포함 영화 몰아보기" },
+    { youtubeCategory: "Sports", youtubeTitle: "Final match highlights" },
+    { youtubeCategory: "News & Politics" },
+    { youtubeCategory: "People & Blogs" },
+    { youtubeCategory: "Pets & Animals" },
+    { youtubeCategory: "Travel & Events" },
+    { youtubeCategory: "Autos & Vehicles" },
+    { youtubeCategory: "Nonprofits & Activism" },
+    { youtubeCategory: null },
+    { youtubeTitle: null },
+    { youtubeTitle: "   " },
+    { youtubeVideoId: "wrongQA0001" },
+    { siteUrl: "https://www.youtube.com/watch?v=otherQA0001" },
+    { siteUrl: "https://youtube.example/watch?v=gamingQA001" },
+    { siteUrl: "broken-url" },
+    { youtubeVideoId: null },
+  ])("keeps ambiguous or incomplete metadata on the AI path: %j", async (overrides) => {
+    classifyLiveActivityWithAi.mockResolvedValue({ kind: "unavailable", reason: "quota-exceeded" });
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: selectedVideo(overrides),
+      category: "entertainment",
+    });
+    expect(result).toEqual({ kind: "suppress", reason: "ai-unavailable:quota-exceeded" });
+    expect(classifyLiveActivityWithAi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each<Partial<ActivitySegment>>([
+    { youtubeCategory: "Music" },
+    { youtubeCategory: "Education" },
+    { youtubeCategory: "Science & Technology" },
+    { youtubeCategory: "Howto & Style" },
+    { youtubePlaylistId: "RDgamingQA001" },
+    { siteUrl: "https://www.youtube.com/watch?v=gamingQA001&list=RDgamingQA001" },
+    { siteDomain: "music.youtube.com", siteUrl: "https://music.youtube.com/watch?v=gamingQA001" },
+  ])("preserves predefined music/learning classification: %j", async (overrides) => {
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: selectedVideo(overrides), category: "entertainment",
+    });
+    expect(result).toEqual({ kind: "skipped", reason: "not-deterministic-youtube-drift" });
+    expect(classifyLiveActivityWithAi).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["youtu.be", "https://youtu.be/gamingQA001"],
+    ["m.youtube.com", "https://m.youtube.com/watch?v=gamingQA001"],
+  ])("recognizes matching %s watch metadata", async (siteDomain, siteUrl) => {
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: selectedVideo({ siteDomain, siteUrl }), category: "game",
+    });
+    expect(result).toEqual({ kind: "skipped", reason: "youtube-selected-gaming" });
+    expect(classifyLiveActivityWithAi).not.toHaveBeenCalled();
+  });
+
+  it("still requires AI for unresolved social surfaces", async () => {
+    classifyLiveActivityWithAi.mockResolvedValue({ kind: "unavailable", reason: "quota-exceeded" });
+    const result = await evaluateYouTubeDriftAlarmGate({
+      segment: selectedVideo({ siteDomain: "instagram.com", siteUrl: "https://www.instagram.com/direct/inbox/" }),
+      category: "social_media",
+    });
+    expect(result).toEqual({ kind: "suppress", reason: "ai-unavailable:quota-exceeded" });
+    expect(classifyLiveActivityWithAi).toHaveBeenCalledTimes(1);
+  });
+
   it("allows a non-Shorts YouTube drift video when AI confirms drift", async () => {
     classifyLiveActivityWithAi.mockResolvedValue({
       kind: "classified",
