@@ -25,12 +25,10 @@ export const PET_MODE_DRIFT_CURSOR_YANK_DISTANCE = 34;
 export const PET_MODE_DRIFT_CURSOR_GRIP_MS = 420;
 export const PET_MODE_DRIFT_CURSOR_LAG_MS = 0;
 /**
- * The cat may spend up to this long reaching the cursor position that began a
- * chase. This is a hidden safety bound, not part of the visible chase budget.
+ * Total time a chase may run. The cat follows the live cursor for the whole
+ * run, so this one budget covers reaching the pointer and keeping up with it.
  */
-export const PET_MODE_DRIFT_APPROACH_TIMEOUT_MS = 8_000;
-/** Time available only after the cursor escapes the cat's initial approach. */
-export const PET_MODE_DRIFT_CHASE_DURATION_MS = 2_500;
+export const PET_MODE_DRIFT_CHASE_DURATION_MS = 2_000;
 /**
  * Carry time selected by how much the pointer resisted during the approach.
  * The defaults preserve the reviewed 6s/2s/1s behavior, while Dev tuning may
@@ -53,7 +51,7 @@ export const PET_MODE_DRIFT_HUNT_ALERT_STORAGE_KEY = "drifty.pet.driftHuntAlertC
 export const PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY = "drifty.pet.driftHuntTuning.v1";
 export const PET_MODE_DRIFT_HUNT_TUNING_REVISION_STORAGE_KEY = "drifty.pet.driftHuntTuningRevision.v1";
 const PET_MODE_DRIFT_HUNT_TUNING_REVISION = "carry-6-2-1";
-const PET_MODE_DRIFT_CHASE_DURATION_REVISION = "post-approach-2.5";
+const PET_MODE_DRIFT_CHASE_DURATION_REVISION = "live-follow-2.0";
 export const PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS = 48;
 export const PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS = 500;
 export const PET_MODE_DRIFT_HUNT_TUNING_RANGES = {
@@ -212,8 +210,11 @@ export function resolvePetModeDriftHuntSettings(): PetModeDriftHuntSettings {
   const candidateChaseDuration = Number.isFinite(storedDuration) && storedDuration > 0
     ? storedDuration
     : tuning.chaseDurationMs;
+  // Both prior shipped defaults are migrated: the original single 8s budget and
+  // the 2.5s post-approach budget that preceded live-follow tracking. A value
+  // the user actually chose in Dev tuning is left alone.
   const carriesLegacyChaseDefault = storedDurationRevision !== PET_MODE_DRIFT_CHASE_DURATION_REVISION
-    && candidateChaseDuration === 8_000;
+    && (candidateChaseDuration === 8_000 || candidateChaseDuration === 2_500);
   const chaseDurationRange = PET_MODE_DRIFT_HUNT_TUNING_RANGES.chaseDurationMs;
   const boundedChaseDuration = typeof candidateChaseDuration === "number"
     && candidateChaseDuration >= chaseDurationRange.min

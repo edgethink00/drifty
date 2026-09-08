@@ -100,7 +100,7 @@ describe("petModeDriftHunt", () => {
     });
   });
 
-  it("migrates the legacy eight-second chase default to a post-approach 2.5-second budget", () => {
+  it("migrates both shipped chase defaults to the live-follow 2-second budget", () => {
     window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, "8000");
     window.localStorage.setItem(PET_MODE_DRIFT_HUNT_TUNING_STORAGE_KEY, JSON.stringify({
       chaseDurationMs: 8_000,
@@ -108,12 +108,25 @@ describe("petModeDriftHunt", () => {
     }));
 
     expect(resolvePetModeDriftHuntSettings()).toMatchObject({
-      chaseDurationMs: 2_500,
+      chaseDurationMs: 2_000,
       stalkSpeed: 180,
     });
-    expect(window.localStorage.getItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY)).toBe("2500");
+    expect(window.localStorage.getItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY)).toBe("2000");
     expect(window.localStorage.getItem(PET_MODE_DRIFT_CHASE_DURATION_REVISION_STORAGE_KEY))
-      .toBe("post-approach-2.5");
+      .toBe("live-follow-2.0");
+
+    window.localStorage.clear();
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, "2500");
+
+    expect(resolvePetModeDriftHuntSettings()).toMatchObject({ chaseDurationMs: 2_000 });
+    expect(window.localStorage.getItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY)).toBe("2000");
+  });
+
+  it("keeps a chase duration the user chose in Dev tuning", () => {
+    window.localStorage.setItem(PET_MODE_DRIFT_CHASE_DURATION_STORAGE_KEY, "4500");
+
+    expect(resolvePetModeDriftHuntSettings()).toMatchObject({ chaseDurationMs: 4_500 });
   });
 
   it("migrates only the legacy 6s/3s/2s carry defaults to the reviewed 6s/2s/1s tiers", () => {

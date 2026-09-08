@@ -253,8 +253,7 @@ describe("pet mode enabled bridge", () => {
     await stalkNativePetCursor({ ...DEFAULT_PET_MODE_DRIFT_HUNT_SETTINGS, enabled: true, mode: "single" });
     expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_stalk_cursor", {
       request: {
-        approachTimeoutMs: 3_200,
-        chaseDurationMs: 0,
+        durationMs: 3_200,
         biteGap: 0,
         captureRadius: 18,
         speed: 220,
@@ -272,8 +271,7 @@ describe("pet mode enabled bridge", () => {
     });
     expect(tauri.invoke).toHaveBeenLastCalledWith("pet_mode_stalk_cursor", {
       request: {
-        approachTimeoutMs: 8_000,
-        chaseDurationMs: 2_500,
+        durationMs: 2_000,
         biteGap: 0,
         captureRadius: 18,
         speed: 280,

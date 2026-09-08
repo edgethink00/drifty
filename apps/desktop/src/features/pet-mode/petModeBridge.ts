@@ -12,7 +12,6 @@ import type {
   PetModeWindowEvent,
 } from "./petModeData";
 import {
-  PET_MODE_DRIFT_APPROACH_TIMEOUT_MS,
   PET_MODE_DRIFT_CHASE_TURN_COOLDOWN_MS,
   PET_MODE_DRIFT_CHASE_TURN_HYSTERESIS,
   resolvePetModeDriftCursorReturnDuration,
@@ -254,8 +253,7 @@ export async function stalkNativePetCursor(settings: PetModeDriftHuntSettings): 
   const chase = settings.mode === "chase";
   return invoke<PetModeStalkResult>("pet_mode_stalk_cursor", {
     request: {
-      approachTimeoutMs: chase ? PET_MODE_DRIFT_APPROACH_TIMEOUT_MS : 3_200,
-      chaseDurationMs: chase ? settings.chaseDurationMs : 0,
+      durationMs: chase ? settings.chaseDurationMs : 3_200,
       biteGap: 0,
       captureRadius: settings.captureRadius,
       speed: settings.stalkSpeed,

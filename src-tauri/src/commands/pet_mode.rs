@@ -62,10 +62,12 @@ const PET_MODE_WALK_SPEED: f64 = 20.8;
 // this is just over four seconds, long enough to read without becoming roam.
 const PET_MODE_POST_DROP_WALK_DISTANCE: f64 = 84.0;
 const PET_MODE_POST_DROP_WALK_MAX_SECONDS: f64 = 5.0;
-const PET_MODE_STALK_MIN_APPROACH_TIMEOUT_MS: u64 = 600;
-const PET_MODE_STALK_MAX_APPROACH_TIMEOUT_MS: u64 = 8_000;
-const PET_MODE_STALK_MIN_CHASE_DURATION_MS: u64 = 600;
-const PET_MODE_STALK_MAX_CHASE_DURATION_MS: u64 = 8_000;
+const PET_MODE_STALK_MIN_DURATION_MS: u64 = 600;
+const PET_MODE_STALK_MAX_DURATION_MS: u64 = 8_000;
+// Hard ceiling for a distance-scaled chase. The grace above is what the user
+// picks; this bounds what the predicted travel may add to it, so no pointer
+// geometry can turn one hunt into a minutes-long pursuit.
+const PET_MODE_STALK_MAX_TOTAL_DURATION_MS: u64 = 20_000;
 const PET_MODE_STALK_MIN_SPEED: f64 = 80.0;
 const PET_MODE_STALK_MAX_SPEED: f64 = 360.0;
 const PET_MODE_STALK_MIN_BITE_GAP: f64 = 0.0;
@@ -380,8 +382,7 @@ pub struct PetModeCursorSample {
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PetModeStalkRequest {
-    approach_timeout_ms: u64,
-    chase_duration_ms: u64,
+    duration_ms: u64,
     bite_gap: f64,
     capture_radius: f64,
     speed: f64,
@@ -3261,19 +3262,10 @@ fn resident_seat_anchor_for_current_position(
 }
 
 fn validate_pet_mode_stalk_request(request: PetModeStalkRequest) -> Result<(), String> {
-    if !(PET_MODE_STALK_MIN_APPROACH_TIMEOUT_MS..=PET_MODE_STALK_MAX_APPROACH_TIMEOUT_MS)
-        .contains(&request.approach_timeout_ms)
+    if !(PET_MODE_STALK_MIN_DURATION_MS..=PET_MODE_STALK_MAX_DURATION_MS)
+        .contains(&request.duration_ms)
     {
-        return Err("Pet Mode stalk approach timeout is outside the safe range".to_string());
-    }
-    if request.retarget_cursor {
-        if !(PET_MODE_STALK_MIN_CHASE_DURATION_MS..=PET_MODE_STALK_MAX_CHASE_DURATION_MS)
-            .contains(&request.chase_duration_ms)
-        {
-            return Err("Pet Mode follow-up chase duration is outside the safe range".to_string());
-        }
-    } else if request.chase_duration_ms != 0 {
-        return Err("Pet Mode single-target stalk cannot include a chase duration".to_string());
+        return Err("Pet Mode stalk duration is outside the safe range".to_string());
     }
     if !request.bite_gap.is_finite()
         || !(PET_MODE_STALK_MIN_BITE_GAP..=PET_MODE_STALK_MAX_BITE_GAP).contains(&request.bite_gap)
@@ -3565,15 +3557,31 @@ fn pet_mode_stalk_step(
     )
 }
 
-fn pet_mode_stalk_budget_expired(
-    request: PetModeStalkRequest,
-    approach_elapsed: Duration,
-    chase_elapsed: Option<Duration>,
-) -> bool {
-    match chase_elapsed {
-        Some(elapsed) => elapsed >= Duration::from_millis(request.chase_duration_ms),
-        None => approach_elapsed >= Duration::from_millis(request.approach_timeout_ms),
+/// Total time a chase may run, scaled to how far the pointer actually is.
+///
+/// A fixed budget cannot serve both a cursor beside the cat and one across the
+/// screen: the same number is generous for the first and impossible for the
+/// second. So predict the straight-line travel at the stalk speed and add the
+/// configured grace on top. The grace is the part that pays for a pointer that
+/// keeps moving, which is what the user is really choosing.
+///
+/// `speed` is in points per second and `distance` in points, both already in
+/// the same physical space as the caller's geometry.
+fn pet_mode_stalk_duration_ms(distance: f64, speed: f64, grace_ms: u64) -> u64 {
+    if !distance.is_finite() || !speed.is_finite() || speed <= 0.0 {
+        return grace_ms;
     }
+    let predicted_ms = (distance.max(0.0) / speed * 1_000.0).round();
+    // Saturate instead of wrapping: an absurd predicted travel must not turn
+    // into a tiny budget once it leaves f64 range.
+    let predicted_ms = if predicted_ms >= u64::MAX as f64 {
+        u64::MAX
+    } else {
+        predicted_ms as u64
+    };
+    predicted_ms
+        .saturating_add(grace_ms)
+        .min(PET_MODE_STALK_MAX_TOTAL_DURATION_MS)
 }
 
 #[cfg(target_os = "macos")]
@@ -3674,9 +3682,9 @@ fn stalk_pet_toward_cursor(
     }
 
     let motion_revision = PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed) + 1;
-    // Both modes first approach the cursor position captured here. Chase mode
-    // starts retargeting only if the pointer has escaped that position by the
-    // time the cat arrives, so initial travel never consumes the chase budget.
+    // Single-attempt mode captures one target. Chase mode refreshes it every
+    // frame, so a pointer that moves is followed live instead of walked to
+    // where it used to be, bounded by the budget below and turn hysteresis.
     let intent = capture_pet_mode_stalk_intent(
         (initial_position.x as f64, initial_position.y as f64),
         cursor_point,
@@ -3692,10 +3700,24 @@ fn stalk_pet_toward_cursor(
     emit_pet_event(&window, json!({ "kind": "motion", "motion": "stalk" }))?;
     thread::sleep(Duration::from_millis(34));
 
-    let approach_started_at = Instant::now();
-    let mut chase_started_at: Option<Instant> = None;
+    let started_at = Instant::now();
+    // Chase scales its budget to the opening distance so a far pointer gets the
+    // travel it needs and `duration_ms` stays pure grace. Single-attempt mode
+    // keeps its own fixed bound, since it never follows a moving pointer.
+    let duration = Duration::from_millis(if request.retarget_cursor {
+        pet_mode_stalk_duration_ms(
+            pet_mode_cursor_movement_distance(
+                intent.target,
+                (initial_position.x as f64, initial_position.y as f64),
+            ),
+            request.speed * scale_factor,
+            request.duration_ms,
+        )
+    } else {
+        request.duration_ms
+    });
     let turn_cooldown = Duration::from_millis(request.turn_cooldown_ms);
-    let mut last_turn_at = approach_started_at;
+    let mut last_turn_at = started_at;
     let mut last_frame_at = Instant::now();
     let outcome = loop {
         if PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != motion_revision {
@@ -3716,7 +3738,7 @@ fn stalk_pet_toward_cursor(
         }
         let position = window.outer_position().map_err(|error| error.to_string())?;
         let current = (position.x as f64, position.y as f64);
-        if chase_started_at.is_some() {
+        if request.retarget_cursor {
             captured_cursor = cursor;
             let next_facing = pet_mode_chase_facing(
                 current,
@@ -3739,14 +3761,10 @@ fn stalk_pet_toward_cursor(
                 work_area,
             );
         }
-        if pet_mode_stalk_budget_expired(
-            request,
-            approach_started_at.elapsed(),
-            chase_started_at.map(|started_at| started_at.elapsed()),
-        ) {
-            // Initial approach and follow-up chase have independent bounds.
-            // Only an actual final stalk step below may produce `Completed`
-            // and unlock the bite/carry sequence.
+        if started_at.elapsed() >= duration {
+            // A target that cannot be reached within its budget is a miss, not
+            // mouth contact. Only an actual final stalk step below may produce
+            // `Completed` and unlock the bite/carry sequence.
             break PetModeStalkOutcome::TimedOut;
         }
         let elapsed = last_frame_at
@@ -3766,45 +3784,6 @@ fn stalk_pet_toward_cursor(
                 next.1.round() as i32,
             ))
             .map_err(|error| error.to_string())?;
-        if reached_target && request.retarget_cursor && chase_started_at.is_none() {
-            if pet_mode_cursor_within_capture(
-                cursor,
-                cursor_point,
-                request.capture_radius * scale_factor,
-            ) {
-                captured_cursor = cursor;
-                break PetModeStalkOutcome::Completed;
-            }
-
-            // The cat has reached the coordinate where the chase began, but
-            // the pointer escaped. Start the visible follow-up budget now,
-            // retarget once from the landed position, and never reset it on
-            // later pointer movement.
-            let chase_started = Instant::now();
-            chase_started_at = Some(chase_started);
-            captured_cursor = cursor;
-            let next_facing = pet_mode_chase_facing(
-                next,
-                cursor,
-                panel_size,
-                facing,
-                request.turn_hysteresis * scale_factor,
-                true,
-            );
-            if next_facing != facing {
-                facing = next_facing;
-                emit_pet_event(&window, json!({ "kind": "facing", "facing": facing }))?;
-            }
-            last_turn_at = chase_started;
-            target = pet_mode_stalk_target(
-                cursor,
-                panel_size,
-                facing,
-                request.bite_gap * scale_factor,
-                work_area,
-            );
-            continue;
-        }
         if reached_target {
             break PetModeStalkOutcome::Completed;
         }
@@ -4857,10 +4836,33 @@ mod tests {
     }
 
     #[test]
+    fn chase_budget_scales_with_the_opening_distance() {
+        // 660pt at 220pt/s is 3s of predicted travel, so a 2s grace yields 5s.
+        assert_eq!(pet_mode_stalk_duration_ms(660.0, 220.0, 2_000), 5_000);
+        // Twice the distance earns twice the travel, and the grace is untouched.
+        assert_eq!(pet_mode_stalk_duration_ms(1_320.0, 220.0, 2_000), 8_000);
+        // A pointer already under the cat still gets its full grace.
+        assert_eq!(pet_mode_stalk_duration_ms(0.0, 220.0, 2_000), 2_000);
+        // A faster cat predicts less travel for the same distance.
+        assert_eq!(pet_mode_stalk_duration_ms(660.0, 330.0, 2_000), 4_000);
+        // Degenerate geometry falls back to the grace alone rather than
+        // dividing by zero or saturating into an effectively unbounded chase.
+        assert_eq!(pet_mode_stalk_duration_ms(660.0, 0.0, 2_000), 2_000);
+        assert_eq!(pet_mode_stalk_duration_ms(f64::NAN, 220.0, 2_000), 2_000);
+        assert_eq!(pet_mode_stalk_duration_ms(f64::INFINITY, 220.0, 2_000), 2_000);
+        assert_eq!(pet_mode_stalk_duration_ms(660.0, f64::NAN, 2_000), 2_000);
+        assert_eq!(pet_mode_stalk_duration_ms(-50.0, 220.0, 2_000), 2_000);
+        // However far the pointer is, one hunt stays inside the hard ceiling.
+        assert_eq!(
+            pet_mode_stalk_duration_ms(100_000.0, 220.0, 2_000),
+            PET_MODE_STALK_MAX_TOTAL_DURATION_MS,
+        );
+    }
+
+    #[test]
     fn stalk_request_rejects_unbounded_motion() {
         let valid = PetModeStalkRequest {
-            approach_timeout_ms: 3_200,
-            chase_duration_ms: 0,
+            duration_ms: 3_200,
             bite_gap: 0.0,
             capture_radius: 18.0,
             speed: 220.0,
@@ -4870,30 +4872,23 @@ mod tests {
         };
         assert!(validate_pet_mode_stalk_request(valid).is_ok());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            approach_timeout_ms: 8_000,
+            duration_ms: 8_000,
             ..valid
         })
         .is_ok());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            approach_timeout_ms: 8_001,
+            duration_ms: 8_001,
             ..valid
         })
         .is_err());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
             retarget_cursor: true,
-            chase_duration_ms: 2_500,
-            approach_timeout_ms: 8_000,
+            duration_ms: 2_000,
             ..valid
         })
         .is_ok());
         assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            retarget_cursor: true,
-            chase_duration_ms: 8_001,
-            ..valid
-        })
-        .is_err());
-        assert!(validate_pet_mode_stalk_request(PetModeStalkRequest {
-            chase_duration_ms: 2_500,
+            duration_ms: 599,
             ..valid
         })
         .is_err());
@@ -4907,41 +4902,6 @@ mod tests {
             ..valid
         })
         .is_err());
-    }
-
-    #[test]
-    fn stalk_budget_starts_the_chase_clock_only_after_initial_approach() {
-        let chase = PetModeStalkRequest {
-            approach_timeout_ms: 8_000,
-            chase_duration_ms: 2_500,
-            bite_gap: 0.0,
-            capture_radius: 18.0,
-            speed: 220.0,
-            retarget_cursor: true,
-            turn_hysteresis: 48.0,
-            turn_cooldown_ms: 500,
-        };
-
-        assert!(!pet_mode_stalk_budget_expired(
-            chase,
-            Duration::from_millis(7_999),
-            None,
-        ));
-        assert!(pet_mode_stalk_budget_expired(
-            chase,
-            Duration::from_millis(8_000),
-            None,
-        ));
-        assert!(!pet_mode_stalk_budget_expired(
-            chase,
-            Duration::from_millis(8_000),
-            Some(Duration::from_millis(2_499)),
-        ));
-        assert!(pet_mode_stalk_budget_expired(
-            chase,
-            Duration::from_millis(8_000),
-            Some(Duration::from_millis(2_500)),
-        ));
     }
 
     #[test]
