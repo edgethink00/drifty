@@ -7,6 +7,7 @@ import {
   CATEGORY_COLOR_OPTIONS,
 } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
+import { SettingsSelect } from "./SettingsSelect";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 
 type AppearanceSettingsSectionProps = {
@@ -39,7 +40,15 @@ export function AppearanceSettingsSection({
   return (
     <div className="settings-section settings-section--appearance">
       <div className="settings-block"><h3>{t("settings.section.appearance")}</h3>
-        <div data-setting-id="settings.appearance.theme" className="settings-row"><div><div className="lbl">{t("settings.appearance.theme")}</div><div className="desc">{t("settings.appearance.themeDescription")}</div></div><div className="ctrl"><div className="settings-mode-switch" role="radiogroup" aria-label={t("settings.appearance.theme")}><button type="button" className={`settings-mode-option${theme === "light" ? " is-active" : ""}`} role="radio" aria-checked={theme === "light"} onClick={() => onThemeChange("light")}><span>{t("settings.appearance.light")}</span></button><button type="button" className={`settings-mode-option${theme === "dark" ? " is-active" : ""}`} role="radio" aria-checked={theme === "dark"} onClick={() => onThemeChange("dark")}><span>{t("settings.appearance.dark")}</span></button></div></div></div>
+        <div data-setting-id="settings.appearance.theme" className="settings-row"><div><div className="lbl">{t("settings.appearance.theme")}</div><div className="desc">{t("settings.appearance.themeDescription")}</div></div><div className="ctrl"><SettingsSelect
+          ariaLabel={t("settings.appearance.theme")}
+          value={theme}
+          options={[
+            { value: "light", label: t("settings.appearance.light") },
+            { value: "dark", label: t("settings.appearance.dark") },
+          ]}
+          onChange={onThemeChange}
+        /></div></div>
       </div>
       <div className="settings-block"><h3>{t("settings.appearance.colors")}</h3>
         <SettingsCollapsibleCard searchReveal="appearance-colors"

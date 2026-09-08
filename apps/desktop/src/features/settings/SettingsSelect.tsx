@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, ReactNode } from "react";
 
 /** A trailing action button rendered inside an option row (e.g. Download, Delete, Show in Finder). */
@@ -72,6 +72,10 @@ type SettingsSelectProps<TValue extends string> = {
   readonly triggerVisual?: ReactNode;
   /** Shown (greyed) in the trigger when `value` matches no option — a "nothing selected yet" state. */
   readonly placeholder?: string;
+  /** Align the selected row with the trigger instead of opening below it. */
+  readonly placement?: "below" | "selected";
+  /** Show every option when the viewport permits, rather than capping at 320px. */
+  readonly menuSize?: "bounded" | "content";
 };
 
 type SettingsSelectStyle = CSSProperties & {
@@ -90,10 +94,15 @@ export function SettingsSelect<TValue extends string>({
   className,
   triggerVisual,
   placeholder,
+  placement = triggerVisual ? "below" : "selected",
+  menuSize = "bounded",
 }: SettingsSelectProps<TValue>) {
   const controlId = useId();
   const listboxId = `${controlId}-listbox`;
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuWasOpen = useRef(false);
+  const keyboardNavigation = useRef(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const selectedIndex = Math.max(0, options.findIndex((option) => option.value === value));
   const matchedOption = options.find((option) => option.value === value);
@@ -116,8 +125,115 @@ export function SettingsSelect<TValue extends string>({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isOpen) setActiveIndex(activeIndexForOptions(options, selectedIndex));
+    setActiveIndex((current) => isOpen && options[current] && !options[current].disabled
+      ? current
+      : activeIndexForOptions(options, selectedIndex));
   }, [isOpen, options, selectedIndex]);
+
+  useLayoutEffect(() => {
+    if (!isOpen || placement !== "selected") return;
+    const menu = menuRef.current;
+    const trigger = triggerRef.current;
+    const root = rootRef.current;
+    if (!menu || !trigger || !root) return;
+
+    function positionMenu() {
+      if (!menu || !trigger || !root) return;
+      const anchor = trigger.getBoundingClientRect();
+      // Fixed positioning escapes the saved-rules list's scroll clipping while
+      // keeping the menu inside the control for focus and dialog handling.
+      menu.style.position = "fixed";
+      menu.style.top = "0px";
+      menu.style.left = "0px";
+      menu.style.margin = "0px";
+      const origin = menu.getBoundingClientRect();
+      const row = menu.querySelectorAll<HTMLElement>(".settings-select-control__option")[selectedIndex];
+      let maxHeight = menuSize === "content" ? window.innerHeight - 16 : Math.min(320, window.innerHeight - 16);
+      menu.style.maxHeight = `${maxHeight}px`;
+      menu.scrollTop = 0;
+      // Measure the longest option including its check slot, independently of
+      // the current trigger label and of the previous opening's inline width.
+      menu.style.width = "max-content";
+      const width = Math.min(Math.max(anchor.width + 12, menu.getBoundingClientRect().width), Math.min(480, window.innerWidth - 16));
+      menu.style.width = `${width}px`;
+      let height = menu.getBoundingClientRect().height;
+      // Match rendered text rather than row centers: borders, padding and
+      // fractional line boxes otherwise move the label slightly on opening.
+      const triggerText = trigger.querySelector<HTMLElement>("[data-select-label]");
+      const optionText = row?.querySelector<HTMLElement>("[data-select-label]");
+      const menuRect = menu.getBoundingClientRect();
+      const labelRect = triggerText?.getBoundingClientRect();
+      const optionRect = optionText?.getBoundingClientRect();
+      const rowRect = row?.getBoundingClientRect();
+      const desiredTop = labelRect && optionRect
+        ? menuRect.top + labelRect.top - optionRect.top
+        : menuRect.top + anchor.top + anchor.height / 2 - (rowRect ? rowRect.top + rowRect.height / 2 : menuRect.top);
+      const desiredLeft = labelRect && optionRect
+        ? menuRect.left + labelRect.left - optionRect.left
+        : anchor.left - 6;
+      // Preserve label alignment while there is room for a useful list. At a
+      // viewport edge, prefer a readable popup over a one-row scroll window.
+      const borderHeight = menu.offsetHeight - menu.clientHeight;
+      const alignedHeight = Math.max(24, Math.min(
+        maxHeight,
+        window.innerHeight - 8 - Math.max(8, desiredTop),
+        desiredTop + menu.scrollHeight + borderHeight - 8,
+      ));
+      const minimumUsefulHeight = Math.min(height, (rowRect?.height ?? anchor.height) * 3 + 12);
+      if (menuSize === "bounded" && alignedHeight >= minimumUsefulHeight) maxHeight = alignedHeight;
+      menu.style.maxHeight = `${maxHeight}px`;
+      height = menu.getBoundingClientRect().height;
+      const maxScroll = Math.max(0, menu.scrollHeight - menu.clientHeight);
+      const lowerTop = Math.max(8, desiredTop);
+      const upperTop = Math.min(window.innerHeight - height - 8, desiredTop + maxScroll);
+      const preferredTop = maxScroll > 0 ? anchor.top + anchor.height / 2 - height / 2 : desiredTop;
+      let top = lowerTop <= upperTop
+        ? Math.max(lowerTop, Math.min(preferredTop, upperTop))
+        : Math.max(8, Math.min(desiredTop, window.innerHeight - height - 8));
+      const requestedScroll = Math.max(0, Math.min(top - desiredTop, maxScroll));
+      menu.scrollTop = requestedScroll;
+      // Scroll offsets may be rounded to device pixels. Compensate in the
+      // floating position so the text stays aligned at fractional font sizes.
+      top = Math.max(8, Math.min(top + menu.scrollTop - requestedScroll, window.innerHeight - height - 8));
+      const left = Math.max(8, Math.min(desiredLeft, window.innerWidth - width - 8));
+      Object.assign(menu.style, {
+        position: "fixed", margin: "0px", right: "auto",
+        top: `${top - origin.top}px`, left: `${left - origin.left}px`,
+        width: `${width}px`, maxHeight: `${maxHeight}px`,
+      });
+    }
+
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    // The popup belongs to this scrolled surface; close when that surface moves.
+    function handleScroll(event: Event) {
+      if (event.target instanceof Node && menu?.contains(event.target)) return;
+      setIsOpen(false);
+    }
+    document.addEventListener("scroll", handleScroll, true);
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      document.removeEventListener("scroll", handleScroll, true);
+    };
+  }, [isOpen, placement, menuSize, selectedIndex, options]);
+
+  useLayoutEffect(() => {
+    const justOpened = !menuWasOpen.current;
+    menuWasOpen.current = isOpen;
+    if (!isOpen || (justOpened && placement === "selected" && activeIndex === selectedIndex)) return;
+    if (!justOpened && !keyboardNavigation.current) return;
+    scrollOptionIntoView(activeIndex);
+  }, [isOpen, activeIndex, placement, selectedIndex]);
+
+  function scrollOptionIntoView(index: number) {
+    const menu = menuRef.current;
+    const row = menu?.querySelectorAll<HTMLElement>(".settings-select-control__option")[index];
+    if (!menu || !row) return;
+    const bounds = menu.getBoundingClientRect();
+    const item = row.getBoundingClientRect();
+    if (item.top < bounds.top + 6) menu.scrollTop -= bounds.top + 6 - item.top;
+    else if (item.bottom > bounds.bottom - 6) menu.scrollTop += item.bottom - bounds.bottom + 6;
+  }
 
   if (!selectedOption) return null;
 
@@ -135,10 +251,13 @@ export function SettingsSelect<TValue extends string>({
     if (option.disabled) return;
     if (option.value !== value) onChange(option.value);
     setIsOpen(false);
+    triggerRef.current?.focus({ preventScroll: true });
   }
 
   function moveActiveIndex(direction: 1 | -1) {
-    setActiveIndex((current) => nextEnabledIndex(options, current, direction));
+    const next = nextEnabledIndex(options, activeIndex, direction);
+    setActiveIndex(next);
+    scrollOptionIntoView(next);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -156,6 +275,7 @@ export function SettingsSelect<TValue extends string>({
       return;
     }
 
+    if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) keyboardNavigation.current = true;
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault();
@@ -170,11 +290,13 @@ export function SettingsSelect<TValue extends string>({
       case "Home":
         event.preventDefault();
         setActiveIndex(firstEnabledIndex(options));
+        scrollOptionIntoView(firstEnabledIndex(options));
         setIsOpen(true);
         break;
       case "End":
         event.preventDefault();
         setActiveIndex(lastEnabledIndex(options));
+        scrollOptionIntoView(lastEnabledIndex(options));
         setIsOpen(true);
         break;
       case "Enter":
@@ -184,6 +306,10 @@ export function SettingsSelect<TValue extends string>({
         else openMenu();
         break;
       case "Escape":
+        if (isOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
         setIsOpen(false);
         break;
     }
@@ -198,6 +324,7 @@ export function SettingsSelect<TValue extends string>({
     <div
       ref={rootRef}
       className={rootClassName}
+      data-placement={placement}
       data-open={isOpen ? "true" : undefined}
       data-has-accent={selectedOption.accentColor ? "true" : undefined}
       data-placeholder={showPlaceholder ? "true" : undefined}
@@ -224,14 +351,14 @@ export function SettingsSelect<TValue extends string>({
           <>
             <span className="settings-select-control__value">
               {showPlaceholder ? null : <OptionIcon option={selectedOption} />}
-              <span>{showPlaceholder ? placeholder : selectedOption.displayLabel ?? selectedOption.label}</span>
+              <span data-select-label>{showPlaceholder ? placeholder : selectedOption.displayLabel ?? selectedOption.label}</span>
             </span>
             <span className="settings-select-control__chevron" aria-hidden="true" />
           </>
         )}
       </button>
       {isOpen ? (
-        <div className="settings-select-control__menu" id={listboxId} role="listbox" aria-label={ariaLabel}>
+        <div ref={menuRef} style={placement === "selected" ? { position: "fixed", margin: 0 } : undefined} className="settings-select-control__menu" id={listboxId} role="listbox" aria-label={ariaLabel}>
           {options.map((option, index) => {
             const optionDisabled = option.disabled === true;
             const showsSelectedState = option.value === value && !optionDisabled;
@@ -260,15 +387,17 @@ export function SettingsSelect<TValue extends string>({
                   data-has-accent={option.accentColor ? "true" : undefined}
                   disabled={optionDisabled}
                   style={optionStyle(option.accentColor)}
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => chooseOption(option)}
                   onMouseEnter={() => {
+                    keyboardNavigation.current = false;
                     if (!optionDisabled) setActiveIndex(index);
                   }}
                 >
                   <OptionIcon option={option} />
                   <span className="settings-select-control__option-label">
                     <span className={option.statusLabel ? "settings-select-control__option-title-with-status" : undefined}>
-                      <span>{option.displayLabel ?? option.label}</span>
+                      <span data-select-label>{option.displayLabel ?? option.label}</span>
                       {option.statusLabel ? (
                         <span className="settings-select-control__option-status" id={`${optionId(option.value)}-status`}>
                           {option.statusLabel}
@@ -277,6 +406,7 @@ export function SettingsSelect<TValue extends string>({
                     </span>
                     {option.description ? <span className="settings-select-control__option-description" id={`${optionId(option.value)}-description`}>{option.description}</span> : null}
                   </span>
+                  {placement === "selected" ? <span className="settings-select-control__check" aria-hidden="true">{showsSelectedState ? "✓" : ""}</span> : null}
                 </button>
                 {rowActions.length > 0 ? (
                   <span className="settings-select-control__option-actions">
@@ -289,7 +419,7 @@ export function SettingsSelect<TValue extends string>({
                         title={action.label}
                         disabled={action.disabled}
                         aria-busy={action.busy || undefined}
-                        onFocus={() => setActiveIndex(index)}
+                        onFocus={() => { keyboardNavigation.current = true; setActiveIndex(index); }}
                         onClick={(event) => {
                           event.stopPropagation();
                           // Async actions can disable or replace this button. Keep

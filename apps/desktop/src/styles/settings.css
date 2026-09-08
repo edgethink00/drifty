@@ -1016,3 +1016,120 @@
 
 .settings-avatar-info .nm { font-size: 0.90625rem; font-weight: 600; }
 .settings-avatar-info .sub { font-family: var(--font-mono); font-size: 0.71875rem; color: var(--text-soft); margin-top: 2px; }
+
+/* Shared text selects align their selected label with the trigger. */
+.settings-select-control[data-placement="selected"] .settings-select-control__trigger,
+.settings-select-control[data-placement="selected"] .settings-select-control__option {
+  height: calc(var(--settings-control-height, 2.25rem) * 1.15);
+  min-height: calc(var(--settings-control-height, 2.25rem) * 1.15);
+}
+
+.settings-select-control[data-placement="selected"] {
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__trigger {
+  min-width: 0;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  font-weight: 400;
+}
+
+.settings-select-control[data-placement="selected"][data-open="true"] { z-index: var(--z-settings-popover); }
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron {
+  position: relative;
+  width: 12px;
+  height: 16px;
+  margin-left: 0;
+  border: 0;
+  transform: none;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron::before,
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron::after {
+  position: absolute;
+  left: 3px;
+  width: 5px;
+  height: 5px;
+  border-top: 1.5px solid currentColor;
+  border-left: 1.5px solid currentColor;
+  content: "";
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron::before { top: 2px; transform: rotate(45deg); }
+.settings-select-control[data-placement="selected"] .settings-select-control__chevron::after { bottom: 2px; transform: rotate(225deg); }
+.settings-select-control[data-placement="selected"] .settings-select-control__menu {
+  padding: 5px;
+  align-content: start;
+  min-width: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%), 0 2px 5px rgb(0 0 0 / 8%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__option {
+  height: auto;
+  transform: none;
+  min-height: calc(var(--settings-control-height, 2.25rem) * 1.15);
+  border-radius: 9px;
+  font-family: var(--font-mono);
+  font-size: var(--type-input-size);
+  font-weight: 400;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__option.is-selected {
+  background: transparent;
+  color: var(--text);
+  font-weight: 400;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__option.is-active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text) 8%, var(--surface));
+  color: var(--text);
+}
+
+.settings-select-control[data-placement="selected"] .settings-select-control__check {
+  flex: 0 0 14px;
+  margin-left: auto;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1;
+  text-align: center;
+}
+
+/* Use the same text box on both sides of the selected-row transition. */
+.settings-select-control[data-placement="selected"] [data-select-label] {
+  display: inline-block;
+  line-height: 1;
+}
+
+.settings-select-control[data-placement="selected"] .settings-select-control__option:has(.settings-select-control__option-description) {
+  padding-block: var(--space-2);
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__option.is-disabled.is-active {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* Keep overflow discoverable even when macOS hides its overlay scrollbars. */
+.settings-select-control[data-placement="selected"] .settings-select-control__menu {
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__menu::-webkit-scrollbar {
+  width: 8px;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__menu::-webkit-scrollbar-track {
+  background: transparent;
+  margin-block: 8px;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__menu::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text) 35%, transparent);
+  background-clip: padding-box;
+}
+.settings-select-control[data-placement="selected"] .settings-select-control__menu::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--text) 55%, transparent);
+}

@@ -459,8 +459,8 @@
   display: inline-flex;
   justify-content: center;
   min-width: 10rem;
-  height: var(--settings-control-height);
-  min-height: var(--settings-control-height);
+  height: calc(var(--settings-control-height) * 1.15);
+  min-height: calc(var(--settings-control-height) * 1.15);
   padding: 0 var(--space-3);
   border: 1px solid var(--settings-control-border);
   border-radius: var(--radius-sm);

@@ -144,7 +144,6 @@ export function ClassificationRulesManager({
   const exactUrlValue = canonicalizeClassificationRuleSiteUrl(domainRuleInput);
   const exactUrlAvailable = Boolean(exactUrlValue);
   const effectiveDomainRuleMode = domainRuleMode === "url" && exactUrlAvailable ? "url" : "domain";
-  const domainRuleSaveLabel = effectiveDomainRuleMode === "url" ? t("settings.classification.saveUrl") : t("settings.classification.saveDomain");
 
   return (
     <div data-setting-id="classification.rules.title" className="settings-section settings-section--classification classification-rules-manager">
@@ -221,7 +220,7 @@ export function ClassificationRulesManager({
               ) : null}
               <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.domainCategoryAria")} value={domainRuleCategory} options={CATEGORY_ORDER} getLabel={(category) => localizedCategoryLabel(category, t)} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={onDomainRuleCategoryChange} />
               <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.domainProductivityAria")} value={domainRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={(productivity) => localizedProductivityLabel(productivity, t)} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onDomainRuleProductivityChange} variant="productivity" />
-              <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveDomainRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? t("settings.classification.saving") : domainRuleSaveLabel}</button>
+              <button type="button" className="settings-btn settings-btn--primary" aria-label={t(effectiveDomainRuleMode === "url" ? "settings.classification.saveUrl" : "settings.classification.saveDomain")} onClick={onSaveDomainRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "site" ? t("settings.classification.saving") : t("common.save")}</button>
             </div>
             {effectiveDomainRuleMode === "url" && exactUrlValue ? <p className="classification-rule-selected classification-rule-selected--url" role="status">{t("settings.classification.exactUrlSelected", { url: exactUrlValue })}</p> : null}
           </div>
@@ -255,7 +254,7 @@ export function ClassificationRulesManager({
               </div>
               <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.appCategoryAria")} value={appRuleCategory} options={CATEGORY_ORDER} getLabel={(category) => localizedCategoryLabel(category, t)} getColor={(category) => categoryControlColor(category, categoryColorOverrides)} onChange={onAppRuleCategoryChange} />
               <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.appProductivityAria")} value={appRuleProductivity} options={PRODUCTIVITY_ORDER} getLabel={(productivity) => localizedProductivityLabel(productivity, t)} getColor={(productivity) => productivityControlColor(productivity, appThemeColorOverrides)} onChange={onAppRuleProductivityChange} variant="productivity" />
-              <button type="button" className="settings-btn settings-btn--primary" onClick={onSaveAppRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "app" ? t("settings.classification.saving") : t("settings.classification.saveApp")}</button>
+              <button type="button" className="settings-btn settings-btn--primary" aria-label={t("settings.classification.saveApp")} onClick={onSaveAppRule} disabled={classificationRuleSavingKind !== null}>{classificationRuleSavingKind === "app" ? t("settings.classification.saving") : t("common.save")}</button>
             </div>
             {appRuleDisplayName ? <p className="classification-rule-selected" role="status">{t("settings.classification.selectedApp", { app: appRuleDisplayName })}</p> : null}
           </div>

@@ -124,7 +124,10 @@ describe("Settings content styles", () => {
     ]);
     expect(selectedOptionRule).toContain("background: color-mix(in srgb, var(--surface-strong) 82%, var(--accent-soft));");
     expect(hoverOptionRule).toContain("background: color-mix(in srgb, var(--surface-strong) 90%, var(--accent-soft));");
-    expect(styles).not.toContain(".settings-select-control__check");
+    // Below-trigger selects keep their fill-only selection; the in-place picker
+    // uses a check so hover and the committed value can be shown separately.
+    expect(styles).not.toMatch(/(?:^|\n)\.settings-select-control__check\s*\{/);
+    expect(cssRule(styles, '.settings-select-control[data-placement="selected"] .settings-select-control__check')).toContain("margin-left: auto;");
     expectRuleToContain(aiActionRowRule, [
       "gap: 0;",
       "grid-template-columns: minmax(0, 1fr);",

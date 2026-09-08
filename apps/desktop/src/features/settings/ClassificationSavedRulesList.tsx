@@ -184,11 +184,11 @@ function ClassificationSavedRuleCard({
             <ClassificationPicker label={t("settings.classification.category")} ariaLabel={t("settings.classification.category")} value={category} options={CATEGORY_ORDER} getLabel={(value) => localizedCategoryLabel(value, t)} getColor={(value) => categoryControlColor(value, categoryColorOverrides)} onChange={setCategory} />
             <ClassificationPicker label={t("settings.classification.productivity")} ariaLabel={t("settings.classification.productivity")} value={productivity} options={PRODUCTIVITY_ORDER} getLabel={(value) => localizedProductivityLabel(value, t)} getColor={(value) => productivityControlColor(value, appThemeColorOverrides)} onChange={setProductivity} variant="productivity" />
           </fieldset>
-          <p>{t("classification.rules.editNotice")}</p>
           <div className="classification-rule-card__form-actions">
             <button type="button" className="settings-btn" onClick={() => setEditing(false)} disabled={busy}>{t("common.cancel")}</button>
-            <button type="submit" className="settings-btn settings-btn--primary" disabled={busy}>{t(busy ? "settings.classification.saving" : "classification.rules.save")}</button>
+            <button type="submit" className="settings-btn settings-btn--primary" aria-label={t(busy ? "settings.classification.saving" : "classification.rules.save")} disabled={busy}>{t(busy ? "settings.classification.saving" : "common.save")}</button>
           </div>
+          <p>{t("classification.rules.editNotice")}</p>
         </form>
       ) : null}
       {confirmDelete ? (

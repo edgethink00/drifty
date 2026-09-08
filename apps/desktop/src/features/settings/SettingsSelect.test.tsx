@@ -113,14 +113,14 @@ describe("SettingsSelect row actions", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
 
-  it("marks the current value with a selected fill instead of a trailing check", () => {
+  it("marks the current value with a check independently of hover", () => {
     renderSelect();
     fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
 
     const selected = screen.getByRole("option", { name: "Current model" });
     expect(selected.classList.contains("is-selected")).toBe(true);
     expect(selected.getAttribute("aria-selected")).toBe("true");
-    expect(selected.querySelector(".settings-select-control__check")).toBeNull();
+    expect(selected.querySelector(".settings-select-control__check")?.textContent).toBe("✓");
     expect(screen.getByRole("option", { name: "Local model" }).classList.contains("is-selected")).toBe(false);
   });
 
@@ -181,5 +181,61 @@ describe("SettingsSelect row actions", () => {
     act(() => reopenedUpgrade.focus());
     fireEvent.blur(reopenedUpgrade, { relatedTarget: screen.getByRole("button", { name: "After select" }) });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
+});
+
+describe("SettingsSelect selected-row placement", () => {
+  const options = [{ value: "en", label: "English" }, { value: "ko", label: "한국어" }];
+
+  it("keeps selection distinct from hover and restores trigger focus after choosing", () => {
+    const onChange = vi.fn();
+    render(<SettingsSelect placement="selected" ariaLabel="Language" value="ko" options={options} onChange={onChange} />);
+    const trigger = screen.getByRole("combobox", { name: "Language" });
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    const english = screen.getByRole("option", { name: "English" });
+    fireEvent.mouseEnter(english);
+    expect(english.classList.contains("is-active")).toBe(true);
+    expect(english.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("option", { name: "한국어" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(english);
+    expect(onChange).toHaveBeenCalledWith("en");
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("supports arrow opening, Escape cancellation, and closes when the surrounding surface scrolls", () => {
+    const onChange = vi.fn();
+    render(<SettingsSelect placement="selected" ariaLabel="Language" value="ko" options={options} onChange={onChange} />);
+    const trigger = screen.getByRole("combobox", { name: "Language" });
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
+    fireEvent.keyDown(trigger, { key: "Home" });
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).toBeNull();
+    fireEvent.click(trigger);
+    fireEvent.scroll(screen.getByRole("listbox"));
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.scroll(document);
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+});
+
+
+describe("SettingsSelect popup integration", () => {
+  it("consumes Escape before it reaches a parent dialog", () => {
+    const onParentKey = vi.fn();
+    render(<div onKeyDown={onParentKey}><SettingsSelect ariaLabel="Range" value="today" options={[{ value: "today", label: "Today" }]} onChange={vi.fn()} /></div>);
+    const trigger = screen.getByRole("combobox", { name: "Range" });
+    fireEvent.click(trigger);
+    fireEvent.keyDown(trigger, { key: "Escape" });
+    expect(onParentKey).not.toHaveBeenCalled();
+    expect(screen.queryByRole("listbox")).toBeNull();
+  });
+
+  it("keeps icon-only triggers on their existing compact placement", () => {
+    render(<SettingsSelect ariaLabel="Detail" value="3" options={[{ value: "3", label: "3m" }]} triggerVisual={<span>•••</span>} onChange={vi.fn()} />);
+    const trigger = screen.getByRole("combobox", { name: "Detail: 3m" });
+    expect(trigger.parentElement?.getAttribute("data-placement")).toBe("below");
   });
 });

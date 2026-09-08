@@ -260,6 +260,7 @@ export function ClassificationPicker<TValue extends string>({ label, ariaLabel, 
       <SettingsSelect
         ariaLabel={ariaLabel}
         className="classification-rule-select"
+        menuSize={variant === "category" ? "content" : "bounded"}
         value={value}
         options={options.map((option) => ({ value: option, label: getLabel(option), accentColor: getColor(option) }))}
         onChange={onChange}

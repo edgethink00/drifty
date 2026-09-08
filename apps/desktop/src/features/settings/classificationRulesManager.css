@@ -127,15 +127,6 @@
 }
 .classification-rules-manager .classification-rule-list-shell,
 .classification-rules-manager .classification-rule-list-head { width: 100%; min-width: 0; }
-/* Inside the bounded list, an open picker participates in the row layout so
-   the final row's choices remain reachable instead of clipping at the edge. */
-.classification-rule-card__editor .settings-select-control__menu {
-  position: static;
-  margin-top: var(--space-1);
-  width: 100%;
-  max-height: none;
-  overflow: visible;
-}
 
 .classification-rules-manager .classification-rule-card__form-actions {
   display: flex;
@@ -177,4 +168,30 @@
 }
 @media (max-width: 720px) {
   .classification-rule-card__editor fieldset { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Only the expanded editor groups its controls on the left. */
+.classification-rules-manager .classification-rule-card__editor .classification-rule-card__form-actions { justify-content: start; }
+.classification-rules-manager .classification-rule-card__editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+.classification-rules-manager .classification-rule-card__editor fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  margin: 0;
+}
+.classification-rules-manager .classification-rule-card__editor .classification-rule-field { flex: 0 1 auto; }
+.classification-rules-manager .classification-rule-card__editor > p { flex-basis: 100%; margin: 0; }
+.classification-rules-manager .classification-rule-card__editor .classification-rule-card__form-actions .settings-btn {
+  min-width: 0;
+  height: calc(var(--settings-control-height) * 1.15);
+  min-height: calc(var(--settings-control-height) * 1.15);
+  padding-inline: var(--space-3);
+}
+.classification-rules-manager .classification-rule-card__editor .classification-rule-card__form-actions .settings-btn--primary {
+  background: var(--text); border-color: var(--text); color: var(--canvas);
 }

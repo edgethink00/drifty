@@ -69,6 +69,7 @@ export function ModelBeingUsedCard({
         </div>
         <div className="ai-setup-current-model__controls">
           <SettingsSelect
+            placement="below"
             ariaLabel={providerAriaLabel}
             className="ai-setup-select-control"
             value={providerValue}
@@ -76,6 +77,7 @@ export function ModelBeingUsedCard({
             onChange={onProviderChange}
           />
           <SettingsSelect
+            placement="below"
             ariaLabel={modelAriaLabel}
             className="ai-setup-select-control ai-setup-select-control--model"
             value={modelValue}
