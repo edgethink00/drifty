@@ -51,7 +51,7 @@ from app.tracker.youtube_video_recovery import YouTubeVideoIdMemory
 _youtube_video_id_memory = YouTubeVideoIdMemory()
 
 OSASCRIPT_TIMEOUT_SECONDS: Final = 3.0
-# Generous enough for the first `swift -e` invocation, which pays JIT warmup cost.
+# Bounds occasional native helper or automation stalls while keeping capture responsive.
 COMMAND_TIMEOUT_SECONDS: Final = 5.0
 FORCE_FRONTMOST_FALLBACK_CAPTURE_ENV: Final = "DRIFTY_FORCE_FRONTMOST_FALLBACK_CAPTURE"
 FORCE_BROWSER_HISTORY_URL_FALLBACK_ENV: Final = "DRIFTY_FORCE_BROWSER_HISTORY_URL_FALLBACK"

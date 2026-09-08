@@ -1,8 +1,28 @@
 import ApplicationServices
+import CoreGraphics
 import Foundation
 
+if CommandLine.arguments.count == 2, CommandLine.arguments[1] == "--onscreen-windows" {
+    let rawRows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []
+    let rows = rawRows.map { row -> [String: Any] in
+        [
+            "owner_name": row[kCGWindowOwnerName as String] as? String ?? NSNull(),
+            "layer": row[kCGWindowLayer as String] as? Int ?? NSNull(),
+            "name": row[kCGWindowName as String] as? String ?? NSNull(),
+        ]
+    }
+    do {
+        let data = try JSONSerialization.data(withJSONObject: rows)
+        print(String(data: data, encoding: .utf8) ?? "[]")
+        exit(0)
+    } catch {
+        fputs("could not serialize onscreen windows\n", stderr)
+        exit(1)
+    }
+}
+
 guard CommandLine.arguments.count >= 2, let pid = Int32(CommandLine.arguments[1]) else {
-    fputs("usage: chatgpt_ax_helper <pid>\n", stderr)
+    fputs("usage: chatgpt_ax_helper <pid>|--onscreen-windows\n", stderr)
     exit(2)
 }
 let app = AXUIElementCreateApplication(pid)

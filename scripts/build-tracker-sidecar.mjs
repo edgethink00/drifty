@@ -93,6 +93,7 @@ function run(command, args, options = {}) {
     encoding: "utf8",
     stdio: options.capture ? ["ignore", "pipe", "pipe"] : "inherit",
     env: options.env ?? process.env,
+    timeout: options.timeoutMs,
   });
   if (result.error) {
     throw result.error;
@@ -306,6 +307,38 @@ function assertMacosBinaryArchitecture(path, target) {
   }
 }
 
+function assertMacosNativeHelperSmokeTest(path, target) {
+  // A cross-compiled Mach-O cannot be executed reliably on the build host.
+  // Architecture and package-presence checks still run for that path.
+  if (target !== detectHostTriple()) return;
+  // This is a bounded CLI/serialization contract check. Outside a GUI
+  // security session CoreGraphics may legitimately return an empty array.
+  let result;
+  try {
+    result = run(path, ["--onscreen-windows"], { capture: true, timeoutMs: 5_000 });
+  } catch (error) {
+    fail(`native helper smoke test could not run: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  if (result.status !== 0) {
+    fail(`native helper smoke test failed with exit status ${result.status}: ${result.stderr.trim()}`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(result.stdout.trim());
+  } catch {
+    fail(`native helper smoke test produced non-JSON output: ${result.stdout}`);
+  }
+  const validRow = (row) => row !== null
+    && typeof row === "object"
+    && !Array.isArray(row)
+    && (typeof row.owner_name === "string" || row.owner_name === null)
+    && (Number.isInteger(row.layer) || row.layer === null)
+    && (typeof row.name === "string" || row.name === null);
+  if (!Array.isArray(parsed) || !parsed.every(validRow)) {
+    fail(`native helper smoke test did not return a window array: ${result.stdout}`);
+  }
+}
+
 function assertSmokeTest(path) {
   // A frozen PyInstaller build can succeed while the interpreter that built it
   // (e.g. Xcode's bundled Python 3.9) rejects a 3.10+-only construct at import
@@ -376,6 +409,7 @@ async function main() {
       chmodSync(chatgptHelperOutput, 0o755);
       await assertExecutable(chatgptHelperOutput);
       assertMacosBinaryArchitecture(chatgptHelperOutput, target);
+      assertMacosNativeHelperSmokeTest(chatgptHelperOutput, target);
     }
 
     const env = {

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Sequence
-from typing import Final, Literal, TypedDict
+from pathlib import Path
+from typing import Literal, TypedDict
+
+from app.tracker.chatgpt_session import compiled_helper_path
 
 SystemTransientActivity = Literal["mission_control", "app_switcher"]
 JsonValue = object
@@ -14,24 +17,6 @@ class OnScreenWindowRow(TypedDict):
     name: str | None
 
 
-CG_WINDOW_ROWS_SCRIPT: Final[str] = "\n".join(
-    (
-        "import Foundation",
-        "import CoreGraphics",
-        "let rawRows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]) ?? []",
-        "let rows = rawRows.map { row -> [String: Any] in",
-        "    [",
-        '        "owner_name": row[kCGWindowOwnerName as String] as? String ?? NSNull(),',
-        '        "layer": row[kCGWindowLayer as String] as? Int ?? NSNull(),',
-        '        "name": row[kCGWindowName as String] as? String ?? NSNull(),',
-        "    ]",
-        "}",
-        "let data = try JSONSerialization.data(withJSONObject: rows)",
-        "print(String(data: data, encoding: .utf8) ?? \"[]\")",
-    )
-)
-
-
 def json_text(value: JsonValue) -> str | None:
     return value if isinstance(value, str) else None
 
@@ -40,9 +25,20 @@ def json_int(value: JsonValue) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
 
-def onscreen_window_rows(run_command: Callable[[list[str]], str]) -> list[OnScreenWindowRow]:
+def onscreen_window_rows(
+    run_command: Callable[[list[str]], str],
+    *,
+    helper_path: Path | None = None,
+) -> list[OnScreenWindowRow]:
+    helper = helper_path or compiled_helper_path()
+    # Packaged builds always include this verifier-checked sibling helper.
+    # Returning no transient marker is the safe fallback for source runs or a
+    # damaged package: core frontmost-app tracking remains available and we do
+    # not invoke Apple's developer-tool shims on a user's Mac.
+    if helper is None:
+        return []
     try:
-        raw_rows = json.loads(run_command(["/usr/bin/swift", "-e", CG_WINDOW_ROWS_SCRIPT]))
+        raw_rows = json.loads(run_command([str(helper), "--onscreen-windows"]))
     except (RuntimeError, json.JSONDecodeError):
         return []
 
