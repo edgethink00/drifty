@@ -28,7 +28,7 @@ thread_local! {
     static PRESENTATION: RefCell<Option<Presentation>> = const { RefCell::new(None) };
 }
 
-fn on_main<R: Send + 'static>(
+pub(super) fn on_main<R: Send + 'static>(
     window: &WebviewWindow,
     work: impl FnOnce(WebviewWindow) -> Result<R, String> + Send + 'static,
 ) -> Result<R, String> {
@@ -65,6 +65,7 @@ pub(super) fn hide_immediately(window: &WebviewWindow) -> Result<(), String> {
         let _ = window.set_ignore_cursor_events(true);
         window.hide().map_err(|error| error.to_string())?;
         native(&window)?.setAlphaValue(1.0);
+        super::release_pet_quick_controls_interaction(window.app_handle());
         Ok(())
     })
 }
@@ -152,7 +153,9 @@ fn hide_with_completion(
 pub(super) fn hold_visible(window: &WebviewWindow) -> Result<(), String> {
     on_main(window, |window| {
         let ns = native(&window)?;
-        if !ns.isVisible() { return Ok(()); }
+        if !ns.isVisible() {
+            return Ok(());
+        }
         GENERATION.fetch_add(1, Ordering::Relaxed);
         PRESENTATION.with(|stored| {
             if let Some(state) = stored.borrow_mut().as_mut() {
@@ -185,7 +188,11 @@ pub(super) fn relocate(
                 // animation offset relative to the anchor.
                 let delta = (next.0 - state.anchor.0, next.1 - state.anchor.1);
                 state.anchor = next;
-                state.toward_pet = if layout.placement == "below" { TRAVEL_PT } else { -TRAVEL_PT };
+                state.toward_pet = if layout.placement == "below" {
+                    TRAVEL_PT
+                } else {
+                    -TRAVEL_PT
+                };
                 ns.setFrameOrigin(NSPoint::new(
                     frame.origin.x + delta.0,
                     frame.origin.y + delta.1,
@@ -294,7 +301,8 @@ mod tests {
 
     #[test]
     fn reentry_grace_matches_native_exit_duration() {
-        let hover = include_str!("../../../../apps/desktop/src/features/pet-mode/petModeQuickControls.ts");
+        let hover =
+            include_str!("../../../../apps/desktop/src/features/pet-mode/petModeQuickControls.ts");
         assert!(hover.contains(&format!("PET_QUICK_CONTROLS_EXIT_MS = {};", EXIT_MS as u64)));
     }
 

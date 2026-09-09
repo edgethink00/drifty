@@ -66,6 +66,7 @@ export function PetModeQuickControlsWindowApp() {
   ));
   const [openMenu, setOpenMenu] = useState<"automaticClose" | "more" | null>(null);
   const [phase, setPhase] = useState<"idle" | "acknowledging" | "failed">("idle");
+  const [actionPending, setActionPending] = useState(false);
   const [acknowledgement, setAcknowledgement] = useState<"automaticClosePause" | "hideOneHour" | null>(null);
   const menuBusyRef = useRef(false);
   const acknowledgeTimerRef = useRef<number | null>(null);
@@ -112,6 +113,7 @@ export function PetModeQuickControlsWindowApp() {
     clearAcknowledgeTimer();
     clearPendingPauseTimer();
     pendingPauseRef.current = false;
+    setActionPending(false);
     setAcknowledgement(null);
     setPhase("failed");
   }, [clearAcknowledgeTimer, clearPendingPauseTimer]);
@@ -139,6 +141,7 @@ export function PetModeQuickControlsWindowApp() {
       ) return;
       clearPendingPauseTimer();
       pendingPauseRef.current = false;
+      setActionPending(false);
       failedOperationRef.current = null;
       setAcknowledgement("automaticClosePause");
       setPhase("acknowledging");
@@ -230,10 +233,12 @@ export function PetModeQuickControlsWindowApp() {
   }, [failAction]);
 
   const handleQuickControlsAction = useCallback((action: PetQuickControlsAction) => {
+    if (pendingPauseRef.current || hideBusyRef.current) return;
     const operation: FailedQuickControlsOperation = { kind: "quickControlsAction", action };
     failedOperationRef.current = operation;
     if (isAutomaticClosePauseAction(action)) {
       pendingPauseRef.current = true;
+      setActionPending(true);
       setPhase("idle");
       clearPendingPauseTimer();
       pendingPauseTimerRef.current = window.setTimeout(() => {
@@ -256,21 +261,24 @@ export function PetModeQuickControlsWindowApp() {
   }, [clearPendingPauseTimer, failAction, phase]);
 
   const handleHideOneHour = useCallback(() => {
-    if (hideBusyRef.current) return;
+    if (hideBusyRef.current || pendingPauseRef.current) return;
     const operation: FailedQuickControlsOperation = { kind: "hideOneHour" };
     failedOperationRef.current = operation;
     hideBusyRef.current = true;
+    setActionPending(true);
     pendingPauseRef.current = false;
     clearPendingPauseTimer();
     void triggerNativePetVisibilityAction("hideOneHour", {
       keepQuickControlsVisible: true,
     }).then(() => {
       hideBusyRef.current = false;
+      setActionPending(false);
       if (failedOperationRef.current === operation) failedOperationRef.current = null;
       setAcknowledgement("hideOneHour");
       setPhase("acknowledging");
     }).catch(() => {
       hideBusyRef.current = false;
+      setActionPending(false);
       failedOperationRef.current = operation;
       failAction();
     });
@@ -370,6 +378,7 @@ export function PetModeQuickControlsWindowApp() {
       className="pet-quick-controls"
       role="toolbar"
       aria-label={copyFor(language, "pet.quickControls.label")}
+      aria-busy={actionPending || undefined}
       data-phase={phase === "idle" ? undefined : phase}
     >
       {showingAcknowledgement ? (
@@ -417,6 +426,7 @@ export function PetModeQuickControlsWindowApp() {
       <button
         type="button"
         className="pet-quick-controls__toggle"
+        disabled={actionPending}
         aria-label={`${copyFor(language, "pet.quickControls.automaticClose")}: ${automaticCloseState}`}
         aria-describedby="pet-quick-controls-automatic-close-description"
         aria-haspopup="menu"
@@ -441,6 +451,7 @@ export function PetModeQuickControlsWindowApp() {
       <button
         type="button"
         className="pet-quick-controls__action"
+        disabled={actionPending}
         title={copyFor(language, "pet.quickControls.hideOneHour")}
         onClick={handleHideOneHour}
       >
@@ -450,6 +461,7 @@ export function PetModeQuickControlsWindowApp() {
       <button
         type="button"
         className="pet-quick-controls__more"
+        disabled={actionPending}
         aria-label={copyFor(language, "pet.quickControls.more")}
         aria-haspopup="menu"
         aria-expanded={openMenu === "more"}

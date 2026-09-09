@@ -661,9 +661,32 @@ function isPetQuickControlsAction(value: unknown): value is PetQuickControlsActi
     || value === "acknowledgeDismiss";
 }
 
-export async function setNativePetQuickControlsVisible(visible: boolean): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("pet_quick_controls_set_visible", { visible });
+export async function setNativePetQuickControlsVisible(visible: boolean): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("pet_quick_controls_set_visible", { visible });
+}
+
+type PetQuickControlsHoldEvent = {
+  readonly held: boolean;
+  readonly generation: number;
+};
+
+function isPetQuickControlsHoldEvent(value: unknown): value is PetQuickControlsHoldEvent {
+  if (!value || typeof value !== "object") return false;
+  const event = value as Record<string, unknown>;
+  return typeof event.held === "boolean"
+    && typeof event.generation === "number"
+    && Number.isSafeInteger(event.generation)
+    && event.generation > 0;
+}
+
+export async function listenToNativePetQuickControlsHold(
+  onHold: (held: boolean, generation: number) => void,
+): Promise<(() => void) | undefined> {
+  if (!isTauriRuntime()) return undefined;
+  return listen<unknown>("pet-quick-controls-hold", ({ payload }) => {
+    if (isPetQuickControlsHoldEvent(payload)) onHold(payload.held, payload.generation);
+  });
 }
 
 let quickControlsStateSync = Promise.resolve();

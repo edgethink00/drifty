@@ -29,9 +29,10 @@ vi.mock("./petModeBridge", () => ({
   }),
   listenToNativePetModeLabStateRequest: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetQuickControlsAction: vi.fn().mockResolvedValue(vi.fn()),
+  listenToNativePetQuickControlsHold: vi.fn().mockResolvedValue(vi.fn()),
   listenToNativePetQuickControlsMenuState: vi.fn().mockResolvedValue(vi.fn()),
   isNativePetCursorInside: vi.fn().mockResolvedValue(false),
-  setNativePetQuickControlsVisible: vi.fn().mockResolvedValue(undefined),
+  setNativePetQuickControlsVisible: vi.fn().mockImplementation(async (visible: boolean) => visible),
   moveNativePetToTarget: vi.fn().mockResolvedValue({
     facing: "right",
     targetKind: "browser_tab_close",

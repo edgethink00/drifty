@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{mpsc, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{
@@ -36,11 +36,11 @@ use super::pet_panel::{
 };
 
 #[cfg(target_os = "macos")]
-#[path = "pet_mode_native_ax.rs"]
-mod pet_mode_native_ax;
-#[cfg(target_os = "macos")]
 #[path = "pet_fullscreen.rs"]
 mod pet_fullscreen;
+#[cfg(target_os = "macos")]
+#[path = "pet_mode_native_ax.rs"]
+mod pet_mode_native_ax;
 
 pub const PET_MODE_WINDOW_LABEL: &str = "pet-mode";
 // Keep the approved 60% cat scale, but include the F12 action's transparent
@@ -104,6 +104,7 @@ const PET_MODE_CARRY_YANK_DISTANCE: f64 = 34.0;
 const PET_MODE_CARRY_MAX_GRIP_MS: f64 = 420.0;
 const PET_MODE_RUN_MAX_SECONDS: f64 = 6.0;
 const PET_MODE_WALK_MAX_SECONDS: f64 = 60.0;
+const PET_MODE_AUTONOMOUS_ROAM_PURPOSE: &str = "autonomous_roam";
 const PET_MODE_SEAT_CORRECTION_PURPOSE: &str = "seat_correction";
 // Same bounded walk as a seat correction, but announced separately so the
 // webview knows the cat was asleep and wakes it with drowsy eyes.
@@ -161,11 +162,16 @@ static PET_MODE_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_SETTLED_VISIBILITY_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PET_MODE_ROAM_RIGHT: AtomicBool = AtomicBool::new(true);
 static PET_MODE_MOTION_REVISION: AtomicU64 = AtomicU64::new(0);
+static PET_MODE_QUICK_CONTROLS_GENERATION: AtomicU64 = AtomicU64::new(0);
+static PET_MODE_DRAG_ACTIVE: AtomicBool = AtomicBool::new(false);
 // Motion starts are tiny critical sections: claim a revision and emit the
 // matching renderer pose as one ordered operation. This prevents a stale
 // background seat scan from publishing `walk` after a newer intervention has
 // already published `run`.
-static PET_MODE_MOTION_START: Mutex<()> = Mutex::new(());
+static PET_MODE_MOTION_START: Mutex<PetModeMotionState> = Mutex::new(PetModeMotionState {
+    active: None,
+    quick_controls_hold: None,
+});
 static PET_MODE_PREVIEW_RETURN: AtomicBool = AtomicBool::new(false);
 static PET_MODE_PREFERRED_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
 static PET_MODE_ANCHOR_CLEAR_CONFIRMATION: Mutex<Option<PetModeAnchorClearConfirmation>> =
@@ -177,6 +183,158 @@ static PET_MODE_ANCHOR_CLEAR_CONFIRMATION: Mutex<Option<PetModeAnchorClearConfir
 static PET_MODE_SIZE: Mutex<(f64, f64)> = Mutex::new((PET_MODE_WIDTH, PET_MODE_HEIGHT));
 static PET_MODE_FLOOR_HOME_PT: Mutex<f64> = Mutex::new(PET_DROP_FLOOR_HOME_PT);
 static PET_MODE_PREVIEW_RETURN_POSITION: Mutex<Option<LogicalPosition<f64>>> = Mutex::new(None);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PetModeMotionPurpose {
+    AutonomousRoam,
+    SeatCorrection,
+    Protected,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PetModeActiveMotion {
+    revision: u64,
+    purpose: PetModeMotionPurpose,
+}
+
+#[derive(Debug)]
+struct PetModeMotionState {
+    active: Option<PetModeActiveMotion>,
+    quick_controls_hold: Option<u64>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PetQuickControlsInteractionPolicy {
+    Allow,
+    InterruptAutonomousRoam,
+    Deny,
+}
+
+fn pet_quick_controls_interaction_policy(
+    entry_active: bool,
+    drag_active: bool,
+    active_motion: Option<PetModeMotionPurpose>,
+) -> PetQuickControlsInteractionPolicy {
+    if entry_active || drag_active {
+        return PetQuickControlsInteractionPolicy::Deny;
+    }
+    match active_motion {
+        None => PetQuickControlsInteractionPolicy::Allow,
+        Some(PetModeMotionPurpose::AutonomousRoam) => {
+            PetQuickControlsInteractionPolicy::InterruptAutonomousRoam
+        }
+        Some(PetModeMotionPurpose::SeatCorrection | PetModeMotionPurpose::Protected) => {
+            PetQuickControlsInteractionPolicy::Deny
+        }
+    }
+}
+
+fn pet_motion_purpose(purpose: Option<&str>) -> PetModeMotionPurpose {
+    match purpose {
+        Some(PET_MODE_AUTONOMOUS_ROAM_PURPOSE) => PetModeMotionPurpose::AutonomousRoam,
+        Some(PET_MODE_SEAT_CORRECTION_PURPOSE | PET_MODE_DROWSY_SEAT_CORRECTION_PURPOSE) => {
+            PetModeMotionPurpose::SeatCorrection
+        }
+        _ => PetModeMotionPurpose::Protected,
+    }
+}
+
+fn emit_pet_quick_controls_hold(window: &WebviewWindow, held: bool, generation: u64) {
+    let _ = window.emit(
+        "pet-quick-controls-hold",
+        json!({
+            "held": held,
+            "generation": generation,
+        }),
+    );
+}
+
+pub(super) fn begin_pet_quick_controls_interaction(app: &AppHandle) -> Result<Option<u64>, String> {
+    let window = app
+        .get_webview_window(PET_MODE_WINDOW_LABEL)
+        .ok_or_else(|| "Pet Mode window is not available".to_string())?;
+    let generation = {
+        let mut motion_state = PET_MODE_MOTION_START
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(generation) = motion_state.quick_controls_hold {
+            return Ok(Some(generation));
+        }
+        let policy = pet_quick_controls_interaction_policy(
+            PET_MODE_ENTRY_ACTIVE.load(Ordering::Relaxed),
+            PET_MODE_DRAG_ACTIVE.load(Ordering::Relaxed),
+            motion_state.active.map(|active| active.purpose),
+        );
+        match policy {
+            PetQuickControlsInteractionPolicy::Deny => return Ok(None),
+            PetQuickControlsInteractionPolicy::InterruptAutonomousRoam => {
+                PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed);
+                motion_state.active = None;
+            }
+            PetQuickControlsInteractionPolicy::Allow => {}
+        }
+        let generation = PET_MODE_QUICK_CONTROLS_GENERATION
+            .fetch_add(1, Ordering::Relaxed)
+            .wrapping_add(1)
+            .max(1);
+        motion_state.quick_controls_hold = Some(generation);
+        generation
+    };
+
+    // Drain every position closure queued before the revision change. The
+    // position is sampled only after this main-thread boundary, so layout gets
+    // a stable anchor and no stale roam frame can land after the controls show.
+    let (sender, receiver) = mpsc::sync_channel(1);
+    if let Err(error) = app.run_on_main_thread(move || {
+        let _ = sender.send(());
+    }) {
+        let _ = end_pet_quick_controls_interaction(app, generation);
+        return Err(error.to_string());
+    }
+    if receiver.recv().is_err() {
+        let _ = end_pet_quick_controls_interaction(app, generation);
+        return Err("Pet Mode quick-controls hold boundary was dropped".to_string());
+    }
+    if let Err(error) = current_pet_logical_position(&window) {
+        let _ = end_pet_quick_controls_interaction(app, generation);
+        return Err(error);
+    }
+    {
+        let motion_state = PET_MODE_MOTION_START
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if motion_state.quick_controls_hold != Some(generation) {
+            return Ok(None);
+        }
+        // Serialize the held notification with revocation. A revoke that wins
+        // this lock emits only `held: false`; one that follows emits false
+        // after this true event, so the renderer cannot resurrect a stale hold.
+        emit_pet_quick_controls_hold(&window, true, generation);
+    }
+    Ok(Some(generation))
+}
+
+pub(super) fn end_pet_quick_controls_interaction(
+    app: &AppHandle,
+    generation: u64,
+) -> Result<(), String> {
+    let released = {
+        let mut motion_state = PET_MODE_MOTION_START
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if motion_state.quick_controls_hold != Some(generation) {
+            return Ok(());
+        }
+        motion_state.quick_controls_hold = None;
+        true
+    };
+    if released {
+        if let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
+            emit_pet_quick_controls_hold(&window, false, generation);
+        }
+    }
+    Ok(())
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PetModeAnchorClearConfirmation {
@@ -699,7 +857,15 @@ pub async fn pet_mode_set_enabled(
     // and the visibility-lock wait off AppKit so it can answer those messages
     // and service this worker's window mutations.
     async_runtime::spawn_blocking(move || {
-        set_pet_mode_enabled(app, enabled, snapshot, reduced_motion, width, height, force_reveal)
+        set_pet_mode_enabled(
+            app,
+            enabled,
+            snapshot,
+            reduced_motion,
+            width,
+            height,
+            force_reveal,
+        )
     })
     .await
     .map_err(|error| format!("Pet Mode visibility task failed: {error}"))?
@@ -1177,8 +1343,8 @@ pub async fn pet_mode_move_to_target(
     async_runtime::spawn_blocking(move || {
         move_pet_to_target(&app, &target, reduced_motion.unwrap_or(false))
     })
-        .await
-        .map_err(|error| error.to_string())?
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -1531,11 +1697,13 @@ pub async fn pet_mode_begin_drag(
     // Capture and cancellation share one native command boundary. The
     // best-effort renderer-side cancellation may race this invoke; doing it
     // here guarantees an in-flight walk cannot fight the manual pointer.
+    super::pet_quick_controls::revoke_pet_quick_controls_interaction(&app);
     cancel_pet_motion();
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
         .ok_or_else(|| "Pet Mode window is not available".to_string())?;
     let before = current_pet_logical_position(&window)?;
+    PET_MODE_DRAG_ACTIVE.store(true, Ordering::Relaxed);
     #[cfg(debug_assertions)]
     eprintln!(
         "[pet-mode-drag] begin client=({start_client_x:.1},{start_client_y:.1}) window={before:?}"
@@ -1555,7 +1723,9 @@ pub async fn pet_mode_begin_drag(
         )
     })
     .await
-    .map_err(|error| format!("Pet Mode drag task failed: {error}"))??;
+    .map_err(|error| format!("Pet Mode drag task failed: {error}"));
+    PET_MODE_DRAG_ACTIVE.store(false, Ordering::Relaxed);
+    let drag = drag??;
     let after = current_pet_logical_position(&window)?;
     #[cfg(debug_assertions)]
     {
@@ -1779,12 +1949,13 @@ pub async fn pet_mode_roam(app: AppHandle, post_drop: Option<bool>) -> Result<()
             let monitor = resolve_pet_home_monitor(&app)
                 .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
             let target = calculate_pet_roam_position_with_nudge(Some(&app), &monitor);
-            animate_pet_window_toward(
+            animate_pet_window_toward_with_purpose(
                 &window,
                 target,
                 PET_MODE_WALK_SPEED,
                 PET_MODE_WALK_MAX_SECONDS,
                 "walk",
+                PET_MODE_AUTONOMOUS_ROAM_PURPOSE,
             )
         }
     })
@@ -2359,11 +2530,10 @@ fn move_pet_to_target(
     #[cfg(target_os = "macos")]
     if target.lab_target.is_none() {
         if let Some(frame) = pet_mode_native_ax::fullscreen_target_frame(
-            &target.app_name, target.browser_name.as_deref(),
+            &target.app_name,
+            target.browser_name.as_deref(),
         ) {
-            return pet_fullscreen::approach(
-                app, &window, target, frame, _reduced_motion,
-            );
+            return pet_fullscreen::approach(app, &window, target, frame, _reduced_motion);
         }
     }
     let point = if target.lab_target == Some(PetModeLabTargetKind::DriftyWindowX) {
@@ -4370,14 +4540,16 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
     };
     // Give the webview one paint boundary to flip before the native window moves.
     thread::sleep(Duration::from_millis(34));
-    animate_pet_window(
+    let result = animate_pet_window(
         window,
         target,
         speed,
         max_duration_seconds,
         motion_revision,
         outing_generation,
-    )
+    );
+    finish_pet_window_motion(motion_revision);
+    result
 }
 
 fn begin_pet_window_motion(
@@ -4388,10 +4560,40 @@ fn begin_pet_window_motion(
     outing_generation: Option<u64>,
     expected_motion_revision: Option<u64>,
 ) -> Result<Option<u64>, String> {
-    let _start_guard = PET_MODE_MOTION_START
+    let purpose_kind = pet_motion_purpose(purpose);
+    let mut motion_state = PET_MODE_MOTION_START
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     if outing_generation.is_some_and(|generation| !pet_outing_is_current(generation)) {
+        return Ok(None);
+    }
+    if expected_motion_revision
+        .is_some_and(|expected| PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != expected)
+    {
+        return Ok(None);
+    }
+    if purpose_kind == PetModeMotionPurpose::Protected && motion_state.quick_controls_hold.is_some()
+    {
+        drop(motion_state);
+        super::pet_quick_controls::revoke_pet_quick_controls_interaction(window.app_handle());
+        motion_state = PET_MODE_MOTION_START
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if outing_generation.is_some_and(|generation| !pet_outing_is_current(generation)) {
+            return Ok(None);
+        }
+        if expected_motion_revision
+            .is_some_and(|expected| PET_MODE_MOTION_REVISION.load(Ordering::Relaxed) != expected)
+        {
+            return Ok(None);
+        }
+    }
+    if motion_state.quick_controls_hold.is_some()
+        && matches!(
+            purpose_kind,
+            PetModeMotionPurpose::AutonomousRoam | PetModeMotionPurpose::SeatCorrection
+        )
+    {
         return Ok(None);
     }
     let Some(motion_revision) =
@@ -4399,7 +4601,14 @@ fn begin_pet_window_motion(
     else {
         return Ok(None);
     };
-    emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
+    motion_state.active = Some(PetModeActiveMotion {
+        revision: motion_revision,
+        purpose: purpose_kind,
+    });
+    if let Err(error) = emit_pet_event(window, json!({ "kind": "facing", "facing": facing })) {
+        motion_state.active = None;
+        return Err(error);
+    }
     #[cfg(debug_assertions)]
     eprintln!("[pet-mode-motion] motion={motion} purpose={purpose:?} facing={facing}");
     let motion_event = if let Some(purpose) = purpose {
@@ -4407,7 +4616,10 @@ fn begin_pet_window_motion(
     } else {
         json!({ "kind": "motion", "motion": motion })
     };
-    emit_pet_event(window, motion_event)?;
+    if let Err(error) = emit_pet_event(window, motion_event) {
+        motion_state.active = None;
+        return Err(error);
+    }
     Ok(Some(motion_revision))
 }
 
@@ -4432,18 +4644,63 @@ fn set_pet_window_position_if_motion_current(
     target: LogicalPosition<f64>,
     expected_motion_revision: u64,
 ) -> Result<bool, String> {
-    let _start_guard = PET_MODE_MOTION_START
+    let mut motion_state = PET_MODE_MOTION_START
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if motion_state.quick_controls_hold.is_some() {
+        return Ok(false);
+    }
     let Some(motion_revision) =
         claim_pet_motion_revision(&PET_MODE_MOTION_REVISION, Some(expected_motion_revision))
     else {
         return Ok(false);
     };
-    window
-        .set_position(target)
-        .map_err(|error| error.to_string())?;
-    Ok(pet_window_motion_is_current(motion_revision, None))
+    motion_state.active = Some(PetModeActiveMotion {
+        revision: motion_revision,
+        purpose: PetModeMotionPurpose::SeatCorrection,
+    });
+    drop(motion_state);
+    let result = apply_pet_window_position_if_motion_current(window, target, motion_revision, None);
+    finish_pet_window_motion(motion_revision);
+    result
+}
+
+fn apply_pet_window_position_if_motion_current(
+    window: &WebviewWindow,
+    target: LogicalPosition<f64>,
+    motion_revision: u64,
+    outing_generation: Option<u64>,
+) -> Result<bool, String> {
+    let app = window.app_handle().clone();
+    let position_window = window.clone();
+    let (sender, receiver) = mpsc::sync_channel(1);
+    app.run_on_main_thread(move || {
+        let result = if !pet_window_motion_is_current(motion_revision, outing_generation) {
+            Ok(false)
+        } else {
+            position_window
+                .set_position(target)
+                .map_err(|error| error.to_string())
+                .map(|_| pet_window_motion_is_current(motion_revision, outing_generation))
+        };
+        let _ = sender.send(result);
+    })
+    .map_err(|error| error.to_string())?;
+    receiver
+        .recv()
+        .map_err(|_| "Pet Mode main-thread position result was dropped".to_string())?
+}
+
+fn finish_pet_window_motion(motion_revision: u64) {
+    let mut motion_state = PET_MODE_MOTION_START
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if motion_state
+        .active
+        .is_some_and(|active| active.revision == motion_revision)
+    {
+        motion_state.active = None;
+    }
 }
 
 fn animate_pet_window(
@@ -4460,13 +4717,12 @@ fn animate_pet_window(
         if !pet_window_motion_is_current(motion_revision, outing_generation) {
             return Ok(false);
         }
-        window
-            .set_position(target)
-            .map_err(|error| error.to_string())?;
-        return Ok(pet_window_motion_is_current(
+        return apply_pet_window_position_if_motion_current(
+            window,
+            target,
             motion_revision,
             outing_generation,
-        ));
+        );
     }
     let duration_seconds = movement_duration_seconds(distance, speed, max_duration_seconds);
     let duration = Duration::from_secs_f64(duration_seconds);
@@ -4476,13 +4732,16 @@ fn animate_pet_window(
             return Ok(false);
         }
         let progress = (started_at.elapsed().as_secs_f64() / duration_seconds).min(1.0);
-        window
-            .set_position(LogicalPosition::new(
+        let applied = apply_pet_window_position_if_motion_current(
+            window,
+            LogicalPosition::new(
                 start.x + (target.x - start.x) * progress,
                 start.y + (target.y - start.y) * progress,
-            ))
-            .map_err(|error| error.to_string())?;
-        if !pet_window_motion_is_current(motion_revision, outing_generation) {
+            ),
+            motion_revision,
+            outing_generation,
+        )?;
+        if !applied {
             return Ok(false);
         }
         if progress >= 1.0 {
@@ -4501,11 +4760,12 @@ fn pet_window_motion_is_current(motion_revision: u64, outing_generation: Option<
 }
 
 fn cancel_pet_motion() -> bool {
-    let _start_guard = PET_MODE_MOTION_START
+    let mut motion_state = PET_MODE_MOTION_START
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let entry_was_active = PET_MODE_ENTRY_ACTIVE.swap(false, Ordering::Relaxed);
     PET_MODE_MOTION_REVISION.fetch_add(1, Ordering::Relaxed);
+    motion_state.active = None;
     entry_was_active
 }
 
@@ -4703,7 +4963,10 @@ mod tests {
 
     #[test]
     fn selected_tab_cross_check_accepts_a_matching_active_tab() {
-        assert_eq!(classify_selected_tab_cross_check(Some("title:StayFree\n"), Some("StayFree")), None);
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("title:StayFree\n"), Some("StayFree")),
+            None
+        );
         // Chromium appends memory/window suffixes to the strip label only.
         assert_eq!(
             classify_selected_tab_cross_check(
@@ -4718,7 +4981,10 @@ mod tests {
             None,
         );
         // New-tab pages have no scripted title; keep the AX hotspot.
-        assert_eq!(classify_selected_tab_cross_check(Some("title:"), Some("새 탭")), None);
+        assert_eq!(
+            classify_selected_tab_cross_check(Some("title:"), Some("새 탭")),
+            None
+        );
     }
 
     #[test]
@@ -4763,7 +5029,15 @@ mod tests {
         for name in ["Aside", "Google Chrome", "Arc", "Whale"] {
             assert!(supports_scripted_active_tab(name), "{name}");
         }
-        for name in ["Safari", "Safari Technology Preview", "Firefox", "Zen", "Floorp", "Finder", ""] {
+        for name in [
+            "Safari",
+            "Safari Technology Preview",
+            "Firefox",
+            "Zen",
+            "Floorp",
+            "Finder",
+            "",
+        ] {
             assert!(!supports_scripted_active_tab(name), "{name}");
         }
     }
@@ -4807,7 +5081,11 @@ mod tests {
             }
             "match" => {
                 assert_eq!(point.kind, PetModeTargetKind::BrowserTabClose);
-                assert!(point.diagnostic.starts_with("ax_selected_tab"), "{}", point.diagnostic);
+                assert!(
+                    point.diagnostic.starts_with("ax_selected_tab"),
+                    "{}",
+                    point.diagnostic
+                );
             }
             other => panic!("unknown DRIFTY_NATIVE_QA_TAB_TARGET_EXPECT={other}"),
         }
@@ -5159,7 +5437,10 @@ mod tests {
         // dividing by zero or saturating into an effectively unbounded chase.
         assert_eq!(pet_mode_stalk_duration_ms(660.0, 0.0, 2_000), 2_000);
         assert_eq!(pet_mode_stalk_duration_ms(f64::NAN, 220.0, 2_000), 2_000);
-        assert_eq!(pet_mode_stalk_duration_ms(f64::INFINITY, 220.0, 2_000), 2_000);
+        assert_eq!(
+            pet_mode_stalk_duration_ms(f64::INFINITY, 220.0, 2_000),
+            2_000
+        );
         assert_eq!(pet_mode_stalk_duration_ms(660.0, f64::NAN, 2_000), 2_000);
         assert_eq!(pet_mode_stalk_duration_ms(-50.0, 220.0, 2_000), 2_000);
         // However far the pointer is, one hunt stays inside the hard ceiling.
@@ -5783,6 +6064,39 @@ mod tests {
         assert!(
             (movement_duration_seconds(2.08, PET_MODE_WALK_SPEED, 60.0) - 0.18).abs()
                 < f64::EPSILON
+        );
+    }
+
+    #[test]
+    fn quick_controls_hold_accepts_only_stationary_or_autonomous_roam_motion() {
+        assert_eq!(
+            pet_quick_controls_interaction_policy(false, false, None),
+            PetQuickControlsInteractionPolicy::Allow,
+        );
+        assert_eq!(
+            pet_quick_controls_interaction_policy(
+                false,
+                false,
+                Some(PetModeMotionPurpose::AutonomousRoam),
+            ),
+            PetQuickControlsInteractionPolicy::InterruptAutonomousRoam,
+        );
+        for purpose in [
+            PetModeMotionPurpose::SeatCorrection,
+            PetModeMotionPurpose::Protected,
+        ] {
+            assert_eq!(
+                pet_quick_controls_interaction_policy(false, false, Some(purpose)),
+                PetQuickControlsInteractionPolicy::Deny,
+            );
+        }
+        assert_eq!(
+            pet_quick_controls_interaction_policy(true, false, None),
+            PetQuickControlsInteractionPolicy::Deny,
+        );
+        assert_eq!(
+            pet_quick_controls_interaction_policy(false, true, None),
+            PetQuickControlsInteractionPolicy::Deny,
         );
     }
 

@@ -1,11 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::Duration;
 use std::sync::Mutex;
+use std::time::Duration;
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder,
+    AppHandle, Emitter, LogicalSize, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 };
 
 use super::pet_mode::{current_pet_logical_position, PET_MODE_WINDOW_LABEL};
@@ -18,16 +17,16 @@ mod motion;
 
 pub const PET_QUICK_CONTROLS_WINDOW_LABEL: &str = "pet-quick-controls";
 /* The panel is sized to its content instead of one constant per language. A
-   paused auto-close spells out when it lifts, so that state needs its own
-   width; each value is the widest string the state can render (for English,
-   "Paused until 10:48pm"). Slack inside a narrower reading is absorbed by the
-   two auto grid tracks. */
+paused auto-close spells out when it lifts, so that state needs its own
+width; each value is the widest string the state can render (for English,
+"Paused until 10:48pm"). Slack inside a narrower reading is absorbed by the
+two auto grid tracks. */
 /* Each value is the widest measured reading plus a three-point margin. The
-   tracks ellipsize rather than overflow, so a width rounded flush to the
-   longest string truncates it: the first pass rounded English "Off" to its
-   exact 281.2pt and lost the last letter. WebKit and Chromium measure these
-   strings within 0.03pt of each other, so the margin covers font revisions
-   and subpixel rounding rather than an engine gap. */
+tracks ellipsize rather than overflow, so a width rounded flush to the
+longest string truncates it: the first pass rounded English "Off" to its
+exact 281.2pt and lost the last letter. WebKit and Chromium measure these
+strings within 0.03pt of each other, so the margin covers font revisions
+and subpixel rounding rather than an engine gap. */
 const PET_QUICK_CONTROLS_KO_IDLE_WIDTH: f64 = 255.0;
 const PET_QUICK_CONTROLS_EN_IDLE_WIDTH: f64 = 285.0;
 const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 290.0;
@@ -40,6 +39,10 @@ const PET_QUICK_CONTROLS_SCREEN_INSET: f64 = 8.0;
 const PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS: u64 = 5_000;
 static PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_HELD: AtomicBool = AtomicBool::new(false);
 static PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_GENERATION: AtomicU64 = AtomicU64::new(0);
+// One native movement hold survives hover, menu tracking, feedback and exit.
+// Only the actual hidden frame releases it, including failed presentations.
+static PET_QUICK_CONTROLS_INTERACTION: AtomicU64 = AtomicU64::new(0);
+static PET_QUICK_CONTROLS_MENU_OPEN: AtomicBool = AtomicBool::new(false);
 // Session state remains available to a newly mounted pet even when the main
 // webview could not persist its temporary override.
 static PET_QUICK_CONTROLS_STATE: Mutex<Option<PetQuickControlsState>> = Mutex::new(None);
@@ -99,8 +102,13 @@ fn is_supported_quick_controls_action(action: &str) -> bool {
 }
 
 fn is_automatic_close_pause_action(action: &str) -> bool {
-    matches!(action, "automaticClosePause15" | "automaticClosePause60"
-        | "automaticClosePauseToday" | "automaticClosePauseForever")
+    matches!(
+        action,
+        "automaticClosePause15"
+            | "automaticClosePause60"
+            | "automaticClosePauseToday"
+            | "automaticClosePauseForever"
+    )
 }
 
 fn is_supported_quick_controls_state(state: &PetQuickControlsState) -> bool {
@@ -139,6 +147,55 @@ fn quick_controls_width(language: &str, paused: bool) -> f64 {
         (false, false) => PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
         (false, true) => PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
     }
+}
+
+fn quick_controls_resize_needed(
+    visible: bool,
+    interaction_held: bool,
+    current: f64,
+    desired: f64,
+) -> bool {
+    // The complete native material and WebView share this frame. Resizing it
+    // during a confirmation produces two different presentation boundaries.
+    (!visible || !interaction_held) && (current - desired).abs() > 0.5
+}
+
+pub(super) fn release_pet_quick_controls_interaction(app: &AppHandle) {
+    PET_QUICK_CONTROLS_MENU_OPEN.store(false, Ordering::Relaxed);
+    let generation = PET_QUICK_CONTROLS_INTERACTION.swap(0, Ordering::Relaxed);
+    if generation != 0 {
+        let _ = super::pet_mode::end_pet_quick_controls_interaction(app, generation);
+    }
+}
+
+pub(super) fn revoke_pet_quick_controls_interaction(app: &AppHandle) {
+    set_pet_quick_controls_acknowledgement_held(app, false);
+    if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+        let _ = hide_pet_quick_controls_window(&window);
+    } else {
+        release_pet_quick_controls_interaction(app);
+    }
+}
+
+fn prepare_pet_quick_controls_size(
+    window: &WebviewWindow,
+    state: &PetQuickControlsState,
+) -> Result<f64, String> {
+    let current = window
+        .inner_size()
+        .map_err(|error| error.to_string())?
+        .to_logical::<f64>(window.scale_factor().map_err(|error| error.to_string())?)
+        .width;
+    let desired = quick_controls_width(&state.language, quick_controls_paused(state));
+    let held = pet_quick_controls_acknowledgement_held()
+        || PET_QUICK_CONTROLS_MENU_OPEN.load(Ordering::Relaxed);
+    if quick_controls_resize_needed(window.is_visible().unwrap_or(false), held, current, desired) {
+        window
+            .set_size(LogicalSize::new(desired, PET_QUICK_CONTROLS_HEIGHT))
+            .map_err(|error| error.to_string())?;
+        return Ok(desired);
+    }
+    Ok(current)
 }
 
 fn layout_pet_quick_controls(
@@ -219,8 +276,10 @@ fn hide_pet_quick_controls_window(window: &WebviewWindow) -> Result<(), String> 
     return motion::hide_immediately(window);
     #[cfg(not(target_os = "macos"))]
     {
-    let _ = window.set_ignore_cursor_events(true);
-    window.hide().map_err(|error| error.to_string())
+        let _ = window.set_ignore_cursor_events(true);
+        window.hide().map_err(|error| error.to_string())?;
+        release_pet_quick_controls_interaction(window.app_handle());
+        Ok(())
     }
 }
 
@@ -308,7 +367,10 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
     .title("Drifty Pet Controls")
     .inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
     .min_inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
-    .max_inner_size(PET_QUICK_CONTROLS_EN_PAUSED_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
+    .max_inner_size(
+        PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+        PET_QUICK_CONTROLS_HEIGHT,
+    )
     .decorations(false)
     .shadow(false)
     .resizable(false)
@@ -342,49 +404,90 @@ pub fn hide_pet_quick_controls(app: &AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<(), String> {
+pub fn pet_quick_controls_set_visible(app: AppHandle, visible: bool) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
+            return Ok(false);
+        };
+        // Acquisition, publication, and presentation share the same AppKit
+        // boundary as hide/revoke. A hide cannot observe a half-published
+        // interaction and leave the motion hold behind or reopen stale UI.
+        return motion::on_main(&window, move |_| {
+            set_pet_quick_controls_visible(&app, visible)
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    set_pet_quick_controls_visible(&app, visible)
+}
+
+fn set_pet_quick_controls_visible(app: &AppHandle, visible: bool) -> Result<bool, String> {
     // Feedback owns the panel in both directions. A stale hover-open request
     // must not hide it because hideOneHour has already hidden the cat.
     if pet_quick_controls_acknowledgement_held() {
-        return Ok(());
+        return Ok(true);
+    }
+    if PET_QUICK_CONTROLS_MENU_OPEN.load(Ordering::Relaxed) {
+        return Ok(true);
     }
     let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) else {
-        return Ok(());
+        return Ok(false);
     };
     if !visible {
         #[cfg(target_os = "macos")]
-        return motion::hide(&window);
+        {
+            motion::hide(&window)?;
+            return Ok(false);
+        }
         #[cfg(not(target_os = "macos"))]
-        return hide_pet_quick_controls_window(&window);
+        {
+            hide_pet_quick_controls_window(&window)?;
+            return Ok(false);
+        }
     }
 
     let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
-        return hide_pet_quick_controls_window(&window);
+        hide_pet_quick_controls_window(&window)?;
+        return Ok(false);
     };
     if !matches!(pet.is_visible(), Ok(true)) {
-        return hide_pet_quick_controls_window(&window);
+        hide_pet_quick_controls_window(&window)?;
+        return Ok(false);
     }
 
-    let controls_width = window
-        .inner_size()
-        .map_err(|error| error.to_string())?
-        .to_logical::<f64>(window.scale_factor().map_err(|error| error.to_string())?)
-        .width;
-    let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
-    window
-        .set_size(LogicalSize::new(controls_width, PET_QUICK_CONTROLS_HEIGHT))
-        .map_err(|error| error.to_string())?;
-    window
-        .set_ignore_cursor_events(false)
-        .map_err(|error| error.to_string())?;
-    let _ = window.emit(
-        "pet-quick-controls-layout",
-        json!({ "placement": layout.placement }),
-    );
-    #[cfg(target_os = "macos")]
-    return motion::show(&window, layout);
-    #[cfg(not(target_os = "macos"))]
-    show_pet_panel_at_position(&app, &window, LogicalPosition::new(layout.x, layout.y))
+    if PET_QUICK_CONTROLS_INTERACTION.load(Ordering::Relaxed) == 0 {
+        let Some(generation) = super::pet_mode::begin_pet_quick_controls_interaction(&app)? else {
+            return Ok(false);
+        };
+        PET_QUICK_CONTROLS_INTERACTION.store(generation, Ordering::Relaxed);
+    }
+    let result = (|| {
+        // A deferred state change must be applied before measuring the next show,
+        // not after its first visible frame. Reentry retains the current geometry.
+        let state = pet_quick_controls_get_state()?;
+        let controls_width = if let Some(state) = state.as_ref() {
+            prepare_pet_quick_controls_size(&window, state)?
+        } else {
+            PET_QUICK_CONTROLS_KO_IDLE_WIDTH
+        };
+        let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
+        window
+            .set_ignore_cursor_events(false)
+            .map_err(|error| error.to_string())?;
+        let _ = window.emit(
+            "pet-quick-controls-layout",
+            json!({ "placement": layout.placement }),
+        );
+        #[cfg(target_os = "macos")]
+        motion::show(&window, layout)?;
+        #[cfg(not(target_os = "macos"))]
+        show_pet_panel_at_position(&app, &window, LogicalPosition::new(layout.x, layout.y))?;
+        Ok(true)
+    })();
+    if result.is_err() {
+        let _ = hide_pet_quick_controls_window(&window);
+    }
+    result
 }
 
 #[tauri::command]
@@ -395,9 +498,10 @@ pub fn pet_quick_controls_sync_state(
     if !is_supported_quick_controls_state(&state) {
         return Err("unsupported pet quick controls state".to_string());
     }
-    *PET_QUICK_CONTROLS_STATE
+    let previous_state = PET_QUICK_CONTROLS_STATE
         .lock()
-        .map_err(|error| error.to_string())? = Some(state.clone());
+        .map_err(|error| error.to_string())?
+        .replace(state.clone());
     if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
         pet.emit("pet-quick-controls-state", &state)
             .map_err(|error| error.to_string())?;
@@ -406,26 +510,25 @@ pub fn pet_quick_controls_sync_state(
         return Ok(());
     };
     #[cfg(target_os = "macos")]
-    sync_pet_quick_controls_theme(&app, &window, state.theme == "dark");
-    let controls_width = quick_controls_width(&state.language, quick_controls_paused(&state));
-    window
-        .set_size(LogicalSize::new(controls_width, PET_QUICK_CONTROLS_HEIGHT))
-        .map_err(|error| error.to_string())?;
-    if matches!(window.is_visible(), Ok(true)) {
+    if previous_state.as_ref().map(|previous| &previous.theme) != Some(&state.theme) {
+        sync_pet_quick_controls_theme(&app, &window, state.theme == "dark");
+    }
+    let controls_width = prepare_pet_quick_controls_size(&window, &state)?;
+    // Settings changed elsewhere may require a wider resting toolbar. Own
+    // button/menu feedback retains its frame; apply its new width hidden at
+    // the next presentation. This also keeps external locale changes readable.
+    if !pet_quick_controls_acknowledgement_held()
+        && !PET_QUICK_CONTROLS_MENU_OPEN.load(Ordering::Relaxed)
+        && matches!(window.is_visible(), Ok(true))
+    {
         if let Some(pet) = app.get_webview_window(PET_MODE_WINDOW_LABEL) {
-            if matches!(pet.is_visible(), Ok(true)) {
-                let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
-                #[cfg(target_os = "macos")]
-                motion::relocate(&window, layout)?;
-                #[cfg(not(target_os = "macos"))]
-                window
-                    .set_position(LogicalPosition::new(layout.x, layout.y))
-                    .map_err(|error| error.to_string())?;
-                let _ = window.emit(
-                    "pet-quick-controls-layout",
-                    json!({ "placement": layout.placement }),
-                );
-            }
+            let layout = resolve_quick_controls_layout(&app, &pet, controls_width)?;
+            #[cfg(target_os = "macos")]
+            motion::relocate(&window, layout)?;
+            #[cfg(not(target_os = "macos"))]
+            window
+                .set_position(LogicalPosition::new(layout.x, layout.y))
+                .map_err(|error| error.to_string())?;
         }
     }
     window
@@ -538,6 +641,7 @@ pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result
     }
 
     if action == "menuOpened" || action == "menuClosed" {
+        PET_QUICK_CONTROLS_MENU_OPEN.store(action == "menuOpened", Ordering::Relaxed);
         #[cfg(target_os = "macos")]
         if action == "menuOpened" {
             if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
@@ -568,23 +672,26 @@ pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result
             Ok(())
         };
         return tauri::async_runtime::spawn_blocking(move || {
-            let result = if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
-                #[cfg(target_os = "macos")]
-                let result = motion::hide_and_wait(&window);
-                #[cfg(not(target_os = "macos"))]
-                let result = hide_pet_quick_controls_window(&window);
-                // Even if presentation failed, never expose idle buttons in
-                // the renderer while an old confirmation panel stays visible.
-                if result.is_err() {
-                    let _ = hide_pet_quick_controls_window(&window);
-                }
-                result
-            } else {
-                Ok(())
-            };
+            let result =
+                if let Some(window) = app.get_webview_window(PET_QUICK_CONTROLS_WINDOW_LABEL) {
+                    #[cfg(target_os = "macos")]
+                    let result = motion::hide_and_wait(&window);
+                    #[cfg(not(target_os = "macos"))]
+                    let result = hide_pet_quick_controls_window(&window);
+                    // Even if presentation failed, never expose idle buttons in
+                    // the renderer while an old confirmation panel stays visible.
+                    if result.is_err() {
+                        let _ = hide_pet_quick_controls_window(&window);
+                    }
+                    result
+                } else {
+                    Ok(())
+                };
             set_pet_quick_controls_acknowledgement_held(&app, false);
             result.and(cooldown_result)
-        }).await.map_err(|error| error.to_string())?;
+        })
+        .await
+        .map_err(|error| error.to_string())?;
     }
 
     // Acquire before emitting the pause, including its asynchronous state
@@ -610,12 +717,13 @@ pub async fn pet_quick_controls_action(app: AppHandle, action: String) -> Result
 #[cfg(test)]
 mod tests {
     use super::{
-        is_automatic_close_pause_action, is_supported_quick_controls_action, is_supported_quick_controls_state,
-        layout_pet_quick_controls, point_inside_rect, PetQuickControlsAutomaticCloseOverride,
-        quick_controls_paused, quick_controls_width, PetQuickControlsState,
-        PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS, PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
-        PET_QUICK_CONTROLS_EN_PAUSED_WIDTH, PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
-        PET_QUICK_CONTROLS_KO_PAUSED_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
+        is_automatic_close_pause_action, is_supported_quick_controls_action,
+        is_supported_quick_controls_state, layout_pet_quick_controls, point_inside_rect,
+        quick_controls_paused, quick_controls_width, PetQuickControlsAutomaticCloseOverride,
+        PetQuickControlsState, PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
+        PET_QUICK_CONTROLS_EN_IDLE_WIDTH, PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+        PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
+        PET_QUICK_CONTROLS_SCREEN_INSET,
     };
     use serde_json::json;
 
@@ -646,13 +754,31 @@ mod tests {
         });
 
         // A temporary enable still reads as "On", so it keeps the resting width.
-        assert!(!quick_controls_paused(&state_with_override("en", temporarily_on.clone())));
-        assert!(quick_controls_paused(&state_with_override("en", paused.clone())));
+        assert!(!quick_controls_paused(&state_with_override(
+            "en",
+            temporarily_on.clone()
+        )));
+        assert!(quick_controls_paused(&state_with_override(
+            "en",
+            paused.clone()
+        )));
 
-        assert_eq!(quick_controls_width("en", false), PET_QUICK_CONTROLS_EN_IDLE_WIDTH);
-        assert_eq!(quick_controls_width("en", true), PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
-        assert_eq!(quick_controls_width("ko", false), PET_QUICK_CONTROLS_KO_IDLE_WIDTH);
-        assert_eq!(quick_controls_width("ko", true), PET_QUICK_CONTROLS_KO_PAUSED_WIDTH);
+        assert_eq!(
+            quick_controls_width("en", false),
+            PET_QUICK_CONTROLS_EN_IDLE_WIDTH
+        );
+        assert_eq!(
+            quick_controls_width("en", true),
+            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH
+        );
+        assert_eq!(
+            quick_controls_width("ko", false),
+            PET_QUICK_CONTROLS_KO_IDLE_WIDTH
+        );
+        assert_eq!(
+            quick_controls_width("ko", true),
+            PET_QUICK_CONTROLS_KO_PAUSED_WIDTH
+        );
 
         // Every reading has to fit between the creation minimum and maximum.
         assert!(PET_QUICK_CONTROLS_KO_IDLE_WIDTH <= PET_QUICK_CONTROLS_EN_IDLE_WIDTH);
@@ -765,12 +891,22 @@ mod tests {
 
     #[test]
     fn holds_all_pause_confirmations_but_not_enable_or_navigation_actions() {
-        for action in ["automaticClosePause15", "automaticClosePause60",
-            "automaticClosePauseToday", "automaticClosePauseForever"] {
+        for action in [
+            "automaticClosePause15",
+            "automaticClosePause60",
+            "automaticClosePauseToday",
+            "automaticClosePauseForever",
+        ] {
             assert!(is_automatic_close_pause_action(action), "{action}");
         }
-        for action in ["automaticCloseEnable15", "automaticCloseRestore",
-            "automaticCloseExtend60", "openSettings", "menuClosed", "acknowledgeDismiss"] {
+        for action in [
+            "automaticCloseEnable15",
+            "automaticCloseRestore",
+            "automaticCloseExtend60",
+            "openSettings",
+            "menuClosed",
+            "acknowledgeDismiss",
+        ] {
             assert!(!is_automatic_close_pause_action(action), "{action}");
         }
     }
@@ -843,6 +979,26 @@ mod tests {
                 layout.x + PET_QUICK_CONTROLS_EN_PAUSED_WIDTH
                     <= -640.0 + 640.0 - PET_QUICK_CONTROLS_SCREEN_INSET
             );
+        }
+    }
+    #[test]
+    fn feedback_updates_wait_for_a_hidden_frame_before_resizing() {
+        for (idle, paused) in [(255.0, 290.0), (285.0, 330.0)] {
+            assert!(!super::quick_controls_resize_needed(
+                true, true, idle, paused
+            ));
+            assert!(!super::quick_controls_resize_needed(
+                true, true, paused, idle
+            ));
+            assert!(super::quick_controls_resize_needed(
+                false, true, idle, paused
+            ));
+            assert!(!super::quick_controls_resize_needed(
+                false, false, paused, paused
+            ));
+            assert!(super::quick_controls_resize_needed(
+                true, false, idle, paused
+            ));
         }
     }
 }

@@ -247,6 +247,30 @@ describe("PetModeQuickControlsWindowApp", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("disables all actions until a pause is confirmed and allows retry after failure", async () => {
+    window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
+    window.localStorage.setItem(DRIFT_ALERTS_STORAGE_KEY, "1");
+    window.localStorage.setItem(EXTREME_NUDGE_STORAGE_KEY, "1");
+    render(<PetModeQuickControlsWindowApp />);
+    fireEvent.click(screen.getByRole("button", { name: "Auto-close: On" }));
+    await waitFor(() => expect(nativeMenu.openNativeAutomaticCloseMenu).toHaveBeenCalled());
+    const choose = nativeMenu.openNativeAutomaticCloseMenu.mock.calls[0][0];
+    let failPause!: (error: Error) => void;
+    bridge.triggerNativePetQuickControlsAction.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => {
+      failPause = reject;
+    }));
+    await act(async () => { choose("automaticClosePause60"); });
+    expect(screen.getByRole("toolbar").getAttribute("aria-busy")).toBe("true");
+    expect(screen.getAllByRole("button").every((button) => (button as HTMLButtonElement).disabled)).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Hide pet 1h" }));
+    expect(bridge.triggerNativePetVisibilityAction).not.toHaveBeenCalled();
+    await act(async () => { failPause(new Error("pause failed")); });
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByRole("toolbar").getAttribute("aria-busy")).toBeNull();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Retry" })); });
+    expect(bridge.triggerNativePetQuickControlsAction).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps native menu presentation single-flight across rapid clicks", async () => {
     window.localStorage.setItem(DISPLAY_LANGUAGE_STORAGE_KEY, "en");
     let closeMenu!: (value: boolean) => void;

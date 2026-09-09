@@ -41,6 +41,7 @@ import {
   isNativePetCursorInside,
   isNativePetQuickControlsCursorInside,
   listenToNativePetQuickControlsAction,
+  listenToNativePetQuickControlsHold,
   listenToNativePetQuickControlsMenuState,
   setNativePetQuickControlsVisible,
   setNativePetPresence,
@@ -295,6 +296,8 @@ export function PetModeWindowApp() {
   const contextChangedInterventionTokenRef = useRef<number | null>(null);
   const menuOpenRef = useRef(false);
   const controlsHoldingRef = useRef(false);
+  const nativeQuickControlsHoldGenerationRef = useRef<number | null>(null);
+  const quickControlsOpenDeniedRevisionRef = useRef(0);
   const quickControlsMenuOpenRef = useRef(false);
   const quickControlsInteractionCooldownUntilRef = useRef(0);
   const quickControlsResumeAfterInteractionRef = useRef(false);
@@ -559,9 +562,21 @@ export function PetModeWindowApp() {
       if (disposed) nextUnlisten?.();
       else if (nextUnlisten) unlisteners.push(nextUnlisten);
     }).catch(() => undefined);
+    void listenToNativePetQuickControlsHold((held, generation) => {
+      if (disposed) return;
+      if (held) {
+        nativeQuickControlsHoldGenerationRef.current = generation;
+      } else if (nativeQuickControlsHoldGenerationRef.current === generation) {
+        nativeQuickControlsHoldGenerationRef.current = null;
+      }
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else if (nextUnlisten) unlisteners.push(nextUnlisten);
+    }).catch(() => undefined);
     return () => {
       disposed = true;
       quickControlsMenuOpenRef.current = false;
+      nativeQuickControlsHoldGenerationRef.current = null;
       for (const stop of unlisteners) stop();
     };
   }, []);
@@ -954,6 +969,7 @@ export function PetModeWindowApp() {
       || manualDragRef.current
       || manualReleaseTokenRef.current !== null
       || menuOpenRef.current || controlsHoldingRef.current
+      || nativeQuickControlsHoldGenerationRef.current !== null
       || activeLabActionRef.current !== null
     ) return;
 
@@ -2494,7 +2510,8 @@ export function PetModeWindowApp() {
     const retry = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
+          || nativeQuickControlsHoldGenerationRef.current !== null) {
           retry();
           return;
         }
@@ -2504,7 +2521,8 @@ export function PetModeWindowApp() {
     const schedule = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
+          || nativeQuickControlsHoldGenerationRef.current !== null) {
           retry();
           return;
         }
@@ -2559,6 +2577,7 @@ export function PetModeWindowApp() {
       && !manualDragRef.current
       && manualReleaseTokenRef.current === null
       && !controlsHoldingRef.current
+      && nativeQuickControlsHoldGenerationRef.current === null
       && activeLabActionRef.current === null
       && !cursorHuntActiveRef.current
     );
@@ -2621,7 +2640,8 @@ export function PetModeWindowApp() {
     const retry = () => {
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
+          || nativeQuickControlsHoldGenerationRef.current !== null) {
           retry();
           return;
         }
@@ -2635,7 +2655,8 @@ export function PetModeWindowApp() {
       );
       timerId = window.setTimeout(() => {
         if (!isCurrentCycle()) return;
-        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current) {
+        if (phaseRef.current !== "idle" || !visibleRef.current || menuOpenRef.current || controlsHoldingRef.current
+          || nativeQuickControlsHoldGenerationRef.current !== null) {
           retry();
           return;
         }
@@ -2796,6 +2817,7 @@ export function PetModeWindowApp() {
     let intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
     let publishedOpen = false;
     let closingUntilMs = 0;
+    let observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
     const blockedNow = () => manualDragRef.current
       || menuOpenRef.current
       || watchingRef.current
@@ -2807,10 +2829,20 @@ export function PetModeWindowApp() {
       || activeLabActionRef.current === "intervention";
     const publishVisibility = async (requestedOpen: boolean) => {
       try {
-        await setNativePetQuickControlsVisible(requestedOpen);
+        const visible = await setNativePetQuickControlsVisible(requestedOpen);
+        if (requestedOpen && !visible) quickControlsOpenDeniedRevisionRef.current += 1;
         if (!disposed) {
-          publishedOpen = requestedOpen;
-          closingUntilMs = requestedOpen ? 0 : performance.now() + PET_QUICK_CONTROLS_EXIT_MS;
+          const wasPublishedOpen = publishedOpen;
+          publishedOpen = visible;
+          closingUntilMs = !visible && !requestedOpen && wasPublishedOpen
+            ? performance.now() + PET_QUICK_CONTROLS_EXIT_MS
+            : 0;
+          if (requestedOpen && !visible) {
+            observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
+            previousPointer = null;
+            intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
+            controlsHoldingRef.current = false;
+          }
         }
       } catch {
         // Leave the published state unchanged so a transient native-window
@@ -2833,6 +2865,13 @@ export function PetModeWindowApp() {
     };
     const poll = async () => {
       if (disposed) return;
+      if (observedDeniedRevision !== quickControlsOpenDeniedRevisionRef.current) {
+        observedDeniedRevision = quickControlsOpenDeniedRevisionRef.current;
+        previousPointer = null;
+        intent = EMPTY_PET_QUICK_CONTROLS_HOVER_INTENT;
+        publishedOpen = false;
+        controlsHoldingRef.current = false;
+      }
       // The native menu lives outside the quick-control WebView, so cursor
       // geometry cannot tell us that the user is still interacting with it.
       // Keep both windows anchored until AppKit dismisses the menu.

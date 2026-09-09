@@ -630,3 +630,45 @@ describe("pet mode intervention outcome classification", () => {
     await expect(result).resolves.toMatchObject({ outcome: "failed", reason: "Pet Mode is disabled" });
   });
 });
+
+describe("pet quick-controls movement hold bridge", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    tauri.invoke.mockReset();
+    tauriListen.listen.mockReset();
+  });
+
+  it("returns the native visibility acknowledgement", async () => {
+    tauri.invoke.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+    const { setNativePetQuickControlsVisible } =
+      await import("./petModeBridge");
+
+    await expect(setNativePetQuickControlsVisible(true)).resolves.toBe(false);
+    await expect(setNativePetQuickControlsVisible(false)).resolves.toBe(true);
+  });
+
+  it("forwards only valid native hold lifecycle events", async () => {
+    const seen: Array<[boolean, number]> = [];
+    tauriListen.listen.mockImplementationOnce(
+      async (event: string, handler: (event: { payload: unknown }) => void) => {
+        expect(event).toBe("pet-quick-controls-hold");
+        handler({ payload: { held: true, generation: 7 } });
+        handler({ payload: { held: false, generation: 7 } });
+        handler({ payload: { held: true, generation: 0 } });
+        handler({ payload: { held: "yes", generation: 8 } });
+        return vi.fn();
+      },
+    );
+    const { listenToNativePetQuickControlsHold } =
+      await import("./petModeBridge");
+
+    await listenToNativePetQuickControlsHold((held, generation) =>
+      seen.push([held, generation]),
+    );
+
+    expect(seen).toEqual([
+      [true, 7],
+      [false, 7],
+    ]);
+  });
+});
