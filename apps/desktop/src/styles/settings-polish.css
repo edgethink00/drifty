@@ -71,14 +71,11 @@
 }
 
 .content--settings .page {
-  max-width: none;
-  margin: 0;
-  padding: var(--page-content-block-start) var(--page-content-inline) 40px;
-}
-
-.content--settings .settings-panel-stack {
-  /* Align forms with other pages without stretching long settings rows. */
-  max-width: 1000px;
+  /* Settings keeps its established inset and centered form layout rather than
+     the shared page gutter: its controls were designed around this width. */
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px clamp(var(--space-6), 5.35vw, 6.5rem) 40px;
 }
 
 .content--settings .settings-layout {

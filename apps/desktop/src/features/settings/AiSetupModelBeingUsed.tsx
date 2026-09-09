@@ -226,9 +226,9 @@ export function AiSetupModelBeingUsed({
         : connectionTestMessage}
       statusMessageKind={connectionTestKind}
     />
-    {selectedProvider === "drifty" ? (
+    {selectedProvider === "drifty" && driftyRoute === "local" ? (
       <div className="ai-model-resource-summary">
-        {driftyRoute === "local" && selectedLocalModel ? (
+        {selectedLocalModel ? (
           <p className="ai-model-resource-summary__facts">{managedModelResourceDescription(selectedLocalModel, t)}</p>
         ) : null}
         <AiResourceNote route={driftyRoute} />
