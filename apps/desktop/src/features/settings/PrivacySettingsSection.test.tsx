@@ -128,6 +128,41 @@ describe("PrivacySettingsSection AI review", () => {
     expect(within(neverSent).getByText(/operating system's credential store/i)).toBeTruthy();
   });
 
+  /**
+   * The footnote and the enhanced-context definition are each written as several keys so
+   * they can render as separate lines. Splitting copy is only safe while every part is
+   * still drawn, so the parts that moved out of the original paragraph are asserted here.
+   */
+  it("still draws every part of the split footnote and enhanced-context copy", () => {
+    openAiDataSending();
+
+    const footnotes = document.querySelector(".ai-privacy-review__footnotes");
+    if (!(footnotes instanceof HTMLElement)) throw new Error("The request footnotes should render as a list.");
+    expect(within(footnotes).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(footnotes).getByText(/a fingerprint of the fields above/i)).toBeTruthy();
+    expect(within(footnotes).getByText(/cloud route only/i)).toBeTruthy();
+    expect(within(footnotes).getByText(/salted account hashes/i)).toBeTruthy();
+
+    const glossary = screen.getByText("What each row means").closest("details");
+    if (!(glossary instanceof HTMLDetailsElement)) throw new Error("The glossary should render as a details block.");
+    expect(within(glossary).getByText(/on a second attempt/i)).toBeTruthy();
+    expect(within(glossary).getByText(/terminal commands/i)).toBeTruthy();
+  });
+
+  it("separates the control the user owns from the claims they can only read", () => {
+    render(<PrivacySettingsSection />);
+
+    // The two product claims used to be drawn as settings rows, which made them read as
+    // controls with a missing switch. Only the analytics preference is switchable here.
+    const claims = document.querySelector(".privacy-claims");
+    if (!(claims instanceof HTMLElement)) throw new Error("The privacy claims should render as their own block.");
+    expect(within(claims).queryByRole("switch")).toBeNull();
+    expect(within(claims).getByText(/Raw tracking history is not published/i)).toBeTruthy();
+    expect(within(claims).getByText(/Optional cloud features are explicit/i)).toBeTruthy();
+    // The long wording is still present, one disclosure away rather than always open.
+    expect(within(claims).getByText(/rolling 7 day focus total/i)).toBeTruthy();
+  });
+
   it("falls back to enabled optional AI privacy controls when persisted settings are malformed", () => {
     window.localStorage.setItem(AI_PRIVACY_REQUEST_SETTINGS_STORAGE_KEY, "{broken json");
     openAiDataSending();

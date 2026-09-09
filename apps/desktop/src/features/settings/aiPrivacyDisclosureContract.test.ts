@@ -6,6 +6,34 @@ import { AI_DISCLOSED_WIRE_FIELDS } from "./AiPrivacyReview";
 import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS } from "../localization/translations";
 
 /**
+ * Two disclosures are written as several keys so the panel can render one claim per
+ * line instead of a single unreadable paragraph. The contract is about what the user
+ * is told, not about which key holds a sentence, so a claim may live in any part —
+ * but every part is rendered together by AiPrivacyReview, and the negative assertions
+ * below still run against each part individually.
+ */
+const FOOTNOTE_KEYS = [
+  "settings.aiPrivacy.footnote",
+  "settings.aiPrivacy.footnoteCloud",
+  "settings.aiPrivacy.footnoteSamples",
+] as const;
+
+const ENHANCED_CONTEXT_KEYS = [
+  "settings.aiPrivacy.meaningEnhancedContext",
+  "settings.aiPrivacy.meaningEnhancedContextDetail",
+] as const;
+
+function joined(translations: Readonly<Record<string, string>>, keys: readonly string[]): string {
+  return keys
+    .map((key) => {
+      const copy = translations[key];
+      if (copy === undefined) throw new Error("Missing disclosure copy for " + key);
+      return copy;
+    })
+    .join("\n");
+}
+
+/**
  * The privacy panel's field list is written by hand. Nothing else notices when the real
  * outbound payload gains a field, so this test reads the request builders and fails when
  * the wire shape and the disclosure drift apart.
@@ -320,8 +348,8 @@ describe("AI privacy disclosure contract", () => {
     expect(localProviderRequest).not.toContain("cloudApiClientMetadata");
     expect(localProviderRequest).not.toContain("withCloudDevicePayload");
 
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/cloud route only/i);
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.footnote"]).toContain("클라우드로 보낼 때만");
+    expect(joined(ENGLISH_TRANSLATIONS, FOOTNOTE_KEYS)).toMatch(/cloud route only/i);
+    expect(joined(KOREAN_TRANSLATIONS, FOOTNOTE_KEYS)).toContain("클라우드로 보낼 때만");
   });
 
   it("keeps the Reddit partial-send rule conditional on a Reddit domain", () => {
@@ -364,15 +392,15 @@ describe("AI privacy disclosure contract", () => {
       );
     }
     // The payload carries these per item (enhancedPromptItems), so the copy names them.
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/depth/i);
+    expect(joined(ENGLISH_TRANSLATIONS, ENHANCED_CONTEXT_KEYS)).toMatch(/depth/i);
     expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/on by default/i);
     expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).not.toMatch(/Dev-gated|Dev settings/i);
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("기본으로 켜져");
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).not.toContain("개발자 모드");
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/conversation title\/type/i);
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toMatch(/terminal commands/i);
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("AI 대화 제목·유형");
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.meaningEnhancedContext"]).toContain("터미널 명령");
+    expect(joined(ENGLISH_TRANSLATIONS, ENHANCED_CONTEXT_KEYS)).toMatch(/conversation title\/type/i);
+    expect(joined(ENGLISH_TRANSLATIONS, ENHANCED_CONTEXT_KEYS)).toMatch(/terminal commands/i);
+    expect(joined(KOREAN_TRANSLATIONS, ENHANCED_CONTEXT_KEYS)).toContain("AI 대화 제목·유형");
+    expect(joined(KOREAN_TRANSLATIONS, ENHANCED_CONTEXT_KEYS)).toContain("터미널 명령");
 
     // The cloud edge builder carries no enhancedContext field, so the copy must scope the
     // claim to local/self-hosted/BYOK routes rather than implying the cloud route receives it too.
@@ -387,16 +415,18 @@ describe("AI privacy disclosure contract", () => {
     // auth.users.id. Users cannot browse individual rows, while the delete-account
     // path derives current and retained hashes and removes matching samples.
     for (const translations of [ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS]) {
-      expect(
-        translations["settings.aiPrivacy.footnote"],
-        "Samples are not stored in the user's account; they are service-role rows keyed by a salted hash.",
-      ).not.toMatch(/stored in your Drifty account|Drifty 계정에 저장/);
+      for (const key of FOOTNOTE_KEYS) {
+        expect(
+          translations[key],
+          "Samples are not stored in the user's account; they are service-role rows keyed by a salted hash.",
+        ).not.toMatch(/stored in your Drifty account|Drifty 계정에 저장/);
+      }
     }
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/salted account hashes/i);
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/deleting the account removes samples/i);
-    expect(ENGLISH_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/blocks.*24 hours.*expired marker.*later sample-cleanup/i);
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.footnote"]).toContain("계정을 삭제하면");
-    expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.footnote"]).toMatch(/24시간 차단.*만료된 표식.*이후 샘플 정리/);
+    expect(joined(ENGLISH_TRANSLATIONS, FOOTNOTE_KEYS)).toMatch(/salted account hashes/i);
+    expect(joined(ENGLISH_TRANSLATIONS, FOOTNOTE_KEYS)).toMatch(/deleting the account removes samples/i);
+    expect(joined(ENGLISH_TRANSLATIONS, FOOTNOTE_KEYS)).toMatch(/blocks.*24 hours.*expired marker.*later sample-cleanup/i);
+    expect(joined(KOREAN_TRANSLATIONS, FOOTNOTE_KEYS)).toContain("계정을 삭제하면");
+    expect(joined(KOREAN_TRANSLATIONS, FOOTNOTE_KEYS)).toMatch(/24시간 차단.*만료된 표식.*이후 샘플 정리/);
   });
 
   it("discloses the truncation limit for both window title and page address", () => {

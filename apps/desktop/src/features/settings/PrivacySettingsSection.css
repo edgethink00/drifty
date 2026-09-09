@@ -1,0 +1,158 @@
+/* Privacy settings — claims vs controls.
+   The tab mixes two kinds of content: statements about what the product does,
+   and settings the user can change. Drawn identically they are indistinguishable,
+   so the claims get a quieter, control-free shape and keep their full wording in
+   a disclosure rather than permanently open above the toggles. */
+
+/* One card, not three stacked shapes. The lede, the two claims and the disclosure
+   are one statement about the same thing, so they share one surface and the
+   disclosure reads as this card's footer instead of a floating second box.
+
+   The geometry is copied from the settings-row card group in settings-polish.css
+   (1rem inline padding, 14px radius, the same row background) so this block reads
+   as a sibling card of the rows below it rather than a foreign box, and it keeps a
+   real gap instead of butting straight into the next card. */
+.privacy-claims {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+  padding: 0.85rem 1rem 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--settings-row-card-bg);
+  min-width: 0;
+}
+
+.privacy-claims__lede {
+  font-size: var(--type-setting-label-size);
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  word-break: keep-all;
+}
+
+.privacy-claims__list {
+  list-style: none;
+  /* One claim per row, marks in a shared column. The verdict chips that used to sit
+     here repeated the sentence next to them word for word ("원본 기록은 공개 안 함"
+     beside "원본 활동 기록은 공개되지 않습니다"), and a five-character label stretched
+     to the width of an eleven-character one looked like a mistake. Both claims are
+     reassurances, so both get the same mark and the sentence carries the meaning. */
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.privacy-claims__item {
+  display: contents;
+}
+
+/* Drawn rather than typed, so it inherits the accent and needs no icon asset. The
+   box is line-height tall so the mark sits on the first line of a wrapped claim. */
+.privacy-claims__check {
+  position: relative;
+  width: 13px;
+  height: 1.45em;
+  flex: 0 0 auto;
+}
+
+.privacy-claims__check::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 1px;
+  width: 5px;
+  height: 9px;
+  margin-top: -6px;
+  border-right: 1.8px solid var(--accent);
+  border-bottom: 1.8px solid var(--accent);
+  transform: rotate(45deg);
+}
+
+.privacy-claims__text {
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.45;
+  color: var(--text);
+  word-break: keep-all;
+}
+
+.privacy-claims__more {
+  /* Sits inside the card's 1rem padding, so this divider is inset exactly like the
+     ::after separators between settings rows. */
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.privacy-claims__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 44px;
+  /* Full-bleed hover target, inset content: the divider above stays inset while the
+     pressable area still reaches the card edges. */
+  margin: 0 -1rem;
+  padding: 0 1rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--type-setting-desc-size);
+  font-weight: 600;
+  color: var(--text);
+  transition: background var(--transition-fast);
+}
+
+.privacy-claims__summary::-webkit-details-marker {
+  display: none;
+}
+
+.privacy-claims__summary:hover {
+  background: var(--surface-strong);
+}
+
+.privacy-claims__summary:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: -2px;
+}
+
+.privacy-claims__chevron {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--text-soft);
+  border-bottom: 1.5px solid var(--text-soft);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform var(--transition-fast);
+}
+
+.privacy-claims__more[open] .privacy-claims__chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+.privacy-claims__detail {
+  font-size: var(--type-setting-desc-size);
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin: 0;
+  padding: 0 0 var(--space-2);
+  max-width: 74ch;
+  word-break: keep-all;
+}
+
+/* A long absolute path must not push the row wider than the panel. */
+.settings-section--privacy .ctrl--path {
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .privacy-claims__chevron {
+    transition: none;
+  }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { AiPrivacyReview } from "./AiPrivacyReview";
+import { AI_EXCLUDED_FIELDS, AiPrivacyReview } from "./AiPrivacyReview";
 import {
   AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
   readAiPrivacyRequestSettings,
@@ -8,6 +8,7 @@ import {
 } from "./aiPrivacyRequestSettings";
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { ModalPresence } from "../../components/ModalPresence";
+import "./PrivacySettingsSection.css";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { useLocalization } from "../localization/LocalizationContext";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -83,21 +84,35 @@ export function PrivacySettingsSection({
     <div className="settings-section settings-section--privacy">
       <div className="settings-block">
         <h3>{t("settings.section.privacy")}</h3>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.privacy.rawTitle")}</div>
-            <div className="desc">{t("settings.privacy.rawDescription")}</div>
-          </div>
-          <div className="ctrl"><span className="chip green">{t("settings.privacy.rawChip")}</span></div>
+        {/* These two are claims about product behavior, not settings. Drawn as
+            settings-rows they read as controls the user failed to find, so they
+            get their own shape and their full wording moves into one disclosure
+            instead of standing permanently open above the only real toggle. */}
+        <div className="privacy-claims">
+          <p className="privacy-claims__lede">{t("settings.privacy.claimsLede")}</p>
+          <ul className="privacy-claims__list">
+            <li className="privacy-claims__item">
+              <span aria-hidden="true" className="privacy-claims__check" />
+              <span className="privacy-claims__text">{t("settings.privacy.rawTitle")}</span>
+            </li>
+            <li className="privacy-claims__item">
+              <span aria-hidden="true" className="privacy-claims__check" />
+              <span className="privacy-claims__text">{t("settings.privacy.cloudTitle")}</span>
+            </li>
+          </ul>
+          <details className="privacy-claims__more">
+            <summary className="privacy-claims__summary">
+              <span>{t("settings.privacy.claimsMore")}</span>
+              <span aria-hidden="true" className="privacy-claims__chevron" />
+            </summary>
+            <p className="privacy-claims__detail">{t("settings.privacy.rawDescription")}</p>
+            <p className="privacy-claims__detail">{t("settings.privacy.cloudDescription")}</p>
+          </details>
         </div>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">{t("settings.privacy.cloudTitle")}</div>
-            <div className="desc">{t("settings.privacy.cloudDescription")}</div>
-          </div>
-          <div className="ctrl"><span className="chip">{t("settings.privacy.aggregatesChip")}</span></div>
-        </div>
-        <div className="settings-row">
+        {/* The claims block above is not a settings-row, so this row is no longer the
+            "h3 + .settings-row" that opens a card group and it lost its top edge.
+            Naming it a group start restores the card it is supposed to be. */}
+        <div className="settings-row settings-row--group-start">
           <label htmlFor="product-analytics-preference">
             <div className="lbl">{t("settings.privacy.productAnalyticsTitle")}</div>
             <div className="desc">{t("settings.privacy.productAnalyticsDescription")}</div>
@@ -122,8 +137,9 @@ export function PrivacySettingsSection({
         summary={
           <>
             <span className={`chip${optionalOnCount > 0 ? " green" : ""}`}>{t("settings.privacy.optionalOn", { enabled: optionalOnCount, total: optionalValues.length })}</span>
-            <span className="chip gray">{t("settings.privacy.lockedLocal")}</span>
-            <span className="chip gray">{t("settings.privacy.keysLocal")}</span>
+            {/* Counted from the never-sent list itself. The previous chip asserted a
+                bare "4" that matched nothing the user could open and count. */}
+            <span className="chip gray">{t("settings.privacy.neverSentCount", { count: AI_EXCLUDED_FIELDS.length })}</span>
           </>
         }
         title={t("settings.privacy.aiSending")}
@@ -136,7 +152,9 @@ export function PrivacySettingsSection({
           <div>
             <div className="lbl">{t("settings.data.database")}</div>
           </div>
-          <div className="ctrl ctrl--value">{databasePath ?? t("settings.data.unknown")}</div>
+          <div className="ctrl ctrl--value ctrl--path" title={databasePath ?? undefined}>
+            {databasePath ?? t("settings.data.unknown")}
+          </div>
         </div>
         <div className="settings-row">
           <div>
