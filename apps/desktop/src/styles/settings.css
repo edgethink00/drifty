@@ -275,7 +275,9 @@
 
 .settings-row:last-child { border-bottom: none; }
 .settings-row .lbl { font-size: var(--type-setting-label-size); font-weight: 500; }
-.settings-row .desc { font-family: var(--font-mono); font-size: var(--type-setting-desc-size); color: var(--text-soft); margin-top: 2px; }
+/* Descriptions are prose, not values: they read in the UI face. Mono stays on
+   values and controls (`.ctrl--value`, inputs, chips). */
+.settings-row .desc { font-family: var(--font-ui); font-size: var(--type-setting-desc-size); color: var(--text-soft); margin-top: 2px; }
 .settings-row .ctrl { flex-shrink: 0; }
 .settings-row .ctrl--value { font-family: var(--font-mono); font-size: var(--type-setting-value-size); }
 .settings-row--disabled { opacity: 0.64; }

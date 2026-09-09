@@ -617,7 +617,16 @@
 
 .projects-page .projects-search .settings-input {
   width: 100%;
+  /* Same 2rem as the page buttons beside it, so the toolbar reads as one row. */
+  height: 2rem;
   padding-left: 2.05rem;
+  border-color: var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  font-family: var(--font-sans);
+  /* 13px is the size the Settings search field already uses; the settings
+     value token below it is sized for short numeric fields, not placeholders. */
+  font-size: 0.8125rem;
 }
 
 /* Status filter uses the shared SettingsSelect control (10rem default width);
@@ -631,7 +640,7 @@
   height: 100%;
   padding-top: 0;
   padding-bottom: 0;
-  border-radius: 7px;
+  border-radius: 8px;
 }
 
 .projects-page .projects-toolbar__spacer {

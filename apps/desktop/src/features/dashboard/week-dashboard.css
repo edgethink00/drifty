@@ -1571,6 +1571,15 @@
   line-height: 1;
 }
 
+/* A 12px block cannot show a 12px line of text; the clipped glyphs only
+   dirtied the column. Colour alone carries these, the inspector carries the rest. */
+.week-v2-calendar__event--tiny strong,
+.week-v2-calendar__event--tiny small,
+.week-v2-calendar__event--tiny em,
+.week-v2-calendar__event--tiny .week-v2-calendar__identity-strip {
+  display: none;
+}
+
 .week-v2-calendar__event--micro {
   border-radius: 4px;
   padding: 0;

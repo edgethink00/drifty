@@ -451,6 +451,47 @@ button.flow-cell:focus {
   }
 }
 
+/* After the 660px stack, the actions row is still tight on a ~500px chart
+   (1024px window with the Breakdown rail open). Compact chips, dots, and
+   segment padding keep that row on one line; narrower charts wrap as before. */
+@container (max-width: 640px) {
+  .flow-chart-head__actions {
+    gap: var(--space-1) var(--space-2);
+  }
+
+  .flow-chart-legend {
+    gap: var(--space-1);
+  }
+
+  .flow-chart-legend__group {
+    gap: 0.25rem;
+    min-height: 1.2rem;
+  }
+
+  .flow-chart-legend__parent {
+    gap: 0.2rem;
+    padding: 0.1rem 0.34rem;
+    letter-spacing: 0.04em;
+  }
+
+  .flow-chart-legend__categories {
+    gap: 0.1rem;
+  }
+
+  /* Category mode puts `__dot` beside the Unclassified `__tone-dot` in the
+     same row, so both markers shrink together or the row looks mismatched. */
+  .flow-chart-legend__dot,
+  .flow-chart-legend__tone-dot {
+    width: 0.46rem;
+    height: 0.46rem;
+    flex-basis: 0.46rem;
+  }
+
+  .flow-chart-head__controls .seg button {
+    padding-inline: 0.28rem;
+  }
+}
+
 /* "Unclassified" is by far the widest legend entry, so on days that do have
    unclassified time it pushed the head onto a second line well before the
    660px stacking breakpoint above. In that in-between band the chip keeps its

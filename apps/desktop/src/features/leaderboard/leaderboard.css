@@ -590,10 +590,11 @@
 .leaderboard-search {
   align-items: center;
   display: flex;
-  min-height: 38px;
-  padding: 0.45rem 0.78rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  min-height: 2rem;
+  padding: 0 12px;
+  border-color: var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
 }
 
 .leaderboard-search input {
@@ -603,7 +604,8 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 0.86rem;
+  /* Matches the Settings and Projects search fields; 0.86rem was off-scale. */
+  font-size: 0.8125rem;
 }
 
 .leaderboard-search input::placeholder {

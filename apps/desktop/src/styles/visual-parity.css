@@ -63,12 +63,12 @@
 .content--classification .clf-stat {
   min-width: 0;
   min-height: 0;
-  padding: 5px 10px;
+  padding: 6px 16px;
   gap: 3px;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
+  justify-content: space-between;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 

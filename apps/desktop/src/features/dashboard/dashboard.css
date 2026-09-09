@@ -509,6 +509,19 @@
   text-transform: none;
 }
 
+/* Below 1080px with the Breakdown rail open, the title + Share + date nav no
+   longer share one line and the nav dropped under the title. A smaller title
+   and tighter gaps keep the head on one row at the 1024 review width. */
+@media (max-width: 1080px) {
+  .pg-head .dashboard-page-head__title {
+    font-size: 1.375rem;
+  }
+
+  .dashboard-page-head__primary {
+    gap: var(--space-2);
+  }
+}
+
 .dashboard-ai-recovery {
   --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));

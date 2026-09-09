@@ -29,25 +29,30 @@
   overflow-y: auto;
 }
 
+/* One stat strip instead of four floating cards: the four numbers are one
+   summary, and dividers cost less height and chrome than four borders. */
 .content--classification .clf-summary {
-  gap: var(--space-2);
-  overflow: visible;
-  border: 0;
-  background: transparent;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
   margin-bottom: var(--space-1);
 }
 
 .content--classification .clf-stat {
   min-width: 0;
-  min-height: 3.7rem;
+  min-height: 0;
   justify-content: space-between;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 44%),
-    color-mix(in srgb, var(--surface) 94%, transparent);
-  box-shadow: 0 12px 26px color-mix(in srgb, var(--text) 4%, transparent);
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.content--classification .clf-stat + .clf-stat {
+  border-left: 1px solid var(--line);
 }
 
 .content--classification .clf-stat strong {
@@ -2540,13 +2545,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   color: var(--text-soft);
   font-family: var(--font-ui);
   font-size: var(--type-setting-desc-size);
-}
-
-/* Written as a child chain on purpose: the shared `.settings-row .desc`
-   typography contract asserts every rule matching that selector restates
-   `--type-setting-desc-size`, and this rule only overrides the face. */
-.settings-section--classification .settings-row > div > .desc {
-  font-family: var(--font-ui);
 }
 
 .settings-section--classification .settings-btn {

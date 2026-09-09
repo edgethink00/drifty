@@ -1254,7 +1254,8 @@
 
 .content--classification .page:has(.classification-panel-view--empty-state) .clf-stat {
   box-shadow: none;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  /* Stay inside the shared strip. A per-tile wash would revive four cards. */
+  background: transparent;
 }
 
 .content--classification .page:has(.classification-panel-view--empty-state) .clf-stat--with-icon .app-glyph {
