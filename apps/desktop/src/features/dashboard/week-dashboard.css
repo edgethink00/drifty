@@ -2090,18 +2090,19 @@
   box-shadow: none;
 }
 
-/* Day header breathing room reuses 20px from the two plots, keeping the
-   app-usage panel and page bottom at their original vertical positions.
-   Divide the flow reduction across its actual row count so every detail
-   interval retains the same total plot height. Other dashboard periods keep
-   their existing layout. */
+/* Both dashboards sit tighter under their heading than --page-header-gap:
+   the flow grid and week calendar read as one unit with the focus headline,
+   so the shared 16px page gap detached them. Keep the compact plot sizing
+   introduced with the roomier page header, dividing the flow reduction across
+   its actual row count so every detail interval retains the same total plot
+   height. Other dashboard periods keep their existing layout. */
 .content--dashboard:has(.day-split__main > .dashboard-page-head) {
   --day-header-flow-height-reduction: 15px;
   --day-header-focus-height-reduction: 5px;
 }
 
 .content--dashboard .day-split__main > .dashboard-page-head {
-  margin-bottom: var(--page-header-gap);
+  margin-bottom: 8px;
 }
 
 .content--dashboard .day-split__main .flow-breakdown-layout__chart .flow-cell {
@@ -2261,7 +2262,7 @@
 .page--week-dashboard .week-v2-calendar > .pg-head {
   grid-row: 1;
   padding: 0;
-  margin: 0 0 var(--page-header-gap);
+  margin: 0 0 8px;
 }
 
 .page--week-dashboard .week-v2-calendar > .pg-head .dashboard-page-head__row {
