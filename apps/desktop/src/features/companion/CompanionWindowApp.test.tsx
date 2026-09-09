@@ -11,7 +11,7 @@ import type { WatcherPeekEvent } from "./WatcherPeek";
 import type { CompanionPillWindowEvent, NativeCompanionPointerEvent } from "./watcherBridge";
 
 const bridge = vi.hoisted(() => ({
-  clearHandler: null as (() => void) | null,
+  clearHandler: null as ((momentKey?: string | null) => void) | null,
   enteredHandler: null as ((event: NativeCompanionPointerEvent) => void) | null,
   exitedHandler: null as ((event: NativeCompanionPointerEvent) => void) | null,
   movedHandler: null as ((event: NativeCompanionPointerEvent) => void) | null,
@@ -48,7 +48,7 @@ vi.mock("./watcherBridge", () => ({
   dismissNativeCompanionMoment: bridge.dismissNativeCompanionMoment,
   isTauriRuntime: () => true,
   isNativeCompanionCursorOverCapsule: bridge.isNativeCompanionCursorOverCapsule,
-  listenToNativeCompanionPillClear: vi.fn(async (handler: () => void) => {
+  listenToNativeCompanionPillClear: vi.fn(async (handler: (momentKey?: string | null) => void) => {
     bridge.clearHandler = handler;
     return vi.fn();
   }),
@@ -166,6 +166,92 @@ describe("CompanionWindowApp", () => {
     document.documentElement.style.colorScheme = "";
   });
 
+  it("ignores an earlier watcher's clear 100ms into a fresh alarm", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    await act(async () => bridge.showHandler?.(focusSnapshot));
+    act(() => vi.advanceTimersByTime(29_900));
+    const alarm = buildCompanionDriftAlarmPreview("drift-alarm");
+    await act(async () => bridge.showHandler?.({ kind: "companionDriftAlarm", alarm }));
+    act(() => vi.advanceTimersByTime(100));
+    act(() => bridge.clearHandler?.(`watcherPeek:${focusSnapshot.id}`));
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("drift");
+    act(() => bridge.clearHandler?.(`driftAlarm:${alarm.id}`));
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+  });
+
+  it("drops an expired drift before requesting native geometry or presentation", async () => {
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    bridge.setNativeCompanionPillState.mockClear();
+    const alarm = { ...buildCompanionDriftAlarmPreview("drift-alarm"), generatedAt: new Date(Date.now() - 11 * 60_000).toISOString() };
+    await act(async () => bridge.showHandler?.({ kind: "companionDriftAlarm", alarm, __companionPresentation: "menuBar" }));
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+    expect(bridge.setNativeCompanionPillState).not.toHaveBeenCalled();
+    expect(bridge.presentPreparedNativeCompanionMoment).not.toHaveBeenCalled();
+  });
+
+  it("skips expired queued moments and continues to a fresh queued card", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    await act(async () => bridge.showHandler?.(focusMilestone));
+    const expiring = { ...focusMilestone, id: "expires-in-queue", generatedAt: new Date().toISOString() };
+    await act(async () => bridge.showHandler?.(expiring));
+    // Wall time advances through sleep while JS timers remain suspended.
+    vi.setSystemTime(Date.now() + 11 * 60_000);
+    await act(async () => bridge.showHandler?.({ ...focusMilestone, id: "fresh-after-wake", title: "Fresh after wake" }));
+    act(() => bridge.clearHandler?.(`milestone:${focusMilestone.id}`));
+    await act(async () => vi.advanceTimersByTime(701));
+    expect(container.textContent).toContain("Fresh after wake");
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("milestone");
+  });
+
+  it("does not resurrect queued information after a whole-surface clear", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    await act(async () => bridge.showHandler?.(focusMilestone));
+    await act(async () => bridge.showHandler?.({ ...focusMilestone, id: "queued" }));
+    act(() => bridge.clearHandler?.(null));
+    await act(async () => vi.advanceTimersByTime(1000));
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+  });
+
+  it("does not present a card which expires during native preparation", async () => {
+    vi.useFakeTimers();
+    let resolvePreparation: ((result: { prepared: boolean; menuAnchorX: number; presentationId: number }) => void) | undefined;
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    bridge.setNativeCompanionPillState.mockImplementationOnce(() => new Promise((resolve) => { resolvePreparation = resolve; }));
+    const alarm = buildCompanionDriftAlarmPreview("drift-alarm");
+    await act(async () => bridge.showHandler?.({ kind: "companionDriftAlarm", alarm, __companionPresentation: "menuBar" }));
+    vi.setSystemTime(Date.now() + 11 * 60_000);
+    await act(async () => resolvePreparation?.({ prepared: true, menuAnchorX: 100, presentationId: 1 }));
+    await act(async () => vi.advanceTimersByTime(200));
+    expect(bridge.presentPreparedNativeCompanionMoment).not.toHaveBeenCalled();
+    expect(container.querySelector(".pill")?.getAttribute("data-state")).toBe("collapsed");
+  });
+
+  it("does not attach an old preparation result to a new card of the same kind", async () => {
+    vi.useFakeTimers();
+    let resolveOld: ((result: { prepared: boolean; menuAnchorX: number; presentationId: number }) => void) | undefined;
+    const { container } = render(<CompanionWindowApp />);
+    await act(async () => undefined);
+    bridge.setNativeCompanionPillState.mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }));
+    const alarm = buildCompanionDriftAlarmPreview("drift-alarm");
+    await act(async () => bridge.showHandler?.({ kind: "companionDriftAlarm", alarm, __companionPresentation: "menuBar" }));
+    await act(async () => bridge.clearHandler?.(`driftAlarm:${alarm.id}`));
+    const replacement = { ...alarm, id: "replacement" };
+    bridge.setNativeCompanionPillState.mockImplementationOnce(() => new Promise(() => {}));
+    await act(async () => bridge.showHandler?.({ kind: "companionDriftAlarm", alarm: replacement, __companionPresentation: "menuBar" }));
+    await act(async () => resolveOld?.({ prepared: true, menuAnchorX: 123, presentationId: 1 }));
+    await act(async () => vi.advanceTimersByTime(200));
+    expect(bridge.presentPreparedNativeCompanionMoment).not.toHaveBeenCalled();
+    expect(container.querySelector(".pill")?.getAttribute("data-direct-entry")).toBe("pending");
+  });
+
   it("boots as its own transparent companion surface and receives snapshots", async () => {
     const { container } = render(<CompanionWindowApp />);
     await act(async () => undefined);
@@ -186,7 +272,7 @@ describe("CompanionWindowApp", () => {
     expect(pill?.dataset.state).toBe("collapsed");
     expect(container.querySelectorAll(".view--collapsed .icon-btn")).toHaveLength(2);
     expect(bridge.setNativeCompanionPillState).not.toHaveBeenCalledWith("peek");
-    expect(bridge.setNativeCompanionPillState).toHaveBeenLastCalledWith("collapsed");
+    expect(bridge.setNativeCompanionPillState).toHaveBeenLastCalledWith("collapsed", undefined, undefined);
   });
 
   it("keeps native cursor polling single-flight while a query is pending", async () => {
@@ -222,7 +308,7 @@ describe("CompanionWindowApp", () => {
     actions.onHideForOneHour();
     actions.onTurnOffCompanion();
 
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openSettings");
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openSettings", undefined, undefined);
     expect(bridge.triggerNativeCompanionVisibilityAction).toHaveBeenNthCalledWith(1, "hideOneHour");
     expect(bridge.triggerNativeCompanionVisibilityAction).toHaveBeenNthCalledWith(2, "turnOff");
   });
@@ -237,7 +323,7 @@ describe("CompanionWindowApp", () => {
     act(() => vi.advanceTimersByTime(180));
 
     fireEvent.click(getByRole("button", { name: "AI settings" }));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openAiSettings");
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openAiSettings", undefined, expect.any(String));
   });
 
   it("renders production milestone preview payloads with their celebration tier", async () => {
@@ -298,7 +384,7 @@ describe("CompanionWindowApp", () => {
     fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(160));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard");
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", undefined, expect.any(String));
   });
 
   /* The panel is much larger than the capsule it draws: the card floats inside
@@ -337,7 +423,7 @@ describe("CompanionWindowApp", () => {
       await vi.advanceTimersByTimeAsync(6_000);
     });
     act(() => vi.advanceTimersByTime(160));
-    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("milestone");
+    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("milestone", expect.any(String));
   });
 
   /* The latch is not momentary: once the pointer has been over the capsule and
@@ -389,7 +475,7 @@ describe("CompanionWindowApp", () => {
     fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(160));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard");
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard", undefined, expect.any(String));
   });
 
   it("reveals a hidden menu-bar moment only after its final card is committed", async () => {
@@ -610,6 +696,7 @@ describe("CompanionWindowApp", () => {
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
       "openActivityDay",
       reentry.lastActiveAt,
+      `reentry:${reentry.id}`,
     );
     expect(readCompanionEngagementMetrics()).toMatchObject({ reentry_opened: 1 });
 
@@ -662,14 +749,14 @@ describe("CompanionWindowApp", () => {
       fireEvent.click(getByRole("button", { name: "Not a drift" }));
       await Promise.resolve();
     });
-    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "manual_correction" });
+    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "manual_correction" }, expect.any(String));
     expect(container.textContent).toContain("Learning signal added");
     expect(container.textContent).toContain("Similar decisions will now weigh this as not drift.");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS + 160);
     });
-    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("notDriftFeedback");
+    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("notDriftFeedback", expect.any(String));
   });
 
   it("keeps the development drift preview interactive through acknowledgement dismissal", async () => {
@@ -695,7 +782,7 @@ describe("CompanionWindowApp", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS + 160);
     });
-    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("notDriftFeedback");
+    expect(bridge.dismissNativeCompanionMoment).toHaveBeenCalledWith("notDriftFeedback", expect.any(String));
   });
 
   it("lets an extreme nudge preempt and permanently discard an active day review", async () => {

@@ -26,7 +26,9 @@ import {
   buildCompanionReentryPreview,
 } from "./companionPillPreview";
 import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
-import { isCompanionMomentStale } from "./companionMomentFreshness";
+import { companionMomentReferenceMs, COMPANION_MOMENT_STALE_AFTER_MS, isCompanionMomentStale } from "./companionMomentFreshness";
+import { companionEventIdentity as companionMomentIdentity } from "./companionEventIdentity";
+import { recordCompanionLifecycle } from "./companionLifecycleLog";
 import {
   INFORMATIONAL_MOMENT_DEFER_RETRY_MS,
   isInformationalMomentKind,
@@ -87,8 +89,25 @@ export function CompanionWindowApp() {
   const [presentedMomentKey, setPresentedMomentKey] = useState<string | null>(null);
   const [menuAnchorX, setMenuAnchorX] = useState<number | null>(null);
   const [usesDirectMenuEntry, setUsesDirectMenuEntry] = useState(false);
+  const presentationModesRef = useRef(new WeakMap<CompanionPillMomentEvent, boolean>());
+  const lastMomentKeyRef = useRef<string | undefined>(momentEvent ? companionMomentIdentity(momentEvent) : undefined);
+  const preparedPresentationIdRef = useRef<number | undefined>(undefined);
+  const stateRequestRef = useRef(0);
 
   const activateMoment = useCallback((nextMoment: CompanionPillMomentEvent | null) => {
+    if (nextMoment && isCompanionMomentStale(nextMoment)) {
+      recordCompanionLifecycle("expired_before_activation", companionMomentIdentity(nextMoment));
+      return;
+    }
+    if (nextMoment && companionMomentIdentity(nextMoment) !== (momentEventRef.current && companionMomentIdentity(momentEventRef.current))) {
+      lastMomentKeyRef.current = companionMomentIdentity(nextMoment);
+      setUsesDirectMenuEntry(presentationModesRef.current.get(nextMoment) === true);
+      setMenuAnchorX(null);
+      setPreparedMomentKey(null);
+      setPresentedMomentKey(null);
+      preparedPresentationIdRef.current = undefined;
+      recordCompanionLifecycle("accepted", companionMomentIdentity(nextMoment));
+    }
     if (nextMoment && !momentEventRef.current) {
       setHorizontalAnchor(resolveCompanionAnchor(companionMomentState(nextMoment)));
     }
@@ -183,6 +202,10 @@ export function CompanionWindowApp() {
   }, []);
 
   const enqueueMoment = useCallback((nextMoment: CompanionPillMomentEvent) => {
+    if (isCompanionMomentStale(nextMoment)) {
+      recordCompanionLifecycle("expired_on_receipt", companionMomentIdentity(nextMoment));
+      return;
+    }
     if (!isInformationalMomentKind(nextMoment.kind)) {
       enqueueMomentNow(nextMoment);
       return;
@@ -208,13 +231,24 @@ export function CompanionWindowApp() {
     }
   }, [enqueueMomentNow, flushDeferredInformationalMoments]);
 
-  const finishCurrentMoment = useCallback(() => {
+  const finishCurrentMoment = useCallback((expectedKey?: string | null) => {
+    const current = momentEventRef.current;
+    if (expectedKey && (!current || companionMomentIdentity(current) !== expectedKey)) {
+      recordCompanionLifecycle("obsolete_clear_ignored", expectedKey);
+      return;
+    }
+    if (current) recordCompanionLifecycle("finished", companionMomentIdentity(current));
     activateMoment(null);
     if (momentQueueRef.current.length === 0 || momentQueueTimerRef.current !== null) return;
     momentQueueTimerRef.current = window.setTimeout(() => {
       momentQueueTimerRef.current = null;
       if (momentEventRef.current) return;
-      activateMoment(momentQueueRef.current.shift() ?? null);
+      let next = momentQueueRef.current.shift();
+      while (next && isCompanionMomentStale(next)) {
+        recordCompanionLifecycle("expired_in_queue", companionMomentIdentity(next));
+        next = momentQueueRef.current.shift();
+      }
+      activateMoment(next ?? null);
     }, COMPANION_MOMENT_QUEUE_GAP_MS);
   }, [activateMoment]);
 
@@ -269,13 +303,26 @@ export function CompanionWindowApp() {
            commit that installs its content. Waiting for the asynchronous
            native resize response leaves one paint where the new card occupies
            the previous card's frame, which reads as a sideways slip. */
-        setUsesDirectMenuEntry(nextEvent.__companionPresentation === "menuBar");
-        setMenuAnchorX(null);
+        presentationModesRef.current.set(nextMoment, nextEvent.__companionPresentation === "menuBar");
         enqueueMoment(nextMoment);
       }
     }));
     register(listenToNativeCompanionPillSnapshot(setPeekEvent));
-    register(listenToNativeCompanionPillClear(finishCurrentMoment));
+    register(listenToNativeCompanionPillClear((momentKey) => {
+      // A targeted clear also cancels a queued card; a deliberate whole-surface
+      // clear must not resurrect the queue after the user hides Companion.
+      momentQueueRef.current = momentKey
+        ? momentQueueRef.current.filter((event) => companionMomentIdentity(event) !== momentKey)
+        : [];
+      deferredInformationalRef.current = momentKey
+        ? deferredInformationalRef.current.filter((event) => companionMomentIdentity(event) !== momentKey)
+        : [];
+      if (!momentKey && momentQueueTimerRef.current !== null) {
+        window.clearTimeout(momentQueueTimerRef.current);
+        momentQueueTimerRef.current = null;
+      }
+      finishCurrentMoment(momentKey);
+    }));
     register(listenToNativeCompanionTransition((event) => {
       setNativeTransition(event);
       setHorizontalAnchor(event.anchor);
@@ -312,19 +359,19 @@ export function CompanionWindowApp() {
     recordCompanionEngagementMetric("dashboard_opened");
     const current = momentEventRef.current;
     if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard"));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", undefined, current ? companionMomentIdentity(current) : undefined));
   }, []);
 
   const handleOpenSettings = useCallback(() => {
     recordCompanionEngagementMetric("settings_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings"));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings", undefined, momentEventRef.current ? companionMomentIdentity(momentEventRef.current) : undefined));
   }, []);
 
   const handleOpenDayReviewAiSettings = useCallback(() => {
     const current = momentEventRef.current;
     if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
     recordCompanionEngagementMetric("settings_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openAiSettings"));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openAiSettings", undefined, current ? companionMomentIdentity(current) : undefined));
   }, []);
 
   const handleOpenMilestoneDestination = useCallback((destination: "leaderboard" | "insights" | "dashboard") => {
@@ -339,13 +386,13 @@ export function CompanionWindowApp() {
       : destination === "insights"
         ? "openTrends"
         : "openDashboard";
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction(action));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction(action, undefined, lastMomentKeyRef.current));
   }, [finishCurrentMoment]);
 
   const handleOpenReentry = useCallback((event: Extract<CompanionPillMomentEvent, { kind: "reentry" }>) => {
     finishCurrentMoment();
     recordCompanionEngagementMetric("reentry_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", event.lastActiveAt));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", event.lastActiveAt, companionMomentIdentity(event)));
   }, [finishCurrentMoment]);
 
   const handleHideForOneHour = useCallback(() => {
@@ -370,16 +417,19 @@ export function CompanionWindowApp() {
         activateMoment({ ...current, correctionStatus: "acknowledged" });
       }
       recordCompanionEngagementMetric(companionActionMetric(action));
-      ignoreCompanionBridgePromise(triggerNativeExtremeNudgeAction(action));
+      ignoreCompanionBridgePromise(triggerNativeExtremeNudgeAction(action, lastMomentKeyRef.current));
       return;
     }
     finishCurrentMoment();
     recordCompanionEngagementMetric(companionActionMetric(action));
-    ignoreCompanionBridgePromise(triggerNativeExtremeNudgeAction(action));
+    ignoreCompanionBridgePromise(triggerNativeExtremeNudgeAction(action, lastMomentKeyRef.current));
   }, [activateMoment, finishCurrentMoment]);
 
   const handleDismiss = useCallback((reason: CompanionPillDismissReason) => {
     const kind = momentEvent?.kind;
+    const key = momentEvent ? companionMomentIdentity(momentEvent) : null;
+    if (!key || !momentEventRef.current || companionMomentIdentity(momentEventRef.current) !== key) return;
+    recordCompanionLifecycle(`dismiss_${reason}`, key);
     /* A deliberate dismiss inside the reporter's dwell window still proves
        the card was seen; auto dismissals never do. */
     if (reason !== "auto" && kind === "endOfDayReview" && momentEvent?.kind === "endOfDayReview") {
@@ -392,7 +442,7 @@ export function CompanionWindowApp() {
         && momentEvent.correctionStatus === "acknowledged"
         ? "notDriftFeedback"
         : kind;
-      ignoreCompanionBridgePromise(dismissNativeCompanionMoment(dismissKind));
+      ignoreCompanionBridgePromise(dismissNativeCompanionMoment(dismissKind, key));
     }
   }, [finishCurrentMoment, momentEvent]);
 
@@ -404,17 +454,34 @@ export function CompanionWindowApp() {
       setMenuAnchorX(null);
       setUsesDirectMenuEntry(false);
     }
-    void setNativeCompanionPillState(state).then((result) => {
+    const requested = momentEventRef.current;
+    const requestedKey = requested ? companionMomentIdentity(requested) : lastMomentKeyRef.current;
+    const referenceMs = requested ? companionMomentReferenceMs(requested) : null;
+    const requestId = ++stateRequestRef.current;
+    if (requested && isCompanionMomentStale(requested)) {
+      finishCurrentMoment(requestedKey);
+      return;
+    }
+    void setNativeCompanionPillState(state, requestedKey,
+      referenceMs === null ? undefined : referenceMs + COMPANION_MOMENT_STALE_AFTER_MS,
+    ).then((result) => {
       const current = momentEventRef.current;
-      if (!current || companionMomentState(current) !== state) return;
+      if (requestId !== stateRequestRef.current || !current
+        || companionMomentIdentity(current) !== requestedKey || companionMomentState(current) !== state) return;
+      if (isCompanionMomentStale(current)) {
+        recordCompanionLifecycle("expired_after_prepare", requestedKey);
+        finishCurrentMoment(requestedKey);
+        return;
+      }
       if (!result.prepared) {
         setUsesDirectMenuEntry(false);
         return;
       }
+      preparedPresentationIdRef.current = result.presentationId ?? undefined;
       setMenuAnchorX(result.menuAnchorX);
-      setPreparedMomentKey(companionMomentIdentity(current));
+      setPreparedMomentKey(requestedKey ?? null);
     }).catch(ignoreCompanionBridgeRejection);
-  }, []);
+  }, [finishCurrentMoment]);
 
   const currentMomentKey = momentEvent ? companionMomentIdentity(momentEvent) : null;
   const presentsMomentImmediately = currentMomentKey !== null && usesDirectMenuEntry;
@@ -442,8 +509,21 @@ export function CompanionWindowApp() {
          presentation opportunities to allocate that backing store. Show the
          native panel in the frozen origin pose, then release shell and child
          animations together on its next visible frame. */
-      void presentPreparedNativeCompanionMoment().then(() => {
+      const current = momentEventRef.current;
+      if (!current || companionMomentIdentity(current) !== preparedKey) return;
+      if (isCompanionMomentStale(current)) {
+        recordCompanionLifecycle("expired_before_present", preparedKey);
+        finishCurrentMoment(preparedKey);
+        return;
+      }
+      void presentPreparedNativeCompanionMoment(preparedPresentationIdRef.current).then((shown) => {
         if (cancelled || !preparedKey) return;
+        if (shown === false) {
+          recordCompanionLifecycle("presentation_rejected", preparedKey);
+          finishCurrentMoment(preparedKey);
+          return;
+        }
+        recordCompanionLifecycle("presented", preparedKey);
         const releasePresentation = () => {
           if (cancelled || presentationReleased) return;
           presentationReleased = true;
@@ -476,7 +556,7 @@ export function CompanionWindowApp() {
       if (secondWarmupFrame) window.cancelAnimationFrame(secondWarmupFrame);
       if (presentationFrame) window.cancelAnimationFrame(presentationFrame);
     };
-  }, [currentMomentKey, preparedForDirectEntry]);
+  }, [currentMomentKey, preparedForDirectEntry, finishCurrentMoment]);
 
   /* The fixed horizontal canvas keeps right-edge motion exact and leaves
      transparent room beside compact states. That rectangle must not swallow
@@ -609,11 +689,6 @@ function toCompanionPillMoment(event: CompanionPillWindowEvent): CompanionPillMo
     return toCompanionDriftAlarmMoment(event.alarm);
   }
   return null;
-}
-
-function companionMomentIdentity(event: CompanionPillMomentEvent): string {
-  if (event.kind === "endOfDayReview") return `${event.kind}:${event.generatedAt}`;
-  return `${event.kind}:${event.id}`;
 }
 
 function companionMomentPriority(event: CompanionPillMomentEvent): number {

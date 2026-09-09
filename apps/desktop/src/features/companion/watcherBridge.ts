@@ -120,20 +120,23 @@ export async function setNativeCompanionSurfacePolicy(
 export type NativeCompanionSetStateResult = {
   prepared: boolean;
   menuAnchorX: number | null;
+  presentationId?: number | null;
 };
 
 export async function setNativeCompanionPillState(
   state: CompanionPillState,
+  momentKey?: string,
+  expiresAtMs?: number,
 ): Promise<NativeCompanionSetStateResult> {
   if (!isTauriRuntime()) return { prepared: false, menuAnchorX: null };
   const animated = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  return invoke<NativeCompanionSetStateResult>("watcher_companion_set_state", { state, animated });
+  return invoke<NativeCompanionSetStateResult>("watcher_companion_set_state", { state, animated, ...(momentKey ? { momentKey } : {}), ...(expiresAtMs !== undefined ? { expiresAtMs } : {}) });
 }
 
 /** Reveal a menu-bar card only after its final React view has committed. */
-export async function presentPreparedNativeCompanionMoment(): Promise<void> {
-  if (!isTauriRuntime()) return;
-  await invoke("watcher_companion_present_prepared");
+export async function presentPreparedNativeCompanionMoment(presentationId?: number): Promise<boolean> {
+  if (!isTauriRuntime()) return false;
+  return invoke<boolean>("watcher_companion_present_prepared", { presentationId });
 }
 
 /**
@@ -174,19 +177,19 @@ export async function updateNativeCompanionPill(event: WatcherPeekEvent): Promis
   await invoke("watcher_companion_update", { payload: event });
 }
 
-export async function dismissNativeCompanionMoment(kind: string): Promise<void> {
+export async function dismissNativeCompanionMoment(kind: string, momentKey?: string): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_companion_dismiss_moment", { kind });
+  await invoke("watcher_companion_dismiss_moment", { kind, ...(momentKey ? { momentKey } : {}) });
 }
 
-export async function hideNativeWatcherPeek(): Promise<void> {
+export async function hideNativeWatcherPeek(momentKey?: string): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_hide");
+  await invoke("watcher_peek_hide", { momentKey });
 }
 
-export async function dismissNativeWatcherPeek(): Promise<void> {
+export async function dismissNativeWatcherPeek(momentKey?: string): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_dismiss");
+  await invoke("watcher_peek_dismiss", { momentKey });
 }
 
 export async function setNativeWatcherInteractive(interactive: boolean): Promise<void> {
@@ -204,17 +207,18 @@ export async function isNativeWatcherCursorInside(): Promise<boolean | null> {
   }
 }
 
-export async function respondNativeWatcherPeek(response: WatcherPeekResponse): Promise<void> {
+export async function respondNativeWatcherPeek(response: WatcherPeekResponse, momentKey?: string): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_respond", { response });
+  await invoke("watcher_peek_respond", { response, ...(momentKey ? { momentKey } : {}) });
 }
 
 export async function triggerNativeEndOfDayReviewAction(
   action: EndOfDayReviewAction,
   activityAt?: string,
+  momentKey?: string,
 ): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_end_of_day_review_action", { action, activityAt });
+  await invoke("watcher_peek_end_of_day_review_action", { action, activityAt, ...(momentKey ? { momentKey } : {}) });
 }
 
 export async function notifyNativeEndOfDayReviewDisplayed(day: string): Promise<void> {
@@ -229,9 +233,9 @@ export async function triggerNativeCompanionVisibilityAction(
   await invoke("watcher_companion_visibility_action", { action });
 }
 
-export async function triggerNativeExtremeNudgeAction(action: DriftAlarmAction): Promise<void> {
+export async function triggerNativeExtremeNudgeAction(action: DriftAlarmAction, momentKey?: string): Promise<void> {
   if (!isTauriRuntime()) return;
-  await invoke("watcher_peek_extreme_nudge_action", { action });
+  await invoke("watcher_peek_extreme_nudge_action", { action, ...(momentKey ? { momentKey } : {}) });
 }
 
 export async function listenToNativeWatcherShow(onShow: (event: CompanionPillWindowEvent) => void): Promise<UnlistenFn | null> {
@@ -244,9 +248,9 @@ export async function listenToNativeCompanionPillSnapshot(onUpdate: (event: Watc
   return listen<WatcherPeekEvent>("watcher-companion-snapshot", ({ payload }) => onUpdate(payload));
 }
 
-export async function listenToNativeCompanionPillClear(onClear: () => void): Promise<UnlistenFn | null> {
+export async function listenToNativeCompanionPillClear(onClear: (momentKey?: string | null) => void): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen("watcher-companion-clear", onClear);
+  return listen<{ momentKey?: string | null }>("watcher-companion-clear", ({ payload }) => onClear(payload?.momentKey));
 }
 
 export async function listenToNativeCompanionTransition(
@@ -286,9 +290,9 @@ export async function listenToNativeWatcherResponse(onResponse: (response: Watch
   });
 }
 
-export async function listenToNativeWatcherDismissed(onDismissed: () => void): Promise<UnlistenFn | null> {
+export async function listenToNativeWatcherDismissed(onDismissed: (momentKey?: string | null) => void): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen("watcher-peek-dismissed", onDismissed);
+  return listen<{ momentKey?: string | null }>("watcher-peek-dismissed", ({ payload }) => onDismissed(payload?.momentKey));
 }
 
 export async function listenToNativeEndOfDayReviewAction(

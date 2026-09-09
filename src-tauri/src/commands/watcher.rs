@@ -1,3 +1,22 @@
+#[path = "watcher/moment_lifecycle.rs"]
+mod moment_lifecycle;
+use moment_lifecycle::{payload_expired, payload_key, MomentLifecycle};
+static MOMENT_LIFECYCLE: std::sync::Mutex<MomentLifecycle> =
+    std::sync::Mutex::new(MomentLifecycle::new());
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CompanionClearPayload {
+    moment_key: Option<String>,
+}
+
+pub(super) fn current_moment_allows_action(key: Option<&str>) -> bool {
+    MOMENT_LIFECYCLE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .allows_action(key)
+}
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -116,6 +135,7 @@ enum CompanionSurfacePolicy {
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompanionSetStateResult {
+    presentation_id: Option<u64>,
     prepared: bool,
     menu_anchor_x: Option<f64>,
 }
@@ -289,6 +309,9 @@ pub fn setup_companion_pill_window(app: &tauri::App) -> tauri::Result<()> {
 
 #[tauri::command]
 pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), String> {
+    if payload_expired(&payload, chrono::Utc::now().timestamp_millis()) {
+        return Ok(());
+    }
     let companion_enabled = companion_pill_enabled();
     /* Day Review has one product renderer. The public UI's "off" preference
     maps to moments-only, so it still reaches Companion; a truly disabled
@@ -299,66 +322,29 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
         return Ok(());
     }
     if companion_enabled {
+        if is_companion_moment_payload(&payload) {
+            if let Some(key) = payload_key(&payload) {
+                MOMENT_LIFECYCLE
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .receive(&key);
+            }
+        }
         annotate_companion_presentation(&mut payload, companion_menu_bar_mode());
         let window = app
             .get_webview_window(COMPANION_PILL_WINDOW_LABEL)
             .ok_or_else(|| "companion pill window is not available".to_string())?;
-        if companion_menu_bar_mode() {
-            COMPANION_MENU_BAR_VISIBILITY_GENERATION.fetch_add(1, Ordering::SeqCst);
-            let current_state = companion_pill_state();
-            let current_state = if current_state.is_empty() {
-                "collapsed"
-            } else {
-                &current_state
-            };
-            if is_companion_moment_payload(&payload) && is_resting_companion_state(current_state) {
-                /* Menu-bar mode has no resident capsule. Even if a stale
-                AppKit frame still reports visible during the short dismiss
-                grace period, remove it before React receives the next event.
-                `watcher_companion_set_state` will now take the hidden prepare
-                path, and the first visible frame will be the completed card. */
-                window.hide().map_err(|error| error.to_string())?;
-                window
-                    .set_ignore_cursor_events(false)
-                    .map_err(|error| error.to_string())?;
-                window
-                    .emit("watcher-peek-show", payload)
-                    .map_err(|error| error.to_string())?;
-                return Ok(());
-            }
-            let is_visible = matches!(window.is_visible(), Ok(true));
-            if !is_visible {
-                /* A menu-bar Companion has no resident pill. Do not reveal the
-                collapsed surface as a staging frame: deliver the event to the
-                already-loaded hidden webview, then let
-                `watcher_companion_set_state` prepare the final card geometry.
-                React calls `watcher_companion_present_prepared` only after that
-                final card has committed, so the first visible frame is the
-                actual moment rather than a pill that immediately expands. */
-                window
-                    .set_ignore_cursor_events(false)
-                    .map_err(|error| error.to_string())?;
-                window
-                    .emit("watcher-peek-show", payload)
-                    .map_err(|error| error.to_string())?;
-                return Ok(());
-            }
-            let state = companion_pill_state();
-            let state = if state.is_empty() {
-                "collapsed"
-            } else {
-                &state
-            };
-            position_companion_pill_under_menu_bar(&app, &window, state)?;
-        }
-        window
-            .set_ignore_cursor_events(false)
-            .map_err(|error| error.to_string())?;
+        // The renderer owns admission and queue priority. Deliver content without
+        // touching a visible panel; only its accepted set_state may change geometry.
         window
             .emit("watcher-peek-show", payload)
             .map_err(|error| error.to_string())?;
-        return show_companion_panel(&app, &window);
+        return Ok(());
     }
+    MOMENT_LIFECYCLE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .receive_legacy(payload_key(&payload));
 
     let window = app
         .get_webview_window(WATCHER_PEEK_WINDOW_LABEL)
@@ -381,14 +367,30 @@ pub fn watcher_peek_show(app: AppHandle, mut payload: Value) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn watcher_peek_hide(app: AppHandle) -> Result<(), String> {
+pub fn watcher_peek_hide(app: AppHandle, moment_key: Option<String>) -> Result<(), String> {
+    let matches = MOMENT_LIFECYCLE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .cancel(moment_key.as_deref());
+    // Send targeted cancellation even for queued moments; the renderer filters
+    // by identity. Only the owning moment can change native visibility.
+    if let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) {
+        window
+            .emit(
+                "watcher-companion-clear",
+                CompanionClearPayload {
+                    moment_key: moment_key.clone(),
+                },
+            )
+            .map_err(|error| error.to_string())?;
+    }
+    if !matches {
+        return Ok(());
+    }
     if companion_pill_enabled() {
         let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) else {
             return Ok(());
         };
-        window
-            .emit("watcher-companion-clear", ())
-            .map_err(|error| error.to_string())?;
         if companion_menu_bar_mode() {
             schedule_menu_bar_companion_hide(app.clone());
             return Ok(());
@@ -441,6 +443,19 @@ fn set_companion_surface_policy(
         if let Some(watcher_window) = app.get_webview_window(WATCHER_PEEK_WINDOW_LABEL) {
             let _ = watcher_window.hide();
         }
+    }
+
+    if previous != policy {
+        MOMENT_LIFECYCLE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .cancel(None);
+        window
+            .emit(
+                "watcher-companion-clear",
+                CompanionClearPayload { moment_key: None },
+            )
+            .map_err(|error| error.to_string())?;
     }
 
     match policy {
@@ -511,6 +526,7 @@ fn validate_companion_visibility_action(action: &str) -> Result<(), String> {
 #[tauri::command]
 pub fn watcher_companion_visibility_action(app: AppHandle, action: String) -> Result<(), String> {
     validate_companion_visibility_action(&action)?;
+    watcher_peek_hide(app.clone(), None)?;
     watcher_companion_set_enabled(app.clone(), false)?;
 
     if let Some(main) = app.get_webview_window("main") {
@@ -529,14 +545,35 @@ pub fn watcher_companion_set_state(
     app: AppHandle,
     state: String,
     animated: Option<bool>,
+    moment_key: Option<String>,
+    expires_at_ms: Option<i64>,
 ) -> Result<CompanionSetStateResult, String> {
     if !companion_pill_enabled() {
         return Ok(CompanionSetStateResult {
+            presentation_id: None,
             prepared: false,
             menu_anchor_x: None,
         });
     }
     validate_companion_pill_state(&state)?;
+    let Some(presentation_id) = MOMENT_LIFECYCLE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .set_state(
+            is_resting_companion_state(&state),
+            moment_key.as_deref(),
+            expires_at_ms,
+            chrono::Utc::now().timestamp_millis(),
+        )
+    else {
+        return Ok(CompanionSetStateResult {
+            prepared: false,
+            menu_anchor_x: None,
+            presentation_id: None,
+        });
+    };
+    COMPANION_MENU_BAR_VISIBILITY_GENERATION.fetch_add(1, Ordering::SeqCst);
+
     /* Capture the layout the panel is leaving before recording the new state,
     so the resize can hold the capsule's chosen anchor across the change. */
     let previous_state = companion_pill_state();
@@ -579,6 +616,7 @@ pub fn watcher_companion_set_state(
                 .set_ignore_cursor_events(true)
                 .map_err(|error| error.to_string())?;
             return Ok(CompanionSetStateResult {
+                presentation_id: None,
                 prepared: false,
                 menu_anchor_x: None,
             });
@@ -604,6 +642,7 @@ pub fn watcher_companion_set_state(
             resize_companion_pill_window(&window, &state)?;
             let menu_anchor_x = position_companion_pill_under_menu_bar(&app, &window, &state)?;
             return Ok(CompanionSetStateResult {
+                presentation_id: Some(presentation_id),
                 prepared: true,
                 menu_anchor_x: Some(menu_anchor_x),
             });
@@ -619,7 +658,11 @@ pub fn watcher_companion_set_state(
             &previous_state
         },
     )?;
+    if let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) {
+        show_companion_panel(&app, &window)?;
+    }
     Ok(CompanionSetStateResult {
+        presentation_id: None,
         prepared: false,
         menu_anchor_x: None,
     })
@@ -630,12 +673,22 @@ pub fn watcher_companion_set_state(
 /// handshake: native geometry first, committed React card second, visibility
 /// last.
 #[tauri::command]
-pub fn watcher_companion_present_prepared(app: AppHandle) -> Result<(), String> {
+pub fn watcher_companion_present_prepared(
+    app: AppHandle,
+    presentation_id: Option<u64>,
+) -> Result<bool, String> {
+    if !MOMENT_LIFECYCLE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .present(presentation_id, chrono::Utc::now().timestamp_millis())
+    {
+        return Ok(false);
+    }
     if !companion_menu_bar_mode() {
-        return Ok(());
+        return Ok(false);
     }
     let Some(window) = app.get_webview_window(COMPANION_PILL_WINDOW_LABEL) else {
-        return Ok(());
+        return Ok(false);
     };
     let state = companion_pill_state();
     if is_resting_companion_state(if state.is_empty() {
@@ -643,13 +696,14 @@ pub fn watcher_companion_present_prepared(app: AppHandle) -> Result<(), String> 
     } else {
         &state
     }) {
-        return Ok(());
+        return Ok(false);
     }
     position_companion_pill_under_menu_bar(&app, &window, &state)?;
     window
         .set_ignore_cursor_events(false)
         .map_err(|error| error.to_string())?;
-    show_companion_panel(&app, &window)
+    show_companion_panel(&app, &window)?;
+    Ok(true)
 }
 
 /// Keep the fixed transparent canvas around the capsule from stealing clicks.
@@ -736,13 +790,23 @@ pub fn watcher_companion_update(app: AppHandle, payload: Value) -> Result<(), St
 }
 
 #[tauri::command]
-pub fn watcher_companion_dismiss_moment(app: AppHandle, kind: String) -> Result<(), String> {
-    watcher_peek_hide(app.clone())?;
+pub fn watcher_companion_dismiss_moment(
+    app: AppHandle,
+    kind: String,
+    moment_key: Option<String>,
+) -> Result<(), String> {
+    if !current_moment_allows_action(moment_key.as_deref()) {
+        return Ok(());
+    }
+    watcher_peek_hide(app.clone(), moment_key.clone())?;
 
     if kind == "driftAlarm" {
         if let Some(main) = app.get_webview_window("main") {
-            main.emit("drift-alarm-dismissed", ())
-                .map_err(|error| error.to_string())?;
+            main.emit(
+                "drift-alarm-dismissed",
+                CompanionClearPayload { moment_key },
+            )
+            .map_err(|error| error.to_string())?;
         }
     }
 
@@ -750,12 +814,18 @@ pub fn watcher_companion_dismiss_moment(app: AppHandle, kind: String) -> Result<
 }
 
 #[tauri::command]
-pub fn watcher_peek_dismiss(app: AppHandle) -> Result<(), String> {
-    watcher_peek_hide(app.clone())?;
+pub fn watcher_peek_dismiss(app: AppHandle, moment_key: Option<String>) -> Result<(), String> {
+    if !current_moment_allows_action(moment_key.as_deref()) {
+        return Ok(());
+    }
+    watcher_peek_hide(app.clone(), moment_key.clone())?;
 
     if let Some(main) = app.get_webview_window("main") {
-        main.emit("watcher-peek-dismissed", ())
-            .map_err(|error| error.to_string())?;
+        main.emit(
+            "watcher-peek-dismissed",
+            CompanionClearPayload { moment_key },
+        )
+        .map_err(|error| error.to_string())?;
     }
 
     Ok(())
@@ -796,8 +866,15 @@ pub fn watcher_peek_cursor_inside(app: AppHandle) -> bool {
 }
 
 #[tauri::command]
-pub fn watcher_peek_respond(app: AppHandle, response: String) -> Result<(), String> {
-    watcher_peek_hide(app.clone())?;
+pub fn watcher_peek_respond(
+    app: AppHandle,
+    response: String,
+    moment_key: Option<String>,
+) -> Result<(), String> {
+    if !current_moment_allows_action(moment_key.as_deref()) {
+        return Ok(());
+    }
+    watcher_peek_hide(app.clone(), moment_key.clone())?;
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit(
@@ -815,9 +892,13 @@ pub fn watcher_peek_end_of_day_review_action(
     app: AppHandle,
     action: String,
     activity_at: Option<String>,
+    moment_key: Option<String>,
 ) -> Result<(), String> {
+    if moment_key.is_some() && !current_moment_allows_action(moment_key.as_deref()) {
+        return Ok(());
+    }
     reveal_main_window_for_review_action(&app);
-    let _ = watcher_peek_hide(app.clone());
+    let _ = watcher_peek_hide(app.clone(), moment_key.clone());
 
     if let Some(main) = app.get_webview_window("main") {
         main.emit(

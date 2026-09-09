@@ -250,7 +250,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
       vi.advanceTimersByTime(300);
     });
 
-    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 });
+    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "start_break", minutes: 15 }, "extremeNudgeToast:extreme-toast-1");
     expect(screen.queryByRole("status")).toBeNull();
   });
 
@@ -259,7 +259,7 @@ describe("WatcherWindowApp extreme nudge toast", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Not a drift" }));
 
-    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "manual_correction" });
+    expect(bridge.triggerNativeExtremeNudgeAction).toHaveBeenCalledWith({ type: "manual_correction" }, "extremeNudgeToast:extreme-toast-1");
     expect(screen.getByRole("status").textContent).toContain("Learning signal added");
     expect(screen.getByRole("status").textContent).toContain("Similar decisions will now weigh this as not drift.");
     expect(screen.queryByRole("button", { name: "Not a drift" })).toBeNull();

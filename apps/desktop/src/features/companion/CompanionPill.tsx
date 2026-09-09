@@ -435,7 +435,7 @@ export function CompanionPill({
 
   useEffect(() => {
     onStateChange?.(state);
-  }, [onStateChange, state]);
+  }, [onStateChange, state, activeMomentKey]);
 
   return (
     <div

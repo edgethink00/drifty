@@ -2819,7 +2819,7 @@ export default function App() {
     watcherRecoveryTimeoutRef.current = window.setTimeout(() => {
       if (watcherEventRef.current?.id !== eventId) return;
       clearWatcherEvent();
-      void hideNativeWatcherPeek();
+      void hideNativeWatcherPeek(`watcherPeek:${eventId}`);
     }, WATCHER_STALE_EVENT_RECOVERY_MS);
   }, [clearWatcherEvent, clearWatcherRecoveryTimer]);
 
@@ -3093,7 +3093,8 @@ export default function App() {
     });
   }, [recordDriftInteraction]);
 
-  const handleDriftAlarmDismissed = useCallback(() => {
+  const handleDriftAlarmDismissed = useCallback((momentKey?: string | null) => {
+    if (momentKey && momentKey !== `driftAlarm:${driftAlarmEventRef.current?.id}`) return;
     recordCurrentDriftAlarmDismiss();
     clearDriftAlarmEvent();
   }, [clearDriftAlarmEvent, recordCurrentDriftAlarmDismiss]);
@@ -3226,8 +3227,18 @@ export default function App() {
     navigateToTab("dashboard");
   }, [navigateToTab]);
 
-  const handleDriftAlarmAction = useCallback((action: DriftAlarmAction) => {
+  const handleDriftAlarmAction = useCallback((action: DriftAlarmAction, momentKey?: string | null) => {
     const currentAlarmEvent = driftAlarmEventRef.current ?? lastDriftAlarmEventRef.current;
+    if (momentKey && momentKey !== `driftAlarm:${currentAlarmEvent?.id}`
+      && momentKey !== `extremeNudgeToast:${lastExtremeNudgeToastEventRef.current?.id}`) {
+      // Navigation from a preview remains useful; an obsolete card must never
+      // correct, snooze, or dismiss the main window's newer alarm.
+      if (action.type === "settings") {
+        setSettingsSection("notifications");
+        navigateToTab("settings");
+      }
+      return;
+    }
     if (currentAlarmEvent) {
       const actedAt = new Date().toISOString();
       const interaction: DriftAlarmInteraction = action.type === "start_break"
@@ -3311,9 +3322,11 @@ export default function App() {
     }
   }, [dismissDriftAlarm, navigateToTab, presentDriftAlarmCorrectionStatus, recordDriftInteraction, returnToFocusTarget, selectedDayClassificationOptions]);
 
-  const dismissWatcherPeek = useCallback(() => {
+  const dismissWatcherPeek = useCallback((momentKey?: string | null) => {
+    const event = watcherEventRef.current;
+    if (momentKey && momentKey !== `watcherPeek:${event?.id}`) return;
     clearWatcherEvent();
-    void hideNativeWatcherPeek();
+    if (event) void hideNativeWatcherPeek(`watcherPeek:${event.id}`);
   }, [clearWatcherEvent]);
 
   async function refresh(day = selectedDay, options: { requireCurrentSnapshot?: boolean; foreground?: boolean } = {}): Promise<boolean> {

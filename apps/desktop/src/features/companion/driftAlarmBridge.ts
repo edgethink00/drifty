@@ -27,6 +27,7 @@ type NativeExtremeNudgeOutcome = {
 
 type DriftAlarmActionEvent = {
   action: unknown;
+  momentKey?: string | null;
 };
 
 export async function applyNativeExtremeNudge(target: ExtremeNudgeTarget): Promise<ExtremeNudgeApplyResult> {
@@ -57,16 +58,16 @@ export function normalizeNativeExtremeNudgeOutcome(value: unknown): ExtremeNudge
   };
 }
 
-export async function listenToNativeDriftAlarmAction(onAction: (action: DriftAlarmAction) => void): Promise<UnlistenFn | null> {
+export async function listenToNativeDriftAlarmAction(onAction: (action: DriftAlarmAction, momentKey?: string | null) => void): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
   return listen<DriftAlarmActionEvent>("drift-alarm-action", ({ payload }) => {
-    if (isDriftAlarmActionEvent(payload)) onAction(payload.action);
+    if (isDriftAlarmActionEvent(payload)) onAction(payload.action, payload.momentKey);
   });
 }
 
-export async function listenToNativeDriftAlarmDismissed(onDismissed: () => void): Promise<UnlistenFn | null> {
+export async function listenToNativeDriftAlarmDismissed(onDismissed: (momentKey?: string | null) => void): Promise<UnlistenFn | null> {
   if (!isTauriRuntime()) return null;
-  return listen("drift-alarm-dismissed", onDismissed);
+  return listen<{ momentKey?: string | null }>("drift-alarm-dismissed", ({ payload }) => onDismissed(payload?.momentKey));
 }
 
 export function isDriftAlarmAction(value: unknown): value is DriftAlarmAction {
@@ -78,9 +79,11 @@ export function isDriftAlarmAction(value: unknown): value is DriftAlarmAction {
   return false;
 }
 
-function isDriftAlarmActionEvent(value: unknown): value is { action: DriftAlarmAction } {
+function isDriftAlarmActionEvent(value: unknown): value is { action: DriftAlarmAction; momentKey?: string | null } {
   if (!value || typeof value !== "object") return false;
-  return isDriftAlarmAction((value as Record<string, unknown>).action);
+  const candidate = value as Record<string, unknown>;
+  return isDriftAlarmAction(candidate.action)
+    && (candidate.momentKey === undefined || candidate.momentKey === null || typeof candidate.momentKey === "string");
 }
 
 export function isDriftAlarmEvent(value: unknown): value is DriftAlarmEvent {

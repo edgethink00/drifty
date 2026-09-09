@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, LogicalPosition, Manager};
 
-use super::watcher::watcher_peek_hide;
+use super::watcher::{current_moment_allows_action, watcher_peek_hide};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -22,6 +22,7 @@ pub enum DriftAlarmAction {
 #[serde(rename_all = "camelCase")]
 struct DriftAlarmActionPayload {
     action: DriftAlarmAction,
+    moment_key: Option<String>,
 }
 
 const EXTREME_NUDGE_TOAST_WIDTH: f64 = 440.0;
@@ -70,7 +71,11 @@ fn should_hide_before_forwarding(action: &DriftAlarmAction) -> bool {
 pub fn watcher_peek_extreme_nudge_action(
     app: AppHandle,
     action: DriftAlarmAction,
+    moment_key: Option<String>,
 ) -> Result<(), String> {
+    if !current_moment_allows_action(moment_key.as_deref()) {
+        return Ok(());
+    }
     // Reveal before emitting, matching the tray Settings contract in
     // shell_action.rs, so the settings section renders in an already visible
     // window instead of behind it.
@@ -81,12 +86,15 @@ pub fn watcher_peek_extreme_nudge_action(
     // A manual correction stays mounted so the renderer can replace the
     // decision with its acknowledgement card. Every other action closes now.
     if should_hide_before_forwarding(&action) {
-        watcher_peek_hide(app.clone())?;
+        watcher_peek_hide(app.clone(), moment_key.clone())?;
     }
 
     if let Some(main) = app.get_webview_window("main") {
-        main.emit("drift-alarm-action", DriftAlarmActionPayload { action })
-            .map_err(|error| error.to_string())?;
+        main.emit(
+            "drift-alarm-action",
+            DriftAlarmActionPayload { action, moment_key },
+        )
+        .map_err(|error| error.to_string())?;
     }
 
     Ok(())

@@ -23,6 +23,7 @@ import {
   triggerNativeExtremeNudgeAction,
   type CompanionPillWindowEvent,
 } from "./watcherBridge";
+import { companionEventIdentity } from "./companionEventIdentity";
 import { cleanupTauriEventListener } from "../../lib/tauriEventCleanup";
 
 const WATCHER_THEME_STORAGE_KEY = "drifty.theme";
@@ -81,9 +82,10 @@ export function WatcherWindowApp() {
   }, [handleNativeShow]);
 
   const handleDismiss = useCallback(() => {
+    if (!event) return;
     setEvent(null);
-    ignoreWatcherBridgePromise(dismissNativeWatcherPeek());
-  }, []);
+    ignoreWatcherBridgePromise(dismissNativeWatcherPeek(event ? companionEventIdentity(event) : undefined));
+  }, [event]);
 
   /* The auto-dismiss budget freezes while macOS sleeps, so without a
      wall-clock expiry a card fired seconds before sleep would greet the user
@@ -97,7 +99,7 @@ export function WatcherWindowApp() {
     const consumeIfStale = () => {
       if (!isCompanionMomentStale(moment)) return;
       setEvent(null);
-      ignoreWatcherBridgePromise(hideNativeWatcherPeek());
+      ignoreWatcherBridgePromise(hideNativeWatcherPeek(event ? companionEventIdentity(event) : undefined));
     };
     consumeIfStale();
     const interval = window.setInterval(consumeIfStale, 30_000);
@@ -105,34 +107,36 @@ export function WatcherWindowApp() {
   }, [event]);
 
   const handleToastDismiss = useCallback(() => {
+    if (!event) return;
     setEvent(null);
-    ignoreWatcherBridgePromise(hideNativeWatcherPeek());
-  }, []);
+    ignoreWatcherBridgePromise(hideNativeWatcherPeek(event ? companionEventIdentity(event) : undefined));
+  }, [event]);
 
   const handlePhaseChange = useCallback((_phase: WatcherPhase, _currentEvent: WatcherPeekEvent | null) => {
     ignoreWatcherBridgePromise(setNativeWatcherInteractive(false));
   }, []);
 
   const handleOpenDashboard = useCallback(() => {
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard"));
-  }, []);
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", undefined, event ? companionEventIdentity(event) : undefined));
+  }, [event]);
 
   const handleExtremeNudgeAction = useCallback((action: Parameters<typeof triggerNativeExtremeNudgeAction>[0]) => {
     if (action.type === "manual_correction") {
       setEvent((current) => isExtremeNudgeToast(current)
         ? { ...current, correctionStatus: "acknowledged" }
         : current);
-      ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action));
+      ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action, event ? companionEventIdentity(event) : undefined));
       return;
     }
     setEvent(null);
-    ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action));
-  }, []);
+    ignoreWatcherBridgePromise(triggerNativeExtremeNudgeAction(action, event ? companionEventIdentity(event) : undefined));
+  }, [event]);
 
   const handleMilestoneDismiss = useCallback((_reason: CompanionPillDismissReason) => {
+    if (!event) return;
     setEvent(null);
-    ignoreWatcherBridgePromise(hideNativeWatcherPeek());
-  }, []);
+    ignoreWatcherBridgePromise(hideNativeWatcherPeek(event ? companionEventIdentity(event) : undefined));
+  }, [event]);
 
   const handleOpenMilestoneDestination = useCallback((destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => {
     setEvent(null);
@@ -141,12 +145,12 @@ export function WatcherWindowApp() {
       : destination === "insights"
         ? "openTrends"
         : "openDashboard";
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction(action));
-  }, []);
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction(action, undefined, event ? companionEventIdentity(event) : undefined));
+  }, [event]);
 
   const handleOpenReentry = useCallback((reentry: CompanionReentryEvent) => {
     setEvent(null);
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", reentry.lastActiveAt));
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", reentry.lastActiveAt, companionEventIdentity(reentry)));
   }, []);
 
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);

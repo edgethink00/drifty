@@ -205,7 +205,7 @@ describe("WatcherWindowApp", () => {
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Open leaderboard" }));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard");
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", undefined, "milestone:weekly-final-rank-3");
   });
 
   it("opens the last activity day from a standalone re-entry card", async () => {
@@ -223,6 +223,7 @@ describe("WatcherWindowApp", () => {
     expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
       "openActivityDay",
       reentry.lastActiveAt,
+      `reentry:${reentry.id}`,
     );
   });
 
