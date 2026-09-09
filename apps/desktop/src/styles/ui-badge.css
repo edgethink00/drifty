@@ -1,0 +1,61 @@
+/* Shared badge primitive.
+
+   Before this file, short status/priority labels were re-implemented per
+   feature: 67 separate pill-radius rules spread across 15 font sizes and 12
+   font weights, most of them monospace at ~650 weight with a border AND a
+   tint. That recipe reads as a button, not as metadata.
+
+   Contract for a text badge:
+   - inherit the UI sans stack; monospace stays reserved for numeric/code data
+   - one visual signal (a soft tint), not border + tint + colored ink
+   - a small corner radius, so it cannot be mistaken for a pill button
+   - tone carries the meaning, so two different priorities never look alike
+
+   Status that changes over time ("connected", "ready") should prefer a dot +
+   plain label instead of a badge; see .projects-model-status__readiness. */
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: var(--ui-badge-padding, 0.16rem 0.4rem);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--ui-badge-bg);
+  color: var(--ui-badge-ink);
+  font-family: inherit;
+  font-size: var(--ui-badge-size, 0.6875rem);
+  font-weight: 560;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+  white-space: nowrap;
+
+  /* Neutral is the default so a badge is never unstyled. Ink is --text-muted
+     rather than --text-soft: at 11px the softer token measured 3.6:1 against
+     this tint in the light theme, under the 4.5:1 small-text bar. */
+  --ui-badge-bg: color-mix(in srgb, var(--text) 6%, transparent);
+  --ui-badge-ink: var(--text-muted);
+}
+
+.ui-badge--md {
+  --ui-badge-padding: 0.22rem 0.5rem;
+  --ui-badge-size: 0.75rem;
+}
+
+/* Lowest step of a priority ladder. Drops the fill so a three-level set
+   (required / recommended / optional) still reads as three levels instead of
+   collapsing the bottom two back into one look. */
+.ui-badge--quiet {
+  --ui-badge-bg: transparent;
+  --ui-badge-ink: var(--text-muted);
+  --ui-badge-padding: 0.16rem 0.2rem;
+}
+
+.ui-badge--warn {
+  --ui-badge-bg: color-mix(in srgb, var(--warn-soft) 62%, transparent);
+  --ui-badge-ink: color-mix(in srgb, var(--warn) 88%, var(--text));
+}
+
+/* Only the tones with a shipped call site live here. A new tone arrives with
+   its own call site and its own contrast measurement, so the primitive never
+   accumulates unverified colors. */

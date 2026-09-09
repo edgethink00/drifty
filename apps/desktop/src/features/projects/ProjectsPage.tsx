@@ -129,16 +129,16 @@ function ProjectMatchingCard(props: ProjectMatchingCardProps): JSX.Element {
           </dl>
         ) : null}
       </div>
-      {props.layout === "card" ? (
-        <span className={`projects-model-status__readiness${props.analysisConnected ? " is-connected" : ""}`}>
-          <span className="projects-model-status__readiness-dot" aria-hidden="true" />
-          {readiness}
-        </span>
-      ) : (
-        <span className={`projects-model-status__chip${props.analysisConnected ? " is-connected" : ""}`}>
-          {autoPhase === "running" || autoPhase === "queued" ? t("projects.matching.recentActivity") : props.analysisConnected ? t("projects.matching.modelReady") : t("projects.matching.modelSetupRequired")}
-        </span>
-      )}
+      <span className={`projects-model-status__readiness${props.analysisConnected ? " is-connected" : ""}`}>
+        <span className="projects-model-status__readiness-dot" aria-hidden="true" />
+        {props.layout === "card"
+          ? readiness
+          : autoPhase === "running" || autoPhase === "queued"
+            ? t("projects.matching.recentActivity")
+            : props.analysisConnected
+              ? t("projects.matching.modelReady")
+              : t("projects.matching.modelSetupRequired")}
+      </span>
       <div className="projects-model-status__actions">
         <button type="button" className="app-btn app-btn--secondary" onClick={props.onConfigureModel}>{t("projects.matching.modelSettings")}</button>
         <button

@@ -150,36 +150,17 @@
   color: var(--text-soft);
 }
 
-.projects-model-status__chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.45rem;
-  padding: 0 var(--space-2);
-  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--line));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--warn-soft) 35%, transparent);
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.projects-model-status__chip.is-connected {
-  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 50%, transparent);
-  color: var(--text);
-}
-
+/* Model readiness is live state, not metadata, so it reads as a dot + label
+   instead of a capsule. The capsule variant this replaced sat next to a real
+   button and competed with it for the "clickable" affordance. */
 .projects-model-status__readiness {
   display: inline-flex;
   align-items: center;
   gap: 0.38rem;
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
-  font-weight: 620;
+  color: var(--text-muted);
+  font-size: 0.71875rem;
+  font-weight: 560;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 

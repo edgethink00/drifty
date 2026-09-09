@@ -16,6 +16,8 @@
 @import "./features/settings/classificationRuleLayout.css";
 @import "./features/settings/classificationRulesManager.css";
 @import "./styles/help-trigger.css";
+/* Shared badge primitive: feature CSS may set tone/size, not the base recipe. */
+@import "./styles/ui-badge.css";
 /* Keep the shared app-button contract last so feature CSS cannot silently
    restore legacy mono/uppercase button typography. */
 @import "./styles/app-buttons.css";

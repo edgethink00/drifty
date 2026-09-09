@@ -156,4 +156,36 @@ describe("PermissionsSettingsSection", () => {
     expect(screen.queryByText("Accessibility")).toBeNull();
     expect(screen.getByText("Notifications")).toBeTruthy();
   });
+
+  it("renders every requirement label as a toned badge so the three priorities stay distinguishable", async () => {
+    // The requirement labels carry their whole visual recipe through .ui-badge.
+    // A label that keeps only .settings-permission-requirement renders as bare
+    // text, which is invisible to the other assertions here because they match
+    // on copy alone.
+    safariHistoryPermission.show = true;
+    const onCheckAccessibility = vi.fn().mockResolvedValue(false);
+
+    render(
+      <PermissionsSettingsSection
+        accessibilityGranted={false}
+        accessibilityRequired
+        onCheckAccessibility={onCheckAccessibility}
+        onRequestAccessibility={vi.fn().mockResolvedValue(false)}
+      />,
+    );
+
+    await waitFor(() => expect(onCheckAccessibility).toHaveBeenCalledTimes(1));
+
+    const toneOf = (label: string) => {
+      const element = screen.getByText(label);
+      return {
+        isBadge: element.classList.contains("ui-badge"),
+        tone: [...element.classList].filter((name) => name.startsWith("ui-badge--")),
+      };
+    };
+
+    expect(toneOf("Required")).toEqual({ isBadge: true, tone: ["ui-badge--warn"] });
+    expect(toneOf("Recommended")).toEqual({ isBadge: true, tone: [] });
+    expect(toneOf("Optional")).toEqual({ isBadge: true, tone: ["ui-badge--quiet"] });
+  });
 });

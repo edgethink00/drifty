@@ -206,7 +206,7 @@ export function PermissionsSettingsSection({
             <div>
               <div className="settings-permission-title-line">
                 <div className="lbl">{t("settings.permissions.accessibility")}</div>
-                <span className="settings-permission-requirement">{t("common.required")}</span>
+                <span className="ui-badge ui-badge--warn settings-permission-requirement">{t("common.required")}</span>
               </div>
               <div className="desc">{t("settings.permissions.accessibilityDescription")}</div>
               {accessibilityError ? (
@@ -233,7 +233,7 @@ export function PermissionsSettingsSection({
           <div>
             <div className="settings-permission-title-line">
               <div className="lbl">{t("settings.permissions.notifications")}</div>
-              <span className="settings-permission-requirement">{t("common.recommended")}</span>
+              <span className="ui-badge settings-permission-requirement">{t("common.recommended")}</span>
             </div>
             <div className="desc">{t("settings.permissions.notificationsDescription")}</div>
             {notificationError ? (
@@ -260,7 +260,7 @@ export function PermissionsSettingsSection({
             <div>
               <div className="settings-permission-title-line">
                 <div className="lbl">{t("settings.permissions.safariHistory")}</div>
-                <span className="settings-permission-requirement">{t("common.optional")}</span>
+                <span className="ui-badge ui-badge--quiet settings-permission-requirement">{t("common.optional")}</span>
               </div>
               <div className="desc">{t("settings.permissions.safariHistoryDescription")}</div>
             </div>

@@ -14,19 +14,12 @@
   gap: var(--space-2);
 }
 
+/* Visual recipe lives in .ui-badge; this only nudges optical alignment against
+   the adjacent row title. Required/Recommended differ by tone, not by copy
+   alone, so the priority is readable at a glance. */
 .settings-permission-requirement {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.15rem;
-  padding: 0.1rem 0.38rem;
-  border: 1px solid color-mix(in srgb, var(--text) 10%, var(--line));
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--text) 3%, var(--surface));
-  color: var(--text-soft);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 650;
-  line-height: 1;
+  position: relative;
+  top: -0.02rem;
 }
 
 .settings-permission-control {
