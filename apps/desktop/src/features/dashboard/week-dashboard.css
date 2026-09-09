@@ -2874,7 +2874,10 @@
    Category, and Productivity. Its listbox is portaled to document.body, so the
    card can stay viewport-clamped without clipping the menu. */
 .week-activity-inspector {
-  --inspector-attribute-label-width: 56px;
+  /* The rail's row heights and label column ride the rem type scale so the gap
+     around a chip stays proportional at every window step. A fixed px value
+     here collapses that gap once the root font size grows at 1600px+. */
+  --inspector-attribute-label-width: 4.5rem;
   --inspector-attribute-column-gap: var(--inspector-rail-gap);
   /* One shared rail for every section: leading icon boxes start at the same
      x, their centers share one line, text starts on one line, and trailing
@@ -2904,7 +2907,7 @@
 
 .week-activity-inspector__attributes {
   display: grid;
-  gap: 1px;
+  gap: 0;
   padding: 5px 0 5px;
 }
 
@@ -2927,7 +2930,7 @@
   align-items: center;
   column-gap: var(--inspector-attribute-column-gap);
   width: 100%;
-  min-height: 32px;
+  min-height: 1.875rem;
   padding: 3px var(--inspector-rail-inset);
   border: 0;
   border-radius: 8px;
@@ -3094,8 +3097,8 @@
   align-items: center;
   gap: 7px;
   width: 100%;
-  min-height: 31px;
-  padding: 3px 6px;
+  min-height: 1.6875rem;
+  padding: 2px 6px;
   border: 0;
   border-radius: 7px;
   background: transparent;

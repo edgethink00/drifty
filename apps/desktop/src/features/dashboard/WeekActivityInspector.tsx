@@ -312,7 +312,10 @@ function useDirectPickerLayout(
 
     const valueRect = triggerElement.querySelector<HTMLElement>(".week-activity-inspector__chip")?.getBoundingClientRect();
     const triggerStyle = getComputedStyle(triggerElement);
-    const labelWidth = Number.parseFloat(triggerStyle.getPropertyValue("--inspector-attribute-label-width")) || 60;
+    // Read the resolved first grid track, not the custom property: the property
+    // carries an unresolved token (a rem length), so parsing it directly would
+    // anchor the picker at a few pixels from the trigger's left edge.
+    const labelWidth = Number.parseFloat(triggerStyle.gridTemplateColumns) || 60;
     const columnGap = Number.parseFloat(triggerStyle.columnGap) || 7;
     const paddingLeft = Number.parseFloat(triggerStyle.paddingLeft) || 7;
     const paddingRight = Number.parseFloat(triggerStyle.paddingRight) || 7;
