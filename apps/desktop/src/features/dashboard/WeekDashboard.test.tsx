@@ -1456,7 +1456,7 @@ describe("WeekDashboard breakdown panel", () => {
     expect(summary!.previousElementSibling?.classList.contains("week-v2-side-card--weekly-breakdown")).toBe(true);
     expect(within(tiles[0]).getByText("Tracked")).toBeTruthy();
     expect(within(tiles[0]).getByText("1h 15m")).toBeTruthy();
-    expect(within(tiles[0]).getByText("1h 15m avg/day")).toBeTruthy();
+    expect(within(tiles[0]).getByText("1h 15m avg")).toBeTruthy();
     expect(within(tiles[1]).getByText("Sessions")).toBeTruthy();
     expect(within(tiles[1]).getByText("2")).toBeTruthy();
     expect(within(tiles[1]).getByText("38m avg")).toBeTruthy();

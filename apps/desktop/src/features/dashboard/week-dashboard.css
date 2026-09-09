@@ -2233,7 +2233,9 @@
   border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
   border-radius: 0;
   box-shadow: none;
-  padding: 13px 2px;
+  /* No side inset: every block in this panel starts its text on the same
+     left edge as the panel's own padding. */
+  padding: 13px 0;
 }
 
 .week-v2-grid--day .week-v2-side__content > .kpi-row--insights,
@@ -2249,11 +2251,40 @@
   grid-auto-rows: min-content;
 }
 
+/* The KPI block is the only bordered card in this panel, so its border plus
+   tile padding pushed the tile text 6px further right than the section labels
+   above it — three different left edges in one narrow rail. Pulling the card
+   out by exactly that inset puts every line of text on one left edge and
+   hands the captions ~11px more room. */
+.week-v2-grid--day .week-v2-side__content > .kpi-row--insights,
+.page--week-dashboard .week-v2-side__content > .kpi-row--insights {
+  margin-inline: -6px;
+}
+
 .week-v2-grid--day .week-v2-side__content .kpi-row--insights .metric-tile,
 .page--week-dashboard .week-v2-side__content .kpi-row--insights .metric-tile {
   background: var(--surface);
   border: 0;
   padding: 8px 12px 9px;
+}
+
+/* Your Day and Agents share this rail with Your Week, but only the Week page
+   ever got the trimmed tile padding below. At 12px side padding the day
+   variant leaves 87.5px of text width, which is 2px short of an 11-character
+   overline ("LONGEST RUN", "ACTIVE SPAN", "NIGHT SHARE"): the label wrapped to
+   a second line, every wrapped row grew 16px, and the panel tipped into
+   overflow. Matching the Week padding restores 101.5px, which clears every
+   label and caption in both languages and drops the grid by 48px. */
+.week-v2-grid--day .week-v2-side__content .kpi-row--insights .metric-tile {
+  padding: 6px 5px 7px;
+}
+
+/* Same wrap guard the Week page carries: if a future label does run long, it
+   should break as a short phrase, never as an orphaned syllable. */
+.week-v2-grid--day .week-v2-side__content .metric-tile .eyebrow {
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+  text-wrap: balance;
 }
 
 /* ── Your Week: flat calendar content inside the white panel; its legend +
@@ -2356,7 +2387,7 @@
   border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
   border-radius: 0;
   box-shadow: none;
-  padding: 13px 2px;
+  padding: 13px 0;
 }
 
 .page--week-dashboard .week-v2-side__content > .week-v2-side-card:last-child,
@@ -2368,7 +2399,7 @@
   /* The KPI block has its own complete outline, so a divider plus a full
      section gap here duplicated the boundary and tipped populated weeks into
      overflow at the normal compact window size. */
-  padding: 13px 2px 6px;
+  padding: 13px 0 6px;
   border-bottom: 0;
 }
 
@@ -2385,7 +2416,7 @@
 }
 
 .page--week-dashboard .week-v2-side__content > .kpi-row--insights .metric-tile {
-  /* Captions like "4h 27m avg/day" need ~11px more than the old side padding
+  /* Captions like "avg 4h 27m" need ~11px more than the old side padding
      leaves them at the 11px type floor. Trimming the padding keeps them intact
      without widening the rail, which Your Day shares and would lose chart width to. */
   padding: 6px 5px 7px;
