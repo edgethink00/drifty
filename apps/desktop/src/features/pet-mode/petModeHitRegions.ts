@@ -92,6 +92,24 @@ export async function preloadPetModeHitRegions(): Promise<void> {
   await loadArtifact();
 }
 
+// Native bounds its refresh at two seconds. Give that response a margin, but
+// do not leave the renderer waiting forever if WebView loses the IPC response.
+export const PET_MODE_HIT_REGION_ACK_TIMEOUT_MS = 2500;
+
+async function awaitHitRegionAcknowledgement(operation: Promise<unknown>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Pet Mode hit-region acknowledgement timed out")), PET_MODE_HIT_REGION_ACK_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function stagePetModeHitRegionTransition(request: {
   readonly regionId: string;
   readonly mirrored: boolean;
@@ -111,12 +129,12 @@ export async function stagePetModeHitRegionTransition(request: {
     spans: [],
   });
   try {
-    await publishEmptyRegion(firstRevision);
+    await awaitHitRegionAcknowledgement(publishEmptyRegion(firstRevision));
   } catch {
     // The first update may have reached native even when its acknowledgement
     // was lost. Retry with a newer revision so both sides converge on the same
     // fail-closed transition before the renderer is allowed to change frames.
-    await publishEmptyRegion(retryRevision);
+    await awaitHitRegionAcknowledgement(publishEmptyRegion(retryRevision));
   }
 }
 

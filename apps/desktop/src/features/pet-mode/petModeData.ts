@@ -102,6 +102,11 @@ export const PET_MODE_ENTRY_HIDDEN_SAFETY_PX = 1;
 // Native completion is authoritative. This grace only recovers a renderer that
 // missed the native completion event during cold start or HMR.
 export const PET_MODE_ENTRY_FALLBACK_GRACE_MS = 500;
+// Frame 0 of walk-frames-v2 has all four paws down. End inside that frame's
+// interval, rather than on its boundary, so the final display tick can hold it.
+export const PET_MODE_ENTRY_REST_FRAME = 0;
+// Only used if native completion beats the renderer's final gait paint.
+export const PET_MODE_ENTRY_SETTLE_DURATION_MS = 160;
 // The traced walk vector and the canonical idle raster use different source
 // canvases. In the fixed 121.2×92.4 cat box, the last walk-frames-v2 frame sits
 // 3.76px above paw/f001.png. Align those measured visible foot lines so
@@ -422,9 +427,15 @@ export function getPetModeGaitFrameIndex(
       petWidth,
     );
     const durationMs = resolvePetModeEntryDurationMs(travelDistance, options?.durationMs);
-    const distance = getPetModeEntryProgress(elapsedMilliseconds, durationMs) * travelDistance;
+    const progress = getPetModeEntryProgress(elapsedMilliseconds, durationMs);
     const stride = getPetModeGaitStride("run") * sizeScale;
-    return Math.floor(distance / stride * frameCount) % frameCount;
+    const totalFrames = travelDistance / stride * frameCount;
+    // Choose the starting leg phase while the panel is still outside the
+    // display. The cadence remains distance-driven, but every distance/size
+    // finishes on planted paws instead of freezing an arbitrary mid-step.
+    const landingFrame = PET_MODE_ENTRY_REST_FRAME + 0.5;
+    const startFrame = ((landingFrame - totalFrames) % frameCount + frameCount) % frameCount;
+    return Math.floor(startFrame + progress * totalFrames) % frameCount;
   }
   const rawFrame = Math.floor(
     Math.max(0, elapsedMilliseconds) * getPetModeGaitFramesPerSecond(motion) / 1000,

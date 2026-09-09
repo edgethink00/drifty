@@ -9,7 +9,7 @@ vi.mock("./petModeBridge", () => ({
   updateNativePetHitRegion: bridge.updateNativePetHitRegion,
 }));
 
-import { publishPetModeHitRegion, stagePetModeHitRegionTransition } from "./petModeHitRegions";
+import { publishPetModeHitRegion, stagePetModeHitRegionTransition, PET_MODE_HIT_REGION_ACK_TIMEOUT_MS } from "./petModeHitRegions";
 
 describe("Pet Mode hit-region transitions", () => {
   beforeEach(() => {
@@ -17,6 +17,7 @@ describe("Pet Mode hit-region transitions", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -42,6 +43,34 @@ describe("Pet Mode hit-region transitions", () => {
       spans: [],
       revision: first.revision + 1,
     });
+  });
+
+  it("retries an unanswered stage without letting its late reply replace newer state", async () => {
+    vi.useFakeTimers();
+    let acknowledge!: () => void;
+    bridge.updateNativePetHitRegion.mockImplementationOnce(() => new Promise<void>((resolve) => { acknowledge = resolve; }));
+    const earlier = stagePetModeHitRegionTransition({ regionId: "transition:idle", mirrored: false });
+    await stagePetModeHitRegionTransition({ regionId: "transition:drag", mirrored: false });
+    await vi.advanceTimersByTimeAsync(PET_MODE_HIT_REGION_ACK_TIMEOUT_MS);
+    await earlier;
+    const [first, newer, retry] = bridge.updateNativePetHitRegion.mock.calls.map(([request]) => request);
+    expect(first.revision).toBeLessThan(retry.revision);
+    expect(retry.revision).toBeLessThan(newer.revision);
+    acknowledge();
+    await Promise.resolve();
+    expect(bridge.updateNativePetHitRegion).toHaveBeenCalledTimes(3);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("rejects after both acknowledgements time out so the caller can recover", async () => {
+    vi.useFakeTimers();
+    bridge.updateNativePetHitRegion.mockImplementation(() => new Promise(() => undefined));
+    const result = stagePetModeHitRegionTransition({ regionId: "transition:idle", mirrored: false });
+    const assertion = expect(result).rejects.toThrow("acknowledgement timed out");
+    await vi.advanceTimersByTimeAsync(2 * PET_MODE_HIT_REGION_ACK_TIMEOUT_MS);
+    await assertion;
+    expect(bridge.updateNativePetHitRegion).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("rejects when native cannot confirm either fail-closed update", async () => {

@@ -2031,8 +2031,8 @@ export function PetModeWindowApp() {
         commitVisibility(true);
         setPetModeEnabled(true);
         if (phaseRef.current === "entry") {
-          // Keep the exact final walk SVG mounted after the native window lands.
-          // This avoids any frame, canvas, or coordinate change at the handoff.
+          // Keep the walk SVG mounted after native lands. PetModeCat finishes
+          // any late final step on planted paws without swapping body canvases.
           setPreserveEntryLanding(true);
           commitPhase("idle");
         }

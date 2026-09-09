@@ -6,6 +6,8 @@ import {
   PET_MODE_DRAG_PICKUP_MS,
   PET_MODE_DRAG_SETTLE_MS,
   PET_MODE_ENTRY_DURATION_MS,
+  PET_MODE_ENTRY_REST_FRAME,
+  PET_MODE_ENTRY_SETTLE_DURATION_MS,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_GAIT_FRAME_COUNT,
@@ -255,17 +257,21 @@ export function PetModeCat({
     void image.decode?.().catch(() => undefined);
   }, [decorative]);
 
+  const settlingEntry = phase === "idle" && preserveEntryLanding
+    && renderedEntrySequenceRef.current === entrySequence;
   useEffect(() => {
     const moving = phase === "entry"
+      || settlingEntry
       || phase === "walk"
       || runUsesVectorFallback
       || phase === "stalk"
       || phase === "return";
     if (!moving || walkFrames.length === 0) return undefined;
+    if (settlingEntry && walkFrameRef.current === PET_MODE_ENTRY_REST_FRAME) return undefined;
     // Native emits `motion: entry` before its one-frame WebView handoff, and
     // entrySequence restarts this renderer clock on that event. Both sides then
-    // use the same duration and distance-based travel progress; the final frame
-    // clamp absorbs the remaining compositor-frame skew before `entry_complete`.
+    // use the same duration and distance-based travel progress. If completion
+    // beats the last renderer paint, the idle branch finishes that step below.
     const motion = phase === "run"
       ? "run"
       : phase === "return"
@@ -282,11 +288,16 @@ export function PetModeCat({
     // Entry is synchronized to native's own travel clock. Later motion phases
     // continue from the silhouette already on screen so stalk -> bite ->
     // return never snaps back to the first gait drawing.
-    const startingFrame = motion === "entry" ? 0 : walkFrameRef.current;
-    if (motion === "entry") {
-      walkFrameRef.current = 0;
-      setWalkFrame(0);
+    const startingFrame = phase === "entry"
+      ? getPetModeGaitFrameIndex("entry", 0, walkFrames.length, {
+        travelDistance: entryTravelDistance, durationMs: resolvedEntryDurationMs, sizeScale,
+      })
+      : walkFrameRef.current;
+    if (phase === "entry") {
+      walkFrameRef.current = startingFrame;
+      setWalkFrame(startingFrame);
     }
+    const settleFrames = (PET_MODE_ENTRY_REST_FRAME - startingFrame + walkFrames.length) % walkFrames.length;
     const startedAt = performance.now();
     let displayedFrame = startingFrame;
     let animationFrameId = 0;
@@ -309,9 +320,14 @@ export function PetModeCat({
           }
           : undefined,
       );
-      const nextFrame = motion === "entry"
-        ? timelineFrame
-        : (startingFrame + timelineFrame) % walkFrames.length;
+      const settleProgress = reducedMotion
+        ? 1
+        : Math.min(1, Math.max(0, now - startedAt) / PET_MODE_ENTRY_SETTLE_DURATION_MS);
+      const nextFrame = settlingEntry
+        ? (startingFrame + Math.floor(settleProgress * settleFrames)) % walkFrames.length
+        : motion === "entry"
+          ? timelineFrame
+          : (startingFrame + timelineFrame) % walkFrames.length;
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
           if (disposed) return;
@@ -325,7 +341,9 @@ export function PetModeCat({
         if (hitRegionInteractive) {
           stagingFrame = true;
           void stagePetModeHitRegionTransition({
-            regionId: `transition:gait:${nextFrame}`,
+            regionId: settlingEntry && nextFrame === PET_MODE_ENTRY_REST_FRAME
+              ? "transition:idle"
+              : `transition:gait:${nextFrame}`,
             mirrored: facing === "left",
           }).then(commitFrame, () => {
             if (disposed) return;
@@ -337,7 +355,11 @@ export function PetModeCat({
           commitFrame();
         }
       }
-      animationFrameId = window.requestAnimationFrame(render);
+      // A completed landing has no frame clock. Later actions still resume
+      // from this rendered silhouette; interrupted/stale callbacks are disposed.
+      if (!settlingEntry || displayedFrame !== PET_MODE_ENTRY_REST_FRAME) {
+        animationFrameId = window.requestAnimationFrame(render);
+      }
     };
     animationFrameId = window.requestAnimationFrame(render);
     return () => {
@@ -345,7 +367,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, fastRunBetaEnabled, hitRegionInteractive, phase, runFramesFailed, runFramesReady, sizeScale, walkFrames.length]);
+  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, settlingEntry, reducedMotion, runUsesVectorFallback, sizeScale, walkFrames.length]);
 
   useEffect(() => {
     if (
@@ -463,12 +485,13 @@ export function PetModeCat({
     && preserveEntryLanding
     && walkFrames.length > 0
     && renderedEntrySequenceRef.current === entrySequence;
+  const entrySettled = holdsRenderedEntryVector && walkFrame === PET_MODE_ENTRY_REST_FRAME;
   const sitVariant = phase === "sit" ? selectedSitVariant : null;
   const usesSourceLockedSit = sitVariant?.kind === "reference-raster";
   const usesLiveD = selectedSitVariant.kind === "live-raster";
   const hasLiveDSitGaze = phase === "sit" && usesLiveD && (gazeOffset.x !== 0 || gazeOffset.y !== 0);
   const hasLiveDNeutralSit = phase === "sit" && usesLiveD && !hasLiveDSitGaze;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${entrySettled ? " is-entry-settled" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy"
     || phase === "drowsy";
@@ -552,7 +575,11 @@ export function PetModeCat({
       </g>
     </>
   );
-  const regionId = usesRunRaster
+  // The planted entry vector fits the existing idle silhouette envelope,
+  // including its breathing. Travel masks are authored for the running pose.
+  const regionId = entrySettled
+    ? "idle"
+    : usesRunRaster
     ? `run-gait:${renderedRunFrame}`
     : holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
     ? (walkFrames.length > 0 ? `gait:${renderedWalkFrame}` : "idle")
@@ -582,9 +609,11 @@ export function PetModeCat({
     void publishPetModeHitRegion({
       regionId,
       mirrored,
-      interactive: hitRegionInteractive,
+      // Keep native entry's click-through until the final paws are planted.
+      // A travel mask must not become clickable around an unfinished landing.
+      interactive: hitRegionInteractive && (!holdsRenderedEntryVector || entrySettled),
     });
-  }, [decorative, hitRegionCommitRevision, hitRegionInteractive, mirrored, publishHitRegion, regionId]);
+  }, [decorative, entrySettled, hitRegionCommitRevision, hitRegionInteractive, holdsRenderedEntryVector, mirrored, publishHitRegion, regionId]);
 
   return (
     <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} data-sit-artwork={selectedSitVariantId} style={motionGeometry}>

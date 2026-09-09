@@ -177,12 +177,13 @@ describe("petModeData", () => {
     );
     expect(sampledProgress.every((value) => value >= 0 && value <= 1)).toBe(true);
     expect(sampledProgress.every((value, index) => index === 0 || value >= sampledProgress[index - 1])).toBe(true);
-    expect(getPetModeGaitFrameIndex("entry", 0)).toBe(0);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.1)).toBe(3);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.25)).toBe(12);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.5)).toBe(28);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS)).toBe(24);
-    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS + 500)).toBe(24);
+    expect(getPetModeGaitFrameIndex("entry", 0)).toBe(6);
+    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.1)).toBe(9);
+    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.25)).toBe(18);
+    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS * 0.5)).toBe(4);
+    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS - 16)).toBe(0);
+    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS)).toBe(0);
+    expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS + 500)).toBe(0);
     expect(getPetModeGaitFrameIndex("entry", 0, 0)).toBe(0);
     expect(getPetModeGaitFramesPerSecond("walk")).toBeCloseTo(21.6, 6);
     expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(112.5, 6);
@@ -196,6 +197,17 @@ describe("petModeData", () => {
     const cycles = travel / stride;
     expect(cycles).toBeGreaterThan(1.5);
     expect(cycles).toBeLessThan(2);
+  });
+
+  it("lands on four planted paws across home distances and supported pet sizes", () => {
+    for (const sizeScale of [0.5, 0.75, 1, 1.25]) {
+      for (const travelDistance of [1, 54, 90, 144.671, 175, 210, 900]) {
+        const durationMs = getPetModeEntryDurationMs(travelDistance);
+        const options = { travelDistance, sizeScale, durationMs };
+        expect(getPetModeGaitFrameIndex("entry", durationMs, 30, options)).toBe(0);
+        expect(getPetModeGaitFrameIndex("entry", durationMs + 500, 30, options)).toBe(0);
+      }
+    }
   });
 
   it("keeps the approved F12 v1.6 paw timeline frame-for-frame", () => {

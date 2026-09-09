@@ -200,12 +200,20 @@
   will-change: transform;
 }
 
-/* Entry completion reuses the exact SVG node and gait frame that was visible
-   on the preceding paint. Do not start idle breathing until a later action
-   replaces this landing hold, or the first stationary frame can still move. */
+/* Keep the same SVG through landing. A renderer that trails native completion
+   finishes its last step before breathing resumes on the planted silhouette. */
 .pet-mode-cat.is-entry-landed .pet-mode-cat__motion {
   animation: none;
   transform: none;
+}
+
+.pet-mode-cat.is-entry-settled .pet-mode-cat__motion {
+  animation: pet-mode-entry-breathe 3.6s ease-in-out infinite;
+}
+
+@keyframes pet-mode-entry-breathe {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.008); }
 }
 
 .pet-mode-cat--entry .pet-mode-cat__motion,

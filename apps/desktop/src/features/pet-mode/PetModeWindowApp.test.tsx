@@ -3203,7 +3203,8 @@ describe("PetModeWindowApp", () => {
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-region-id")).toBe("gait:0");
   });
 
-  it("holds the exact rendered entry SVG when native reports landing", async () => {
+  it("keeps the entry SVG and finishes on planted paws when native reports landing", async () => {
+    vi.useFakeTimers();
     window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       json: async () => ({ frames: walkFrames, cycleSeconds: 1.25 }),
@@ -3239,6 +3240,10 @@ describe("PetModeWindowApp", () => {
     expect(landedVector).toBe(entryVector);
     expect(landedVector?.querySelector("path")?.getAttribute("d")).toBe(entryPath);
     expect(cat.querySelector(".pet-mode-cat__motion > .pet-mode-cat__raster")).toBeNull();
+    await act(async () => { await vi.advanceTimersByTimeAsync(240); });
+    expect(cat.querySelector(".pet-mode-cat__landed-vector")).toBe(entryVector);
+    expect(cat.getAttribute("data-region-id")).toBe("idle");
+    expect(cat.classList.contains("is-entry-settled")).toBe(true);
   });
 
   it("uses native travel distance for the short run entrance", async () => {
