@@ -39,6 +39,26 @@ function props(): TeamProjectsViewProps {
 }
 
 describe("TeamProjectsView", () => {
+  it("keeps the shared project options menu on screen through its exit", async () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <TeamProjectsView {...props()} projects={[{ ...project, can_manage: true }]} />
+      </LocalizationTestProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Options for Shared alpha" }));
+
+    const menu = screen.getByRole("menu", { name: "Project options" });
+    const boundary = menu.parentElement as HTMLElement;
+    await waitFor(() => expect(boundary.getAttribute("data-anchored-presence")).toBe("open"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Shared alpha" }));
+
+    expect(boundary.getAttribute("data-anchored-presence")).toBe("exiting");
+    expect(boundary.inert).toBe(true);
+    expect(screen.queryByRole("menu", { name: "Project options" })).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Project options" })).toBeNull());
+  });
+
   it.each(["create", "row edit", "detail edit"])("focuses Name and restores the %s invoker", async (route) => {
     render(<TeamProjectsView {...props()} projects={[{ ...project, can_manage: true }]} />);
     let trigger: HTMLElement;

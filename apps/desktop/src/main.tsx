@@ -25,6 +25,7 @@ import "./features/leaderboard/rank-embeds.css";
 import "./features/share/share-card.css";
 import "./features/profile/profile-page.css";
 import "./styles/chartHoverMotion.css";
+import "./styles/popover-motion.css";
 import "./styles/modal-chrome.css";
 import { hideBootShell } from "./features/loading/bootShell";
 

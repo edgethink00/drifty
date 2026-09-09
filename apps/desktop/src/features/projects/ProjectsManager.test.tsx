@@ -39,6 +39,22 @@ function baseProps(overrides: Partial<ProjectsManagerProps> = {}): ProjectsManag
 }
 
 describe("ProjectsManager", () => {
+  it("keeps the row options menu on screen through its exit and takes it out of reach while it fades", async () => {
+    render(<ProjectsManager {...baseProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
+
+    const menu = screen.getByRole("menu", { name: "Project options" });
+    const boundary = menu.parentElement as HTMLElement;
+    await waitFor(() => expect(boundary.getAttribute("data-anchored-presence")).toBe("open"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Options for Drifty" }));
+
+    expect(boundary.getAttribute("data-anchored-presence")).toBe("exiting");
+    expect(boundary.inert).toBe(true);
+    expect(screen.queryByRole("menu", { name: "Project options" })).not.toBeNull();
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Project options" })).toBeNull());
+  });
+
   it("keeps initial focus on Name after the modal has entered", async () => {
     render(<ProjectsManager {...baseProps()} />);
     const trigger = screen.getByRole("button", { name: "New project" });

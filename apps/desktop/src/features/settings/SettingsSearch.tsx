@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { useSettingsSearch } from "./SettingsSearchContext";
 import { searchSettings } from "./settingsSearchIndex";
@@ -114,7 +115,7 @@ export function SettingsSearch({ children }: { readonly children: ReactNode }) {
         </button> : null}
       </div>
     </div>
-    {searching ? createPortal(<div ref={popupRef} style={popupStyle} className={`settings-search__results${results.length ? "" : " settings-search__results--empty"}`}>
+    {createPortal(<AnchoredPresence>{searching ? <div ref={popupRef} style={popupStyle} className={`settings-search__results${results.length ? "" : " settings-search__results--empty"}`}>
       <p className="settings-search__count" role="status">{t(results.length ? "settings.search.count" : "settings.search.empty", { count: results.length })}</p>
       <div id={id} ref={listRef} role="listbox" aria-label={t("settings.search.results")} className="settings-search__list">
         {results.map((entry, index) => <button key={entry.id} id={`${id}-${index}`} type="button"
@@ -125,7 +126,7 @@ export function SettingsSearch({ children }: { readonly children: ReactNode }) {
           <span className="settings-search__path">{t(SETTINGS_SECTION_LABELS[entry.section])}</span>
         </button>)}
       </div>
-    </div>, document.body) : null}
+    </div> : null}</AnchoredPresence>, document.body)}
     {children}
   </>;
 }

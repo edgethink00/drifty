@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, FocusEvent, KeyboardEvent, ReactNode } from "react";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 
 /** A trailing action button rendered inside an option row (e.g. Download, Delete, Show in Finder). */
 export type SettingsSelectRowAction = {
@@ -369,7 +370,7 @@ export function SettingsSelect<TValue extends string>({
           </>
         )}
       </button>
-      {isOpen ? (
+      <AnchoredPresence>{isOpen ? (
         <div ref={menuRef} style={placement === "selected" ? { position: "fixed", margin: 0 } : undefined} className="settings-select-control__menu" id={listboxId} role="listbox" aria-label={ariaLabel}>
           {options.map((option, index) => {
             const optionDisabled = option.disabled === true;
@@ -449,7 +450,7 @@ export function SettingsSelect<TValue extends string>({
             );
           })}
         </div>
-      ) : null}
+      ) : null}</AnchoredPresence>
     </div>
   );
 }

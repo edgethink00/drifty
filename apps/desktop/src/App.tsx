@@ -2,6 +2,7 @@ import { localizeUpdateMessage } from "./features/localization/settingsMessageTr
 import { SettingsSearchProvider, SettingsSearchDestination } from "./features/settings/SettingsSearchContext";
 import { Fragment, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ModalPresence } from "./components/ModalPresence";
+import { AnchoredPresence } from "./components/AnchoredPresence";
 import { listen } from "@tauri-apps/api/event";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import type { ActivityCategory, ActivitySegment, AppIconMap, ClassificationMetrics, ClassificationOptions, ClassificationRuleInput, CurrentActivitySnapshot, DeviceTimelineFilter, DriftAlarmTrayStatus, FlowIntervalMinutes, HourBucket, ProductivityLabel, ProductivityShareMix, ProjectAssignmentRecord, ProjectInput, ProjectWindowAssignmentRecord, SiteDuration, TimelinePageCursor, TrackerStatus, UnclassifiedSegmentsQuery } from "@drifty/domain";
@@ -9393,7 +9394,7 @@ export default function App() {
                   );
                 })
               )}
-              {teamNavMenuOpen && teamNavMenuPos && !isSidebarVisuallyCollapsed ? (
+              <AnchoredPresence>{teamNavMenuOpen && teamNavMenuPos && !isSidebarVisuallyCollapsed ? (
                 <div className="team-nav-menu" role="menu" aria-label={localization.t("team.nav.options")} style={{ left: teamNavMenuPos.left, top: teamNavMenuPos.top }}>
                   <button type="button" role="menuitem" onClick={() => openTeamAction("invite")}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 19.5v-1.4a3.6 3.6 0 0 0-3.6-3.6H6.1a3.6 3.6 0 0 0-3.6 3.6v1.4" /><circle cx="8.8" cy="7.6" r="3.3" /><path d="M18.5 8v6M15.5 11h6" /></svg>
@@ -9408,7 +9409,7 @@ export default function App() {
                     {localization.t("team.nav.createOrJoin")}
                   </button>
                 </div>
-              ) : null}
+              ) : null}</AnchoredPresence>
             </nav>
           </>
         ) : null}

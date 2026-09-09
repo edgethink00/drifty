@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FocusEvent, KeyboardEvent } from "react";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 
 import { useLocalization } from "../localization/LocalizationContext";
 import {
@@ -313,7 +314,7 @@ export function CustomEndpointSetupPanel({
                 <span className="settings-select-control__chevron" aria-hidden="true" />
               </button>
             </div>
-            {modelMenuOpen && models.length > 0 ? (
+            <AnchoredPresence>{modelMenuOpen && models.length > 0 ? (
               <div ref={modelMenuRef} className="settings-select-control__menu" id={modelListboxId} role="listbox" aria-label={t("settings.ai.availableModelsAria")}>
                 {models.map((modelId, index) => {
                   const selected = modelId === model;
@@ -336,7 +337,7 @@ export function CustomEndpointSetupPanel({
                   );
                 })}
               </div>
-            ) : null}
+            ) : null}</AnchoredPresence>
           </div>
         </div>
       </div>

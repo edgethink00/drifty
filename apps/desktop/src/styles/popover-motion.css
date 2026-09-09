@@ -1,0 +1,92 @@
+/* Anchored popups arrive beside a control, so they emerge from their anchor at
+   160ms on the shared easing token rather than zooming at the centre of the
+   window the way a modal does. Closing accelerates away in 100ms, matching the
+   asymmetry modals already use: opening is an arrival, closing is a decision
+   already made.
+
+   Click-opened popups run both halves through an AnchoredPresence boundary,
+   which keeps them mounted long enough to be seen leaving. Hover-driven cards
+   below stay entry-only on purpose: a retained card would sit under the pointer
+   while it travels to the next target.
+
+   At rest the transform resolves to none, so no panel is left as a containing
+   block for its fixed-position descendants. */
+
+[data-anchored-presence] {
+  display: contents;
+  --popover-motion-duration: 160ms;
+  --popover-motion-ease: var(--ease-out-quart);
+  --popover-motion-transform: none;
+  --popover-motion-opacity: 1;
+}
+
+[data-anchored-presence="entering"],
+[data-anchored-presence="exiting"] {
+  --popover-motion-transform: translate3d(0, -0.25rem, 0) scale(0.985);
+  --popover-motion-opacity: 0;
+}
+
+[data-anchored-presence="exiting"] {
+  --popover-motion-duration: 100ms;
+  --popover-motion-ease: cubic-bezier(.4, 0, 1, 1);
+}
+
+[data-anchored-presence] > * {
+  opacity: var(--popover-motion-opacity);
+  transform: var(--popover-motion-transform);
+  transform-origin: top center;
+  transition:
+    opacity var(--popover-motion-duration) var(--popover-motion-ease),
+    transform var(--popover-motion-duration) var(--popover-motion-ease);
+}
+
+/* Menus pinned to the trailing edge of their trigger grow from that corner. */
+[data-anchored-presence] > .settings-select-control__menu,
+[data-anchored-presence] > .pt-menu,
+[data-anchored-presence] > .developer-skill-picker__menu {
+  transform-origin: top right;
+}
+
+/* Entry only. The hover preview has to vanish the instant the pointer leaves,
+   and the week inspector still owns its own portal, focus restore, and delete
+   flow, so giving it an exit needs the host/dialog split the plan dialog got. */
+.week-activity-inspector,
+.week-activity-inspector__picker,
+.week-activity-inspector--preview {
+  animation: popover-anchored-in 160ms var(--ease-out-quart) backwards;
+  transform-origin: top center;
+}
+
+/* The inspector is placed beside its week block, so it grows from the edge that
+   touches the block rather than from its own centre. */
+.week-activity-inspector[data-side="left"] {
+  transform-origin: top right;
+}
+
+.week-activity-inspector[data-side="right"] {
+  transform-origin: top left;
+}
+
+@keyframes popover-anchored-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -0.25rem, 0) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-anchored-presence] > *,
+  .week-activity-inspector,
+  .week-activity-inspector__picker,
+  .week-activity-inspector--preview {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

@@ -11,11 +11,16 @@ function cssRule(source: string, selector: string): string {
 }
 
 describe("chart hover motion", () => {
-  it("defines the chart motion easing token used by hover contracts", () => {
-    const rootRule = cssRule(motionStyles, ":root");
+  it("consumes the anchored easing token from the base layer instead of redefining it", () => {
+    // The token moved into the base layer because the classification popover
+    // and the anchored menus need the same curve. Chart motion now consumes it,
+    // and a second definition anywhere would let the curves drift apart again.
+    const tokens = readFileSync("src/styles/tokens-base.css", "utf8");
 
-    expect(rootRule).toContain("--ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);");
-    expect(baseStyles).not.toContain("--ease-out-quart");
+    expect(cssRule(tokens, ":root")).toContain("--ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);");
+    expect(motionStyles).not.toContain("--ease-out-quart:");
+    expect(motionStyles).toContain("var(--ease-out-quart)");
+    expect(baseStyles.match(/--ease-out-quart:/g)).toHaveLength(1);
   });
 
   it("keeps flow grid cells stable while the inner overlay breathes on hover", () => {

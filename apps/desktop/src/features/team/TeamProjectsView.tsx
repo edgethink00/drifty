@@ -5,6 +5,7 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { TeamProjectDetailView } from "./TeamProjectDetailView";
 import { ModalPresence } from "../../components/ModalPresence";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { PROJECT_COLOR_SWATCHES, ProjectEditorFields } from "../../components/ProjectEditorFields";
 import { useModalDismiss } from "../../lib/useModalDismiss";
@@ -363,7 +364,7 @@ export function TeamProjectsView({
                         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.4" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="18.6" r="1.7" /></svg>
                       </button>
                     ) : null}
-                    {menuFor === project.id ? (
+                    <AnchoredPresence>{menuFor === project.id ? (
                       <div className="pt-menu" role="menu" aria-label={t("team.projects.options")}>
                         <button
                           type="button"
@@ -392,7 +393,7 @@ export function TeamProjectsView({
                           {isArchived ? t("team.projects.restore") : t("team.projects.archive")}
                         </button>
                       </div>
-                    ) : null}
+                    ) : null}</AnchoredPresence>
                   </span>
                 </div>
               </div>

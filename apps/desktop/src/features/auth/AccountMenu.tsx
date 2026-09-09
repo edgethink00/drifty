@@ -3,6 +3,7 @@ import { getAccountDisplayName } from "./accountDisplay";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, SVGProps } from "react";
 import { createPortal } from "react-dom";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
 
@@ -300,7 +301,10 @@ export function AccountMenu({
     ? t("settings.general.languageKorean")
     : t("settings.general.languageEnglish");
 
-  const popover = isOpen && popoverStyle ? createPortal(
+  // The boundary sits inside the portal because the exit pose is applied through
+  // a descendant selector; one left behind in the sidebar never reaches this menu.
+  const popover = createPortal(
+    <AnchoredPresence>{isOpen && popoverStyle ? (
     <div
       ref={menuRef}
       className={isSidebarCollapsed ? "account-popover account-popover--collapsed" : "account-popover"}
@@ -441,9 +445,10 @@ export function AccountMenu({
           </button>
         </>
       )}
-    </div>,
+    </div>
+    ) : null}</AnchoredPresence>,
     document.body,
-  ) : null;
+  );
 
   return (
     <div className="account-menu-shell">

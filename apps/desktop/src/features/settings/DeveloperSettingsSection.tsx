@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 
 import {
   developerToolsClient,
@@ -442,7 +443,7 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
         <span>{t("settings.developer.addSkillTo")}</span>
         <ChevronIcon />
       </button>
-      {open ? (
+      <AnchoredPresence>{open ? (
         <div className="developer-skill-picker__menu" role="menu" aria-label={t("settings.developer.skillTargetsLabel")}>
           <p>{t("settings.developer.skillTargetsLabel")}</p>
           <div className="developer-skill-picker__options">
@@ -478,7 +479,7 @@ function SkillTargetPicker({ status, busy, selectedTarget, onSelectTarget, onIns
             })}
           </div>
         </div>
-      ) : null}
+      ) : null}</AnchoredPresence>
     </div>
   );
 }

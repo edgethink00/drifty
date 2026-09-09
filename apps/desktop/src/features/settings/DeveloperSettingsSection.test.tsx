@@ -117,6 +117,21 @@ describe("DeveloperSettingsSection", () => {
     expect(screen.getByText("~/.cursor/skills/drifty")).toBeTruthy();
   });
 
+  it("keeps the agent picker on screen through its exit and out of reach while it fades", async () => {
+    render(<DeveloperSettingsSection client={mockClient(status())} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Add skill to…" }));
+
+    const menu = screen.getByRole("menu", { name: "All agents" });
+    const boundary = menu.parentElement as HTMLElement;
+    await waitFor(() => expect(boundary.getAttribute("data-anchored-presence")).toBe("open"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add skill to…" }));
+
+    expect(boundary.getAttribute("data-anchored-presence")).toBe("exiting");
+    expect(boundary.inert).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "All agents" })).toBeNull());
+  });
+
   it("closes the agent picker on Escape and returns focus to its trigger", async () => {
     render(<DeveloperSettingsSection client={mockClient(status())} />);
 

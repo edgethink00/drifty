@@ -57,7 +57,11 @@ describe("settings search", () => {
     const navigation = screen.getByRole("navigation");
     fireEvent.change(input, { target: { value: "Theme" } });
     expect(screen.getByRole("navigation")).toBe(navigation);
-    expect(screen.getByRole("listbox").closest(".settings-search__results")?.parentElement).toBe(document.body);
+    // The results still escape the settings layout into a body-level portal; the
+    // presence boundary that carries their open/close motion travels with them.
+    const results = screen.getByRole("listbox").closest(".settings-search__results");
+    expect(results?.parentElement?.getAttribute("data-anchored-presence")).toBe("entering");
+    expect(results?.closest("[data-anchored-presence]")?.parentElement).toBe(document.body);
     fireEvent.pointerDown(screen.getByRole("button", { name: "General section" }));
     expect(screen.queryByRole("listbox")).toBeNull();
     fireEvent.focus(input);

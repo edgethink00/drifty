@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Project, ProjectInput, ProjectStatus } from "@drifty/domain";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { ModalPresence } from "../../components/ModalPresence";
+import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { ProjectEditorModal } from "./ProjectEditorModal";
 import { SettingsSelect } from "../settings/SettingsSelect";
 import { projectAutoAnalysisPhase, type ProjectAutoAnalysisState } from "./projectAutoAnalysisState";
@@ -243,7 +244,7 @@ export function ProjectsManager({
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5.4" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="12" cy="18.6" r="1.7" /></svg>
                   </button>
-                  {menuFor === project.id ? (
+                  <AnchoredPresence>{menuFor === project.id ? (
                     <div className="pt-menu" role="menu" aria-label={t("projects.options")}>
                       <button
                         type="button"
@@ -284,7 +285,7 @@ export function ProjectsManager({
                         {t("common.delete")}
                       </button>
                     </div>
-                  ) : null}
+                  ) : null}</AnchoredPresence>
                 </span>
               </div>
             </div>

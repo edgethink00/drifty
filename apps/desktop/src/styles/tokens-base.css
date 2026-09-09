@@ -40,6 +40,10 @@ html {
 :root {
   --field-focus-border: var(--line);
   --field-focus-shadow: 0 0 6px 1px color-mix(in srgb, var(--text) 10%, transparent);
+  /* One easing for every surface that arrives next to a control: chart hover
+     cards, the classification popover, and the anchored menus. Modals own a
+     separate curve because they arrive at the centre of the window. */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   /* Shared danger action colors for page, dialog, and Settings buttons. */
   --button-danger-bg: color-mix(in srgb, var(--warn-soft) 86%, var(--surface));
   --button-danger-border: color-mix(in srgb, var(--warn) 14%, transparent);
