@@ -148,6 +148,26 @@ export function SettingsSelect<TValue extends string>({
     if (!menu || !trigger || !root) return;
 
     function positionMenu() {
+      if (!menu) return;
+      // Presence starts scaled around the menu's right edge. DOM rects include
+      // that transform (even before width is set), so measuring it would bake
+      // the entrance pose into the final label position. Measure at rest, then
+      // restore the CSS pose before paint so entry/exit motion stays intact.
+      const { transform, transition } = menu.style;
+      menu.style.transition = "none";
+      menu.style.transform = "none";
+      try {
+        measureMenuPosition();
+      } finally {
+        menu.style.transform = transform;
+        // Flush the restored pose while transitions are off: otherwise the
+        // browser can animate from the temporary measurement pose instead.
+        menu.getBoundingClientRect();
+        menu.style.transition = transition;
+      }
+    }
+
+    function measureMenuPosition() {
       if (!menu || !trigger || !root) return;
       const anchor = trigger.getBoundingClientRect();
       // Fixed positioning escapes the saved-rules list's scroll clipping while
