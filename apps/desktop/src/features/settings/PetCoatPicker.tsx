@@ -11,8 +11,9 @@ import { useLocalization, type LocalizationController } from "../localization/Lo
 import type { TranslationKey } from "../localization/translations";
 
 // Power and style are separate controls on purpose: the account menu already
-// presents the pet as an on/off checkbox, and a disabled style segment while
-// off shows that the choice survives a turn-off.
+// presents the pet as an on/off checkbox. Presence stays disabled while off so
+// that choice is visibly preserved; appearance stays editable because the
+// preview still shows the dormant cat.
 const PET_PRESENCE_MODES: ReadonlyArray<{
   readonly value: PetPresenceMode;
   readonly labelKey: TranslationKey;
@@ -76,9 +77,9 @@ export function PetSettings({
           />
         </div>
       </div>
-      {/* Preserve the chosen appearance while the pet is off. */}
-      <PetCoatPicker value={coat} onChange={onCoatChange} disabled={!enabled} />
-      <PetSizePicker value={size} onChange={onSizeChange} disabled={!enabled} />
+      {/* Keep appearance editable so the dormant preview can still be dressed. */}
+      <PetCoatPicker value={coat} onChange={onCoatChange} />
+      <PetSizePicker value={size} onChange={onSizeChange} />
     </>
   );
 }

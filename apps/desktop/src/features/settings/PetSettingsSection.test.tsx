@@ -79,4 +79,14 @@ describe("PetSettingsSection", () => {
     expect(props.onCoatChange).toHaveBeenCalledWith("grey");
     expect(props.onSizeChange).toHaveBeenCalledWith(125);
   });
+
+  it("keeps the cat visible and appearance editable while the pet is off", () => {
+    const { props } = renderPet({ enabled: false, coat: "charcoal", size: 75 });
+    expect(screen.getByRole("img", { name: "꺼져 있음 · 75% · 차콜" })).toBeTruthy();
+    expect(document.querySelector(".pet-settings-preview.is-off .pet-mode-cat")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "회색" }));
+    fireEvent.click(screen.getByRole("radio", { name: "125%" }));
+    expect(props.onCoatChange).toHaveBeenCalledWith("grey");
+    expect(props.onSizeChange).toHaveBeenCalledWith(125);
+  });
 });

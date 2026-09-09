@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { PetSettingsPreview } from "./PetSettingsPreview";
@@ -14,7 +14,8 @@ describe("PetSettingsPreview", () => {
     const { container, rerender } = render(preview(true));
     expect(container.querySelector('[data-phase="happy"]')).toBeNull();
     rerender(preview(false));
-    expect(container.querySelector('.pet-mode-cat')).toBeNull();
+    expect(container.querySelector('.pet-settings-preview.is-off .pet-mode-cat')).not.toBeNull();
+    expect(container.querySelector('[data-phase="happy"]')).toBeNull();
     rerender(preview(true));
     expect(container.querySelector('[data-phase="happy"]')).not.toBeNull();
     act(() => vi.advanceTimersByTime(700));
@@ -26,7 +27,8 @@ describe("PetSettingsPreview", () => {
     expect(container.querySelector('[data-phase="idle"]')).not.toBeNull();
     rerender(preview(false)); rerender(preview(true)); rerender(preview(false));
     act(() => vi.advanceTimersByTime(1200));
-    expect(container.querySelector('.pet-mode-cat')).toBeNull();
+    expect(container.querySelector('.pet-settings-preview.is-off .pet-mode-cat')).not.toBeNull();
+    expect(container.querySelector('[data-phase="happy"]')).toBeNull();
   });
   it("respects reduced motion when enabled", () => {
     vi.stubGlobal('matchMedia', () => ({ matches: true }));
@@ -34,5 +36,9 @@ describe("PetSettingsPreview", () => {
     rerender(preview(true));
     expect(container.querySelector('[data-phase="happy"]')).toBeNull();
     expect(container.querySelector('[data-phase="idle"]')).not.toBeNull();
+  });
+  it("labels the dormant preview with the chosen size and coat", () => {
+    render(preview(false, "charcoal", 125));
+    expect(screen.getByRole("img", { name: "꺼져 있음 · 125% · 차콜" })).toBeTruthy();
   });
 });

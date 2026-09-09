@@ -14,7 +14,10 @@ export function PetSettingsPreview({ enabled, coat, size }: {
   const [happy, setHappy] = useState(false);
   const wasEnabled = useRef(enabled);
   const spec = getPetModeCoatSpec(coat);
-  const previewLabel = t("settings.pet.preview", { size, coat: localizedPetCoatLabel(coat, t) });
+  const previewLabel = t(enabled ? "settings.pet.preview" : "settings.pet.previewOff", {
+    size,
+    coat: localizedPetCoatLabel(coat, t),
+  });
 
   useEffect(() => {
     const justEnabled = enabled && !wasEnabled.current;
@@ -32,19 +35,19 @@ export function PetSettingsPreview({ enabled, coat, size }: {
   }, [enabled]);
 
   return (
-    <div className="pet-settings-preview" role={enabled ? "img" : undefined} aria-label={enabled ? previewLabel : undefined}>
+    <div className={`pet-settings-preview${enabled ? "" : " is-off"}`} role="img" aria-label={previewLabel}>
       <div className="pet-settings-preview__stage" aria-hidden="true" style={{
         "--pet-fur": spec.fur,
         "--pet-ink": spec.ink,
         "--pet-raster-filter": `url("#pet-mode-coat-${coat}")`,
         "--pet-size-scale": size / 100,
       } as CSSProperties}>
-        {enabled && <div className="pet-settings-preview__cat">
-          <PetModeCat phase={happy ? "happy" : "idle"} facing="right" pawFrame={0}
+        <div className="pet-settings-preview__cat">
+          <PetModeCat phase={enabled && happy ? "happy" : "idle"} facing="right" pawFrame={0}
             publishHitRegion={false} decorative />
-        </div>}
+        </div>
       </div>
-      <span className="pet-settings-preview__caption">{enabled ? previewLabel : t("settings.pet.previewOff")}</span>
+      <span className="pet-settings-preview__caption">{previewLabel}</span>
     </div>
   );
 }
