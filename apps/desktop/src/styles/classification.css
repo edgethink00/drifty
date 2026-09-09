@@ -598,7 +598,11 @@
 
 .classification-panel-view__activity-classification {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* Four rigid columns left ~70px per value in the detail panel, so ordinary
+     labels ("Not classified", "Confidence unavailable") were served as
+     "Not classifie…". Keep four columns where they fit, fold to fewer in a
+     narrow panel, and let a long value wrap rather than lose its own words. */
+  grid-template-columns: repeat(auto-fit, minmax(5rem, 1fr));
   gap: var(--space-2);
 }
 
@@ -617,11 +621,9 @@
 }
 
 .classification-panel-view__activity-classification dd {
-  overflow: hidden;
   color: var(--text);
   font-weight: 560;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* Reclassification popover — anchored to the pencil that opened it; the list never moves. */

@@ -73,6 +73,30 @@ describe("approved UI polish contracts", () => {
     ).toContain("background: transparent;");
   });
 
+  it("keeps the Classification stat strip out of the panel's shrink pool", () => {
+    // The strip clips to its own rounded corners, and that overflow waives the
+    // flex automatic minimum size: the page's flex column then handed it a
+    // share of the scrolling panel's overflow and sliced "1h 44m" in half.
+    // Expanding a capture-detail row grew the panel until the values vanished.
+    const strip = ruleBody(polish, ".content--classification .clf-summary {");
+    expect(strip).toContain("overflow: hidden;");
+    expect(strip).toContain("flex: 0 0 auto;");
+  });
+
+  it("wraps the capture-detail classification pairs instead of truncating their values", () => {
+    // Four fixed columns inside the detail panel left ~70px per value, which
+    // turned "Not classified" into "Not classifie…".
+    const grid = ruleBody(classification, ".classification-panel-view__activity-classification {");
+    expect(grid).toContain("repeat(auto-fit, minmax(5rem, 1fr))");
+    const block = classification.slice(
+      classification.indexOf(".classification-panel-view__activity-classification {"),
+      classification.indexOf("/* Reclassification popover"),
+    );
+    expect(block).not.toContain("white-space: nowrap;");
+    expect(block).not.toContain("text-overflow: ellipsis;");
+    expect(block).toContain("overflow-wrap: anywhere;");
+  });
+
   it("fades the expanded sidebar foot under the glass account menu and respects reduced motion", () => {
     // The popover stays translucent by contract, so the fix is underneath it.
     expect(prototype).toContain("body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .sidebar-cta-slot-wrap,");

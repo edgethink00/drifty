@@ -33,6 +33,15 @@
    summary, and dividers cost less height and chrome than four borders. */
 .content--classification .clf-summary {
   gap: 0;
+  /* `overflow: hidden` clips the tiles to the strip's rounded corners, but it
+     also waives this flex item's automatic minimum size — which made the strip
+     the one page child that could be shrunk below its own content. The page is
+     a flex column, so the panel's overflow is shared out in proportion to base
+     size, and the strip's share alone sliced "1h 44m" in half; the taller the
+     activity list grew (expanded capture details), the more of the strip
+     disappeared. The panel scrolls and can absorb all of it. Siblings keep
+     visible overflow, so their content minimum already holds them up. */
+  flex: 0 0 auto;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
