@@ -249,7 +249,8 @@ describe("sidebar motion styles", () => {
     expect(settingsSidebarBlock).toContain("padding-inline: var(--sidebar-inline-gutter);");
     expect(navItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(navLabelBlock).toContain("padding: 12px var(--sidebar-row-inline-padding) 4px;");
-    expect(settingsBackBlock).toContain("padding: 0.5rem var(--sidebar-row-inline-padding);");
+    expect(settingsBackBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
+    expect(settingsBackBlock).toContain("min-height: var(--nav-item-height);");
     expect(settingsNavLabelBlock).toContain("padding-top: 10px;");
     expect(settingsNavItemBlock).toContain("padding: 0 var(--sidebar-row-inline-padding);");
     expect(settingsNavItemBlock).not.toContain("overflow: hidden;");

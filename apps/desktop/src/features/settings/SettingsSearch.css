@@ -7,15 +7,26 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 36px;
+  /* The search sits directly above the section rows, so it rides the shared
+     sidebar row token instead of the pre-token 36px it was born with. */
+  min-height: var(--nav-item-height);
   padding-inline: 9px 3px;
-  border: 1px solid var(--line);
+  /* An inset well, not a card. --surface is a content-panel color: on the
+     tinted rail it read as a bright warm chip in light mode and as a near-black
+     bar in dark mode. Tinting the rail itself keeps the field in the same
+     material as the rows below it, and leaves the accent pill as the only
+     thing allowed to pop. */
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text-muted);
 }
 
 .settings-search__field:focus-within {
+  /* Focus deepens the same well rather than swapping in the panel color, which
+     would bring back the near-black bar in dark mode. The accent border and
+     ring carry the focus signal. */
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 15%, transparent);
 }
@@ -29,7 +40,9 @@
 .settings-search__field input {
   width: 100%;
   min-width: 0;
-  padding: 7px 0;
+  /* Height is owned by the field's min-height; block padding here would push
+     the row back off the nav rhythm. */
+  padding: 0;
   border: 0;
   outline: 0;
   box-shadow: none;
@@ -55,9 +68,9 @@
 .settings-search__clear {
   display: grid;
   place-items: center;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -165,7 +178,9 @@
     max-height: 260px;
   }
   .settings-search__field {
-    min-height: 40px;
+    /* The compact layout turns the rail into pill rows at 2rem; match those
+       instead of keeping a taller standalone field. */
+    min-height: 2rem;
   }
 }
 
