@@ -28,8 +28,9 @@ use super::pet_drop::{
 };
 use super::pet_drop_windows::{inferred_bottom_dock, list_on_screen_ledges};
 use super::pet_hit_region::{
-    install_pet_hit_region_monitor, pet_hit_region_pointer_inside,
-    refresh_pet_hit_region_for_window, reset_pet_hit_region, set_pet_window_interactive,
+    install_pet_hit_region_monitor, pet_hit_region_geometry_refresh_needed,
+    pet_hit_region_pointer_inside, refresh_pet_hit_region_for_window, reset_pet_hit_region,
+    set_pet_window_interactive,
 };
 use super::pet_panel::{
     configure_pet_panel, perform_pet_panel_drag, show_pet_panel, show_pet_panel_at_position,
@@ -831,7 +832,9 @@ pub fn setup_pet_mode_window(app: &tauri::App) -> tauri::Result<()> {
         .map_err(|error| tauri::Error::Io(std::io::Error::other(error)))?;
     let hit_region_window = window.clone();
     window.on_window_event(move |event| {
-        if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+        if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_))
+            && pet_hit_region_geometry_refresh_needed()
+        {
             // The panel can walk underneath a stationary pointer, so mouse
             // monitors alone are insufficient. Refresh at every native frame
             // movement and size transition as well.

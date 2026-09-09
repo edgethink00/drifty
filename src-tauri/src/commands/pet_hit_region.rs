@@ -48,6 +48,7 @@ static HIT_REGION: Mutex<HitRegionState> = Mutex::new(HitRegionState {
     pointer_inside: false,
 });
 static HIT_REGION_MONITOR_INSTALLED: AtomicBool = AtomicBool::new(false);
+static HIT_REGION_NATIVE_REFRESH_PENDING: AtomicBool = AtomicBool::new(false);
 static HIT_REGION_PRESS: Mutex<PressState> = Mutex::new(PressState {
     active: false,
     owned_by_pet: false,
@@ -56,10 +57,58 @@ static HIT_REGION_PRESS: Mutex<PressState> = Mutex::new(PressState {
 pub fn reset_pet_hit_region() {
     if let Ok(mut state) = HIT_REGION.lock() {
         clear_hit_region_input(&mut state);
+        HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
     }
     if let Ok(mut press) = HIT_REGION_PRESS.lock() {
         *press = PressState::default();
     }
+}
+
+fn hit_region_has_spans() -> bool {
+    HIT_REGION
+        .lock()
+        .map(|state| !state.spans.is_empty())
+        .unwrap_or(false)
+}
+
+fn hit_region_press_active() -> bool {
+    HIT_REGION_PRESS
+        .lock()
+        .map(|press| press.active)
+        .unwrap_or(false)
+}
+
+fn hit_region_native_refresh_pending() -> bool {
+    HIT_REGION_NATIVE_REFRESH_PENDING.load(Ordering::Acquire)
+}
+
+fn hit_region_geometry_refresh_needed(
+    press_active: bool,
+    has_spans: bool,
+    native_refresh_pending: bool,
+) -> bool {
+    press_active || has_spans || native_refresh_pending
+}
+
+fn should_refresh_hit_region_for_mouse_event(
+    is_down: bool,
+    owned_by_pet: bool,
+    press_active: bool,
+    has_spans: bool,
+) -> bool {
+    if is_down {
+        owned_by_pet || has_spans
+    } else {
+        press_active || has_spans
+    }
+}
+
+pub fn pet_hit_region_geometry_refresh_needed() -> bool {
+    hit_region_geometry_refresh_needed(
+        hit_region_press_active(),
+        hit_region_has_spans(),
+        hit_region_native_refresh_pending(),
+    )
 }
 
 fn clear_hit_region_input(state: &mut HitRegionState) {
@@ -95,6 +144,7 @@ pub fn pet_mode_update_hit_region(
             spans: update.spans,
             pointer_inside: false,
         };
+        HIT_REGION_NATIVE_REFRESH_PENDING.store(true, Ordering::Release);
     }
     refresh_pet_hit_region_for_window(&window)
 }
@@ -144,7 +194,11 @@ pub fn refresh_pet_hit_region_for_window(window: &WebviewWindow) -> Result<(), S
                 )
             })
             .unwrap_or(false);
-        set_pet_window_interactive(window, inside)
+        let result = set_pet_window_interactive(window, inside);
+        if result.is_ok() {
+            HIT_REGION_NATIVE_REFRESH_PENDING.store(false, Ordering::Release);
+        }
+        result
     }
 }
 
@@ -184,6 +238,9 @@ pub fn set_pet_window_interactive(window: &WebviewWindow, interactive: bool) -> 
     {
         if let Ok(mut state) = HIT_REGION.lock() {
             state.pointer_inside = interactive;
+            if !interactive && state.spans.is_empty() {
+                HIT_REGION_NATIVE_REFRESH_PENDING.store(false, Ordering::Release);
+            }
         }
         Ok(())
     }
@@ -286,10 +343,6 @@ fn handle_monitored_mouse_event(
     let is_up = event_type == NSEventType::LeftMouseUp
         || event_type == NSEventType::RightMouseUp
         || event_type == NSEventType::OtherMouseUp;
-    let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
-        return;
-    };
-
     if is_down {
         // The monitor cannot retarget this already-dispatched down event. Its
         // job here is to freeze the *actual recipient* for the rest of the
@@ -303,10 +356,33 @@ fn handle_monitored_mouse_event(
             press.active = true;
             press.owned_by_pet = owned_by_pet;
         }
+        if !should_refresh_hit_region_for_mouse_event(
+            true,
+            owned_by_pet,
+            true,
+            hit_region_has_spans() || hit_region_native_refresh_pending(),
+        ) {
+            return;
+        }
+        let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
+            return;
+        };
         let _ = refresh_pet_hit_region_for_window(&window);
         return;
     }
 
+    let press_active = hit_region_press_active();
+    if !should_refresh_hit_region_for_mouse_event(
+        false,
+        false,
+        press_active,
+        hit_region_has_spans() || hit_region_native_refresh_pending(),
+    ) {
+        return;
+    }
+    let Some(window) = app.get_webview_window(PET_MODE_WINDOW_LABEL) else {
+        return;
+    };
     let _ = refresh_pet_hit_region_for_window(&window);
     if is_up && objc2_app_kit::NSEvent::pressedMouseButtons() == 0 {
         if let Ok(mut press) = HIT_REGION_PRESS.lock() {
@@ -388,6 +464,7 @@ fn refresh_pet_hit_region_on_main_thread(window: &WebviewWindow) -> Result<(), S
         // cannot interleave between the decision and the NSWindow property.
         set_macos_window_interactive(ns_window, inside);
         state.pointer_inside = inside;
+        HIT_REGION_NATIVE_REFRESH_PENDING.store(false, Ordering::Release);
         return Ok(());
     } else {
         false
@@ -409,6 +486,9 @@ fn set_pet_window_interactive_on_main_thread(
         .map_err(|_| "Pet Mode hit-region state is unavailable".to_string())?;
     set_macos_window_interactive(ns_window, interactive);
     state.pointer_inside = interactive;
+    if !interactive && state.spans.is_empty() {
+        HIT_REGION_NATIVE_REFRESH_PENDING.store(false, Ordering::Release);
+    }
     Ok(())
 }
 
@@ -575,6 +655,29 @@ mod tests {
         assert!(!press_owned_by_pet(true, 7, pet_window));
         assert!(!press_owned_by_pet(false, pet_window, pet_window));
         assert!(!press_owned_by_pet(true, 0, 0));
+    }
+
+    #[test]
+    fn dormant_monitor_skips_mouse_refreshes_until_input_can_matter() {
+        assert!(!should_refresh_hit_region_for_mouse_event(
+            false, false, false, false,
+        ));
+        assert!(!should_refresh_hit_region_for_mouse_event(
+            true, false, false, false,
+        ));
+        assert!(should_refresh_hit_region_for_mouse_event(
+            false, false, false, true,
+        ));
+        assert!(should_refresh_hit_region_for_mouse_event(
+            false, false, true, false,
+        ));
+        assert!(should_refresh_hit_region_for_mouse_event(
+            true, true, false, false,
+        ));
+        assert!(!hit_region_geometry_refresh_needed(false, false, false));
+        assert!(hit_region_geometry_refresh_needed(false, false, true));
+        assert!(hit_region_geometry_refresh_needed(false, true, false));
+        assert!(hit_region_geometry_refresh_needed(true, false, false));
     }
 
     #[cfg(target_os = "macos")]

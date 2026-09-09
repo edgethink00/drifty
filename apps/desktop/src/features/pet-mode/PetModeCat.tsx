@@ -86,6 +86,7 @@ export function PetModeCat({
   gazeOffset = { x: 0, y: 0 },
   publishHitRegion = true,
   decorative = false,
+  suspended = false,
   playfulPaw = false,
   huntAlertVisible = false,
   huntAlertDurationMs = 480,
@@ -114,6 +115,8 @@ export function PetModeCat({
   readonly gazeOffset?: PetModeGazeOffset;
   readonly publishHitRegion?: boolean;
   readonly decorative?: boolean;
+  /** Hide artwork and stop visual clocks, retaining loaded assets for reveal. */
+  readonly suspended?: boolean;
   readonly playfulPaw?: boolean;
   readonly huntAlertVisible?: boolean;
   readonly huntAlertDurationMs?: number;
@@ -142,6 +145,14 @@ export function PetModeCat({
   const [runFramesReady, setRunFramesReady] = useState(false);
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
   const renderedEntrySequenceRef = useRef<number | null>(null);
+  const preloadMountedRef = useRef(true);
+  const walkLoadStartedRef = useRef(false);
+  const runFramesLoadStartedRef = useRef(false);
+  const runFramesLoadGenerationRef = useRef(0);
+  const preloadedSitArtworkIdRef = useRef<string | null>(null);
+  const lifeMotionPreloadedRef = useRef(false);
+  const pawArtworkPreloadedRef = useRef(false);
+  const dragArtworkPreloadedRef = useRef(false);
   const selectedSitVariantId = resolvePetModeSitArtworkId();
   const selectedSitVariant = PET_MODE_SIT_VARIANTS[selectedSitVariantId];
   // The stylesheet already stops secondary CSS animations under reduced
@@ -157,14 +168,21 @@ export function PetModeCat({
   const runUsesVectorFallback = phase === "run" && !usesRunRaster;
 
   useEffect(() => {
-    if (decorative) return;
-    let active = true;
+    preloadMountedRef.current = true;
+    return () => { preloadMountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (decorative || suspended || walkFrames.length > 0 || walkLoadStartedRef.current) return;
+    walkLoadStartedRef.current = true;
     void fetch("/pet-mode/walk-frames-v2.json")
       .then((response) => response.json() as Promise<WalkFramesFile>)
       .then((payload) => {
-        if (active && Array.isArray(payload.frames)) setWalkFrames(payload.frames);
+        if (preloadMountedRef.current && Array.isArray(payload.frames)) setWalkFrames(payload.frames);
       })
       .catch((error: unknown) => {
+        if (!preloadMountedRef.current) return;
+        walkLoadStartedRef.current = false;
         // A swallowed rejection here is invisible: the render falls back to a
         // single standing frame, so the cat crosses the screen with frozen
         // legs and nothing is logged anywhere. That shipped once already — a
@@ -178,15 +196,18 @@ export function PetModeCat({
         console.warn("[pet-mode] walk frames failed to load; gait will not animate", error);
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "walk-frames" } });
       });
-    return () => { active = false; };
-  }, [decorative]);
+  }, [decorative, suspended, walkFrames.length]);
 
   useEffect(() => {
     if (decorative || !fastRunBetaEnabled) {
+      runFramesLoadGenerationRef.current += 1;
+      runFramesLoadStartedRef.current = false;
       setRunFramesReady(false);
       return;
     }
-    let active = true;
+    if (suspended || runFramesReady || runFramesLoadStartedRef.current) return;
+    runFramesLoadStartedRef.current = true;
+    const loadGeneration = ++runFramesLoadGenerationRef.current;
     setRunFramesFailed(false);
     setRunFramesReady(false);
     const images = PET_MODE_RUN_FRAME_SOURCES.map((source) => {
@@ -196,19 +217,27 @@ export function PetModeCat({
     });
     void Promise.all(images.map((image) => image.decode?.() ?? Promise.resolve()))
       .then(() => {
-        if (active) setRunFramesReady(true);
+        if (preloadMountedRef.current && loadGeneration === runFramesLoadGenerationRef.current) {
+          setRunFramesReady(true);
+        }
       })
       .catch((error: unknown) => {
-        if (!active) return;
+        if (!preloadMountedRef.current || loadGeneration !== runFramesLoadGenerationRef.current) return;
+        runFramesLoadStartedRef.current = false;
         setRunFramesFailed(true);
         console.warn("[pet-mode] run frames failed to preload; falling back to vector gait", error);
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "run-frames" } });
       });
-    return () => { active = false; };
-  }, [decorative, fastRunBetaEnabled]);
+  }, [decorative, fastRunBetaEnabled, runFramesReady, suspended]);
 
   useEffect(() => {
-    if (decorative || selectedSitVariant.kind === "vector") return;
+    if (
+      decorative
+      || suspended
+      || preloadedSitArtworkIdRef.current === selectedSitVariantId
+      || selectedSitVariant.kind === "vector"
+    ) return;
+    preloadedSitArtworkIdRef.current = selectedSitVariantId;
     const sources = selectedSitVariant.kind === "live-raster"
       ? [selectedSitVariant.neutralSource, selectedSitVariant.source, selectedSitVariant.eyeSource]
       : [selectedSitVariant.source];
@@ -222,10 +251,11 @@ export function PetModeCat({
         console.warn("[pet-mode] sit artwork failed to preload", error);
         captureSentryException(error, { tags: { surface: "pet-mode", asset: "sit-artwork" } });
       });
-  }, [decorative, selectedSitVariant, selectedSitVariantId]);
+  }, [decorative, selectedSitVariant, selectedSitVariantId, suspended]);
 
   useEffect(() => {
-    if (decorative) return;
+    if (decorative || suspended || lifeMotionPreloadedRef.current) return;
+    lifeMotionPreloadedRef.current = true;
     for (const motion of Object.values(LIFE_MOTION_ASSET_BY_PHASE)) {
       for (let frame = 1; frame <= PET_MODE_LIFE_MOTION_FRAME_COUNT; frame += 1) {
         const image = new Image();
@@ -233,10 +263,11 @@ export function PetModeCat({
         void image.decode?.().catch(() => undefined);
       }
     }
-  }, [decorative]);
+  }, [decorative, suspended]);
 
   useEffect(() => {
-    if (decorative) return;
+    if (decorative || suspended || pawArtworkPreloadedRef.current) return;
+    pawArtworkPreloadedRef.current = true;
     // The F12 frames are deliberately high-resolution source crops. Decode the
     // whole reviewed range before it can be requested by an intervention so a
     // src swap never produces a white/transparent decode flash mid-reach.
@@ -245,28 +276,31 @@ export function PetModeCat({
       image.src = `/pet-mode/paw/f${String(frame).padStart(3, "0")}.png`;
       void image.decode?.().catch(() => undefined);
     }
-  }, [decorative]);
+  }, [decorative, suspended]);
 
   useEffect(() => {
-    if (decorative) return;
+    if (decorative || suspended || dragArtworkPreloadedRef.current) return;
+    dragArtworkPreloadedRef.current = true;
     // Drag feedback has to be available on the very first grab. Waiting for
     // the phase swap to request this bitmap creates a one-frame empty pet while
     // the native window has already started following the pointer.
     const image = new Image();
     image.src = DRAG_SCRUFF_ASSET;
     void image.decode?.().catch(() => undefined);
-  }, [decorative]);
+  }, [decorative, suspended]);
 
   const settlingEntry = phase === "idle" && preserveEntryLanding
     && renderedEntrySequenceRef.current === entrySequence;
-  useEffect(() => {
+  // Visual clocks are disposed during the same commit as the suspension clear,
+  // before a queued frame can reserve a newer native hit-region revision.
+  useLayoutEffect(() => {
     const moving = phase === "entry"
       || settlingEntry
       || phase === "walk"
       || runUsesVectorFallback
       || phase === "stalk"
       || phase === "return";
-    if (!moving || walkFrames.length === 0) return undefined;
+    if (suspended || !moving || walkFrames.length === 0) return undefined;
     if (settlingEntry && walkFrameRef.current === PET_MODE_ENTRY_REST_FRAME) return undefined;
     // Native emits `motion: entry` before its one-frame WebView handoff, and
     // entrySequence restarts this renderer clock on that event. Both sides then
@@ -305,6 +339,7 @@ export function PetModeCat({
     let stagingFrame = false;
     let disposed = false;
     const render = (now: number) => {
+      if (disposed) return;
       // The prototype advances gait in its requestAnimationFrame loop. Do the
       // same here: at run speed it may skip source indices, but it never queues
       // several full-silhouette React updates between display refreshes.
@@ -367,9 +402,10 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, settlingEntry, reducedMotion, runUsesVectorFallback, sizeScale, walkFrames.length]);
+  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, settlingEntry, reducedMotion, runUsesVectorFallback, sizeScale, suspended, walkFrames.length]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (suspended) return undefined;
     if (
       phase !== "run"
       || !fastRunBetaEnabled
@@ -389,6 +425,7 @@ export function PetModeCat({
     let stagingFrame = false;
     let disposed = false;
     const render = (now: number) => {
+      if (disposed) return;
       const nextFrame = getPetModeRunFrameIndex(now - startedAt);
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
@@ -422,10 +459,10 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runFramesFailed, runFramesReady]);
+  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runFramesFailed, runFramesReady, suspended]);
 
-  useEffect(() => {
-    if (!isLifeMotionPhase(phase)) return undefined;
+  useLayoutEffect(() => {
+    if (suspended || !isLifeMotionPhase(phase)) return undefined;
     setLifeMotionFrame(0);
     const startedAt = performance.now();
     let displayedFrame = 0;
@@ -434,6 +471,7 @@ export function PetModeCat({
     let stagingFrame = false;
     let disposed = false;
     const render = (now: number) => {
+      if (disposed) return;
       const nextFrame = Math.min(
         PET_MODE_LIFE_MOTION_FRAME_COUNT - 1,
         Math.floor((now - startedAt) * PET_MODE_LIFE_MOTION_FPS / 1000),
@@ -472,7 +510,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [facing, hitRegionInteractive, phase]);
+  }, [facing, hitRegionInteractive, phase, suspended]);
 
   const mirrored = facing === "left";
   const registerWalkVector = useCallback((node: SVGSVGElement | null) => {
@@ -602,7 +640,7 @@ export function PetModeCat({
                 : "idle";
 
   useLayoutEffect(() => {
-    if (decorative || !publishHitRegion) return;
+    if (decorative || !publishHitRegion || suspended) return;
     // Publish from the component that owns the rendered frame. Parent/child
     // layout-effect ordering otherwise lets a parent briefly publish the prior
     // frame id during the same commit.
@@ -613,7 +651,20 @@ export function PetModeCat({
       // A travel mask must not become clickable around an unfinished landing.
       interactive: hitRegionInteractive && (!holdsRenderedEntryVector || entrySettled),
     });
-  }, [decorative, entrySettled, hitRegionCommitRevision, hitRegionInteractive, holdsRenderedEntryVector, mirrored, publishHitRegion, regionId]);
+  }, [decorative, entrySettled, hitRegionCommitRevision, hitRegionInteractive, holdsRenderedEntryVector, mirrored, publishHitRegion, regionId, suspended]);
+
+  useLayoutEffect(() => {
+    if (decorative || !publishHitRegion || !suspended) return;
+    // Clear once at the suspension boundary, even if an older frame's asset
+    // load or native acknowledgement is still pending. The hit-region bridge
+    // reserves revisions before awaiting, so that old frame cannot win later.
+    // Phase/facing changes while away must not keep publishing empty regions.
+    void publishPetModeHitRegion({ regionId: "idle", mirrored: false, interactive: false });
+  }, [decorative, publishHitRegion, suspended]);
+
+  // Keep this component (and its asset caches) mounted, but remove CSS motion
+  // and the live-sit child's blink timers until the owning window reveals us.
+  if (suspended) return null;
 
   return (
     <div className={rootClass} aria-hidden={decorative ? true : undefined} aria-label={decorative ? undefined : "Drifty pet cat"} data-phase={phase} data-region-id={regionId} data-sit-artwork={selectedSitVariantId} style={motionGeometry}>

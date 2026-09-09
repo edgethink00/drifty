@@ -10,6 +10,11 @@
 #[cfg(target_os = "macos")]
 use objc2_app_kit::NSWorkspace;
 
+#[cfg(target_os = "macos")]
+const FULLSCREEN_AX_BUDGET: std::time::Duration = std::time::Duration::from_millis(120);
+#[cfg(target_os = "macos")]
+const AX_MIN_TIMEOUT_SECONDS: f32 = 0.001;
+
 /// True when a fullscreen app other than Drifty itself is frontmost.
 /// Fails open (false) whenever the state cannot be determined, so a missing
 /// accessibility grant never silences moments outright.
@@ -24,6 +29,7 @@ fn frontmost_other_app_is_fullscreen() -> bool {
     use core_foundation::boolean::CFBoolean;
     use core_foundation::string::CFString;
     use std::ffi::c_void;
+    use std::time::Instant;
 
     type AXUIElementRef = *const c_void;
     type AXError = i32;
@@ -37,6 +43,7 @@ fn frontmost_other_app_is_fullscreen() -> bool {
             attribute: core_foundation::string::CFStringRef,
             value: *mut CFTypeRef,
         ) -> AXError;
+        fn AXUIElementSetMessagingTimeout(element: AXUIElementRef, timeout: f32) -> AXError;
         fn CFRelease(cf: CFTypeRef);
     }
 
@@ -57,7 +64,11 @@ fn frontmost_other_app_is_fullscreen() -> bool {
         if app.is_null() {
             return false;
         }
+        let deadline = Instant::now() + FULLSCREEN_AX_BUDGET;
         let result = (|| {
+            if AXUIElementSetMessagingTimeout(app, remaining_ax_timeout_seconds(deadline)) != 0 {
+                return false;
+            }
             let mut window_ref: CFTypeRef = std::ptr::null();
             let window_key = CFString::new("AXFocusedWindow");
             if AXUIElementCopyAttributeValue(app, window_key.as_concrete_TypeRef(), &mut window_ref)
@@ -67,6 +78,14 @@ fn frontmost_other_app_is_fullscreen() -> bool {
                 return false;
             }
             let fullscreen = (|| {
+                if Instant::now() >= deadline
+                    || AXUIElementSetMessagingTimeout(
+                        window_ref as AXUIElementRef,
+                        remaining_ax_timeout_seconds(deadline),
+                    ) != 0
+                {
+                    return false;
+                }
                 let mut value_ref: CFTypeRef = std::ptr::null();
                 let fullscreen_key = CFString::new("AXFullScreen");
                 if AXUIElementCopyAttributeValue(
@@ -91,7 +110,34 @@ fn frontmost_other_app_is_fullscreen() -> bool {
     }
 }
 
+#[cfg(target_os = "macos")]
+fn remaining_ax_timeout_seconds(deadline: std::time::Instant) -> f32 {
+    deadline
+        .saturating_duration_since(std::time::Instant::now())
+        .as_secs_f32()
+        .max(AX_MIN_TIMEOUT_SECONDS)
+}
+
 #[cfg(not(target_os = "macos"))]
 fn frontmost_other_app_is_fullscreen() -> bool {
     false
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fullscreen_ax_timeout_never_restores_the_multisecond_default() {
+        let expired = std::time::Instant::now() - std::time::Duration::from_secs(1);
+        assert_eq!(
+            remaining_ax_timeout_seconds(expired),
+            AX_MIN_TIMEOUT_SECONDS
+        );
+        let remaining = remaining_ax_timeout_seconds(
+            std::time::Instant::now() + std::time::Duration::from_millis(30),
+        );
+        assert!(remaining > 0.0);
+        assert!(remaining <= 0.03);
+    }
 }

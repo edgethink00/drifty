@@ -261,6 +261,19 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 describe("PetModeWindowApp", () => {
+  async function renderResidentPet() {
+    const view = render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    // Model the main webview restoring Show Pet after the hidden renderer
+    // mounts. A native pose preview/drag requires an enabled, landed pet.
+    await act(async () => {
+      window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+      window.dispatchEvent(new StorageEvent("storage", { key: PET_MODE_STORAGE_KEY, newValue: "1" }));
+      bridge.eventHandler?.({ kind: "entry_complete" });
+    });
+    return view;
+  }
+
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -2593,7 +2606,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); });
     expect(bridge.prepareNativePetOutingHunt).not.toHaveBeenCalled();
     expect(bridge.stalkNativePetCursor).not.toHaveBeenCalled();
-    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).not.toBe("notice");
+    expect(screen.queryByLabelText("Drifty pet cat")).toBeNull();
 
     act(() => {
       bridge.eventHandler?.({
@@ -3134,10 +3147,9 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
-    act(() => {
+    await act(async () => {
       bridge.eventHandler?.({ kind: "facing", facing: "left" });
     });
 
@@ -3959,8 +3971,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
@@ -4016,8 +4027,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch_with_note" });
@@ -4065,8 +4075,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch_with_note" });
@@ -4087,8 +4096,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
@@ -4108,8 +4116,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
@@ -4138,8 +4145,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     const callsBeforeAction = random.mock.calls.length;
 
     act(() => {
@@ -4169,8 +4175,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "music_note" });
@@ -4198,8 +4203,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "tail_flick" });
@@ -4220,8 +4224,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "blink" });
@@ -4245,8 +4248,7 @@ describe("PetModeWindowApp", () => {
     bridge.roamNativePet.mockImplementationOnce(() => new Promise<void>((resolve) => {
       finishWalk = resolve;
     }));
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "walk" });
@@ -4270,8 +4272,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "life_loop" });
@@ -4279,7 +4280,7 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(360); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("stretch");
 
-    act(() => {
+    await act(async () => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stop" });
     });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("idle");
@@ -4427,8 +4428,7 @@ describe("PetModeWindowApp", () => {
       targetX: 1482,
       targetY: 52,
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({
@@ -4516,8 +4516,7 @@ describe("PetModeWindowApp", () => {
       configurable: true,
       value: () => ({ matches: true }),
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({
@@ -4583,8 +4582,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 3, clientX: 12, clientY: 12 });
@@ -4625,8 +4623,7 @@ describe("PetModeWindowApp", () => {
       endX: 240,
       endY: 140,
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 41, clientX: 12, clientY: 12 });
@@ -4655,8 +4652,7 @@ describe("PetModeWindowApp", () => {
         endY: 80,
       });
     }));
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 42, clientX: 12, clientY: 12 });
@@ -4680,8 +4676,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     act(() => {
       bridge.eventHandler?.({ kind: "motion", motion: "run" });
     });
@@ -4703,8 +4698,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
     });
@@ -4730,8 +4724,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
     });
@@ -4828,8 +4821,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
     });
@@ -4855,8 +4847,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sleep" });
     });
@@ -4880,8 +4871,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     dispatchPointer(pet, "pointerdown", { pointerId: 36, clientX: 12, clientY: 12 });
@@ -5501,9 +5491,8 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
-    act(() => {
+    await renderResidentPet();
+    await act(async () => {
       bridge.eventHandler?.({ kind: "motion", motion: "run" });
     });
 
@@ -5521,7 +5510,7 @@ describe("PetModeWindowApp", () => {
     const cat = screen.getByLabelText("Drifty pet cat");
     expect(cat.getAttribute("data-phase")).toBe("run");
 
-    act(() => {
+    await act(async () => {
       bridge.dragStartHandler?.();
     });
     expect(cat.getAttribute("data-phase")).toBe("drag");
@@ -5548,8 +5537,7 @@ describe("PetModeWindowApp", () => {
       bridge.eventHandler = handler;
       return vi.fn();
     });
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "stretch" });
@@ -5573,7 +5561,7 @@ describe("PetModeWindowApp", () => {
     dispatchPointer(pet, "pointerdown", { pointerId: 9, clientX: 18, clientY: 18 });
     dispatchPointer(pet, "pointermove", { pointerId: 9, clientX: 30, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
-    act(() => {
+    await act(async () => {
       bridge.dragStartHandler?.();
     });
     expect(cat.getAttribute("data-phase")).toBe("drag");
@@ -5612,14 +5600,13 @@ describe("PetModeWindowApp", () => {
         endY: 140,
       });
     }));
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 10, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
-    act(() => {
+    await act(async () => {
       bridge.dragStartHandler?.();
     });
     expect(cat.getAttribute("data-phase")).toBe("drag");
@@ -5646,19 +5633,18 @@ describe("PetModeWindowApp", () => {
     });
     bridge.listenToNativePetModeEvent.mockResolvedValue(vi.fn());
     bridge.beginNativePetDrag.mockImplementationOnce(async () => new Promise(() => undefined));
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 11, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
-    act(() => {
+    await act(async () => {
       bridge.dragStartHandler?.();
     });
     expect(cat.getAttribute("data-phase")).toBe("drag");
 
-    act(() => {
+    await act(async () => {
       bridge.dragEndHandler?.({ moved: true, startX: 120, startY: 80, endX: 180, endY: 96 });
     });
     expect(cat.getAttribute("data-phase")).toBe("release");
@@ -5766,13 +5752,12 @@ describe("PetModeWindowApp", () => {
         endY: 96,
       });
     }));
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 21, clientX: 18, clientY: 18 });
     await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_DRAG_PICKUP_MS); });
-    act(() => { bridge.dragStartHandler?.(); });
+    await act(async () => { bridge.dragStartHandler?.(); });
     expect(cat.getAttribute("data-phase")).toBe("drag");
     dispatchPointer(pet, "pointerup", { pointerId: 21, clientX: 40, clientY: 18 });
     await act(async () => { completeNativeDrag(); await Promise.resolve(); });
@@ -5804,8 +5789,7 @@ describe("PetModeWindowApp", () => {
     bridge.resolveNativePetDrop.mockImplementationOnce(() => new Promise((resolve) => {
       finishDrop = resolve;
     }));
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
     const pet = screen.getByRole("button", { name: "Pet Drifty cat. Drag to move. Right-click for options." });
     const cat = screen.getByLabelText("Drifty pet cat");
     dispatchPointer(pet, "pointerdown", { pointerId: 22, clientX: 18, clientY: 18 });

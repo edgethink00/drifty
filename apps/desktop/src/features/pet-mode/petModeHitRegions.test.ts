@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 const bridge = vi.hoisted(() => ({
   updateNativePetHitRegion: vi.fn(),
@@ -130,5 +131,40 @@ describe("Pet Mode hit-region transitions", () => {
       regionId: "idle",
       spans: [20, 40, 60],
     });
+  });
+
+  it("keeps a frame awaiting its artifact older than a suspension clear", async () => {
+    vi.resetModules();
+    const { publishPetModeHitRegion: publish } = await import("./petModeHitRegions");
+    let finishFetch!: (response: unknown) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise((resolve) => { finishFetch = resolve; })));
+    const pending = publish({ regionId: "idle", mirrored: false, interactive: true });
+    await publish({ regionId: "idle", mirrored: false, interactive: false });
+    finishFetch({ ok: true, json: async () => JSON.parse(readFileSync("public/pet-mode/hit-regions-v1.json", "utf8")) });
+    await pending;
+    const [clear, lateFrame] = bridge.updateNativePetHitRegion.mock.calls.map(([request]) => request);
+    expect(clear.spans).toEqual([]);
+    expect(lateFrame.spans.length).toBeGreaterThan(0);
+    expect(lateFrame.generation).toBe(clear.generation);
+    expect(lateFrame.revision).toBeLessThan(clear.revision);
+  });
+
+  it("keeps a failed suspension clear retry older than a subsequent reveal", async () => {
+    vi.resetModules();
+    const { publishPetModeHitRegion: publish } = await import("./petModeHitRegions");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true, json: async () => JSON.parse(readFileSync("public/pet-mode/hit-regions-v1.json", "utf8")),
+    }));
+    let rejectClear!: (error: Error) => void;
+    bridge.updateNativePetHitRegion.mockImplementationOnce(() => new Promise((_, reject) => { rejectClear = reject; }));
+    const pendingClear = publish({ regionId: "idle", mirrored: false, interactive: false });
+    await publish({ regionId: "idle", mirrored: true, interactive: true });
+    rejectClear(new Error("late clear acknowledgement failure"));
+    await pendingClear;
+    const [clear, reveal, retry] = bridge.updateNativePetHitRegion.mock.calls.map(([request]) => request);
+    expect(reveal.spans.length).toBeGreaterThan(0);
+    expect(retry.spans).toEqual([]);
+    expect(clear.revision).toBeLessThan(retry.revision);
+    expect(retry.revision).toBeLessThan(reveal.revision);
   });
 });

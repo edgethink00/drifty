@@ -1064,13 +1064,13 @@ export function PetModeWindowApp() {
   }, [menuHolding, petModeEnabled, petVisible, phase, requestSeatReconcile]);
 
   useEffect(() => {
-    if (!petModeEnabled) return undefined;
+    if (!petModeEnabled || !petVisible) return undefined;
     const intervalId = window.setInterval(
       requestSeatReconcile,
       PET_MODE_SEAT_RECONCILE_INTERVAL_MS,
     );
     return () => window.clearInterval(intervalId);
-  }, [petModeEnabled, requestSeatReconcile]);
+  }, [petModeEnabled, petVisible, requestSeatReconcile]);
 
   useEffect(() => {
     seatReconcileDisposedRef.current = false;
@@ -2615,7 +2615,7 @@ export function PetModeWindowApp() {
   }, [autonomousCycle, petModeEnabled, presenceMode, retreatRevision, retreatToWatch, snapshot?.productivity, timedPauseUntil, watching]);
 
   useEffect(() => {
-    if (!petModeEnabled || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
+    if (!petModeEnabled || !petVisible || timedPauseUntil !== null || snapshot?.productivity === "focus") return;
     let disposed = false;
     let timerId = 0;
     const cycle = autonomousCycle;
@@ -2668,10 +2668,10 @@ export function PetModeWindowApp() {
       disposed = true;
       window.clearTimeout(timerId);
     };
-  }, [autonomousCycle, timedPauseUntil, petModeEnabled, playLifeAction, snapshot?.productivity]);
+  }, [autonomousCycle, timedPauseUntil, petModeEnabled, petVisible, playLifeAction, snapshot?.productivity]);
 
   useEffect(() => {
-    if (snapshot?.productivity === "focus") return undefined;
+    if (!petModeEnabled || !petVisible || snapshot?.productivity === "focus") return undefined;
     let disposed = false;
     let resetTimerId = 0;
     let timerId = 0;
@@ -2693,10 +2693,10 @@ export function PetModeWindowApp() {
       window.clearTimeout(timerId);
       window.clearTimeout(resetTimerId);
     };
-  }, [commitPhase, snapshot?.productivity]);
+  }, [commitPhase, petModeEnabled, petVisible, snapshot?.productivity]);
 
   useEffect(() => {
-    if (snapshot?.productivity === "focus") return undefined;
+    if (!petModeEnabled || !petVisible || snapshot?.productivity === "focus") return undefined;
     let disposed = false;
     let resetTimerId = 0;
     let timerId = 0;
@@ -2722,7 +2722,7 @@ export function PetModeWindowApp() {
       window.clearTimeout(timerId);
       window.clearTimeout(resetTimerId);
     };
-  }, [commitPhase, snapshot?.productivity]);
+  }, [commitPhase, petModeEnabled, petVisible, snapshot?.productivity]);
 
   useEffect(() => {
     // Focus and drift are both intentionally self-contained states. Looking at
@@ -3185,6 +3185,7 @@ export function PetModeWindowApp() {
           aria-label="Pet Drifty cat. Drag to move. Right-click for options."
         >
           <PetModeCat
+            suspended={!petModeEnabled || !petVisible}
             phase={phase}
             facing={facing}
             pawFrame={pawFrame}

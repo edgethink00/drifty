@@ -5,6 +5,7 @@ import { PET_MODE_SIT_VARIANT_STORAGE_KEY } from "./petModeSitVariant";
 import { PetModeWindowApp } from "./PetModeWindowApp";
 import {
   PET_MODE_SIT_MIN_MS,
+  PET_MODE_STORAGE_KEY,
   pickPetModeLifeAction,
   type PetModeWindowEvent,
 } from "./petModeData";
@@ -67,8 +68,17 @@ vi.mock("@tauri-apps/api/window", () => ({
 }));
 
 describe("pet sit pose", () => {
+  async function renderResidentPet() {
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    // Native completes entry before an enabled pet can accept a pose preview.
+    await act(async () => { bridge.eventHandler?.({ kind: "entry_complete" }); });
+  }
+
   beforeEach(() => {
     window.localStorage.clear();
+    // These tests exercise visible pose previews, not an off-screen renderer.
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
   });
 
   afterEach(() => {
@@ -81,8 +91,7 @@ describe("pet sit pose", () => {
   it("keeps the legacy shipped fallback as one connected vector with its own blink", async () => {
     window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "shipped");
     vi.useFakeTimers();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
@@ -113,8 +122,7 @@ describe("pet sit pose", () => {
 
   it("keeps a sitting cat pettable instead of ignoring the touch", async () => {
     vi.useFakeTimers();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
@@ -134,8 +142,7 @@ describe("pet sit pose", () => {
   it("uses the approved D frame unchanged when the Dev lab selects it", async () => {
     window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "d-lifted-tail");
     vi.useFakeTimers();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
@@ -154,8 +161,7 @@ describe("pet sit pose", () => {
   it("keeps D's approved open eyes as a live, coat-aware layer", async () => {
     window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "d-lifted-tail-live");
     vi.useFakeTimers();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sit" });
@@ -183,8 +189,7 @@ describe("pet sit pose", () => {
   it("keeps D as one approved bitmap at rest, then switches layers only for a blink", async () => {
     window.localStorage.setItem(PET_MODE_SIT_VARIANT_STORAGE_KEY, "d-lifted-tail-live");
     vi.useFakeTimers();
-    render(<PetModeWindowApp />);
-    await act(async () => undefined);
+    await renderResidentPet();
 
     act(() => {
       bridge.eventHandler?.({ kind: "preview_action", action: "sit" });

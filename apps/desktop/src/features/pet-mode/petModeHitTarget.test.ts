@@ -83,7 +83,7 @@ describe("pet mode hit target", () => {
 
   it("skips native hit-region publication for decorative previews", () => {
     expect(cat).toContain("publishHitRegion = true");
-    expect(cat).toContain("if (decorative || !publishHitRegion) return;");
+    expect(cat).toContain("if (decorative || !publishHitRegion || suspended) return;");
     expect(cat).toContain("decorative = false");
   });
 });

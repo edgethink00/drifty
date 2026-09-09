@@ -65,6 +65,7 @@ static SCENE: Mutex<Option<Scene>> = Mutex::new(None);
 static RETIRED: Mutex<std::collections::VecDeque<String>> =
     Mutex::new(std::collections::VecDeque::new());
 static GENERATION: AtomicU64 = AtomicU64::new(0);
+static RESIDENT_STYLE_REVISION: AtomicU64 = AtomicU64::new(0);
 
 fn on_main<R: Send + 'static>(
     app: &AppHandle,
@@ -112,16 +113,35 @@ pub(super) fn close_completed(id: &str) {
 // AppKit can retain a panel on a full-screen Space after its auxiliary flag
 // is removed. Keep resident visibility explicit, while an active scene owns
 // its own presentation. Do not change the user's enabled/presence state.
+fn resident_style_refresh_needed(
+    previous: Option<(bool, u64)>,
+    suppressed: bool,
+    revision: u64,
+) -> bool {
+    previous != Some((suppressed, revision))
+}
+
 pub(super) fn monitor_resident_visibility(app: AppHandle) {
-    std::thread::spawn(move || loop {
-        thread::sleep(Duration::from_millis(250));
-        if !PET_MODE_ENABLED.load(Ordering::Relaxed) || SCENE.lock().unwrap().is_some() {
-            continue;
+    std::thread::spawn(move || {
+        let mut last_style = None;
+        loop {
+            thread::sleep(Duration::from_millis(250));
+            if !PET_MODE_ENABLED.load(Ordering::Relaxed) || SCENE.lock().unwrap().is_some() {
+                // Reassert after a disabled period or scene-owned presentation.
+                last_style = None;
+                continue;
+            }
+            let suppressed = objc2::rc::autoreleasepool(|_| {
+                super::super::companion_context::companion_informational_moments_suppressed()
+            });
+            let revision = RESIDENT_STYLE_REVISION.load(Ordering::Acquire);
+            if !resident_style_refresh_needed(last_style, suppressed, revision) {
+                continue;
+            }
+            if set_panel_style(&app, None, false, if suppressed { 0.0 } else { 1.0 }).is_ok() {
+                last_style = Some((suppressed, revision));
+            }
         }
-        let suppressed = objc2::rc::autoreleasepool(|_| {
-            super::super::companion_context::companion_informational_moments_suppressed()
-        });
-        let _ = set_panel_style(&app, None, false, if suppressed { 0.0 } else { 1.0 });
     });
 }
 
@@ -475,6 +495,10 @@ fn clear_generation_with_motion(app: &AppHandle, generation: u64, expected_motio
     if !removed {
         return;
     }
+    // A scene can begin and end between two resident-monitor samples. Advance
+    // the revision before the direct restore so the monitor reasserts the same
+    // suppression state if this cleanup's AppKit handoff fails.
+    RESIDENT_STYLE_REVISION.fetch_add(1, Ordering::AcqRel);
     let suppressed = super::super::companion_context::companion_informational_moments_suppressed();
     let _ = set_panel_style(app, None, false, if suppressed { 0.0 } else { 1.0 });
 }
@@ -482,6 +506,18 @@ fn clear_generation_with_motion(app: &AppHandle, generation: u64, expected_motio
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resident_style_only_refreshes_on_first_sample_or_fullscreen_transition() {
+        assert!(resident_style_refresh_needed(None, false, 4));
+        assert!(resident_style_refresh_needed(None, true, 4));
+        assert!(!resident_style_refresh_needed(Some((false, 4)), false, 4));
+        assert!(!resident_style_refresh_needed(Some((true, 4)), true, 4));
+        assert!(resident_style_refresh_needed(Some((false, 4)), true, 4));
+        assert!(resident_style_refresh_needed(Some((true, 4)), false, 4));
+        assert!(resident_style_refresh_needed(Some((false, 3)), false, 4));
+    }
+
     #[test]
     fn full_screen_layout_keeps_the_paw_at_the_left_edge_without_clipping_the_cat() {
         for frame in [
