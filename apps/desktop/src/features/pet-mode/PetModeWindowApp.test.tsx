@@ -2360,7 +2360,6 @@ describe("PetModeWindowApp", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    // The superseded attempt must not leave the cat hidden or flagged away.
     expect(bridge.setNativePetPresence).not.toHaveBeenCalledWith(false, 1);
 
     await act(async () => {
@@ -2369,6 +2368,58 @@ describe("PetModeWindowApp", () => {
     });
     expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(2);
   });
+
+  it("walks off again after an automatic close called the away cat in", async () => {
+    // Automatic close runs on its own schedule and can fire while the
+    // drift-only cat is still away. Without recording that visit the cat
+    // stayed on screen after the close, with no retreat and no hover controls.
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_PRESENCE_MODE_STORAGE_KEY, "drift_only");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => bridge.eventHandler?.({ kind: "entry_complete" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(1);
+    expect(bridge.setNativePetPresence).toHaveBeenCalledWith(false, 1);
+
+    // Automatic close pulls the away cat in to close a tab.
+    act(() => bridge.eventHandler?.({
+      kind: "intervention",
+      target: { id: "close-while-away", appName: "Safari", browserName: "Safari", preview: false },
+    }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await Promise.resolve();
+    });
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalled();
+    // The stale edge ticket must not survive the visit.
+    expect(bridge.returnNativePetFromOuting).not.toHaveBeenCalled();
+
+    // Once focus holds again the visit ends the normal way: it walks back off.
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "snapshot",
+        snapshot: { productivity: "focus", contextLabel: "code", durationSeconds: 5 },
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3 * 60_000);
+      await Promise.resolve();
+    });
+    expect(bridge.exitNativePetScreen).toHaveBeenCalledTimes(2);
+  });
+
 
   it("enters a natural outing from the cursor display edge before stalking", async () => {
     vi.useFakeTimers();

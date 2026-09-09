@@ -361,6 +361,21 @@ export function PetModeWindowApp() {
     setWatching(next);
   }, []);
 
+  /**
+   * Any action that pulls the away drift-only cat back onto the screen is a
+   * visit: clear the away flag and its now-stale return ticket, and restart
+   * the retreat wait from this moment. Without this the cat would stay on
+   * screen after the action with its retreat timer and hover controls off,
+   * and the next drift would enter from a stale edge ticket.
+   */
+  const endWatchForVisit = useCallback(() => {
+    if (!watchingRef.current) return;
+    setWatchingState(false);
+    outingTicketRef.current = null;
+    lastOnDutyAtMsRef.current = Date.now();
+    dismissRequestedRef.current = false;
+  }, [setWatchingState]);
+
   const clearHuntAlert = useCallback(() => {
     if (huntAlertTimerRef.current !== null) {
       window.clearTimeout(huntAlertTimerRef.current);
@@ -1344,6 +1359,11 @@ export function PetModeWindowApp() {
   const playIntervention = useCallback(async (target: PetModeInterventionTarget) => {
     const token = ++actionTokenRef.current;
     interventionSceneRef.current = { id: target.id, token };
+    // Automatic close runs on its own schedule and can fire while the
+    // drift-only cat is still away. It reveals the panel at home, so the
+    // visit has to be recorded here; the retreat timer then walks the cat
+    // back off screen once focus holds again after the close.
+    endWatchForVisit();
     let movedToTarget = false;
     let contacted = false;
     let terminalContactReported = false;
@@ -1476,7 +1496,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
-  }, [commitFacing, commitPhase, revealForAction, stopMusicNote]);
+  }, [commitFacing, commitPhase, endWatchForVisit, revealForAction, stopMusicNote]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     if (!petOutingsEnabledRef.current) return;
@@ -1902,11 +1922,7 @@ export function PetModeWindowApp() {
         outingTicketRef.current = null;
         // An explicit Show also ends a drift-only watch: the user asked to
         // see the cat, so it visits now and the retreat timer restarts.
-        if (watchingRef.current) {
-          setWatchingState(false);
-          lastOnDutyAtMsRef.current = Date.now();
-          dismissRequestedRef.current = false;
-        }
+        endWatchForVisit();
         driftHuntRef.current = {
           ...driftHuntRef.current,
           noticed: true,
@@ -2231,7 +2247,7 @@ export function PetModeWindowApp() {
       cleanupTauriEventListener(unlisten);
       actionTokenRef.current += 1;
     };
-  }, [beginSleepwalk, clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
+  }, [beginSleepwalk, clearActiveLabAction, clearDriftCue, commitFacing, commitPhase, commitVisibility, endWatchForVisit, playCursorHunt, playIntervention, playLifeAction, reportLabState, requestSeatReconcile, restartAutonomousCycle, revealForAction, setActiveLabAction, showDriftCue]);
 
   useEffect(() => {
     const resting = snapshot?.productivity === "focus";
