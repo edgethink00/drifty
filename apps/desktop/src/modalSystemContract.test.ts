@@ -1,8 +1,53 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
+}
+
+/** A panel only animates when a ModalPresence boundary owns it, and adoption is
+ * per surface rather than global. Registering every animated panel here makes an
+ * unwrapped new modal fail loudly: the account plan dialog shipped motionless
+ * because adding a modal broke no test. */
+const animatedModalPanelFiles = [
+  "./features/auth/AccountDeletionModal.tsx",
+  "./features/auth/AuthModal.tsx",
+  "./features/billing/PromoHandoffAccountDialog.tsx",
+  "./features/billing/UpgradePlanModal.tsx",
+  "./features/cloud-devices/CloudDeviceManagementPanel.tsx",
+  "./features/command-bar/CommandBar.tsx",
+  "./features/companion/DriftAlarmCopySettings.tsx",
+  "./features/dashboard/DashboardAiRecoveryOverlay.tsx",
+  "./features/dev-signals/SshAgentSourcesModal.tsx",
+  "./features/device-sync/DeviceSyncPurgeConfirmation.tsx",
+  "./features/feedback/FeedbackModal.tsx",
+  "./features/history/HistoryView.tsx",
+  "./features/leaderboard/RankEmbedsModal.tsx",
+  "./features/onboarding/OnboardingDesignCodeContent.tsx",
+  "./features/profile/ProfileEmbedsModal.tsx",
+  "./features/profile/ProfileModals.tsx",
+  "./features/projects/ProjectEditorModal.tsx",
+  "./features/settings/AccountPlanModal.tsx",
+  "./features/settings/AiSetupModelDialogs.tsx",
+  "./features/settings/DebugLogModal.tsx",
+  "./features/settings/DeleteHistoryModal.tsx",
+  "./features/settings/DeleteManagedModelModal.tsx",
+  "./features/share/ShareCardModal.tsx",
+  "./features/team/TeamProjectsView.tsx",
+  "./features/team/TeamWorkspace.tsx",
+] as const;
+
+// A doc comment naming the selector must not register a file as a panel.
+const ANIMATED_PANEL_MARKUP = /className="[^"]*\bmodal-shell\b|^\s*data-modal-motion-panel\s*$/m;
+
+function productionComponentFiles(directory = ""): string[] {
+  const base = fileURLToPath(new URL(`./${directory}`, import.meta.url));
+  return readdirSync(base, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.isDirectory()) return productionComponentFiles(`${directory}${entry.name}/`);
+    if (!entry.name.endsWith(".tsx") || entry.name.includes(".test.")) return [];
+    return [`./${directory}${entry.name}`];
+  });
 }
 
 const sharedModalSurfaces = [
@@ -30,6 +75,7 @@ const sharedModalSurfaces = [
   ["Edit drift alarm copy", "./features/companion/DriftAlarmCopySettings.tsx", /className="auth-modal modal-shell drift-copy-modal"\s+data-modal-variant="workspace"/],
   ["Restore AI analysis", "./features/dashboard/DashboardAiRecoveryOverlay.tsx", /className="dashboard-ai-recovery__panel modal-shell" data-modal-variant="workspace"/],
   ["Upgrade to Pro", "./features/billing/UpgradePlanModal.tsx", /className="dashboard-ai-recovery__panel modal-shell"\s+data-modal-variant="workspace"/],
+  ["Change plan", "./features/settings/AccountPlanModal.tsx", /className="account-plan-modal modal-shell" data-modal-variant="workspace"/],
   ["Promo account handoff", "./features/billing/PromoHandoffAccountDialog.tsx", /className="auth-modal modal-shell"\s+data-modal-variant="standard"/],
   ["SSH agent sources", "./features/dev-signals/SshAgentSourcesModal.tsx", /className="auth-modal modal-shell agents-ssh-modal"\s+data-modal-variant="standard"/],
 ] as const;
@@ -59,7 +105,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(26);
+    expect(sharedModalSurfaces).toHaveLength(27);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -71,6 +117,33 @@ describe("modal system v2 contract", () => {
 
     for (const [name, path, pattern] of purposeBuiltDialogSurfaces) {
       expect(read(path), `${name} should remain an explicit purpose-built dialog`).toMatch(pattern);
+    }
+  });
+
+  it("registers every file that renders an animated modal panel", () => {
+    const discovered = productionComponentFiles().filter((file) => ANIMATED_PANEL_MARKUP.test(read(file)));
+
+    expect(discovered.slice().sort()).toEqual([...animatedModalPanelFiles].sort());
+  });
+
+  it("holds one shared entry and exit timing for every modal", () => {
+    const presence = read("./components/modal-presence.css");
+
+    // Opening is the slower half so the panel reads as arriving; closing is a
+    // decision already made, so it accelerates away.
+    expect(presence).toContain("--modal-motion-duration: 150ms;");
+    expect(presence).toMatch(/\[data-modal-presence="exiting"\]\s*\{[^}]*--modal-motion-duration: 80ms;/);
+    expect(presence).toContain("--modal-motion-ease: cubic-bezier(.16, 1, .3, 1);");
+    expect(presence).toMatch(/\[data-modal-presence="exiting"\]\s*\{[^}]*--modal-motion-ease: cubic-bezier\(.4, 0, 1, 1\);/);
+  });
+
+  it("keeps a portaled modal panel inside a presence boundary it owns", () => {
+    for (const file of animatedModalPanelFiles) {
+      const source = read(file);
+      if (!source.includes("createPortal")) continue;
+
+      expect(source, `${file} portals past any caller boundary, so it must render its own ModalPresence`)
+        .toContain("<ModalPresence");
     }
   });
 

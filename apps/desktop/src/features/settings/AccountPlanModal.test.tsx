@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AccountPlanModal } from "./AccountPlanModal";
 import { AccountSettingsSection, type AccountSettingsSectionProps } from "./AccountSettingsSection";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 vi.mock("../auth/AuthContext", () => ({ useAuth: () => ({ hasRequiredAccountAuth: false, user: null }) }));
@@ -166,5 +168,69 @@ describe("Account plan hardening", () => {
     expect(yearly.getAttribute("aria-checked")).toBe("true");
     expect(document.activeElement).toBe(yearly);
     expect(checkout).not.toHaveBeenCalled();
+  });
+});
+
+function MotionHarness({ onClosed = () => {} }: { readonly onClosed?: () => void }) {
+  const [open, setOpen] = useState(true);
+  const close = () => { setOpen(false); onClosed(); };
+  return (
+    <>
+      <button onClick={close}>Close plans</button>
+      <AccountPlanModal open={open} busy={false} onClose={close}><p>Plan comparison</p></AccountPlanModal>
+    </>
+  );
+}
+
+describe("Account plan dialog motion", () => {
+  const tick = (ms: number) => act(() => { vi.advanceTimersByTime(ms); });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => window.setTimeout(() => callback(0), 16));
+    vi.stubGlobal("cancelAnimationFrame", window.clearTimeout);
+  });
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+
+  it("portals the panel into its own presence boundary so shared modal motion applies", () => {
+    render(<AccountPlanModal open busy={false} onClose={() => {}}><p>Plan comparison</p></AccountPlanModal>);
+    tick(20);
+
+    // A boundary left outside the portal cannot match the descendant-scoped
+    // motion rules, which is how this dialog shipped without entry or exit.
+    const boundary = screen.getByRole("dialog").closest("[data-modal-presence]");
+    expect(boundary?.getAttribute("data-modal-presence")).toBe("open");
+    expect(boundary?.querySelector(".account-plan-modal.modal-shell")).not.toBeNull();
+  });
+
+  it("holds the panel, page scroll lock, and app inert state through the exit transition", () => {
+    render(<div id="root"><MotionHarness /></div>);
+    tick(20);
+    const appRoot = document.getElementById("root");
+    expect(document.body.style.overflow).toBe("hidden");
+    expect(appRoot?.inert).toBe(true);
+
+    fireEvent.click(screen.getByText("Close plans"));
+
+    expect(screen.getByRole("dialog").closest("[data-modal-presence]")?.getAttribute("data-modal-presence")).toBe("exiting");
+    expect(document.body.style.overflow).toBe("hidden");
+
+    tick(300);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.body.style.overflow).toBe("");
+    expect(appRoot?.inert).toBe(false);
+  });
+
+  it("blocks a duplicate dismissal while the panel is exiting", () => {
+    const onClosed = vi.fn();
+    render(<MotionHarness onClosed={onClosed} />);
+    tick(20);
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss plan selection" }));
+    fireEvent.keyDown(window, { key: "Escape" });
+    tick(300);
+
+    expect(onClosed).toHaveBeenCalledTimes(1);
   });
 });

@@ -27,11 +27,14 @@ function BoundaryDismiss({ onDismiss, disabled }: { onDismiss: () => void; disab
  * Retains the last rendered element (including nullable-data props) until exit ends.
  * Business callbacks run immediately; only visual removal is deferred.
  */
-export function ModalPresence({ children, onDismiss, dismissDisabled = false }: {
+export function ModalPresence({ children, onDismiss, dismissDisabled = false, explicitTabNavigation = false }: {
   readonly children: ReactNode;
   /** For inline dialogs whose parent lives outside this boundary's context. */
   readonly onDismiss?: () => void;
   readonly dismissDisabled?: boolean;
+  /** Forwarded to the boundary's trap; a descendant dialog's own request is
+   * ignored once this boundary owns focus. */
+  readonly explicitTabNavigation?: boolean;
 }) {
   const present = children !== null && children !== undefined && children !== false;
   const retained = useRef<ReactNode>(null);
@@ -93,7 +96,7 @@ export function ModalPresence({ children, onDismiss, dismissDisabled = false }: 
     };
   }, [present, reduced]);
 
-  useModalFocusTrap(root, { enabled: visible });
+  useModalFocusTrap(root, { enabled: visible, explicitTabNavigation });
 
   const blockExitInteraction = (event: SyntheticEvent) => {
     if (!exiting) return;

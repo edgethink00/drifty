@@ -227,26 +227,24 @@ export function AccountSettingsSection({
 
       {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
 
-      {planModalOpen ? (
-        <AccountPlanModal busy={planActionBusy} onClose={() => setPlanModalOpen(false)}>
-          {planStatusUnknown ? <div className="account-plan-progress" role="status">
-            <p>{t("settings.account.planUnknownDescription")}</p>
-            <button type="button" className="modal-btn" disabled={cloudStatusRefreshing}
-              onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>
-          </div> : null}
-          {canManageCurrentPlan ? <p className="account-plan-progress">{t("settings.account.existingPlanComparison")}</p> : null}
-          {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
-          {planCards}
-          {actionError || billingActionErrorCode === "pricing_revision_mismatch" ? (
-            <div className="account-plan-modal__error" role="alert">
-              <p>{actionError ? localizeSettingsError(actionError, effectiveLanguage, t) : t("billing.checkout.updateRequired")}</p>
-              {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
-                <button type="button" className="modal-btn" onClick={() => { setPlanModalOpen(false); onCheckForUpdates(); }}>{t("billing.checkout.checkForUpdates")}</button>
-              ) : null}
-            </div>
-          ) : null}
-        </AccountPlanModal>
-      ) : null}
+      <AccountPlanModal open={planModalOpen} busy={planActionBusy} onClose={() => setPlanModalOpen(false)}>
+        {planStatusUnknown ? <div className="account-plan-progress" role="status">
+          <p>{t("settings.account.planUnknownDescription")}</p>
+          <button type="button" className="modal-btn" disabled={cloudStatusRefreshing}
+            onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>
+        </div> : null}
+        {canManageCurrentPlan ? <p className="account-plan-progress">{t("settings.account.existingPlanComparison")}</p> : null}
+        {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
+        {planCards}
+        {actionError || billingActionErrorCode === "pricing_revision_mismatch" ? (
+          <div className="account-plan-modal__error" role="alert">
+            <p>{actionError ? localizeSettingsError(actionError, effectiveLanguage, t) : t("billing.checkout.updateRequired")}</p>
+            {billingActionErrorCode === "pricing_revision_mismatch" && onCheckForUpdates ? (
+              <button type="button" className="modal-btn" onClick={() => { setPlanModalOpen(false); onCheckForUpdates(); }}>{t("billing.checkout.checkForUpdates")}</button>
+            ) : null}
+          </div>
+        ) : null}
+      </AccountPlanModal>
 
       <TrialCouponRedemption
         disabled={billingPlansDisabled || !isSupabaseConfigured || !isSignedIn}
