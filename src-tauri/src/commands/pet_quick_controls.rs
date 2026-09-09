@@ -17,8 +17,21 @@ use {super::pet_panel::show_pet_panel_at_position, tauri::LogicalPosition};
 mod motion;
 
 pub const PET_QUICK_CONTROLS_WINDOW_LABEL: &str = "pet-quick-controls";
-const PET_QUICK_CONTROLS_KO_WIDTH: f64 = 273.0;
-const PET_QUICK_CONTROLS_EN_WIDTH: f64 = 300.0;
+/* The panel is sized to its content instead of one constant per language. A
+   paused auto-close spells out when it lifts, so that state needs its own
+   width; each value is the widest string the state can render (for English,
+   "Paused until 10:48pm"). Slack inside a narrower reading is absorbed by the
+   two auto grid tracks. */
+/* Each value is the widest measured reading plus a three-point margin. The
+   tracks ellipsize rather than overflow, so a width rounded flush to the
+   longest string truncates it: the first pass rounded English "Off" to its
+   exact 281.2pt and lost the last letter. WebKit and Chromium measure these
+   strings within 0.03pt of each other, so the margin covers font revisions
+   and subpixel rounding rather than an engine gap. */
+const PET_QUICK_CONTROLS_KO_IDLE_WIDTH: f64 = 255.0;
+const PET_QUICK_CONTROLS_EN_IDLE_WIDTH: f64 = 285.0;
+const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 290.0;
+const PET_QUICK_CONTROLS_EN_PAUSED_WIDTH: f64 = 330.0;
 const PET_QUICK_CONTROLS_HEIGHT: f64 = 36.0;
 #[cfg(target_os = "macos")]
 const PET_QUICK_CONTROLS_MATERIAL_RADIUS: f64 = PET_QUICK_CONTROLS_HEIGHT / 2.0;
@@ -112,11 +125,19 @@ fn is_supported_quick_controls_state(state: &PetQuickControlsState) -> bool {
         && matches!(state.theme.as_str(), "light" | "dark")
 }
 
-fn quick_controls_width(language: &str) -> f64 {
-    if language == "en" {
-        PET_QUICK_CONTROLS_EN_WIDTH
-    } else {
-        PET_QUICK_CONTROLS_KO_WIDTH
+fn quick_controls_paused(state: &PetQuickControlsState) -> bool {
+    state
+        .automatic_close_override
+        .as_ref()
+        .is_some_and(|override_state| !override_state.enabled)
+}
+
+fn quick_controls_width(language: &str, paused: bool) -> f64 {
+    match (language == "en", paused) {
+        (true, false) => PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
+        (true, true) => PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
+        (false, false) => PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
+        (false, true) => PET_QUICK_CONTROLS_KO_PAUSED_WIDTH,
     }
 }
 
@@ -285,9 +306,9 @@ pub fn setup_pet_quick_controls_window(app: &tauri::App) -> tauri::Result<()> {
         WebviewUrl::App("index.html?driftySurface=pet-quick-controls".into()),
     )
     .title("Drifty Pet Controls")
-    .inner_size(PET_QUICK_CONTROLS_KO_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
-    .min_inner_size(PET_QUICK_CONTROLS_KO_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
-    .max_inner_size(PET_QUICK_CONTROLS_EN_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
+    .inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
+    .min_inner_size(PET_QUICK_CONTROLS_KO_IDLE_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
+    .max_inner_size(PET_QUICK_CONTROLS_EN_PAUSED_WIDTH, PET_QUICK_CONTROLS_HEIGHT)
     .decorations(false)
     .shadow(false)
     .resizable(false)
@@ -386,7 +407,7 @@ pub fn pet_quick_controls_sync_state(
     };
     #[cfg(target_os = "macos")]
     sync_pet_quick_controls_theme(&app, &window, state.theme == "dark");
-    let controls_width = quick_controls_width(&state.language);
+    let controls_width = quick_controls_width(&state.language, quick_controls_paused(&state));
     window
         .set_size(LogicalSize::new(controls_width, PET_QUICK_CONTROLS_HEIGHT))
         .map_err(|error| error.to_string())?;
@@ -591,10 +612,53 @@ mod tests {
     use super::{
         is_automatic_close_pause_action, is_supported_quick_controls_action, is_supported_quick_controls_state,
         layout_pet_quick_controls, point_inside_rect, PetQuickControlsAutomaticCloseOverride,
-        PetQuickControlsState, PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS,
-        PET_QUICK_CONTROLS_EN_WIDTH, PET_QUICK_CONTROLS_KO_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
+        quick_controls_paused, quick_controls_width, PetQuickControlsState,
+        PET_QUICK_CONTROLS_ACKNOWLEDGEMENT_FAILSAFE_MS, PET_QUICK_CONTROLS_EN_IDLE_WIDTH,
+        PET_QUICK_CONTROLS_EN_PAUSED_WIDTH, PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
+        PET_QUICK_CONTROLS_KO_PAUSED_WIDTH, PET_QUICK_CONTROLS_SCREEN_INSET,
     };
     use serde_json::json;
+
+    fn state_with_override(
+        language: &str,
+        override_state: Option<PetQuickControlsAutomaticCloseOverride>,
+    ) -> PetQuickControlsState {
+        PetQuickControlsState {
+            automatic_close_enabled: override_state.is_none(),
+            automatic_close_saved_enabled: true,
+            automatic_close_override: override_state,
+            language: language.to_string(),
+            theme: "light".to_string(),
+        }
+    }
+
+    #[test]
+    fn widens_the_panel_only_while_the_pause_spells_out_its_end() {
+        let paused = Some(PetQuickControlsAutomaticCloseOverride {
+            enabled: false,
+            kind: "60".to_string(),
+            ends_at_ms: Some(1_800_000),
+        });
+        let temporarily_on = Some(PetQuickControlsAutomaticCloseOverride {
+            enabled: true,
+            kind: "60".to_string(),
+            ends_at_ms: Some(1_800_000),
+        });
+
+        // A temporary enable still reads as "On", so it keeps the resting width.
+        assert!(!quick_controls_paused(&state_with_override("en", temporarily_on.clone())));
+        assert!(quick_controls_paused(&state_with_override("en", paused.clone())));
+
+        assert_eq!(quick_controls_width("en", false), PET_QUICK_CONTROLS_EN_IDLE_WIDTH);
+        assert_eq!(quick_controls_width("en", true), PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
+        assert_eq!(quick_controls_width("ko", false), PET_QUICK_CONTROLS_KO_IDLE_WIDTH);
+        assert_eq!(quick_controls_width("ko", true), PET_QUICK_CONTROLS_KO_PAUSED_WIDTH);
+
+        // Every reading has to fit between the creation minimum and maximum.
+        assert!(PET_QUICK_CONTROLS_KO_IDLE_WIDTH <= PET_QUICK_CONTROLS_EN_IDLE_WIDTH);
+        assert!(PET_QUICK_CONTROLS_EN_IDLE_WIDTH <= PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
+        assert!(PET_QUICK_CONTROLS_KO_PAUSED_WIDTH <= PET_QUICK_CONTROLS_EN_PAUSED_WIDTH);
+    }
 
     #[test]
     fn serializes_quick_controls_state_for_the_webview_contract() {
@@ -722,11 +786,11 @@ mod tests {
             0.0,
             1440.0,
             900.0,
-            PET_QUICK_CONTROLS_KO_WIDTH,
+            PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
         );
         assert_eq!(layout.placement, "below");
         assert!((layout.y - 121.0).abs() < f64::EPSILON);
-        assert!(layout.x + PET_QUICK_CONTROLS_KO_WIDTH <= 1440.0 - 8.0);
+        assert!(layout.x + PET_QUICK_CONTROLS_KO_IDLE_WIDTH <= 1440.0 - 8.0);
     }
 
     #[test]
@@ -740,7 +804,7 @@ mod tests {
             0.0,
             1440.0,
             900.0,
-            PET_QUICK_CONTROLS_KO_WIDTH,
+            PET_QUICK_CONTROLS_KO_IDLE_WIDTH,
         );
         assert_eq!(layout.placement, "above");
         assert!((layout.y - (860.0 - 36.0 - 8.0)).abs() < f64::EPSILON);
@@ -757,7 +821,7 @@ mod tests {
             0.0,
             640.0,
             480.0,
-            PET_QUICK_CONTROLS_EN_WIDTH,
+            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
         );
         let right = layout_pet_quick_controls(
             -100.0,
@@ -768,15 +832,15 @@ mod tests {
             0.0,
             640.0,
             480.0,
-            PET_QUICK_CONTROLS_EN_WIDTH,
+            PET_QUICK_CONTROLS_EN_PAUSED_WIDTH,
         );
 
         assert!((left.x - (-632.0)).abs() < f64::EPSILON);
-        assert!((right.x - (-308.0)).abs() < f64::EPSILON);
+        assert!((right.x - (-338.0)).abs() < f64::EPSILON);
         for layout in [left, right] {
             assert!(layout.x >= -640.0 + PET_QUICK_CONTROLS_SCREEN_INSET);
             assert!(
-                layout.x + PET_QUICK_CONTROLS_EN_WIDTH
+                layout.x + PET_QUICK_CONTROLS_EN_PAUSED_WIDTH
                     <= -640.0 + 640.0 - PET_QUICK_CONTROLS_SCREEN_INSET
             );
         }

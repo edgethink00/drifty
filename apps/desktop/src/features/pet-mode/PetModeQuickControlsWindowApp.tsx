@@ -350,8 +350,11 @@ export function PetModeQuickControlsWindowApp() {
           ? "pet.quickControls.automaticCloseOn"
           : "pet.quickControls.automaticCloseOff",
     );
+  /* While paused the state carries the whole sentence, including when the
+     pause lifts. That reading is the reason the panel is paused at all, and
+     it used to be available only through the menu or the accessible name. */
   const automaticCloseVisibleState = paused
-    ? copyFor(language, "pet.quickControls.automaticClosePaused")
+    ? pausedState
     : automaticCloseOverride?.enabled
       ? copyFor(language, "pet.quickControls.automaticCloseOn")
       : automaticCloseState;
@@ -424,9 +427,10 @@ export function PetModeQuickControlsWindowApp() {
         title={automaticCloseDescription}
         onClick={handleOpenAutomaticCloseMenu}
       >
-        <span className="pet-quick-controls__status-dot" aria-hidden="true" />
         <span className="pet-quick-controls__text">
-          <span className="pet-quick-controls__label">{copyFor(language, "pet.quickControls.automaticClose")}</span>
+          {paused ? null : (
+            <span className="pet-quick-controls__label">{copyFor(language, "pet.quickControls.automaticClose")}</span>
+          )}
           <span className="pet-quick-controls__state">{automaticCloseVisibleState}</span>
         </span>
         <svg className="pet-quick-controls__chevron" viewBox="0 0 10 10" aria-hidden="true" focusable="false">

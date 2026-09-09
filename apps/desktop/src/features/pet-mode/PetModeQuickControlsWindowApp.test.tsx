@@ -341,8 +341,11 @@ describe("PetModeQuickControlsWindowApp", () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     expect(document.documentElement.style.colorScheme).toBe("dark");
     expect(screen.getByRole("button", { name: /자동 닫기: .*까지/ })).toBeTruthy();
-    expect(screen.getByText("멈춤")).toBeTruthy();
-    expect(screen.queryByText(/까지$/)).toBeNull();
+    /* The panel shows when the pause lifts instead of the bare word: that
+       reading was previously reachable only through the menu or the
+       accessible name, and the resting label is dropped to make room. */
+    expect(screen.getByText(/까지 멈춤$/)).toBeTruthy();
+    expect(screen.queryByText("자동 닫기")).toBeNull();
   });
 
   it("does not render a stale paused state from an already-expired native event", async () => {

@@ -96,13 +96,15 @@ describe("pet quick-controls material", () => {
     expect(acknowledgementRule?.[1]).toContain("line-height: 15px;");
   });
 
-  it("gives the primary quick-control actions a 60:40 split", () => {
+  it("sizes the primary quick-control tracks to their content", () => {
     const idleLayoutRule = petQuickControlsCssContract.match(
       /\.pet-quick-controls:not\(\[data-phase\]\)\s*\{([^}]*)\}/,
     );
-    expect(petQuickControlsTsContract).toContain("export const PET_QUICK_CONTROLS_WIDTH = 273;");
+    expect(petQuickControlsTsContract).toContain("export const PET_QUICK_CONTROLS_WIDTH = 255;");
+    /* A fixed ratio cannot serve both languages: the split that fit English
+       left the shorter Korean labels with more slack in a narrower window. */
     expect(idleLayoutRule?.[1]).toContain(
-      "grid-template-columns: minmax(0, 3fr) 1px minmax(0, 2fr) 1px 28px;",
+      "grid-template-columns: auto 1px auto 1px 28px;",
     );
     expect(petQuickControlsCssContract).toMatch(
       /\.pet-quick-controls__toggle \{\n\s+flex: 1 1 0;\n\s+justify-content: center;/,
@@ -111,10 +113,16 @@ describe("pet quick-controls material", () => {
       /\.pet-quick-controls__action \{\n\s+flex: 1 1 0;\n\s+justify-content: center;/,
     );
     expect(petQuickControlsRustContract).toContain(
-      "const PET_QUICK_CONTROLS_KO_WIDTH: f64 = 273.0;",
+      "const PET_QUICK_CONTROLS_KO_IDLE_WIDTH: f64 = 255.0;",
     );
     expect(petQuickControlsRustContract).toContain(
-      "const PET_QUICK_CONTROLS_EN_WIDTH: f64 = 300.0;",
+      "const PET_QUICK_CONTROLS_EN_IDLE_WIDTH: f64 = 285.0;",
+    );
+    expect(petQuickControlsRustContract).toContain(
+      "const PET_QUICK_CONTROLS_KO_PAUSED_WIDTH: f64 = 290.0;",
+    );
+    expect(petQuickControlsRustContract).toContain(
+      "const PET_QUICK_CONTROLS_EN_PAUSED_WIDTH: f64 = 330.0;",
     );
     expect(petQuickControlsCssContract).toMatch(
       /\.pet-quick-controls__text \{[\s\S]*?align-items: baseline;[\s\S]*?gap: 6px;/,
@@ -131,6 +139,35 @@ describe("pet quick-controls material", () => {
     expect(petQuickControlsCssContract).toContain(
       "outline: 2px solid var(--pet-quick-controls-focus-ring);",
     );
+  });
+
+  it("lets the changing state carry the emphasis instead of a repeated dot", () => {
+    /* The label never changes and the state always does. A status dot beside
+       the state word only repeated it, so the state text is the indicator. */
+    expect(petQuickControlsCssContract).not.toContain("pet-quick-controls__status-dot");
+    expect(petQuickControlsCssContract).toMatch(
+      /\.pet-quick-controls__toggle \.pet-quick-controls__label \{[\s\S]*?color: var\(--pet-quick-controls-muted\);/,
+    );
+    expect(petQuickControlsCssContract).toMatch(
+      /\.pet-quick-controls__toggle\[data-effective="on"\] \.pet-quick-controls__state \{[\s\S]*?color: var\(--accent-strong\);/,
+    );
+    expect(petQuickControlsCssContract).toMatch(
+      /\.pet-quick-controls__toggle\[data-override="true"\] \.pet-quick-controls__state \{[\s\S]*?color: var\(--pet-quick-controls-override-ink\);/,
+    );
+  });
+
+  it("lifts the light theme ink and capsule edge without changing its metrics", () => {
+    /* Identical geometry reads emptier on a bright field, so light gets more
+       ink and a real edge. Type size must stay shared: a per-theme size would
+       change the native window width. */
+    const lightRule = petQuickControlsCssContract.match(
+      /html\[data-theme="light"\] \.pet-quick-controls \{([^}]*)\}/,
+    );
+    expect(lightRule?.[1]).toContain("border-color: var(--line-strong);");
+    expect(lightRule?.[1]).toContain(
+      "--pet-quick-controls-muted: color-mix(in srgb, var(--text-soft) 55%, var(--text));",
+    );
+    expect(lightRule?.[1]).not.toContain("font-size");
   });
 
   it("keeps the native material appearance aligned with the app theme", () => {

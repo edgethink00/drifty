@@ -11,7 +11,11 @@ html[data-surface="pet-quick-controls"] #root {
   gap: 3px;
   width: 100%;
   height: 36px;
-  padding: 3px 4px;
+  /* A capsule needs more room at its ends than a rectangular panel: the 18pt
+     radius eats into the corner, so edge-hugging content would sit on the
+     curve. The trailing side is wider than the leading one because the round
+     overflow dots read tighter than a flat letter edge. */
+  padding: 3px 7px 3px 5px;
   border: 1px solid color-mix(in srgb, var(--line-strong) 60%, transparent);
   border-radius: var(--radius-pill);
   /* The Tauri panel owns the macOS HudWindow material. Keeping a CSS
@@ -29,6 +33,7 @@ html[data-surface="pet-quick-controls"] #root {
   --pet-quick-controls-muted: color-mix(in srgb, var(--text-soft) 90%, var(--text));
   --pet-quick-controls-focus-ring: color-mix(in srgb, var(--accent) 72%, var(--text));
   --pet-quick-controls-warn: color-mix(in srgb, var(--warn) 90%, var(--text));
+  --pet-quick-controls-override-ink: #8a6220;
   user-select: none;
   -webkit-user-select: none;
   overflow: hidden;
@@ -36,7 +41,11 @@ html[data-surface="pet-quick-controls"] #root {
 
 .pet-quick-controls:not([data-phase]) {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) 1px minmax(0, 2fr) 1px 28px;
+  /* Tracks follow their content instead of a fixed 3:2 split. One rule then
+     serves both languages: a 3:2 split tuned for English left the shorter
+     Korean labels with more slack in a narrower window. */
+  grid-template-columns: auto 1px auto 1px 28px;
+  column-gap: 4px;
 }
 
 /* Browser QA has no NSVisualEffectView behind the surface, so it retains the
@@ -66,6 +75,21 @@ html[data-theme="dark"] .pet-quick-controls {
      12px feedback on a translucent HUD, so lift the token enough to keep the
      failed label and retry action legible after native-material compositing. */
   --pet-quick-controls-warn: color-mix(in srgb, var(--warn-wash) 80%, white);
+  --pet-quick-controls-override-ink: #d1a259;
+}
+
+html[data-theme="dark"] .pet-quick-controls__toggle[data-effective="on"] .pet-quick-controls__state {
+  color: var(--accent);
+}
+
+/* Identical geometry reads emptier on a bright field: dark glyphs on white
+   look thinner than white glyphs on black, and this surface measured its
+   weakest ink and its faintest edge in the light theme. Type size stays shared
+   across themes — a per-theme size would change the native window width — so
+   only ink and the capsule edge are lifted here. */
+html[data-theme="light"] .pet-quick-controls {
+  border-color: var(--line-strong);
+  --pet-quick-controls-muted: color-mix(in srgb, var(--text-soft) 55%, var(--text));
 }
 
 .pet-quick-controls__toggle,
@@ -76,7 +100,7 @@ html[data-theme="dark"] .pet-quick-controls {
   background: transparent;
   color: inherit;
   font-family: var(--font-sans);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 550;
   line-height: 15px;
   letter-spacing: 0;
@@ -163,7 +187,7 @@ html[data-theme="dark"] .pet-quick-controls {
   flex: 1 1 0;
   justify-content: center;
   gap: 0;
-  padding: 0 8px;
+  padding: 0 10px 0 14px;
   min-width: 0;
   overflow: hidden;
 }
@@ -171,10 +195,13 @@ html[data-theme="dark"] .pet-quick-controls {
 .pet-quick-controls__action {
   flex: 1 1 0;
   justify-content: center;
-  min-width: 4.25rem;
-  padding: 0 8px;
+  min-width: 0;
+  padding: 0 10px;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* The hide action is the least important control here, so it must not be
+     the highest-contrast element in the panel. */
+  color: color-mix(in srgb, var(--text) 78%, var(--text-soft));
 }
 
 .pet-quick-controls__retry {
@@ -211,32 +238,18 @@ html[data-theme="dark"] .pet-quick-controls {
   outline-offset: 1px;
 }
 
-.pet-quick-controls__status-dot {
-  width: 5px;
-  height: 5px;
-  flex: none;
-  margin-right: 6px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--text) 22%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 7%, transparent);
-  transform: translateY(-0.25px);
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
-}
-
-.pet-quick-controls__toggle[data-effective="on"] .pet-quick-controls__status-dot {
-  background: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-.pet-quick-controls__toggle[data-override="true"] .pet-quick-controls__status-dot {
-  background: #b5823e;
-  box-shadow: 0 0 0 2px color-mix(in srgb, #b5823e 20%, transparent);
-}
-
 .pet-quick-controls__label {
   flex: none;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* The label never changes and the state always does, so the state carries the
+   emphasis and the colour. A separate status dot would only repeat the word
+   next to it, so the state text is the single indicator. */
+.pet-quick-controls__toggle .pet-quick-controls__label {
+  font-weight: 550;
+  color: var(--pet-quick-controls-muted);
 }
 
 .pet-quick-controls__text {
@@ -251,10 +264,18 @@ html[data-theme="dark"] .pet-quick-controls {
   margin-left: 0;
   overflow: hidden;
   color: var(--pet-quick-controls-muted);
-  font-size: 0.6875rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
+  font-weight: 650;
   line-height: 15px;
   text-overflow: ellipsis;
+}
+
+.pet-quick-controls__toggle[data-effective="on"] .pet-quick-controls__state {
+  color: var(--accent-strong);
+}
+
+.pet-quick-controls__toggle[data-override="true"] .pet-quick-controls__state {
+  color: var(--pet-quick-controls-override-ink);
 }
 
 .pet-quick-controls__chevron {
@@ -325,7 +346,6 @@ html[data-theme="dark"] .pet-quick-controls {
   .pet-quick-controls__toggle,
   .pet-quick-controls__action,
   .pet-quick-controls__more,
-  .pet-quick-controls__status-dot,
   .pet-quick-controls__chevron {
     transition: none;
   }

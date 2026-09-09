@@ -1,8 +1,10 @@
 export const PET_QUICK_CONTROLS_WINDOW_LABEL = "pet-quick-controls";
 
-// Korean production width. The native host expands the English surface to
-// 300pt when it receives the localized quick-control state.
-export const PET_QUICK_CONTROLS_WIDTH = 273;
+// Korean resting width. The panel is sized to its content, so the native host
+// widens this surface when it receives the localized quick-control state
+// (English resting) and again while auto-close is paused, because that state
+// spells out when the pause lifts.
+export const PET_QUICK_CONTROLS_WIDTH = 255;
 export const PET_QUICK_CONTROLS_HEIGHT = 36;
 export const PET_QUICK_CONTROLS_GAP = 8;
 export const PET_QUICK_CONTROLS_SCREEN_INSET = 8;
