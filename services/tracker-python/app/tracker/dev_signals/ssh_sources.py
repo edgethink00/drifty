@@ -33,6 +33,9 @@ CONFIG_DIRECTIVE_PATTERN = re.compile(r"\A\s*([A-Za-z][A-Za-z0-9]*)(?:\s*=\s*|\s
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 DEFAULT_BACKFILL_DAYS = 30
 MAX_BACKFILL_DAYS = 400
+MAX_REMOTE_COMMITS = 500
+REMOTE_REPO_NAME_PATTERN = re.compile(r"\A[A-Za-z0-9._-]{1,100}\Z")
+COMMIT_SHA_PATTERN = re.compile(r"\A[0-9a-f]{7,64}\Z")
 MAX_CONFIG_FILES = 64
 MAX_CONFIG_BYTES = 1024 * 1024
 MAX_CONFIG_DEPTH = 8
@@ -179,6 +182,7 @@ _REMOTE_EXPORTER_TEMPLATE = r'''import base64
 import hashlib
 import json
 import sys
+import time
 import types
 import zlib
 from datetime import datetime, timezone
@@ -186,6 +190,15 @@ from pathlib import Path
 
 MAX_FILES = 400
 MAX_TURNS = 5000
+#: Commit collection runs git on the remote host, so it is bounded twice: by
+#: how many repositories it will visit and by how long it may spend in total.
+#: The SSH call itself has a fixed timeout, and losing the agent turns because
+#: git was slow would be a worse trade than reporting fewer commits.
+MAX_COMMIT_REPOS = 10
+MAX_COMMITS = 500
+MAX_REPO_LOOKUPS = 40
+COMMIT_BUDGET_SECONDS = 10.0
+REMOTE_GIT_TIMEOUT_SECONDS = 5.0
 SOURCE_BLOB = "__DRIFTY_AGENT_SOURCES__"
 
 def module(name):
@@ -199,11 +212,10 @@ package_name = "_drifty_remote_agents"
 package = module(package_name)
 package.__path__ = []
 
-git_commits = module(package_name + ".git_commits")
-git_commits.repo_key_for = lambda value: None
-git_commits.resolve_primary_repo = lambda value: None
-
 sources = json.loads(zlib.decompress(base64.b64decode(SOURCE_BLOB)).decode("utf-8"))
+git_commits = module(package_name + ".git_commits")
+exec(compile(sources["git_commits.py"], git_commits.__file__, "exec"), git_commits.__dict__)
+git_commits.GIT_TIMEOUT_SECONDS = REMOTE_GIT_TIMEOUT_SECONDS
 agent_sessions = module(package_name + ".agent_sessions")
 exec(compile(sources["agent_sessions.py"], agent_sessions.__file__, "exec"), agent_sessions.__dict__)
 
@@ -218,7 +230,43 @@ def remote_repo_name(value):
         pass
     return None
 
-agent_sessions._cwd_key = remote_repo_name
+# The working directory stays on the remote host. It is kept here only long
+# enough to fold a worktree back onto its repository and to run git in it; the
+# envelope carries the repository's directory name and nothing else.
+agent_sessions._cwd_key = lambda value: value if isinstance(value, str) and value else None
+
+repo_cache = {}
+repo_targets = {}
+
+def repo_for_cwd(value):
+    """Return (repo name, repository path) for one session's working directory.
+
+    A task worktree and its main checkout are the same repository, and git log
+    walks every ref, so keying commits by the worktree directory would report
+    one commit once per worktree. --git-common-dir collapses them. Without git
+    on the host the directory name is still returned, which is what this
+    exporter reported before it collected commits at all.
+    """
+    if not isinstance(value, str) or not value:
+        return (None, None)
+    cached = repo_cache.get(value)
+    if cached is not None:
+        return cached
+    primary = None
+    if len(repo_cache) < MAX_REPO_LOOKUPS:
+        try:
+            primary = git_commits.resolve_primary_repo(value)
+        except Exception:
+            primary = None
+    if primary is not None:
+        result = (remote_repo_name(str(primary)), str(primary))
+    else:
+        result = (remote_repo_name(value), None)
+    if result[0] is None:
+        result = (None, None)
+    repo_cache[value] = result
+    return result
+
 adapters = module(package_name + ".adapters")
 exec(compile(sources["adapters.py"], adapters.__file__, "exec"), adapters.__dict__)
 
@@ -259,7 +307,9 @@ def public_turn(provider, value, cutoff):
         return None
     raw_key = str(value.session_key).encode("utf-8", errors="replace")
     remote_key = "remote-" + hashlib.sha256(provider.encode("utf-8") + b":" + raw_key).hexdigest()[:32]
-    repo_name = remote_repo_name(value.cwd_key)
+    repo_name, repo_path = repo_for_cwd(value.cwd_key)
+    if repo_path is not None and repo_path not in repo_targets:
+        repo_targets[repo_path] = repo_name
     result = {
         "provider": provider,
         "sessionKey": remote_key,
@@ -347,7 +397,59 @@ for _, adapter, path in candidates[:MAX_FILES]:
     if len(turns) >= MAX_TURNS:
         break
 
-print(json.dumps({"version": 1, "turns": turns, "filesScanned": files_scanned, "truncated": truncated}, separators=(",", ":")))
+def public_commit(repo_name, event, cutoff):
+    stamp = parsed_time(getattr(event, "authored_at", None))
+    sha = getattr(event, "commit_sha", None)
+    if stamp is None or stamp.timestamp() < cutoff:
+        return None
+    if not isinstance(sha, str) or not 7 <= len(sha) <= 64:
+        return None
+    if any(character not in "0123456789abcdefABCDEF" for character in sha):
+        return None
+    return {
+        "repo": repo_name,
+        "sha": sha.lower(),
+        "authoredAt": stamp.isoformat(),
+        "insertions": safe_int(getattr(event, "insertions", 0)) or 0,
+        "deletions": safe_int(getattr(event, "deletions", 0)) or 0,
+        "filesChanged": safe_int(getattr(event, "files_changed", 0)) or 0,
+    }
+
+# Only repositories this run already saw an agent work in are visited, so the
+# exporter never walks the remote filesystem looking for code.
+commits = []
+deadline = time.monotonic() + COMMIT_BUDGET_SECONDS
+since = str(days) + " days ago"
+targets = list(repo_targets.items())
+if len(targets) > MAX_COMMIT_REPOS:
+    targets = targets[:MAX_COMMIT_REPOS]
+    truncated = True
+for repo_path, repo_name in targets:
+    if time.monotonic() >= deadline:
+        truncated = True
+        break
+    try:
+        # A repository with no git identity on this host is someone else's
+        # checkout that happens to live here. Local repository discovery
+        # applies the same authorship test before it registers a repository.
+        email = git_commits.default_author_email(repo_path)
+        if not email:
+            continue
+        events = git_commits.collect_commits(repo_path, since=since, author_email=email, limit=MAX_COMMITS)
+    except Exception:
+        continue
+    for event in events:
+        item = public_commit(repo_name, event, cutoff)
+        if item is not None:
+            commits.append(item)
+        if len(commits) >= MAX_COMMITS:
+            commits = commits[:MAX_COMMITS]
+            truncated = True
+            break
+    if len(commits) >= MAX_COMMITS:
+        break
+
+print(json.dumps({"version": 1, "turns": turns, "commits": commits, "filesScanned": files_scanned, "truncated": truncated}, separators=(",", ":")))
 '''
 
 
@@ -355,7 +457,7 @@ def _remote_exporter_script() -> str:
     module_directory = Path(__file__).resolve().parent
     bundled_directory = module_directory / "remote_exporter_support"
     sources: dict[str, str] = {}
-    for filename in ("agent_sessions.py", "adapters.py"):
+    for filename in ("git_commits.py", "agent_sessions.py", "adapters.py"):
         bundled_path = bundled_directory / filename
         source_path = bundled_path if bundled_path.is_file() else module_directory / filename
         sources[filename] = source_path.read_text(encoding="utf-8")
@@ -382,6 +484,19 @@ def validate_ssh_host(value: object) -> str:
 
 def _result(ok: bool, code: str, message: str, host: str = "", **extra: Any) -> dict[str, Any]:
     return {"ok": ok, "code": code, "message": message, "host": host, **extra}
+
+
+def _empty_collection() -> dict[str, Any]:
+    """Counters a collection result always carries, even when it failed."""
+    return {
+        "providers": [],
+        "turnsFound": 0,
+        "turnsIngested": 0,
+        "commitsFound": 0,
+        "commitsIngested": 0,
+        "filesScanned": 0,
+        "truncated": False,
+    }
 
 
 def _failure(host: str, returncode: int | None, stderr: str, *, timed_out: bool = False) -> dict[str, Any]:
@@ -455,6 +570,49 @@ def _parse_time(value: object) -> str | None:
     return parsed.astimezone(timezone.utc).isoformat()
 
 
+def _normalize_commits(payload: object) -> list[dict[str, Any]]:
+    """Validate the commit half of a remote envelope.
+
+    Commits are keyed by ``remote:<repo-name>``, the same key remote agent turns
+    already carry, so one repository's sessions and commits meet on one row
+    instead of splitting into two entries that look like two projects.
+    """
+    if not isinstance(payload, dict):
+        return []
+    raw_commits = payload.get("commits")
+    if not isinstance(raw_commits, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for raw in raw_commits[:MAX_REMOTE_COMMITS]:
+        if not isinstance(raw, dict):
+            continue
+        repo = raw.get("repo")
+        sha = raw.get("sha")
+        if not isinstance(repo, str) or not REMOTE_REPO_NAME_PATTERN.fullmatch(repo):
+            continue
+        if not isinstance(sha, str) or not COMMIT_SHA_PATTERN.fullmatch(sha):
+            continue
+        authored_at = _parse_time(raw.get("authoredAt"))
+        if authored_at is None:
+            continue
+        key = (repo, sha)
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized.append(
+            {
+                "repoKey": f"remote:{repo}",
+                "commitSha": sha,
+                "authoredAt": authored_at,
+                "insertions": _bounded_int(raw.get("insertions"), maximum=10_000_000) or 0,
+                "deletions": _bounded_int(raw.get("deletions"), maximum=10_000_000) or 0,
+                "filesChanged": _bounded_int(raw.get("filesChanged"), maximum=100_000) or 0,
+            }
+        )
+    return normalized
+
+
 def _normalize_turns(host: str, payload: object) -> list[dict[str, Any]] | None:
     if not isinstance(payload, dict) or payload.get("version") != 1 or not isinstance(payload.get("turns"), list):
         return None
@@ -516,7 +674,7 @@ def collect_ssh_agent_source(
     try:
         host = validate_ssh_host(host_value)
     except ValueError as error:
-        return _result(False, "invalid_host", str(error), providers=[], turnsFound=0, turnsIngested=0, filesScanned=0, truncated=False)
+        return _result(False, "invalid_host", str(error), **_empty_collection())
     days = max(1, min(int(backfill_days), MAX_BACKFILL_DAYS))
     args = [*SSH_BASE_ARGS, host, f"python3 - {days}"]
     try:
@@ -530,24 +688,29 @@ def collect_ssh_agent_source(
     else:
         failure = _failure(host, completed.returncode, completed.stderr or "") if completed.returncode != 0 else None
     if failure is not None:
-        return {**failure, "providers": [], "turnsFound": 0, "turnsIngested": 0, "filesScanned": 0, "truncated": False}
+        return {**failure, **_empty_collection()}
     stdout = completed.stdout or ""
     if len(stdout.encode("utf-8", errors="replace")) > MAX_RESPONSE_BYTES:
-        return _result(False, "invalid_response", "The remote metadata response was too large.", host, providers=[], turnsFound=0, turnsIngested=0, filesScanned=0, truncated=True)
+        return _result(False, "invalid_response", "The remote metadata response was too large.", host, **{**_empty_collection(), "truncated": True})
     try:
         raw_payload = json.loads(stdout.strip())
     except (TypeError, ValueError):
-        return _result(False, "invalid_response", "The host connected, but returned invalid metadata.", host, providers=[], turnsFound=0, turnsIngested=0, filesScanned=0, truncated=False)
+        return _result(False, "invalid_response", "The host connected, but returned invalid metadata.", host, **_empty_collection())
     turns = _normalize_turns(host, raw_payload)
     if turns is None:
-        return _result(False, "invalid_response", "The host connected, but returned an unsupported metadata format.", host, providers=[], turnsFound=0, turnsIngested=0, filesScanned=0, truncated=False)
+        return _result(False, "invalid_response", "The host connected, but returned an unsupported metadata format.", host, **_empty_collection())
     ingested = database.save_agent_session_events(turns)
+    commits = _normalize_commits(raw_payload)
+    commits_ingested = database.save_dev_commit_events(commits) if commits else 0
     providers = sorted({turn["provider"] for turn in turns})
     files_scanned = _bounded_int(raw_payload.get("filesScanned"), maximum=400) or 0
     truncated = bool(raw_payload.get("truncated"))
-    if not turns:
+    if not turns and not commits:
         message = "Connected, but no recent supported agent activity was found."
         code = "empty"
+    elif commits:
+        message = f"Collected {len(turns)} agent turns and {len(commits)} commits."
+        code = "collected"
     else:
         message = f"Collected {len(turns)} agent turns."
         code = "collected"
@@ -559,6 +722,8 @@ def collect_ssh_agent_source(
         providers=providers,
         turnsFound=len(turns),
         turnsIngested=ingested,
+        commitsFound=len(commits),
+        commitsIngested=commits_ingested,
         filesScanned=files_scanned,
         truncated=truncated,
     )

@@ -26,9 +26,14 @@ from app.tracker.dev_signals.ssh_sources import (
 class CapturingDatabase:
     def __init__(self) -> None:
         self.events: list[dict] = []
+        self.commits: list[dict] = []
 
     def save_agent_session_events(self, events: list[dict]) -> int:
         self.events.extend(events)
+        return len(events)
+
+    def save_dev_commit_events(self, events: list[dict]) -> int:
+        self.commits.extend(events)
         return len(events)
 
 
@@ -233,6 +238,39 @@ class SshCollectionTests(unittest.TestCase):
         collect_ssh_agent_source(database2, "worker", runner=lambda args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps(wire_with_repo), stderr=""))
         self.assertEqual(database2.events[0]["cwdKey"], "remote:drifty_mac")
 
+    def test_saves_only_valid_remote_commits_under_the_session_repo_key(self) -> None:
+        sha = "b" * 40
+        wire = {
+            "version": 1,
+            "filesScanned": 1,
+            "truncated": False,
+            "turns": [],
+            "commits": [
+                {"repo": "drifty_mac", "sha": sha, "authoredAt": "2026-09-01T02:00:00+00:00", "insertions": 12, "deletions": 3, "filesChanged": 2},
+                {"repo": "drifty_mac", "sha": sha, "authoredAt": "2026-09-01T02:00:00+00:00", "insertions": 12, "deletions": 3, "filesChanged": 2},
+                {"repo": "drifty_mac", "sha": "not-a-sha", "authoredAt": "2026-09-01T02:00:00+00:00"},
+                {"repo": "/Users/someone/secret", "sha": "c" * 40, "authoredAt": "2026-09-01T02:00:00+00:00"},
+                {"repo": "drifty_mac", "sha": "d" * 40, "authoredAt": "not a time"},
+                {"repo": "drifty_mac", "sha": "e" * 40, "authoredAt": "2026-09-01T02:00:00+00:00", "message": "must never be stored"},
+            ],
+        }
+
+        database = CapturingDatabase()
+        result = collect_ssh_agent_source(
+            database,
+            "worker",
+            runner=lambda args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps(wire), stderr=""),
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["commitsFound"], 2)
+        self.assertEqual(result["commitsIngested"], 2)
+        self.assertEqual([commit["commitSha"] for commit in database.commits], [sha, "e" * 40])
+        # Remote commits meet remote sessions on one repository key.
+        self.assertEqual({commit["repoKey"] for commit in database.commits}, {"remote:drifty_mac"})
+        self.assertNotIn("message", database.commits[1])
+        self.assertEqual(database.commits[0]["insertions"], 12)
+
     def test_remote_exporter_uses_shared_providers_and_keeps_raw_content_and_paths_remote(self) -> None:
         secret = "TOP-SECRET-PROMPT-CONTENT"
         now = datetime.now(timezone.utc)
@@ -301,6 +339,137 @@ class SshCollectionTests(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual({turn["provider"] for turn in payload["turns"]}, {"codex", "claude_code", "gemini"})
         self.assertEqual(payload["filesScanned"], 3)
+
+
+
+AUTHOR_EMAIL = "fixture@drifty.test"
+
+
+class RemoteCommitCollectionTests(unittest.TestCase):
+    """The exporter runs for real here: these assert what leaves the host."""
+
+    def git(self, *args: str, cwd: Path) -> str:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            check=True,
+            env={
+                **os.environ,
+                "GIT_CONFIG_GLOBAL": os.devnull,
+                "GIT_CONFIG_SYSTEM": os.devnull,
+                "GIT_AUTHOR_NAME": "Fixture",
+                "GIT_AUTHOR_EMAIL": AUTHOR_EMAIL,
+                "GIT_COMMITTER_NAME": "Fixture",
+                "GIT_COMMITTER_EMAIL": AUTHOR_EMAIL,
+            },
+        )
+        return completed.stdout
+
+    def make_repo(self, path: Path) -> None:
+        path.mkdir(parents=True)
+        self.git("init", "--quiet", "--initial-branch=main", cwd=path)
+        self.git("config", "user.email", AUTHOR_EMAIL, cwd=path)
+        self.git("config", "user.name", "Fixture", cwd=path)
+
+    def commit_file(self, repo: Path, name: str, body: str) -> str:
+        (repo / name).write_text(body, encoding="utf-8")
+        self.git("add", name, cwd=repo)
+        self.git("commit", "--quiet", "-m", "fixture change", cwd=repo)
+        # Local ingestion stores the same abbreviated sha, which is what lets a
+        # commit reachable from both sources be recognised as one commit.
+        return self.git("rev-parse", "HEAD", cwd=repo).strip()[:12]
+
+    def write_codex_session(self, home: Path, cwd: Path, name: str) -> None:
+        codex_dir = home / ".codex" / "sessions" / "2026" / "09"
+        codex_dir.mkdir(parents=True, exist_ok=True)
+        now = datetime.now(timezone.utc)
+        records = [
+            {"timestamp": (now - timedelta(minutes=6)).isoformat(), "type": "session_meta", "payload": {"session_id": name, "cwd": str(cwd)}},
+            {"timestamp": (now - timedelta(minutes=5)).isoformat(), "type": "turn_context", "payload": {"model": "gpt-5.6-codex", "cwd": str(cwd)}},
+            {"timestamp": (now - timedelta(minutes=4)).isoformat(), "type": "event_msg", "payload": {"type": "task_started", "prompt": "fixture"}},
+            {"timestamp": (now - timedelta(minutes=3)).isoformat(), "type": "event_msg", "payload": {"type": "token_count", "info": {"total_token_usage": {"total_tokens": 44}}}},
+            {"timestamp": (now - timedelta(minutes=2)).isoformat(), "type": "event_msg", "payload": {"type": "task_complete", "response": "fixture"}},
+        ]
+        path = codex_dir / f"{name}.jsonl"
+        path.write_text("\n".join(json.dumps(record) for record in records) + "\n", encoding="utf-8")
+
+    def run_exporter(self, home: Path, *, path_value: str | None = None) -> tuple[dict, str]:
+        env = {**os.environ, "HOME": str(home), "USERPROFILE": str(home)}
+        if path_value is not None:
+            env["PATH"] = path_value
+        completed = subprocess.run(
+            [sys.executable, "-", "30"],
+            input=REMOTE_EXPORTER_SCRIPT,
+            text=True,
+            capture_output=True,
+            check=True,
+            env=env,
+        )
+        return json.loads(completed.stdout), completed.stdout
+
+    def test_collects_commits_only_from_repositories_an_agent_worked_in(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            home = root / "home"
+            home.mkdir()
+            repo = root / "worked-repo"
+            idle = root / "untouched-repo"
+            self.make_repo(repo)
+            self.make_repo(idle)
+            sha = self.commit_file(repo, "a.txt", "one\ntwo\n")
+            self.commit_file(idle, "b.txt", "ignored\n")
+            self.write_codex_session(home, repo, "worked-session")
+
+            payload, stdout = self.run_exporter(home)
+
+        self.assertEqual([commit["repo"] for commit in payload["commits"]], ["worked-repo"])
+        self.assertEqual(payload["commits"][0]["sha"], sha)
+        self.assertEqual(payload["commits"][0]["filesChanged"], 1)
+        self.assertEqual(payload["commits"][0]["insertions"], 2)
+        self.assertEqual({turn["repo"] for turn in payload["turns"]}, {"worked-repo"})
+        # The repository directory name is the only path fragment allowed out.
+        self.assertNotIn(str(root), stdout)
+        self.assertNotIn("untouched-repo", stdout)
+
+    def test_folds_worktrees_onto_their_repository_so_commits_count_once(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            home = root / "home"
+            home.mkdir()
+            repo = root / "primary-repo"
+            self.make_repo(repo)
+            first = self.commit_file(repo, "a.txt", "one\n")
+            worktree = root / "task-worktree-slug"
+            self.git("worktree", "add", "--quiet", "-b", "task", str(worktree), cwd=repo)
+            second = self.commit_file(worktree, "b.txt", "two\n")
+            self.write_codex_session(home, repo, "primary-session")
+            self.write_codex_session(home, worktree, "worktree-session")
+
+            payload, stdout = self.run_exporter(home)
+
+        shas = [commit["sha"] for commit in payload["commits"]]
+        self.assertEqual(sorted(shas), sorted({first, second}))
+        self.assertEqual({commit["repo"] for commit in payload["commits"]}, {"primary-repo"})
+        self.assertEqual({turn["repo"] for turn in payload["turns"]}, {"primary-repo"})
+        self.assertNotIn("task-worktree-slug", stdout)
+
+    def test_without_git_the_turns_still_arrive_and_commits_are_omitted(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_root:
+            root = Path(raw_root)
+            home = root / "home"
+            home.mkdir()
+            repo = root / "worked-repo"
+            self.make_repo(repo)
+            self.commit_file(repo, "a.txt", "one\n")
+            self.write_codex_session(home, repo, "worked-session")
+
+            payload, _ = self.run_exporter(home, path_value="")
+
+        self.assertEqual(payload["commits"], [])
+        self.assertTrue(payload["turns"])
+        self.assertEqual({turn["repo"] for turn in payload["turns"]}, {"worked-repo"})
 
 
 if __name__ == "__main__":

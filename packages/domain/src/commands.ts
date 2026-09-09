@@ -342,6 +342,8 @@ export interface SshAgentSourceCollectResult extends SshAgentSourceTestResult {
   providers: string[];
   turnsFound: number;
   turnsIngested: number;
+  commitsFound: number;
+  commitsIngested: number;
   filesScanned: number;
   truncated: boolean;
 }

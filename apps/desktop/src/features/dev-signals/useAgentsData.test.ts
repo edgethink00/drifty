@@ -192,4 +192,29 @@ describe("Your Agents date ranges", () => {
       600, 660, "codex", "drifty_mac", "gpt-5", 200,
     ]);
   });
+
+  it("counts a commit once when the same repository is local and on an SSH host", async () => {
+    trackerClient.getDevRepos.mockResolvedValue([
+      { repo_key: "local-key", repo_path: "/Users/me/code/drifty_mac", author_email: null, created_at: "" },
+    ]);
+    trackerClient.getDevSignals.mockResolvedValue({
+      ...emptySignals,
+      commits: [
+        { repoKey: "local-key", commitSha: "abc123abc123", authoredAt: "2026-08-28T10:00:00", insertions: 12, deletions: 3, filesChanged: 2 },
+        { repoKey: "remote:drifty_mac", commitSha: "abc123abc123", authoredAt: "2026-08-28T10:00:00", insertions: 12, deletions: 3, filesChanged: 2 },
+        { repoKey: "remote:drifty_mac", commitSha: "def456def456", authoredAt: "2026-08-28T11:00:00", insertions: 4, deletions: 1, filesChanged: 1 },
+      ],
+    });
+    trackerClient.getTimeline.mockResolvedValue([]);
+
+    const hook = renderHook(() => useAgentsData("2026-08-28", "2026-08-28", 0));
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+
+    // The local row survives with its own repository name, the SSH copy of the
+    // same commit is dropped, and the commit only the host has is kept.
+    expect(hook.result.current.days[0]?.commits).toEqual([
+      [600, 12, 3, 2, "abc123abc123", "drifty_mac"],
+      [660, 4, 1, 1, "def456def456", "drifty_mac"],
+    ]);
+  });
 });

@@ -33,6 +33,8 @@ const collectedResult: SshAgentSourceCollectResult = {
   providers: ["codex"],
   turnsFound: 3,
   turnsIngested: 3,
+  commitsFound: 0,
+  commitsIngested: 0,
   filesScanned: 1,
   truncated: false,
 };

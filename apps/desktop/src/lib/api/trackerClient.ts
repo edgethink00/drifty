@@ -426,6 +426,8 @@ export const trackerClient: TrackerApi = {
       providers: [],
       turnsFound: 0,
       turnsIngested: 0,
+      commitsFound: 0,
+      commitsIngested: 0,
       filesScanned: 0,
       truncated: false,
     };

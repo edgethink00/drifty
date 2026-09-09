@@ -14,7 +14,7 @@ const chatgptHelperBaseName = "chatgpt-session-ax";
 const chatgptHelperSource = resolve(trackerPythonRoot, "app/tracker/chatgpt_session_ax.swift");
 const remoteExporterSourceDirectory = resolve(trackerPythonRoot, "app/tracker/dev_signals");
 const remoteExporterDataDestination = "app/tracker/dev_signals/remote_exporter_support";
-const remoteExporterSources = ["agent_sessions.py", "adapters.py"];
+const remoteExporterSources = ["git_commits.py", "agent_sessions.py", "adapters.py"];
 // Tauri resolves a macOS externalBin as `<name>-<triple><exeSuffix>`, so the
 // suffix has to match the host or the build succeeds and then fails at bundle
 // time with a missing resource.

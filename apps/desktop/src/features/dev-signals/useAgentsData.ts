@@ -159,7 +159,20 @@ function toDaySource(
   }
 
   const commits: CommitTuple[] = [];
+  // The same commit arrives twice when a repository is both checked out here
+  // and reachable on an SSH host: the two sources key it under different
+  // repositories, so nothing upstream can collapse them. The local row wins,
+  // since its repository name comes from a path this machine can resolve.
+  const localShas = new Set<string>();
   for (const commit of payload.commits) {
+    if (!commit.repoKey.startsWith("remote:")) localShas.add(commit.commitSha);
+  }
+  const seenRemoteShas = new Set<string>();
+  for (const commit of payload.commits) {
+    if (commit.repoKey.startsWith("remote:")) {
+      if (localShas.has(commit.commitSha) || seenRemoteShas.has(commit.commitSha)) continue;
+      seenRemoteShas.add(commit.commitSha);
+    }
     const minute = minuteOfLogicalDay(commit.authoredAt, day, startOfDayMinutes);
     if (minute === null || minute < 0 || minute >= 24 * 60) continue;
     commits.push([
