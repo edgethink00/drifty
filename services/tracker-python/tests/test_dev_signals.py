@@ -7,9 +7,11 @@ runs against fixtures written here rather than against live session files.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1675,6 +1677,78 @@ class IngestRegistryTests(TempDirTestCase):
             self.assertEqual((turns, scanned, skipped), (0, 0, 0))
         finally:
             ingest_mod.PROVIDERS = original
+
+    def _stub_provider(self, root, names: list[str]):
+        """One file per name, oldest first, parsed into a single turn each."""
+        from app.tracker.dev_signals.agent_sessions import AgentTurn
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+
+        root.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        for index, name in enumerate(names):
+            path = root / f"{name}.jsonl"
+            path.write_text("{}", encoding="utf-8")
+            os.utime(path, (now - (len(names) - index) * 60, now - (len(names) - index) * 60))
+
+        def parse(path):
+            key = Path(path).stem
+            return [
+                AgentTurn(
+                    provider="stub",
+                    session_key=key,
+                    turn_index=0,
+                    started_at="2026-09-09T01:00:00+00:00",
+                    ended_at="2026-09-09T01:10:00+00:00",
+                    active_seconds=600,
+                    cwd_key=None,
+                    model=None,
+                    total_tokens=None,
+                )
+            ]
+
+        return ProviderAdapter("stub", lambda: [root], parse, ("*.jsonl",))
+
+    def test_newest_files_are_ingested_before_the_backlog_drains(self) -> None:
+        """A backlog wider than one pass must not hide today's sessions."""
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        adapter = self._stub_provider(self.tmp_path / "stub", ["a", "b", "c", "d", "e"])
+        original_providers = ingest_mod.PROVIDERS
+        ingest_mod.PROVIDERS = (adapter,)
+        try:
+            database = TrackerDatabase(self.tmp_path / "tracker.sqlite3")
+            ingest_agent_sessions(database, backfill_days=1, max_files=2)
+            with database.connect() as conn:
+                keys = {
+                    row[0]
+                    for row in conn.execute("SELECT session_key FROM agent_session_events")
+                }
+            # One backlog file (the oldest) plus the newest file.
+            self.assertEqual(keys, {"a", "e"})
+        finally:
+            ingest_mod.PROVIDERS = original_providers
+
+    def test_head_files_do_not_advance_the_watermark(self) -> None:
+        """The unread middle stays reachable after a head-first pass."""
+        from app.tracker.dev_signals import ingest as ingest_mod
+
+        adapter = self._stub_provider(self.tmp_path / "stub", ["a", "b", "c", "d", "e"])
+        original_providers = ingest_mod.PROVIDERS
+        ingest_mod.PROVIDERS = (adapter,)
+        try:
+            database = TrackerDatabase(self.tmp_path / "tracker.sqlite3")
+            ingest_agent_sessions(database, backfill_days=1, max_files=2)
+            ingest_agent_sessions(database, backfill_days=1, max_files=2)
+            ingest_agent_sessions(database, backfill_days=1, max_files=2)
+            ingest_agent_sessions(database, backfill_days=1, max_files=2)
+            with database.connect() as conn:
+                keys = {
+                    row[0]
+                    for row in conn.execute("SELECT session_key FROM agent_session_events")
+                }
+            self.assertEqual(keys, {"a", "b", "c", "d", "e"})
+        finally:
+            ingest_mod.PROVIDERS = original_providers
 
 
 if __name__ == "__main__":

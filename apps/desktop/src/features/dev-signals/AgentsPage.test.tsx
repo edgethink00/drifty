@@ -370,6 +370,40 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(weekPage?.querySelector(".agents-week-calendar__foot")).toBeNull();
   });
 
+  it("paints a week run with its cells without adding keyboard stops", async () => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{
+        ...source,
+        attention: [],
+        // One uninterrupted run whose second half runs two agents at once:
+        // the block must not read as a single flat rectangle.
+        turns: [
+          [60, 120, "codex", "drifty_mac", "gpt-5", 1_000],
+          [90, 120, "claude_code", "drifty_mac", "claude", 1_000],
+        ],
+        commits: [],
+      }],
+      loading: false,
+      live: true,
+    });
+    renderAgentsPage();
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+
+    const run = document.querySelector(".agents-week-calendar__event--segmented");
+    if (!run) throw new Error("Expected a segmented week run");
+    const segments = run.querySelectorAll(".agents-week-calendar__segment");
+    expect(segments.length).toBeGreaterThan(1);
+    const tones = new Set([...segments].map((segment) => segment.getAttribute("data-agent-intensity-band")));
+    expect(tones.size).toBeGreaterThan(1);
+    // The run stays the only focus target; cells are pointer surfaces only.
+    expect(run.querySelectorAll("[tabindex]")).toHaveLength(0);
+    expect(document.querySelectorAll('.agents-week-calendar__event[tabindex="0"]')).toHaveLength(1);
+
+    const segment = segments[segments.length - 1]!;
+    fireEvent(segment, new MouseEvent("pointermove", { bubbles: true, clientX: 100, clientY: 100 }));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card")).toBeTruthy());
+  });
+
   it("retargets a single highlighted cell across parallel repos and preserves its color", async () => {
     vi.mocked(useAgentsData).mockReturnValue({ days: [{
       ...source, attention: [],

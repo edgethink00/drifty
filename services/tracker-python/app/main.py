@@ -58,6 +58,7 @@ from app.tracker.dev_signals.aggregation import peak_concurrency, summarize_agen
 from app.tracker.dev_signals.discovery import discover_repositories as discover_dev_repositories
 from app.tracker.dev_signals.ingest import (
     DEFAULT_BACKFILL_DAYS as DEV_SIGNALS_BACKFILL_DAYS,
+    ingest_agent_sessions as ingest_dev_agent_sessions,
     register_repo as register_dev_repo,
     run_ingest as run_dev_signals_ingest,
 )
@@ -80,6 +81,21 @@ PASSIVE_AUDIO_GAP_GRACE_SECONDS = 15
 PASSIVE_AUDIO_LAST_SUPPORTED_AT_META_KEY = "passive_audio_last_supported_at"
 YOUTUBE_METADATA_TIMEOUT_SECONDS = float(os.environ.get("DRIFTY_YOUTUBE_METADATA_TIMEOUT_SECONDS", "2"))
 DATABASE_BACKUP_CHECK_SECONDS = 60 * 60
+
+#: How often the capture daemon pulls in new agent session turns.
+#:
+#: Ingestion otherwise runs only when the Your Agents tab asks for it, so the
+#: freshness of the view depends on having opened it. The daemon keeps the
+#: recent window current on its own.
+DEV_SIGNALS_INGEST_INTERVAL_SECONDS = 30 * 60
+
+#: Files one daemon pass may read. This pass shares the capture loop, and a
+#: session file costs roughly a quarter second to parse on a real corpus, so
+#: the budget stays small enough to keep the worst pass around ten seconds.
+#: At 48 passes a day it still covers far more files than a working machine
+#: writes; the on-demand pass keeps the larger budget for bulk catch-up, and
+#: git commit collection stays out of the daemon entirely.
+DEV_SIGNALS_DAEMON_MAX_FILES = 40
 TRACKER_RUNTIME_FINGERPRINT_META_KEY = "tracker_runtime_fingerprint"
 TRACKER_EXIT_TIMEOUT_SECONDS = 3.0
 TRACKER_EXIT_POLL_SECONDS = 0.05
@@ -1963,6 +1979,28 @@ def _maybe_create_periodic_backup(
     return current
 
 
+def _maybe_ingest_dev_signals(
+    db: TrackerDatabase,
+    last_check_wall_seconds: float,
+    *,
+    now_wall_seconds: float | None = None,
+) -> float:
+    current = time.time() if now_wall_seconds is None else now_wall_seconds
+    elapsed = current - last_check_wall_seconds
+    if elapsed < 0:
+        # A wall-clock correction restarts the window instead of suspending
+        # ingestion for an unbounded stretch.
+        return current
+    if elapsed < DEV_SIGNALS_INGEST_INTERVAL_SECONDS:
+        return last_check_wall_seconds
+    ingest_dev_agent_sessions(
+        db,
+        backfill_days=DEV_SIGNALS_BACKFILL_DAYS,
+        max_files=DEV_SIGNALS_DAEMON_MAX_FILES,
+    )
+    return current
+
+
 def daemon():
     daemon_pid = os.getpid()
     lock_file = _acquire_tracker_daemon_lock()
@@ -1986,6 +2024,8 @@ def daemon():
         raise
     last_capture_tick: float | None = None
     last_backup_check = time.time()
+    # One wall-clock read per loop feeds both maintenance windows.
+    last_dev_signals_ingest = last_backup_check
 
     try:
         while True:
@@ -2002,6 +2042,19 @@ def daemon():
                 last_backup_check = backup_check_started_at
                 capture_tracker_exception(exc, {"phase": "database_periodic_backup"})
                 print("tracker database periodic backup failed:", file=sys.stderr)
+                traceback.print_exc(file=sys.stderr)
+            try:
+                last_dev_signals_ingest = _maybe_ingest_dev_signals(
+                    db,
+                    last_dev_signals_ingest,
+                    now_wall_seconds=backup_check_started_at,
+                )
+            except Exception as exc:
+                # Reading another tool's session logs is best-effort. A parser
+                # or permission failure must not interrupt capture.
+                last_dev_signals_ingest = backup_check_started_at
+                capture_tracker_exception(exc, {"phase": "dev_signals_periodic_ingest"})
+                print("tracker dev signals periodic ingest failed:", file=sys.stderr)
                 traceback.print_exc(file=sys.stderr)
             try:
                 last_capture_tick = _daemon_tick(db, last_capture_tick)

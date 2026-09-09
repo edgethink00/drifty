@@ -594,6 +594,111 @@ export function buildAgentsGridCells(
   return result;
 }
 
+/** Cell width that gives a Week run its internal texture. */
+export const AGENTS_SEGMENT_MINUTES = 15;
+
+/** One coloured piece of a run: a stretch of adjacent cells that read alike. */
+export type AgentsRunSegment = AgentsRunStretch & { readonly attended: boolean };
+
+/**
+ * Split one run into the pieces the Week view paints.
+ *
+ * A day spent on several agents at once merges into a single run, because
+ * parallel sessions leave no five-minute gap anywhere; painting that run with
+ * its own peak concurrency then turns seventeen hours into one flat block.
+ * The pieces come from the same grid cells the Day view already uses, so the
+ * run keeps its identity, hover target, and keyboard focus while the cells
+ * carry the rhythm of the day.
+ *
+ * Boundaries do not depend on the colour mode. A piece ends where either the
+ * concurrency band or the top repository changes, in both modes, so switching
+ * modes recolours the same pieces instead of moving them.
+ */
+export function buildAgentsRunSegments(
+  run: AgentsRunStretch,
+  cells: ReadonlyMap<number, AgentsGridCell>,
+  intervalMinutes: number = AGENTS_SEGMENT_MINUTES,
+  bands: readonly AgentsIntensityBand[] = AGENTS_INTENSITY_BANDS,
+): AgentsRunSegment[] {
+  const interval = Math.max(1, Math.floor(intervalMinutes));
+  const segments: AgentsRunSegment[] = [];
+  let key: string | null = null;
+  let current: {
+    start: number;
+    end: number;
+    activeMinutes: number;
+    peakConcurrency: number;
+    topRepo: string | null;
+    providers: Set<string>;
+    models: Set<string>;
+    commitCount: number;
+    attended: boolean;
+    intensityBand: AgentsIntensityBand;
+  } | null = null;
+
+  const flush = () => {
+    if (!current) return;
+    segments.push({
+      start: current.start,
+      end: current.end,
+      activeMinutes: Math.round(current.activeMinutes * 10) / 10,
+      peakConcurrency: current.peakConcurrency,
+      topRepo: current.topRepo,
+      providers: [...current.providers].sort(),
+      models: [...current.models].sort(),
+      commitCount: current.commitCount,
+      attended: current.attended,
+      intensityBand: current.intensityBand,
+    });
+    current = null;
+    key = null;
+  };
+
+  const firstCellStart = Math.floor(run.start / interval) * interval;
+  for (let cellStart = firstCellStart; cellStart < run.end; cellStart += interval) {
+    const cell = cells.get(cellStart);
+    const start = Math.max(run.start, cellStart);
+    const end = Math.min(run.end, cellStart + interval);
+    if (!cell || end <= start) {
+      // A cell with no agent time is a real gap inside the run, and drawing
+      // it as one keeps the block honest about when nothing was running.
+      flush();
+      continue;
+    }
+    const band = agentsIntensityBandFor(cell.concurrency, bands);
+    const cellKey = band.id + "|" + (cell.topRepo ?? "");
+    if (!current || key !== cellKey) {
+      flush();
+      current = {
+        start,
+        end,
+        activeMinutes: 0,
+        peakConcurrency: 0,
+        topRepo: cell.topRepo,
+        providers: new Set<string>(),
+        models: new Set<string>(),
+        commitCount: 0,
+        attended: false,
+        intensityBand: band,
+      };
+      key = cellKey;
+    }
+    current.end = end;
+    // The run may start or end mid-cell, so a cell's active minutes are
+    // clipped to the part of it the run actually covers.
+    current.activeMinutes += Math.min(cell.activeMinutes, end - start);
+    current.peakConcurrency = Math.max(current.peakConcurrency, cell.concurrency);
+    current.commitCount += cell.commitCount;
+    current.attended = current.attended || cell.attended;
+    for (const entry of cell.repos) {
+      for (const provider of entry.providers) current.providers.add(provider);
+    }
+    for (const model of cell.models) current.models.add(model);
+  }
+  flush();
+  return segments;
+}
+
 /** Distinct repos that appear as a cell's top repo, most cell-time first. */
 export function gridRepoLegend(cells: ReadonlyMap<number, AgentsGridCell>): string[] {
   const counts = new Map<string, number>();

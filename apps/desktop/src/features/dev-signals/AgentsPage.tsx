@@ -55,10 +55,12 @@ import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath } from "../dashboard/focusDri
 import {
   buildAgentsDayModel,
   buildAgentsGridCells,
+  buildAgentsRunSegments,
   buildAgentsRunStretches,
   buildAgentsWeekModel,
   agentMinutesByRepo,
   agentsIntensityBandFor,
+  AGENTS_SEGMENT_MINUTES,
   gridRepoLegend,
   repoDominantProviders,
   agentsHourHistogram,
@@ -771,11 +773,22 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
       intensityBandId: AgentsIntensityBand["id"];
       intensityBand: AgentsIntensityBand;
       tone: string;
+      segments: {
+        id: string;
+        start: number;
+        end: number;
+        tone: string;
+        intensityBandId: AgentsIntensityBand["id"];
+        intensityBand: AgentsIntensityBand;
+      }[];
       foreground?: string;
     }[]>();
     const nextHoverDetailsById = new Map<string, AgentsHoverDetails>();
     for (const source of sources) {
       const stretches = buildAgentsRunStretches(source, repoOrder, undefined, intensityBands);
+      // The Week paints the same cells the Day view uses, so one run reads as
+      // the shape of its hours instead of a single block of its peak.
+      const cells = buildAgentsGridCells(source, AGENTS_SEGMENT_MINUTES, repoOrder);
       const events = stretches.map((stretch) => {
         // A run keeps the same identity across Intensity and Project. Colour
         // changes presentation only; it never replaces the focused node.
@@ -793,6 +806,27 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
           tone,
           effectiveLanguage,
         ));
+        const segments = buildAgentsRunSegments(stretch, cells, AGENTS_SEGMENT_MINUTES, intensityBands).map((segment) => {
+          const segmentId = id + ":seg:" + segment.start;
+          const segmentTone = colorMode === "repo"
+            ? (segment.topRepo ? repoColors.get(segment.topRepo) ?? AGENTS_UNKNOWN_COLOR : AGENTS_UNKNOWN_COLOR)
+            : intensityBandColor(segment.intensityBand);
+          nextHoverDetailsById.set(segmentId, buildAgentsHoverDetails(
+            segment,
+            segmentId,
+            boundaryMinutes,
+            segmentTone,
+            effectiveLanguage,
+          ));
+          return {
+            id: segmentId,
+            start: segment.start,
+            end: segment.end,
+            tone: segmentTone,
+            intensityBandId: segment.intensityBand.id,
+            intensityBand: segment.intensityBand,
+          };
+        });
         return {
           id,
           start: stretch.start,
@@ -804,6 +838,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
           intensityBandId: stretch.intensityBand.id,
           intensityBand: stretch.intensityBand,
           tone,
+          segments,
           ...(colorMode === "repo" ? { foreground: readableForeground(tone) } : {}),
         };
       });
@@ -914,7 +949,7 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                           if (element) eventElementsRef.current.set(event.id, element);
                           else eventElementsRef.current.delete(event.id);
                         }}
-                        className={`week-v2-calendar__event week-v2-calendar__event--focus agents-week-calendar__event${isShort ? " week-v2-calendar__event--short week-v2-calendar__event--tiny" : ""}`}
+                        className={`week-v2-calendar__event week-v2-calendar__event--focus agents-week-calendar__event${event.segments.length ? " agents-week-calendar__event--segmented" : ""}${isShort ? " week-v2-calendar__event--short week-v2-calendar__event--tiny" : ""}`}
                         style={{
                           top: formatWeekDashboardAxisPixelValue((event.start / 60) * AGENTS_WEEK_HOUR_HEIGHT),
                           height: formatWeekDashboardAxisPixelValue(heightPx),
@@ -950,6 +985,20 @@ function AgentsWeekCalendar({ colorMode, header, loading, models, intensityBands
                           duration: formatAgentRunDuration(event.activeMinutes, effectiveLanguage),
                         })}
                       >
+                        {event.segments.map((segment) => (
+                          <span
+                            key={segment.id}
+                            className="agents-week-calendar__segment"
+                            style={{
+                              top: formatWeekDashboardAxisPixelValue(((segment.start - event.start) / 60) * AGENTS_WEEK_HOUR_HEIGHT),
+                              height: formatWeekDashboardAxisPixelValue(Math.max(1, ((segment.end - segment.start) / 60) * AGENTS_WEEK_HOUR_HEIGHT)),
+                              "--segment-tone": segment.tone,
+                            } as CSSProperties}
+                            data-agent-hover-id={segment.id}
+                            data-agent-intensity-band={segment.intensityBandId}
+                            aria-hidden="true"
+                          />
+                        ))}
                         {!isShort ? <strong>{formatAgentRunDuration(event.activeMinutes, effectiveLanguage)}</strong> : null}
                       </article>
                     );

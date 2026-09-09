@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .adapters import PROVIDERS
+from .adapters import PROVIDERS, ProviderAdapter
 from .git_commits import collect_commits, default_author_email, repo_key_for, resolve_primary_repo
 from .discovery import default_discovery_roots, discover_repositories
 
@@ -25,6 +25,17 @@ DISCOVERY_INTERVAL_SECONDS = 6 * 60 * 60
 
 #: Ceiling on files read in one pass, so a first run cannot stall the tracker.
 MAX_FILES_PER_PASS = 400
+
+#: Share of every pass reserved for the newest session files.
+#:
+#: The watermark walks forward from the oldest unscanned file, so a backlog
+#: bigger than one pass hides *today* behind it: on a machine that writes ~150
+#: session files a day, the current range is only as fresh as the oldest
+#: unread file. Reading part of every pass from the newest end keeps the
+#: visible range correct while the backlog drains from the other end. Head
+#: files are read again once the watermark reaches them, which the turn upsert
+#: makes free. A share rather than a count keeps both ends alive at any budget.
+HEAD_SHARE_PER_PASS = 0.4
 
 
 @dataclass(frozen=True)
@@ -94,6 +105,54 @@ def _candidate_files(
     return candidates
 
 
+def _split_pass(
+    candidates: list[tuple[float, Path]],
+    max_files: int,
+) -> tuple[list[tuple[float, Path]], list[tuple[float, Path]]]:
+    """Split one pass into a backlog slice and a head slice.
+
+    The backlog is contiguous from the watermark, so reaching its end may
+    advance the watermark. The head is the newest tail of the corpus and never
+    advances it, because the files between the two slices are still unread.
+    """
+    budget = max(1, max_files)
+    if len(candidates) <= budget:
+        return candidates, []
+    head_size = min(budget - 1, max(1, int(budget * HEAD_SHARE_PER_PASS)))
+    if head_size <= 0:
+        return candidates[:budget], []
+    return candidates[: budget - head_size], candidates[-head_size:]
+
+
+def _turn_rows(adapter: ProviderAdapter, path: Path) -> list[dict] | None:
+    """Rows for one session file, or None when the file could not be read."""
+    try:
+        turns = adapter.parse(path)
+    except Exception:
+        # A schema change degrades to fewer events, never a failed capture
+        # cycle.
+        return None
+    return [
+        {
+            "provider": turn.provider,
+            "sessionKey": turn.session_key,
+            "turnIndex": turn.turn_index,
+            "startedAt": turn.started_at,
+            "endedAt": turn.ended_at,
+            "activeSeconds": turn.active_seconds,
+            "cwdKey": turn.cwd_key,
+            "model": turn.model,
+            "totalTokens": turn.total_tokens,
+            "tokensIn": turn.tokens_in,
+            "tokensOut": turn.tokens_out,
+            "tokensCacheRead": turn.tokens_cache_read,
+            "tokensCacheWrite": turn.tokens_cache_write,
+            "costUsd": turn.cost_usd,
+        }
+        for turn in turns
+    ]
+
+
 def ingest_agent_sessions(
     database,
     *,
@@ -123,37 +182,26 @@ def ingest_agent_sessions(
         if not candidates:
             continue
 
+        backlog, head = _split_pass(candidates, max_files)
         highest = watermark
         batch: list[dict] = []
-        for modified, path in candidates[: max(1, max_files)]:
+        for modified, path in backlog:
             total_scanned += 1
-            try:
-                turns = adapter.parse(path)
-            except Exception:
-                # A schema change degrades to fewer events, never a failed
-                # capture cycle.
+            rows = _turn_rows(adapter, path)
+            if rows is None:
                 total_skipped += 1
                 continue
-            for turn in turns:
-                batch.append(
-                    {
-                        "provider": turn.provider,
-                        "sessionKey": turn.session_key,
-                        "turnIndex": turn.turn_index,
-                        "startedAt": turn.started_at,
-                        "endedAt": turn.ended_at,
-                        "activeSeconds": turn.active_seconds,
-                        "cwdKey": turn.cwd_key,
-                        "model": turn.model,
-                        "totalTokens": turn.total_tokens,
-                        "tokensIn": turn.tokens_in,
-                        "tokensOut": turn.tokens_out,
-                        "tokensCacheRead": turn.tokens_cache_read,
-                        "tokensCacheWrite": turn.tokens_cache_write,
-                        "costUsd": turn.cost_usd,
-                    }
-                )
+            batch.extend(rows)
             highest = max(highest, modified)
+        # The newest files land in the same pass, ahead of the unread middle.
+        # They stay behind the watermark so the backlog still gets read.
+        for _, path in head:
+            total_scanned += 1
+            rows = _turn_rows(adapter, path)
+            if rows is None:
+                total_skipped += 1
+                continue
+            batch.extend(rows)
 
         total_turns += database.save_agent_session_events(batch)
         # Only advance the watermark past files this pass actually reached, so a

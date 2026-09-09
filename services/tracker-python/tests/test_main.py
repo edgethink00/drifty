@@ -1762,12 +1762,44 @@ class TrackerMainTests(unittest.TestCase):
                 "time",
                 side_effect=[0.0, float(tracker_main.DATABASE_BACKUP_CHECK_SECONDS)],
             ), patch.object(
+                tracker_main, "ingest_dev_agent_sessions"
+            ), patch.object(
                 tracker_main.time, "sleep", side_effect=KeyboardInterrupt
             ):
                 with self.assertRaises(KeyboardInterrupt):
                     tracker_main.daemon()
 
         mock_db.create_periodic_backup.assert_called_once_with()
+
+    def test_daemon_ingests_dev_signals_when_the_window_is_due(self) -> None:
+        """Agent turns stay current without opening the Your Agents tab."""
+        with temp_dir_closing_databases() as tmp:
+            tracker_main.DB_PATH = Path(tmp) / "tracker.sqlite3"
+            mock_db = MagicMock()
+            power_state = PowerStateSample(
+                observed_at=datetime(2026, 4, 6, 9, 5, tzinfo=timezone.utc),
+                should_capture=False,
+                reason="non_user_visible_wake_type:darkwake",
+            )
+            with patch.object(tracker_main, "database", return_value=mock_db), patch.object(
+                tracker_main, "current_power_state", return_value=power_state
+            ), patch.object(
+                tracker_main.time,
+                "time",
+                side_effect=[0.0, float(tracker_main.DEV_SIGNALS_INGEST_INTERVAL_SECONDS)],
+            ), patch.object(
+                tracker_main, "ingest_dev_agent_sessions"
+            ) as ingest_sessions, patch.object(
+                tracker_main.time, "sleep", side_effect=KeyboardInterrupt
+            ):
+                with self.assertRaises(KeyboardInterrupt):
+                    tracker_main.daemon()
+
+        ingest_sessions.assert_called_once_with(
+            mock_db,
+            backfill_days=tracker_main.DEV_SIGNALS_BACKFILL_DAYS,
+            max_files=tracker_main.DEV_SIGNALS_DAEMON_MAX_FILES,
+        )
 
     def test_unexpected_periodic_backup_error_does_not_skip_sampling(self) -> None:
         with temp_dir_closing_databases() as tmp:
@@ -1789,6 +1821,8 @@ class TrackerMainTests(unittest.TestCase):
                 tracker_main, "capture_tracker_exception"
             ) as capture_exception, patch.object(
                 tracker_main.sys, "stderr", MagicMock()
+            ), patch.object(
+                tracker_main, "ingest_dev_agent_sessions"
             ), patch.object(
                 tracker_main.time, "sleep", side_effect=KeyboardInterrupt
             ):

@@ -4,6 +4,7 @@ import {
   buildAgentsDayModel,
   buildAgentsGridCells,
   buildAgentsIntensityBands,
+  buildAgentsRunSegments,
   buildAgentsRunStretches,
   buildAgentsWeekModel,
   agentMinutesByRepo,
@@ -427,6 +428,73 @@ describe("buildAgentsRunStretches", () => {
 
     expect(buildAgentsRunStretches(mostlyUnlabelledSource, ["alpha"])).toMatchObject([
       { start: 200, end: 205, topRepo: null },
+    ]);
+  });
+});
+
+describe("buildAgentsRunSegments", () => {
+  const bands = buildAgentsIntensityBands(2);
+  const source: AgentsDaySource = {
+    day: "2026-08-22",
+    attention: [[0, 15]],
+    turns: [
+      [0, 15, "codex", "alpha"],
+      [15, 30, "codex", "alpha"],
+      [15, 30, "claude", "alpha"],
+      [30, 45, "codex", "beta"],
+      [30, 45, "claude", "beta"],
+      [45, 60, "codex", "beta"],
+    ],
+    commits: [],
+  };
+
+  it("breaks one run where the concurrency band or the repository changes", () => {
+    const [run] = buildAgentsRunStretches(source, ["alpha", "beta"], undefined, bands);
+    const cells = buildAgentsGridCells(source, 15, ["alpha", "beta"]);
+    expect(run).toMatchObject({ start: 0, end: 60 });
+    expect(buildAgentsRunSegments(run!, cells, 15, bands).map((segment) => ({
+      start: segment.start,
+      end: segment.end,
+      peak: segment.peakConcurrency,
+      repo: segment.topRepo,
+      band: segment.intensityBand.label,
+    }))).toEqual([
+      { start: 0, end: 15, peak: 1, repo: "alpha", band: "×1" },
+      { start: 15, end: 30, peak: 2, repo: "alpha", band: "×2" },
+      { start: 30, end: 45, peak: 2, repo: "beta", band: "×2" },
+      { start: 45, end: 60, peak: 1, repo: "beta", band: "×1" },
+    ]);
+  });
+
+  it("carries attention and active minutes from the cells it covers", () => {
+    const [run] = buildAgentsRunStretches(source, ["alpha", "beta"], undefined, bands);
+    const segments = buildAgentsRunSegments(run!, buildAgentsGridCells(source, 15, []), 15, bands);
+    expect(segments[0]).toMatchObject({ activeMinutes: 15, attended: true });
+    expect(segments[3]).toMatchObject({ activeMinutes: 15, attended: false });
+  });
+
+  it("leaves a gap where a cell has no agent time and clips to the run", () => {
+    const sparse: AgentsDaySource = {
+      day: "2026-08-22",
+      attention: [],
+      turns: [[0, 15, "codex", "alpha"], [45, 60, "codex", "alpha"]],
+      commits: [],
+    };
+    const cells = buildAgentsGridCells(sparse, 15, ["alpha"]);
+    const run = {
+      start: 7,
+      end: 52,
+      activeMinutes: 15,
+      peakConcurrency: 1,
+      topRepo: "alpha",
+      providers: ["codex"],
+      models: [],
+      commitCount: 0,
+      intensityBand: bands[0]!,
+    };
+    expect(buildAgentsRunSegments(run, cells, 15, bands).map(({ start, end }) => ({ start, end }))).toEqual([
+      { start: 7, end: 15 },
+      { start: 45, end: 52 },
     ]);
   });
 });

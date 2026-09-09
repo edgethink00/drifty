@@ -577,6 +577,43 @@
   filter: brightness(1.04);
 }
 
+/* A run that carries its own cells.
+
+   One block painted from the run's peak concurrency reads as a flat rectangle
+   on a day spent across several agents, because parallel sessions leave no
+   gap wide enough to split the run. The run stays the hover and focus target;
+   the cells inside it carry when the day was actually busy, and an empty cell
+   stays empty so pauses remain visible. */
+.agents-week-calendar__event--segmented {
+  display: block;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--text) 12%, transparent);
+  background: color-mix(in srgb, var(--surface) 94%, var(--canvas));
+}
+
+.agents-week-calendar__segment {
+  position: absolute;
+  right: 0;
+  left: 0;
+  background: var(--segment-tone, var(--accent));
+}
+
+/* The duration keeps its own plate so it stays readable over any cell tone. */
+.agents-week-calendar__event--segmented > strong {
+  position: absolute;
+  z-index: 1;
+  top: 2px;
+  left: 3px;
+  max-width: calc(100% - 6px);
+  padding: 0 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agents-flow-card .flow-cell[data-agent-hover-id] {
   cursor: default;
 }
