@@ -13,6 +13,228 @@ fn app_version_label_formats_drifty_version() {
     assert_eq!(app_version_label("1.2.3"), "Drifty 1.2.3");
 }
 
+fn sample_tray_menu_plan(
+    lang: TrayLanguage,
+    pause_snapshot: TrackingPauseSnapshot,
+    drift_summary: Option<&str>,
+) -> TrayMenuPlan {
+    tray_menu_plan_from(
+        lang,
+        Some(true),
+        pause_snapshot,
+        "Drift alerts on".to_string(),
+        drift_summary.map(str::to_string),
+        "1.2.3",
+    )
+}
+
+fn visible_rows(plan: &TrayMenuPlan) -> Vec<(String, String, bool)> {
+    tray_menu_rows(plan)
+        .into_iter()
+        .filter(|row| row.visible)
+        .map(|row| {
+            (
+                row.id.to_string(),
+                row.text.unwrap_or_else(|| "---".into()),
+                row.enabled,
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn running_tray_preserves_pause_choices_and_static_actions() {
+    let plan = sample_tray_menu_plan(TrayLanguage::English, TrackingPauseSnapshot::Inactive, None);
+    let rendered = visible_rows(&plan);
+    let labels: Vec<_> = rendered
+        .iter()
+        .map(|(_, text, enabled)| (text.as_str(), *enabled))
+        .collect();
+    assert_eq!(
+        labels,
+        vec![
+            ("Pause Tracking", false),
+            ("15 Minutes", true),
+            ("30 Minutes", true),
+            ("1 Hour", true),
+            ("Forever", true),
+            ("---", false),
+            ("Drift alerts on", false),
+            ("---", false),
+            ("Open Dashboard", true),
+            ("Settings", true),
+            ("---", false),
+            ("Drifty 1.2.3", false),
+            ("Check for Updates...", true),
+            ("---", false),
+            ("Quit", true),
+        ]
+    );
+}
+
+#[test]
+fn paused_and_stopped_trays_offer_only_the_applicable_tracking_action() {
+    for (running, pause, action, status) in [
+        (
+            Some(true),
+            TrackingPauseSnapshot::Indefinite,
+            "Resume Tracking",
+            Some("Paused until you resume"),
+        ),
+        (
+            Some(false),
+            TrackingPauseSnapshot::Inactive,
+            "Start Tracking",
+            None,
+        ),
+        (
+            None,
+            TrackingPauseSnapshot::Inactive,
+            "Start Tracking",
+            None,
+        ),
+    ] {
+        let plan = tray_menu_plan_from(
+            TrayLanguage::English,
+            running,
+            pause,
+            "Alerts".into(),
+            Some("2h drifted".into()),
+            "1.2.3",
+        );
+        let rendered = visible_rows(&plan);
+        assert_eq!(
+            rendered[0],
+            (tray_menu_id::TRACKING_TOGGLE.into(), action.into(), true)
+        );
+        assert!(!rendered.iter().any(
+            |(id, _, _)| id == tray_menu_id::PAUSE_FOR_15 || id == tray_menu_id::PAUSE_FOREVER
+        ));
+        let pause_row = rendered
+            .iter()
+            .find(|(id, _, _)| id == tray_menu_id::PAUSE_STATUS);
+        assert_eq!(pause_row.map(|(_, label, _)| label.as_str()), status);
+        assert!(rendered
+            .iter()
+            .any(|(id, label, enabled)| id == tray_menu_id::DRIFT_SUMMARY
+                && label == "2h drifted"
+                && !enabled));
+    }
+}
+
+#[test]
+fn korean_menu_and_language_roundtrip_preserve_actions_and_optional_rows() {
+    let en = sample_tray_menu_plan(
+        TrayLanguage::English,
+        TrackingPauseSnapshot::Indefinite,
+        Some("summary"),
+    );
+    let ko = sample_tray_menu_plan(
+        TrayLanguage::Korean,
+        TrackingPauseSnapshot::Indefinite,
+        Some("summary"),
+    );
+    let english = visible_rows(&en);
+    let korean = visible_rows(&ko);
+    assert_eq!(korean[0].1, "활동 기록 다시 시작");
+    assert!(korean.iter().any(|(_, label, _)| label == "대시보드 열기"));
+    assert!(korean.iter().any(|(_, label, _)| label == "설정"));
+    assert!(korean.iter().any(|(_, label, _)| label == "업데이트 확인…"));
+    assert_eq!(
+        english
+            .iter()
+            .map(|(id, _, enabled)| (id, enabled))
+            .collect::<Vec<_>>(),
+        korean
+            .iter()
+            .map(|(id, _, enabled)| (id, enabled))
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn every_tracking_and_summary_state_uses_the_same_bounded_item_pool() {
+    let baseline = tray_menu_rows(&sample_tray_menu_plan(
+        TrayLanguage::English,
+        TrackingPauseSnapshot::Inactive,
+        None,
+    ));
+    let schema = |rows: Vec<MenuRow>| {
+        rows.into_iter()
+            .map(|row| (row.id, row.text.is_some()))
+            .collect::<Vec<_>>()
+    };
+    let expected = schema(baseline);
+    let mut unique_ids = std::collections::HashSet::new();
+    assert!(expected.iter().all(|(id, _)| unique_ids.insert(*id)));
+    for language in [TrayLanguage::English, TrayLanguage::Korean] {
+        for running in [None, Some(false), Some(true)] {
+            for pause in [
+                TrackingPauseSnapshot::Inactive,
+                TrackingPauseSnapshot::Indefinite,
+                TrackingPauseSnapshot::Timed {
+                    resumes_at_unix_seconds: 1_800_000_000,
+                },
+                TrackingPauseSnapshot::ResumeFailed {
+                    resumes_at_unix_seconds: 1_800_000_000,
+                },
+            ] {
+                for summary in [None, Some("drift")] {
+                    let plan = tray_menu_plan_from(
+                        language,
+                        running,
+                        pause,
+                        "Alerts".into(),
+                        summary.map(str::to_string),
+                        "1.2.3",
+                    );
+                    assert_eq!(
+                        schema(tray_menu_rows(&plan)),
+                        expected,
+                        "state changes must never allocate replacement click targets"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn menu_refreshes_dispatch_the_complete_snapshot_and_update_transaction() {
+    // A regression to worker-side snapshots or independently queued native
+    // setters can resurrect stale menus. Keep these orchestration boundaries.
+    let source = include_str!("../tray.rs");
+    let refresh = source
+        .split("fn refresh_tray_menu(app:")
+        .nth(1)
+        .unwrap()
+        .split("fn refresh_tray_menu_on_main_thread")
+        .next()
+        .unwrap();
+    assert!(refresh.contains("run_on_main_thread"));
+    assert!(!refresh.contains("tray_menu_plan("));
+    let language = source
+        .split("pub async fn tray_set_language(")
+        .nth(1)
+        .unwrap()
+        .split("pub(crate) fn tray_icon_rect")
+        .next()
+        .unwrap();
+    assert!(
+        language.find("run_menu_update").unwrap() < language.find("latest_tray_language").unwrap()
+    );
+    assert!(
+        !source.contains(".set_menu("),
+        "tray refresh must preserve its original menu root"
+    );
+    let app_menu = include_str!("../app_menu.rs");
+    assert_eq!(app_menu.matches(".set_as_app_menu()").count(), 1);
+    assert!(
+        app_menu.find("try_state::<AppMenuState>").unwrap()
+            < app_menu.find("let menu = Menu::default").unwrap()
+    );
+}
+
 #[test]
 fn focused_time_title_uses_hours_and_zero_padded_minutes() {
     assert_eq!(format_focus_time(0.0), "0:00");

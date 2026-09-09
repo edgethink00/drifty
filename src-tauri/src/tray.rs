@@ -1,4 +1,5 @@
 mod drift_alarm_status;
+mod menu;
 mod productivity_icon;
 #[cfg(test)]
 mod tests;
@@ -15,7 +16,6 @@ use std::{
 
 use chrono::{DateTime, Local, Utc};
 use tauri::image::Image;
-use tauri::menu::{Menu, MenuBuilder, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, State};
 
@@ -34,6 +34,7 @@ use objc2_foundation::{
 use self::drift_alarm_status::{
     drift_alerts_status_label, drift_summary_label, TrayDriftAlarmStatus,
 };
+use self::menu::{run_menu_update, MenuRow, TrayMenu};
 use self::productivity_icon::{
     latest_tray_productivity_mix, update_tray_productivity_mix, TrayProductivityMix,
 };
@@ -85,7 +86,7 @@ pub(crate) fn latest_tray_language(app: &AppHandle) -> TrayLanguage {
 }
 
 #[tauri::command]
-pub fn tray_set_language(
+pub async fn tray_set_language(
     app: AppHandle,
     state: State<'_, TrayLanguageState>,
     language: String,
@@ -98,12 +99,17 @@ pub fn tray_set_language(
             .map_err(|_| "tray language state lock poisoned".to_string())?;
         *latest = parsed;
     }
-    refresh_tray_menu(&app).map_err(|error| error.to_string())?;
-    let display = latest_tray_display(&app);
-    apply_tray_display_title(&app, display, parsed);
-    // Rebuild the application menu bar so its labels also reflect the new language.
-    let _ = app_menu::setup_app_menu(&app);
-    Ok(())
+    run_menu_update(app, |app| {
+        // Read inside the transaction: an older queued IPC must not overwrite
+        // a newer language using a snapshot captured on its worker thread.
+        let language = latest_tray_language(app);
+        let tray_result = refresh_tray_menu_on_main_thread(app);
+        let display = latest_tray_display(app);
+        apply_tray_display_title(app, display, language);
+        let app_result = app_menu::setup_app_menu(app);
+        tray_result.and(app_result)
+    })
+    .await
 }
 
 pub(crate) fn tray_icon_rect(app: &AppHandle) -> Option<tauri::Rect> {
@@ -266,19 +272,20 @@ pub fn tray_update_productivity_icon(
 }
 
 #[tauri::command]
-pub fn tray_update_drift_alarm_status(
+pub async fn tray_update_drift_alarm_status(
     app: AppHandle,
     state: State<'_, TrayDriftAlarmState>,
     status: TrayDriftAlarmStatus,
 ) -> Result<(), String> {
-    let mut latest = state
-        .0
-        .lock()
-        .map_err(|_| "tray drift alarm state lock poisoned".to_string())?;
-    *latest = status;
-    drop(latest);
+    {
+        let mut latest = state
+            .0
+            .lock()
+            .map_err(|_| "tray drift alarm state lock poisoned".to_string())?;
+        *latest = status;
+    }
 
-    refresh_tray_menu(&app).map_err(|error| error.to_string())
+    run_menu_update(app, refresh_tray_menu_on_main_thread).await
 }
 
 #[tauri::command]
@@ -322,7 +329,10 @@ pub fn tray_update_display_mode(
 }
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
-    let menu = build_tray_menu(app)?;
+    if app.try_state::<TrayMenuState>().is_some() {
+        return Ok(());
+    }
+    let menu = TrayMenu::new(app, tray_menu_rows(&tray_menu_plan(app)))?;
 
     let (initial_rgba, iw, ih) = donut_icon::render(DonutIconRenderInput {
         focus: 0.0,
@@ -336,7 +346,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .icon_as_template(false)
         .tooltip("Drifty")
         .show_menu_on_left_click(true)
-        .menu(&menu)
+        .menu(&menu.menu)
         .on_menu_event(|app, event| {
             let Some(action) = ShellAction::from_tray_menu_id(event.id().as_ref()) else {
                 return;
@@ -346,6 +356,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
 
+    // Keep the root and every potential child alive, even while hidden.
+    app.manage(TrayMenuState(Mutex::new(menu)));
     let app_handle = app.clone();
     let _ = app
         .state::<TrayRefreshWorker>()
@@ -354,123 +366,181 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-fn build_tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let version = app.package_info().version.to_string();
+/// One snapshot of the values rendered by the tray menu.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct TrayMenuPlan {
+    korean: bool,
+    show_pause_options: bool,
+    tracking_action: &'static str,
+    pause_status: Option<String>,
+    drift_alerts_status: String,
+    drift_summary: Option<String>,
+    app_info: String,
+}
+
+struct TrayMenuState(Mutex<TrayMenu<tauri::Wry>>);
+
+fn tray_menu_plan(app: &AppHandle) -> TrayMenuPlan {
     let drift_status = latest_tray_drift_alarm_status(app);
-    let pause_snapshot = tracking_pause::snapshot(app);
-    let tracker_running = drift_status.tracker_running();
     let lang = latest_tray_language(app);
     let ko = lang.is_korean();
-    let app_info = MenuItem::with_id(
-        app,
-        tray_menu_id::APP_INFO,
-        app_version_label(&version),
-        false,
-        None::<&str>,
-    )?;
-    let update_status = MenuItem::with_id(
-        app,
-        tray_menu_id::UPDATE_STATUS,
-        if ko { "업데이트 확인…" } else { UPDATE_STATUS_LABEL },
-        true,
-        None::<&str>,
-    )?;
-    let drift_alerts_status = MenuItem::with_id(
-        app,
-        tray_menu_id::DRIFT_ALERTS_STATUS,
+
+    tray_menu_plan_from(
+        lang,
+        drift_status.tracker_running(),
+        tracking_pause::snapshot(app),
         drift_alerts_status_label(&drift_status, ko),
-        false,
-        None::<&str>,
-    )?;
-    let drift_summary = drift_summary_label(&drift_status, ko)
-        .map(|label| {
-            MenuItem::with_id(app, tray_menu_id::DRIFT_SUMMARY, label, false, None::<&str>)
-        })
-        .transpose()?;
-    let show_pause_options = pause_options_visible(tracker_running, pause_snapshot);
-    let pause_header = MenuItem::with_id(
-        app,
-        tray_menu_id::PAUSE_HEADER,
-        if ko { "활동 기록 일시 정지" } else { "Pause Tracking" },
-        false,
-        None::<&str>,
-    )?;
-    let pause_15 = MenuItem::with_id(
-        app,
-        tray_menu_id::PAUSE_FOR_15,
-        if ko { "15분 동안" } else { "15 Minutes" },
-        show_pause_options,
-        None::<&str>,
-    )?;
-    let pause_30 = MenuItem::with_id(
-        app,
-        tray_menu_id::PAUSE_FOR_30,
-        if ko { "30분 동안" } else { "30 Minutes" },
-        show_pause_options,
-        None::<&str>,
-    )?;
-    let pause_60 = MenuItem::with_id(
-        app,
-        tray_menu_id::PAUSE_FOR_60,
-        if ko { "1시간 동안" } else { "1 Hour" },
-        show_pause_options,
-        None::<&str>,
-    )?;
-    let pause_forever = MenuItem::with_id(
-        app,
-        tray_menu_id::PAUSE_FOREVER,
-        if ko { "직접 다시 시작할 때까지" } else { "Forever" },
-        show_pause_options,
-        None::<&str>,
-    )?;
-    let pause_status = pause_status_label(pause_snapshot, lang)
-        .map(|label| MenuItem::with_id(app, tray_menu_id::PAUSE_STATUS, label, false, None::<&str>))
-        .transpose()?;
+        drift_summary_label(&drift_status, ko),
+        &app.package_info().version.to_string(),
+    )
+}
 
-    let mut builder = MenuBuilder::new(app);
+fn tray_menu_plan_from(
+    lang: TrayLanguage,
+    tracker_running: Option<bool>,
+    pause_snapshot: TrackingPauseSnapshot,
+    drift_alerts_status: String,
+    drift_summary: Option<String>,
+    version: &str,
+) -> TrayMenuPlan {
+    TrayMenuPlan {
+        korean: lang.is_korean(),
+        show_pause_options: pause_options_visible(tracker_running, pause_snapshot),
+        tracking_action: tracking_action_label(tracker_running, pause_snapshot, lang),
+        pause_status: pause_status_label(pause_snapshot, lang),
+        drift_alerts_status,
+        drift_summary,
+        app_info: app_version_label(version),
+    }
+}
 
-    if show_pause_options {
-        builder = builder.items(&[
-            &pause_header,
-            &pause_15,
-            &pause_30,
-            &pause_60,
-            &pause_forever,
-        ]);
-    } else {
-        builder = builder.text(
+fn tray_menu_rows(plan: &TrayMenuPlan) -> Vec<MenuRow> {
+    let ko = plan.korean;
+    let pause = plan.show_pause_options;
+    vec![
+        MenuRow::item(
+            tray_menu_id::PAUSE_HEADER,
+            if ko {
+                "활동 기록 일시 정지"
+            } else {
+                "Pause Tracking"
+            },
+            false,
+            pause,
+        ),
+        MenuRow::item(
+            tray_menu_id::PAUSE_FOR_15,
+            if ko { "15분 동안" } else { "15 Minutes" },
+            pause,
+            pause,
+        ),
+        MenuRow::item(
+            tray_menu_id::PAUSE_FOR_30,
+            if ko { "30분 동안" } else { "30 Minutes" },
+            pause,
+            pause,
+        ),
+        MenuRow::item(
+            tray_menu_id::PAUSE_FOR_60,
+            if ko { "1시간 동안" } else { "1 Hour" },
+            pause,
+            pause,
+        ),
+        MenuRow::item(
+            tray_menu_id::PAUSE_FOREVER,
+            if ko {
+                "직접 다시 시작할 때까지"
+            } else {
+                "Forever"
+            },
+            pause,
+            pause,
+        ),
+        MenuRow::item(
             tray_menu_id::TRACKING_TOGGLE,
-            tracking_action_label(tracker_running, pause_snapshot, lang),
-        );
-    }
-
-    if let Some(status) = &pause_status {
-        builder = builder.item(status);
-    }
-
-    let mut builder = builder.separator().item(&drift_alerts_status);
-
-    if let Some(summary) = &drift_summary {
-        builder = builder.item(summary);
-    }
-
-    builder
-        .separator()
-        .text(tray_menu_id::OPEN_DASHBOARD, if ko { "대시보드 열기" } else { "Open Dashboard" })
-        .text(tray_menu_id::SETTINGS, if ko { "설정" } else { "Settings" })
-        .separator()
-        .items(&[&app_info, &update_status])
-        .separator()
-        .text(tray_menu_id::QUIT, if ko { "Drifty 종료" } else { "Quit" })
-        .build()
+            plan.tracking_action,
+            !pause,
+            !pause,
+        ),
+        MenuRow::item(
+            tray_menu_id::PAUSE_STATUS,
+            plan.pause_status.as_deref().unwrap_or(""),
+            false,
+            plan.pause_status.is_some(),
+        ),
+        MenuRow::separator("tracking-separator"),
+        MenuRow::item(
+            tray_menu_id::DRIFT_ALERTS_STATUS,
+            &plan.drift_alerts_status,
+            false,
+            true,
+        ),
+        MenuRow::item(
+            tray_menu_id::DRIFT_SUMMARY,
+            plan.drift_summary.as_deref().unwrap_or(""),
+            false,
+            plan.drift_summary.is_some(),
+        ),
+        MenuRow::separator("drift-separator"),
+        MenuRow::item(
+            tray_menu_id::OPEN_DASHBOARD,
+            if ko {
+                "대시보드 열기"
+            } else {
+                "Open Dashboard"
+            },
+            true,
+            true,
+        ),
+        MenuRow::item(
+            tray_menu_id::SETTINGS,
+            if ko { "설정" } else { "Settings" },
+            true,
+            true,
+        ),
+        MenuRow::separator("app-info-separator"),
+        MenuRow::item(tray_menu_id::APP_INFO, &plan.app_info, false, true),
+        MenuRow::item(
+            tray_menu_id::UPDATE_STATUS,
+            if ko {
+                "업데이트 확인…"
+            } else {
+                UPDATE_STATUS_LABEL
+            },
+            true,
+            true,
+        ),
+        MenuRow::separator("quit-separator"),
+        MenuRow::item(
+            tray_menu_id::QUIT,
+            if ko { "Drifty 종료" } else { "Quit" },
+            true,
+            true,
+        ),
+    ]
 }
 
 fn refresh_tray_menu(app: &AppHandle) -> tauri::Result<()> {
-    if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        tray.set_menu(Some(build_tray_menu(app)?))?;
-    }
+    let callback_app = app.clone();
+    // Queue the entire read/apply transaction. Never hold a worker-side menu
+    // lock while a Tauri setter waits for the main thread.
+    app.run_on_main_thread(move || {
+        if let Err(error) = refresh_tray_menu_on_main_thread(&callback_app) {
+            eprintln!("[tray] Could not refresh menu: {error}");
+        }
+    })
+}
 
-    Ok(())
+fn refresh_tray_menu_on_main_thread(app: &AppHandle) -> tauri::Result<()> {
+    let Some(state) = app.try_state::<TrayMenuState>() else {
+        return Ok(());
+    };
+    let rows = tray_menu_rows(&tray_menu_plan(app));
+    let mut menu = state
+        .0
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    menu.apply(rows)
 }
 
 fn app_version_label(version: &str) -> String {

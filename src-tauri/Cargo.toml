@@ -64,6 +64,12 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Netwo
 
 [dev-dependencies]
 tempfile = "3"
+tauri = { version = "2", features = ["test"] }
+muda = { version = "0.19", default-features = false }
+
+[[test]]
+name = "native_menu_lifetime"
+harness = false
 
 [target."cfg(windows)".dev-dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_System_IO", "Win32_System_Ioctl"] }

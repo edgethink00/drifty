@@ -1,24 +1,80 @@
+use std::sync::Mutex;
+
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, MenuItemKind, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::shell_action::{self, app_menu_id, ShellAction};
-use crate::tray::latest_tray_language;
+use crate::tray::{latest_tray_language, TrayLanguage};
 
+struct LocalizedItem {
+    item: MenuItemKind<tauri::Wry>,
+    english: &'static str,
+    korean: &'static str,
+}
+
+/// The menu bar is installed once. Keeping its tree and changing labels in
+/// place preserves both muda's click targets and the Dev Mode check state.
+struct AppMenu {
+    _menu: Menu<tauri::Wry>,
+    localized: Vec<LocalizedItem>,
+    language: Option<TrayLanguage>,
+}
+
+struct AppMenuState(Mutex<AppMenu>);
+
+impl AppMenu {
+    fn set_language(&mut self, language: TrayLanguage) -> tauri::Result<()> {
+        if self.language == Some(language) {
+            return Ok(());
+        }
+        self.language = None;
+        for item in &self.localized {
+            let text = if language.is_korean() {
+                item.korean
+            } else {
+                item.english
+            };
+            match &item.item {
+                MenuItemKind::MenuItem(item) => item.set_text(text)?,
+                MenuItemKind::Predefined(item) => item.set_text(text)?,
+                _ => unreachable!("only text and predefined items are localized"),
+            }
+        }
+        self.language = Some(language);
+        Ok(())
+    }
+}
+
+/// Startup and language refresh both run on the main thread. No worker may
+/// hold AppMenuState while a native setter waits for that thread.
 pub(crate) fn setup_app_menu(app: &AppHandle) -> tauri::Result<()> {
-    // Windows WebView2 surfaces Menu::default() as a native menubar
-    // (File/Edit/Window/Help). The product chrome already lives in the
-    // renderer, so attaching that menu makes a Mac app look pasted on.
+    // Windows WebView2 surfaces Menu::default() as a native menubar.
+    // The product chrome already lives in the renderer.
     if cfg!(windows) {
         return Ok(());
+    }
+
+    let language = latest_tray_language(app);
+    if let Some(state) = app.try_state::<AppMenuState>() {
+        return state
+            .0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .set_language(language);
     }
 
     let menu = Menu::default(app)?;
     if !menu.items()?.is_empty() {
         let _ = menu.remove_at(0)?;
     }
-    let app_submenu = build_app_submenu(app)?;
+    let (app_submenu, localized) = build_app_submenu(app, language)?;
     menu.insert(&app_submenu, 0)?;
     menu.set_as_app_menu()?;
+    app.manage(AppMenuState(Mutex::new(AppMenu {
+        _menu: menu,
+        localized,
+        language: Some(language),
+    })));
     Ok(())
 }
 
@@ -68,10 +124,12 @@ fn find_check_menu_item<R: Runtime>(
     Ok(None)
 }
 
-fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
-    let ko = latest_tray_language(app).is_korean();
-    // Use AppKit's bundle-backed About panel directly, avoiding the custom
-    // options path implicated in the observed native icon-encoding crash.
+fn build_app_submenu(
+    app: &AppHandle,
+    language: TrayLanguage,
+) -> tauri::Result<(Submenu<tauri::Wry>, Vec<LocalizedItem>)> {
+    let ko = language.is_korean();
+    // Use AppKit's bundle-backed About panel.
     let about = PredefinedMenuItem::about(app, Some(if ko { "Drifty에 관하여" } else { "About Drifty" }), None)?;
     let check_updates = MenuItem::with_id(
         app,
@@ -133,7 +191,7 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
         Some("CmdOrCtrl+Q"),
     )?;
 
-    Submenu::with_id_and_items(
+    let submenu = Submenu::with_id_and_items(
         app,
         app_menu_id::ROOT,
         "Drifty",
@@ -153,7 +211,50 @@ fn build_app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
             &app_quit_separator,
             &quit,
         ],
-    )
+    )?;
+    let localized = vec![
+        LocalizedItem {
+            item: MenuItemKind::Predefined(about),
+            english: "About Drifty",
+            korean: "Drifty에 관하여",
+        },
+        LocalizedItem {
+            item: MenuItemKind::MenuItem(check_updates),
+            english: "Check for Updates...",
+            korean: "업데이트 확인…",
+        },
+        LocalizedItem {
+            item: MenuItemKind::MenuItem(settings),
+            english: "Settings...",
+            korean: "설정…",
+        },
+        LocalizedItem {
+            item: MenuItemKind::Predefined(services),
+            english: "Services",
+            korean: "서비스",
+        },
+        LocalizedItem {
+            item: MenuItemKind::Predefined(hide),
+            english: "Hide Drifty",
+            korean: "Drifty 가리기",
+        },
+        LocalizedItem {
+            item: MenuItemKind::Predefined(hide_others),
+            english: "Hide Others",
+            korean: "기타 가리기",
+        },
+        LocalizedItem {
+            item: MenuItemKind::Predefined(show_all),
+            english: "Show All",
+            korean: "모두 보기",
+        },
+        LocalizedItem {
+            item: MenuItemKind::MenuItem(quit),
+            english: "Quit Drifty",
+            korean: "Drifty 종료",
+        },
+    ];
+    Ok((submenu, localized))
 }
 
 fn build_short_commit() -> String {
