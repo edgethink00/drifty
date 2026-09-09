@@ -1400,7 +1400,9 @@
   box-shadow: inset 2px 0 0 color-mix(in srgb, var(--accent) 42%, transparent), inset -1px 0 0 color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
-/* Match the Day flow cells' 20% surface tint on the event background. */
+/* Match the Day flow cells' 20% surface tint on the event background. Day cells
+   are flat, so the border alone carries the block edge here: no gloss, and no
+   shadow until a block is genuinely stacked over another (--stacked below). */
 .week-v2-calendar__event {
   left: 4px;
   right: 4px;
@@ -1415,10 +1417,15 @@
   border: 1px solid color-mix(in srgb, var(--event-tone, var(--accent)) 72%, var(--line));
   border-radius: var(--week-calendar-event-radius);
   background: color-mix(in srgb, var(--surface) 20%, var(--event-tone, var(--accent)));
-  box-shadow:
-    0 8px 16px color-mix(in srgb, var(--canvas) 48%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 16%, transparent);
+  box-shadow: none;
   line-height: 1.14;
+}
+
+/* Concurrent activity renders as lanes offset by 12px, so the upper block needs
+   real elevation to say which one is on top. This is the only place the week
+   calendar earns a shadow. */
+.week-v2-calendar__event--stacked {
+  box-shadow: var(--shadow);
 }
 
 .week-v2-calendar__event .category-dot {

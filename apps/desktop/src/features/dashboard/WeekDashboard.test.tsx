@@ -1632,3 +1632,40 @@ describe("WeekDashboard legend", () => {
     expect(within(document.querySelector<HTMLElement>(".category-hover-card")!).getByText("news.example")).toBeTruthy();
   });
 });
+
+describe("WeekDashboard event elevation", () => {
+  it("keeps standalone blocks flat like the Day flow cells", () => {
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([
+        ["2024-01-03", [makeWeekCalendarEvent({ id: "solo" })]],
+      ]),
+    });
+
+    const event = container.querySelector(".week-v2-calendar__event");
+    expect(event).not.toBeNull();
+    expect(event!.className).not.toContain("week-v2-calendar__event--stacked");
+    expect(styles).toMatch(/\.week-v2-calendar__event\s*\{[^}]*box-shadow:\s*none;/);
+  });
+
+  it("lifts only the blocks that overlap another lane", () => {
+    const { container } = renderWeekDashboard({
+      calendarEvents: new Map([
+        ["2024-01-03", [
+          makeWeekCalendarEvent({ id: "lane-0", lane: 0, laneCount: 2 }),
+          makeWeekCalendarEvent({ id: "lane-1", lane: 1, laneCount: 2, topMinutes: 9 * 60 + 30 }),
+        ]],
+      ]),
+    });
+
+    const events = [...container.querySelectorAll(".week-v2-calendar__event")];
+    expect(events).toHaveLength(2);
+    for (const event of events) {
+      expect(event.className).toContain("week-v2-calendar__event--stacked");
+    }
+    expect(styles).toMatch(/\.week-v2-calendar__event--stacked\s*\{[^}]*box-shadow:\s*var\(--shadow\);/);
+  });
+
+  it("drops the gloss hairline the Day surface never had", () => {
+    expect(styles).not.toMatch(/\.week-v2-calendar__event\s*\{[^}]*inset 0 1px 0 color-mix\(in srgb, white 16%/);
+  });
+});

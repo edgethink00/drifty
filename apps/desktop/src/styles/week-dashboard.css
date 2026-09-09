@@ -462,10 +462,12 @@
   border: 1px solid color-mix(in srgb, var(--event-tone, var(--accent)) 72%, var(--line));
   border-radius: var(--week-calendar-event-radius);
   background: color-mix(in srgb, var(--surface) 20%, var(--event-tone, var(--accent)));
-  box-shadow:
-    0 8px 16px color-mix(in srgb, var(--canvas) 48%, transparent),
-    inset 0 1px 0 color-mix(in srgb, white 16%, transparent);
+  box-shadow: none;
   line-height: 1.14;
+}
+
+.week-v2-calendar__event--stacked {
+  box-shadow: var(--shadow);
 }
 
 .week-v2-calendar__event .category-dot {

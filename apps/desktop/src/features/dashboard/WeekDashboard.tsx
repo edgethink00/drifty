@@ -737,7 +737,7 @@ export function WeekDashboard({
                       };
                       return (
                         <article
-                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}${activityInspector?.event.id === event.id ? " is-inspected" : ""}`}
+                          className={`week-v2-calendar__event week-v2-calendar__event--${event.productivity}${event.isShort ? " week-v2-calendar__event--short" : ""}${event.isGroupedCluster ? " week-v2-calendar__event--grouped" : ""}${eventLayout.isTinyEvent ? " week-v2-calendar__event--tiny" : ""}${eventLayout.isMicroEvent ? " week-v2-calendar__event--micro" : ""}${event.laneCount > 1 ? " week-v2-calendar__event--stacked" : ""}${event.laneCount > 2 ? " week-v2-calendar__event--dense" : ""}${eventLayout.isCompactEvent ? " week-v2-calendar__event--compact" : ""}${activityInspector?.event.id === event.id ? " is-inspected" : ""}`}
                           data-funnel-classified-result={event.category !== "unknown" && event.segmentIds.some((id) => classifiedResultIds?.has(id)) ? "true" : undefined}
                           data-event-id={event.id}
                           key={event.id}
