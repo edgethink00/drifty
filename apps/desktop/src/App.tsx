@@ -14,8 +14,6 @@ import {
   buildCategoryDurations,
   buildProductivityDurations,
   classifyActivity,
-  buildDailyTotals,
-  buildDayRibbonSegments,
   buildHourlySummary,
   buildProductivityPersona,
   buildPersonalProjectSliceProjection,
@@ -6243,10 +6241,6 @@ export default function App() {
     }),
     [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, classificationRules, effectiveSelectedDaySegments, showAiClassificationImpact],
   );
-  const dashboardActiveDays = useMemo(
-    () => buildDailyTotals(effectiveDashboardSegments, effectiveDashboardRange.startDay, effectiveDashboardRange.endDay, startOfDayMinutes).filter((day) => day.totalSeconds > 0).length,
-    [effectiveDashboardRange.endDay, effectiveDashboardRange.startDay, effectiveDashboardSegments, startOfDayMinutes],
-  );
   const insightRange = useMemo(() => getInsightPeriodRange(selectedDay, trendsRange, startOfDayMinutes), [selectedDay, startOfDayMinutes, trendsRange]);
   const insightRecentWeekRange = useMemo(() => getInsightPeriodRange(selectedDay, "Week", startOfDayMinutes), [selectedDay, startOfDayMinutes]);
   const shouldBuildInsightModels = activeTab === "trends";
@@ -7241,7 +7235,6 @@ export default function App() {
     [driftAlarmInteractions, insightRange.end, insightRange.start],
   );
   const insightSiteSummary = insightTopSites.slice(0, 5);
-  const dayRibbonSegments = useMemo(() => buildDayRibbonSegments(segments, selectedDay, selectedDayClassificationOptions, startOfDayMinutes), [selectedDayClassificationOptions, segments, selectedDay, startOfDayMinutes]);
   const selectedDayRange = useMemo(() => getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
   const updateSharedCustomEndpoint = useCallback((next: { readonly baseUrl: string; readonly apiKey: string }) => {
     setLocalAiSetup((current) => ({
