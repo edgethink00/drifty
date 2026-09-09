@@ -36,6 +36,12 @@ export type ClassificationActivityRow = {
   endedLabel: string;
   segments: ActivitySegment[];
   hasDetails: boolean;
+  /**
+   * True when the captures in this row carry no title we can name the activity
+   * by, so the row stands for "time we could not identify" rather than one
+   * activity. Those rows cannot back a reusable detail rule.
+   */
+  unidentified: boolean;
 };
 
 export type TimelineItem = ReturnType<typeof formatTimelineItems>[number];
@@ -172,6 +178,35 @@ export function segmentHasUsefulCaptureDetails(segment: ActivitySegment, rowLabe
     || segment.classification?.reason
     || segment.classification?.confidence != null,
   );
+}
+
+/**
+ * True when a capture tells us nothing about what the person was actually
+ * doing: no page/video/window title, no URL we can canonicalize, or a window
+ * title that is just the app's own name (a browser tab-less "ChatGPT" window
+ * says as little as an empty one).
+ *
+ * Such captures cannot back a reusable detail rule, because a rule matches an
+ * exact title or URL and there is none. Keeping them in their own row is what
+ * stops "ChatGPT" from meaning both "the ChatGPT window" and "ChatGPT time we
+ * could not name".
+ */
+export function isUnidentifiedActivitySegment(segment: ActivitySegment): boolean {
+  if ((segment.youtubeTitle || "").trim()) return false;
+  if ((segment.siteTitle || "").trim()) return false;
+  if (canonicalizeClassificationRuleSiteUrl(segment.siteUrl)) return false;
+  const windowTitle = (segment.windowTitle || "").trim();
+  if (!windowTitle) return true;
+  return windowTitle.toLocaleLowerCase() === segment.appName.trim().toLocaleLowerCase();
+}
+
+// A control character keeps this key out of reach of any real capture label,
+// which are sanitized text. Row ids are never rendered; the DOM id derived from
+// them is sanitized and hashed.
+const UNIDENTIFIED_ROW_KEY = "\u0000unidentified";
+
+function unidentifiedRowId(sourceKey: string): string {
+  return `${sourceKey}:${UNIDENTIFIED_ROW_KEY}`;
 }
 
 export function hashStringForDomId(value: string): string {
@@ -317,7 +352,11 @@ export function buildClassificationActivityRows(segs: ActivitySegment[]): Classi
   const ordered = segs.slice().sort((a, b) => a.startedAt.localeCompare(b.startedAt));
   for (const item of ordered) {
     const label = classificationActivityLabel(item);
-    const key = `${classifySegmentSourceKey(item)}:${label}`;
+    // Captures we cannot name never share a row with a real activity, even when
+    // the label fallback makes them look alike.
+    const unidentified = isUnidentifiedActivitySegment(item);
+    const sourceKey = classifySegmentSourceKey(item);
+    const key = unidentified ? unidentifiedRowId(sourceKey) : `${sourceKey}:${label}`;
     const current = rows.get(key) ?? {
       id: key,
       label,
@@ -327,6 +366,7 @@ export function buildClassificationActivityRows(segs: ActivitySegment[]): Classi
       endedLabel: formatTimeLabel(item.endedAt),
       segments: [],
       hasDetails: false,
+      unidentified,
     };
     current.totalSeconds += item.durationSeconds;
     current.count += 1;

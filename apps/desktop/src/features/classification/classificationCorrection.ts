@@ -12,7 +12,24 @@ import {
 } from "@drifty/domain";
 import { normalizeClassificationRuleDetail } from "./classificationViewData";
 
-export type ClassificationCorrectionScope = "surface" | "detail";
+/**
+ * "surface" and "detail" save a reusable rule. "records" is for rows we cannot
+ * name: there is no title or URL to write a rule about, so the correction
+ * applies to the captured records themselves and nothing is promised about
+ * future activity.
+ */
+export type ClassificationCorrectionScope = "surface" | "detail" | "records";
+
+/**
+ * Row pencils ask for a "detail" correction, but a row we could not name has no
+ * title or URL to write a rule about, so it corrects its records instead.
+ */
+export function classificationCorrectionScopeForRow(
+  requestedScope: ClassificationCorrectionScope,
+  row: { readonly unidentified: boolean } | null,
+): ClassificationCorrectionScope {
+  return requestedScope === "detail" && row?.unidentified === true ? "records" : requestedScope;
+}
 
 export type ClassificationCorrectionNotice = {
   readonly kind: "success" | "error";
@@ -130,10 +147,36 @@ export async function persistClassificationCorrection(
     saveRule: (input: ClassificationRuleInput) => Promise<boolean>;
   },
 ): Promise<boolean> {
+  if (draft.scope === "records") throw new Error("Unidentified-activity corrections do not save a rule.");
   return persistence.saveRule({
     targetKind: draft.targetKind, targetValue: draft.targetValue, matchScope: draft.scope,
     detailKind: draft.scope === "detail" ? draft.detailKind : null,
     detailValue: draft.scope === "detail" ? draft.detailValue : null,
     category: draft.category, productivity: draft.productivity, enabled: true, confidence: 1,
   });
+}
+
+/**
+ * Corrections for a row we could not name. A rule needs an exact title or URL
+ * to match on, and there is none, so every capture in the row gets a manual
+ * classification instead. Manual records outrank rules and AI results when the
+ * timeline is recomputed, so the fix stays put.
+ */
+export async function persistUnidentifiedRecordsCorrection(
+  draft: ClassificationCorrectionDraft,
+  segments: readonly ActivitySegment[],
+  persistence: {
+    saveClassifications: (records: ActivityClassificationRecord[]) => Promise<{ saved: number }>;
+  },
+  classifiedAt: string = new Date().toISOString(),
+): Promise<boolean> {
+  if (segments.length === 0) return false;
+  const records = segments.map((segment) => buildClassificationCorrectionRecord({
+    category: draft.category,
+    classifiedAt,
+    productivity: draft.productivity,
+    segment,
+  }));
+  const result = await persistence.saveClassifications(records);
+  return result.saved === records.length;
 }

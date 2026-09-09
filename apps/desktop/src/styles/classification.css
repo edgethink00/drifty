@@ -344,6 +344,14 @@
   min-width: 0;
 }
 
+/* A row of captures we could not name is real time, but not an activity. It
+   keeps its place in the size order and reads one step quieter than the named
+   rows so it is not mistaken for one. */
+.classification-panel-view__activity-row[data-unidentified="true"] .classification-panel-view__activity-copy strong {
+  color: var(--text-soft);
+  font-style: italic;
+}
+
 .classification-panel-view__source-copy > strong {
   display: block;
 }

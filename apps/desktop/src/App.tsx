@@ -438,7 +438,7 @@ import { TrendsPage } from "./features/insights/TrendsPage";
 import { ProfileDialogs } from "./features/profile/ProfileDialogs";
 import { copyTextToClipboard } from "./features/profile/ProfileModals";
 import { useDeferredTabBodyReady } from "./app/useDeferredTabBodyReady";
-import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, persistClassificationCorrection, type ClassificationCorrectionDraft, type ClassificationCorrectionNotice, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
+import { buildClassificationCorrectionDraft, buildClassificationCorrectionRecord, classificationCorrectionScopeForRow, persistClassificationCorrection, persistUnidentifiedRecordsCorrection, type ClassificationCorrectionDraft, type ClassificationCorrectionNotice, type ClassificationCorrectionScope } from "./features/classification/classificationCorrection";
 import { captureCorrectionEvidence } from "./features/classification/correctionEvidence";
 import { learnLivingSoulFromFeedback, type SoulLearningProvider } from "./features/classification/soulLearning";
 import type { LocalAiClassificationOptions } from "./features/settings/localAiClassificationOptions";
@@ -3529,18 +3529,21 @@ export default function App() {
     }
   }
   function startClassificationCorrection(scope: ClassificationCorrectionScope, rowId: string | null = null) {
-    if (classificationCorrectionDraft?.scope === scope && classificationCorrectionDraft.rowId === rowId) {
+    const sourceRow = rowId ? classificationActivityRows.find((row) => row.id === rowId) ?? null : null;
+    // A row we could not name has no title or URL to write a rule about, so its
+    // pencil edits the captured records instead of promising a future rule.
+    const effectiveScope = classificationCorrectionScopeForRow(scope, sourceRow);
+    if (classificationCorrectionDraft?.scope === effectiveScope && classificationCorrectionDraft.rowId === rowId) {
       setClassificationCorrectionDraft(null);
       setClassificationCorrectionNotice(null);
       return;
     }
-    const sourceRow = rowId ? classificationActivityRows.find((row) => row.id === rowId) ?? null : null;
     const sourceSegment = sourceRow?.segments[0]
       ?? (rowId ? null : classificationActivityRows[0]?.segments[0] ?? classificationSourceSegments.find((segment) => classifySegmentSourceKey(segment) === effectiveClassifySourceId) ?? null);
     if (!sourceSegment) return;
     const draft = buildClassificationCorrectionDraft({
       rowId,
-      scope,
+      scope: effectiveScope,
       segment: sourceSegment,
       classificationOptions,
       displayLabel: sourceRow?.label ?? selectedClassificationSourceSummary?.label ?? null,
@@ -3548,7 +3551,7 @@ export default function App() {
     if (!draft) return;
     setClassificationCorrectionNotice(null);
     setClassificationCorrectionDraft(draft);
-    if (scope === "detail" && rowId) {
+    if (effectiveScope !== "surface" && rowId) {
       setExpandedClassificationActivityRows((current) => {
         const next = new Set(current);
         next.add(rowId);
@@ -3569,6 +3572,27 @@ export default function App() {
     setClassificationCorrectionNotice(null);
     setClassificationCorrectionSaving(true);
     try {
+      if (draft.scope === "records") {
+        const row = draft.rowId ? classificationActivityRows.find((item) => item.id === draft.rowId) ?? null : null;
+        const saved = row
+          ? await persistUnidentifiedRecordsCorrection(draft, row.segments, { saveClassifications: trackerClient.saveClassifications })
+          : false;
+        if (!saved) {
+          setClassificationCorrectionNotice({ kind: "error", message: localization.t("classification.correction.saveError") });
+          return;
+        }
+        // Nothing is taught to the soul here on purpose: these captures carry no
+        // title, so they are not an example of anything.
+        setClassificationCorrectionDraft(null);
+        setClassificationCorrectionNotice({
+          kind: "success",
+          message: localization.t("classification.correction.savedRecords", { count: row?.segments.length ?? 0 }),
+        });
+        clearLocalActivityCaches();
+        await refresh(selectedDayRef.current);
+        return;
+      }
+
       let feedbackSegment: ActivitySegment | null = null;
       if (draft.scope === "detail" && draft.rowId) {
         const row = classificationActivityRows.find((item) => item.id === draft.rowId) ?? null;

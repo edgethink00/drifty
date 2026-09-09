@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
-import { classificationActivityLabel, classificationSourceLabel, windowTitleMatchesSiteTitle } from "./classificationViewData";
+import { buildClassificationActivityRows, classificationActivityLabel, classificationSourceLabel, isUnidentifiedActivitySegment, windowTitleMatchesSiteTitle } from "./classificationViewData";
 
 function segment(overrides: Partial<ActivitySegment>): ActivitySegment {
   return {
@@ -99,5 +99,41 @@ describe("windowTitleMatchesSiteTitle", () => {
   it("treats missing titles as compatible", () => {
     expect(windowTitleMatchesSiteTitle("", "새 탭", null)).toBe(true);
     expect(windowTitleMatchesSiteTitle("Video", "", null)).toBe(true);
+  });
+});
+
+describe("activity rows we could not identify", () => {
+  const chatgpt = (overrides: Partial<ActivitySegment>): ActivitySegment => segment({
+    appName: "ChatGPT", bundleId: "com.openai.chat", source: "nsworkspace", ...overrides,
+  });
+
+  it("counts a missing title and a title that is just the app name as unidentified", () => {
+    expect(isUnidentifiedActivitySegment(chatgpt({ windowTitle: undefined }))).toBe(true);
+    expect(isUnidentifiedActivitySegment(chatgpt({ windowTitle: "   " }))).toBe(true);
+    expect(isUnidentifiedActivitySegment(chatgpt({ windowTitle: "ChatGPT" }))).toBe(true);
+    expect(isUnidentifiedActivitySegment(chatgpt({ windowTitle: "릴리스 노트 초안 다듬기 - drifty_mac" }))).toBe(false);
+    expect(isUnidentifiedActivitySegment(chatgpt({ windowTitle: undefined, siteTitle: "ChatGPT" }))).toBe(false);
+    expect(isUnidentifiedActivitySegment(chatgpt({ windowTitle: "ChatGPT", siteUrl: "https://chatgpt.com/c/abc" }))).toBe(false);
+  });
+
+  it("keeps unnamed captures out of the row of a real activity that shares the fallback label", () => {
+    const rows = buildClassificationActivityRows([
+      chatgpt({ id: "a", startedAt: "2026-09-07T01:01:08", endedAt: "2026-09-07T01:01:44", durationSeconds: 36 }),
+      chatgpt({ id: "b", startedAt: "2026-09-07T01:02:10", endedAt: "2026-09-07T01:05:31", durationSeconds: 201, windowTitle: "ChatGPT" }),
+      chatgpt({ id: "c", startedAt: "2026-09-07T00:59:16", endedAt: "2026-09-07T01:01:10", durationSeconds: 114, windowTitle: "주간 계획 점검 - drifty_mac" }),
+    ]);
+
+    const unidentified = rows.filter((row) => row.unidentified);
+    expect(unidentified).toHaveLength(1);
+    expect(unidentified[0].segments.map((item) => item.id)).toEqual(["a", "b"]);
+    expect(rows.filter((row) => !row.unidentified).map((row) => row.label)).toEqual(["주간 계획 점검 - drifty_mac"]);
+  });
+
+  it("leaves the unidentified row in the same size order as every other row", () => {
+    const rows = buildClassificationActivityRows([
+      chatgpt({ id: "small", startedAt: "2026-09-07T01:00:00", endedAt: "2026-09-07T01:00:10", durationSeconds: 10 }),
+      chatgpt({ id: "big", startedAt: "2026-09-07T02:00:00", endedAt: "2026-09-07T02:10:00", durationSeconds: 600, windowTitle: "긴 작업 - drifty_mac" }),
+    ]);
+    expect(rows.map((row) => row.unidentified)).toEqual([false, true]);
   });
 });

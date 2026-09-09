@@ -202,7 +202,7 @@ export function ClassificationPage({
   useEffect(() => {
     if (classificationCorrectionNotice?.kind !== "success") return;
     const settled = lastDraftRef.current;
-    const rowId = settled?.scope === "detail" ? settled.rowId : "__surface__";
+    const rowId = settled && settled.scope !== "surface" ? settled.rowId : "__surface__";
     setRecentlyCorrectedRowId(rowId ?? null);
     const timer = window.setTimeout(() => {
       setRecentlyCorrectedRowId(null);
@@ -220,21 +220,31 @@ export function ClassificationPage({
     if (!classificationCorrectionDraft || !selectedClassificationSourceSummary) return null;
     const draft = classificationCorrectionDraft;
     const isDetailCorrection = draft.scope === "detail";
-    const anchorElement = isDetailCorrection
+    const isRecordsCorrection = draft.scope === "records";
+    const isRowCorrection = draft.scope !== "surface";
+    const correctedRow = draft.rowId ? classificationActivityRows.find((row) => row.id === draft.rowId) ?? null : null;
+    const anchorElement = isRowCorrection
       ? (draft.rowId ? detailCorrectionButtonRefs.current.get(draft.rowId) ?? null : null)
       : surfaceCorrectionButtonRef.current;
     const targetLabel = draft.displayLabel ?? draft.targetValue;
     const detailKindLabel = localizedCorrectionDetailLabel(draft.detailKind, t);
     const surfaceKindLabel = t(selectedClassificationSourceSummary.usageKind === "site" ? "classification.domain" : "classification.app");
-    const scopeDescription = isDetailCorrection
-      ? t("classification.correction.detailScope", { detail: detailKindLabel })
-      : t("classification.correction.surfaceScope", { target: targetLabel });
-    const scopeBadge = isDetailCorrection
-      ? t("classification.correction.detailBadge", { detail: detailKindLabel })
-      : t("classification.correction.surfaceBadge", { surface: surfaceKindLabel });
-    const title = isDetailCorrection
-      ? (draft.detailValue && draft.detailValue !== targetLabel ? draft.detailValue : targetLabel)
-      : selectedClassificationSourceSummary.label;
+    const recordCount = correctedRow?.count ?? 0;
+    const scopeDescription = isRecordsCorrection
+      ? t("classification.correction.recordsScope", { count: recordCount })
+      : isDetailCorrection
+        ? t("classification.correction.detailScope", { detail: detailKindLabel })
+        : t("classification.correction.surfaceScope", { target: targetLabel });
+    const scopeBadge = isRecordsCorrection
+      ? t("classification.correction.recordsBadge")
+      : isDetailCorrection
+        ? t("classification.correction.detailBadge", { detail: detailKindLabel })
+        : t("classification.correction.surfaceBadge", { surface: surfaceKindLabel });
+    const title = isRecordsCorrection
+      ? t("classification.unidentifiedActivity")
+      : isDetailCorrection
+        ? (draft.detailValue && draft.detailValue !== targetLabel ? draft.detailValue : targetLabel)
+        : selectedClassificationSourceSummary.label;
     const identity = selectedClassificationSourceSummary.usageKind === "site" && selectedClassificationSourceSummary.siteDomain
       ? <SiteFavicon domain={selectedClassificationSourceSummary.siteDomain} size={18} fallbackIconSrc={appIcons[selectedClassificationSourceSummary.appName] ?? null} />
       : <AppGlyph appName={selectedClassificationSourceSummary.usageKind === "site" ? selectedClassificationSourceSummary.label : selectedClassificationSourceSummary.appName} iconSrc={appIcons[selectedClassificationSourceSummary.appName] ?? null} size="sm" />;
@@ -249,7 +259,7 @@ export function ClassificationPage({
         title={title}
         scopeBadge={scopeBadge}
         scopeDescription={scopeDescription}
-        ariaLabel={t(isDetailCorrection ? "classification.correction.detailAria" : "classification.correction.surfaceAria")}
+        ariaLabel={t(isRecordsCorrection ? "classification.correction.recordsAria" : isDetailCorrection ? "classification.correction.detailAria" : "classification.correction.surfaceAria")}
         originalCategory={draft.originalCategory}
         originalProductivity={draft.originalProductivity}
         t={t}
@@ -504,12 +514,24 @@ export function ClassificationPage({
                         const startedLabel = firstSegment ? formatLocalizedTimeLabel(firstSegment.startedAt, effectiveLanguage) : row.startedLabel;
                         const endedLabel = lastSegment ? formatLocalizedTimeLabel(lastSegment.endedAt, effectiveLanguage) : row.endedLabel;
                         const rowMeta = `${row.count === 1 ? t("classification.activityCountOne") : t("classification.activityCount", { count: row.count })} · ${startedLabel} - ${endedLabel}`;
+                        // A row we could not name is not an activity, so it is
+                        // labelled as unidentified time instead of borrowing the
+                        // app or domain name.
+                        const rowLabel = row.unidentified ? t("classification.unidentifiedActivity") : row.label;
+                        const isRowCorrecting = Boolean(
+                          classificationCorrectionDraft
+                          && classificationCorrectionDraft.scope !== "surface"
+                          && classificationCorrectionDraft.rowId === row.id,
+                        );
+                        const rowCorrectionLabel = row.unidentified
+                          ? t("classification.correctRecords", { count: row.count })
+                          : t("classification.correctDetail", { label: rowLabel });
                         const isExpanded = row.hasDetails && expandedClassificationActivityRows.has(row.id);
                         const detailsId = classificationActivityDetailsId(row.id);
                         const rowSummary = (
                           <>
                             <div className="classification-panel-view__activity-copy">
-                              <strong title={row.label}>{row.label}</strong>
+                              <strong title={rowLabel}>{rowLabel}</strong>
                               <span title={rowMeta}>{rowMeta}</span>
                             </div>
                             <div className="classification-panel-view__activity-measure">
@@ -521,7 +543,7 @@ export function ClassificationPage({
                           </>
                         );
                         return (
-                          <div key={row.id} className="classification-panel-view__activity-row" role="listitem" data-expandable={String(row.hasDetails)} data-expanded={String(isExpanded)} data-correcting={String(classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id)} data-recently-corrected={String(recentlyCorrectedRowId === row.id)}>
+                          <div key={row.id} className="classification-panel-view__activity-row" role="listitem" data-expandable={String(row.hasDetails)} data-expanded={String(isExpanded)} data-unidentified={String(row.unidentified)} data-correcting={String(isRowCorrecting)} data-recently-corrected={String(recentlyCorrectedRowId === row.id)}>
                             <div className="classification-panel-view__activity-head">
                               {row.hasDetails ? (
                                 <button
@@ -544,11 +566,11 @@ export function ClassificationPage({
                                 type="button"
                                 ref={registerDetailCorrectionButton(row.id)}
                                 className="app-btn app-btn--quiet app-btn--compact classification-correction__detail-button"
-                                aria-label={t("classification.correctDetail", { label: row.label })}
-                                title={t("classification.correctDetail", { label: row.label })}
-                                aria-expanded={classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id}
+                                aria-label={rowCorrectionLabel}
+                                title={rowCorrectionLabel}
+                                aria-expanded={isRowCorrecting}
                                 aria-haspopup="dialog"
-                                data-active={String(classificationCorrectionDraft?.scope === "detail" && classificationCorrectionDraft.rowId === row.id)}
+                                data-active={String(isRowCorrecting)}
                                 onClick={() => onStartClassificationDetailCorrection(row.id)}
                               >
                                 <ClassificationEditGlyph />
@@ -559,7 +581,7 @@ export function ClassificationPage({
                               const surfaceDetails = captureRowSurfaceDetails(row.segments).map((detail) => localizeCaptureSurfaceDetail(detail, effectiveLanguage));
                               const summary = classificationRowSummary(row.segments, classificationOptions);
                               return (
-                                <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={t("classification.captureDetailsFor", { label: row.label })}>
+                                <div id={detailsId} className="classification-panel-view__activity-details" role="region" aria-label={t("classification.captureDetailsFor", { label: rowLabel })}>
                                   <div className="classification-panel-view__activity-overview">
                                     {surfaceDetails.length > 0 ? (
                                       <div className="classification-panel-view__activity-surface" aria-label={t("classification.captureSurface")}>
@@ -582,7 +604,7 @@ export function ClassificationPage({
                                   </div>
                                   <div className="classification-panel-view__capture-timeline">
                                     <span className="label-mono">{t("classification.captureSlices")}</span>
-                                    <div className="classification-panel-view__capture-slice-list" role="list" aria-label={t("classification.captureSlicesFor", { label: row.label })}>
+                                    <div className="classification-panel-view__capture-slice-list" role="list" aria-label={t("classification.captureSlicesFor", { label: rowLabel })}>
                                       {row.segments.map((segment, index) => {
                                         const segmentRange = `${formatLocalizedTimeLabel(segment.startedAt, effectiveLanguage)} - ${formatLocalizedTimeLabel(segment.endedAt, effectiveLanguage)}`;
                                         const segmentDuration = formatLocalizedCompactDurationFromSeconds(segment.durationSeconds, effectiveLanguage);

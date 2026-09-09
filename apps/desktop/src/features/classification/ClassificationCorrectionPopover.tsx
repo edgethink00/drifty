@@ -41,6 +41,23 @@ export function getClassificationCorrectionPopoverPlacement(
   return { left, top: Math.min(Math.max(preferredTop, pad), maxTop), side };
 }
 
+/**
+ * Where the card goes when its trigger is gone — a row that scrolled out of the
+ * list, or a ref that never attached. The card stays hidden until it has a
+ * placement, so without this an open editor would be invisible with no way to
+ * tell it apart from a dead button.
+ */
+export function getClassificationCorrectionPopoverFallbackPlacement(
+  width: number,
+  height: number,
+  viewport: { readonly width: number; readonly height: number },
+): ClassificationCorrectionPopoverPlacement {
+  const pad = CLASSIFICATION_CORRECTION_POPOVER_VIEWPORT_PADDING;
+  const left = Math.min(Math.max((viewport.width - width) / 2, pad), Math.max(pad, viewport.width - width - pad));
+  const top = Math.min(Math.max((viewport.height - height) / 2, pad), Math.max(pad, viewport.height - height - pad));
+  return { left, top, side: "below" };
+}
+
 function moveRadioValue<T>(values: readonly T[], current: T, key: string): T | null {
   if (!values.length) return null;
   const index = Math.max(0, values.indexOf(current));
@@ -111,14 +128,19 @@ export function ClassificationCorrectionPopover({
   const changed = draft.category !== originalCategory || draft.productivity !== originalProductivity;
 
   const updatePlacement = useCallback(() => {
-    if (!anchorElement || !cardRef.current) return;
-    const anchorRect = anchorElement.getBoundingClientRect();
+    if (!cardRef.current) return;
     const height = cardRef.current.getBoundingClientRect().height;
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (!anchorElement) {
+      setPlacement(getClassificationCorrectionPopoverFallbackPlacement(CLASSIFICATION_CORRECTION_POPOVER_WIDTH, height, viewport));
+      return;
+    }
+    const anchorRect = anchorElement.getBoundingClientRect();
     setPlacement(getClassificationCorrectionPopoverPlacement(
       anchorRect,
       CLASSIFICATION_CORRECTION_POPOVER_WIDTH,
       height,
-      { width: window.innerWidth, height: window.innerHeight },
+      viewport,
     ));
   }, [anchorElement]);
 
