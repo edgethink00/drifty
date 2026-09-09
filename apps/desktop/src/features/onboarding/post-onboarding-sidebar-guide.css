@@ -42,16 +42,16 @@
 
 .post-onboarding-sidebar-guide__highlight {
   position: fixed;
-  left: calc(var(--sidebar-guide-anchor-left) - 5px);
-  top: calc(var(--sidebar-guide-anchor-top) - 5px);
-  width: calc(var(--sidebar-guide-anchor-width) + 10px);
-  height: calc(var(--sidebar-guide-anchor-height) + 10px);
+  left: calc(var(--sidebar-guide-anchor-left) - var(--sidebar-guide-highlight-padding));
+  top: calc(var(--sidebar-guide-anchor-top) - var(--sidebar-guide-highlight-padding));
+  width: calc(var(--sidebar-guide-anchor-width) + 2 * var(--sidebar-guide-highlight-padding));
+  height: calc(var(--sidebar-guide-anchor-height) + 2 * var(--sidebar-guide-highlight-padding));
   border: 1px solid color-mix(in srgb, var(--accent) 64%, var(--line-strong));
-  border-radius: var(--radius-md);
+  border-radius: var(--sidebar-guide-highlight-radius);
   background: color-mix(in srgb, var(--accent-soft) 7%, transparent);
   box-shadow:
     0 8px 24px color-mix(in srgb, var(--text) 7%, transparent),
-    0 0 0 3px color-mix(in srgb, var(--accent) 9%, transparent);
+    inset 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent);
   animation: sidebar-guide-highlight-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 

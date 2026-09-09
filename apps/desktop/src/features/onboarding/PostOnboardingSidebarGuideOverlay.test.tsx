@@ -140,6 +140,30 @@ describe("PostOnboardingSidebarGuide", () => {
     }
   });
 
+  it("refreshes the anchor after a transform finishes without a resize", async () => {
+    const anchor = document.createElement("div");
+    anchor.dataset.sidebarGuideAnchor = "account";
+    const rect = vi.spyOn(anchor, "getBoundingClientRect");
+    const bounds = (top: number) => ({
+      left: 2, top, right: 203, bottom: top + 334,
+      width: 201, height: 334, x: 2, y: top, toJSON: () => ({}),
+    });
+    rect.mockReturnValue(bounds(366));
+    document.body.append(anchor);
+    try {
+      render(<PostOnboardingSidebarGuide step="account"
+        onAdvance={vi.fn()} onBack={vi.fn()} onDismiss={vi.fn()} />);
+      const guide = screen.getByRole("region").parentElement!;
+      expect(guide.parentElement).toBe(document.body);
+      await waitFor(() => expect(guide.style.getPropertyValue("--sidebar-guide-anchor-top")).toBe("366px"));
+      rect.mockReturnValue(bounds(370));
+      fireEvent.transitionEnd(anchor, { propertyName: "transform" });
+      await waitFor(() => expect(guide.style.getPropertyValue("--sidebar-guide-anchor-top")).toBe("370px"));
+    } finally {
+      anchor.remove();
+    }
+  });
+
   it("dismisses on Escape and labels the final action", () => {
     const onDismiss = vi.fn();
     render(

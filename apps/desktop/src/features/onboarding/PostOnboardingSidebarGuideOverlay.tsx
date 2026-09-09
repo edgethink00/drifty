@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useLocalization } from "../localization/LocalizationContext";
 import {
   POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
@@ -17,6 +18,8 @@ type GuideRect = {
 
 type GuideLayout = {
   readonly anchor: GuideRect;
+  readonly highlightPadding?: number;
+  readonly highlightRadius?: string;
   readonly panelLeft: number;
   readonly panelTop: number;
 };
@@ -132,30 +135,56 @@ export function PostOnboardingSidebarGuide({
           setLayout(null);
           return;
         }
-        setLayout(computePostOnboardingSidebarGuideLayout({
-          anchor,
-          panelHeight: panel.offsetHeight || 184,
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight,
-        }));
+        // Keep the complete ring visible without changing its shape at one edge.
+        const highlightPadding = Math.max(0, Math.min(5,
+          anchor.left - 1, anchor.top - 1,
+          window.innerWidth - anchor.right - 1, window.innerHeight - anchor.bottom - 1,
+        ));
+        const radius = Number.parseFloat(window.getComputedStyle(anchorElement).borderTopLeftRadius) || 0;
+        setLayout({
+          ...computePostOnboardingSidebarGuideLayout({
+            anchor,
+            panelHeight: panel.offsetHeight || 184,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+          }),
+          highlightPadding,
+          highlightRadius: `${radius + highlightPadding}px`,
+        });
+        // ResizeObserver does not report transforms during the menu's entrance.
+        if (anchorElement.getAnimations?.().some((animation) => animation.playState === "running")) update();
       });
     };
+
+    // Unrelated buttons and charts must not trigger layout work for this guide.
+    const updateForAnchorMotion = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = resolveAnchor(step);
+      if (anchor && (target === anchor || target.contains(anchor))) update();
+    };
+    const motionEvents = ["transitionrun", "transitionend", "transitioncancel",
+      "animationstart", "animationend", "animationcancel"] as const;
 
     update();
     resizeObserver?.observe(panel);
     mutationObserver?.observe(document.body, { childList: true, subtree: true });
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    motionEvents.forEach((name) => document.addEventListener(name, updateForAnchorMotion, true));
     return () => {
       window.cancelAnimationFrame(frame);
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      motionEvents.forEach((name) => document.removeEventListener(name, updateForAnchorMotion, true));
     };
   }, [step]);
 
   const style = layout ? {
+    "--sidebar-guide-highlight-padding": `${layout.highlightPadding ?? 5}px`,
+    "--sidebar-guide-highlight-radius": layout.highlightRadius,
     "--sidebar-guide-anchor-left": `${layout.anchor.left}px`,
     "--sidebar-guide-anchor-top": `${layout.anchor.top}px`,
     "--sidebar-guide-anchor-right": `${layout.anchor.right}px`,
@@ -166,7 +195,7 @@ export function PostOnboardingSidebarGuide({
     "--sidebar-guide-panel-top": `${layout.panelTop}px`,
   } as CSSProperties : undefined;
 
-  return (
+  return createPortal(
     <div
       className={`post-onboarding-sidebar-guide${layout ? " post-onboarding-sidebar-guide--positioned" : ""}`}
       data-step={step}
@@ -234,6 +263,7 @@ export function PostOnboardingSidebarGuide({
           </div>
         </div>
       </aside>
-    </div>
+    </div>,
+    document.body,
   );
 }
