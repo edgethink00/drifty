@@ -8,8 +8,9 @@ vi.mock("./updatePolicy", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./updatePolicy")>();
   return { ...actual, fetchUpdatePolicy: vi.fn(async (version: string) => actual.fallbackUpdatePolicy(version)) };
 });
+import { acquireUpdateOperation, pauseUpdatesForVersionTest, resumeUpdatesAfterVersionTest } from "./versionSwitchState";
 import { useUpdateController } from "./useUpdateController";
-import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY } from "./updatePolicy";
+import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, fetchUpdatePolicy, fallbackUpdatePolicy } from "./updatePolicy";
 function update(version = "1.10.9") {
   return { version, body: null, close: vi.fn().mockResolvedValue(undefined), download: vi.fn().mockResolvedValue(undefined), install: vi.fn().mockResolvedValue(undefined), downloadAndInstall: vi.fn().mockResolvedValue(undefined) };
 }
@@ -98,4 +99,74 @@ describe("manual and automatic update interaction", () => {
     unmount();
     await waitFor(() => expect(release.close).toHaveBeenCalledTimes(1));
   });
+});
+
+
+describe("version testing coordination", () => {
+  it("suppresses automatic checks during a pause but keeps manual recovery available", async () => {
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+    act(() => pauseUpdatesForVersionTest());
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    expect(checkMock).not.toHaveBeenCalled();
+    expect(result.current.backgroundUpdatesEnabled).toBe(false);
+    checkMock.mockResolvedValue(null);
+    await act(async () => { await result.current.handleCheckForUpdates("manual"); });
+    expect(checkMock).toHaveBeenCalledTimes(1);
+    act(() => resumeUpdatesAfterVersionTest());
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    expect(checkMock).toHaveBeenCalledTimes(2);
+  });
+  it("discards an automatic result that arrives after the test pause starts", async () => {
+    let resolve!: (value: ReturnType<typeof update>) => void;
+    checkMock.mockReturnValue(new Promise(r => { resolve = r; }));
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+    let pending!: Promise<unknown>;
+    act(() => { pending = result.current.handleCheckForUpdates("automatic"); });
+    act(() => pauseUpdatesForVersionTest());
+    const next = update();
+    await act(async () => { resolve(next); await pending; });
+    expect(next.download).not.toHaveBeenCalled();
+    expect(next.close).toHaveBeenCalled();
+    expect(result.current.availableUpdate).toBeNull();
+  });
+  it("does not install stable updates while another channel owns the installer", async () => {
+    const next = update(); checkMock.mockResolvedValue(next);
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: false }));
+    await act(async () => { await result.current.handleCheckForUpdates("manual"); });
+    const release = acquireUpdateOperation();
+    try { await act(async () => { await result.current.handleInstallUpdate(); });
+      expect(next.downloadAndInstall).not.toHaveBeenCalled();
+    } finally { release?.(); }
+  });
+});
+
+it("allows an explicitly selected stable recovery install while the seven-day pause remains active", async () => {
+  const next = update("1.11.0"); checkMock.mockResolvedValue(next);
+  const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+  act(() => pauseUpdatesForVersionTest());
+  const deadline = localStorage.getItem("drifty.updates.nextAutomaticCheckAt.v1");
+  await act(async () => { await result.current.handleCheckForUpdates("manual"); });
+  expect(result.current.shouldShowAvailableUpdateDialog).toBe(true);
+  expect(next.download).not.toHaveBeenCalled();
+  await act(async () => { await result.current.handleInstallUpdate(); });
+  expect(next.downloadAndInstall).toHaveBeenCalledTimes(1);
+  expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+  expect(localStorage.getItem("drifty.updates.nextAutomaticCheckAt.v1")).toBe(deadline);
+  expect(localStorage.getItem("drifty.updates.backgroundApply.v2")).toBe("0");
+});
+
+it("discards a scheduled update when the pause begins during policy loading", async () => {
+  const next = update("1.11.0"); checkMock.mockResolvedValue(next);
+  let finish!: (policy: ReturnType<typeof fallbackUpdatePolicy>) => void;
+  vi.mocked(fetchUpdatePolicy).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+  const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+  let pending!: Promise<unknown>;
+  act(() => { pending = result.current.handleCheckForUpdates("automatic"); });
+  await waitFor(() => expect(fetchUpdatePolicy).toHaveBeenCalledWith("1.11.0"));
+  act(() => pauseUpdatesForVersionTest());
+  await act(async () => { finish(fallbackUpdatePolicy("1.11.0")); await pending; });
+  expect(result.current.availableUpdate).toBeNull();
+  expect(next.close).toHaveBeenCalledTimes(1);
+  expect(next.download).not.toHaveBeenCalled();
+  expect(next.install).not.toHaveBeenCalled();
 });

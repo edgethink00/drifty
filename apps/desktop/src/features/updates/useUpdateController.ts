@@ -1,3 +1,4 @@
+import { acquireUpdateOperation, readVersionTestPauseUntil, useVersionTestPauseUntil } from "./versionSwitchState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
@@ -64,6 +65,7 @@ function releaseUpdateResource(update: AvailableUpdate | null): void {
 export function useUpdateController({
   backgroundPreparationSupported,
 }: UseUpdateControllerOptions): UseUpdateControllerResult {
+  const versionTestPauseUntil = useVersionTestPauseUntil();
   const updaterCheckingRef = useRef(false);
   const manualCheckRequestedRef = useRef(false);
   const updaterOperatingRef = useRef(false);
@@ -82,6 +84,10 @@ export function useUpdateController({
   const [updaterInstalling, setUpdaterInstalling] = useState(false);
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (versionTestPauseUntil > Date.now()) setBackgroundUpdatesEnabled(false);
+  }, [versionTestPauseUntil]);
 
   useEffect(() => {
     updateInteractionsRef.current = updateInteractions;
@@ -117,6 +123,8 @@ export function useUpdateController({
   ) => {
     if (updaterOperatingRef.current) return;
 
+    const releaseOperation = acquireUpdateOperation();
+    if (!releaseOperation) return;
     updaterOperatingRef.current = true;
     setUpdaterInstalling(true);
     setUpdaterError(null);
@@ -131,6 +139,7 @@ export function useUpdateController({
       clearPostUpdateRelaunchFocusPending();
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
     } finally {
+      releaseOperation();
       updaterOperatingRef.current = false;
       setUpdaterInstalling(false);
     }
@@ -142,6 +151,9 @@ export function useUpdateController({
   ): Promise<boolean> => {
     if (updaterOperatingRef.current) return false;
 
+    if (readVersionTestPauseUntil() > Date.now()) return false;
+    const releaseOperation = acquireUpdateOperation();
+    if (!releaseOperation) return false;
     updaterOperatingRef.current = true;
     setUpdaterDownloading(true);
     setUpdaterError(null);
@@ -163,6 +175,7 @@ export function useUpdateController({
       setUpdaterError(`Update preparation failed: ${toErrorMessage(nextError)}`);
       return false;
     } finally {
+      releaseOperation();
       updaterOperatingRef.current = false;
       setUpdaterDownloading(false);
       setUpdaterInstalling(false);
@@ -173,6 +186,7 @@ export function useUpdateController({
     mode: UpdateCheckMode = "manual",
   ): Promise<UpdateCheckResult | void> => {
     if (updaterOperatingRef.current) return;
+    if (mode === "automatic" && readVersionTestPauseUntil() > Date.now()) return;
     if (updaterCheckingRef.current) {
       // A click during the scheduled check upgrades that same request to a
       // visible manual result instead of silently discarding the user's action.
@@ -195,6 +209,10 @@ export function useUpdateController({
 
     try {
       const nextUpdate = await check();
+      if (!manualCheckRequestedRef.current && readVersionTestPauseUntil() > Date.now()) {
+        releaseUpdateResource(nextUpdate);
+        return;
+      }
       if (nextUpdate) {
         if (preparedUpdateVersionRef.current === nextUpdate.version) {
           releaseUpdateResource(nextUpdate);
@@ -204,6 +222,10 @@ export function useUpdateController({
 
         const nowMs = Date.now();
         const nextPolicy = await fetchUpdatePolicy(nextUpdate.version);
+        if (!manualCheckRequestedRef.current && readVersionTestPauseUntil() > Date.now()) {
+          releaseUpdateResource(nextUpdate);
+          return;
+        }
         const nextInteractions = updateStoredInteractions((currentInteractions) => {
           const seenInteractions = upsertUpdateSeen(currentInteractions, nextUpdate.version, nowMs);
           return manualCheckRequestedRef.current ? markUpdateInteracted(seenInteractions, nextUpdate.version, nowMs) : seenInteractions;
@@ -327,6 +349,7 @@ export function useUpdateController({
   const availableUpdateInteraction = offeredUpdateVersion ? updateInteractions[offeredUpdateVersion] ?? null : null;
   const shouldShowAvailableUpdateDialog = Boolean(
     availableUpdate
+    && (availableUpdateSource === "manual" || versionTestPauseUntil <= Date.now())
     && currentUpdatePolicy
     && dismissedPromptVersion !== availableUpdate.version
     && (

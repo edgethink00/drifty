@@ -273,6 +273,11 @@ fn bounded_tracker_status_message(message: &str) -> String {
 }
 
 impl TrackerController {
+    pub(crate) fn backup_for_version_switch(&self, app: &AppHandle) -> Result<Option<String>, String> {
+        if !resolve_db_path(app).exists() { return Ok(None); }
+        self.invoke::<String>(app, "backup_for_version_switch", json!({})).map(Some).map_err(|e| e.to_string())
+    }
+
     pub fn get_status(&self, app: &AppHandle) -> Result<TrackerStatus, TrackerError> {
         let mut status = self.invoke::<TrackerStatus>(app, "get_status", json!({}))?;
         status.accessibility_granted = merged_accessibility_granted(
@@ -1677,6 +1682,7 @@ pub(crate) fn resolve_db_path(app: &AppHandle) -> PathBuf {
 mod tests {
     use super::*;
     const MUTATING_COMMANDS: &[&str] = &[
+        "backup_for_version_switch",
         "start_tracking",
         "stop_tracking",
         "set_developer_diagnostics",

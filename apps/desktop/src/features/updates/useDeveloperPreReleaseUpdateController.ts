@@ -1,3 +1,4 @@
+import { acquireUpdateOperation } from "./versionSwitchState";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toErrorMessage } from "../../lib/formatting";
 import {
@@ -101,6 +102,8 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
     const currentUpdate = updateRef.current;
     if (isBusyStatus(statusRef.current) || currentUpdate?.available !== true) return;
 
+    const releaseOperation = acquireUpdateOperation();
+    if (!releaseOperation) return;
     setStatus("installing");
     setError(null);
     setPromptedUpdateVersion(null);
@@ -120,6 +123,8 @@ export function useDeveloperPreReleaseUpdateController(): DeveloperPreReleaseUpd
       const errorMessage = nextError instanceof Error ? nextError.message : toErrorMessage(nextError);
       setStatus("available");
       setError(`Pre-release update install failed: ${errorMessage}`);
+    } finally {
+      releaseOperation();
     }
   }, [setStatus, setUpdate]);
 

@@ -1,3 +1,4 @@
+import { DevVersionSwitchBlock } from "./DevVersionSwitchBlock";
 import { useEffect, useId, useState, type CSSProperties } from "react";
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
@@ -316,6 +317,7 @@ export function DevSettingsSection({
               onInstallLatestBuild={onInstallLatestBuild}
             />
           </div>
+          <DevVersionSwitchBlock />
           <DevSettingsAxFallbackCard
             forceBrowserHistoryUrlFallbackEnabled={forceBrowserHistoryUrlFallbackEnabled}
             forceChromiumAxCaptureEnabled={forceChromiumAxCaptureEnabled}

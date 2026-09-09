@@ -1,10 +1,11 @@
+import { UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY, useVersionTestPauseUntil } from "./versionSwitchState";
 import { useEffect, useRef } from "react";
 
 export const AUTO_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_RETRY_MS = 60 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_BUSY_RETRY_MS = 15 * 60 * 1000;
 export const AUTO_UPDATE_CHECK_STARTUP_DELAY_MS = 2500;
-export const UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY = "drifty.updates.nextAutomaticCheckAt.v1";
+export { UPDATE_NEXT_AUTOMATIC_CHECK_STORAGE_KEY } from "./versionSwitchState";
 
 type ScheduledUpdateCheckResult = {
   readonly kind: "available" | "none" | "error";
@@ -52,6 +53,7 @@ export function useAutomaticUpdateScheduler({
   enabled,
   checkForUpdates,
 }: UseAutomaticUpdateSchedulerOptions): void {
+  const versionTestPauseUntil = useVersionTestPauseUntil();
   const checkForUpdatesRef = useRef(checkForUpdates);
   checkForUpdatesRef.current = checkForUpdates;
 
@@ -131,5 +133,5 @@ export function useAutomaticUpdateScheduler({
       window.removeEventListener("online", reconsiderSchedule);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [enabled]);
+  }, [enabled, versionTestPauseUntil]);
 }

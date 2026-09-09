@@ -10,6 +10,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: invokeMock,
   isTauri: () => false,
 }));
+import { acquireUpdateOperation } from "./versionSwitchState";
 import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY } from "./updatePolicy";
 import { useDeveloperPreReleaseUpdateController } from "./useDeveloperPreReleaseUpdateController";
 
@@ -99,6 +100,25 @@ describe("useDeveloperPreReleaseUpdateController", () => {
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("developer_install_pre_release_update"));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update"));
     expect(window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
+  });
+
+  it("blocks prerelease installation while another channel owns the installer, then allows retry", async () => {
+    invokeMock.mockImplementation(async (command: string) => {
+      if (command === "developer_check_pre_release_update") return { available: true, currentVersion: "1.0.14", version: "1.0.15", date: null, body: null };
+      return command === "developer_install_pre_release_update" ? true : null;
+    });
+    render(<LatestBuildControllerHarness />);
+    fireEvent.click(screen.getByRole("button", { name: /^Check latest build$/i }));
+    await screen.findByText(/drifty 1\.0\.15 pre-release is available/i);
+    const release = acquireUpdateOperation();
+    expect(release).not.toBeNull();
+    try {
+      fireEvent.click(screen.getByRole("button", { name: /^Install latest build$/i }));
+      expect(invokeMock).not.toHaveBeenCalledWith("developer_install_pre_release_update");
+    } finally { release?.(); }
+    fireEvent.click(screen.getByRole("button", { name: /^Install latest build$/i }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update"));
+    expect(invokeMock.mock.calls.filter(([command]) => command === "developer_install_pre_release_update")).toHaveLength(1);
   });
 
   it("disables latest-build checks outside the desktop runtime", () => {

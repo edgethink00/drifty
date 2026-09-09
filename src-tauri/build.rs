@@ -25,6 +25,8 @@ fn main() {
             "app_menu_set_dev_mode_checked",
             "quit_confirmation_set_language",
             "app_restart_after_update",
+            "developer_list_releases",
+            "developer_install_release",
             "developer_check_pre_release_update",
             "developer_install_pre_release_update",
             "developer_tools_get_status",

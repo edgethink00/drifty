@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-developer-list-releases"
+description = "Enables the developer_list_releases command without any pre-configured scope."
+commands.allow = ["developer_list_releases"]
+
+[[permission]]
+identifier = "deny-developer-list-releases"
+description = "Denies the developer_list_releases command without any pre-configured scope."
+commands.deny = ["developer_list_releases"]

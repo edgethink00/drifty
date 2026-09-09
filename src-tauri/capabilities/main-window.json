@@ -36,6 +36,8 @@
     "allow-correction-evidence-append",
     "allow-living-soul-read",
     "allow-living-soul-write",
+    "allow-developer-list-releases",
+    "allow-developer-install-release",
     "allow-developer-check-pre-release-update",
     "allow-developer-install-pre-release-update",
     "allow-developer-tools-get-status",

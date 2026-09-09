@@ -1857,7 +1857,17 @@ def purge_remote_segments(payload: dict):
     return response(True, {"purged": purged})
 
 
+def backup_for_version_switch(payload: dict):
+    from app.storage.database_maintenance import create_rotating_backup
+    db = database()
+    path = create_rotating_backup(db.connect(), db.db_path, interval_seconds=0)
+    if path is None:
+        return response(False, error="No verified tracker backup was created")
+    return response(True, str(path))
+
+
 COMMANDS = {
+    "backup_for_version_switch": backup_for_version_switch,
     "get_status": lambda payload: get_status(),
     "start_tracking": lambda payload: start_tracking(),
     "stop_tracking": lambda payload: stop_tracking(),
