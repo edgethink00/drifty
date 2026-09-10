@@ -1,4 +1,8 @@
-import type { BillingEntitlement } from "./billingService";
+import type {
+  BillingEntitlement,
+  BillingEntitlementOrganization,
+  BillingEntitlementOrganizationRole,
+} from "./billingService";
 
 /**
  * What the plan cards must say about the account right now.
@@ -35,4 +39,51 @@ export function resolvePlanCardState(entitlement: BillingEntitlement | null): Pl
     default:
       return "free";
   }
+}
+
+/**
+ * Organization-seat presentation is a separate projection from plan cards.
+ * The server keeps `plan: "individual"` and `status: "active"` on an
+ * organization seat so older clients keep working, which makes
+ * `resolvePlanCardState` report `pro_active`. This resolver is the only
+ * signal that access comes from an organization seat, and it never infers
+ * that from `plan` or `accessSource`.
+ */
+export type OrganizationSeatDisplay = {
+  organizationName: string;
+  role: BillingEntitlementOrganizationRole;
+  canManageSeats: boolean;
+  seatId: string;
+};
+
+export function resolveOrganizationSeatDisplay(
+  entitlement: BillingEntitlement | null,
+): OrganizationSeatDisplay | null {
+  if (!entitlement || entitlement.entitlementOwner !== "organization") return null;
+  if (!isWellFormedOrganization(entitlement.organization)) return null;
+
+  return Object.freeze({
+    organizationName: entitlement.organization.name,
+    role: entitlement.organization.role,
+    canManageSeats: entitlement.organization.role === "owner"
+      || entitlement.organization.role === "admin",
+    seatId: entitlement.organization.seatId,
+  });
+}
+
+function isWellFormedOrganization(
+  value: BillingEntitlementOrganization | undefined,
+): value is BillingEntitlementOrganization {
+  if (!value) return false;
+  return typeof value.id === "string"
+    && value.id.trim().length > 0
+    && typeof value.name === "string"
+    && value.name.trim().length > 0
+    && isOrganizationRole(value.role)
+    && typeof value.seatId === "string"
+    && value.seatId.trim().length > 0;
+}
+
+function isOrganizationRole(value: unknown): value is BillingEntitlementOrganizationRole {
+  return value === "owner" || value === "admin" || value === "member";
 }

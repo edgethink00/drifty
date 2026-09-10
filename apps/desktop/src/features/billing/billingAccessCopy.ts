@@ -11,3 +11,26 @@ export function formatBillingAccessEndDate(value: string | null, language: Displ
     day: "numeric",
   }).format(date);
 }
+
+export type OrganizationSeatAccessCopy = {
+  readonly title: string;
+  readonly summary: string;
+};
+
+export function formatOrganizationSeatAccessCopy(
+  organizationName: string,
+  language: DisplayLanguage,
+): OrganizationSeatAccessCopy | null {
+  const name = organizationName.trim();
+  if (!name) return null;
+
+  return Object.freeze(language === "ko"
+    ? {
+      title: "조직 좌석",
+      summary: `개인 구독이 아니라 ${name} 조직 좌석으로 앱을 사용하고 있어요.`,
+    }
+    : {
+      title: "Organization seat",
+      summary: `Your app access comes from an organization seat at ${name}, not a personal subscription.`,
+    });
+}

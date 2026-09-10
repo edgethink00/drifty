@@ -3,7 +3,8 @@ import { AccountPlanModal } from "./AccountPlanModal";
 import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManagementPanel";
 import { Toggle } from "../../components/Toggle";
 import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
-import { resolvePlanCardState } from "../billing/planCardState";
+import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
+import { resolveOrganizationSeatDisplay, resolvePlanCardState, type OrganizationSeatDisplay } from "../billing/planCardState";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
 import type {
   BillingEntitlement,
@@ -18,11 +19,14 @@ import { localizeSettingsError } from "../localization/settingsMessageTranslatio
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import "./AccountSettingsSection.css";
 
+export const ORGANIZATION_SEAT_MANAGEMENT_URL = "https://drifty.so/account/organization";
+
 export type AccountSettingsSectionProps = {
   readonly billingCheckoutAwaitingConfirmation?: boolean;
   readonly billingActionErrorCode?: CheckoutFailureCode | null;
   readonly onCheckForUpdates?: () => void;
   readonly billingCheckoutLoadingInterval: BillingInterval | null;
+  readonly billingEntitlement?: BillingEntitlement | null;
   readonly billingEntitlementError: string | null;
   readonly billingEntitlementLockedReason: BillingEntitlement["lockedReason"] | null;
   readonly billingEntitlementStatus: BillingEntitlement["status"] | null;
@@ -68,6 +72,7 @@ export function AccountSettingsSection({
   billingActionErrorCode,
   onCheckForUpdates,
   billingCheckoutLoadingInterval,
+  billingEntitlement = null,
   billingEntitlementError,
   billingEntitlementLockedReason,
   billingEntitlementStatus,
@@ -111,6 +116,9 @@ export function AccountSettingsSection({
   const [localActionPending, setLocalActionPending] = useState(false);
   const [localActionError, setLocalActionError] = useState<string | null>(null);
   const actionInFlight = useRef(false);
+  const organizationOpeningRef = useRef(false);
+  const [organizationOpening, setOrganizationOpening] = useState(false);
+  const [organizationOpenError, setOrganizationOpenError] = useState(false);
   const planActionBusy = localActionPending || billingCheckoutLoadingInterval !== null || billingPortalLoading;
   const runBillingAction = async (action: () => void | Promise<void>) => {
     if (actionInFlight.current || planActionBusy || billingPlansDisabled) return;
@@ -122,9 +130,28 @@ export function AccountSettingsSection({
     catch { setLocalActionError(t("settings.account.billingActionFailed")); }
     finally { actionInFlight.current = false; setLocalActionPending(false); }
   };
+  const openOrganizationSeatManagement = async () => {
+    if (organizationOpeningRef.current) return;
+    organizationOpeningRef.current = true;
+    setOrganizationOpening(true);
+    setOrganizationOpenError(false);
+    try {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(ORGANIZATION_SEAT_MANAGEMENT_URL);
+    } catch {
+      setOrganizationOpenError(true);
+    } finally {
+      organizationOpeningRef.current = false;
+      setOrganizationOpening(false);
+    }
+  };
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
   const isPaymentRequiredLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "payment_required";
   const isCurrentCloudPlan = billingEntitlementStatus === "active";
+  const organizationSeat = resolveOrganizationSeatDisplay(billingEntitlement);
+  const organizationSeatCopy = organizationSeat
+    ? formatOrganizationSeatAccessCopy(organizationSeat.organizationName, effectiveLanguage)
+    : null;
   const shouldShowDeviceManagement = isCurrentCloudPlan || isDeviceLimitLocked || cloudDevices.length > 0;
   // A trial holds Pro access without owning the subscription. Passing the real
   // state (instead of relabelling the account as Free) keeps Pro purchasable
@@ -197,14 +224,16 @@ export function AccountSettingsSection({
         ) : null}
         <div className="settings-row account-plan-summary">
           <div>
-            <div className="lbl">{planStatusUnknown ? t(cloudStatusRefreshing ? "settings.account.planChecking" : "settings.account.planUnavailable") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
-            <div className="desc">{planStatusUnknown ? t("settings.account.planUnknownDescription") : isTrialing
-              ? t("billing.plan.trialBadge")
-              : planState === "trial_expired"
-                ? t("settings.account.trialEndedSummary")
-                : canManageCurrentPlan
-                  ? t("settings.account.proSummary")
-                  : t("settings.account.freeSummary")}</div>
+            <div className="lbl">{organizationSeatCopy ? organizationSeatCopy.title : planStatusUnknown ? t(cloudStatusRefreshing ? "settings.account.planChecking" : "settings.account.planUnavailable") : isTrialing || canManageCurrentPlan ? t("billing.plan.pro") : t("billing.plan.free")}</div>
+            <div className="desc">{organizationSeat && organizationSeatCopy
+              ? [organizationSeatCopy.summary, t("settings.account.organizationRole", { role: organizationRoleLabel(organizationSeat.role, t) })].join(" ")
+              : planStatusUnknown ? t("settings.account.planUnknownDescription") : isTrialing
+                ? t("billing.plan.trialBadge")
+                : planState === "trial_expired"
+                  ? t("settings.account.trialEndedSummary")
+                  : canManageCurrentPlan
+                    ? t("settings.account.proSummary")
+                    : t("settings.account.freeSummary")}</div>
           </div>
           <div className="ctrl account-plan-summary__actions">
             <button type="button" className="settings-btn primary" aria-haspopup="dialog"
@@ -215,10 +244,17 @@ export function AccountSettingsSection({
               <button type="button" className="settings-btn" disabled={cloudStatusRefreshing}
                 onClick={() => void onRefreshCloudStatus()}>{t("settings.account.refreshPlan")}</button>
             ) : null}
-            {canManageCurrentPlan ? (
+            {canManageCurrentPlan && !organizationSeat ? (
               <button type="button" className="settings-btn" disabled={planActionBusy || billingPlansDisabled}
                 onClick={() => void runBillingAction(onManageCloudBilling)}>
                 {billingPortalLoading ? t("billing.plan.openingBilling") : isPaymentRequiredLocked ? t("settings.account.fixBilling") : t("billing.plan.manageBilling")}
+              </button>
+            ) : null}
+            {organizationSeat?.canManageSeats ? (
+              <button type="button" className="settings-btn" disabled={organizationOpening}
+                aria-busy={organizationOpening}
+                onClick={() => void openOrganizationSeatManagement()}>
+                {t("settings.account.manageSeats")}
               </button>
             ) : null}
           </div>
@@ -226,6 +262,7 @@ export function AccountSettingsSection({
       </div>
 
       {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}
+      {organizationOpenError ? <p className="account-plan-progress" role="alert">{t("settings.account.organizationOpenFailed")}</p> : null}
 
       <AccountPlanModal open={planModalOpen} busy={planActionBusy} onClose={() => setPlanModalOpen(false)}>
         {planStatusUnknown ? <div className="account-plan-progress" role="status">
@@ -372,6 +409,12 @@ export function AccountSettingsSection({
       ) : null}
     </div>
   );
+}
+
+function organizationRoleLabel(role: OrganizationSeatDisplay["role"], t: LocalizationController["t"]): string {
+  if (role === "owner") return t("settings.account.organizationRoleOwner");
+  if (role === "admin") return t("settings.account.organizationRoleAdmin");
+  return t("settings.account.organizationRoleMember");
 }
 
 function describeDeviceSyncStatus(status: DeviceSyncStatus | undefined, t: LocalizationController["t"]): string {

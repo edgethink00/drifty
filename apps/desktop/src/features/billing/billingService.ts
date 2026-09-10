@@ -3,6 +3,14 @@ import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import type { CloudDeviceAccess, CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
 import { INDIVIDUAL_PRICING } from "./individualPricing";
 
+export type BillingEntitlementOrganizationRole = "owner" | "admin" | "member";
+export type BillingEntitlementOrganization = {
+  id: string;
+  name: string;
+  role: BillingEntitlementOrganizationRole;
+  seatId: string;
+};
+
 export type BillingEntitlement = {
   plan: "individual";
   status: "trialing" | "active" | "locked";
@@ -10,6 +18,8 @@ export type BillingEntitlement = {
   trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   accessSource?: "standard_trial" | "promotion" | "subscription";
+  entitlementOwner?: "individual" | "organization";
+  organization?: BillingEntitlementOrganization;
   lockedReason?: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached";
   deviceAccess?: CloudDeviceAccess;
   cloudDevices?: readonly CloudDeviceRecord[];
@@ -342,7 +352,51 @@ function isBillingEntitlement(value: unknown): value is BillingEntitlement {
       || entitlement.accessSource === "standard_trial"
       || entitlement.accessSource === "promotion"
       || entitlement.accessSource === "subscription")
-    && typeof entitlement.canUseApp === "boolean";
+    && typeof entitlement.canUseApp === "boolean"
+    && hasValidBillingEntitlementOwnership(value);
+}
+
+const LOWERCASE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const ORGANIZATION_NAME_MAX_LENGTH = 120;
+
+function hasValidBillingEntitlementOwnership(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const owner = value.entitlementOwner;
+  const organization = value.organization;
+  if (owner === "organization") return isBillingEntitlementOrganization(organization);
+  if (owner === "individual" || owner === undefined) return organization === undefined;
+  return false;
+}
+
+function isBillingEntitlementOrganization(value: unknown): value is BillingEntitlementOrganization {
+  if (!isRecord(value) || Array.isArray(value)) return false;
+  return isLowercaseUuid(value.id)
+    && isBillingOrganizationName(value.name)
+    && isBillingEntitlementOrganizationRole(value.role)
+    && isLowercaseUuid(value.seatId);
+}
+
+function isBillingEntitlementOrganizationRole(value: unknown): value is BillingEntitlementOrganizationRole {
+  return value === "owner" || value === "admin" || value === "member";
+}
+
+function isLowercaseUuid(value: unknown): value is string {
+  return typeof value === "string" && LOWERCASE_UUID_PATTERN.test(value);
+}
+
+function isBillingOrganizationName(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= ORGANIZATION_NAME_MAX_LENGTH
+    && !hasControlCharacters(value);
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) return true;
+  }
+  return false;
 }
 
 function enrichBillingEntitlement(data: BillingEntitlementResponse | null | undefined): BillingEntitlement | undefined {

@@ -9963,6 +9963,7 @@ export default function App() {
                     onCheckForUpdates={() => void handleCheckForUpdates()}
                     billingCheckoutLoadingInterval={billingCheckoutLoadingInterval}
                     billingEntitlementError={effectiveBillingSettingsError}
+                    billingEntitlement={effectiveBillingEntitlement}
                     billingEntitlementLockedReason={effectiveBillingEntitlement?.lockedReason ?? null}
                     billingEntitlementStatus={effectiveBillingEntitlement?.status ?? null}
                     billingPlansDisabled={isDashboardAiUnavailablePreviewActive || billingCheckoutAwaitingConfirmation}

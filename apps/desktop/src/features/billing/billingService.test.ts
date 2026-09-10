@@ -4,6 +4,7 @@ import {
   COUPON_REDEMPTION_TIMEOUT_MS,
   createBillingPortalSession,
   createIndividualCheckout,
+  fetchBillingEntitlement,
   redeemTrialCoupon,
 } from "./billingService";
 
@@ -196,5 +197,132 @@ describe("billingService", () => {
       signal: expect.any(AbortSignal),
       timeout: COUPON_REDEMPTION_TIMEOUT_MS,
     }));
+  });
+
+  describe("fetchBillingEntitlement", () => {
+    const invalidEntitlementResult = {
+      success: false,
+      error: "Billing entitlement returned an invalid response.",
+    } as const;
+
+    const individualEntitlement = {
+      plan: "individual" as const,
+      status: "active" as const,
+      canUseApp: true,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+    };
+
+    const organization = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Drifty Enterprise Pilot",
+      role: "member" as const,
+      seatId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    };
+
+    function entitlementClient(entitlement: unknown): MockBillingClient {
+      return {
+        functions: {
+          invoke: vi.fn().mockResolvedValue({ data: { entitlement }, error: null }),
+        },
+      };
+    }
+
+    it("keeps an individual entitlement without organization fields", async () => {
+      const result = await fetchBillingEntitlement(entitlementClient(individualEntitlement));
+
+      expect(result).toEqual({ success: true, data: individualEntitlement });
+      expect(result.success && "entitlementOwner" in result.data).toBe(false);
+      expect(result.success && "organization" in result.data).toBe(false);
+    });
+
+    it("accepts a valid organization entitlement and preserves all four fields", async () => {
+      const entitlement = {
+        ...individualEntitlement,
+        currentPeriodEnd: "2026-10-05T20:19:17.11+00:00",
+        accessSource: "subscription" as const,
+        entitlementOwner: "organization" as const,
+        organization,
+      };
+
+      await expect(fetchBillingEntitlement(entitlementClient(entitlement))).resolves.toEqual({
+        success: true,
+        data: entitlement,
+      });
+    });
+
+    it("rejects an organization payload that is not owned by an organization entitlement", async () => {
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        organization,
+      }))).resolves.toEqual(invalidEntitlementResult);
+
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "individual",
+        organization,
+      }))).resolves.toEqual(invalidEntitlementResult);
+    });
+
+    it("rejects entitlementOwner organization when organization is missing or malformed", async () => {
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+      }))).resolves.toEqual(invalidEntitlementResult);
+
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: null,
+      }))).resolves.toEqual(invalidEntitlementResult);
+
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, seatId: undefined },
+      }))).resolves.toEqual(invalidEntitlementResult);
+    });
+
+    it("rejects an organization role outside owner, admin, or member", async () => {
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, role: "superadmin" },
+      }))).resolves.toEqual(invalidEntitlementResult);
+    });
+
+    it("rejects a non-UUID organization id or seatId", async () => {
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, id: "organization-1" },
+      }))).resolves.toEqual(invalidEntitlementResult);
+
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, seatId: "SEAT-1" },
+      }))).resolves.toEqual(invalidEntitlementResult);
+
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, id: "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA" },
+      }))).resolves.toEqual(invalidEntitlementResult);
+    });
+
+    it("rejects an empty or control-character organization name", async () => {
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, name: "" },
+      }))).resolves.toEqual(invalidEntitlementResult);
+
+      await expect(fetchBillingEntitlement(entitlementClient({
+        ...individualEntitlement,
+        entitlementOwner: "organization",
+        organization: { ...organization, name: "Drifty\nEnterprise" },
+      }))).resolves.toEqual(invalidEntitlementResult);
+    });
   });
 });

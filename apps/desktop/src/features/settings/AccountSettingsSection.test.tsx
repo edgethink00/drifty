@@ -3,9 +3,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AccountSettingsSection, type AccountSettingsSectionProps } from "./AccountSettingsSection";
+import { AccountSettingsSection, ORGANIZATION_SEAT_MANAGEMENT_URL, type AccountSettingsSectionProps } from "./AccountSettingsSection";
+import { LocalizationTestProvider } from "../localization/LocalizationContext";
+import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS } from "../localization/translations";
+import type { BillingEntitlement, BillingEntitlementOrganizationRole } from "../billing/billingService";
+
+const { openUrlMock } = vi.hoisted(() => ({ openUrlMock: vi.fn() }));
+vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: openUrlMock }));
 
 vi.mock("../auth/AuthContext", () => ({
   useAuth: () => ({ hasRequiredAccountAuth: false, user: null }),
@@ -511,5 +517,138 @@ describe("AccountSettingsSection", () => {
     expect(styles).toContain("min-width: 10rem;");
     expect(styles).toContain("width: min(100%, 28rem);");
     expect(styles).not.toContain("grid-template-columns: minmax(12rem, 1fr) minmax(18rem, 24rem);");
+  });
+});
+
+const individualEntitlement = {
+  plan: "individual",
+  status: "active",
+  canUseApp: true,
+  trialEndsAt: null,
+  currentPeriodEnd: "2026-12-01T00:00:00.000Z",
+} as const satisfies BillingEntitlement;
+
+function organizationEntitlement(role: BillingEntitlementOrganizationRole): BillingEntitlement {
+  return {
+    ...individualEntitlement,
+    entitlementOwner: "organization",
+    organization: {
+      id: "org-1",
+      name: "Acme",
+      role,
+      seatId: "seat-1",
+    },
+  };
+}
+
+function accountProps(overrides: Partial<AccountSettingsSectionProps> = {}): AccountSettingsSectionProps {
+  return {
+    billingCheckoutLoadingInterval: null,
+    billingEntitlementError: null,
+    billingEntitlementLockedReason: null,
+    billingEntitlementStatus: "active",
+    billingPlansDisabled: false,
+    billingPortalLoading: false,
+    couponRedemption: null,
+    couponRedemptionErrorCode: null,
+    couponRedemptionLoading: false,
+    cloudDeviceAccess: null,
+    cloudDeviceActionError: null,
+    cloudDeviceRevokingId: null,
+    cloudDevices: [],
+    cloudStatusRefreshing: false,
+    currentBillingPlan: "individual",
+    isSupabaseConfigured: true,
+    shouldShowCloudCheckoutPlans: false,
+    userEmail: "alex@example.com",
+    onManageCloudBilling: vi.fn(),
+    onRefreshCloudStatus: vi.fn(),
+    onRedeemTrialCoupon: vi.fn(),
+    onRevokeCloudDevice: vi.fn(),
+    onSignIn: vi.fn(),
+    onStartCloudSetup: vi.fn(),
+    ...overrides,
+  };
+}
+
+describe("AccountSettingsSection organization seat", () => {
+  beforeEach(() => {
+    openUrlMock.mockReset();
+    openUrlMock.mockResolvedValue(undefined);
+  });
+
+  it("renders an individual entitlement as a personal plan with no organization row or seat management", () => {
+    render(<AccountSettingsSection {...accountProps({ billingEntitlement: individualEntitlement })} />);
+
+    expect(screen.getByText("Drifty Pro")).toBeTruthy();
+    expect(screen.getByText("Manage your Cloud AI subscription and billing.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Manage billing$/i })).toBeTruthy();
+    expect(screen.queryByText("Organization seat")).toBeNull();
+    expect(screen.queryByText(/organization seat at/i)).toBeNull();
+    expect(screen.queryByText(/^Role:/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Manage seats$/i })).toBeNull();
+  });
+
+  it("shows the organization name and role for a member seat without a management entry point", () => {
+    render(<AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("member") })} />);
+
+    expect(screen.getByText("Organization seat")).toBeTruthy();
+    expect(screen.getByText(/organization seat at Acme, not a personal subscription/i)).toBeTruthy();
+    expect(screen.getByText(/Role: Member/)).toBeTruthy();
+    expect(screen.queryByText("Drifty Pro")).toBeNull();
+    expect(screen.queryByText("Manage your Cloud AI subscription and billing.")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Manage billing$/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Manage seats$/i })).toBeNull();
+  });
+
+  it.each(["owner", "admin"] as const)("shows seat management for an %s and opens the organization page", async (role) => {
+    render(<AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement(role) })} />);
+
+    const manageSeats = screen.getByRole("button", { name: /^Manage seats$/i });
+    expect(manageSeats).toBeTruthy();
+    fireEvent.click(manageSeats);
+    await waitFor(() => expect(openUrlMock).toHaveBeenCalledWith(ORGANIZATION_SEAT_MANAGEMENT_URL));
+    expect(openUrlMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves the new organization-seat strings in each supported locale instead of falling back to keys", () => {
+    const keys = [
+      "settings.account.organizationRole",
+      "settings.account.organizationRoleOwner",
+      "settings.account.organizationRoleAdmin",
+      "settings.account.organizationRoleMember",
+      "settings.account.manageSeats",
+      "settings.account.organizationOpenFailed",
+    ] as const;
+
+    for (const key of keys) {
+      expect(ENGLISH_TRANSLATIONS[key]).not.toBe(key);
+      expect(KOREAN_TRANSLATIONS[key]).not.toBe(key);
+      expect(KOREAN_TRANSLATIONS[key]).not.toBe(ENGLISH_TRANSLATIONS[key]);
+    }
+
+    const { unmount } = render(
+      <LocalizationTestProvider language="en">
+        <AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("owner") })} />
+      </LocalizationTestProvider>,
+    );
+    expect(screen.getByText("Organization seat")).toBeTruthy();
+    expect(screen.getByText(/organization seat at Acme/i)).toBeTruthy();
+    expect(screen.getByText(/Role: Owner/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Manage seats$/i })).toBeTruthy();
+    expect(screen.queryByText("settings.account.manageSeats")).toBeNull();
+    unmount();
+
+    render(
+      <LocalizationTestProvider language="ko">
+        <AccountSettingsSection {...accountProps({ billingEntitlement: organizationEntitlement("owner") })} />
+      </LocalizationTestProvider>,
+    );
+    expect(screen.getByText("조직 좌석")).toBeTruthy();
+    expect(screen.getByText(/Acme 조직 좌석으로 앱을 사용하고 있어요/)).toBeTruthy();
+    expect(screen.getByText(/역할: 소유자/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^좌석 관리$/ })).toBeTruthy();
+    expect(screen.queryByText("settings.account.manageSeats")).toBeNull();
+    expect(screen.queryByText("settings.account.organizationRole")).toBeNull();
   });
 });
