@@ -24,6 +24,7 @@
     "allow-update-status-show-native",
     "allow-startup-get-open-at-login-status",
     "allow-startup-set-open-at-login-enabled",
+    "allow-startup-get-install-location",
     "opener:allow-open-url",
     "opener:allow-default-urls",
     "opener:allow-reveal-item-in-dir",

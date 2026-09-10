@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
+import { reportStartupRegistration } from "../../lib/analytics/startupEnvironment";
 import { toErrorMessage } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -47,9 +48,20 @@ export function StartupSettingsRow() {
 
     try {
       const result = await startupSettingsClient.setOpenAtLoginEnabled(nextEnabled);
+      reportStartupRegistration({
+        phase: "settings",
+        requestedEnabled: nextEnabled,
+        outcome: result,
+      });
       setStatus(result.success ? "ready" : "unavailable");
       if (!result.success) setEnabled(false);
     } catch (nextError) {
+      reportStartupRegistration({
+        phase: "settings",
+        requestedEnabled: nextEnabled,
+        outcome: null,
+        failed: true,
+      });
       setEnabled(previousEnabled);
       setStatus("ready");
       setError(t("settings.general.startupFailed", { error: toErrorMessage(nextError) }));

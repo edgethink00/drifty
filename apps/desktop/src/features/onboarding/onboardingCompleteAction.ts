@@ -1,4 +1,5 @@
 import { startupSettingsClient } from "../../lib/api/startupSettingsClient";
+import { reportStartupRegistration } from "../../lib/analytics/startupEnvironment";
 import { saveUserOnboardingState } from "./onboardingCompletion";
 import type { SetupChoice } from "./onboardingFlow";
 import type { UserOnboardingState } from "./onboardingState";
@@ -58,11 +59,22 @@ export async function completeOnboardingAction({
   if (startupSettingsClient.isAvailable()) {
     try {
       const startupResult = await startupSettingsClient.setOpenAtLoginEnabled(openAtLoginEnabled);
+      reportStartupRegistration({
+        phase: "onboarding",
+        requestedEnabled: openAtLoginEnabled,
+        outcome: startupResult,
+      });
       console.debug("Start at login update completed during onboarding.", {
         requested: openAtLoginEnabled,
         ...startupResult,
       });
     } catch (error) {
+      reportStartupRegistration({
+        phase: "onboarding",
+        requestedEnabled: openAtLoginEnabled,
+        outcome: null,
+        failed: true,
+      });
       console.debug("Start at login update failed during onboarding.", {
         requested: openAtLoginEnabled,
         error: error instanceof Error

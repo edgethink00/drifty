@@ -484,9 +484,122 @@ fn unsupported_response() -> StartupOpenAtLoginResponse {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StartupInstallLocation {
+    Applications,
+    UserApplications,
+    Translocated,
+    RemovableVolume,
+    Other,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupInstallLocationResponse {
+    location: StartupInstallLocation,
+}
+
+/// Reports where the running bundle lives so open-at-login results can be read
+/// against a location that survives a restart.
+#[tauri::command]
+pub fn startup_get_install_location() -> StartupInstallLocationResponse {
+    StartupInstallLocationResponse {
+        location: current_install_location(),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn current_install_location() -> StartupInstallLocation {
+    let Ok(executable) = std::env::current_exe() else {
+        return StartupInstallLocation::Unknown;
+    };
+    let home = std::env::var("HOME").ok();
+    classify_install_location(&executable.to_string_lossy(), home.as_deref())
+}
+
+/// Only macOS relocates a bundle behind the user's back, so other platforms
+/// report Unknown instead of forcing every install into Other.
+#[cfg(not(target_os = "macos"))]
+fn current_install_location() -> StartupInstallLocation {
+    StartupInstallLocation::Unknown
+}
+
+/// Gatekeeper runs an app that was never moved out of its disk image from a
+/// randomized read-only `AppTranslocation` path. A login item registered from
+/// there points at a path that no longer exists at the next login, so the app
+/// silently fails to reopen even though registration reported success.
+/// Running straight from a mounted `/Volumes` image has the same effect.
+fn classify_install_location(executable_path: &str, home: Option<&str>) -> StartupInstallLocation {
+    if executable_path.contains("/AppTranslocation/") {
+        return StartupInstallLocation::Translocated;
+    }
+    if let Some(home) = home {
+        if !home.is_empty() && executable_path.starts_with(&format!("{home}/Applications/")) {
+            return StartupInstallLocation::UserApplications;
+        }
+    }
+    if executable_path.starts_with("/Applications/") {
+        return StartupInstallLocation::Applications;
+    }
+    if executable_path.starts_with("/Volumes/") {
+        return StartupInstallLocation::RemovableVolume;
+    }
+    StartupInstallLocation::Other
+}
+
 #[cfg(all(test, not(target_os = "windows")))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn classify_install_location_flags_translocated_and_volume_paths() {
+        assert_eq!(
+            classify_install_location(
+                "/private/var/folders/ab/AppTranslocation/1E2/d/Drifty.app/Contents/MacOS/Drifty",
+                Some("/Users/example"),
+            ),
+            StartupInstallLocation::Translocated
+        );
+        assert_eq!(
+            classify_install_location("/Volumes/Drifty/Drifty.app/Contents/MacOS/Drifty", None),
+            StartupInstallLocation::RemovableVolume
+        );
+    }
+
+    #[test]
+    fn classify_install_location_separates_system_and_user_applications() {
+        assert_eq!(
+            classify_install_location(
+                "/Applications/Drifty.app/Contents/MacOS/Drifty",
+                Some("/Users/example"),
+            ),
+            StartupInstallLocation::Applications
+        );
+        assert_eq!(
+            classify_install_location(
+                "/Users/example/Applications/Drifty.app/Contents/MacOS/Drifty",
+                Some("/Users/example"),
+            ),
+            StartupInstallLocation::UserApplications
+        );
+    }
+
+    #[test]
+    fn classify_install_location_falls_back_to_other() {
+        assert_eq!(
+            classify_install_location(
+                "/Users/example/Downloads/Drifty.app/Contents/MacOS/Drifty",
+                Some("/Users/example"),
+            ),
+            StartupInstallLocation::Other
+        );
+        assert_eq!(
+            classify_install_location("/Applications/Drifty.app/Contents/MacOS/Drifty", Some("")),
+            StartupInstallLocation::Applications
+        );
+    }
 
     #[cfg(target_os = "macos")]
     #[test]

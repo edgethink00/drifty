@@ -174,6 +174,13 @@ function BootstrapLoader() {
               tags: { surface: "bootstrap", phase: "posthog_schedule" },
             });
           });
+        void import("./lib/analytics/startupEnvironment")
+          .then(({ reportStartupEnvironment }) => reportStartupEnvironment())
+          .catch((error) => {
+            captureSentryException(error, {
+              tags: { surface: "bootstrap", phase: "startup_environment" },
+            });
+          });
       }
       scheduleSentryInitialization();
     }

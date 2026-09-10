@@ -10,6 +10,17 @@ const STARTUP_OPEN_AT_LOGIN_STATUSES = [
 
 export type StartupOpenAtLoginStatus = (typeof STARTUP_OPEN_AT_LOGIN_STATUSES)[number];
 
+const STARTUP_INSTALL_LOCATIONS = [
+  "applications",
+  "userApplications",
+  "translocated",
+  "removableVolume",
+  "other",
+  "unknown",
+] as const;
+
+export type StartupInstallLocation = (typeof STARTUP_INSTALL_LOCATIONS)[number];
+
 export type StartupOpenAtLoginResult = {
   readonly success: boolean;
   readonly enabled: boolean;
@@ -30,6 +41,17 @@ function isTauriRuntime() {
 
 function isStartupOpenAtLoginStatus(value: unknown): value is StartupOpenAtLoginStatus {
   return typeof value === "string" && STARTUP_OPEN_AT_LOGIN_STATUSES.some((status) => status === value);
+}
+
+function isStartupInstallLocation(value: unknown): value is StartupInstallLocation {
+  return typeof value === "string" && STARTUP_INSTALL_LOCATIONS.some((location) => location === value);
+}
+
+/** Reporting an unreadable location as unknown keeps launch analytics non-blocking. */
+function parseStartupInstallLocation(value: unknown): StartupInstallLocation {
+  if (!value || typeof value !== "object") return "unknown";
+  const location: unknown = Reflect.get(value, "location");
+  return isStartupInstallLocation(location) ? location : "unknown";
 }
 
 function parseStartupOpenAtLoginResult(value: unknown): StartupOpenAtLoginResult {
@@ -67,6 +89,14 @@ export const startupSettingsClient = {
     if (!isTauriRuntime()) return false;
     const result = parseStartupOpenAtLoginResult(await invoke<unknown>("startup_get_open_at_login_status"));
     return result.enabled;
+  },
+  async getOpenAtLoginStatus(): Promise<StartupOpenAtLoginResult> {
+    if (!isTauriRuntime()) return unavailableStartupResult;
+    return parseStartupOpenAtLoginResult(await invoke<unknown>("startup_get_open_at_login_status"));
+  },
+  async getInstallLocation(): Promise<StartupInstallLocation> {
+    if (!isTauriRuntime()) return "unknown";
+    return parseStartupInstallLocation(await invoke<unknown>("startup_get_install_location"));
   },
   async setOpenAtLoginEnabled(enabled: boolean) {
     if (!isTauriRuntime()) return unavailableStartupResult;

@@ -21,11 +21,16 @@ import type {
   FIRST_DAY_PREPARATION_OUTCOMES,
   FIRST_DAY_PREPARATION_QUOTA_WINDOWS,
   FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
+  INSTALL_LOCATIONS,
   LEADERBOARD_ACTIONS,
   LEADERBOARD_PERIODS,
+  LOCAL_MODEL_FITS,
+  LOCAL_MODEL_SETUP_PHASES,
   LOCKED_REASONS,
+  MANAGED_MODEL_TIERS,
   ONBOARDING_SOURCES,
   ONBOARDING_STEPS,
+  OPEN_AT_LOGIN_STATUSES,
   PERMISSION_ACTIONS,
   PERMISSIONS,
   PROJECT_CLASSIFICATION_TRIGGERS,
@@ -33,6 +38,8 @@ import type {
   RESULT_VALUES,
   SETTINGS_SECTIONS,
   SETUP_CHOICES,
+  STARTUP_BACKENDS,
+  STARTUP_REGISTRATION_PHASES,
   TRACKER_ACTIONS,
   TRACKER_MODES,
   PostHogEventName,
@@ -53,6 +60,25 @@ export type PostHogEventPropertiesByName = {
     readonly surface: (typeof APP_SURFACES)[number];
     readonly dashboard_period?: (typeof DASHBOARD_PERIODS)[number];
     readonly settings_section?: (typeof SETTINGS_SECTIONS)[number];
+  };
+  readonly app_launch_environment: {
+    readonly install_location: (typeof INSTALL_LOCATIONS)[number];
+    readonly open_at_login_status: (typeof OPEN_AT_LOGIN_STATUSES)[number];
+    readonly startup_backend: (typeof STARTUP_BACKENDS)[number];
+  };
+  readonly startup_registration: {
+    readonly phase: (typeof STARTUP_REGISTRATION_PHASES)[number];
+    readonly requested_enabled: boolean;
+    readonly result: (typeof RESULT_VALUES)[number];
+    readonly open_at_login_status: (typeof OPEN_AT_LOGIN_STATUSES)[number];
+    readonly startup_backend: (typeof STARTUP_BACKENDS)[number];
+    readonly install_location?: (typeof INSTALL_LOCATIONS)[number];
+  };
+  readonly local_model_setup: {
+    readonly phase: (typeof LOCAL_MODEL_SETUP_PHASES)[number];
+    readonly any_installable: boolean;
+    readonly recommended_fit: (typeof LOCAL_MODEL_FITS)[number];
+    readonly model_tier?: (typeof MANAGED_MODEL_TIERS)[number];
   };
   readonly onboarding_opened: {
     readonly source?: (typeof ONBOARDING_SOURCES)[number];

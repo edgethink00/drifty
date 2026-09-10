@@ -2,6 +2,9 @@ export const POSTHOG_EVENT_NAMES = [
   "app_opened",
   "app_active",
   "app_surface_opened",
+  "app_launch_environment",
+  "startup_registration",
+  "local_model_setup",
   "onboarding_opened",
   "onboarding_step_viewed",
   "onboarding_completed",
@@ -59,6 +62,29 @@ export const RESULT_VALUES = ["success", "error", "cancelled", "skipped", "unava
 export const AUTH_STATES = ["signed_in", "signed_out"] as const;
 export const ACCOUNT_KINDS = ["anonymous_account", "account", "none"] as const;
 export const APP_ACTIVE_TRIGGERS = ["launch", "auth_resolved", "foreground", "day_rollover"] as const;
+/** Where the running bundle lives. Translocated and removable installs cannot survive a restart. */
+export const INSTALL_LOCATIONS = [
+  "applications",
+  "user_applications",
+  "translocated",
+  "removable_volume",
+  "other",
+  "unknown",
+] as const;
+export const OPEN_AT_LOGIN_STATUSES = [
+  "enabled",
+  "not_registered",
+  "requires_approval",
+  "not_found",
+  "unsupported",
+  "unknown",
+] as const;
+export const STARTUP_BACKENDS = ["sm_app_service", "registry_run_key", "unsupported", "unknown"] as const;
+export const STARTUP_REGISTRATION_PHASES = ["onboarding", "settings"] as const;
+/** Local model download is the only onboarding step a machine can be unable to pass. */
+export const LOCAL_MODEL_SETUP_PHASES = ["viewed", "download_started", "download_failed", "model_ready"] as const;
+export const LOCAL_MODEL_FITS = ["good", "tight", "insufficient", "unknown"] as const;
+export const MANAGED_MODEL_TIERS = ["economy", "default", "gemma", "smart", "unknown"] as const;
 export const CLOUD_AUTH_ACTIONS = ["sign_in_started", "sign_in_completed", "sign_out", "sign_up_completed"] as const;
 export const CLOUD_AUTH_METHODS = ["oauth", "email", "anonymous", "website", "unknown"] as const;
 export const BILLING_ACTIONS = [
@@ -124,6 +150,25 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     surface: APP_SURFACES,
     dashboard_period: DASHBOARD_PERIODS,
     settings_section: SETTINGS_SECTIONS,
+  },
+  app_launch_environment: {
+    install_location: INSTALL_LOCATIONS,
+    open_at_login_status: OPEN_AT_LOGIN_STATUSES,
+    startup_backend: STARTUP_BACKENDS,
+  },
+  startup_registration: {
+    phase: STARTUP_REGISTRATION_PHASES,
+    requested_enabled: "boolean",
+    result: RESULT_VALUES,
+    open_at_login_status: OPEN_AT_LOGIN_STATUSES,
+    startup_backend: STARTUP_BACKENDS,
+    install_location: INSTALL_LOCATIONS,
+  },
+  local_model_setup: {
+    phase: LOCAL_MODEL_SETUP_PHASES,
+    any_installable: "boolean",
+    recommended_fit: LOCAL_MODEL_FITS,
+    model_tier: MANAGED_MODEL_TIERS,
   },
   onboarding_opened: {
     source: ONBOARDING_SOURCES,

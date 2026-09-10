@@ -112,6 +112,7 @@ fn main() {
             "google_calendar_disconnect",
             "startup_get_open_at_login_status",
             "startup_set_open_at_login_enabled",
+            "startup_get_install_location",
             "system_open_settings_pane",
             "watcher_peek_show",
             "watcher_peek_hide",

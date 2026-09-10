@@ -2,6 +2,7 @@ import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "../../../setting
 import { managedLocalAiProgressText } from "../../../settings/managedLocalAiProgressText";
 import { managedModelRuntimeMemoryLabel } from "../../../settings/managedLocalAiMemory";
 import { isManagedLocalReady } from "../../onboardingManagedLocalStatus";
+import { useLocalModelSetupAnalytics } from "../../useLocalModelSetupAnalytics";
 import type { SetupChoice } from "../../onboardingFlow";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { SpinnerIcon, SuccessIcon } from "./shared";
@@ -26,6 +27,7 @@ export function ConnectServerStep({ flow }: { readonly flow: OnboardingFlow }) {
 function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
   const status = flow.managedLocalAi.status;
+  useLocalModelSetupAnalytics({ active: true, catalog: flow.managedLocalAi.catalog, status });
   const selectedModelId = flow.managedLocalAi.status?.selectedModelId
     ?? flow.managedLocalAi.actionModelId
     ?? flow.managedLocalAi.catalog.find((model) => model.recommended)?.id
