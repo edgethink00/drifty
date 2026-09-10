@@ -119,6 +119,16 @@ describe("ProjectsManager", () => {
     expect(within(projectList).queryByText(/signals?$/i)).toBeNull();
   });
 
+  it("reserves the status chip for archived projects so Active does not repeat the loudest treatment", () => {
+    render(<ProjectsManager {...baseProps({
+      projects: [project(), project({ id: "p2", name: "Blog relaunch", status: "archived", anchors: [] })],
+    })} />);
+
+    const projectList = screen.getByRole("region", { name: "Projects" });
+    expect(within(projectList).getByText("Active").className).not.toContain("chip");
+    expect(within(projectList).getByText("Archived").className).toContain("chip");
+  });
+
   it("opens the project detail on row click instead of expanding", () => {
     const props = baseProps();
     render(<ProjectsManager {...props} />);

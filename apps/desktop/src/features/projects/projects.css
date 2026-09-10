@@ -679,11 +679,15 @@
 .projects-page .projects-table__row {
   min-height: 3.15rem;
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, box-shadow 0.12s ease;
 }
 
 .projects-page .projects-table__row:hover {
-  background: color-mix(in srgb, var(--accent-soft) 24%, transparent);
+  /* The whole row is clickable, so the hover state has to be legible on the
+     dark canvas too. The inset edge marks which row the pointer owns without
+     shifting any layout. */
+  background: color-mix(in srgb, var(--accent-soft) 48%, transparent);
+  box-shadow: inset 3px 0 0 0 var(--accent);
 }
 
 .projects-page .projects-table__rowwrap--archived .projects-table__row {
@@ -744,6 +748,17 @@
 .projects-page .pt-mono {
   font-family: var(--font-mono);
   font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status for a live project: same slot and type scale as the archived chip,
+   without the filled pill. See ProjectsManager for why only Archived is a chip. */
+.projects-page .pt-status {
+  font-family: var(--font-mono);
+  font-size: var(--type-chip-size);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1058,7 +1073,9 @@
 .project-detail__source-val {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.4rem;
+  /* Duration and share are two separate readings; at 0.4rem they ran together
+     as one token ("16h 48m 69%"). */
+  gap: 0.55rem;
   font-family: var(--font-mono);
   white-space: nowrap;
 }
@@ -1073,6 +1090,9 @@
 .project-detail__source-val span {
   font-size: 0.75rem;
   color: var(--text-muted);
+  /* Right-aligned fixed slot keeps the share column steady between rows. */
+  min-width: 2.6em;
+  text-align: right;
 }
 
 .project-detail__source-bar {

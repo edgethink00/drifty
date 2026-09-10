@@ -184,6 +184,16 @@
    frame the small curve in extra whitespace. */
 .ptc-panel .insight-panel-head {
   margin-bottom: 0.55rem;
+  /* In the two-column overview the head is narrow enough that the eyebrow used
+     to break mid-phrase ("… LATEST 7 / DAYS"). Keep the title on one line and
+     let the legend drop to the next row instead; measured clear of overflow
+     from 700px up. */
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
+}
+
+.ptc-panel .insight-panel-head > .label-mono {
+  white-space: nowrap;
 }
 
 /* Legend pills: neutral rounded chip (like focus/drift) carrying a colored dot. */

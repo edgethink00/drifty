@@ -214,7 +214,14 @@ export function ProjectsManager({
                   </button>
                 </div>
                 <span className="pt-mono">{formatLastActivity(lastActivityByProject.get(project.id), effectiveLanguage)}</span>
-                <span className={`chip${isArchived ? " gray" : " green"}`}>{t(isArchived ? "common.archived" : "common.active")}</span>
+                {/* Every live project is Active, so a chip per row would repeat the
+                    loudest treatment on the least distinguishing column. Archived is
+                    the state worth spotting, so only it keeps the chip. */}
+                {isArchived ? (
+                  <span className="chip gray">{t("common.archived")}</span>
+                ) : (
+                  <span className="pt-status">{t("common.active")}</span>
+                )}
                 <div className="pt-total">
                   {timeState ? (
                     <span
