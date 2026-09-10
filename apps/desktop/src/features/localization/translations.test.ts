@@ -82,6 +82,10 @@ describe("Korean translations", () => {
     expect(KOREAN_TRANSLATIONS["settings.account.deleteTeamsImpact"]).toMatch(/다른 멤버.*계정 삭제를 차단/);
     expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toMatch(/데이터를 보호.*계정 삭제를 차단.*직접 정리를 지원하지 않습니다/);
     expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).not.toContain("지원팀");
+    // The app can now release an organization seat, so the blocked message has
+    // to name that exit instead of reading as a dead end.
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toContain("조직을 나가");
+    expect(ENGLISH_TRANSLATIONS["settings.account.deleteErrorSharedTeam"]).toContain("leave that organization");
     expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorBillingStopped"]).toMatch(/결제 고객 정리는 완료.*구독이 있었다면 종료.*계정 삭제는 끝나지/);
     expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorGuestBillingCleared"]).toMatch(/결제 고객은 정리.*게스트 계정 삭제가 끝나지/);
     expect(KOREAN_TRANSLATIONS["settings.account.deleteErrorGuestBillingCleared"]).not.toContain("구독");

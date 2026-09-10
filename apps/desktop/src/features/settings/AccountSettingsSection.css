@@ -83,7 +83,8 @@
   color: var(--warn);
 }
 
-.content--settings .account-plan-summary {
+.content--settings .account-plan-summary,
+.content--settings .account-organization-seat-release {
   gap: var(--space-4);
 }
 .content--settings .account-plan-summary__actions {
@@ -123,7 +124,8 @@
 .account-plan-modal .individual-plan-suite { max-width: none; width: 100%; gap: var(--space-4); }
 .account-plan-modal__error { color: var(--warn); margin-top: var(--space-4); }
 @media (max-width: 720px) {
-  .content--settings .account-plan-summary { align-items: flex-start; flex-direction: column; }
+  .content--settings .account-plan-summary,
+  .content--settings .account-organization-seat-release { align-items: flex-start; flex-direction: column; }
   .account-plan-modal .individual-plan-cards { grid-template-columns: 1fr; }
 }
 
@@ -135,11 +137,13 @@
   overflow-wrap: anywhere;
 }
 .account-plan-summary > div:first-child,
+.account-organization-seat-release > div:first-child,
 .account-plan-summary__actions,
 .account-plan-modal {
   min-width: 0;
 }
 .account-plan-summary .desc,
+.account-organization-seat-release .desc,
 .account-plan-modal__error,
 .account-plan-notice__error {
   overflow-wrap: anywhere;

@@ -4,6 +4,10 @@ import { CloudDeviceManagementPanel } from "../cloud-devices/CloudDeviceManageme
 import { Toggle } from "../../components/Toggle";
 import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
+import {
+  releaseOwnOrganizationSeat,
+  type OrganizationSeatReleaseResult,
+} from "../billing/organizationSeatService";
 import { resolveOrganizationSeatDisplay, resolvePlanCardState, type OrganizationSeatDisplay } from "../billing/planCardState";
 import { TrialCouponRedemption } from "./TrialCouponRedemption";
 import type {
@@ -62,6 +66,7 @@ export type AccountSettingsSectionProps = {
   readonly onOpenLeaderboard?: () => void;
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onRedeemTrialCoupon: (code: string) => void | Promise<void>;
+  readonly onReleaseOrganizationSeat?: (seatId: string) => Promise<OrganizationSeatReleaseResult>;
   readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
   readonly onStartCloudSetup: (billingInterval: BillingInterval) => void | Promise<void>;
@@ -107,6 +112,7 @@ export function AccountSettingsSection({
   onOpenLeaderboard,
   onRefreshCloudStatus,
   onRedeemTrialCoupon,
+  onReleaseOrganizationSeat = releaseOwnOrganizationSeat,
   onRevokeCloudDevice,
   onSignIn,
   onStartCloudSetup,
@@ -119,6 +125,10 @@ export function AccountSettingsSection({
   const organizationOpeningRef = useRef(false);
   const [organizationOpening, setOrganizationOpening] = useState(false);
   const [organizationOpenError, setOrganizationOpenError] = useState(false);
+  const seatReleaseInFlight = useRef(false);
+  const [seatReleaseConfirming, setSeatReleaseConfirming] = useState(false);
+  const [seatReleaseWorking, setSeatReleaseWorking] = useState(false);
+  const [seatReleaseNotice, setSeatReleaseNotice] = useState<"pending" | "refused" | "failed" | null>(null);
   const planActionBusy = localActionPending || billingCheckoutLoadingInterval !== null || billingPortalLoading;
   const runBillingAction = async (action: () => void | Promise<void>) => {
     if (actionInFlight.current || planActionBusy || billingPlansDisabled) return;
@@ -143,6 +153,28 @@ export function AccountSettingsSection({
     } finally {
       organizationOpeningRef.current = false;
       setOrganizationOpening(false);
+    }
+  };
+  const releaseOrganizationSeat = async (seatId: string) => {
+    if (seatReleaseInFlight.current) return;
+    seatReleaseInFlight.current = true;
+    setSeatReleaseWorking(true);
+    setSeatReleaseNotice(null);
+    try {
+      const result = await onReleaseOrganizationSeat(seatId);
+      if (result.outcome === "released") {
+        setSeatReleaseConfirming(false);
+        // The seat surface is derived from the entitlement, so it only
+        // disappears once the refreshed entitlement says the seat is gone.
+        await onRefreshCloudStatus();
+        return;
+      }
+      setSeatReleaseNotice(result.outcome === "pending" ? "pending" : result.outcome === "refused" ? "refused" : "failed");
+    } catch {
+      setSeatReleaseNotice("failed");
+    } finally {
+      seatReleaseInFlight.current = false;
+      setSeatReleaseWorking(false);
     }
   };
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
@@ -259,6 +291,49 @@ export function AccountSettingsSection({
             ) : null}
           </div>
         </div>
+        {organizationSeat && organizationSeat.role !== "owner" ? (
+          <div className="settings-row account-organization-seat-release">
+            <div>
+              <div className="lbl">{t("settings.account.releaseSeatTitle")}</div>
+              <div className="desc">
+                {t(seatReleaseConfirming
+                  ? "settings.account.releaseSeatConfirmDescription"
+                  : "settings.account.releaseSeatDescription")}
+              </div>
+            </div>
+            <div className="ctrl account-plan-summary__actions">
+              {seatReleaseConfirming ? (
+                <>
+                  <button type="button" className="settings-btn danger"
+                    disabled={seatReleaseWorking} aria-busy={seatReleaseWorking}
+                    onClick={() => void releaseOrganizationSeat(organizationSeat.seatId)}>
+                    {seatReleaseWorking
+                      ? t("settings.account.releaseSeatWorking")
+                      : t("settings.account.releaseSeatConfirm")}
+                  </button>
+                  <button type="button" className="settings-btn" disabled={seatReleaseWorking}
+                    onClick={() => { setSeatReleaseConfirming(false); setSeatReleaseNotice(null); }}>
+                    {t("settings.account.releaseSeatCancel")}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="settings-btn"
+                  onClick={() => { setSeatReleaseConfirming(true); setSeatReleaseNotice(null); }}>
+                  {t("settings.account.releaseSeat")}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {seatReleaseNotice ? (
+          <p className="account-plan-notice__error" role="alert">
+            {t(seatReleaseNotice === "pending"
+              ? "settings.account.releaseSeatPending"
+              : seatReleaseNotice === "refused"
+                ? "settings.account.releaseSeatRefused"
+                : "settings.account.releaseSeatFailed")}
+          </p>
+        ) : null}
       </div>
 
       {billingProgress ? <p className="account-plan-progress" role="status">{billingProgress}</p> : null}

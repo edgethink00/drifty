@@ -652,3 +652,149 @@ describe("AccountSettingsSection organization seat", () => {
     expect(screen.queryByText("settings.account.organizationRole")).toBeNull();
   });
 });
+
+describe("AccountSettingsSection organization seat release", () => {
+  it("offers the leave control to a member and to an admin, but never to the owner", () => {
+    for (const role of ["member", "admin"] as const) {
+      const { unmount } = render(<AccountSettingsSection {...accountProps({
+        billingEntitlement: organizationEntitlement(role),
+        onReleaseOrganizationSeat: vi.fn(),
+      })} />);
+      expect(screen.getByText("Leave this organization")).toBeTruthy();
+      expect(screen.getByRole("button", { name: /^Leave$/ })).toBeTruthy();
+      unmount();
+    }
+
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onReleaseOrganizationSeat: vi.fn(),
+    })} />);
+    expect(screen.queryByText("Leave this organization")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Leave$/ })).toBeNull();
+  });
+
+  it("does not offer the leave control on an individual entitlement", () => {
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: individualEntitlement,
+      onReleaseOrganizationSeat: vi.fn(),
+    })} />);
+
+    expect(screen.queryByText("Leave this organization")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Leave$/ })).toBeNull();
+  });
+
+  it("requires a second confirmation before releasing and releases nothing when cancelled", () => {
+    const onReleaseOrganizationSeat = vi.fn();
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("member"),
+      onReleaseOrganizationSeat,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    expect(onReleaseOrganizationSeat).not.toHaveBeenCalled();
+    expect(screen.getByText(/Leaving ends your access right away/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel$/ }));
+    expect(onReleaseOrganizationSeat).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Leaving ends your access right away/)).toBeNull();
+    expect(screen.getByRole("button", { name: /^Leave$/ })).toBeTruthy();
+  });
+
+  it("releases the member's own seat and refreshes the entitlement on success", async () => {
+    const onReleaseOrganizationSeat = vi.fn().mockResolvedValue({ outcome: "released" });
+    const onRefreshCloudStatus = vi.fn().mockResolvedValue(undefined);
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("member"),
+      onReleaseOrganizationSeat,
+      onRefreshCloudStatus,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, leave$/ }));
+    });
+
+    expect(onReleaseOrganizationSeat).toHaveBeenCalledWith("seat-1");
+    expect(onReleaseOrganizationSeat).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reports an unconfirmed release as pending and does not refresh the entitlement", async () => {
+    const onReleaseOrganizationSeat = vi.fn().mockResolvedValue({ outcome: "pending", error: "still pending" });
+    const onRefreshCloudStatus = vi.fn().mockResolvedValue(undefined);
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("member"),
+      onReleaseOrganizationSeat,
+      onRefreshCloudStatus,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, leave$/ }));
+    });
+
+    expect(screen.getByRole("alert").textContent).toContain("was not confirmed as released");
+    expect(onRefreshCloudStatus).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /^Yes, leave$/ })).toBeTruthy();
+  });
+
+  it("reports a refusal separately from a transport failure", async () => {
+    const refused = vi.fn().mockResolvedValue({ outcome: "refused", error: "no" });
+    const { unmount } = render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("member"),
+      onReleaseOrganizationSeat: refused,
+    })} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, leave$/ }));
+    });
+    expect(screen.getByRole("alert").textContent).toContain("cannot be released here");
+    unmount();
+
+    const threw = vi.fn().mockRejectedValue(new Error("offline"));
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("member"),
+      onReleaseOrganizationSeat: threw,
+    })} />);
+    fireEvent.click(screen.getByRole("button", { name: /^Leave$/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, leave$/ }));
+    });
+    expect(screen.getByRole("alert").textContent).toContain("Unable to leave the organization");
+  });
+
+  it("localizes every new seat-release string instead of falling back to keys", () => {
+    const keys = [
+      "settings.account.releaseSeatTitle",
+      "settings.account.releaseSeat",
+      "settings.account.releaseSeatDescription",
+      "settings.account.releaseSeatConfirmDescription",
+      "settings.account.releaseSeatConfirm",
+      "settings.account.releaseSeatCancel",
+      "settings.account.releaseSeatWorking",
+      "settings.account.releaseSeatPending",
+      "settings.account.releaseSeatRefused",
+      "settings.account.releaseSeatFailed",
+    ] as const;
+
+    for (const key of keys) {
+      expect(ENGLISH_TRANSLATIONS[key]).not.toBe(key);
+      expect(KOREAN_TRANSLATIONS[key]).not.toBe(key);
+      expect(KOREAN_TRANSLATIONS[key]).not.toBe(ENGLISH_TRANSLATIONS[key]);
+    }
+
+    render(
+      <LocalizationTestProvider language="ko">
+        <AccountSettingsSection {...accountProps({
+          billingEntitlement: organizationEntitlement("member"),
+          onReleaseOrganizationSeat: vi.fn(),
+        })} />
+      </LocalizationTestProvider>,
+    );
+    expect(screen.getByText("이 조직에서 나가기")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^나가기$/ }));
+    expect(screen.getByRole("button", { name: /^네, 나갈게요$/ })).toBeTruthy();
+    expect(screen.queryByText("settings.account.releaseSeatConfirm")).toBeNull();
+  });
+});
