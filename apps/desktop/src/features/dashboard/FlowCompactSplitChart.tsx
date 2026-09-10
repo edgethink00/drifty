@@ -63,6 +63,19 @@ export function buildActiveCategoryEntries(categoryEntries: CategoryDuration[]):
     });
 }
 
+/** Insights category rail: omit unclassified and reanchor shares to classified time. */
+export function buildClassifiedCategoryEntries(categoryEntries: CategoryDuration[]): CategoryDuration[] {
+  const classified = categoryEntries.filter((entry) => entry.category !== "unknown" && entry.totalSeconds > 0);
+  const classifiedSeconds = classified.reduce((sum, entry) => sum + entry.totalSeconds, 0);
+  return classified
+    .slice()
+    .sort((left, right) => right.totalSeconds - left.totalSeconds)
+    .map((entry) => ({
+      ...entry,
+      ratio: classifiedSeconds > 0 ? entry.totalSeconds / classifiedSeconds : 0,
+    }));
+}
+
 export function FlowCompactSplitChart({
   categoryEntries,
   productivityEntries,

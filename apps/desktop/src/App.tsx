@@ -15,7 +15,6 @@ import {
   buildProductivityDurations,
   classifyActivity,
   buildHourlySummary,
-  buildProductivityPersona,
   buildPersonalProjectSliceProjection,
   logicalDayIsoDateForDate,
   shiftIsoDate,
@@ -342,7 +341,8 @@ import { useCompanionLeaderboardMilestones } from "./features/companion/useCompa
 import { useCompanionCommunityMilestones } from "./features/companion/useCompanionCommunityMilestones";
 import { toLeaderboardCelebration, type LeaderboardCelebration } from "./features/companion/companionLeaderboardMilestones";
 import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
-import { buildBreakRecoveryAttempt, buildBreakRecoveryInsight, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
+import { buildBreakRecoveryAttempt, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
+import { buildAlarmFollowThrough } from "./features/insights/alarmFollowThrough";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
 import { END_OF_DAY_LEADERBOARD_CHECKPOINT_STORAGE_KEY, END_OF_DAY_REVIEW_MIN_TRACKED_SECONDS, END_OF_DAY_REVIEW_REPRESENT_COOLDOWN_MS, END_OF_DAY_REVIEW_STORAGE_KEY, END_OF_DAY_REVIEW_TRIGGER_MINUTE, buildMockEndOfDayReviewSegments, buildMockPendingEndOfDayReviewSegments, collectMissingEndOfDayReviewIconRequests, mergeResolvedAppIcons, sumEndOfDayReviewTrackedSeconds } from "./features/companion/endOfDayReviewData";
 import type { EndOfDayReviewSummaryInput } from "./features/companion/endOfDayReviewData";
@@ -6285,10 +6285,6 @@ export default function App() {
     () => ({ fallbackCandidates: activeInsightSegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
     [activeInsightSegments, allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, showAiClassificationImpact],
   );
-  const productivityPersonaReport = useMemo(
-    () => buildProductivityPersona(activeInsightSegments, insightClassificationOptions),
-    [activeInsightSegments, insightClassificationOptions],
-  );
   const historyClassificationOptions = useMemo<ClassificationOptions>(
     () => ({ fallbackCandidates: historySegments, includeAiClassifications: showAiClassificationImpact, includeBuiltInHeuristics: allowBuiltInHeuristics, builtInHeuristicsUnavailableSince }),
     [allowBuiltInHeuristics, builtInHeuristicsUnavailableSince, historySegments, showAiClassificationImpact],
@@ -7226,13 +7222,15 @@ export default function App() {
     () => buildInsightSourceLists(activeInsightSegments, "focus", insightClassificationOptions),
     [activeInsightSegments, insightClassificationOptions],
   );
-  const breakRecoveryInsight = useMemo(
-    () => buildBreakRecoveryInsight({
+  const alarmFollowThrough = useMemo(
+    () => buildAlarmFollowThrough({
       interactions: driftAlarmInteractions,
+      segments: activeInsightSegments,
+      classificationOptions: insightClassificationOptions,
       rangeStart: insightRange.start,
       rangeEnd: insightRange.end,
     }),
-    [driftAlarmInteractions, insightRange.end, insightRange.start],
+    [activeInsightSegments, driftAlarmInteractions, insightClassificationOptions, insightRange.end, insightRange.start],
   );
   const insightSiteSummary = insightTopSites.slice(0, 5);
   const selectedDayRange = useMemo(() => getLogicalDayRange(selectedDay, selectedDay, startOfDayMinutes), [selectedDay, startOfDayMinutes]);
@@ -9794,13 +9792,16 @@ export default function App() {
         {/* Insights */}
         {activeTab === "trends" ? (
           <TrendsPage
+            calendarEndDay={selectedDay}
+            calendarStartOfDayMinutes={startOfDayMinutes}
+            loadCalendarHistory={loadCompactHistoryRange}
             activeInsightCategoryTotals={activeInsightCategoryTotals}
             activeInsightProductivityTotals={activeInsightProductivityTotals}
             appIcons={appIcons}
             attentionRhythm={attentionRhythm}
             bodyFallback={<DeferredTabBodyFallback label="trend analysis" variant="trends" />}
             bodyReady={isTrendsBodyReady}
-            breakRecoveryInsight={breakRecoveryInsight}
+            alarmFollowThrough={alarmFollowThrough}
             canShiftInsightForward={canShiftInsightForward}
             driftSourceLists={driftSourceLists}
             focusSourceLists={focusSourceLists}
@@ -9808,7 +9809,6 @@ export default function App() {
             insightDateLabel={insightDateLabel}
             insightSegments={activeInsightSegments}
             isTodaySelected={isTodaySelected}
-            productivityPersonaReport={productivityPersonaReport}
             trendsRange={trendsRange}
             weeklyBreakdown={weeklyBreakdown}
             weeklyProjectSeries={weeklyProjectChart.series}

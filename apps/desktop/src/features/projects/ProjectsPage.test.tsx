@@ -55,7 +55,7 @@ describe("ProjectsPage", () => {
     expect(screen.getByRole("group", { name: "Project matching model" }).textContent).toContain("without changing live activity classification");
     expect(screen.queryByText(/chunk 1 of 3/i)).toBeNull();
     expect(screen.queryByRole("status", { name: /Analyzing your activity/i })).toBeNull();
-    expect(screen.getByRole("button", { name: /Explore in Trends/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Explore in Insights/i })).toBeTruthy();
   });
 
   it("reports automatic matching on the model card while a new project is analyzed", () => {
@@ -163,7 +163,7 @@ describe("ProjectsPage", () => {
     expect(within(projectTable).getByText("Time · Latest 7 days")).toBeTruthy();
     expect(within(projectTable).getByText("2h")).toBeTruthy();
     expect(within(projectTable).queryByText("3h")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Explore in Trends/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Explore in Insights/i }));
     expect(onOpenTrends).toHaveBeenCalledTimes(1);
   });
 
