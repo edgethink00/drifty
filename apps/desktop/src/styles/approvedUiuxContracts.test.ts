@@ -142,4 +142,21 @@ describe("approved UI polish contracts", () => {
     expect(projectSearch).toContain(searchSize);
     expect(ruleBody(leaderboard, ".leaderboard-search input")).toContain(searchSize);
   });
+
+  it("keeps the account language submenu solid and anchored to prevent background bleed", () => {
+    const submenu = ruleBody(prototype, ".account-menu-language-submenu {");
+    expect(submenu).toContain("background: var(--surface-strong);");
+    expect(submenu).toContain("top: 0;");
+    expect(submenu).toContain("left: calc(100% + 4px);");
+    expect(submenu).toContain("width: 9.75rem;");
+    expect(submenu).toContain("backdrop-filter: none;");
+
+    const toggle = ruleBody(prototype, ".account-menu-toggle {");
+    expect(toggle).toContain("width: 32px;");
+    expect(toggle).toContain("height: 18px;");
+
+    const knob = ruleBody(prototype, ".account-menu-toggle__knob {");
+    expect(knob).toContain("width: 14px;");
+    expect(knob).toContain("height: 14px;");
+  });
 });
