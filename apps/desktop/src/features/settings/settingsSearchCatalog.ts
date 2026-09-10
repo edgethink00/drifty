@@ -95,7 +95,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.appearance.categoryColors",
     keywords: "카테고리 색상 category color",
     descriptionKey: "settings.appearance.categoryColorsDescription",
-    reveal: "appearance-colors",
   },
   {
     id: "settings.appearance.accent",
@@ -103,7 +102,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.appearance.accent",
     keywords: "강조색 포인트색 accent color",
     descriptionKey: "settings.appearance.accentDescription",
-    reveal: "appearance-colors",
   },
   {
     id: "settings.appearance.productivityColors",
@@ -111,7 +109,6 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     titleKey: "settings.appearance.productivityColors",
     keywords: "집중 딴짓 중립 색상 focus drift neutral colors",
     descriptionKey: "settings.appearance.productivityColorsDescription",
-    reveal: "appearance-colors",
   },
   {
     id: "settings.pet.show",

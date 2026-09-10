@@ -1,0 +1,77 @@
+/* Shared swatch language (ColorSwatchGrid). Sizes never change between
+   states; every state is a ring, so a row of swatches always stays aligned. */
+.color-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--swatch-columns, 10), max-content);
+  gap: 0.55rem;
+  justify-content: start;
+}
+
+.color-swatch {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  border-radius: var(--radius-pill);
+  background: var(--swatch-color);
+  cursor: pointer;
+  flex: none;
+  transition: box-shadow var(--transition-fast), background var(--transition-fast);
+}
+
+.color-swatch:hover {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.color-swatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.color-swatch.is-selected {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--swatch-color);
+}
+
+.color-swatch.is-selected:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+/* Taken elsewhere: hue stays legible as a ring, fill drops out. */
+.color-swatch.is-used {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--swatch-color) 28%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--swatch-color) 85%, var(--text) 15%);
+}
+
+.color-swatch.is-used:hover {
+  box-shadow:
+    inset 0 0 0 1.5px color-mix(in srgb, var(--swatch-color) 85%, var(--text) 15%),
+    0 0 0 2px color-mix(in srgb, var(--text) 22%, transparent);
+}
+
+.color-swatch__check {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+  transition: opacity var(--transition-fast);
+}
+
+.color-swatch.is-selected .color-swatch__check {
+  opacity: 1;
+}
+
+@media (forced-colors: active) {
+  .color-swatch.is-selected {
+    outline: 2px solid Highlight;
+  }
+}

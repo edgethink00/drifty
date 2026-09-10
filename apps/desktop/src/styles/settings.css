@@ -638,13 +638,6 @@
   opacity: 0.5;
 }
 
-.settings-color-grid {
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-  width: 100%;
-}
-
 .settings-color-field {
   align-items: center;
   background: color-mix(in srgb, var(--bg-2) 72%, transparent);

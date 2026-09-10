@@ -103,23 +103,23 @@ describe("settings search", () => {
       return <SettingsSearchProvider activeSection={section} availability={publicAvailability} onNavigate={(entry) => setSection(entry.section)}>
         <SettingsSearch><nav /></SettingsSearch>
         <SettingsSearchDestination>
-          {section === "appearance" ? <SettingsCollapsibleCard title="Colors" searchReveal="appearance-colors">
-            <div data-setting-id="settings.appearance.categoryColors">Category colors <button onClick={changeSetting}>Change color</button></div>
+          {section === "privacy" ? <SettingsCollapsibleCard title="Privacy" searchReveal="privacy-ai">
+            <div data-setting-id="settings.privacy.aiSending">AI data sending <button onClick={changeSetting}>Change</button></div>
           </SettingsCollapsibleCard> : <div>General</div>}
         </SettingsSearchDestination>
       </SettingsSearchProvider>;
     }
     render(<Harness />);
     const input = screen.getByRole("combobox");
-    fireEvent.change(input, { target: { value: "Category colors" } });
+    fireEvent.change(input, { target: { value: "AI data sending" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(document.activeElement?.getAttribute("data-setting-id")).toBe("settings.appearance.categoryColors"));
-    expect(screen.getByRole("button", { name: "Colors" }).getAttribute("aria-expanded")).toBe("true");
+    await waitFor(() => expect(document.activeElement?.getAttribute("data-setting-id")).toBe("settings.privacy.aiSending"));
+    expect(screen.getByRole("button", { name: "Privacy" }).getAttribute("aria-expanded")).toBe("true");
     expect(changeSetting).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Colors" }));
-    fireEvent.change(input, { target: { value: "Category colors" } });
+    fireEvent.click(screen.getByRole("button", { name: "Privacy" }));
+    fireEvent.change(input, { target: { value: "AI data sending" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Colors" }).getAttribute("aria-expanded")).toBe("true"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Privacy" }).getAttribute("aria-expanded")).toBe("true"));
     expect(changeSetting).not.toHaveBeenCalled();
   });
   it("keeps a pending request across delayed navigation and consumes it before destination remount", async () => {

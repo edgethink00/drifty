@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { normalizeProjectColor } from "../../lib/colorPalette";
 import {
   type AiReviewEvent,
   type Project,
@@ -186,7 +187,9 @@ export function useProjectClassification(args: UseProjectClassificationArgs): Us
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true);
     try {
-      setProjects((await tracker.getProjects?.()) ?? []);
+      // Legacy vivid colors resolve to their palette slot here, so every consumer
+      // (rows, legends, charts) sees one palette without a data migration.
+      setProjects(((await tracker.getProjects?.()) ?? []).map((project) => ({ ...project, color: normalizeProjectColor(project.color) })));
     } catch {
       setProjects([]);
     } finally {

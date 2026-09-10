@@ -1,5 +1,5 @@
 import type { ActivityCategory } from "@drifty/domain";
-import { CategoryColorControls, ThemeColorControls, type AppThemeColorKey } from "./SettingsColorControls";
+import { AccentColorControl, CategoryColorControls, ProductivityColorControls, type AppThemeColorKey } from "./SettingsColorControls";
 import type { AppThemeColorOverrides, CategoryColorOverrides, ThemeMode } from "./settingsStorage";
 import {
   APP_THEME_ACCENT_COLOR_OPTIONS,
@@ -8,7 +8,6 @@ import {
 } from "./settingsStorage";
 import { useLocalization } from "../localization/LocalizationContext";
 import { SettingsSelect } from "./SettingsSelect";
-import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 
 type AppearanceSettingsSectionProps = {
   readonly appThemeColorOverrides: AppThemeColorOverrides;
@@ -21,6 +20,11 @@ type AppearanceSettingsSectionProps = {
   readonly onThemeChange: (theme: ThemeMode) => void;
 };
 
+/**
+ * Two blocks: app chrome (theme, accent) and activity semantics (productivity,
+ * categories), small group before large. Nothing collapses — at rest each
+ * color row is a one-line legend of what the colors currently are.
+ */
 export function AppearanceSettingsSection({
   appThemeColorOverrides,
   categoryColorOverrides,
@@ -32,10 +36,6 @@ export function AppearanceSettingsSection({
   onThemeChange,
 }: AppearanceSettingsSectionProps) {
   const { t } = useLocalization();
-  const colorRoleCount =
-    CATEGORY_COLOR_OPTIONS.length
-    + APP_THEME_ACCENT_COLOR_OPTIONS.length
-    + APP_THEME_PRODUCTIVITY_COLOR_OPTIONS.length;
 
   return (
     <div className="settings-section settings-section--appearance">
@@ -49,27 +49,26 @@ export function AppearanceSettingsSection({
           ]}
           onChange={onThemeChange}
         /></div></div>
+        <AccentColorControl
+          accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
+          overrides={appThemeColorOverrides}
+          onColorChange={onAppThemeColorChange}
+          onColorReset={onAppThemeColorReset}
+        />
       </div>
-      <div className="settings-block"><h3>{t("settings.appearance.colors")}</h3>
-        <SettingsCollapsibleCard searchReveal="appearance-colors"
-          title={t("settings.appearance.advancedColors")}
-          subtitle={t("settings.appearance.advancedColorsDescription")}
-          summary={t("settings.appearance.colorRoles", { count: colorRoleCount })}
-        >
-          <CategoryColorControls
-            options={CATEGORY_COLOR_OPTIONS}
-            overrides={categoryColorOverrides}
-            onColorChange={onCategoryColorChange}
-            onColorReset={onCategoryColorReset}
-          />
-          <ThemeColorControls
-            accentOptions={APP_THEME_ACCENT_COLOR_OPTIONS}
-            productivityOptions={APP_THEME_PRODUCTIVITY_COLOR_OPTIONS}
-            overrides={appThemeColorOverrides}
-            onColorChange={onAppThemeColorChange}
-            onColorReset={onAppThemeColorReset}
-          />
-        </SettingsCollapsibleCard>
+      <div className="settings-block"><h3>{t("settings.appearance.activityColors")}</h3>
+        <ProductivityColorControls
+          productivityOptions={APP_THEME_PRODUCTIVITY_COLOR_OPTIONS}
+          overrides={appThemeColorOverrides}
+          onColorChange={onAppThemeColorChange}
+          onColorReset={onAppThemeColorReset}
+        />
+        <CategoryColorControls
+          options={CATEGORY_COLOR_OPTIONS}
+          overrides={categoryColorOverrides}
+          onColorChange={onCategoryColorChange}
+          onColorReset={onCategoryColorReset}
+        />
       </div>
     </div>
   );

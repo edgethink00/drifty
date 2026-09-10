@@ -108,7 +108,7 @@ describe("TeamProjectsView", () => {
     expect(viewProps.onCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: "Launch",
       description: "Ship the launch.",
-      color: "#6366f1",
+      color: "#5366a3",
     }));
   });
 

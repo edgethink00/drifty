@@ -7,6 +7,7 @@ import type {
   TeamProjectMemberRow,
   TeamProjectMixRow,
 } from "./teamTypes";
+import { normalizeProjectColor } from "../../lib/colorPalette";
 import {
   readBoolean,
   readInviteStatus,
@@ -52,7 +53,9 @@ export function normalizeTeamProject(row: unknown): TeamProject {
     organization_id: readString(record, "organization_id"),
     name: readString(record, "name"),
     description: readString(record, "description"),
-    color: readString(record, "color"),
+    // Members may still publish legacy vivid values; resolve at the boundary so
+    // project rows, mix slices and dashboards all share one palette.
+    color: normalizeProjectColor(readString(record, "color")),
     status: readProjectStatus(record),
     anchors: readTeamProjectAnchors(record.anchors),
     can_manage: readBoolean(record, "can_manage"),
@@ -67,7 +70,7 @@ export function normalizeTeamProjectMixRow(row: unknown): TeamProjectMixRow {
     organization_id: readString(record, "organization_id"),
     organization_project_id: readString(record, "organization_project_id"),
     project_name: readString(record, "project_name"),
-    project_color: readString(record, "project_color"),
+    project_color: normalizeProjectColor(readString(record, "project_color")),
     project_status: readProjectStatus({ status: record.project_status }),
     activity_date: readString(record, "activity_date"),
     seconds: readNumber(record, "seconds"),
