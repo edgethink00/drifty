@@ -2955,6 +2955,20 @@ export default function App() {
     setDriftAlarmInteractions(recordDriftAlarmInteraction(interaction));
   }, []);
 
+  const recordDriftAlarmShown = useCallback((event: DriftAlarmEvent) => {
+    const alreadyRecorded = readDriftAlarmInteractions().some(
+      (entry) => entry.kind === "shown" && entry.alarmId === event.id,
+    );
+    if (alreadyRecorded) return;
+    recordDriftInteraction({
+      kind: "shown",
+      alarmId: event.id,
+      mode: event.mode,
+      shownAt: new Date().toISOString(),
+      driftDurationSeconds: event.driftDurationSeconds,
+    });
+  }, [recordDriftInteraction]);
+
   const recordBreakRecoveryOutcome = useCallback((attempt: DriftAlarmBreakSnooze, outcome: BreakRecoveryOutcome) => {
     recordDriftInteraction({
       kind: "break_outcome",
@@ -3000,6 +3014,7 @@ export default function App() {
 
     if (!isTauriRuntime()) {
       setDriftAlarmEvent(event);
+      recordDriftAlarmShown(event);
       recordDriftAlarmDebugEvent({
         kind: "renderer_show_non_tauri",
         alertKey: event.id,
@@ -3020,6 +3035,7 @@ export default function App() {
         alertKey: event.id,
         delivery,
       });
+      recordDriftAlarmShown(event);
     }).catch((error: unknown) => {
       recordDriftAlarmDebugEvent({
         kind: "native_show_failed",
@@ -3034,7 +3050,7 @@ export default function App() {
       pendingDriftAlarmEventRef.current = null;
       if (pendingEvent) showDriftAlarm(pendingEvent);
     });
-  }, [clearDriftAlarmEvent]);
+  }, [clearDriftAlarmEvent, recordDriftAlarmShown]);
 
   const previewCompanionMilestone = useCallback((previewId: CompanionMilestonePreviewId) => {
     void showNativeCompanionMilestone(buildCompanionMilestonePreview(previewId))

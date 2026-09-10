@@ -1,6 +1,7 @@
 import { classifyActivity } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import type { DriftAlarmInteraction } from "../companion/driftAlarmRecoveryTypes";
+import { interactionTimestamp } from "../companion/driftAlarmInteractionStorage";
 
 /** How long after an alarm we still count a return to focus. */
 export const FOLLOW_THROUGH_WINDOW_MINUTES = 30;
@@ -67,6 +68,11 @@ function median(values: readonly number[]): number | null {
  * Recovery is read back from classified activity with one method for every
  * alarm, which keeps the four paths comparable. The path records what the user
  * did before returning; it is not a claim that the alarm caused the return.
+ *
+ * Shown events are the intended denominator. Production builds before this
+ * fix never wrote them, so a click or break outcome in the window still
+ * counts as evidence that an alarm appeared. The same alarm is not counted
+ * twice when both a shown record and an action exist.
  */
 export function buildAlarmFollowThrough({
   interactions,
@@ -85,11 +91,7 @@ export function buildAlarmFollowThrough({
   const rangeEndMs = new Date(rangeEnd).getTime();
   if (Number.isNaN(rangeStartMs) || Number.isNaN(rangeEndMs)) return EMPTY_ALARM_FOLLOW_THROUGH;
 
-  const alarms = interactions
-    .filter((interaction) => interaction.kind === "shown")
-    .map((interaction) => ({ alarmId: interaction.alarmId, shownMs: new Date(interaction.shownAt).getTime() }))
-    .filter((alarm) => !Number.isNaN(alarm.shownMs) && alarm.shownMs >= rangeStartMs && alarm.shownMs <= rangeEndMs)
-    .sort((left, right) => left.shownMs - right.shownMs);
+  const alarms = collectAlarmsInRange(interactions, rangeStartMs, rangeEndMs);
 
   if (alarms.length === 0) return EMPTY_ALARM_FOLLOW_THROUGH;
 
@@ -137,4 +139,29 @@ export function buildAlarmFollowThrough({
     medianMinutesToFocus: median(minutesToFocus),
     pathCounts,
   };
+}
+
+function collectAlarmsInRange(
+  interactions: readonly DriftAlarmInteraction[],
+  rangeStartMs: number,
+  rangeEndMs: number,
+): { readonly alarmId: string; readonly shownMs: number }[] {
+  const shownByAlarm = new Map<string, number>();
+  const inferredByAlarm = new Map<string, number>();
+
+  for (const interaction of interactions) {
+    const atMs = interactionTimestamp(interaction);
+    if (!Number.isFinite(atMs) || atMs < rangeStartMs || atMs > rangeEndMs) continue;
+    const bucket = interaction.kind === "shown" ? shownByAlarm : inferredByAlarm;
+    const previous = bucket.get(interaction.alarmId);
+    if (previous === undefined || atMs < previous) bucket.set(interaction.alarmId, atMs);
+  }
+
+  const alarmIds = new Set([...shownByAlarm.keys(), ...inferredByAlarm.keys()]);
+  return [...alarmIds]
+    .map((alarmId) => ({
+      alarmId,
+      shownMs: shownByAlarm.get(alarmId) ?? inferredByAlarm.get(alarmId)!,
+    }))
+    .sort((left, right) => left.shownMs - right.shownMs);
 }

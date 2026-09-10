@@ -106,6 +106,49 @@ describe("buildAlarmFollowThrough", () => {
     expect(result.rate).toBe(1);
   });
 
+  it("counts a unique alarm from a click when no shown record exists", () => {
+    const result = build(
+      [
+        action("a", "start_break", "2026-09-02T09:01:00.000Z"),
+        action("b", "dismiss", "2026-09-02T14:01:00.000Z"),
+      ],
+      [focus("f", "2026-09-02T09:12:00.000Z", 30)],
+    );
+    expect(result.totalAlarms).toBe(2);
+    expect(result.pathCounts.afterBreak).toBe(1);
+    expect(result.pathCounts.noReturn).toBe(1);
+  });
+
+  it("does not double-count an alarm that has both a shown record and a click", () => {
+    const result = build(
+      [
+        shown("a", "2026-09-02T09:00:00.000Z"),
+        action("a", "dismiss", "2026-09-02T09:01:00.000Z"),
+      ],
+      [focus("f", "2026-09-02T09:08:00.000Z", 20)],
+    );
+    expect(result.totalAlarms).toBe(1);
+    expect(result.pathCounts.onOwn).toBe(1);
+    expect(result.medianMinutesToFocus).toBe(8);
+  });
+
+  it("counts a break outcome as evidence when no shown record exists", () => {
+    const result = build(
+      [{
+        kind: "break_outcome",
+        alarmId: "a",
+        attemptId: "attempt-a",
+        minutes: 5,
+        outcome: "recovered",
+        sourceLabel: "youtube.com",
+        resolvedAt: "2026-09-02T09:06:00.000Z",
+      } as DriftAlarmInteraction],
+      [focus("f", "2026-09-02T09:12:00.000Z", 20)],
+    );
+    expect(result.totalAlarms).toBe(1);
+    expect(result.pathCounts.onOwn).toBe(1);
+  });
+
   it("takes the median of the recovered alarms only", () => {
     const result = build(
       [
