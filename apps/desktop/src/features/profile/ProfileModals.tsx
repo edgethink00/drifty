@@ -79,7 +79,7 @@ export function ProfileModal({
         </div>
         {isLoading ? <p className="capture-recency">{t("profile.loading")}</p> : null}
         {error ? <p className="capture-recency capture-recency--error">{error}</p> : null}
-        <p className="profile-modal__bio">{bio || t("profile.noBio")}</p>
+        <p className={`profile-modal__bio ${bio ? "" : "profile-modal__bio--empty"}`.trim()}>{bio || t("profile.noBio")}</p>
         <ProfileSocialLinks profile={profile ?? { website_url: null, github_url: null, linkedin_url: null }} hideWhenEmpty />
         <div className="profile-modal__hero" data-rank-tier={rankTier ?? undefined}>
           <span className="eyebrow">{periodFocusLabel}</span>

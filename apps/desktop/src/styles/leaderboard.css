@@ -27,11 +27,13 @@
   color: var(--warn);
 }
 
-.profile-modal {
-  max-width: 560px;
+.profile-modal,
+.auth-modal.profile-modal {
+  max-width: 470px;
 }
 
-.profile-editor-modal {
+.profile-editor-modal,
+.auth-modal.profile-modal.profile-editor-modal {
   max-width: 640px;
 }
 
@@ -114,14 +116,36 @@
   border-radius: var(--radius-lg);
   display: grid;
   gap: 0.45rem;
-  padding: var(--space-3);
+  padding: 16px 18px;
+}
+
+.profile-modal__hero .eyebrow {
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  margin-bottom: 0;
+  text-transform: none;
+}
+
+.profile-modal__hero[data-rank-tier="gold"] .eyebrow {
+  color: var(--gold);
+}
+
+.profile-modal__hero[data-rank-tier="silver"] .eyebrow {
+  color: var(--blue);
+}
+
+.profile-modal__hero[data-rank-tier="bronze"] .eyebrow {
+  color: var(--accent);
 }
 
 .profile-modal__hero-value {
   color: var(--text);
   font-family: var(--font-display);
-  font-size: 1.5rem;
-  letter-spacing: -0.02em;
+  font-size: 1.625rem;
+  letter-spacing: -0.025em;
   line-height: 1.1;
 }
 
@@ -130,7 +154,7 @@
   border-radius: var(--radius-pill);
   display: block;
   height: 6px;
-  margin-top: 0.15rem;
+  margin-top: 0.2rem;
   overflow: hidden;
 }
 
@@ -169,11 +193,12 @@
 }
 
 .profile-modal__updated {
-  color: var(--text-soft);
+  color: var(--text-muted);
   font-family: var(--font-sans);
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
-  margin: var(--space-3) 0 0;
+  margin: var(--space-4) 0 0;
+  text-align: right;
 }
 
 .profile-modal__avatar {
@@ -193,7 +218,19 @@
 
 .profile-modal__bio {
   color: var(--text-soft);
-  line-height: 1.6;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  margin: 0 0 var(--space-4);
+}
+
+.profile-modal__bio--empty {
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.profile-modal__bio:has(+ .profile-socials) {
+  margin-bottom: var(--space-3);
 }
 
 .update-dialog-title {
@@ -375,7 +412,47 @@
 
 .profile-modal__stats {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
-  margin: var(--space-3) 0 0;
+  margin: 10px 0 0;
+}
+
+.profile-modal__stats .metric-tile {
+  background: color-mix(in srgb, var(--surface-strong) 28%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.profile-modal__stats .metric-tile .eyebrow {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: normal;
+  margin-bottom: 0;
+  text-transform: none;
+}
+
+.profile-modal__stats .metric-tile strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+}
+
+.profile-modal__stats .metric-tile p {
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  letter-spacing: normal;
+  line-height: 1.35;
+  margin-top: 0;
 }
