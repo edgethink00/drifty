@@ -14,6 +14,7 @@ export type ProfileDialogsProps = {
   profileLoading: boolean;
   profileMessage: string | null;
   profileSaving: boolean;
+  publicId: string | null;
   selectedLeaderboardRow: LeaderboardRow | null;
   selectedProfileError: string | null;
   selectedProfileLoading: boolean;
@@ -36,6 +37,7 @@ export function ProfileDialogs({
   profileLoading,
   profileMessage,
   profileSaving,
+  publicId,
   selectedLeaderboardRow,
   selectedProfileError,
   selectedProfileLoading,
@@ -67,6 +69,7 @@ export function ProfileDialogs({
         <EditProfileModal
           displayName={displayName}
           avatarUrl={avatarUrl}
+          publicId={publicId}
           profileDraft={profileDraft}
           profileLoading={profileLoading}
           profileSaving={profileSaving}

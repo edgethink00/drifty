@@ -124,6 +124,7 @@ export function ProfileModal({
 export function EditProfileModal({
   displayName,
   avatarUrl,
+  publicId,
   profileDraft,
   profileLoading,
   profileSaving,
@@ -137,6 +138,7 @@ export function EditProfileModal({
 }: {
   displayName: string;
   avatarUrl: string;
+  publicId: string | null;
   profileDraft: ProfileDraft;
   profileLoading: boolean;
   profileSaving: boolean;
@@ -191,6 +193,22 @@ export function EditProfileModal({
             </div>
             <ProfileSocialLinks profile={{ website_url: profileDraft.websiteUrl, github_url: profileDraft.githubUrl, linkedin_url: profileDraft.linkedinUrl }} />
             <p className="profile-editor-preview__privacy">{t("profile.editor.previewPrivacy")}</p>
+            {/* Visibility sits with the preview it governs: what is published, whether it is
+                published, and a way to go look at it now read as one cluster. */}
+            <PublicProfileToggle
+              checked={profileDraft.isPublic}
+              disabled={profileLoading || profileSaving}
+              onChange={(isPublic) => onChange({ isPublic })}
+            />
+            {publicId && profileDraft.isPublic ? (
+              <button
+                type="button"
+                className="app-btn app-btn--quiet app-btn--compact profile-editor-preview__open-page"
+                onClick={() => void openPublicProfilePage(publicId)}
+              >
+                {t("profile.editor.openPublicPage")}
+              </button>
+            ) : null}
           </aside>
 
           <div className="leaderboard-profile-sidebar__form">
@@ -206,11 +224,6 @@ export function EditProfileModal({
               <label><span>GitHub</span><input className="settings-input modal-code" value={profileDraft.githubUrl} onChange={(event) => onChange({ githubUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
               <label><span>LinkedIn</span><input className="settings-input modal-code" value={profileDraft.linkedinUrl} onChange={(event) => onChange({ linkedinUrl: event.target.value })} disabled={profileLoading || profileSaving} /></label>
             </fieldset>
-            <PublicProfileToggle
-              checked={profileDraft.isPublic}
-              disabled={profileLoading || profileSaving}
-              onChange={(isPublic) => onChange({ isPublic })}
-            />
           </div>
         </div>
 
@@ -337,6 +350,21 @@ export function formatProfileLinkLabel(kind: ProfileLinkKind, value?: string | n
 
 export function buildPublicProfileUrl(publicId: string): string {
   return `https://drifty.so/profile/?id=${encodeURIComponent(publicId)}`;
+}
+
+/**
+ * Open the live public profile page in the default browser. The in-app editor can only
+ * preview the fields it owns, so this is the one place a user can see exactly what the
+ * public URL serves before sharing it.
+ */
+export async function openPublicProfilePage(publicId: string): Promise<void> {
+  const url = buildPublicProfileUrl(publicId);
+  try {
+    const { openUrl } = await import("@tauri-apps/plugin-opener");
+    await openUrl(url);
+  } catch {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 export async function copyTextToClipboard(text: string): Promise<void> {

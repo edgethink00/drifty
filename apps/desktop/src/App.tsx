@@ -2137,6 +2137,7 @@ export default function App() {
     profileReadyUserId,
     profileSaving,
     profileShareMessage,
+    publicProfileLiveOffBoard,
     rows: leaderboardRows,
     selectedLeaderboardRow,
     selectedProfileError,
@@ -9857,6 +9858,7 @@ export default function App() {
               focusSeconds7d: localRollingFocusSeconds,
               localMetricsStatus: leaderboardLocalMetricsStatus,
               isPreviewProfile: leaderboardUsesPreviewProfile,
+              liveOffBoard: publicProfileLiveOffBoard,
               profileError: isProfileEditorOpen ? null : profileError,
               profileLoading,
               profileMessage: isProfileEditorOpen ? null : profileMessage,
@@ -10326,6 +10328,7 @@ export default function App() {
         profileLoading={profileLoading}
         profileMessage={profileMessage}
         profileSaving={profileSaving}
+        publicId={profile?.public_id ?? null}
         selectedLeaderboardRow={selectedLeaderboardRow}
         selectedProfileError={selectedProfileError}
         selectedProfileLoading={selectedProfileLoading}

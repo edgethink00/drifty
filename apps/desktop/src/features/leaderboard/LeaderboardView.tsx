@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { formatLocalizedDuration } from "../../lib/formatting";
-import { normalizeExternalUrl, type ProfileDraft } from "../profile/ProfileModals";
+import { normalizeExternalUrl, openPublicProfilePage, type ProfileDraft } from "../profile/ProfileModals";
 import type { DailyProductivityPoint } from "../share/dailyProductivity";
 import type { FocusCardControls } from "../share/useFocusCard";
 import { LeaderboardBoard } from "./LeaderboardBoard";
@@ -16,6 +16,8 @@ export type LeaderboardPublicProfileControls = {
   readonly draft: ProfileDraft;
   readonly focusSeconds7d: number;
   readonly isPreviewProfile?: boolean;
+  /** True whenever `is_public` keeps the profile page live while the user is off the board. */
+  readonly liveOffBoard?: boolean;
   readonly localMetricsStatus?: "loading" | "ready" | "error";
   readonly profileError: string | null;
   readonly profileLoading: boolean;
@@ -99,6 +101,8 @@ export function LeaderboardView({
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const profileDraft = publicProfile?.draft ?? null;
   const profileAvatarUrl = profileDraft?.avatarUrl.trim() ?? "";
+  // Captured out of the closure so the open-page button keeps its non-null narrowing.
+  const publicPageId = publicProfile?.publicId ?? null;
   const editProfile = publicProfile?.onEditProfile ?? null;
   const weekFocusSeconds = publicProfile?.focusSeconds7d ?? 0;
   const dailyAverageSeconds = Math.round(weekFocusSeconds / 7);
@@ -326,6 +330,30 @@ export function LeaderboardView({
             </div>
           </section>
           {!isLoading && actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
+          {!isLoading && !isOptedIn && publicProfile?.liveOffBoard && publicProfile.isPreviewProfile !== true ? (
+            <div className="leaderboard-public-profile__notice" role="status">
+              <p className="capture-recency">{t("leaderboard.publicProfileOffBoard")}</p>
+              <div className="leaderboard-public-profile__notice-actions">
+                <button
+                  type="button"
+                  className="app-btn app-btn--secondary app-btn--compact"
+                  onClick={() => void publicProfile.onSetProfileVisibility(false)}
+                  disabled={publicProfile.profileSaving}
+                >
+                  {t("leaderboard.makeProfilePrivate")}
+                </button>
+                {publicPageId ? (
+                  <button
+                    type="button"
+                    className="app-btn app-btn--quiet app-btn--compact"
+                    onClick={() => void openPublicProfilePage(publicPageId)}
+                  >
+                    {t("profile.editor.openPublicPage")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           {!isLoading && (publicProfile?.profileError || publicProfile?.profileMessage) ? (
             <div className="leaderboard-public-profile__messages">
               {publicProfile.profileError ? <p className="capture-recency capture-recency--error">{publicProfile.profileError}</p> : null}

@@ -3,6 +3,7 @@ import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isPassiveSupportedSegment } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
+import { isPublicProfileLiveOffBoard } from "./publicProfileOffBoard";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { capturePostHogEvent, toAnalyticsErrorKind, toCountBucket } from "../../lib/analytics/posthogClient";
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
@@ -106,6 +107,11 @@ type UseLeaderboardProfileControllerResult = {
   readonly profileReadyUserId: string | null;
   readonly profileSaving: boolean;
   readonly profileShareMessage: string | null;
+  /**
+   * True whenever the profile page is serving while the user is off the board. The user
+   * still chooses whether to unpublish; this only refuses to keep the state invisible.
+   */
+  readonly publicProfileLiveOffBoard: boolean;
   readonly rows: LeaderboardRow[];
   readonly selectedLeaderboardRow: LeaderboardRow | null;
   readonly selectedProfileError: string | null;
@@ -429,6 +435,13 @@ export function useLeaderboardProfileController({
   const isLeaderboardParticipationResolved = leaderboardUsesPreviewProfile
     || !isSupabaseConfigured
     || (isAuthResolved && (!isPolicySignedIn || leaderboardOwnEntryScopeRef.current === leaderboardOwnEntryScopeKey));
+
+  const publicProfileLiveOffBoard = isPublicProfileLiveOffBoard({
+    isParticipationResolved: isLeaderboardParticipationResolved,
+    isOptedIn: isLeaderboardOptedIn,
+    isProfileReady: profileReadyUserId !== null && profileReadyUserId === (user?.id ?? null),
+    isPublic: profile?.is_public,
+  });
 
   useEffect(() => {
     leaderboardOptInCacheRef.current = null;
@@ -1367,6 +1380,7 @@ export function useLeaderboardProfileController({
     profileReadyUserId,
     profileSaving,
     profileShareMessage,
+    publicProfileLiveOffBoard,
     rows: leaderboardRows,
     selectedLeaderboardRow,
     selectedProfileError,

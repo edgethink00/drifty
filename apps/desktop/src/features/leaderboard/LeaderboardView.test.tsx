@@ -303,6 +303,7 @@ describe("LeaderboardView", () => {
       <EditProfileModal
         displayName="Alex"
         avatarUrl="data:image/png;base64,avatar"
+        publicId={null}
         profileDraft={{
           displayName: "Alex",
           bio: "Building quiet tools.",
@@ -389,6 +390,24 @@ describe("LeaderboardView", () => {
     expect(within(totals).getByText("—")).toBeTruthy();
     expect(within(totals).queryByText("0m")).toBeNull();
     expect(screen.getByRole("status").textContent).toBe("Calculating your 30-day focus total…");
+  });
+
+  it("reports a live public page while off the board, and offers to unpublish", () => {
+    const onSetProfileVisibility = vi.fn().mockResolvedValue(true);
+    renderView({
+      isOptedIn: false,
+      publicProfile: makePublicProfile({ liveOffBoard: true, onSetProfileVisibility }),
+    });
+
+    expect(screen.getByText(/public profile page is on/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Make profile private" }));
+    expect(onSetProfileVisibility).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps that notice hidden while the user is still on the board", () => {
+    renderView({ isOptedIn: true, publicProfile: makePublicProfile({ liveOffBoard: true }) });
+
+    expect(screen.queryByText(/public profile page is on/i)).toBeNull();
   });
 
   it("renders background refresh status as a non-error toolbar status", () => {

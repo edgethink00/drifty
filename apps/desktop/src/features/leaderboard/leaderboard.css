@@ -253,6 +253,26 @@
   margin: 0;
 }
 
+.leaderboard-public-profile__notice {
+  background: color-mix(in srgb, var(--surface-strong) 46%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+}
+
+.leaderboard-public-profile__notice .capture-recency {
+  margin: 0;
+}
+
+.leaderboard-public-profile__notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .leaderboard-public-profile .profile-btn,
 .leaderboard-panel .profile-embeds .profile-btn {
   align-items: center;
@@ -1886,6 +1906,12 @@
   font-size: var(--type-setting-desc-size);
   line-height: 1.45;
   margin: 0;
+}
+
+.profile-editor-preview__open-page {
+  align-self: flex-start;
+  justify-self: start;
+  margin-top: var(--space-2);
 }
 
 .profile-socials--empty {

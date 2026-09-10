@@ -83,6 +83,7 @@ function EditProfileModalHarness({
         <EditProfileModal
           displayName="Alex"
           avatarUrl=""
+          publicId={null}
           profileDraft={PROFILE_DRAFT}
           profileLoading={false}
           profileSaving={profileSaving}
