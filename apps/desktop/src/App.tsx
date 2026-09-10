@@ -10320,6 +10320,7 @@ export default function App() {
         avatarUrl={profileDraft.avatarUrl}
         displayName={leaderboardProfileDisplayName}
         isProfileEditorOpen={isProfileEditorOpen}
+        leaderboardRows={leaderboardRows}
         profileDraft={profileDraft}
         profileError={profileError}
         profileLoading={profileLoading}

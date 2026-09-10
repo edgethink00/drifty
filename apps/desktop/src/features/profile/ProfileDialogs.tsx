@@ -8,6 +8,7 @@ export type ProfileDialogsProps = {
   avatarUrl: string;
   displayName: string;
   isProfileEditorOpen: boolean;
+  leaderboardRows?: readonly LeaderboardRow[];
   profileDraft: ProfileDraft;
   profileError: string | null;
   profileLoading: boolean;
@@ -29,6 +30,7 @@ export function ProfileDialogs({
   avatarUrl,
   displayName,
   isProfileEditorOpen,
+  leaderboardRows,
   profileDraft,
   profileError,
   profileLoading,
@@ -54,6 +56,7 @@ export function ProfileDialogs({
           profile={selectedPublicProfile}
           isLoading={selectedProfileLoading}
           error={selectedProfileError}
+          leaderboardRows={leaderboardRows}
           onClose={onCloseSelectedProfile}
         />
         ) : null}

@@ -46,6 +46,136 @@
   margin: var(--space-1) 0 0;
 }
 
+.profile-modal__identity {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.profile-modal__identity h2 {
+  margin: 0;
+}
+
+/* Standing reads as a quiet scoreboard line. Hangul stays in the sans stack;
+   only the figures line up, so mono letter-spacing never hits Korean text. */
+.profile-modal__standing {
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+/* Podium crest: the avatar carries the rank tier the board already uses. */
+.profile-modal__crest {
+  --profile-rank-color: var(--text-muted);
+  display: inline-flex;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.profile-modal__crest[data-rank-tier="gold"] {
+  --profile-rank-color: var(--gold);
+}
+
+.profile-modal__crest[data-rank-tier="silver"] {
+  --profile-rank-color: var(--blue);
+}
+
+.profile-modal__crest[data-rank-tier="bronze"] {
+  --profile-rank-color: var(--accent);
+}
+
+.profile-modal__crest .profile-modal__avatar {
+  border: 2px solid color-mix(in srgb, var(--profile-rank-color) 55%, transparent);
+}
+
+.profile-modal__rank-badge {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--profile-rank-color) 42%, var(--line));
+  border-radius: var(--radius-pill);
+  bottom: -5px;
+  color: var(--profile-rank-color);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.1rem;
+  min-width: 1.75rem;
+  padding: 0 0.3rem;
+  position: absolute;
+  right: -6px;
+  text-align: center;
+}
+
+/* Focus total as the popup's single hero number, with a leader-relative meter. */
+.profile-modal__hero {
+  background: color-mix(in srgb, var(--surface-strong) 46%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 0.45rem;
+  padding: var(--space-3);
+}
+
+.profile-modal__hero-value {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.profile-modal__leader-bar {
+  background: color-mix(in srgb, var(--bg-2) 76%, transparent);
+  border-radius: var(--radius-pill);
+  display: block;
+  height: 6px;
+  margin-top: 0.15rem;
+  overflow: hidden;
+}
+
+.profile-modal__leader-bar-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 52%, transparent), var(--accent));
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  transform: scaleX(var(--profile-leader-share, 0));
+  transform-origin: left center;
+  width: 100%;
+  animation: profile-leader-bar-grow 220ms ease-out;
+}
+
+.profile-modal__hero[data-rank-tier="gold"] .profile-modal__leader-bar-fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gold) 48%, transparent), var(--gold));
+}
+
+@keyframes profile-leader-bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-modal__leader-bar-fill {
+    animation: none;
+  }
+}
+
+.profile-modal__hero-note {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.profile-modal__updated {
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  margin: var(--space-3) 0 0;
+}
+
 .profile-modal__avatar {
   align-items: center;
   border-radius: 999px;
@@ -61,8 +191,7 @@
   width: 52px;
 }
 
-.profile-modal__bio,
-.profile-modal__privacy {
+.profile-modal__bio {
   color: var(--text-soft);
   line-height: 1.6;
 }
@@ -185,21 +314,52 @@
   margin: var(--space-3) 0;
 }
 
-.profile-socials a,
-.profile-socials--empty {
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  color: var(--text);
+/* Link chips are tertiary: a tonal fill at rest, structure only on interaction.
+   The label carries its own kind (domain, @handle, in/slug), so no brand mark
+   or decorative bullet is needed. */
+.profile-socials a {
+  align-items: center;
+  background: color-mix(in srgb, var(--surface-strong) 64%, transparent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  color: var(--text-muted);
+  display: inline-flex;
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  padding: 0.42rem 0.62rem;
+  max-width: 13rem;
+  padding: 0.3rem 0.66rem;
   text-decoration: none;
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* Long handles truncate instead of wrapping the chip row. */
+.profile-social__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-socials--empty {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.3rem 0.66rem;
 }
 
 .profile-socials a:hover,
 .profile-socials a:focus-visible {
-  border-color: var(--accent);
-  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  color: var(--accent-strong);
+}
+
+.profile-socials a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  outline-offset: 1px;
 }
 
 .profile-socials--empty {
@@ -216,6 +376,6 @@
 .profile-modal__stats {
   display: grid;
   gap: var(--space-3);
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin: var(--space-4) 0;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  margin: var(--space-3) 0 0;
 }

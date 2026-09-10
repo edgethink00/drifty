@@ -463,14 +463,13 @@
 .profile-editor-preview .profile-socials a {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.34rem 0.72rem;
-  border: 1px solid var(--line);
+  padding: 0.3rem 0.66rem;
+  border: 1px solid transparent;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-strong) 46%, var(--surface));
-  color: var(--text);
+  background: color-mix(in srgb, var(--surface-strong) 64%, var(--surface));
+  color: var(--text-muted);
   font-size: 0.76rem;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   text-decoration: none;
   transition:
     background 120ms ease,
@@ -483,16 +482,6 @@
   font-size: 0.75rem;
   color: var(--text-soft);
   background: color-mix(in srgb, var(--surface-strong) 40%, transparent);
-}
-
-.profile-modal > .profile-socials a::before,
-.profile-editor-preview .profile-socials a::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 62%, var(--line-strong));
-  flex: 0 0 auto;
 }
 
 .profile-modal > .profile-socials a:hover,
@@ -539,8 +528,8 @@
   justify-self: start;
 }
 
-/* Public-profile privacy line sits flush against the modal's bottom padding. */
-.profile-modal .profile-modal__privacy {
+/* Public-profile freshness line sits flush against the modal's bottom padding. */
+.profile-modal .profile-modal__updated {
   margin-bottom: 0;
 }
 
