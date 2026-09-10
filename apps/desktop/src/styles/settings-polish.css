@@ -279,6 +279,23 @@
 
 .content--settings {
   --settings-control-height: 1.8rem;
+  /* A Settings action button is a button first and a Settings control second,
+     so it stands at the same 2rem as .app-btn instead of deriving its height
+     from the input row.
+
+     It used to be calc(--settings-control-height * 1.15) = 33.12px. That step
+     is real, not noise: it is the height Settings uses when a control has to
+     line up with the input beside it, and the classification rule form and the
+     selected-placement select still restate it for exactly that reason. What
+     was wrong is that the standalone action button inherited it too, even
+     though it never shares a row with an input, so the whole app carried a
+     fourth action height for the sake of rows this button is never in.
+
+     The 1.15 step therefore stays where a row needs it; only the free-standing
+     action button leaves it. It remains spelled out at those three call sites
+     rather than named here, which is worth collapsing into its own token in a
+     later pass. */
+  --settings-action-height: 2rem;
   --settings-control-radius: var(--radius-sm);
   --settings-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
   --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
@@ -470,8 +487,8 @@
   display: inline-flex;
   justify-content: center;
   min-width: 10rem;
-  height: calc(var(--settings-control-height) * 1.15);
-  min-height: calc(var(--settings-control-height) * 1.15);
+  height: var(--settings-action-height);
+  min-height: var(--settings-action-height);
   padding: 0 var(--space-3);
   border: 1px solid var(--settings-control-border);
   border-radius: var(--radius-sm);

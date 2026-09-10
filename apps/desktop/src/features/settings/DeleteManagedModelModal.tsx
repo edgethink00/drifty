@@ -13,6 +13,12 @@ type DeleteManagedModelModalProps = {
  * Confirmation dialog for deleting an installed managed local model. Mirrors the
  * app's other settings dialogs (auth-modal shell + a danger confirm button) so the
  * destructive action can't fire from a single dropdown click.
+ *
+ * The footer uses `.modal-btn`, not `.settings-btn`. This dialog belongs to
+ * Settings, but its footer is a modal surface: a Settings control here renders in
+ * mono type at a 10rem minimum width, which reads as a settings row that wandered
+ * into a compact dialog. The two sibling confirmations owned by Settings, cloud
+ * device removal and history deletion, already resolve it the same way.
  */
 export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConfirm }: DeleteManagedModelModalProps) {
   const { t } = useLocalization();
@@ -34,10 +40,10 @@ export function DeleteManagedModelModal({ modelLabel, deleting, onCancel, onConf
           <p>{t("settings.ai.deleteModelConfirmBody", { model: modelLabel })}</p>
         </div>
         <div className="ai-delete-model-modal__actions">
-          <button type="button" className="settings-btn" disabled={deleting} onClick={onCancel}>
+          <button type="button" className="modal-btn modal-btn--ghost" disabled={deleting} onClick={onCancel}>
             {t("settings.ai.deleteModelConfirmCancel")}
           </button>
-          <button type="button" className="settings-btn danger" disabled={deleting} onClick={onConfirm}>
+          <button type="button" className="modal-btn modal-btn--danger" disabled={deleting} onClick={onConfirm}>
             {deleting ? t("settings.ai.deleteModelDeleting") : t("settings.ai.deleteModel")}
           </button>
         </div>

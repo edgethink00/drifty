@@ -88,11 +88,22 @@ describe("app button system contract", () => {
     expect(entryStyles).toMatch(/@import "\.\/styles\/app-buttons\.css";$/);
   });
 
+  /* A dialog footer is a modal surface even when the dialog belongs to another
+   * area of the app. Watching only for the app button left the other direction
+   * open, and a Settings-owned confirmation drifted through it: the Settings
+   * control renders in mono at a 10rem minimum width, which reads as a settings
+   * row that wandered into a compact dialog. Both foreign languages are refused
+   * now, and only real className values count so a doc comment explaining the
+   * rule cannot trip it. */
   it("keeps modal component actions on the modal button contract", () => {
+    const FOREIGN_ACTION_ROOTS = ["app-btn", "settings-btn"];
     const violations = productionTsxFiles().flatMap((path) => {
       if (!path.endsWith("Modal.tsx")) return [];
       const source = readFileSync(path, "utf8");
-      return /\bapp-btn\b/.test(source) ? [sourceRelativePath(path)] : [];
+      const foreign = [...source.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\}|\{"([^"]*)"\})/g)]
+        .flatMap((match) => (match[1] ?? match[2] ?? match[3] ?? "").split(/\s+/))
+        .filter((token) => FOREIGN_ACTION_ROOTS.some((root) => token === root || token.startsWith(root + "--")));
+      return foreign.length > 0 ? [`${sourceRelativePath(path)}: ${foreign.join(" ")}`] : [];
     });
 
     expect(violations).toEqual([]);
