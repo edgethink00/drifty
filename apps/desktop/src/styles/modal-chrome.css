@@ -1,5 +1,5 @@
 /* ──────────────────────────────────────────────────────────────────────────
-   Shared modal chrome (redesign — "Drifty Modals" v1.3)
+   Shared modal chrome (redesign — "Drifty Modals" v3)
 
    Shared chrome for surfaces that opt into `.modal-shell`: a circular
    top-right close button, a single-title header (no mono eyebrow / icon tile),
@@ -11,6 +11,26 @@
 
    Loaded last in main.tsx so these win the cascade over the base + feature
    stylesheets (shared-surfaces, leaderboard, team, projects, rank-embeds).
+
+   v3 — the "held corner" pass. Three things were wrong once the shell radius
+   grew, and they were all the same mistake in different places: the shell had
+   a shape, and the parts inside it were still positioned against the old flat
+   rectangle.
+
+     1. Inset > radius, so the bottom-right corner opened into a bare gap and
+        the footer action floated instead of being held. Fixed in tokens-base
+        by pinning every inset at or under its radius.
+     2. The action was 32px / 8px — too small and too square to sit under a
+        26px corner. It now runs 36px / 11px (see `.modal-btn` below).
+     3. The close control sat at a fixed 14px from the corner, which lined it
+        up with nothing: it cleared the content's right edge horizontally and
+        floated above the title's centerline vertically. It is now anchored to
+        the header's first line (see `--modal-close-anchor`).
+
+   The primary action's hover also stopped jumping to the brand green. A
+   neutral filled button turning olive on hover reads as a different button,
+   not the same button reacting — especially in a project dialog where the
+   user has just picked their own accent colour two rows above.
    ────────────────────────────────────────────────────────────────────────── */
 
 /* Shell polish. The circular close button is absolutely positioned, so the
@@ -39,6 +59,20 @@
 .modal-shell {
   --modal-shell-radius: var(--modal-radius-standard);
   --modal-shell-inset: var(--modal-inset-standard);
+  /* Height of the block the close control centres against. Every header in the
+     app opens with a 1.2rem/1.2 title line, so the default anchor is that line
+     box. This is what makes one rule cover both header shapes: a title-only
+     header and a title + subtitle header share the same *first* line, so the
+     subtitle flows underneath without dragging the close control down with it.
+     Headers that lead with something taller than text (an avatar crest, an
+     oversized display title) restate this one value and inherit the maths. */
+  --modal-close-anchor: 1.44rem;
+  --modal-close-top: calc(
+    var(--modal-shell-inset) + (var(--modal-close-anchor) - var(--modal-close-size)) / 2
+  );
+  /* Room a header must leave on its right so long copy cannot run under the
+     close control: its box plus one breathing gap. */
+  --modal-close-gutter: calc(var(--modal-close-size) + var(--space-3));
 }
 
 .modal-shell[data-modal-variant="compact"] {
@@ -68,6 +102,7 @@
 /* Use shell-family specificity so independently loaded feature CSS cannot
    silently restore an older 14/16/18px radius later in the cascade. */
 .auth-modal.modal-shell,
+.account-plan-modal.modal-shell,
 .cloud-device-confirm__panel.modal-shell,
 .history-confirm__panel.modal-shell,
 .dc-onb-confirm.modal-shell,
@@ -77,6 +112,7 @@
 }
 
 .auth-modal.modal-shell,
+.account-plan-modal.modal-shell,
 .cloud-device-confirm__panel.modal-shell,
 .history-confirm__panel.modal-shell,
 .dc-onb-confirm.modal-shell,
@@ -95,18 +131,28 @@
   padding: 12px var(--modal-shell-inset) var(--modal-shell-inset);
 }
 
-/* ── Circular close button (replaces text "X", bottom Cancel/Close rows) ─── */
+/* ── Close control ───────────────────────────────────────────────────────
+   The glyph is the whole control: no chip, no ring, no plate at rest. What
+   was wrong with it was never the styling, it was that nothing agreed with
+   it. It is sized to the WCAG 2.2 minimum target so the hit area does not
+   depend on decoration, and the round hover wash only appears on pointer.
+
+   Surfaces outside `.modal-shell` (the full-bleed share card, where the mark
+   floats over artwork rather than beside a title) keep the corner offset
+   below; shells take the anchored placement further down. */
 .modal-x {
   position: absolute;
   top: 0.85rem;
   right: 0.85rem;
-  width: 30px;
-  height: 30px;
+  width: var(--modal-close-size, 24px);
+  height: var(--modal-close-size, 24px);
   padding: 0;
   border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-soft);
+  /* One step up from --text-soft. Beside a 600-weight display title, the soft
+     rank read as a hairline scratch rather than a control. */
+  color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -118,9 +164,27 @@
     border-color var(--transition-fast);
 }
 
+/* Anchored placement. `right` is the content inset, so the control's box ends
+   on the same vertical line as every input, button and divider in the dialog.
+   `top` centres it on the header's first line rather than on the header as a
+   whole — centring on the whole header would sink the control by half the
+   subtitle whenever one exists. */
 .modal-shell .modal-x {
-  top: 14px;
-  right: 14px;
+  top: var(--modal-close-top);
+  right: var(--modal-shell-inset);
+}
+
+/* Headers that lead with something other than a title line restate the anchor
+   and inherit the same maths. */
+
+/* Public profile opens on a 52px avatar crest. */
+.modal-shell:has(.profile-modal__crest) {
+  --modal-close-anchor: 52px;
+}
+
+/* The billing / recovery family uses an oversized fluid display title. */
+.dashboard-ai-recovery__panel.modal-shell {
+  --modal-close-anchor: calc(clamp(1.35rem, 3vw, 1.9rem) * 1.05);
 }
 
 .modal-x:hover:not(:disabled) {
@@ -140,8 +204,11 @@
 }
 
 .modal-x svg {
-  width: 12px;
-  height: 12px;
+  /* 13px at 2.3 stroke. The old 12px at stroke 2 rendered under one device
+     pixel of ink next to a 600-weight title, so the mark looked unfinished
+     rather than quiet. */
+  width: 13px;
+  height: 13px;
   display: block;
 }
 
@@ -151,7 +218,7 @@
   align-items: center;
   gap: var(--space-3);
   margin: 0 0 var(--space-4);
-  padding-right: 2.5rem;
+  padding-right: var(--modal-close-gutter, 2.5rem);
 }
 
 .modal-head__copy {
@@ -177,7 +244,7 @@
 
 /* profile-family headers (avatar + title) need room for the circular X too */
 .profile-modal__header {
-  padding-right: 2.6rem;
+  padding-right: var(--modal-close-gutter, 2.6rem);
 }
 
 /* Generic modal titles share one typographic rhythm. Avatar, icon, and eyebrow
@@ -187,6 +254,7 @@
 .modal-shell .auth-modal__header h2,
 .modal-shell .profile-modal__header h2,
 .modal-shell.rank-embeds-modal .rank-embeds-modal__header h2,
+.account-plan-modal.modal-shell .account-plan-modal__heading h2,
 .cloud-device-confirm__panel.modal-shell h2,
 .history-confirm__panel.modal-shell h2 {
   font-family: var(--font-display);
@@ -194,6 +262,12 @@
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.015em;
+}
+
+/* The plan dialog now shares the shell inset, so its heading clears the close
+   control with the same gutter as every other header. */
+.account-plan-modal.modal-shell .account-plan-modal__heading {
+  padding-inline-end: var(--modal-close-gutter);
 }
 
 .modal-shell .modal-head,
@@ -234,9 +308,22 @@
    differently depending on whether it was inside a dialog.
 
    Only genuinely modal behaviour stays here: the second-click armed state and
-   the full-width `--block` variant. */
+   the full-width `--block` variant.
+
+   v3 reopens exactly one axis of that unification, on purpose: size. A page
+   action lives in a dense toolbar next to other controls and is sized to that
+   row. A modal action is the last thing in the dialog, sits alone in the
+   footer, and has the shell's 26px corner curving in beside it — at 32px / 8px
+   it was visibly too small and too square to hold that corner, which is what
+   left the bottom-right of every dialog looking empty.
+
+   So `.modal-btn` is now a *sized* variant of the app action rather than an
+   identical one: intent colours, typography, focus ring, and disabled
+   behaviour stay shared with `.app-btn`; only height and radius differ, and
+   both are named tokens so the split stays visible instead of becoming drift
+   again. The contract test asserts both values for that reason. */
 .modal-btn {
-  --btn-h: 2rem;
+  --btn-h: var(--modal-action-height);
   appearance: none;
   display: inline-flex;
   align-items: center;
@@ -245,7 +332,7 @@
   height: var(--btn-h);
   min-height: var(--btn-h);
   padding: 0 var(--space-4);
-  border-radius: var(--radius-sm);
+  border-radius: var(--modal-action-radius);
   border: 1px solid transparent;
   font-family: var(--font-sans);
   font-size: var(--type-button-size);
@@ -311,10 +398,16 @@
   color: var(--canvas);
 }
 
+/* Hover moves one step along the same neutral ramp instead of jumping to the
+   brand accent. The accent hover was loud enough to read as a different
+   button rather than the same button reacting, and inside the project editor
+   it collided with the swatch the user had just chosen two rows above.
+   --text-muted is the neighbouring ink token in both themes, so this stays a
+   single lightening step in light mode and a single darkening step in dark. */
 .modal-btn--primary:hover:not(:disabled) {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+  background: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--canvas);
 }
 
 .modal-btn--danger {

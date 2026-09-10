@@ -109,7 +109,12 @@ describe("app button system contract", () => {
     expect(styles).toMatch(/\.modal-btn--danger\s*\{[^}]*background:\s*var\(--button-danger-bg\);/);
     expect(styles).toMatch(/\.app-btn--header-action\s*\{[^}]*border-radius:\s*var\(--radius-pill\);/);
     expect(styles).toMatch(/\.app-btn:focus-visible\s*\{[\s\S]*outline:\s*2px solid/);
-    expect(styles).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);
+    // A modal action shares intent, typography and focus with .app-btn and
+    // differs only in box: it is the terminal decision of the dialog and has to
+    // hold the shell's corner beside it, so it runs taller and rounder. Both
+    // halves are asserted here so the divergence stays a stated decision.
+    expect(styles).toMatch(/\.modal-btn\s*\{[^}]*--btn-h: var\(--modal-action-height\);/);
+    expect(styles).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--modal-action-radius\);/);
     expect(styles).toMatch(/\.modal-btn\s*\{[^}]*font-size:\s*var\(--type-button-size\);/);
     expect(styles).toMatch(/\.modal-btn:focus-visible\s*\{[\s\S]*outline:\s*2px solid/);
     expect(styles).toMatch(/\.content--settings \.settings-btn\s*\{[^}]*cursor:\s*pointer;/);

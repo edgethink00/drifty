@@ -90,18 +90,83 @@ const purposeBuiltDialogSurfaces = [
 ] as const;
 
 describe("modal system v2 contract", () => {
-  it("keeps the approved 125% shell radii and variant insets as semantic tokens", () => {
+  it("keeps the approved v3 shell radii and variant insets as semantic tokens", () => {
     const tokens = read("./styles/tokens-base.css");
 
-    expect(tokens).toContain("--modal-radius-compact: 22.5px;");
-    expect(tokens).toContain("--modal-radius-standard: 25px;");
-    expect(tokens).toContain("--modal-radius-workspace: 25px;");
+    expect(tokens).toContain("--modal-radius-compact: 24px;");
+    expect(tokens).toContain("--modal-radius-standard: 26px;");
+    expect(tokens).toContain("--modal-radius-workspace: 26px;");
     expect(tokens).toContain("--modal-radius-expressive: 30px;");
     expect(tokens).toContain("--modal-radius-utility: 20px;");
-    expect(tokens).toContain("--modal-inset-compact: 24px;");
-    expect(tokens).toContain("--modal-inset-standard: 32px;");
-    expect(tokens).toContain("--modal-inset-workspace: 24px;");
-    expect(tokens).toContain("--modal-inset-expressive: 28px;");
+    expect(tokens).toContain("--modal-inset-compact: 20px;");
+    expect(tokens).toContain("--modal-inset-standard: 22px;");
+    expect(tokens).toContain("--modal-inset-workspace: 22px;");
+    expect(tokens).toContain("--modal-inset-expressive: 24px;");
+  });
+
+  /* The numbers above are one reviewed instance of a rule, and the rule is the
+   * part that must not rot: a shell whose inset exceeds its radius stops
+   * holding its own corner, which is exactly the gap v3 was opened to close.
+   * Asserting the invariant means a future re-tune can move the values without
+   * quietly re-introducing the flaw. */
+  it("never lets a shell inset grow past its own corner radius", () => {
+    const tokens = read("./styles/tokens-base.css");
+
+    const px = (name: string): number => {
+      const line = tokens.split("\n").find((entry) => entry.trim().startsWith("--modal-" + name + ":"));
+      expect(line, "--modal-" + name + " should be declared").toBeDefined();
+      return Number.parseFloat(line!.split(":")[1]);
+    };
+
+    for (const variant of ["compact", "standard", "workspace", "expressive"] as const) {
+      expect(
+        px("inset-" + variant),
+        variant + " inset must stay inside its corner radius so the shell closes around its last element",
+      ).toBeLessThanOrEqual(px("radius-" + variant));
+    }
+  });
+
+  /* A fixed corner offset lines the close control up with nothing. Anchoring it
+   * to the header's first line is what lets one rule serve both a title-only
+   * header and a title + subtitle header, and anchoring `right` to the content
+   * inset is what puts it on the same vertical line as the fields below it. */
+  it("anchors the close control to the header's first line and the content inset", () => {
+    const chrome = read("./styles/modal-chrome.css");
+
+    expect(chrome).toContain("--modal-close-anchor: 1.44rem;");
+    expect(chrome).toMatch(
+      /\.modal-shell \.modal-x \{[^}]*top: var\(--modal-close-top\);[^}]*right: var\(--modal-shell-inset\);/,
+    );
+    // Headers that open on something taller than a text line restate the anchor.
+    expect(chrome).toContain(".modal-shell:has(.profile-modal__crest)");
+    expect(chrome).toMatch(/\.dashboard-ai-recovery__panel\.modal-shell \{[^}]*--modal-close-anchor:/);
+  });
+
+  /* Modal actions are a deliberately sized variant of the app action: shared
+   * intent colours and typography, taller and rounder box. Both halves are
+   * asserted so the split stays a decision rather than drift. */
+  it("keeps the modal action on its own height and radius tokens", () => {
+    const tokens = read("./styles/tokens-base.css");
+    const chrome = read("./styles/modal-chrome.css");
+
+    expect(tokens).toContain("--modal-action-height: 2.25rem;");
+    expect(tokens).toContain("--modal-action-radius: 11px;");
+    expect(chrome).toMatch(/\.modal-btn\s*\{[^}]*--btn-h: var\(--modal-action-height\);/);
+    expect(chrome).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--modal-action-radius\);/);
+  });
+
+  /* The filled action stays on the neutral ink ramp on hover. Jumping to the
+   * brand accent read as a different button rather than the same one reacting,
+   * and clashed with the user's own project colour in the editor dialog. */
+  it("hovers the filled modal action along the neutral ramp, not the accent", () => {
+    const chrome = read("./styles/modal-chrome.css");
+
+    expect(chrome).toMatch(
+      /\.modal-btn--primary:hover:not\(:disabled\)\s*\{[^}]*background: var\(--text-muted\);/,
+    );
+    expect(chrome).not.toMatch(
+      /\.modal-btn--primary:hover:not\(:disabled\)\s*\{[^}]*background: var\(--accent\);/,
+    );
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
@@ -161,7 +226,7 @@ describe("modal system v2 contract", () => {
     expect(chrome).toContain("padding: var(--modal-shell-inset);");
     expect(chrome).toContain(".modal-shell .modal-x");
     expect(chrome).toMatch(/\.modal-x\s*\{[^}]*border-radius:\s*999px;/);
-    expect(chrome).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--radius-sm\);/);
+    expect(chrome).toMatch(/\.modal-btn\s*\{[^}]*border-radius:\s*var\(--modal-action-radius\);/);
     expect(chrome).toContain(".modal-shell .modal-head__copy h2");
     expect(chrome).toContain(".cloud-device-confirm__panel.modal-shell .cloud-device-confirm__eyebrow");
   });

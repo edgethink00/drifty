@@ -141,17 +141,43 @@ html {
     0 8px 18px color-mix(in srgb, var(--text) 3%, transparent);
   --stacked-column-gridline: color-mix(in srgb, var(--text) 15%, transparent);
   --stacked-column-vline: color-mix(in srgb, var(--text) 10%, transparent);
-  /* Modal shell v2: the approved 125% curvature pass. These semantic tokens
-     keep shell shape independent from the smaller card/control radii above. */
-  --modal-radius-compact: 22.5px;
-  --modal-radius-standard: 25px;
-  --modal-radius-workspace: 25px;
+  /* Modal shell v3: concentric geometry.
+
+     v2 grew the shell radius to 25px but left the standard inset at 32px. An
+     inset larger than the radius means the corner arc finishes and flattens
+     out well before the footer action starts, so the bottom-right of every
+     dialog opened into a bare L-shaped gap and the primary action read as
+     floating in the middle of the panel instead of being held by it.
+
+     v3 states the rule the shell was missing: the inset never exceeds the
+     radius. The corner curve then closes around the last element in the
+     dialog, which is what makes a rounded panel feel deliberate rather than
+     simply "rounded". Standard is the reviewed pair (26 / 22); the other
+     variants are pulled onto the same rule rather than re-tuned by feel.
+
+     These stay separate from the card/control radii above: a shell is the
+     outermost surface in the window and owns a shape language the controls
+     inside it are not allowed to inherit. */
+  --modal-radius-compact: 24px;
+  --modal-radius-standard: 26px;
+  --modal-radius-workspace: 26px;
   --modal-radius-expressive: 30px;
   --modal-radius-utility: 20px;
-  --modal-inset-compact: 24px;
-  --modal-inset-standard: 32px;
-  --modal-inset-workspace: 24px;
-  --modal-inset-expressive: 28px;
+  --modal-inset-compact: 20px;
+  --modal-inset-standard: 22px;
+  --modal-inset-workspace: 22px;
+  --modal-inset-expressive: 24px;
+  /* A modal footer action is the terminal decision of the dialog and has to
+     visually carry the shell corner beside it, so it runs one step taller and
+     rounder than a page-level action. 11px against a 36px box is the squircle
+     band: past a rounded rectangle, short of a pill, and close enough to the
+     26px shell that the two read as one family. */
+  --modal-action-height: 2.25rem;
+  --modal-action-radius: 11px;
+  /* The close control is sized to the WCAG 2.2 minimum target (24px) and is
+     placed by `--modal-close-anchor` in modal-chrome.css, not by a fixed
+     corner offset. */
+  --modal-close-size: 24px;
   --week-calendar-event-radius: 4px;
   --transition-fast: 140ms ease-out;
   --transition-base: 220ms ease-out;

@@ -10,7 +10,10 @@ type ModalCloseButtonProps = {
 
 /**
  * The shared circular top-right close button used by every app modal.
- * Styling lives in `styles/modal-chrome.css` (`.modal-x`).
+ * Styling and placement live in `styles/modal-chrome.css` (`.modal-x`): inside a
+ * `.modal-shell` the control is anchored to the header's first line and the
+ * content inset rather than to a fixed corner offset, so it lines up with the
+ * title beside it and with the fields below it.
  */
 export function ModalCloseButton({
   label,
@@ -30,7 +33,11 @@ export function ModalCloseButton({
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
-        strokeWidth={2}
+        /* Drawn at 13px. Stroke 2 in a 24 viewBox scaled that far down landed
+         * under a full device pixel of ink beside a 600-weight title, so the
+         * mark read as unfinished rather than restrained. 2.3 restores the
+         * weight balance without making the control loud. */
+        strokeWidth={2.3}
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
