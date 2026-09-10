@@ -103,6 +103,7 @@ export function captureAiClassificationRun(
     range,
     ...(summary.status === "error" ? { error_kind: toAnalyticsErrorKind(summary.message) } : {}),
     ...(summary.failureKind ? { failure_kind: summary.failureKind } : {}),
+    ...(summary.issueKind ? { ai_issue_kind: summary.issueKind } : {}),
   });
 }
 

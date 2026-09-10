@@ -29,7 +29,12 @@ const AI_STATUS_TRANSLATION_KEYS = {
   "Storage needed": "settings.ai.status.storageNeeded",
   "Runtime missing": "settings.ai.status.runtimeMissing",
   "Start failed": "settings.ai.status.startFailed",
+  // Two independent producers reach this table. `managedLocalAiTopbarLabel`
+  // emits "Issue" for an unclassified managed-local runtime error, while
+  // `labelForIssueKind` emits "Provider error" for a provider HTTP failure.
+  // They are different conditions and must not share a key.
   Issue: "settings.ai.status.issue",
+  "Provider error": "settings.ai.status.providerError",
   "Classifying…": "settings.ai.status.classifying",
   "AI setup needed": "settings.ai.status.setupNeeded",
   "Open settings": "settings.ai.status.openSettings",

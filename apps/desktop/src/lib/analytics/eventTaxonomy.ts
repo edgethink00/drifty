@@ -108,6 +108,19 @@ export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "9
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
 export const CLASSIFICATION_TRIGGERS = ["manual", "background_threshold", "focused_idle", "live", "drift_alarm"] as const;
 export const CLASSIFICATION_FAILURE_KINDS = ["transport", "quota", "content"] as const;
+// Mirrors AiConnectionIssueKind. Kept as a local literal list so the analytics
+// taxonomy stays free of feature imports; aiFailureGuidance.test.ts pins the
+// two lists to the same members.
+export const AI_ISSUE_KINDS = [
+  "network",
+  "provider",
+  "authentication",
+  "credits",
+  "access",
+  "model_unavailable",
+  "rate_limited",
+  "unavailable",
+] as const;
 export const PROJECT_CLASSIFICATION_TRIGGERS = ["schedule", "open", "eod"] as const;
 export const PROJECT_CLASSIFICATION_SKIP_REASONS = ["analysis_disconnected", "no_work"] as const;
 export const CLASSIFICATION_RANGES = ["current_day", "recent", "unknown"] as const;
@@ -257,6 +270,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     range: CLASSIFICATION_RANGES,
     error_kind: ERROR_KINDS,
     failure_kind: CLASSIFICATION_FAILURE_KINDS,
+    ai_issue_kind: AI_ISSUE_KINDS,
   },
   project_classification_run: {
     trigger: PROJECT_CLASSIFICATION_TRIGGERS,

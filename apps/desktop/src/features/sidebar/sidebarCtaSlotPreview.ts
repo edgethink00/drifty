@@ -145,7 +145,7 @@ export function buildSidebarCtaPreviewInput(previewCase: SidebarCtaPreviewCase, 
     case "ai-provider":
       return {
         ...base,
-        aiStatus: { issueKind: "provider", label: "Issue", providerLabel: "DeepSeek V4 Flash BYOK", tone: "error" },
+        aiStatus: { issueKind: "provider", label: "Provider error", providerLabel: "DeepSeek V4 Flash BYOK", tone: "error" },
         billingEntitlement: ACTIVE_ENTITLEMENT,
         localAiDisconnectConfirmed: false,
         localAiProvider: "openrouter_byok",

@@ -43,6 +43,7 @@ import {
   openRouterEmbeddedIssueKind,
   openRouterIssueKindFromResponse,
 } from "../ai-connection/openRouterError";
+import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
 import {
   cloudAiBackoffMessage,
   cloudAiRequestBackoffs,
@@ -263,6 +264,10 @@ export interface AiClassificationSummary {
   metrics?: ClassificationMetrics;
   failureKind?: AiClassificationFailureKind;
   quotaWindow?: AiClassificationQuotaWindow;
+  // Structured cause when the provider rejected the request. Carried here so
+  // telemetry reads the value the transport already computed instead of
+  // re-deriving a coarser one by matching the message text.
+  issueKind?: AiConnectionIssueKind;
   // True only when this run completed a real provider round-trip; summaries
   // satisfied purely by deterministic rules or reused classifications carry no
   // evidence about provider connectivity.
@@ -1408,7 +1413,7 @@ async function classifyLivePayloadWithLocalAi(
       provider.provider === "managed_local" ? provider : null,
     );
     const responseFailure = localProviderResponseFailure(response, provider);
-    if (responseFailure) return unavailableLiveClassification(responseFailure);
+    if (responseFailure) return unavailableLiveClassification(responseFailure.message);
 
     const data = toLocalClassificationResponse(response, providerRequest.model);
     return firstLiveClassification(data, payload, "Local AI classification returned no usable classification.", memoryContext, "local");
@@ -1798,7 +1803,7 @@ async function requestLocalClassificationResponse(
   }
 
   const responseFailure = localProviderResponseFailure(response, provider);
-  if (responseFailure) throw localAiProviderResponseError(responseFailure);
+  if (responseFailure) throw localAiProviderResponseError(responseFailure.message, responseFailure.issueKind);
 
   try {
     return toLocalClassificationResponse(response, providerRequest.model);
@@ -2088,20 +2093,29 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
   };
 }
 
+type LocalProviderResponseFailure = {
+  readonly message: string;
+  readonly issueKind?: AiConnectionIssueKind;
+};
+
 function localProviderResponseFailure(
   response: NativeOpenAiChatResponse,
   provider: LocalAiProviderConfig,
-): string | null {
+): LocalProviderResponseFailure | null {
   const status = typeof response.status === "number" ? response.status : 0;
   const httpFailed = status < 200 || status >= 300;
   if (provider.provider === "openrouter_byok") {
     const embeddedIssue = openRouterEmbeddedIssueKind(response.body);
     if (httpFailed || embeddedIssue) {
       const issueKind = embeddedIssue ?? openRouterIssueKindFromResponse(status, response.body);
-      return openRouterConnectionFailureMessage(issueKind, status);
+      // Return the kind alongside the prose. Rendering to a message and parsing
+      // it back is how this cause used to be lost on the way to telemetry.
+      return { message: openRouterConnectionFailureMessage(issueKind, status), issueKind };
     }
   }
-  return httpFailed ? `Local AI classification failed with HTTP ${status || "unknown"}.` : null;
+  return httpFailed
+    ? { message: `Local AI classification failed with HTTP ${status || "unknown"}.` }
+    : null;
 }
 
 async function readClassificationWorkProfile(useLocalFallback: boolean): Promise<string | null> {

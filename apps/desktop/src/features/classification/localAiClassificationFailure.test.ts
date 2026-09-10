@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { AI_ISSUE_KINDS } from "../../lib/analytics/eventTaxonomy";
+import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
 import {
   describeLocalAiClassificationFailure,
   localAiInvalidResponseError,
@@ -39,5 +41,55 @@ describe("local AI classification failure evidence", () => {
       usedAiProvider: false,
       connectionEvidence: "none",
     });
+  });
+});
+
+/**
+ * The provider rejection path used to render its cause to prose and let
+ * telemetry guess the cause back out of that prose. These assertions pin the
+ * structured value travelling on the error instead.
+ */
+describe("local AI classification failure carries the structured cause", () => {
+  it("keeps the issue kind from a provider rejection", () => {
+    const failure = describeLocalAiClassificationFailure(
+      localAiProviderResponseError("OpenRouter credits are required.", "credits"),
+    );
+    expect(failure.issueKind).toBe("credits");
+    expect(failure.failureKind).toBe("content");
+    expect(failure.connectionEvidence).toBe("failure");
+  });
+
+  it("omits the issue kind when the provider did not name one", () => {
+    expect(describeLocalAiClassificationFailure(
+      localAiProviderResponseError("Local AI classification failed with HTTP 500."),
+    ).issueKind).toBeUndefined();
+  });
+
+  it("omits the issue kind for transport and malformed-response failures", () => {
+    expect(describeLocalAiClassificationFailure(localAiTransportError(new Error("offline"))).issueKind).toBeUndefined();
+    expect(describeLocalAiClassificationFailure(localAiInvalidResponseError(new Error("bad json"))).issueKind).toBeUndefined();
+  });
+
+  // App.tsx builds its error summary with `...failure`, so anything this
+  // function returns reaches captureAiClassificationRun without a call-site
+  // change. Spreading is the whole delivery mechanism; assert it survives.
+  it("survives the spread into an analytics summary", () => {
+    const failure = describeLocalAiClassificationFailure(
+      localAiProviderResponseError("OpenRouter rejected the API key.", "authentication"),
+    );
+    const summary = { status: "error" as const, selectedSegments: 0, savedRecords: 0, ...failure };
+    expect(summary.issueKind).toBe("authentication");
+  });
+});
+
+describe("analytics AI_ISSUE_KINDS mirrors AiConnectionIssueKind", () => {
+  // eventTaxonomy.ts keeps its own literal list to stay free of feature
+  // imports. This is the assertion that keeps the two from drifting apart.
+  it("lists exactly the connection issue kinds", () => {
+    const connectionKinds: readonly AiConnectionIssueKind[] = [
+      "network", "provider", "authentication", "credits",
+      "access", "model_unavailable", "rate_limited", "unavailable",
+    ];
+    expect([...AI_ISSUE_KINDS].sort()).toEqual([...connectionKinds].sort());
   });
 });

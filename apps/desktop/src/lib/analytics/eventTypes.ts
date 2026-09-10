@@ -3,6 +3,7 @@ import type {
   APP_ACTIVE_TRIGGERS,
   AI_PROVIDER_KINDS,
   AI_SETUP_ACTIONS,
+  AI_ISSUE_KINDS,
   APP_ERROR_ACTIONS,
   APP_SURFACES,
   AUTH_STATES,
@@ -160,6 +161,10 @@ export type PostHogEventPropertiesByName = {
     readonly range?: (typeof CLASSIFICATION_RANGES)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
     readonly failure_kind?: (typeof CLASSIFICATION_FAILURE_KINDS)[number];
+    // The structured cause the transport already computed. Present alongside
+    // error_kind so the two can be compared while error_kind still re-derives
+    // its value from prose; see lib/analytics/eventHelpers.test.ts.
+    readonly ai_issue_kind?: (typeof AI_ISSUE_KINDS)[number];
   };
   readonly project_classification_run: {
     readonly trigger: (typeof PROJECT_CLASSIFICATION_TRIGGERS)[number];

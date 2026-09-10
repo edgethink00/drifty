@@ -1,4 +1,5 @@
 import type { AiConnectionIssueKind } from "./aiConnectionHealth";
+import { aiFailureGuidanceKeys } from "./aiFailureGuidance";
 import { localizeAiStatusLabel } from "../localization/aiStatusTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -135,6 +136,13 @@ export function AiConnectionStatusBar({
   const statusLabel = localizeAiStatusLabel(status.label, t);
   const providerLabel = localizeAiStatusLabel(status.providerLabel, t);
   const memoryAria = status.memoryLabel ? t("ai.connection.memoryAria", { memory: status.memoryLabel }) : "";
+  // The pill only has room for a two-word label, so the cause, the recovery
+  // step, and the local-data reassurance move to the title. With aria-label
+  // supplying the accessible name, title becomes the accessible description,
+  // so assistive technology reads it without a draft-spec aria-description.
+  const failureExplanation = status.issueKind
+    ? aiFailureGuidanceKeys(status.issueKind).map((key) => t(key)).join(" ")
+    : undefined;
 
   return (
     <>
@@ -147,6 +155,7 @@ export function AiConnectionStatusBar({
         type="button"
         className="ai-connection-status"
         aria-label={t("ai.connection.aria", { status: statusLabel, provider: providerLabel, memory: memoryAria })}
+        title={failureExplanation}
         data-tone={status.tone}
         data-activity={status.activity ?? undefined}
         onClick={onOpenSettings}
@@ -180,6 +189,8 @@ function toneForIssueKind(issueKind: AiConnectionIssueKind): AiConnectionTone {
     case "credits":
     case "access":
     case "model_unavailable":
+    // Also the catch-all for HTTP statuses we have not mapped, so an unfamiliar
+    // failure stays visible rather than degrading into a quiet warning.
     case "provider":
       return "error";
     default:
@@ -204,7 +215,7 @@ function labelForIssueKind(issueKind: AiConnectionIssueKind): string {
     case "unavailable":
       return "Provider unavailable";
     case "provider":
-      return "Issue";
+      return "Provider error";
     default:
       return assertNever(issueKind);
   }

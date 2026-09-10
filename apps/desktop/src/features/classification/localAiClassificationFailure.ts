@@ -1,3 +1,5 @@
+import type { AiConnectionIssueKind } from "../ai-connection/aiConnectionHealth";
+
 export type LocalAiClassificationFailure = {
   readonly message: string;
   readonly failureKind: "transport" | "content";
@@ -7,6 +9,9 @@ export type LocalAiClassificationFailure = {
   // authentication/model/provider rejection still means the configured route
   // is unusable even though the provider answered.
   readonly connectionEvidence: "reachable" | "failure" | "none";
+  // The structured cause, when the provider gave us one. Carried on the error
+  // so telemetry does not have to re-derive it by matching the message text.
+  readonly issueKind?: AiConnectionIssueKind;
 };
 
 export class LocalAiClassificationError extends Error {
@@ -15,6 +20,7 @@ export class LocalAiClassificationError extends Error {
   readonly usedAiProvider: boolean;
   readonly connectionEvidence: LocalAiClassificationFailure["connectionEvidence"];
   readonly retryWithSmallerBatch: boolean;
+  readonly issueKind?: AiConnectionIssueKind;
 
   constructor(failure: LocalAiClassificationFailure, retryWithSmallerBatch = false) {
     super(failure.message);
@@ -23,6 +29,7 @@ export class LocalAiClassificationError extends Error {
     this.usedAiProvider = failure.usedAiProvider;
     this.connectionEvidence = failure.connectionEvidence;
     this.retryWithSmallerBatch = retryWithSmallerBatch;
+    this.issueKind = failure.issueKind;
   }
 }
 
@@ -35,12 +42,16 @@ export function localAiTransportError(error: unknown): LocalAiClassificationErro
   });
 }
 
-export function localAiProviderResponseError(message: string): LocalAiClassificationError {
+export function localAiProviderResponseError(
+  message: string,
+  issueKind?: AiConnectionIssueKind,
+): LocalAiClassificationError {
   return new LocalAiClassificationError({
     message,
     failureKind: "content",
     usedAiProvider: true,
     connectionEvidence: "failure",
+    issueKind,
   });
 }
 
@@ -65,6 +76,7 @@ export function describeLocalAiClassificationFailure(error: unknown): LocalAiCla
       failureKind: error.failureKind,
       usedAiProvider: error.usedAiProvider,
       connectionEvidence: error.connectionEvidence,
+      ...(error.issueKind ? { issueKind: error.issueKind } : {}),
     };
   }
 

@@ -65,7 +65,7 @@ describe("resolveAiConnectionStatus", () => {
 
     expect(status).toMatchObject({
       tone: "error",
-      label: "Issue",
+      label: "Provider error",
       providerLabel: "Drifty Cloud",
       memoryLabel: null,
     });
@@ -121,7 +121,7 @@ describe("resolveAiConnectionStatus", () => {
 
     expect(status).toMatchObject({
       tone: "error",
-      label: "Issue",
+      label: "Provider error",
       providerLabel: "OpenAI GPT 4o Mini BYOK",
       memoryLabel: null,
     });

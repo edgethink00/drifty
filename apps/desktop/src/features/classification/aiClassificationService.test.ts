@@ -1583,6 +1583,9 @@ describe("runAiClassification cloud contract", () => {
         failureKind: "content",
         usedAiProvider: true,
         connectionEvidence: "failure",
+        // The embedded payment_required type reaches the caller as a structured
+        // kind, so telemetry no longer has to recover it from the message text.
+        issueKind: "credits",
       });
       expect(saveClassifications).not.toHaveBeenCalled();
     } finally {

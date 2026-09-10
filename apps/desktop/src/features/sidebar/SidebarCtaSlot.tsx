@@ -1,6 +1,7 @@
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import type { CSSProperties } from "react";
 import type { AiConnectionStatus } from "../ai-connection/AiConnectionStatusBar";
+import { aiFailureResolvesWithoutUser } from "../ai-connection/aiFailureGuidance";
 import type { BillingEntitlement } from "../billing/billingService";
 import type { ClassificationAvailability } from "../classification/classificationAvailability";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -380,7 +381,9 @@ function aiDisconnectedState(
 }
 
 function isSidebarRecoveryIssue(issueKind: AiConnectionStatus["issueKind"]): boolean {
-  return issueKind !== null && issueKind !== "rate_limited" && issueKind !== "unavailable";
+  // Single source with the status pill: a card here and a tooltip there must
+  // not disagree about whether the same failure needs the user.
+  return issueKind !== null && !aiFailureResolvesWithoutUser(issueKind);
 }
 
 function aiRecoveryCopy(
