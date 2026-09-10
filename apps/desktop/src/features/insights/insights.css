@@ -177,25 +177,36 @@
   box-shadow: 0 10px 26px color-mix(in srgb, var(--text) 12%, transparent);
   color: var(--text-soft);
   font-size: 0.8rem;
-  left: auto;
+  /* Right of the ?. The trigger sits at the left of a left-column card
+     inside .content, which clips overflow-x; opening left showed only the
+     tail of the sentence. */
+  left: calc(100% + 0.45rem);
   line-height: 1.45;
-  max-width: 18rem;
+  max-width: 24rem;
   opacity: 0;
   padding: 0.6rem 0.75rem;
   pointer-events: none;
   position: absolute;
-  right: calc(100% + 0.45rem);
-  top: -0.35rem;
-  transform: translateX(3px);
+  right: auto;
+  top: 0;
+  transform: translateX(-3px);
   transition: opacity 140ms ease, transform 140ms ease;
   width: max-content;
+  word-break: keep-all;
   z-index: 30;
 }
 
 .alarm-follow-through__help:hover .alarm-follow-through__tip,
 .alarm-follow-through__help:focus-within .alarm-follow-through__tip {
   opacity: 1;
-  transform: translateX(0);
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .alarm-follow-through__tip {
+    transition: none;
+    transform: none;
+  }
 }
 
 .alarm-follow-through__metric {
