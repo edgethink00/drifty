@@ -20,7 +20,7 @@ from app.storage.db import TrackerDatabase
 from app.storage.activity_segment_serialization import serialize_activity_row
 
 SCHEMA_VERSION = 1
-CLI_VERSION = "1.11.3"
+CLI_VERSION = "1.11.5"
 CLI_COMMANDS = frozenset({"status", "summary", "timeline", "search"})
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
