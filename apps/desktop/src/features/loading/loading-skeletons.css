@@ -269,8 +269,7 @@
 }
 
 .deferred-tab-skeleton--trends {
-  display: grid;
-  gap: var(--block-gap);
+  min-height: 0;
 }
 
 .deferred-tab-skeleton--trends .weekly-breakdown-analytical {
@@ -300,6 +299,11 @@
   margin-top: 0.22rem;
 }
 
+[data-calendar-placement^="right-"] .weekly-productivity-trend-card .wt-plot.deferred-tab-skeleton__block--weekly-chart {
+  height: 7.82rem;
+  min-height: 7.82rem;
+}
+
 .deferred-tab-skeleton__block--weekly-summary {
   min-height: 11.4rem;
   height: 100%;
@@ -309,6 +313,17 @@
 .deferred-tab-skeleton__block--rhythm {
   min-height: 12.25rem;
   height: 100%;
+}
+
+.insights-fit-window .deferred-tab-skeleton__block--rhythm {
+  min-height: 7.2rem;
+  height: calc(100% - 2.4rem);
+}
+
+.deferred-tab-skeleton__block--calendar {
+  min-height: 5.25rem;
+  height: 5.25rem;
+  margin-top: 0.2rem;
 }
 
 .deferred-tab-skeleton__block--source-group {
@@ -335,6 +350,54 @@
 
 .deferred-tab-skeleton--trends .productivity-insight-group--focus {
   min-height: 14.15rem;
+}
+
+.deferred-tab-skeleton--trends.insights-fit-window .productivity-insight-group--drift,
+.deferred-tab-skeleton--trends.insights-fit-window .productivity-insight-group--focus {
+  min-height: 123px;
+  max-height: 123px;
+  height: 123px;
+  box-sizing: border-box;
+}
+
+.deferred-tab-skeleton--trends.insights-fit-window .alarm-follow-through {
+  min-height: 138px;
+  max-height: 138px;
+  height: 138px;
+  box-sizing: border-box;
+}
+
+.deferred-tab-skeleton--trends.insights-fit-window #insights-weekly-attention-rhythm {
+  min-height: 192px;
+  max-height: 192px;
+  height: 192px;
+  box-sizing: border-box;
+}
+
+.deferred-tab-skeleton--trends.insights-fit-window[data-calendar-placement="right-bottom"] .focus-calendar {
+  min-height: 118px;
+  max-height: 118px;
+  height: 118px;
+  box-sizing: border-box;
+}
+
+.deferred-tab-skeleton--trends.insights-fit-window .alarm-follow-through__paths {
+  gap: 4px;
+}
+
+.deferred-tab-skeleton--trends.insights-fit-window .alarm-follow-through__row {
+  min-height: 18px;
+}
+
+.deferred-tab-skeleton--trends .weekly-summary-rail__stack .dashboard-skeleton-panel-bed--list {
+  min-height: 6.2rem;
+}
+
+.deferred-tab-skeleton--trends .drift-time-trend__sources-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
 }
 
 @keyframes loading-skeleton-sheen {
