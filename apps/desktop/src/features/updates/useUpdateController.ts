@@ -26,6 +26,10 @@ import {
 type AvailableUpdate = NonNullable<Awaited<ReturnType<typeof check>>>;
 export type UpdateCheckMode = "manual" | "automatic";
 
+export const UPDATE_IDLE_RESTART_THRESHOLD_SECONDS = 15 * 60;
+export const UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS = 3 * 60;
+export const UPDATE_IDLE_CHECK_INTERVAL_MS = 30 * 1000;
+
 export type UpdateCheckResult =
   | { readonly kind: "available"; readonly version: string }
   | { readonly kind: "none" }
@@ -41,6 +45,8 @@ type UseUpdateControllerResult = {
   readonly dismissAvailableUpdate: () => void;
   readonly handleCheckForUpdates: (mode?: UpdateCheckMode) => Promise<UpdateCheckResult | void>;
   readonly handleInstallUpdate: () => Promise<void>;
+  readonly canAutoUpdateSilently: boolean;
+  readonly preparedUpdateVersion: string | null;
   readonly setBackgroundUpdatesEnabled: (enabled: boolean) => void;
   readonly shouldShowAvailableUpdateDialog: boolean;
   readonly updateLifecycleStatus: UpdateLifecycleStatus;
@@ -55,6 +61,8 @@ type UseUpdateControllerResult = {
 
 type UseUpdateControllerOptions = {
   readonly backgroundPreparationSupported: boolean;
+  readonly getIdleSeconds?: () => Promise<number | null>;
+  readonly canSafelyRestart?: () => boolean;
 };
 
 function releaseUpdateResource(update: AvailableUpdate | null): void {
@@ -66,6 +74,8 @@ function releaseUpdateResource(update: AvailableUpdate | null): void {
 
 export function useUpdateController({
   backgroundPreparationSupported,
+  getIdleSeconds,
+  canSafelyRestart,
 }: UseUpdateControllerOptions): UseUpdateControllerResult {
   const versionTestPauseUntil = useVersionTestPauseUntil();
   const updaterCheckingRef = useRef(false);
@@ -77,6 +87,7 @@ export function useUpdateController({
   const [availableUpdatePolicy, setAvailableUpdatePolicy] = useState<UpdatePolicy | null>(null);
   const [dismissedPromptVersion, setDismissedPromptVersion] = useState<string | null>(null);
   const preparedUpdateVersionRef = useRef<string | null>(null);
+  const [preparedUpdateVersion, setPreparedUpdateVersion] = useState<string | null>(null);
   const [updateInteractions, setUpdateInteractions] = useState<UpdateInteractionMap>(readUpdateInteractionMap);
   const updateInteractionsRef = useRef(updateInteractions);
   const [updatePromptNowMs, setUpdatePromptNowMs] = useState(() => Date.now());
@@ -113,6 +124,7 @@ export function useUpdateController({
 
   const rememberPreparedUpdate = useCallback((version: string | null) => {
     preparedUpdateVersionRef.current = version;
+    setPreparedUpdateVersion(version);
   }, []);
 
   useEffect(() => () => {
@@ -315,6 +327,11 @@ export function useUpdateController({
   ]);
 
   const handleInstallUpdate = useCallback(async () => {
+    if (preparedUpdateVersionRef.current) {
+      markPostUpdateRelaunchFocusPending();
+      await invoke<void>("app_restart_after_update");
+      return;
+    }
     const offeredUpdate = availableUpdateRef.current;
     if (!offeredUpdate || updaterCheckingRef.current || updaterOperatingRef.current) return;
 
@@ -381,11 +398,21 @@ export function useUpdateController({
     && dismissedPromptVersion !== availableUpdate.version
     && (
       availableUpdateSource === "manual"
-      || (availableUpdateSource === "automatic" && shouldShowAutomaticUpdateDialog({
-        policy: currentUpdatePolicy,
-        interaction: availableUpdateInteraction,
-        nowMs: updatePromptNowMs,
-      }))
+      || currentUpdatePolicy.urgency === "urgent"
+      || (
+        availableUpdateSource === "automatic"
+        && (
+          !backgroundUpdatesEnabled
+          || !backgroundPreparationSupported
+          || !currentUpdatePolicy.backgroundDownloadEligible
+          || (availableUpdateInteraction?.backgroundPreparationFailureCount ?? 0) >= 3
+        )
+        && shouldShowAutomaticUpdateDialog({
+          policy: currentUpdatePolicy,
+          interaction: availableUpdateInteraction,
+          nowMs: updatePromptNowMs,
+        })
+      )
     ),
   );
 
@@ -419,14 +446,102 @@ export function useUpdateController({
           ? "available"
           : "idle";
 
+  useEffect(() => {
+    if (!preparedUpdateVersion) return undefined;
+    if (!backgroundUpdatesEnabled) return undefined;
+    if (!backgroundPreparationSupported) return undefined;
+
+    let disposed = false;
+    let restartInFlight = false;
+    let hiddenSinceMs: number | null = typeof document !== "undefined" && document.visibilityState === "hidden"
+      ? Date.now()
+      : null;
+
+    const handleVisibilityChange = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "hidden") {
+        if (hiddenSinceMs === null) hiddenSinceMs = Date.now();
+      } else {
+        hiddenSinceMs = null;
+      }
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+
+    const intervalId = window.setInterval(async () => {
+      if (disposed || restartInFlight) return;
+      if (updaterOperatingRef.current) return;
+      if (canSafelyRestart && !canSafelyRestart()) return;
+
+      const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
+      const idleSeconds = getIdleSeconds ? await getIdleSeconds().catch(() => null) : null;
+      if (disposed || restartInFlight) return;
+
+      let isSafeToRestart = false;
+      if (idleSeconds !== null && Number.isFinite(idleSeconds)) {
+        if (idleSeconds >= UPDATE_IDLE_RESTART_THRESHOLD_SECONDS) {
+          isSafeToRestart = true;
+        } else if (isHidden && idleSeconds >= UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS) {
+          isSafeToRestart = true;
+        }
+      } else if (isHidden && hiddenSinceMs !== null && Date.now() - hiddenSinceMs >= UPDATE_IDLE_RESTART_THRESHOLD_SECONDS * 1000) {
+        isSafeToRestart = true;
+      }
+
+      if (!isSafeToRestart) return;
+
+      const releaseOperation = acquireUpdateOperation();
+      if (!releaseOperation) return;
+      restartInFlight = true;
+      try {
+        if (!isHidden) {
+          markPostUpdateRelaunchFocusPending();
+        }
+        await invoke<void>("app_restart_after_update");
+      } catch (error) {
+        console.warn("Failed to restart app after background update:", toErrorMessage(error));
+        restartInFlight = false;
+      } finally {
+        releaseOperation();
+      }
+    }, UPDATE_IDLE_CHECK_INTERVAL_MS);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+    };
+  }, [
+    backgroundPreparationSupported,
+    backgroundUpdatesEnabled,
+    canSafelyRestart,
+    getIdleSeconds,
+    preparedUpdateVersion,
+  ]);
+
+  const canAutoUpdateSilently = backgroundPreparationSupported
+    && backgroundUpdatesEnabled
+    && (preparedUpdateVersion !== null || (
+      availableUpdateSource === "automatic"
+      && currentUpdatePolicy?.urgency !== "urgent"
+      && currentUpdatePolicy?.backgroundDownloadEligible === true
+      && (availableUpdateInteraction?.backgroundPreparationFailureCount ?? 0) < 3
+    ));
+
   return {
     backgroundUpdatesEnabled,
     availableUpdate,
     availableUpdateSource,
+    canAutoUpdateSilently,
     currentUpdatePolicy,
     dismissAvailableUpdate,
     handleCheckForUpdates,
     handleInstallUpdate,
+    preparedUpdateVersion,
     setBackgroundUpdatesEnabled,
     shouldShowAvailableUpdateDialog,
     updateLifecycleStatus,

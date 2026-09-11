@@ -224,3 +224,173 @@ it("discards a scheduled update when the pause begins during policy loading", as
   expect(next.download).not.toHaveBeenCalled();
   expect(next.install).not.toHaveBeenCalled();
 });
+
+describe("background update and idle auto-restart", () => {
+  it("prepares an eligible update in the background without showing dialog", async () => {
+    const next = update("1.11.6");
+    checkMock.mockResolvedValue(next);
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+      version: "1.11.6",
+      policyVersion: 2,
+      urgency: "general",
+      promptAfterMs: 72 * 60 * 60 * 1000,
+      backgroundDownloadEligible: true,
+      installBehavior: "next-launch",
+      message: null,
+    });
+
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+    await act(async () => {
+      await result.current.handleCheckForUpdates("automatic");
+    });
+
+    expect(result.current.shouldShowAvailableUpdateDialog).toBe(false);
+    expect(result.current.canAutoUpdateSilently).toBe(true);
+    expect(result.current.preparedUpdateVersion).toBe("1.11.6");
+    expect(next.download).toHaveBeenCalledTimes(1);
+    expect(next.install).toHaveBeenCalledTimes(1);
+  });
+
+  it("restarts automatically when idle threshold is reached after update is prepared", async () => {
+    vi.useFakeTimers();
+    try {
+      const next = update("1.11.6");
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+        version: "1.11.6",
+        policyVersion: 2,
+        urgency: "general",
+        promptAfterMs: 72 * 60 * 60 * 1000,
+        backgroundDownloadEligible: true,
+        installBehavior: "next-launch",
+        message: null,
+      });
+
+      let idleSec = 0;
+      const getIdleSeconds = vi.fn(async () => idleSec);
+      const canSafelyRestart = vi.fn(() => true);
+
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        getIdleSeconds,
+        canSafelyRestart,
+      }));
+
+      await act(async () => {
+        await result.current.handleCheckForUpdates("automatic");
+      });
+
+      expect(result.current.preparedUpdateVersion).toBe("1.11.6");
+      expect(invokeMock).not.toHaveBeenCalledWith("app_restart_after_update");
+
+      // Advance timer while user is active
+      idleSec = 60; // 1 min
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(invokeMock).not.toHaveBeenCalledWith("app_restart_after_update");
+
+      // User becomes idle for 15+ minutes
+      idleSec = 15 * 60 + 1;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not restart when canSafelyRestart returns false", async () => {
+    vi.useFakeTimers();
+    try {
+      const next = update("1.11.6");
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+        version: "1.11.6",
+        policyVersion: 2,
+        urgency: "general",
+        promptAfterMs: 72 * 60 * 60 * 1000,
+        backgroundDownloadEligible: true,
+        installBehavior: "next-launch",
+        message: null,
+      });
+
+      const getIdleSeconds = vi.fn(async () => 20 * 60);
+      const canSafelyRestart = vi.fn(() => false);
+
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        getIdleSeconds,
+        canSafelyRestart,
+      }));
+
+      await act(async () => {
+        await result.current.handleCheckForUpdates("automatic");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+
+      expect(invokeMock).not.toHaveBeenCalledWith("app_restart_after_update");
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts immediately on handleInstallUpdate when update is already prepared", async () => {
+    const next = update("1.11.6");
+    checkMock.mockResolvedValue(next);
+    vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+      version: "1.11.6",
+      policyVersion: 2,
+      urgency: "general",
+      promptAfterMs: 72 * 60 * 60 * 1000,
+      backgroundDownloadEligible: true,
+      installBehavior: "next-launch",
+      message: null,
+    });
+
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+    await act(async () => {
+      await result.current.handleCheckForUpdates("automatic");
+    });
+
+    expect(result.current.preparedUpdateVersion).toBe("1.11.6");
+    invokeMock.mockClear();
+
+    await act(async () => {
+      await result.current.handleInstallUpdate();
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+    expect(localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
+  });
+
+  it("exposes canAutoUpdateSilently as false when background preparation has terminally failed", async () => {
+    const next = update("1.11.6");
+    next.download.mockRejectedValue(new Error("disk read-only"));
+    checkMock.mockResolvedValue(next);
+    vi.mocked(fetchUpdatePolicy).mockResolvedValue({
+      version: "1.11.6",
+      policyVersion: 2,
+      urgency: "general",
+      promptAfterMs: 72 * 60 * 60 * 1000,
+      backgroundDownloadEligible: true,
+      installBehavior: "next-launch",
+      message: null,
+    });
+
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: true }));
+
+    // Fail 3 times
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+    await act(async () => { await result.current.handleCheckForUpdates("automatic"); });
+
+    expect(result.current.canAutoUpdateSilently).toBe(false);
+  });
+});

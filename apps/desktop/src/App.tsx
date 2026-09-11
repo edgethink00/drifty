@@ -641,10 +641,12 @@ export default function App() {
     setDevSettingsSubsection(subsection);
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, []);
+  const canSafelyRestartRef = useRef<() => boolean>(() => true);
   const {
     backgroundUpdatesEnabled,
     availableUpdate,
     availableUpdateSource,
+    canAutoUpdateSilently,
     currentUpdatePolicy,
     dismissAvailableUpdate,
     handleCheckForUpdates,
@@ -663,6 +665,20 @@ export default function App() {
     // Keep unattended next-launch preparation on the macOS path proven by
     // packaged runtime QA until another platform has its own safe contract.
     backgroundPreparationSupported: hostPlatform === "macos",
+    getIdleSeconds: async () => {
+      try {
+        const s = await trackerClient.getStatus();
+        // If the tracker is actively recording (e.g. video, meeting, or interactive work),
+        // treat as active even if the mouse hasn't moved
+        if (s.running && s.trackerMode && s.trackerMode !== "idle") {
+          return 0;
+        }
+        return s.idleSeconds ?? null;
+      } catch {
+        return null;
+      }
+    },
+    canSafelyRestart: () => canSafelyRestartRef.current(),
   });
   useAutomaticUpdateScheduler({
     enabled: isTauriRuntime(),
@@ -1365,6 +1381,7 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  canSafelyRestartRef.current = () => !onboardingOpen && !authModalOpen && !upgradePlanModalOpen;
   // One-shot: armed only by completing onboarding in this session — never re-read
   // from storage, so the bootstrap import cannot re-fire on later launches.
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
@@ -6585,6 +6602,7 @@ export default function App() {
     || visibleUpdate
     || updaterDownloading
     || updaterInstalling
+    || canAutoUpdateSilently
     ? null
     : availableUpdate?.version ?? null;
   const latestBuildPromptUpdate = developerPreReleaseUpdateController.promptUpdate;
