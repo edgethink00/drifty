@@ -136,6 +136,13 @@ export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
+export function collapsedAccountPopoverLeftPx(
+  railRight: number,
+  gapPx: number = ACCOUNT_POPOVER_COLLAPSED_GAP_PX,
+): number {
+  return railRight + gapPx;
+}
+
 type AccountMenuProps = {
   readonly isOpen: boolean;
   readonly isSidebarCollapsed: boolean;
@@ -197,9 +204,11 @@ export function AccountMenu({
 
     const rect = trigger.getBoundingClientRect();
     if (isSidebarCollapsed) {
+      const rail = trigger.closest(".sidebar");
+      const railRight = rail?.getBoundingClientRect().right ?? rect.right;
       setPopoverStyle({
         position: "fixed",
-        left: rect.right + ACCOUNT_POPOVER_COLLAPSED_GAP_PX,
+        left: collapsedAccountPopoverLeftPx(railRight),
         bottom: window.innerHeight - rect.bottom,
         width: ACCOUNT_POPOVER_COLLAPSED_WIDTH,
       });
@@ -223,10 +232,16 @@ export function AccountMenu({
     updatePopoverPosition();
     window.addEventListener("resize", updatePopoverPosition);
     window.addEventListener("scroll", updatePopoverPosition, true);
+    const rail = triggerRef.current?.closest(".sidebar");
+    const resizeObserver = typeof ResizeObserver === "function" && rail
+      ? new ResizeObserver(() => updatePopoverPosition())
+      : null;
+    if (rail && resizeObserver) resizeObserver.observe(rail);
 
     return () => {
       window.removeEventListener("resize", updatePopoverPosition);
       window.removeEventListener("scroll", updatePopoverPosition, true);
+      resizeObserver?.disconnect();
     };
   }, [isOpen, updatePopoverPosition]);
 

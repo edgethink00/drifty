@@ -2,7 +2,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { ACCOUNT_POPOVER_EXPANDED_GAP_PX, AccountMenu } from "./AccountMenu";
+import {
+  ACCOUNT_POPOVER_COLLAPSED_GAP_PX,
+  ACCOUNT_POPOVER_EXPANDED_GAP_PX,
+  AccountMenu,
+  collapsedAccountPopoverLeftPx,
+} from "./AccountMenu";
 import {
   LocalizationProvider,
   LocalizationTestProvider,
@@ -57,6 +62,74 @@ function renderAccountMenu({ userAvatarUrl = null, userEmail = null, language = 
 describe("AccountMenu", () => {
   it("keeps the expanded account popover close to the trigger", () => {
     expect(ACCOUNT_POPOVER_EXPANDED_GAP_PX).toBe(5);
+  });
+
+  it("anchors the collapsed popover to the visible rail, not the unclipped trigger", () => {
+    expect(ACCOUNT_POPOVER_COLLAPSED_GAP_PX).toBe(10);
+    expect(collapsedAccountPopoverLeftPx(54)).toBe(64);
+    expect(collapsedAccountPopoverLeftPx(54)).not.toBe(211.5 + ACCOUNT_POPOVER_COLLAPSED_GAP_PX);
+
+    const handlers = {
+      onProfile: vi.fn(),
+      onAiSetting: vi.fn(),
+      onSettings: vi.fn(),
+      onToggleTheme: vi.fn(),
+      onCheckForUpdates: vi.fn(),
+      onFeedback: vi.fn(),
+      onSignIn: vi.fn(),
+      onSignOut: vi.fn(),
+    };
+
+    function Harness() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <LocalizationTestProvider language="en">
+          <div className="sidebar sidebar--collapsed">
+            <AccountMenu
+              isOpen={isOpen}
+              isSidebarCollapsed
+              userAvatarUrl={null}
+              userEmail={null}
+              isDarkMode={false}
+              isPetVisible={false}
+              onTogglePet={() => {}}
+              onToggle={() => setIsOpen((open) => !open)}
+              {...handlers}
+            />
+          </div>
+        </LocalizationTestProvider>
+      );
+    }
+
+    const { container } = render(<Harness />);
+    const sidebar = container.querySelector(".sidebar") as HTMLElement;
+    const trigger = screen.getByRole("button", { name: /^unknown$/i });
+    vi.spyOn(sidebar, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 54,
+      height: 820,
+      top: 0,
+      right: 54,
+      bottom: 820,
+      left: 0,
+      toJSON: () => ({}),
+    } as DOMRect);
+    vi.spyOn(trigger, "getBoundingClientRect").mockReturnValue({
+      x: 6.5,
+      y: 769,
+      width: 205,
+      height: 43,
+      top: 769,
+      right: 211.5,
+      bottom: 812,
+      left: 6.5,
+      toJSON: () => ({}),
+    } as DOMRect);
+
+    fireEvent.click(trigger);
+    const menu = screen.getByRole("menu", { name: /account menu/i });
+    expect(menu.style.left).toBe("64px");
   });
 
   it("renders signed-out users with the branded fallback label and the default profile avatar", () => {

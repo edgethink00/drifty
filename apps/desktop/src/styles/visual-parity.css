@@ -176,11 +176,19 @@
   --sidebar-collapse-nav-icon-align-x: 2px;
   --sidebar-collapse-settings-icon-align-x: 1px;
   --sidebar-collapse-tracker-align-x: 1px;
-  --sidebar-collapse-account-align-x: -1.5px;
+  /* The collapsed account button carries its own padding (see below), so the
+     avatar already lands on the rail centre without a transform nudge. */
+  --sidebar-collapse-account-align-x: 0px;
+  /* Same box as a collapsed nav chip, so the footer keeps the rail's rhythm. */
+  --sidebar-collapsed-account-width: 38px;
   align-items: flex-start;
   gap: 3px;
-  overflow-x: hidden;
-  overflow-y: hidden;
+  /* Clip, don't hide, and clip on both axes: overflow:hidden keeps a real
+     scrollport, so hovering or focusing the account row could shift scrollLeft
+     and push the avatar out of the rail. A lone overflow-x: clip does not help
+     either - paired with overflow-y: hidden it computes back to hidden - so the
+     rail declares clip once for both axes and has no scrollport at all. */
+  overflow: clip;
   padding: var(--window-chrome-height) 8px var(--content-panel-gap);
   scrollbar-width: none;
 }
@@ -460,13 +468,14 @@
     max-width: 2.25rem;
   }
 
-  /* The account row keeps the expanded width and is simply clipped by the rail,
-     so the avatar never re-centres and never drifts vertically. */
-  .sidebar--collapsed .account-menu-shell,
+  /* The account row hugs the rail instead of keeping its expanded box. Its
+     hover and focus surface is now a whole chip instead of a rectangle sheared
+     off at the rail edge, and nothing overflows the rail, so no scroll can push
+     the avatar out of view. */
   .sidebar--collapsed .account-trigger {
-    width: var(--sidebar-expanded-width);
-    min-width: var(--sidebar-expanded-width);
-    max-width: var(--sidebar-expanded-width);
+    width: var(--sidebar-collapsed-account-width);
+    min-width: var(--sidebar-collapsed-account-width);
+    max-width: var(--sidebar-collapsed-account-width);
   }
 
   .sidebar--collapsed .live-pill {
@@ -654,7 +663,9 @@
     justify-content: start;
     gap: 8px;
     margin-inline: 0;
-    padding: 5px 7px;
+    /* 4px + the 30px avatar column centres the 27px mark on the rail axis and
+       leaves equal 5.5px shoulders inside the 38px chip. */
+    padding: 5px 4px;
     border-radius: 10px;
     transform: translateX(var(--sidebar-collapse-account-align-x));
   }

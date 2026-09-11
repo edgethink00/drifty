@@ -73,8 +73,8 @@ describe("sidebar motion styles", () => {
     const collapsedLiveCopyBlock =
       styles.match(/\.sidebar--collapsed \.live-pill \.app-name,\s*\.sidebar--collapsed \.live-pill \.app-class\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
     const collapsedTrackerControlBlock = cssBlock(styles, ".sidebar--collapsed .tracker-control");
-    const collapsedFooterControlsBlock =
-      styles.match(/\.sidebar--collapsed \.account-menu-shell,\s*\.sidebar--collapsed \.account-trigger\s*\{[\s\S]*?\n\s*\}/)?.[0] ?? "";
+    const collapsedAccountWidthBlock =
+      styles.match(/\.sidebar--collapsed \.account-trigger\s*\{\s*width: var\(--sidebar-collapsed-account-width\);[\s\S]*?\n\s*\}/)?.[0] ?? "";
     const collapsedTrackerToggleBlock = collapsedToggleRule(styles);
     const collapsedTrackerToggleLabelBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle span");
     const collapsedTrackerIconBlock = cssBlock(styles, ".sidebar--collapsed .sidebar-tracker-toggle::before");
@@ -84,7 +84,10 @@ describe("sidebar motion styles", () => {
     const collapsedAccountTriggerBlock = cssBlock(styles, ".sidebar--collapsed .account-trigger", "last");
 
     expect(navTextBlock).toContain("max-width: 9rem;");
-    expect(collapsedSidebarBlock).toContain("overflow-x: hidden;");
+    /* overflow-x: clip paired with overflow-y: hidden computes back to hidden,
+       which restores the scrollport that hid the avatar. */
+    expect(collapsedSidebarBlock).toContain("overflow: clip;");
+    expect(collapsedSidebarBlock).not.toContain("overflow-y: hidden;");
     expect(collapsedBrandBlock).toContain("justify-content: flex-start;");
     expect(collapsedBrandBlock).toContain("margin: 0 0 4px;");
     expect(collapsedNavLabelBlock).toContain("padding: 12px 10px 4px;");
@@ -95,7 +98,9 @@ describe("sidebar motion styles", () => {
     expect(collapsedTrackerControlBlock).toContain("padding: 0;");
     expect(collapsedTrackerControlBlock).toContain("background: transparent;");
     expect(collapsedTrackerControlBlock).toContain("box-shadow: none;");
-    expect(collapsedFooterControlsBlock).toContain("width: var(--sidebar-expanded-width);");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapsed-account-width: 38px;");
+    expect(collapsedAccountWidthBlock).toContain("max-width: var(--sidebar-collapsed-account-width);");
+    expect(collapsedAccountWidthBlock).not.toContain("var(--sidebar-expanded-width)");
     expect(collapsedLivePillBlock).toContain("place-items: center;");
     expect(collapsedLiveStatusBlock).toContain("width: 8px;");
     expect(collapsedLiveStatusBlock).not.toContain("display: none;");
@@ -129,7 +134,7 @@ describe("sidebar motion styles", () => {
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-nav-icon-align-x: 2px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-settings-icon-align-x: 1px;");
     expect(collapsedSidebarBlock).toContain("--sidebar-collapse-tracker-align-x: 1px;");
-    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: -1.5px;");
+    expect(collapsedSidebarBlock).toContain("--sidebar-collapse-account-align-x: 0px;");
     expect(collapsedScrollBlock).toContain("width: 100%;");
     expect(collapsedScrollBlock).toContain("min-width: 0;");
     expect(collapsedBrandBlock).toContain("transform: translateX(var(--sidebar-collapse-brand-align-x));");
