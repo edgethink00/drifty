@@ -3,6 +3,7 @@ export { sanitizePostHogEventProperties } from "./privacyGuard";
 export {
   toAnalyticsErrorKind,
   toCountBucket,
+  toDailyDedupKey,
   toFirstDayPreparationDurationBucket,
   toFirstDayPreparationSegmentCountBucket,
 } from "./eventHelpers";

@@ -19,6 +19,23 @@ export function toCountBucket(value: number): CountBucket {
   return "50_plus";
 }
 
+/**
+ * Builds a daily dedup key from every property an event actually reports.
+ *
+ * Keying on a subset would be worse than dropping the event outright: the one
+ * surviving row's count buckets and error kinds would silently describe whichever
+ * occurrence happened first that day. With the full combination as the key, each
+ * row keeps a plain meaning — this exact combination occurred at least once today
+ * — and daily volume is bounded by how many distinct combinations a person
+ * actually produces rather than by how long the app stays open.
+ */
+export function toDailyDedupKey(properties: Readonly<Record<string, unknown>>): string {
+  return Object.keys(properties)
+    .sort()
+    .map((key) => `${key}=${String(properties[key])}`)
+    .join("|");
+}
+
 export function toFirstDayPreparationDurationBucket(valueMs: number): FirstDayPreparationDurationBucket {
   if (!Number.isFinite(valueMs) || valueMs < 30_000) return "under_30s";
   if (valueMs < 90_000) return "30_90s";

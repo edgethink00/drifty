@@ -10,7 +10,7 @@ import type {
   STARTUP_BACKENDS,
   STARTUP_REGISTRATION_PHASES,
 } from "./eventTaxonomy";
-import { capturePostHogEvent } from "./posthogClient";
+import { capturePostHogDailyEvent, capturePostHogEvent, toDailyDedupKey } from "./posthogClient";
 
 type AnalyticsInstallLocation = (typeof INSTALL_LOCATIONS)[number];
 type AnalyticsOpenAtLoginStatus = (typeof OPEN_AT_LOGIN_STATUSES)[number];
@@ -67,11 +67,14 @@ export async function reportStartupEnvironment(): Promise<void> {
     startupSettingsClient.getInstallLocation().catch(() => null),
     startupSettingsClient.getOpenAtLoginStatus().catch(() => null),
   ]);
-  capturePostHogEvent("app_launch_environment", {
+  const properties = {
     install_location: toAnalyticsInstallLocation(location),
     open_at_login_status: toAnalyticsOpenAtLoginStatus(startup?.status ?? null),
     startup_backend: toAnalyticsStartupBackend(startup?.backend ?? null),
-  });
+  } as const;
+  // These three facts describe the install, not the session, so relaunching the
+  // app several times a day cannot tell us anything the first launch did not.
+  capturePostHogDailyEvent("app_launch_environment", toDailyDedupKey(properties), properties);
 }
 
 /**

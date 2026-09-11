@@ -15,6 +15,7 @@ export {
   sanitizePostHogEventProperties,
   toAnalyticsErrorKind,
   toCountBucket,
+  toDailyDedupKey,
   type PostHogEventName,
   type PostHogEventPropertiesByName,
 } from "./events";
@@ -26,7 +27,7 @@ type PostHogUser = {
 
 export type PostHogClientRuntime = Pick<
   typeof import("./posthog"),
-  "capturePostHogEvent" | "initializePostHog" | "recordPostHogAuthState"
+  "capturePostHogEvent" | "capturePostHogDailyEvent" | "initializePostHog" | "recordPostHogAuthState"
 >;
 
 type PendingPostHogOperation = {
@@ -94,6 +95,18 @@ export function createDeferredPostHogClient(
         kind: "event",
         run: (nextRuntime) => {
           nextRuntime.capturePostHogEvent(event, ...properties);
+        },
+      });
+    },
+    capturePostHogDailyEvent<Event extends PostHogEventName>(
+      event: Event,
+      dedupKey: string,
+      ...properties: PostHogEventPropertiesArgument<Event>
+    ): void {
+      enqueue({
+        kind: "event",
+        run: (nextRuntime) => {
+          nextRuntime.capturePostHogDailyEvent(event, dedupKey, ...properties);
         },
       });
     },
@@ -167,6 +180,15 @@ export function capturePostHogEvent<Event extends PostHogEventName>(
   ...properties: PostHogEventPropertiesArgument<Event>
 ): void {
   client.capturePostHogEvent(event, ...properties);
+}
+
+/** One delivery per reporting day for each (event, dedupKey) pair. */
+export function capturePostHogDailyEvent<Event extends PostHogEventName>(
+  event: Event,
+  dedupKey: string,
+  ...properties: PostHogEventPropertiesArgument<Event>
+): void {
+  client.capturePostHogDailyEvent(event, dedupKey, ...properties);
 }
 
 export function recordPostHogAuthState(user: PostHogUser | null): void {

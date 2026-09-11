@@ -5,6 +5,7 @@ function createRuntime(): PostHogClientRuntime {
   return {
     initializePostHog: vi.fn(() => true),
     capturePostHogEvent: vi.fn(),
+    capturePostHogDailyEvent: vi.fn(),
     recordPostHogAuthState: vi.fn(),
   };
 }
@@ -19,6 +20,9 @@ describe("deferred PostHog client", () => {
       }),
       capturePostHogEvent: vi.fn(() => {
         calls.push("capture");
+      }),
+      capturePostHogDailyEvent: vi.fn(() => {
+        calls.push("capture-daily");
       }),
       recordPostHogAuthState: vi.fn(() => {
         calls.push("auth");

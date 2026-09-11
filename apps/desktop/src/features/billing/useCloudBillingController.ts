@@ -19,7 +19,7 @@ import {
   type CloudTrialStartedNoticeModel,
 } from "./CloudTrialStartedNotice";
 import { toErrorMessage } from "../../lib/formatting";
-import { capturePostHogEvent, toAnalyticsErrorKind } from "../../lib/analytics/posthogClient";
+import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
 import { canStartIndividualCheckout } from "./billingEligibility";
 import { useLocalization } from "../localization/LocalizationContext";
 
@@ -60,6 +60,18 @@ type UseCloudBillingControllerResult = {
 };
 
 export const CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS = 1_500;
+
+/**
+ * An entitlement check runs on auth resolution, on every return from the billing
+ * browser and on deep links, so a repeated "still active" says nothing new.
+ * Checkout, portal and coupon actions stay per-occurrence: those are real
+ * decisions a person made, and each one matters on its own.
+ */
+function captureEntitlementCheckOncePerDay(
+  properties: PostHogEventPropertiesByName["billing_action"],
+): void {
+  capturePostHogDailyEvent("billing_action", toDailyDedupKey(properties), properties);
+}
 
 function cloudEntitlementRetryDelay(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, CLOUD_ENTITLEMENT_CONFIRMATION_RETRY_MS));
@@ -148,7 +160,7 @@ export function useCloudBillingController({
       const message = toErrorMessage(error);
       setBillingEntitlementError(message);
       setBillingEntitlementLoading(false);
-      capturePostHogEvent("billing_action", {
+      captureEntitlementCheckOncePerDay({
         action: "entitlement_check",
         result: "error",
         error_kind: toAnalyticsErrorKind(error),
@@ -159,7 +171,7 @@ export function useCloudBillingController({
     if (result.success) {
       setBillingEntitlement(result.data);
       setBillingEntitlementLoading(false);
-      capturePostHogEvent("billing_action", {
+      captureEntitlementCheckOncePerDay({
         action: "entitlement_check",
         result: "success",
         entitlement_status: result.data.status,
@@ -170,7 +182,7 @@ export function useCloudBillingController({
 
     setBillingEntitlementError(result.error);
     setBillingEntitlementLoading(false);
-    capturePostHogEvent("billing_action", {
+    captureEntitlementCheckOncePerDay({
       action: "entitlement_check",
       result: "error",
       error_kind: toAnalyticsErrorKind(result.error),

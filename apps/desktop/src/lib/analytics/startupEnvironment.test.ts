@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const analyticsMocks = vi.hoisted(() => ({
   capturePostHogEvent: vi.fn(),
+  capturePostHogDailyEvent: vi.fn(),
 }));
 
 const startupMocks = vi.hoisted(() => ({
@@ -12,6 +13,13 @@ const startupMocks = vi.hoisted(() => ({
 
 vi.mock("./posthogClient", () => ({
   capturePostHogEvent: analyticsMocks.capturePostHogEvent,
+  capturePostHogDailyEvent: analyticsMocks.capturePostHogDailyEvent,
+  // The dedup key is the real helper: the test should fail if the key stops
+  // covering a reported property, not quietly accept a stubbed key.
+  toDailyDedupKey: (properties: Readonly<Record<string, unknown>>) => Object.keys(properties)
+    .sort()
+    .map((key) => `${key}=${String(properties[key])}`)
+    .join("|"),
 }));
 
 vi.mock("../api/startupSettingsClient", () => ({
@@ -59,11 +67,15 @@ describe("reportStartupEnvironment", () => {
 
     await reportStartupEnvironment();
 
-    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("app_launch_environment", {
-      install_location: "translocated",
-      open_at_login_status: "enabled",
-      startup_backend: "sm_app_service",
-    });
+    expect(analyticsMocks.capturePostHogDailyEvent).toHaveBeenCalledWith(
+      "app_launch_environment",
+      "install_location=translocated|open_at_login_status=enabled|startup_backend=sm_app_service",
+      {
+        install_location: "translocated",
+        open_at_login_status: "enabled",
+        startup_backend: "sm_app_service",
+      },
+    );
   });
 
   it("still reports when one native read fails", async () => {
@@ -77,11 +89,15 @@ describe("reportStartupEnvironment", () => {
 
     await reportStartupEnvironment();
 
-    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("app_launch_environment", {
-      install_location: "unknown",
-      open_at_login_status: "requires_approval",
-      startup_backend: "sm_app_service",
-    });
+    expect(analyticsMocks.capturePostHogDailyEvent).toHaveBeenCalledWith(
+      "app_launch_environment",
+      "install_location=unknown|open_at_login_status=requires_approval|startup_backend=sm_app_service",
+      {
+        install_location: "unknown",
+        open_at_login_status: "requires_approval",
+        startup_backend: "sm_app_service",
+      },
+    );
   });
 
   it("stays silent outside the native runtime", async () => {

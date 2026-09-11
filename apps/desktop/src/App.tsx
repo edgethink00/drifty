@@ -93,6 +93,7 @@ import { shouldUsePreviewData } from "./lib/api/previewData";
 import { setMainWindowNativeBlur, setMainWindowThemeAppearance, setOnboardingWindowPresentation } from "./lib/api/windowChromeClient";
 import {
   capturePostHogEvent,
+  capturePostHogDailyEvent,
   toAnalyticsErrorKind,
 } from "./lib/analytics/posthogClient";
 import { cleanupTauriEventListener } from "./lib/tauriEventCleanup";
@@ -404,10 +405,11 @@ import { activityNav, dashboardPeriodOptions, type NavigationHistoryState, type 
 import { useFeatureNewBadges } from "./features/discovery/useFeatureNewBadges";
 import {
   captureAiClassificationRun,
+  captureAiClassificationRunOncePerDay,
+  captureScheduledProjectPass,
   toAiProviderAnalytics,
   toAppSurfaceAnalytics,
   toDashboardPeriodAnalytics,
-  toScheduledProjectPassAnalytics,
   toTrackerModeAnalytics,
 } from "./app/appAnalytics";
 import { aiServerStatusLabelForCloud, driftyCloudStatusLabel, hasAiClassificationUsageMeasurement } from "./features/ai-connection/aiStatusLabels";
@@ -1088,7 +1090,10 @@ export default function App() {
     if (previousSurfaceAnalyticsKeyRef.current === surfaceKey) return;
     previousSurfaceAnalyticsKeyRef.current = surfaceKey;
 
-    capturePostHogEvent("app_surface_opened", {
+    // Which surfaces get opened is the question; how many times someone walks
+    // back and forth between two tabs is not. The key carries every property
+    // below so each distinct surface still reports once a day.
+    capturePostHogDailyEvent("app_surface_opened", surfaceKey, {
       surface: toAppSurfaceAnalytics(activeTab),
       ...(dashboardPeriod ? { dashboard_period: dashboardPeriod } : {}),
       ...(activeTab === "settings" ? { settings_section: settingsSection } : {}),
@@ -1097,9 +1102,14 @@ export default function App() {
 
   useEffect(() => {
     if (!error) return;
-    capturePostHogEvent("app_error", {
-      surface: toAppSurfaceAnalytics(activeTab),
-      error_kind: toAnalyticsErrorKind(error),
+    // The same unresolved error re-fired on every tab change. Sentry owns the
+    // per-occurrence detail; this event only needs "did this kind of error
+    // reach this surface today".
+    const surface = toAppSurfaceAnalytics(activeTab);
+    const errorKind = toAnalyticsErrorKind(error);
+    capturePostHogDailyEvent("app_error", `${surface}:${errorKind}`, {
+      surface,
+      error_kind: errorKind,
     });
   }, [activeTab, error]);
 
@@ -5052,7 +5062,7 @@ export default function App() {
 
             switch (result.kind) {
               case "classified":
-                capturePostHogEvent("ai_classification_run", {
+                captureAiClassificationRunOncePerDay({
                   trigger: "live",
                   provider_kind: liveAiProviderKind,
                   result: "success",
@@ -5069,7 +5079,7 @@ export default function App() {
                 await refreshAfterLiveAiClassification();
                 return;
               case "unavailable":
-                capturePostHogEvent("ai_classification_run", {
+                captureAiClassificationRunOncePerDay({
                   trigger: "live",
                   provider_kind: liveAiProviderKind,
                   result: "unavailable",
@@ -5114,7 +5124,7 @@ export default function App() {
               },
               evaluation,
             });
-            capturePostHogEvent("ai_classification_run", {
+            captureAiClassificationRunOncePerDay({
               trigger: "live",
               provider_kind: liveAiProviderKind,
               result: "error",
@@ -8183,10 +8193,7 @@ export default function App() {
         trigger,
         getLogicalDayRange(day, day, startOfDayMinutes),
       ).then((outcome) => {
-        capturePostHogEvent(
-          "project_classification_run",
-          toScheduledProjectPassAnalytics(trigger, outcome),
-        );
+        captureScheduledProjectPass(trigger, outcome);
         if (outcome.status === "failed") {
           console.warn("[project-pass] Scheduled pass failed", {
             trigger,

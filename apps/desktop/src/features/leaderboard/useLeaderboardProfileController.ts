@@ -5,7 +5,15 @@ import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { isPublicProfileLiveOffBoard } from "./publicProfileOffBoard";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { capturePostHogEvent, toAnalyticsErrorKind, toCountBucket } from "../../lib/analytics/posthogClient";
+import { capturePostHogDailyEvent, capturePostHogEvent, toAnalyticsErrorKind, toCountBucket, toDailyDedupKey, type PostHogEventPropertiesByName } from "../../lib/analytics/posthogClient";
+
+type LeaderboardActionProperties = PostHogEventPropertiesByName["leaderboard_action"];
+
+/** Every reported dimension goes into the key, so a surviving row never
+    describes a different occurrence than the one its properties came from. */
+function captureLeaderboardActionOncePerDay(properties: LeaderboardActionProperties): void {
+  capturePostHogDailyEvent("leaderboard_action", toDailyDedupKey(properties), properties);
+}
 import { getLogicalDayRange, logicalTodayIsoDate, toErrorMessage } from "../../lib/formatting";
 import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";
@@ -491,7 +499,27 @@ export function useLeaderboardProfileController({
     }
   }, [leaderboardLocalMetricsScopeKey, leaderboardWindowEndDay, leaderboardWindowStartDay, startOfDayMinutes]);
 
-  const refreshLeaderboardData = useCallback(async (authenticatedUser = user) => {
+  // `origin` decides whether a successful load is worth an event. Most callers are
+  // machine-driven (a classification batch finished, an interval elapsed, a publish
+  // landed) and a background data refresh is not a person looking at the board, so
+  // only an explicit open reports success. Failures always report, once a day per
+  // kind, which answers "how many installs hit this" rather than inflating counts.
+  const refreshLeaderboardData = useCallback(async (
+    authenticatedUser = user,
+    origin: "user_open" | "background" = "background",
+  ) => {
+    const reportLoadFailure = (
+      errorKind: ReturnType<typeof toAnalyticsErrorKind>,
+      extra: { readonly row_count_bucket?: ReturnType<typeof toCountBucket> } = {},
+    ) => {
+      captureLeaderboardActionOncePerDay({
+        action: "load",
+        result: "error",
+        period: activeLeaderboardPeriod,
+        ...extra,
+        error_kind: errorKind,
+      });
+    };
     const requestId = ++leaderboardRefreshRequestRef.current;
     const hasResolvedLeaderboardState = leaderboardHasResolvedOnceRef.current;
     const shouldPreserveLeaderboardState = leaderboardHasLoadedOnceRef.current;
@@ -537,12 +565,7 @@ export function useLeaderboardProfileController({
         leaderboardHasResolvedOnceRef.current = true;
         setLeaderboardHasResolvedOnce(true);
         setLeaderboardError(globalResult.error ?? "Unable to load leaderboard");
-        capturePostHogEvent("leaderboard_action", {
-          action: "load",
-          result: "error",
-          period: activeLeaderboardPeriod,
-          error_kind: toAnalyticsErrorKind(globalResult.error),
-        });
+        reportLoadFailure(toAnalyticsErrorKind(globalResult.error));
         return;
       }
 
@@ -555,12 +578,8 @@ export function useLeaderboardProfileController({
         leaderboardHasResolvedOnceRef.current = true;
         setLeaderboardHasResolvedOnce(true);
         setLeaderboardError(ownResult.error ?? "Unable to load your leaderboard status");
-        capturePostHogEvent("leaderboard_action", {
-          action: "load",
-          result: "error",
-          period: activeLeaderboardPeriod,
+        reportLoadFailure(toAnalyticsErrorKind(ownResult.error), {
           row_count_bucket: toCountBucket((globalResult.data ?? []).length),
-          error_kind: toAnalyticsErrorKind(ownResult.error),
         });
         return;
       }
@@ -573,12 +592,14 @@ export function useLeaderboardProfileController({
       setLeaderboardHasResolvedOnce(true);
       setLeaderboardHasLoadedOnce(true);
       setLeaderboardError(null);
-      capturePostHogEvent("leaderboard_action", {
-        action: "load",
-        result: "success",
-        period: activeLeaderboardPeriod,
-        row_count_bucket: toCountBucket((globalResult.data ?? []).length),
-      });
+      if (origin === "user_open") {
+        captureLeaderboardActionOncePerDay({
+          action: "load",
+          result: "success",
+          period: activeLeaderboardPeriod,
+          row_count_bucket: toCountBucket((globalResult.data ?? []).length),
+        });
+      }
     } catch (nextError) {
       if (leaderboardRefreshRequestRef.current !== requestId) return;
       if (!shouldPreserveLeaderboardState) {
@@ -589,12 +610,7 @@ export function useLeaderboardProfileController({
       leaderboardHasResolvedOnceRef.current = true;
       setLeaderboardHasResolvedOnce(true);
       setLeaderboardError(toErrorMessage(nextError));
-      capturePostHogEvent("leaderboard_action", {
-        action: "load",
-        result: "error",
-        period: activeLeaderboardPeriod,
-        error_kind: toAnalyticsErrorKind(nextError),
-      });
+      reportLoadFailure(toAnalyticsErrorKind(nextError));
     } finally {
       if (leaderboardRefreshRequestRef.current === requestId) setLeaderboardRefreshing(false);
     }
@@ -621,7 +637,7 @@ export function useLeaderboardProfileController({
 
     if (activeTab !== "leaderboard") return;
 
-    void refreshLeaderboardData();
+    void refreshLeaderboardData(undefined, "user_open");
   }, [activeTab, isSupabaseConfigured, refreshLeaderboardData]);
 
   useEffect(() => {
@@ -868,7 +884,7 @@ export function useLeaderboardProfileController({
         if (activeTab === "leaderboard") {
           setLeaderboardAutoPublishError(result.error ?? "Unable to update your leaderboard score");
         }
-        capturePostHogEvent("leaderboard_action", {
+        captureLeaderboardActionOncePerDay({
           action: "publish",
           result: "error",
           period: activeLeaderboardPeriod,
@@ -879,7 +895,9 @@ export function useLeaderboardProfileController({
       }
 
       setLeaderboardAutoPublishError(null);
-      capturePostHogEvent("leaderboard_action", {
+      // Auto publish already has an hourly slot gate, so this is bounded per day
+      // but still repeats. "Did publishing work today" is the whole question.
+      captureLeaderboardActionOncePerDay({
         action: "publish",
         result: "success",
         period: activeLeaderboardPeriod,
@@ -901,7 +919,7 @@ export function useLeaderboardProfileController({
         }));
       }
       if (activeTab === "leaderboard") setLeaderboardAutoPublishError(message);
-      capturePostHogEvent("leaderboard_action", {
+      captureLeaderboardActionOncePerDay({
         action: "publish",
         result: "error",
         period: activeLeaderboardPeriod,

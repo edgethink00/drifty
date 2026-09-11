@@ -194,7 +194,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
         app_platform: "macos",
         runtime: "web",
         channel: "development",
-        analytics_schema_version: "v2",
+        analytics_schema_version: "v3",
         app_version: BUILD_INFO.version,
         build_commit: BUILD_INFO.commit,
         identity_scope: "install",

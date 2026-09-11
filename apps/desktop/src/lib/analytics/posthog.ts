@@ -39,7 +39,7 @@ type PostHogDefaultProperties = {
   readonly app_platform: "macos";
   readonly runtime: "tauri" | "web";
   readonly channel: string;
-  readonly analytics_schema_version: "v2";
+  readonly analytics_schema_version: "v3";
   readonly app_version: string;
   readonly build_commit: string;
   readonly identity_scope: PostHogIdentityScope;
@@ -80,6 +80,24 @@ type PostHogStorage = Pick<Storage, "getItem" | "setItem">;
 const POSTHOG_INSTALL_ID_STORAGE_KEY = "drifty.posthog.installDistinctId.v2";
 const POSTHOG_ACCOUNT_ID_NAMESPACE = "drifty-posthog-account-v2:";
 const POSTHOG_DAILY_ACTIVE_STORAGE_PREFIX = "drifty.posthog.dailyActive.v2";
+/**
+ * One record holds the whole day's already-sent keys.
+ *
+ * A key-per-combination scheme would have been simpler, but nothing in this app
+ * ever removes a storage entry, so every combination an install ever produced
+ * would keep its own entry for the life of the install. `localStorage` is a
+ * single quota shared with the rest of the app, so an analytics record that only
+ * grows would eventually break unrelated features. Keying the record by date
+ * instead means yesterday's keys are discarded the first time today needs it.
+ */
+const POSTHOG_DAILY_EVENT_LEDGER_STORAGE_KEY = "drifty.posthog.dailyEventLedger.v1";
+/**
+ * A hard per-install daily ceiling, far above the couple of dozen combinations a
+ * real day produces. Reaching it means something is generating keys it should
+ * not, and the point of this whole mechanism is that such a bug cannot turn into
+ * unbounded ingestion. It stops sending instead of growing.
+ */
+const POSTHOG_DAILY_EVENT_LEDGER_LIMIT = 500;
 const POSTHOG_REPORTING_TIME_ZONE = "Asia/Seoul";
 const POSTHOG_DAILY_ACTIVE_INTERVAL_MS = 15 * 60 * 1000;
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY?.trim();
@@ -222,7 +240,10 @@ function getDefaultProperties(identityScope: PostHogIdentityScope): PostHogDefau
     app_platform: "macos",
     runtime: isTauriRuntime() ? "tauri" : "web",
     channel: posthogChannel,
-    analytics_schema_version: "v2",
+    // v3 is the cutover where machine-driven events became at-most-once-per-day.
+    // Counting a v2 series and a v3 series together shows a cliff that looks
+    // exactly like a broken feature, so the version has to separate them.
+    analytics_schema_version: "v3",
     app_version: BUILD_INFO.version,
     build_commit: BUILD_INFO.commit,
     identity_scope: identityScope,
@@ -353,7 +374,103 @@ export function createPostHogDailyActiveRecorder(): (
   };
 }
 
+export type PostHogDailyEventLedger = {
+  readonly date: string;
+  readonly keys: readonly string[];
+};
+
+/** Any unreadable or stale record is replaced by an empty one for today, which
+    is what keeps the stored size bounded to a single day. */
+export function parsePostHogDailyEventLedger(
+  raw: string | null,
+  reportingDate: string,
+): PostHogDailyEventLedger {
+  const emptyLedger = { date: reportingDate, keys: [] } as const;
+  if (!raw) return emptyLedger;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return emptyLedger;
+    const record = parsed as { readonly date?: unknown; readonly keys?: unknown };
+    if (record.date !== reportingDate || !Array.isArray(record.keys)) return emptyLedger;
+    return {
+      date: reportingDate,
+      keys: record.keys.filter((key): key is string => typeof key === "string"),
+    };
+  } catch {
+    return emptyLedger;
+  }
+}
+
+export type PostHogDailyEventAdmission = "send" | "already_sent" | "ceiling_reached";
+
+export function resolvePostHogDailyEventAdmission(
+  ledger: PostHogDailyEventLedger,
+  dedupKey: string,
+  limit: number = POSTHOG_DAILY_EVENT_LEDGER_LIMIT,
+): PostHogDailyEventAdmission {
+  if (ledger.keys.includes(dedupKey)) return "already_sent";
+  if (ledger.keys.length >= limit) return "ceiling_reached";
+  return "send";
+}
+
+type PostHogDailyEventRecorderInput = {
+  readonly dedupKey: string;
+  readonly reportingDate: string;
+  readonly storage: PostHogStorage | null;
+  readonly deliver: () => Promise<boolean>;
+};
+
+/** Marks the day only after delivery succeeds, so a transient network failure
+    does not silently drop the whole day's single observation. */
+export function createPostHogDailyEventRecorder(
+  limit: number = POSTHOG_DAILY_EVENT_LEDGER_LIMIT,
+): (input: PostHogDailyEventRecorderInput) => Promise<boolean> {
+  const recordedDateByDedupKey = new Map<string, string>();
+  const inFlightKeys = new Set<string>();
+
+  return async ({ dedupKey, reportingDate, storage, deliver }) => {
+    if (recordedDateByDedupKey.get(dedupKey) === reportingDate) return false;
+
+    const readLedger = () => parsePostHogDailyEventLedger(
+      readPostHogStorageItem(storage, POSTHOG_DAILY_EVENT_LEDGER_STORAGE_KEY),
+      reportingDate,
+    );
+    const admission = resolvePostHogDailyEventAdmission(readLedger(), dedupKey, limit);
+    if (admission === "already_sent") {
+      recordedDateByDedupKey.set(dedupKey, reportingDate);
+      return false;
+    }
+    if (admission === "ceiling_reached") {
+      warnPostHog(`Reached the daily event ceiling of ${limit}; dropping ${dedupKey}.`);
+      return false;
+    }
+
+    const inFlightKey = `${dedupKey}.${reportingDate}`;
+    if (inFlightKeys.has(inFlightKey)) return false;
+    inFlightKeys.add(inFlightKey);
+
+    try {
+      const delivered = await deliver();
+      if (!delivered) return false;
+      recordedDateByDedupKey.set(dedupKey, reportingDate);
+      // Re-read before writing: another key can land while this request is in
+      // flight, and a stale copy would drop it.
+      const latest = readLedger();
+      const keys = latest.keys.includes(dedupKey) ? latest.keys : [...latest.keys, dedupKey];
+      writePostHogStorageItem(
+        storage,
+        POSTHOG_DAILY_EVENT_LEDGER_STORAGE_KEY,
+        JSON.stringify({ date: reportingDate, keys }),
+      );
+      return true;
+    } finally {
+      inFlightKeys.delete(inFlightKey);
+    }
+  };
+}
+
 const recordPostHogDailyActiveOnce = createPostHogDailyActiveRecorder();
+const recordPostHogDailyEventOnce = createPostHogDailyEventRecorder();
 
 async function recordPostHogDailyActive(
   trigger: PostHogEventPropertiesByName["app_active"]["active_trigger"],
@@ -442,4 +559,27 @@ export function capturePostHogEvent<Event extends PostHogEventName>(
   const identity = resolvePostHogEventIdentity(event, installIdentity, accountIdentity);
   if (!identity) return;
   sendPostHogEvent(identity, event, properties);
+}
+
+/**
+ * Sends at most one event per reporting day for each (event, dedupKey) pair.
+ *
+ * Use this for anything a background loop or a repeated navigation can trigger.
+ * `dedupKey` must carry every property dimension the analysis needs to keep
+ * separate, because only the first delivery of each key survives the day.
+ */
+export function capturePostHogDailyEvent<Event extends PostHogEventName>(
+  event: Event,
+  dedupKey: string,
+  ...[properties]: PostHogEventPropertiesArgument<Event>
+): void {
+  if (!isPostHogReady || !readProductAnalyticsEnabled()) return;
+  const identity = resolvePostHogEventIdentity(event, installIdentity, accountIdentity);
+  if (!identity) return;
+  void recordPostHogDailyEventOnce({
+    dedupKey: `${event}.${dedupKey}`,
+    reportingDate: getPostHogReportingDateKey(new Date()),
+    storage: getPostHogStorage(),
+    deliver: () => deliverPostHogEvent(identity, event, properties),
+  });
 }

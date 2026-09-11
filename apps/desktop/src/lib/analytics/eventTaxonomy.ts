@@ -56,7 +56,9 @@ export const ONBOARDING_STEPS = [
 export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint"] as const;
 export const PERMISSIONS = ["accessibility", "notifications"] as const;
 export const PERMISSION_ACTIONS = ["check", "request", "open_settings"] as const;
-export const TRACKER_ACTIONS = ["refresh", "start", "stop", "status_check"] as const;
+// Only start/stop are ever sent. `refresh` and `status_check` were declared but
+// never emitted, which made analysis queries look for rows that cannot exist.
+export const TRACKER_ACTIONS = ["start", "stop"] as const;
 export const TRACKER_MODES = ["tracking", "idle", "degraded", "unavailable", "preview", "demo", "unknown"] as const;
 export const RESULT_VALUES = ["success", "error", "cancelled", "skipped", "unavailable", "disabled"] as const;
 export const AUTH_STATES = ["signed_in", "signed_out"] as const;

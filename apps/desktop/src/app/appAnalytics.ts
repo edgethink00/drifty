@@ -2,9 +2,10 @@ import type { AiClassificationSummary } from "../features/classification/aiClass
 import type { ScheduledProjectPassOutcome } from "../features/classification/useProjectClassification";
 import type { DashboardPeriod } from "../features/dashboard/dashboardPeriods";
 import {
-  capturePostHogEvent,
+  capturePostHogDailyEvent,
   toAnalyticsErrorKind,
   toCountBucket,
+  toDailyDedupKey,
   type PostHogEventPropertiesByName,
 } from "../lib/analytics/posthogClient";
 import type { TabId } from "./navigation";
@@ -94,7 +95,7 @@ export function captureAiClassificationRun(
   range: AiClassificationRangeAnalyticsValue,
   summary: AiClassificationSummary,
 ) {
-  capturePostHogEvent("ai_classification_run", {
+  const properties: PostHogEventPropertiesByName["ai_classification_run"] = {
     trigger,
     provider_kind: providerKind,
     result: toAiClassificationResultAnalytics(summary),
@@ -104,7 +105,39 @@ export function captureAiClassificationRun(
     ...(summary.status === "error" ? { error_kind: toAnalyticsErrorKind(summary.message) } : {}),
     ...(summary.failureKind ? { failure_kind: summary.failureKind } : {}),
     ...(summary.issueKind ? { ai_issue_kind: summary.issueKind } : {}),
-  });
+  };
+  captureAiClassificationRunOncePerDay(properties);
+}
+
+/**
+ * The single entry point for `ai_classification_run`.
+ *
+ * The live drift-alarm path classifies one segment at a time and used to send an
+ * event per segment, which made this the one classification trigger whose volume
+ * tracked how much the person drifted rather than whether the feature worked.
+ */
+export function captureAiClassificationRunOncePerDay(
+  properties: PostHogEventPropertiesByName["ai_classification_run"],
+): void {
+  capturePostHogDailyEvent("ai_classification_run", toDailyDedupKey(properties), properties);
+}
+
+/**
+ * A skipped pass is the hourly tick reporting that it had nothing to do. That is
+ * the scheduler's own heartbeat, not a measurement of the feature, so it is not
+ * sent at all. Real outcomes collapse to one event per distinct result per day.
+ */
+export function captureScheduledProjectPass(
+  trigger: PostHogEventPropertiesByName["project_classification_run"]["trigger"],
+  outcome: ScheduledProjectPassOutcome,
+): void {
+  if (outcome.status === "skipped") return;
+  const properties = toScheduledProjectPassAnalytics(trigger, outcome);
+  capturePostHogDailyEvent(
+    "project_classification_run",
+    toDailyDedupKey(properties),
+    properties,
+  );
 }
 
 export function toScheduledProjectPassAnalytics(
