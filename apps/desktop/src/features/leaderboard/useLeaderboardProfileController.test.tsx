@@ -1,0 +1,147 @@
+// @vitest-environment jsdom
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useLeaderboardProfileController } from "./useLeaderboardProfileController";
+
+vi.mock("./leaderboardService", () => ({
+  DEFAULT_LEADERBOARD_PERIOD: "weekly",
+  LEADERBOARD_PERIODS: ["daily", "weekly", "monthly"],
+  fetchGlobalLeaderboard: vi.fn().mockResolvedValue({ success: true, error: null, data: [] }),
+  fetchOwnLeaderboardEntry: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  optOutLeaderboard: vi.fn().mockResolvedValue({ success: true, error: null }),
+  publishOwnLeaderboardCheckpoint: vi.fn().mockResolvedValue({ success: true, error: null, data: true }),
+}));
+
+vi.mock("../profile/profileService", () => ({
+  fallbackDisplayName: vi.fn().mockReturnValue("member"),
+  fetchOwnProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  fetchPublicProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: null }),
+  saveOwnProfile: vi.fn().mockResolvedValue({ success: true, error: null, data: { display_name: "member" } }),
+}));
+
+vi.mock("../../lib/api/trackerClient", () => ({
+  trackerClient: {
+    getTimeline: vi.fn().mockResolvedValue([]),
+  },
+}));
+
+function defaultProps() {
+  return {
+    activeTab: "other", // Avoid mounting 5-minute background refresh interval
+    allowsEffectiveAnonymousAuth: true,
+    authMetadataAvatarUrl: "",
+    isAuthResolved: true,
+    hasRequiredAccountAuth: true,
+    isEffectiveAuthRequired: false,
+    isSupabaseConfigured: true,
+    classificationAssessmentReady: true,
+    classificationAvailabilityState: "ready" as const,
+    classificationCatchingUp: false,
+    showAiClassificationImpact: false,
+    includeBuiltInHeuristics: true,
+    builtInHeuristicsUnavailableSince: null,
+    signInAnonymously: vi.fn().mockResolvedValue({ error: null, user: { id: "anon-1" } }),
+    startOfDayMinutes: 0,
+    user: { id: "user-1", email: "test@example.com" } as any,
+    onAuthRequired: vi.fn(),
+  };
+}
+
+describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
+  it("surfaces the quota exceeded error when joining while daily quota has reached limit", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(),
+      classificationAssessmentReady: false,
+      classificationAvailabilityReason: "cloud_quota_exceeded",
+    }));
+
+    await act(async () => {
+      await result.current.handleLeaderboardOptIn();
+    });
+
+    expect(result.current.leaderboardActionError).toBe(
+      "Daily AI classification limit reached. You can join the leaderboard once your quota resets or after upgrading to Pro.",
+    );
+  });
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("surfaces a clear catching-up error when joining while AI is catching up on recent activity", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(),
+      classificationAssessmentReady: false,
+      classificationCatchingUp: true,
+    }));
+
+    expect(result.current.isClassificationCatchingUp).toBe(true);
+
+    await act(async () => {
+      await result.current.handleLeaderboardOptIn();
+    });
+
+    expect(result.current.leaderboardActionError).toBe(
+      "AI is catching up on recent activity. You can join the leaderboard once catch-up is complete.",
+    );
+  });
+
+  it("surfaces an AI verification error when joining while connection check is in-flight", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(),
+      classificationAssessmentReady: false,
+      classificationAvailabilityState: "checking",
+    }));
+
+    await act(async () => {
+      await result.current.handleLeaderboardOptIn();
+    });
+
+    expect(result.current.leaderboardActionError).toBe(
+      "AI connection is being verified. Please try joining again in a moment.",
+    );
+  });
+
+  it("surfaces the reconnect AI error when joining while AI is truly unavailable or paused", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(),
+      classificationAssessmentReady: false,
+      classificationAvailabilityState: "unavailable",
+    }));
+
+    await act(async () => {
+      await result.current.handleLeaderboardOptIn();
+    });
+
+    expect(result.current.leaderboardActionError).toBe(
+      "AI classification is paused. Reconnect AI before joining the leaderboard.",
+    );
+  });
+
+  it("automatically clears catching-up action error once classification assessment becomes ready", async () => {
+    let ready = false;
+    let catchingUp = true;
+    const { result, rerender } = renderHook(() => useLeaderboardProfileController({
+      ...defaultProps(),
+      classificationAssessmentReady: ready,
+      classificationCatchingUp: catchingUp,
+    }));
+
+    await act(async () => {
+      await result.current.handleLeaderboardOptIn();
+    });
+
+    expect(result.current.leaderboardActionError).toContain("catching up");
+
+    // Readiness returns once background backlog drain finishes
+    ready = true;
+    catchingUp = false;
+    rerender();
+
+    expect(result.current.leaderboardActionError).toBeNull();
+  });
+});

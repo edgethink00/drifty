@@ -66,6 +66,61 @@ function renderReview(
 }
 
 describe("CompanionPillDayReview", () => {
+  it("renders daily limit reached badge and quota exceeded title for cloud 429 quota exhaustion", () => {
+    const onUpgrade = vi.fn();
+    const quotaEvent: EndOfDayReviewEvent = {
+      ...reviewEvent,
+      totalSeconds: reviewEvent.totalSeconds,
+      focusSeconds: 0,
+      driftSeconds: 0,
+      neutralSeconds: 0,
+      unclassifiedSeconds: reviewEvent.totalSeconds,
+      highlightLabel: undefined,
+      comparison: undefined,
+      dailySignals: undefined,
+      leaderboardCelebration: undefined,
+      assessment: {
+        state: "pending",
+        route: "cloud",
+        reason: "cloud_quota_exceeded",
+        recoveryAction: "upgrade",
+        unavailableSince: "2026-09-11T10:00:00.000Z",
+      },
+    };
+
+    renderReview(quotaEvent, { onOpenAiSettings: onUpgrade });
+
+    expect(screen.getByText("Daily limit reached")).toBeTruthy();
+    expect(screen.getByText("Daily AI classification limit reached")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Upgrade to Pro" })).toBeTruthy();
+  });
+
+  it("renders AI disconnected badge only when the provider is genuinely disconnected", () => {
+    const disconnectedEvent: EndOfDayReviewEvent = {
+      ...reviewEvent,
+      totalSeconds: reviewEvent.totalSeconds,
+      focusSeconds: 0,
+      driftSeconds: 0,
+      neutralSeconds: 0,
+      unclassifiedSeconds: reviewEvent.totalSeconds,
+      highlightLabel: undefined,
+      comparison: undefined,
+      dailySignals: undefined,
+      leaderboardCelebration: undefined,
+      assessment: {
+        state: "pending",
+        route: "cloud",
+        reason: "cloud_disconnected",
+        recoveryAction: "retry",
+        unavailableSince: "2026-09-11T10:00:00.000Z",
+      },
+    };
+
+    renderReview(disconnectedEvent);
+
+    expect(screen.getByText("AI disconnected")).toBeTruthy();
+  });
+
   it("reproduces every reviewed block from the prototype", () => {
     const { container, onDismiss, onOpenDashboard } = renderReview(reviewEvent);
 
@@ -195,7 +250,7 @@ describe("CompanionPillDayReview", () => {
 
     const { container } = renderReview(pendingEvent, { onOpenDashboard, onOpenAiSettings });
 
-    expect(screen.getByText("AI disconnected")).toBeTruthy();
+    expect(screen.getByText("Trial ended")).toBeTruthy();
     expect(screen.getByText("Tracked time")).toBeTruthy();
     expect(screen.queryByText("Work hours")).toBeNull();
     expect(screen.getByText("Your Pro trial ended")).toBeTruthy();
@@ -237,7 +292,7 @@ describe("CompanionPillDayReview", () => {
     };
 
     renderReview(pendingEvent, { language: "ko", onOpenAiSettings: vi.fn() });
-    expect(screen.getByText("AI 연결 끊김")).toBeTruthy();
+    expect(screen.getByText("체험 종료")).toBeTruthy();
     expect(screen.getByText("추적 시간")).toBeTruthy();
     expect(screen.getByText("Pro 체험이 끝났습니다")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Pro로 업그레이드" })).toBeTruthy();

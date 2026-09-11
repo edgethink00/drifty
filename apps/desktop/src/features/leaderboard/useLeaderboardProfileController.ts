@@ -20,6 +20,7 @@ import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from ".
 import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
+import type { ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
   LEADERBOARD_AUTO_PUBLISH_SLOT_MS,
   buildLeaderboardAutoPublishPayloadKey,
@@ -70,6 +71,10 @@ type UseLeaderboardProfileControllerInput = {
   readonly isSupabaseConfigured: boolean;
   /** False while AI-derived totals are unavailable or reconciling after recovery. */
   readonly classificationAssessmentReady?: boolean;
+  readonly classificationAvailabilityState?: ClassificationAvailabilityState;
+  readonly classificationRecoveryPending?: boolean;
+  readonly classificationCatchingUp?: boolean;
+  readonly classificationAvailabilityReason?: ClassificationAvailabilityReason;
   readonly showAiClassificationImpact: boolean;
   readonly includeBuiltInHeuristics?: boolean;
   readonly builtInHeuristicsUnavailableSince?: string | null;
@@ -88,6 +93,8 @@ type UseLeaderboardProfileControllerResult = {
    * rendered as a confident "not joined".
    */
   readonly isLeaderboardParticipationResolved: boolean;
+  readonly isClassificationCatchingUp: boolean;
+  readonly isClassificationAssessmentReady: boolean;
   readonly isProfileEditorOpen: boolean;
   readonly leaderboardActionError: string | null;
   readonly leaderboardActionLoading: boolean;
@@ -332,6 +339,42 @@ function selectAutoPublishPayloads({
   };
 }
 
+
+export type LeaderboardGateBlockedReason = "checking" | "catching_up" | "quota_exceeded" | "paused";
+
+function resolveLeaderboardBlockedReason(input: {
+  readonly availabilityState?: ClassificationAvailabilityState;
+  readonly availabilityReason?: ClassificationAvailabilityReason;
+  readonly catchingUp: boolean;
+}): LeaderboardGateBlockedReason {
+  if (input.availabilityReason === "cloud_quota_exceeded") return "quota_exceeded";
+  if (input.catchingUp) return "catching_up";
+  if (input.availabilityState === "checking") return "checking";
+  return "paused";
+}
+
+function getAssessmentBlockedErrorMessage(
+  reason: "checking" | "catching_up" | "quota_exceeded" | "paused",
+  context: "join" | "pre_publish",
+): string {
+  if (reason === "quota_exceeded") {
+    return context === "join"
+      ? "Daily AI classification limit reached. You can join the leaderboard once your quota resets or after upgrading to Pro."
+      : "Daily AI classification limit reached before focus totals were published. You can publish once your quota resets or after upgrading to Pro.";
+  }
+  if (reason === "catching_up") {
+    return context === "join"
+      ? "AI is catching up on recent activity. You can join the leaderboard once catch-up is complete."
+      : "AI is catching up on recent activity. Please try again once catch-up completes.";
+  }
+  if (reason === "checking") {
+    return "AI connection is being verified. Please try joining again in a moment.";
+  }
+  return context === "join"
+    ? "AI classification is paused. Reconnect AI before joining the leaderboard."
+    : "AI classification paused before your focus totals were published. Reconnect AI and try again.";
+}
+
 export function useLeaderboardProfileController({
   activeTab,
   allowsEffectiveAnonymousAuth,
@@ -341,6 +384,10 @@ export function useLeaderboardProfileController({
   isEffectiveAuthRequired,
   isSupabaseConfigured,
   classificationAssessmentReady = true,
+  classificationAvailabilityState = "ready",
+  classificationRecoveryPending = false,
+  classificationCatchingUp = false,
+  classificationAvailabilityReason = "ready",
   showAiClassificationImpact,
   includeBuiltInHeuristics,
   builtInHeuristicsUnavailableSince,
@@ -385,12 +432,37 @@ export function useLeaderboardProfileController({
   const leaderboardManualActionInFlightRef = useRef(false);
   const leaderboardOptInCacheRef = useRef<LeaderboardOptInCache | null>(null);
   const leaderboardAutoPublishDayRef = useRef<string | null>(null);
+  const isClassificationCatchingUp = Boolean(
+    classificationCatchingUp
+    || (
+      classificationAvailabilityState === "ready"
+      && (classificationRecoveryPending || builtInHeuristicsUnavailableSince !== null)
+    ),
+  );
+  const classificationCatchingUpRef = useRef(isClassificationCatchingUp);
+  classificationCatchingUpRef.current = isClassificationCatchingUp;
+  const classificationAvailabilityStateRef = useRef(classificationAvailabilityState);
+  classificationAvailabilityStateRef.current = classificationAvailabilityState;
+  const classificationAvailabilityReasonRef = useRef(classificationAvailabilityReason);
+  classificationAvailabilityReasonRef.current = classificationAvailabilityReason;
+
   const classificationAssessmentReadyRef = useRef(classificationAssessmentReady);
   const classificationAssessmentRevisionRef = useRef(0);
   if (classificationAssessmentReadyRef.current !== classificationAssessmentReady) {
     classificationAssessmentReadyRef.current = classificationAssessmentReady;
     classificationAssessmentRevisionRef.current += 1;
   }
+
+  useEffect(() => {
+    if (classificationAssessmentReady) {
+      setLeaderboardActionError((current) => {
+        if (current?.includes("catching up") || current?.includes("verified") || current?.includes("limit reached")) {
+          return null;
+        }
+        return current;
+      });
+    }
+  }, [classificationAssessmentReady]);
   const [leaderboardAutoPublishRefreshing, setLeaderboardAutoPublishRefreshing] = useState(false);
   const [leaderboardAutoPublishError, setLeaderboardAutoPublishError] = useState<string | null>(null);
 
@@ -1017,7 +1089,12 @@ export function useLeaderboardProfileController({
 
     try {
       if (!classificationAssessmentReadyRef.current) {
-        setLeaderboardActionError("AI classification is paused. Reconnect AI before joining the leaderboard.");
+        const reason = resolveLeaderboardBlockedReason({
+          availabilityState: classificationAvailabilityStateRef.current,
+          catchingUp: classificationCatchingUpRef.current,
+          availabilityReason: classificationAvailabilityReasonRef.current,
+        });
+        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "join"));
         return;
       }
       if (isEffectiveAuthRequired && !hasRequiredAccountAuth) {
@@ -1116,7 +1193,12 @@ export function useLeaderboardProfileController({
 
       if (!classificationAssessmentReadyRef.current
         || classificationAssessmentRevisionRef.current !== assessmentRevision) {
-        setLeaderboardActionError("AI classification paused before your focus totals were published. Reconnect AI and try again.");
+        const reason = resolveLeaderboardBlockedReason({
+          availabilityState: classificationAvailabilityStateRef.current,
+          catchingUp: classificationCatchingUpRef.current,
+          availabilityReason: classificationAvailabilityReasonRef.current,
+        });
+        setLeaderboardActionError(getAssessmentBlockedErrorMessage(reason, "pre_publish"));
         return;
       }
       const result = await publishLeaderboardPeriods({
@@ -1130,6 +1212,11 @@ export function useLeaderboardProfileController({
         builtInHeuristicsUnavailableSince,
         publicationAllowed: () => classificationAssessmentReadyRef.current
           && classificationAssessmentRevisionRef.current === assessmentRevision,
+        publicationBlockedReason: () => resolveLeaderboardBlockedReason({
+          availabilityState: classificationAvailabilityStateRef.current,
+          catchingUp: classificationCatchingUpRef.current,
+          availabilityReason: classificationAvailabilityReasonRef.current,
+        }),
       });
 
       if (!result.success) {
@@ -1371,6 +1458,8 @@ export function useLeaderboardProfileController({
     activeLeaderboardPeriod,
     isLeaderboardOptedIn,
     isLeaderboardParticipationResolved,
+    isClassificationCatchingUp,
+    isClassificationAssessmentReady: classificationAssessmentReady,
     isProfileEditorOpen,
     leaderboardActionError,
     leaderboardActionLoading,

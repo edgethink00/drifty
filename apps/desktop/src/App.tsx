@@ -74,6 +74,7 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIconDomain, type SiteIconMap } from "./features/app-icons/siteIconRequests";
 import { SiteIconProvider } from "./components/SiteIconContext";
+import { cloudAiRequestBackoffs } from "./features/classification/cloudAiRequestBackoff";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, describeLocalAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
@@ -1656,6 +1657,10 @@ export default function App() {
   const hasSelectedAiClassificationProvider = Boolean(
     selectedLocalAiClassificationOptions || canUseSelectedCloudAiClassification,
   );
+  const isCloudQuotaExceeded = selectedClassificationRoute === "cloud" && (
+    (Boolean(user?.id) && cloudAiRequestBackoffs.current(user?.id ?? "")?.status === 429)
+    || (classificationSummary?.status === "error" && classificationSummary.message.includes("429"))
+  );
   const classificationAvailabilityInput = {
     localProviderStatus: localAiProviderStatus,
     localConsecutiveFailures: localAiConnectionFailureCount,
@@ -1667,6 +1672,7 @@ export default function App() {
     billingEntitlementLoading,
     billingEntitlementError,
     cloudConnectionCheck: cloudAiConnectionCheck,
+    cloudQuotaExceeded: isCloudQuotaExceeded,
   };
   const cloudClassificationAvailability = resolveClassificationAvailability({
     ...classificationAvailabilityInput,
@@ -1704,6 +1710,10 @@ export default function App() {
     && builtInHeuristicsUnavailableSinceRef.current === null
     && !classificationRecoveryPending
     && !classificationRecoveryTransitionPending
+  );
+  const isClassificationCatchingUp = classificationAvailabilityGateEnabled && (
+    classificationAvailability.state === "ready"
+    && (builtInHeuristicsUnavailableSinceRef.current !== null || classificationRecoveryPending || classificationRecoveryTransitionPending)
   );
   const classificationAssessmentReadyRef = useRef(classificationAssessmentReady);
   classificationAssessmentReadyRef.current = classificationAssessmentReady;
@@ -2182,6 +2192,10 @@ export default function App() {
     isEffectiveAuthRequired,
     isSupabaseConfigured,
     classificationAssessmentReady,
+    classificationAvailabilityState: classificationAvailability.state,
+    classificationRecoveryPending: classificationRecoveryPending || classificationRecoveryTransitionPending,
+    classificationCatchingUp: isClassificationCatchingUp,
+    classificationAvailabilityReason: classificationAvailability.reason,
     showAiClassificationImpact,
     includeBuiltInHeuristics: allowBuiltInHeuristics,
     builtInHeuristicsUnavailableSince,
@@ -2240,11 +2254,13 @@ export default function App() {
     // failure hysteresis); only cloud runs surface summary errors here, and
     // content-level failures (provider answered, output unusable) never do.
     classificationIssueKind: selectedClassificationRoute === "cloud" ? establishedCloudClassificationIssueKind : null,
-    cloudIssueKind: selectedClassificationRoute === "cloud" && billingEntitlementError
-      ? aiConnectionIssueKindFromMessage(billingEntitlementError)
-      : selectedClassificationRoute === "cloud" && billingEntitlement?.lockedReason === "device_limit_reached"
-        ? "provider"
-        : null,
+    cloudIssueKind: isCloudQuotaExceeded
+      ? "rate_limited"
+      : selectedClassificationRoute === "cloud" && billingEntitlementError
+        ? aiConnectionIssueKindFromMessage(billingEntitlementError)
+        : selectedClassificationRoute === "cloud" && billingEntitlement?.lockedReason === "device_limit_reached"
+          ? "provider"
+          : null,
   });
   const aiConnectionStatus = classificationAvailabilityGateEnabled
     ? applyClassificationAvailabilityToAiStatus(resolvedAiConnectionStatus, classificationAvailability)
@@ -2904,9 +2920,12 @@ export default function App() {
           companionFocusRecordClassificationOptions,
         )
         : 0;
+      const totalTrackedSeconds = reviewInput.segments.reduce((total, s) => total + s.durationSeconds, 0);
+      const isPendingAssessmentMaterial = inferredPendingSeconds > 15 * 60
+        && (totalTrackedSeconds === 0 || (inferredPendingSeconds / totalTrackedSeconds) >= 0.2);
       const assessment = requestedAssessment === null
         ? undefined
-        : requestedAssessment ?? (inferredPendingSeconds > 0 ? inferredPendingAssessment : undefined);
+        : requestedAssessment ?? (isPendingAssessmentMaterial ? inferredPendingAssessment : undefined);
       return { ...reviewInput, assessment };
     };
     const resolvedInput = resolveCurrentInput();
@@ -9892,6 +9911,7 @@ export default function App() {
             email={user?.email ?? null}
             error={leaderboardError}
             isActionLoading={leaderboardActionLoading}
+            isCatchingUp={isClassificationCatchingUp}
             isLoading={leaderboardLoading}
             isOptedIn={isLeaderboardOptedIn}
             isParticipationResolved={isLeaderboardParticipationResolved}

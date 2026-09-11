@@ -879,5 +879,44 @@ describe("LeaderboardView", () => {
       expect(screen.getByRole("button", { name: /^leave leaderboard$/i })).toBeTruthy();
       expect(screen.queryByText(/checking your status/i)).toBeNull();
     });
+
+    it("renders a disabled Catching up button with notice when AI is catching up on recent activity", () => {
+      const { rerender } = renderView({
+        isSupabaseEnabled: true,
+        isSignedIn: true,
+        isOptedIn: false,
+        isCatchingUp: true,
+      });
+
+      const catchingUpButton = screen.getByRole("button", { name: /^catching up…$/i });
+      expect(catchingUpButton).toBeTruthy();
+      expect(catchingUpButton.hasAttribute("disabled")).toBe(true);
+      expect(catchingUpButton.getAttribute("title")).toMatch(/catching up on recent activity/i);
+      expect(screen.getByText(/AI is catching up on recent activity/i)).toBeTruthy();
+
+      rerender(
+        <LeaderboardView
+          isSupabaseEnabled
+          isSignedIn
+          isLoading={false}
+          error={null}
+          isOptedIn={false}
+          isCatchingUp={false}
+          activePeriod="weekly"
+          leaderboard={[]}
+          profileDisplayName={null}
+          email={null}
+          isActionLoading={false}
+          actionError={null}
+          onOptIn={vi.fn()}
+          onOptOut={vi.fn()}
+        />,
+      );
+
+      const joinButton = screen.getByRole("button", { name: /join leaderboard/i });
+      expect(joinButton).toBeTruthy();
+      expect(joinButton.hasAttribute("disabled")).toBe(false);
+      expect(screen.queryByText(/AI is catching up on recent activity/i)).toBeNull();
+    });
   });
 });

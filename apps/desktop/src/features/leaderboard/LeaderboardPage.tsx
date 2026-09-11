@@ -9,6 +9,7 @@ export type LeaderboardPageProps = {
   email?: string | null;
   error?: string | null;
   isActionLoading: boolean;
+  isCatchingUp?: boolean;
   isLoading: boolean;
   isOptedIn: boolean;
   isParticipationResolved?: boolean;
@@ -36,6 +37,7 @@ export function LeaderboardPage({
   email,
   error,
   isActionLoading,
+  isCatchingUp = false,
   isLoading,
   isOptedIn,
   isParticipationResolved,
@@ -82,6 +84,7 @@ export function LeaderboardPage({
           profileDisplayName={profileDisplayName}
           email={email}
           isActionLoading={isActionLoading}
+          isCatchingUp={isCatchingUp}
           actionError={actionError}
           publicProfile={publicProfile}
           statusMessage={statusMessage}

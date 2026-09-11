@@ -26,16 +26,28 @@ type RingStyle = CSSProperties & { "--seg"?: string };
 type BarStyle = CSSProperties & { "--w"?: string; "--glyph"?: string };
 type DonutRingStyle = CSSProperties & { background: string };
 
+
+function pendingAssessmentBadgeKey(reason?: string): TranslationKey {
+  if (reason === "cloud_quota_exceeded") return "companion.dayReview.dailyLimitReached";
+  if (reason === "cloud_trial_expired") return "companion.dayReview.trialEnded";
+  if (reason === "provider_checking" || reason === "cloud_entitlement_checking") {
+    return "companion.dayReview.checking";
+  }
+  return "companion.dayReview.aiDisconnected";
+}
+
 export function CompanionPillDayReview({
   event,
   onDismiss,
   onOpenDashboard,
   onOpenAiSettings,
+  onUpgrade,
 }: {
   event: EndOfDayReviewEvent;
   onDismiss: () => void;
   onOpenDashboard: () => void;
   onOpenAiSettings?: () => void;
+  onUpgrade?: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const totalSeconds = Math.max(0, event.totalSeconds);
@@ -70,7 +82,7 @@ export function CompanionPillDayReview({
             <PillBrandMark />
           </span>
           {t("companion.dayReview.title")}
-          {pendingAssessment ? <span className="eod__badge">{t("companion.dayReview.aiDisconnected")}</span> : null}
+          {pendingAssessment ? <span className="eod__badge">{t(pendingAssessmentBadgeKey(pendingAssessment.reason))}</span> : null}
           {!pendingAssessment && event.highlightLabel ? <span className="eod__badge">{event.highlightLabel}</span> : null}
         </span>
         <button className="card__close" type="button" title={t("companion.dayReview.dismiss")} onClick={onDismiss}>
@@ -202,12 +214,20 @@ export function CompanionPillDayReview({
         {pendingAssessment ? (
           <div
             className="eodv12b eodv12__pending"
-            data-tone={pendingAssessment.reason === "cloud_trial_expired" ? "trial-ended" : undefined}
+            data-tone={pendingAssessment.reason === "cloud_trial_expired" || pendingAssessment.reason === "cloud_quota_exceeded" ? "trial-ended" : undefined}
           >
             <div className="eodv12__pending-head">
               <b>{t(pendingAssessmentTitleKey(pendingAssessment.reason))}</b>
-              {onOpenAiSettings ? (
-                <button className="act act--primary eodv12__pending-action" type="button" onClick={onOpenAiSettings}>
+              {(onOpenAiSettings || onUpgrade) ? (
+                <button
+                  className="act act--primary eodv12__pending-action"
+                  type="button"
+                  onClick={
+                    (pendingAssessment.reason === "cloud_quota_exceeded" || pendingAssessment.reason === "cloud_trial_expired") && onUpgrade
+                      ? onUpgrade
+                      : onOpenAiSettings
+                  }
+                >
                   {pendingAssessmentActionLabel(pendingAssessment.reason, t)}
                 </button>
               ) : null}
@@ -228,6 +248,7 @@ export function CompanionPillDayReview({
 }
 
 function pendingAssessmentTitleKey(reason: NonNullable<EndOfDayReviewEvent["assessment"]>["reason"]): TranslationKey {
+  if (reason === "cloud_quota_exceeded") return "companion.dayReview.pending.quotaExceeded";
   if (reason === "cloud_trial_expired") return "companion.dayReview.pending.trialEnded";
   if (reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
     return "companion.dayReview.pending.cloudNeedsAttention";
@@ -239,7 +260,7 @@ function pendingAssessmentTitleKey(reason: NonNullable<EndOfDayReviewEvent["asse
 }
 
 function pendingAssessmentActionLabel(reason: string, t: LocalizationController["t"]): string {
-  if (reason === "cloud_trial_expired" || reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
+  if (reason === "cloud_quota_exceeded" || reason === "cloud_trial_expired" || reason === "cloud_payment_required" || reason === "cloud_billing_missing") {
     return t("sidebar.cta.upgrade.action");
   }
   return t("account.aiSettings");

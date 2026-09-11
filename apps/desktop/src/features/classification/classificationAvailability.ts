@@ -29,7 +29,8 @@ export type ClassificationAvailabilityReason =
   | "cloud_trial_expired"
   | "cloud_payment_required"
   | "cloud_billing_missing"
-  | "cloud_device_limit";
+  | "cloud_device_limit"
+  | "cloud_quota_exceeded";
 
 export type ClassificationRecoveryAction = "connect" | "retry" | "upgrade" | "choose_local" | null;
 
@@ -59,6 +60,7 @@ export type ClassificationAvailabilityInput = {
   readonly billingEntitlementLoading: boolean;
   readonly billingEntitlementError: string | null;
   readonly cloudConnectionCheck: CloudAiConnectionCheck | null;
+  readonly cloudQuotaExceeded?: boolean;
 };
 
 export function resolveClassificationAvailability(input: ClassificationAvailabilityInput): ClassificationAvailability {
@@ -176,6 +178,12 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
     return availability("unavailable", "cloud", "cloud_auth_required", {
       showRecovery: true,
       recoveryAction: "connect",
+    });
+  }
+  if (input.cloudQuotaExceeded) {
+    return availability("cloud_locked", "cloud", "cloud_quota_exceeded", {
+      showRecovery: true,
+      recoveryAction: "upgrade",
     });
   }
   if (input.billingEntitlement?.status === "locked") {

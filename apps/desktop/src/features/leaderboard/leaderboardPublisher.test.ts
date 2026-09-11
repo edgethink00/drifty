@@ -211,6 +211,26 @@ describe("leaderboardPublisher", () => {
     expect(publishOwnFocusTotal).not.toHaveBeenCalled();
   });
 
+  it("returns a specific catching-up error when publication is blocked due to recovery backlog", async () => {
+    const today = todayIsoDate();
+    getTimeline.mockResolvedValue([makeSegment(today, 3600)]);
+
+    const result = await publishLeaderboardPeriods({
+      mode: "join",
+      profileDisplayName: "Alex",
+      leaderboardWindowEndDay: today,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+      publicationAllowed: () => false,
+      publicationBlockedReason: () => "catching_up",
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/catching up on recent activity/i);
+    expect(publishOwnFocusTotal).not.toHaveBeenCalled();
+  });
+
   it("builds an exact closed weekly checkpoint without replacing it with today", async () => {
     vi.setSystemTime(new Date(2026, 6, 8, 12, 0, 0, 0));
     const closedDay = "2026-07-05";

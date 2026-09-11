@@ -51,6 +51,7 @@ export type LeaderboardViewProps = {
   profileDisplayName?: string | null;
   email?: string | null;
   isActionLoading?: boolean;
+  isCatchingUp?: boolean;
   actionError?: string | null;
   publicProfile?: LeaderboardPublicProfileControls;
   statusMessage?: string | null;
@@ -78,6 +79,7 @@ export function LeaderboardView({
   profileDisplayName = null,
   email = null,
   isActionLoading = false,
+  isCatchingUp = false,
   actionError = null,
   publicProfile,
   statusMessage = null,
@@ -258,6 +260,16 @@ export function LeaderboardView({
                     >
                       {isActionLoading ? t("leaderboard.leaving") : t("leaderboard.leave")}
                     </button>
+                  ) : isCatchingUp ? (
+                    <button
+                      type="button"
+                      className="app-btn app-btn--primary leaderboard-hero__participation leaderboard-hero__participation--join profile-btn hero-action-btn"
+                      aria-describedby="leaderboard-participation-privacy"
+                      title={t("leaderboard.catchingUpTitle")}
+                      disabled
+                    >
+                      {t("leaderboard.catchingUp")}
+                    </button>
                   ) : (
                     <button
                       type="button"
@@ -330,6 +342,9 @@ export function LeaderboardView({
             </div>
           </section>
           {!isLoading && actionError ? <p className="capture-recency capture-recency--error" role="status">{actionError}</p> : null}
+          {!isLoading && !isOptedIn && isCatchingUp && !actionError ? (
+            <p className="capture-recency" role="status">{t("leaderboard.catchingUpNotice")}</p>
+          ) : null}
           {!isLoading && !isOptedIn && publicProfile?.liveOffBoard && publicProfile.isPreviewProfile !== true ? (
             <div className="leaderboard-public-profile__notice" role="status">
               <p className="capture-recency">{t("leaderboard.publicProfileOffBoard")}</p>
