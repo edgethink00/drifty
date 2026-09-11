@@ -239,6 +239,63 @@ export function productivityControlColor(productivity: ProductivityLabel, overri
   }
 }
 
+const ACCENT_FAMILY_PROPERTIES = [
+  "--accent-soft",
+  "--accent-mid",
+  "--accent-wash",
+  "--accent-strong",
+  "--on-accent",
+] as const;
+
+function channelToLinear(channel: number): number {
+  const value = channel / 255;
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+}
+
+export function contrastingInk(hex: string): "#0f0f0d" | "#ffffff" {
+  const value = hex.replace("#", "");
+  const red = Number.parseInt(value.slice(0, 2), 16);
+  const green = Number.parseInt(value.slice(2, 4), 16);
+  const blue = Number.parseInt(value.slice(4, 6), 16);
+  const luminance = 0.2126 * channelToLinear(red) + 0.7152 * channelToLinear(green) + 0.0722 * channelToLinear(blue);
+  return luminance > 0.55 ? "#0f0f0d" : "#ffffff";
+}
+
+export function derivedThemeColorCustomProperties(
+  key: AppThemeColorKey,
+  color: string | undefined,
+): ReadonlyArray<{ readonly property: string; readonly value: string | null }> {
+  switch (key) {
+    case "accent":
+      if (!color) return ACCENT_FAMILY_PROPERTIES.map((property) => ({ property, value: null }));
+      return [
+        { property: "--accent-soft", value: `color-mix(in srgb, ${color} 18%, var(--surface))` },
+        { property: "--accent-mid", value: `color-mix(in srgb, ${color} 46%, var(--surface))` },
+        { property: "--accent-wash", value: `color-mix(in srgb, ${color} 62%, var(--surface))` },
+        { property: "--accent-strong", value: `color-mix(in srgb, ${color} 78%, var(--text))` },
+        { property: "--on-accent", value: contrastingInk(color) },
+      ];
+    case "productivityFocus":
+      return [{ property: "--productivity-focus-soft", value: color ? `color-mix(in srgb, ${color} 18%, var(--surface))` : null }];
+    case "productivityDrift":
+      return [{ property: "--productivity-drift-soft", value: color ? `color-mix(in srgb, ${color} 18%, var(--surface))` : null }];
+    default:
+      return [];
+  }
+}
+
+export function applyAppThemeColorOverrides(target: CSSStyleDeclaration, overrides: AppThemeColorOverrides): void {
+  for (const option of APP_THEME_COLOR_OPTIONS) {
+    const color = overrides[option.key];
+    if (color) target.setProperty(option.cssVariable, color);
+    else target.removeProperty(option.cssVariable);
+    for (const derived of derivedThemeColorCustomProperties(option.key, color)) {
+      if (derived.value) target.setProperty(derived.property, derived.value);
+      else target.removeProperty(derived.property);
+    }
+  }
+}
+
 export const DEFAULT_THEME: ThemeMode = "light";
 
 export function isHexColor(value: string): boolean {

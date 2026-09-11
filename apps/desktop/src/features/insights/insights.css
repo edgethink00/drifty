@@ -1061,21 +1061,21 @@
 }
 
 .insight-section--source-analysis {
-  --analysis-tone: var(--warn);
-  --analysis-soft: var(--warn-soft);
+  --analysis-tone: var(--productivity-drift);
+  --analysis-soft: var(--productivity-drift-soft);
   margin-top: var(--space-2);
   padding: var(--space-2);
   background: color-mix(in srgb, var(--analysis-soft) 18%, var(--surface));
 }
 
 .insight-section--drift-analysis {
-  --analysis-tone: color-mix(in srgb, var(--warn) 88%, var(--text-muted));
-  --analysis-soft: var(--warn-soft);
+  --analysis-tone: color-mix(in srgb, var(--productivity-drift) 88%, var(--text-muted));
+  --analysis-soft: var(--productivity-drift-soft);
 }
 
 .insight-section--focus-analysis {
-  --analysis-tone: color-mix(in srgb, var(--accent) 84%, var(--text-muted));
-  --analysis-soft: var(--accent-soft);
+  --analysis-tone: color-mix(in srgb, var(--productivity-focus) 84%, var(--text-muted));
+  --analysis-soft: var(--productivity-focus-soft);
 }
 
 .drift-analysis__head {
@@ -1241,8 +1241,8 @@
 }
 
 .drift-pattern-card--focus {
-  border-color: color-mix(in srgb, var(--accent) 18%, var(--line));
-  background: color-mix(in srgb, var(--accent-soft) 20%, var(--surface));
+  border-color: color-mix(in srgb, var(--productivity-focus) 18%, var(--line));
+  background: color-mix(in srgb, var(--productivity-focus-soft) 20%, var(--surface));
 }
 
 @media (max-width: 920px) {
@@ -1936,11 +1936,11 @@
 }
 
 .productivity-rhythm-card__legend-dot--focus {
-  background: var(--accent);
+  background: var(--productivity-focus);
 }
 
 .productivity-rhythm-card__legend-dot--drift {
-  background: var(--warn);
+  background: var(--productivity-drift);
 }
 
 .productivity-rhythm-card__legend-dot--neutral {
@@ -2016,27 +2016,27 @@
 }
 
 .productivity-rhythm-card__cell--focus-1 {
-  background: color-mix(in srgb, var(--accent) 18%, var(--surface-strong));
+  background: color-mix(in srgb, var(--productivity-focus) 18%, var(--surface-strong));
 }
 
 .productivity-rhythm-card__cell--focus-2 {
-  background: color-mix(in srgb, var(--accent) 34%, var(--surface-strong));
+  background: color-mix(in srgb, var(--productivity-focus) 34%, var(--surface-strong));
 }
 
 .productivity-rhythm-card__cell--focus-3 {
-  background: color-mix(in srgb, var(--accent) 54%, var(--surface-strong));
+  background: color-mix(in srgb, var(--productivity-focus) 54%, var(--surface-strong));
 }
 
 .productivity-rhythm-card__cell--drift-1 {
-  background: color-mix(in srgb, var(--warn) 18%, var(--surface-strong));
+  background: color-mix(in srgb, var(--productivity-drift) 18%, var(--surface-strong));
 }
 
 .productivity-rhythm-card__cell--drift-2 {
-  background: color-mix(in srgb, var(--warn) 34%, var(--surface-strong));
+  background: color-mix(in srgb, var(--productivity-drift) 34%, var(--surface-strong));
 }
 
 .productivity-rhythm-card__cell--drift-3 {
-  background: color-mix(in srgb, var(--warn) 54%, var(--surface-strong));
+  background: color-mix(in srgb, var(--productivity-drift) 54%, var(--surface-strong));
 }
 
 #insights-weekly-attention-rhythm {
@@ -2117,11 +2117,11 @@
 }
 
 .productivity-insight-group--drift {
-  --insight-group-tone: var(--warn);
+  --insight-group-tone: var(--productivity-drift);
 }
 
 .productivity-insight-group--focus {
-  --insight-group-tone: var(--accent);
+  --insight-group-tone: var(--productivity-focus);
 }
 
 .productivity-insight-group__section {

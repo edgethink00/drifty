@@ -394,7 +394,7 @@ export function InsightSourceGroup({
 }) {
   const { effectiveLanguage, t } = useLocalization();
   const [pages, setPages] = useState({ apps: 0, topics: 0 });
-  const tone = variant === "drift" ? "var(--warn)" : "var(--accent)";
+  const tone = variant === "drift" ? "var(--productivity-drift)" : "var(--productivity-focus)";
   const topicsLabel = t(variant === "drift" ? "trends.driftAfterFocus" : "trends.focusBeforeDrift");
   const transitionsLabel = t(variant === "drift" ? "trends.driftTransitionsAria" : "trends.focusTransitionsAria");
   const appsLabel = t(variant === "drift" ? "trends.driftApps" : "trends.focusApps");
