@@ -18,7 +18,10 @@ import {
   resolveInitialEnhancedContextSettings,
 } from "./settingsStorage";
 import { renderProductionDevSettings } from "./DevSettingsSection.testHarness";
-import { PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY } from "../pet-mode/petModeData";
+import {
+  PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
+  PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY,
+} from "../pet-mode/petModeData";
 
 const featureSwitches = vi.hoisted(() => ({
   demoDashboardReplayDevToolEnabled: false,
@@ -148,6 +151,13 @@ describe("DevSettingsSection", () => {
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("tail_flick_with_note");
     fireEvent.click(sleepAngryButton);
     expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("sleep_angry_wake");
+    const danceButton = screen.getByRole("button", { name: /Dance 4-beat hip sway/ });
+    fireEvent.click(danceButton);
+    expect(enabledProps.onPreviewPetModeAction).toHaveBeenCalledWith("dance");
+    const danceOnCloseToggle = screen.getByRole("switch", { name: "Toggle Dance on close beta" });
+    expect(danceOnCloseToggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(danceOnCloseToggle);
+    expect(window.localStorage.getItem(PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY)).toBe("1");
     const guaranteedOutcomesToggle = screen.getByRole("switch", { name: "Toggle guaranteed expressive outcomes" });
     expect(screen.getByText("Natural odds")).toBeTruthy();
     fireEvent.click(guaranteedOutcomesToggle);

@@ -81,6 +81,9 @@ import {
   getPetModeWindowSize,
   resolvePetModeEntryDurationMs,
   PET_MODE_LIFE_MOTION_DURATION_MS,
+  PET_MODE_DANCE_DURATION_MS,
+  PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY,
+  resolveInitialPetModeDanceOnCloseBetaEnabled,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_PET_STREAK_TO_DROWSY,
   PET_MODE_PET_STREAK_TO_SLEEP,
@@ -229,6 +232,9 @@ export function PetModeWindowApp() {
   });
   const [petModeSize, setPetModeSize] = useState(resolveInitialPetModeSize);
   const [fastRunBetaEnabled, setFastRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
+  const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
+  const danceOnCloseBetaEnabledRef = useRef(danceOnCloseBetaEnabled);
+  danceOnCloseBetaEnabledRef.current = danceOnCloseBetaEnabled;
   const [preserveEntryLanding, setPreserveEntryLanding] = useState(false);
   const [petModeEnabled, setPetModeEnabled] = useState(initialAppearance.enabled);
   const [petVisible, setPetVisible] = useState(true);
@@ -1297,6 +1303,17 @@ export function PetModeWindowApp() {
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY) return;
+      const next = resolveInitialPetModeDanceOnCloseBetaEnabled();
+      setDanceOnCloseBetaEnabled(next);
+      danceOnCloseBetaEnabledRef.current = next;
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
   // Native cursor control is owned by the Dev settings webview. Turning it off
   // is a hard safety boundary, so cancel an active stalk/carry immediately.
   // The approved visual drift reaction is independent and must stay intact;
@@ -1496,6 +1513,11 @@ export function PetModeWindowApp() {
       ).catch(() => false);
       if (token !== actionTokenRef.current) return;
       if (movedToTarget && !fullscreenReturnHandled) {
+        if (contacted && danceOnCloseBetaEnabledRef.current && token === actionTokenRef.current) {
+          commitPhase("dance");
+          await delay(prefersReducedMotion() ? 40 : PET_MODE_DANCE_DURATION_MS);
+          if (token !== actionTokenRef.current) return;
+        }
         // Every real successful close earns the E04 face for the walk home.
         // Approaches, failed contacts, generic previews, and Show Pet stay
         // neutral.
@@ -1700,12 +1722,14 @@ export function PetModeWindowApp() {
         blink: "blink",
         stretch: "stretch",
         tail_flick: "tail",
+        dance: "dance",
         pet: "happy",
       };
       const durationByAction: Record<keyof typeof phaseByAction, number> = {
         blink: PET_MODE_BLINK_DURATION_MS,
         stretch: PET_MODE_LIFE_MOTION_DURATION_MS,
         tail_flick: PET_MODE_TAIL_FLICK_DURATION_MS,
+        dance: PET_MODE_DANCE_DURATION_MS,
         pet: 1_200,
       };
       commitPhase(phaseByAction[action]);

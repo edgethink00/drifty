@@ -32,6 +32,8 @@ import {
   PET_MODE_FLOOR_HOME_PT,
   PET_MODE_FLOOR_HOME_RANGE,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
+  PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY,
+  resolveInitialPetModeDanceOnCloseBetaEnabled,
   type PetModeLabAction,
   type PetModeLabState,
   type PetModePreviewAction,
@@ -214,6 +216,13 @@ export function DevSettingsSection({
   const fastRunDescriptionId = `pet-run-beta-desc-${fastRunId}`;
   const [petModeLabState, setPetModeLabState] = useState<PetModeLabState | null>(null);
   const [driftHuntSettings, setDriftHuntSettings] = useState(resolvePetModeDriftHuntSettings);
+  const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
+
+  const updateDanceOnCloseBeta = (enabled: boolean) => {
+    setDanceOnCloseBetaEnabled(enabled);
+    window.localStorage.setItem(PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY, enabled ? "1" : "0");
+  };
+
   const [guaranteedOutcomes, setGuaranteedOutcomes] = useState(
     () => window.localStorage.getItem(PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY) === "1",
   );
@@ -377,6 +386,21 @@ export function DevSettingsSection({
                 ariaDescribedBy={`${fastRunLabelId} ${fastRunDescriptionId}`}
               />
             </div>
+            <div className="pet-mode-lab__experiment-policy" data-active={danceOnCloseBetaEnabled}>
+              <span>
+                <strong className="settings-label-with-badge" id="dance-on-close-beta-label">
+                  Dance on close <span className="status-badge status-badge--beta">Beta</span>
+                </strong>
+                <small id="dance-on-close-beta-desc">Celebrates with a 4-beat dance after closing a distracting window</small>
+              </span>
+              <Toggle
+                checked={danceOnCloseBetaEnabled}
+                disabled={!petModeEnabled}
+                onChange={updateDanceOnCloseBeta}
+                ariaLabel="Toggle Dance on close beta"
+                ariaDescribedBy="dance-on-close-beta-label dance-on-close-beta-desc"
+              />
+            </div>
           </div>
           <div className="pet-mode-lab__row">
             <div className="pet-mode-lab__row-copy">
@@ -426,6 +450,7 @@ export function DevSettingsSection({
             <div className="pet-mode-lab__controls" aria-label="Expressive interaction scenarios">
               <PetModeLabAction label="Stretch + note" detail="Guaranteed combination" action="stretch_with_note" active={petModeLabState?.activeAction === "stretch_with_note"} disabled={isPetModeLabActionDisabled("stretch_with_note")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Tail + note" detail="Guaranteed combination" action="tail_flick_with_note" active={petModeLabState?.activeAction === "tail_flick_with_note"} disabled={isPetModeLabActionDisabled("tail_flick_with_note")} onAction={onPreviewPetModeAction} />
+              <PetModeLabAction label="Dance" detail="4-beat hip sway" action="dance" active={petModeLabState?.activeAction === "dance"} disabled={isPetModeLabActionDisabled("dance")} onAction={onPreviewPetModeAction} />
               <PetModeLabAction label="Sleep → angry" detail="Guaranteed wake reaction" action="sleep_angry_wake" active={petModeLabState?.activeAction === "sleep_angry_wake"} disabled={isPetModeLabActionDisabled("sleep_angry_wake")} onAction={onPreviewPetModeAction} />
             </div>
           </div>

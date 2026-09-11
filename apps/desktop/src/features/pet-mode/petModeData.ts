@@ -8,6 +8,7 @@ import type { WatcherSnapshot } from "../companion/watcherData";
 export const PET_MODE_STORAGE_KEY = "drifty.pet.enabled";
 export const PET_MODE_COAT_STORAGE_KEY = "drifty.pet.coat";
 export const PET_MODE_RUN_BETA_STORAGE_KEY = "drifty.pet.fastRunBeta.v1";
+export const PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY = "drifty.pet.danceOnCloseBeta.v1";
 export const PET_MODE_LEGACY_STORAGE_KEY = "drifty.dev.petMode";
 export const PET_MODE_LEGACY_COAT_STORAGE_KEY = "drifty.dev.petModeCoat";
 /** A timestamp keeps a temporary hide reliable across an app restart. */
@@ -184,6 +185,11 @@ export const PET_MODE_LIFE_MOTION_FPS = 12;
 export const PET_MODE_LIFE_MOTION_FRAME_COUNT = 37;
 export const PET_MODE_LIFE_MOTION_DURATION_MS = PET_MODE_LIFE_MOTION_FRAME_COUNT * 1000 / PET_MODE_LIFE_MOTION_FPS;
 export const PET_MODE_TAIL_FLICK_DURATION_MS = PET_MODE_LIFE_MOTION_DURATION_MS;
+export const PET_MODE_DANCE_FPS = 5;
+export const PET_MODE_DANCE_FRAME_COUNT = 4;
+export const PET_MODE_DANCE_CYCLE_MS = 800;
+export const PET_MODE_DANCE_CYCLES = 3;
+export const PET_MODE_DANCE_DURATION_MS = PET_MODE_DANCE_CYCLE_MS * PET_MODE_DANCE_CYCLES;
 // A manual drop is direct attention from the user, so the rare acknowledgement
 // can answer quickly before the longer authored tail motion takes over.
 export const PET_MODE_POST_DROP_LOOK_DURATION_MS = 840;
@@ -213,6 +219,7 @@ export type PetModePreviewAction =
   | "music_note"
   | "stretch_with_note"
   | "tail_flick_with_note"
+  | "dance"
   | "sleep_angry_wake"
   | "sleep"
   | "sit"
@@ -558,6 +565,15 @@ export function resolveInitialPetModeEnabled(): boolean {
  * storage all resolve to the shipped vector gait so an app update cannot
  * silently change the pet's movement.
  */
+export function resolveInitialPetModeDanceOnCloseBetaEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export function resolveInitialPetModeRunBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   try {

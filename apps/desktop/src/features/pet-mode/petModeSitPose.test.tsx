@@ -1,3 +1,4 @@
+import { PetModeCat } from "./PetModeCat";
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -66,6 +67,38 @@ vi.mock("./petModeHitRegions", () => ({
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ onMoved: vi.fn().mockResolvedValue(vi.fn()) }),
 }));
+
+describe("pet dance pose", () => {
+  it("renders dance raster frames when phase is dance", () => {
+    const { container } = render(
+      <PetModeCat
+        phase="dance"
+        facing="right"
+        decorative={false}
+        suspended={false}
+        pawFrame={0}
+      />
+    );
+    const img = container.querySelector(".pet-mode-cat__raster--dance");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("/pet-mode/dance/f001.png");
+  });
+
+  it("respects frameOverride for dance frames QA review", () => {
+    const { container } = render(
+      <PetModeCat
+        phase="dance"
+        facing="right"
+        decorative={false}
+        suspended={false}
+        pawFrame={0}
+        frameOverride={2}
+      />
+    );
+    const img = container.querySelector(".pet-mode-cat__raster--dance");
+    expect(img?.getAttribute("src")).toBe("/pet-mode/dance/f003.png");
+  });
+});
 
 describe("pet sit pose", () => {
   async function renderResidentPet() {

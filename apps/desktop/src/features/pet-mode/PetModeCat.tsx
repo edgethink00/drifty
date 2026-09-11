@@ -13,6 +13,9 @@ import {
   PET_MODE_GAIT_FRAME_COUNT,
   PET_MODE_LIFE_MOTION_FPS,
   PET_MODE_LIFE_MOTION_FRAME_COUNT,
+  PET_MODE_DANCE_FPS,
+  PET_MODE_DANCE_FRAME_COUNT,
+  PET_MODE_DANCE_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_RUN_FRAME_COUNT,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
@@ -49,6 +52,7 @@ type PetModeCatPhase =
   | "blink"
   | "stretch"
   | "tail"
+  | "dance"
   | "sleep"
   | "sit"
   | "drag"
@@ -144,6 +148,8 @@ export function PetModeCat({
   const [runFramesFailed, setRunFramesFailed] = useState(false);
   const [runFramesReady, setRunFramesReady] = useState(false);
   const [lifeMotionFrame, setLifeMotionFrame] = useState(0);
+  const [danceFrame, setDanceFrame] = useState(0);
+  const dancePreloadedRef = useRef(false);
   const renderedEntrySequenceRef = useRef<number | null>(null);
   const preloadMountedRef = useRef(true);
   const walkLoadStartedRef = useRef(false);
@@ -254,7 +260,16 @@ export function PetModeCat({
   }, [decorative, selectedSitVariant, selectedSitVariantId, suspended]);
 
   useEffect(() => {
-    if (decorative || suspended || lifeMotionPreloadedRef.current) return;
+    if (decorative || suspended) return;
+    if (!dancePreloadedRef.current) {
+      dancePreloadedRef.current = true;
+      for (let frame = 1; frame <= PET_MODE_DANCE_FRAME_COUNT; frame += 1) {
+        const image = new Image();
+        image.src = `/pet-mode/dance/f${String(frame).padStart(3, "0")}.png`;
+        void image.decode?.().catch(() => undefined);
+      }
+    }
+    if (lifeMotionPreloadedRef.current) return;
     lifeMotionPreloadedRef.current = true;
     for (const motion of Object.values(LIFE_MOTION_ASSET_BY_PHASE)) {
       for (let frame = 1; frame <= PET_MODE_LIFE_MOTION_FRAME_COUNT; frame += 1) {
@@ -462,6 +477,33 @@ export function PetModeCat({
   }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runFramesFailed, runFramesReady, suspended]);
 
   useLayoutEffect(() => {
+    if (suspended || phase !== "dance" || reducedMotion) return undefined;
+    setDanceFrame(0);
+    const startedAt = performance.now();
+    let displayedFrame = 0;
+    let animationFrameId = 0;
+    let disposed = false;
+    const render = (now: number) => {
+      if (disposed) return;
+      const elapsed = now - startedAt;
+      const totalFrames = Math.floor(elapsed * PET_MODE_DANCE_FPS / 1000);
+      const nextFrame = totalFrames % PET_MODE_DANCE_FRAME_COUNT;
+      if (nextFrame !== displayedFrame) {
+        displayedFrame = nextFrame;
+        setDanceFrame(nextFrame);
+      }
+      if (elapsed < PET_MODE_DANCE_DURATION_MS) {
+        animationFrameId = window.requestAnimationFrame(render);
+      }
+    };
+    animationFrameId = window.requestAnimationFrame(render);
+    return () => {
+      disposed = true;
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [phase, suspended]);
+
+  useLayoutEffect(() => {
     if (suspended || !isLifeMotionPhase(phase)) return undefined;
     setLifeMotionFrame(0);
     const startedAt = performance.now();
@@ -581,6 +623,9 @@ export function PetModeCat({
     (Math.trunc(requestedRunFrame) % PET_MODE_RUN_FRAME_COUNT) + PET_MODE_RUN_FRAME_COUNT
   ) % PET_MODE_RUN_FRAME_COUNT;
   const renderedLifeMotionFrame = frameOverride ?? lifeMotionFrame;
+  const renderedDanceFrame = (frameOverride !== undefined && frameOverride !== null)
+    ? (Math.abs(frameOverride) % PET_MODE_DANCE_FRAME_COUNT)
+    : danceFrame;
   const walkFramePath = walkFrames[renderedWalkFrame];
   const runFramePath = getPetModeRunFrameSource(renderedRunFrame);
   // The head is drawn a second time on top of the complete body rather than
@@ -830,6 +875,13 @@ export function PetModeCat({
               <PetModeRestPoseArtwork pose={dragReleasePose} sitVariantId={selectedSitVariantId} gazeOffset={gazeOffset} reducedMotion={reducedMotion} devForceLiveBlink={devForceLiveBlink} />
             </span>
           </>
+        ) : phase === "dance" ? (
+          <img
+            className="pet-mode-cat__raster pet-mode-cat__raster--dance"
+            src={`/pet-mode/dance/f${String(renderedDanceFrame + 1).padStart(3, "0")}.png`}
+            alt=""
+            draggable={false}
+          />
         ) : lifeMotionAsset ? (
           <img
             className="pet-mode-cat__raster pet-mode-cat__raster--life-motion"

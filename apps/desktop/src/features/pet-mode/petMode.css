@@ -581,6 +581,17 @@
 /* Tail V2-B uses the larger comparison canvas that preserved its complete
    Flow contour. These values are the approved review geometry scaled exactly
    50% into the native 60% pet panel, keeping every frame inside 144 × 99 px. */
+.pet-mode-cat__raster--dance {
+  position: absolute;
+  inset: auto;
+  left: 6.4px;
+  top: -50.9px;
+  width: 113px;
+  height: 144.3px;
+  object-fit: fill;
+  pointer-events: none;
+}
+
 .pet-mode-cat--tail .pet-mode-cat__raster--life-motion {
   left: -18.2484px;
   top: -13.1835px;

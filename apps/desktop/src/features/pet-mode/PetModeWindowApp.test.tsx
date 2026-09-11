@@ -14,6 +14,8 @@ import {
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
   PET_MODE_LIFE_MOTION_DURATION_MS,
+  PET_MODE_DANCE_DURATION_MS,
+  PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY,
   PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_GUIDES_STORAGE_KEY,
@@ -4321,6 +4323,49 @@ describe("PetModeWindowApp", () => {
     }));
     expect(bridge.reportNativePetContact).toHaveBeenCalledTimes(1);
     expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-1");
+  });
+
+  it("celebrates with dance after closing when danceOnCloseBeta is enabled", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_DANCE_ON_CLOSE_BETA_STORAGE_KEY, "1");
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      value: () => ({ matches: true }),
+    });
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "drift-dance-1",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+
+    // In reduced motion (matches: true), paw reach to contact is 14 * 8 + 4 ms
+    await act(async () => { await vi.advanceTimersByTimeAsync(14 * 8 + 4); });
+    expect(bridge.reportNativePetContact).toHaveBeenCalledWith("drift-dance-1");
+
+    // Complete remaining paw return frames (14 * 0.75 * 8ms = ~84ms)
+    // In reduced motion, dance hold is 40ms.
+    // Advancing 85ms finishes paw return and enters dance hold
+    await act(async () => { await vi.advanceTimersByTimeAsync(85); });
+    expect(bridge.returnNativePetHome).not.toHaveBeenCalled();
+
+    // Advancing past 40ms dance hold triggers returnNativePetHome!
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+    expect(bridge.returnNativePetHome).toHaveBeenCalledTimes(1);
   });
 
   it("never reports paw contact when native target travel was cancelled", async () => {
