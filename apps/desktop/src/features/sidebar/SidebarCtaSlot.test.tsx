@@ -441,7 +441,7 @@ describe("SidebarCtaSlot", () => {
     })).toBeNull();
   });
 
-  it("renders one accessible whole-surface action", () => {
+  it("renders an accessible action button within the contextual card", () => {
     const onAction = vi.fn();
     const onDismiss = vi.fn();
     render(<SidebarCtaSlot
@@ -463,7 +463,8 @@ describe("SidebarCtaSlot", () => {
     const action = screen.getByRole("button", { name: /Trial ends in 2 days.*Upgrade to Pro/i });
     expect(action.getAttribute("data-kind")).toBe("trial");
     expect(action.getAttribute("data-alert")).toBe("warn");
-    expect(action.textContent).toContain("2 days");
+    expect(action.getAttribute("aria-label")).toContain("2 days");
+    expect(action.closest(".sidebar-cta-slot")?.textContent).toContain("2 days");
     fireEvent.click(action);
     expect(onAction).toHaveBeenCalledTimes(1);
 

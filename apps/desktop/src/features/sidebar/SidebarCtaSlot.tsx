@@ -494,7 +494,7 @@ export function SidebarCtaSlot({
     resetKey: state.kind === "download" ? state.modelLabel ?? "download" : "idle",
     value: state.kind === "download" ? state.progressValue : null,
   });
-  const offerRef = useProFunnelExposure<HTMLButtonElement>(funnelEnabled,
+  const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled,
     state.kind === "upgrade" || state.kind === "trial" || state.kind === "trial-ended"
       ? { step: "pro_offer_viewed", offer_surface: "sidebar",
         offer_context: state.kind === "trial" ? "trial_active" : state.kind === "trial-ended" ? "trial_ended"
@@ -567,16 +567,12 @@ export function SidebarCtaSlot({
 
   return (
     <div className="sidebar-cta-slot-wrap" data-dismissible={onDismiss ? "true" : undefined}>
-      <button
-        type="button"
+      <div
         className="sidebar-cta-slot"
         ref={offerRef}
         data-kind={state.kind}
         data-tone={state.tone}
         data-alert={state.alert ?? undefined}
-        disabled={state.disabled}
-        aria-busy={state.disabled || undefined}
-        onClick={onAction}
       >
         <span className="sidebar-cta-slot__copy">
           <strong className="sidebar-cta-slot__title">
@@ -590,7 +586,18 @@ export function SidebarCtaSlot({
           </strong>
           <span className="sidebar-cta-slot__detail">{copy}</span>
         </span>
-        <span className="sidebar-cta-slot__action">
+        <button
+          type="button"
+          className="sidebar-cta-slot__action"
+          data-kind={state.kind}
+          data-tone={state.tone}
+          data-alert={state.alert ?? undefined}
+          data-direction={state.direction}
+          disabled={state.disabled}
+          aria-busy={state.disabled || undefined}
+          aria-label={[titleEmphasis ? `${title} ${titleEmphasis}` : title, copy, actionLabel].filter(Boolean).join(" · ")}
+          onClick={onAction}
+        >
           <span className="sidebar-cta-slot__action-label">{actionLabel}</span>
           <svg
             className="sidebar-cta-slot__arrow"
@@ -615,8 +622,8 @@ export function SidebarCtaSlot({
               </>
             )}
           </svg>
-        </span>
-      </button>
+        </button>
+      </div>
       {onDismiss ? (
         <button
           type="button"
