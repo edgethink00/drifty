@@ -188,6 +188,7 @@
   position: fixed;
   z-index: 60;
   padding: 8px;
+  min-width: 244px;
   border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent);
   border-radius: 13.5px;
   background: var(--shell-floating-surface-strong);
@@ -243,17 +244,25 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 
 .account-popover__account {
   margin: 0;
-  padding: 2px 8px 7px 5px;
+  padding: 7px 10px 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-popover__user-info {
+  min-width: 0;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1.5px;
 }
 
 .account-popover__name {
   color: var(--text);
-  font-size: 0.75rem;
-  font-weight: 400;
-  line-height: 1.2;
+  font-size: 0.84375rem;
+  font-weight: 650;
+  line-height: 1.25;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -262,7 +271,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .account-popover__email {
   margin: 0;
   color: var(--text-soft);
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -273,14 +282,14 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6.7px;
-  min-height: 30.8px;
-  padding: 5.803px 8px 5.803px 5px;
+  gap: 9px;
+  min-height: 34px;
+  padding: 6px 10px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text);
-  font-size: 0.8125rem;
+  font-size: 0.84375rem;
   line-height: 1.2;
   text-align: left;
   box-shadow: none;
@@ -366,7 +375,7 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
 .account-menu-toggle:active .account-menu-toggle__knob {
   width: 16px;
 }
-.account-menu-separator { height: 1px; background: var(--line); margin: 6px 5px; }
+.account-menu-separator { height: 1px; background: var(--line); margin: 5px 6px; }
 .account-menu-separator--account { margin-top: 0; }
 
 /* Page wrapper (each page in App.tsx uses `<div class="page">`) */

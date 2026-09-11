@@ -136,6 +136,8 @@ export const ACCOUNT_POPOVER_COLLAPSED_GAP_PX = 10;
 
 export const ACCOUNT_POPOVER_COLLAPSED_WIDTH = "14rem";
 
+export const ACCOUNT_POPOVER_MIN_WIDTH_PX = 244;
+
 export function collapsedAccountPopoverLeftPx(
   railRight: number,
   gapPx: number = ACCOUNT_POPOVER_COLLAPSED_GAP_PX,
@@ -216,11 +218,11 @@ export function AccountMenu({
     }
 
     setPopoverStyle({
-      position: "fixed",
-      left: rect.left - ACCOUNT_POPOVER_EXPANDED_EDGE_OFFSET_PX,
-      bottom: window.innerHeight - rect.top + ACCOUNT_POPOVER_EXPANDED_GAP_PX,
-      width: rect.width + ACCOUNT_POPOVER_EXPANDED_EDGE_OFFSET_PX * 2,
-    });
+        position: "fixed",
+        left: rect.left - ACCOUNT_POPOVER_EXPANDED_EDGE_OFFSET_PX,
+        bottom: window.innerHeight - rect.top + ACCOUNT_POPOVER_EXPANDED_GAP_PX,
+        width: Math.max(ACCOUNT_POPOVER_MIN_WIDTH_PX, rect.width + ACCOUNT_POPOVER_EXPANDED_EDGE_OFFSET_PX * 2),
+      });
   }, [isSidebarCollapsed]);
 
   useLayoutEffect(() => {
@@ -329,11 +331,22 @@ export function AccountMenu({
       aria-label={t("account.menu")}
     >
       <div className="account-popover__account">
-        {isSignedIn ? (
-          <div className="account-popover__email" title={userEmail ?? undefined}>{userEmail}</div>
-        ) : (
-          <div className="account-popover__name">{t("account.notSignedIn")}</div>
-        )}
+        <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
+          {shouldShowUserAvatar ? (
+            <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" />
+          ) : (
+            <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
+              <circle cx="14" cy="10.4" r="3.5" />
+              <path d="M7.6 22c1.2-4 3.6-6.1 6.4-6.1s5.2 2.1 6.4 6.1" />
+            </svg>
+          )}
+        </span>
+        <div className="account-popover__user-info">
+          <div className="account-popover__name">{isSignedIn ? displayName : t("account.notSignedIn")}</div>
+          {isSignedIn && userEmail ? (
+            <div className="account-popover__email" title={userEmail}>{userEmail}</div>
+          ) : null}
+        </div>
       </div>
       <div className="account-menu-separator account-menu-separator--account" role="separator" />
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
