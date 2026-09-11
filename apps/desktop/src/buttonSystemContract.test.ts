@@ -48,7 +48,6 @@ describe("app button system contract", () => {
     // These extracted components mount only inside Settings-owned panels.
     const allowedFiles = [
       "features/cloud-devices/CloudDeviceManagementPanel.tsx",
-      "features/companion/CompanionPanel.tsx",
       "features/companion/DriftAlarmCopySettings.tsx",
     ];
     const violations = productionTsxFiles().flatMap((path) => {

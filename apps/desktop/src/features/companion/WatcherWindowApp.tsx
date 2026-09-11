@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ExtremeNudgeToast, type ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
+import type { DriftAlarmAction } from "./driftAlarmEvent";
 import {
   buildMilestoneSparks,
   CompanionPillMoment,
@@ -7,7 +8,6 @@ import {
   type CompanionPillMilestoneEvent,
 } from "./CompanionPillMoment";
 import type { CompanionReentryEvent } from "./companionReentry";
-import { WatcherPeek, type WatcherPeekEvent, type WatcherPhase } from "./WatcherPeek";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
 import {
   isInformationalMomentEvent,
@@ -15,7 +15,6 @@ import {
   refreshInformationalMomentSuppression,
 } from "./informationalMomentSuppression";
 import {
-  dismissNativeWatcherPeek,
   hideNativeWatcherPeek,
   listenToNativeWatcherShow,
   setNativeWatcherInteractive,
@@ -50,7 +49,9 @@ export function WatcherWindowApp() {
     /* Day Review belongs exclusively to the current Companion surface. Ignore
        a stale legacy-routed payload instead of reconnecting Summary - Today. */
     if ("kind" in nextEvent && nextEvent.kind === "endOfDayReview") return;
-    if (!("kind" in nextEvent) || !isInformationalMomentEvent(nextEvent)) {
+    /* The old watcher orb is retired. Peek snapshots belong to Companion. */
+    if (!("kind" in nextEvent)) return;
+    if (!isInformationalMomentEvent(nextEvent)) {
       setEvent(nextEvent);
       return;
     }
@@ -81,12 +82,6 @@ export function WatcherWindowApp() {
     };
   }, [handleNativeShow]);
 
-  const handleDismiss = useCallback(() => {
-    if (!event) return;
-    setEvent(null);
-    ignoreWatcherBridgePromise(dismissNativeWatcherPeek(event ? companionEventIdentity(event) : undefined));
-  }, [event]);
-
   /* The auto-dismiss budget freezes while macOS sleeps, so without a
      wall-clock expiry a card fired seconds before sleep would greet the user
      the next morning as if it had just happened. Consume stale moments
@@ -111,10 +106,6 @@ export function WatcherWindowApp() {
     setEvent(null);
     ignoreWatcherBridgePromise(hideNativeWatcherPeek(event ? companionEventIdentity(event) : undefined));
   }, [event]);
-
-  const handlePhaseChange = useCallback((_phase: WatcherPhase, _currentEvent: WatcherPeekEvent | null) => {
-    ignoreWatcherBridgePromise(setNativeWatcherInteractive(false));
-  }, []);
 
   const handleOpenDashboard = useCallback(() => {
     ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", undefined, event ? companionEventIdentity(event) : undefined));
@@ -165,8 +156,8 @@ export function WatcherWindowApp() {
 
   return (
     <main
-      className={`watcher-window-surface${isMilestone || isReentry ? " companion-pill-surface" : ""}`}
-      data-state={isMilestone ? "milestone" : isReentry ? "reentry" : undefined}
+      className={`watcher-window-surface${isMilestone || isReentry || isExtremeNudgeToastEvent ? " companion-pill-surface" : ""}`}
+      data-state={isMilestone ? "milestone" : isReentry ? "reentry" : isExtremeNudgeToastEvent ? "nudge" : undefined}
       aria-label="Drifty watcher window"
     >
       {isMilestone ? (
@@ -184,14 +175,8 @@ export function WatcherWindowApp() {
           onOpenReentry={handleOpenReentry}
         />
       ) : isExtremeNudgeToastEvent ? (
-        <ExtremeNudgeToast event={event} onAction={handleExtremeNudgeAction} onDismiss={handleToastDismiss} />
-      ) : (
-        <WatcherPeek
-          event={isWatcherPeekEvent(event) ? event : null}
-          onDismiss={handleDismiss}
-          onPhaseChange={handlePhaseChange}
-        />
-      )}
+        <StandaloneNudge event={event} onAction={handleExtremeNudgeAction} onDismiss={handleToastDismiss} />
+      ) : null}
     </main>
   );
 }
@@ -206,10 +191,6 @@ function isMilestoneEvent(event: CompanionPillWindowEvent | null): event is Comp
 
 function isReentryEvent(event: CompanionPillWindowEvent | null): event is CompanionReentryEvent {
   return event !== null && "kind" in event && event.kind === "reentry";
-}
-
-function isWatcherPeekEvent(event: CompanionPillWindowEvent | null): event is WatcherPeekEvent {
-  return event !== null && !("kind" in event);
 }
 
 function ignoreWatcherBridgePromise(promise: Promise<unknown>) {
@@ -275,6 +256,29 @@ function StandaloneReentry({
           onDismiss={onDismiss}
           onOpenDashboard={onOpenDashboard}
           onOpenReentry={onOpenReentry}
+        />
+      </div>
+    </div>
+  );
+}
+
+function StandaloneNudge({
+  event,
+  onAction,
+  onDismiss,
+}: {
+  readonly event: ExtremeNudgeToastEvent;
+  readonly onAction: (action: DriftAlarmAction) => void;
+  readonly onDismiss: () => void;
+}) {
+  return (
+    <div className="pill" data-state="nudge" data-card-state="nudge">
+      <div className="pill__clip">
+        <CompanionPillMoment
+          event={event}
+          onDismiss={() => onDismiss()}
+          onOpenDashboard={() => undefined}
+          onAction={onAction}
         />
       </div>
     </div>

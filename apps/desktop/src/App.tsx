@@ -162,11 +162,7 @@ import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPrepara
 import { PostOnboardingSidebarGuide } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
 import { isPostOnboardingSidebarGuideReviewEnabled } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
-import {
-  WatcherPeek,
-  type WatcherPeekEvent,
-  type WatcherPeekResponse,
-} from "./features/companion/WatcherPeek";
+import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
   buildCompanionMilestonePreview,
   type CompanionMilestonePreviewId,
@@ -200,7 +196,7 @@ import {
   type DriftAlarmFocusTarget,
 } from "./features/companion/driftAlarmEvent";
 import { CompanionDriftAlarmCard } from "./features/companion/CompanionDriftAlarmCard";
-import type { ExtremeNudgeToastEvent } from "./features/companion/ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./features/companion/extremeNudgeData";
 import {
   hideNativeWatcherPeek,
   isTauriRuntime,
@@ -10283,7 +10279,6 @@ export default function App() {
 
       {!isTauriRuntime() ? (
         <>
-          <WatcherPeek event={watcherEvent} onDismiss={dismissWatcherPeek} onRespond={handleWatcherResponse} />
           {END_OF_DAY_REVIEW_DEV_PREVIEW_ENABLED && endOfDayReviewEvent ? (
             <CompanionDayReviewBrowserSurface
               event={endOfDayReviewEvent}

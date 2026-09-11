@@ -1,4 +1,4 @@
-import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
+import type { WatcherPeekEvent, WatcherPeekResponse } from "./watcherPeekTypes";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { categorizeActivity, classifyActivity, computeCurrentFocusStrikeSeconds, computePreservedFocusStrikeSeconds } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, CurrentActivitySnapshot, ProductivityLabel } from "@drifty/domain";

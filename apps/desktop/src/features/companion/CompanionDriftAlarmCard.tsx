@@ -1,6 +1,6 @@
 import { CompanionPillMoment, type CompanionPillDriftEvent } from "./CompanionPillMoment";
 import type { DriftAlarmAction, DriftAlarmEvent } from "./driftAlarmEvent";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 
 export function toCompanionDriftAlarmMoment(alarm: DriftAlarmEvent): CompanionPillDriftEvent {
   const target = alarm.focusTargets[0] ?? null;

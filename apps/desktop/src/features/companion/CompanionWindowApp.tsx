@@ -12,7 +12,7 @@ import {
 } from "./companionEngagementMetrics";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
 import { toCompanionDriftAlarmMoment } from "./CompanionDriftAlarmCard";
-import type { WatcherPeekEvent } from "./WatcherPeek";
+import type { WatcherPeekEvent } from "./watcherPeekTypes";
 import {
   COMPANION_PILL_SIZES,
   resolveCompanionHorizontalAnchor,

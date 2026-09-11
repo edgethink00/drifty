@@ -1,10 +1,10 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 import type { DriftAlarmAction } from "./driftAlarmEvent";
 import type { DriftAlarmEvent } from "./driftAlarmEvent";
-import type { WatcherPeekEvent, WatcherPeekResponse } from "./WatcherPeek";
+import type { WatcherPeekEvent, WatcherPeekResponse } from "./watcherPeekTypes";
 import type { CompanionHorizontalAnchor, CompanionPillState } from "./companionPillLayout";
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
 import type { CompanionReentryEvent } from "./companionReentry";

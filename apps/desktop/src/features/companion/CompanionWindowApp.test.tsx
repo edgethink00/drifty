@@ -7,7 +7,7 @@ import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import { buildCompanionDriftAlarmPreview, buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
 import { DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS } from "./driftAlarmEvent";
-import type { WatcherPeekEvent } from "./WatcherPeek";
+import type { WatcherPeekEvent } from "./watcherPeekTypes";
 import type { CompanionPillWindowEvent, NativeCompanionPointerEvent } from "./watcherBridge";
 
 const bridge = vi.hoisted(() => ({

@@ -5,7 +5,7 @@ import {
   COMPANION_PILL_SIZES,
   resolveCompanionHorizontalAnchor,
 } from "./companionPillLayout";
-import type { WatcherPeekEvent } from "./WatcherPeek";
+import type { WatcherPeekEvent } from "./watcherPeekTypes";
 
 function buildPeekEvent(overrides: Partial<WatcherPeekEvent> = {}): WatcherPeekEvent {
   return {

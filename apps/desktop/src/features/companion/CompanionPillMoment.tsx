@@ -7,7 +7,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 import type { CompanionReentryEvent } from "./companionReentry";
 import {
   DRIFT_ALARM_CORRECTION_FEEDBACK_COPY,

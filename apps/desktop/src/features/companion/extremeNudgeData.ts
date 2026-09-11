@@ -1,8 +1,19 @@
 import type { ActivitySegment } from "@drifty/domain";
-import type { DriftAlarmFocusTarget } from "./driftAlarmEvent";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { DriftAlarmCorrectionStatus, DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import type { ExtremeNudgeTarget } from "./driftAlarmBridge";
 import { buildDefaultDriftAlarmCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
+
+export type ExtremeNudgeToastEvent = {
+  kind: "extremeNudgeToast";
+  placement: "top-right";
+  id: string;
+  generatedAt: string;
+  title: string;
+  closedLabel: string;
+  focusLabel: string | null;
+  breakOptions?: readonly number[];
+  correctionStatus?: DriftAlarmCorrectionStatus;
+};
 
 export const EXTREME_NUDGE_STORAGE_KEY = "drifty.notifications.extremeNudge";
 

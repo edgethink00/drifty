@@ -1,5 +1,5 @@
 import type { CompanionPillMilestoneEvent } from "./CompanionPillMoment";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 import type { CompanionReentryEvent } from "./companionReentry";
 import { buildBreakReturnAlarmEvent, buildDriftAlarmEvent, type DriftAlarmEvent } from "./driftAlarmEvent";
 import { buildEndOfDayReviewSummary, type EndOfDayReviewEvent } from "./endOfDayReviewModel";

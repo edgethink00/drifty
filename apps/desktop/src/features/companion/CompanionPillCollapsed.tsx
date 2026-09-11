@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { WatcherPeekEvent } from "./WatcherPeek";
+import type { WatcherPeekEvent } from "./watcherPeekTypes";
 import {
   PillOverflowIcon,
   PillPauseIcon,

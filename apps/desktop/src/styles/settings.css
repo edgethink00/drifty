@@ -299,40 +299,6 @@
   width: 100%;
 }
 
-.companion-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.companion-code {
-  font-family: var(--font-mono);
-  font-size: 0.78125rem;
-  font-weight: 700;
-  letter-spacing: .08em;
-  color: var(--accent);
-}
-
-.companion-import-row { align-items: flex-start; }
-
-.companion-import-controls {
-  display: grid;
-  gap: 8px;
-  width: min(360px, 100%);
-}
-
-.companion-import-controls textarea {
-  width: 100%;
-  resize: none;
-  min-height: 5rem;
-  border: 1px solid var(--field-line);
-  border-radius: 10px;
-  background: var(--field-bg);
-  color: var(--text);
-  padding: 10px 11px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-}
-
 .settings-dev-status {
   display: grid;
   gap: 5px;

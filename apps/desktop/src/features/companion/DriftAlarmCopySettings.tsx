@@ -6,7 +6,7 @@ import {
   type DriftAlarmFocusTarget,
 } from "./driftAlarmEvent";
 import { CompanionAutomaticCloseCard, CompanionDriftAlarmCard } from "./CompanionDriftAlarmCard";
-import type { ExtremeNudgeToastEvent } from "./ExtremeNudgeToast";
+import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
 import { buildDefaultDriftAlarmCopy, buildDriftNotificationCopy, buildExtremeNudgeToastCopy, type DriftAlarmCopySettingsValue } from "./driftAlarmCopy";
 import { DRIFT_ALARM_COPY_SECTIONS, selectCopySection, type DriftAlarmCopySectionKey } from "./driftAlarmCopySettingsSections";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";

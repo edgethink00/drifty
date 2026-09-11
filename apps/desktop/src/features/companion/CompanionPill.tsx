@@ -3,7 +3,7 @@ import {
   dragNativeCompanion,
   type NativeCompanionTransitionEvent,
 } from "./watcherBridge";
-import type { WatcherPeekEvent } from "./WatcherPeek";
+import type { WatcherPeekEvent } from "./watcherPeekTypes";
 import {
   CompanionPillCollapsedView,
   resolveCollapsedState,
