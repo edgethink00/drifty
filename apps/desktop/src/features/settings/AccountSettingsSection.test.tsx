@@ -798,3 +798,110 @@ describe("AccountSettingsSection organization seat release", () => {
     expect(screen.queryByText("settings.account.releaseSeatConfirm")).toBeNull();
   });
 });
+
+describe("AccountSettingsSection organization dissolution", () => {
+  it("offers the close control only to the owner", () => {
+    for (const role of ["member", "admin"] as const) {
+      const { unmount } = render(<AccountSettingsSection {...accountProps({
+        billingEntitlement: organizationEntitlement(role),
+        onDissolveOrganization: vi.fn(),
+      })} />);
+      expect(screen.queryByText("Close this organization")).toBeNull();
+      unmount();
+    }
+
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onDissolveOrganization: vi.fn(),
+    })} />);
+    expect(screen.getByText("Close this organization")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Close organization$/ })).toBeTruthy();
+  });
+
+  it("does not offer the close control on an individual entitlement", () => {
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: individualEntitlement,
+      onDissolveOrganization: vi.fn(),
+    })} />);
+
+    expect(screen.queryByText("Close this organization")).toBeNull();
+  });
+
+  it("keeps the confirmation disabled until the organization name is typed exactly", () => {
+    const onDissolveOrganization = vi.fn();
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onDissolveOrganization,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
+    const confirm = screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement;
+    // This is the only thing standing between one stray click and an
+    // immediately cancelled subscription for everyone in the organization.
+    expect(confirm.disabled).toBe(true);
+
+    const field = screen.getByLabelText("Organization name");
+    fireEvent.change(field, { target: { value: "Acm" } });
+    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(field, { target: { value: "acme" } });
+    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(field, { target: { value: "Acme" } });
+    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect(onDissolveOrganization).not.toHaveBeenCalled();
+  });
+
+  it("dissolves once confirmed and refreshes the entitlement", async () => {
+    const onDissolveOrganization = vi.fn().mockResolvedValue({ outcome: "dissolved" });
+    const onRefreshCloudStatus = vi.fn().mockResolvedValue(undefined);
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onDissolveOrganization,
+      onRefreshCloudStatus,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
+    fireEvent.change(screen.getByLabelText("Organization name"), { target: { value: "Acme" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, close it$/ }));
+    });
+
+    expect(onDissolveOrganization).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onRefreshCloudStatus).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("cancels without dissolving and forgets the typed name", () => {
+    const onDissolveOrganization = vi.fn();
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onDissolveOrganization,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
+    fireEvent.change(screen.getByLabelText("Organization name"), { target: { value: "Acme" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Keep the organization$/ }));
+    expect(onDissolveOrganization).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
+    expect((screen.getByLabelText("Organization name") as HTMLInputElement).value).toBe("");
+    expect((screen.getByRole("button", { name: /^Yes, close it$/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("warns that the subscription may already be cancelled when the reply does not settle", async () => {
+    const onDissolveOrganization = vi.fn().mockResolvedValue({ outcome: "pending", error: "not settled" });
+    render(<AccountSettingsSection {...accountProps({
+      billingEntitlement: organizationEntitlement("owner"),
+      onDissolveOrganization,
+    })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close organization$/ }));
+    fireEvent.change(screen.getByLabelText("Organization name"), { target: { value: "Acme" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Yes, close it$/ }));
+    });
+
+    expect(screen.getByRole("alert").textContent).toMatch(/may already be cancelled/);
+  });
+});

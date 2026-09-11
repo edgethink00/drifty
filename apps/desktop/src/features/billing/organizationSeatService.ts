@@ -13,6 +13,19 @@ export type OrganizationSeatReleaseResult =
   | { readonly outcome: "refused"; readonly error: string }
   | { readonly outcome: "unavailable"; readonly error: string };
 
+/**
+ * Dissolving is the owner-side off-ramp, and the owner has no other one:
+ * account deletion is refused while the account still owns an Enterprise
+ * organization. It cancels the subscription immediately and removes every
+ * member, so an unconfirmed reply must never be shown as a completed
+ * dissolution.
+ */
+export type OrganizationDissolveResult =
+  | { readonly outcome: "dissolved" }
+  | { readonly outcome: "pending"; readonly error: string }
+  | { readonly outcome: "refused"; readonly error: string }
+  | { readonly outcome: "unavailable"; readonly error: string };
+
 type SeatFunctionInvokeOptions = {
   readonly body?: unknown;
   readonly timeout?: number;
@@ -39,6 +52,56 @@ export const ORGANIZATION_SEAT_RELEASE_TIMEOUT_MS = 30_000;
 const UNAVAILABLE_ERROR = "Organization seat release is unavailable because Supabase is not configured.";
 const PENDING_ERROR = "Seat release did not confirm. Refresh your plan before trying again.";
 const GENERIC_ERROR = "Unable to release the organization seat.";
+const DISSOLVE_UNAVAILABLE_ERROR = "Organization dissolution is unavailable because Supabase is not configured.";
+const DISSOLVE_PENDING_ERROR = "Dissolution did not confirm. Refresh your plan before trying again.";
+const DISSOLVE_GENERIC_ERROR = "Unable to dissolve the organization.";
+
+export async function dissolveOwnOrganization(
+  client: OrganizationSeatClient = supabase,
+): Promise<OrganizationDissolveResult> {
+  if (!client) return { outcome: "unavailable", error: DISSOLVE_UNAVAILABLE_ERROR };
+
+  try {
+    const { data, error } = await client.functions.invoke<SeatReleaseResponse>("manage-enterprise-seats", {
+      timeout: ORGANIZATION_SEAT_RELEASE_TIMEOUT_MS,
+      body: { action: "dissolve-organization" },
+    });
+    if (error) return await classifyDissolveFailure(error);
+    if (isRecord(data) && readNonEmptyString(data.error)) {
+      return { outcome: "refused", error: readNonEmptyString(data.error) ?? DISSOLVE_GENERIC_ERROR };
+    }
+    // The server answers a repeat of a completed dissolution with the same
+    // success envelope, so a retry after a lost reply reads as done rather
+    // than as a new failure.
+    if (!isRecord(data) || data.ok !== true || data.action !== "dissolve-organization") {
+      return { outcome: "pending", error: DISSOLVE_PENDING_ERROR };
+    }
+    return { outcome: "dissolved" };
+  } catch (error) {
+    return {
+      outcome: "unavailable",
+      error: error instanceof Error && error.message ? error.message : DISSOLVE_GENERIC_ERROR,
+    };
+  }
+}
+
+async function classifyDissolveFailure(error: unknown): Promise<OrganizationDissolveResult> {
+  const status = readResponseStatus(error);
+  const body = await readFunctionErrorBody(error);
+  const message = readNonEmptyString(isRecord(body) ? body.error : null);
+
+  // 502 is the server saying the provider call or the local cleanup did not
+  // settle. An unknown status is treated the same way, because the one thing
+  // this must never do is claim the subscription is untouched when it may
+  // already be cancelled.
+  if (status === null || status === 502 || status === 504) {
+    return { outcome: "pending", error: message ?? DISSOLVE_PENDING_ERROR };
+  }
+  if (status >= 400 && status < 500) {
+    return { outcome: "refused", error: message ?? DISSOLVE_GENERIC_ERROR };
+  }
+  return { outcome: "unavailable", error: message ?? DISSOLVE_GENERIC_ERROR };
+}
 
 export async function releaseOwnOrganizationSeat(
   seatId: string,

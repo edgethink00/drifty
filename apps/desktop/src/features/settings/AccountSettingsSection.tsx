@@ -5,7 +5,9 @@ import { Toggle } from "../../components/Toggle";
 import { IndividualPlanCards, type BillingPlanId } from "../billing/IndividualPlanCards";
 import { formatOrganizationSeatAccessCopy } from "../billing/billingAccessCopy";
 import {
+  dissolveOwnOrganization,
   releaseOwnOrganizationSeat,
+  type OrganizationDissolveResult,
   type OrganizationSeatReleaseResult,
 } from "../billing/organizationSeatService";
 import { resolveOrganizationSeatDisplay, resolvePlanCardState, type OrganizationSeatDisplay } from "../billing/planCardState";
@@ -67,6 +69,7 @@ export type AccountSettingsSectionProps = {
   readonly onRefreshCloudStatus: () => void | Promise<unknown>;
   readonly onRedeemTrialCoupon: (code: string) => void | Promise<void>;
   readonly onReleaseOrganizationSeat?: (seatId: string) => Promise<OrganizationSeatReleaseResult>;
+  readonly onDissolveOrganization?: () => Promise<OrganizationDissolveResult>;
   readonly onRevokeCloudDevice: (deviceId: string) => void | Promise<void>;
   readonly onSignIn: () => void;
   readonly onStartCloudSetup: (billingInterval: BillingInterval) => void | Promise<void>;
@@ -113,6 +116,7 @@ export function AccountSettingsSection({
   onRefreshCloudStatus,
   onRedeemTrialCoupon,
   onReleaseOrganizationSeat = releaseOwnOrganizationSeat,
+  onDissolveOrganization = dissolveOwnOrganization,
   onRevokeCloudDevice,
   onSignIn,
   onStartCloudSetup,
@@ -129,6 +133,11 @@ export function AccountSettingsSection({
   const [seatReleaseConfirming, setSeatReleaseConfirming] = useState(false);
   const [seatReleaseWorking, setSeatReleaseWorking] = useState(false);
   const [seatReleaseNotice, setSeatReleaseNotice] = useState<"pending" | "refused" | "failed" | null>(null);
+  const dissolveInFlight = useRef(false);
+  const [dissolveConfirming, setDissolveConfirming] = useState(false);
+  const [dissolveWorking, setDissolveWorking] = useState(false);
+  const [dissolveNameInput, setDissolveNameInput] = useState("");
+  const [dissolveNotice, setDissolveNotice] = useState<"pending" | "refused" | "failed" | null>(null);
   const planActionBusy = localActionPending || billingCheckoutLoadingInterval !== null || billingPortalLoading;
   const runBillingAction = async (action: () => void | Promise<void>) => {
     if (actionInFlight.current || planActionBusy || billingPlansDisabled) return;
@@ -175,6 +184,29 @@ export function AccountSettingsSection({
     } finally {
       seatReleaseInFlight.current = false;
       setSeatReleaseWorking(false);
+    }
+  };
+  const dissolveOrganization = async () => {
+    if (dissolveInFlight.current) return;
+    dissolveInFlight.current = true;
+    setDissolveWorking(true);
+    setDissolveNotice(null);
+    try {
+      const result = await onDissolveOrganization();
+      if (result.outcome === "dissolved") {
+        setDissolveConfirming(false);
+        setDissolveNameInput("");
+        // The organization surface is derived from the entitlement, so it only
+        // disappears once the refreshed entitlement agrees it is gone.
+        await onRefreshCloudStatus();
+        return;
+      }
+      setDissolveNotice(result.outcome === "pending" ? "pending" : result.outcome === "refused" ? "refused" : "failed");
+    } catch {
+      setDissolveNotice("failed");
+    } finally {
+      dissolveInFlight.current = false;
+      setDissolveWorking(false);
     }
   };
   const isDeviceLimitLocked = billingEntitlementStatus === "locked" && billingEntitlementLockedReason === "device_limit_reached";
@@ -332,6 +364,61 @@ export function AccountSettingsSection({
               : seatReleaseNotice === "refused"
                 ? "settings.account.releaseSeatRefused"
                 : "settings.account.releaseSeatFailed")}
+          </p>
+        ) : null}
+        {organizationSeat && organizationSeat.role === "owner" ? (
+          <div className="settings-row account-organization-dissolve">
+            <div>
+              <div className="lbl">{t("settings.account.dissolveTitle")}</div>
+              <div className="desc">
+                {t(dissolveConfirming
+                  ? "settings.account.dissolveConfirmDescription"
+                  : "settings.account.dissolveDescription")}
+              </div>
+              {dissolveConfirming ? (
+                <input
+                  className="settings-input"
+                  type="text"
+                  value={dissolveNameInput}
+                  disabled={dissolveWorking}
+                  onChange={(event) => setDissolveNameInput(event.target.value)}
+                  placeholder={t("settings.account.dissolveNamePlaceholder")}
+                  aria-label={t("settings.account.dissolveNamePlaceholder")}
+                />
+              ) : null}
+            </div>
+            <div className="ctrl account-plan-summary__actions">
+              {dissolveConfirming ? (
+                <>
+                  <button type="button" className="settings-btn danger"
+                    disabled={dissolveWorking || dissolveNameInput.trim() !== organizationSeat.organizationName.trim()}
+                    aria-busy={dissolveWorking}
+                    onClick={() => void dissolveOrganization()}>
+                    {dissolveWorking
+                      ? t("settings.account.dissolveWorking")
+                      : t("settings.account.dissolveConfirm")}
+                  </button>
+                  <button type="button" className="settings-btn" disabled={dissolveWorking}
+                    onClick={() => { setDissolveConfirming(false); setDissolveNameInput(""); setDissolveNotice(null); }}>
+                    {t("settings.account.dissolveCancel")}
+                  </button>
+                </>
+              ) : (
+                <button type="button" className="settings-btn"
+                  onClick={() => { setDissolveConfirming(true); setDissolveNotice(null); }}>
+                  {t("settings.account.dissolve")}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : null}
+        {dissolveNotice ? (
+          <p className="account-plan-notice__error" role="alert">
+            {t(dissolveNotice === "pending"
+              ? "settings.account.dissolvePending"
+              : dissolveNotice === "refused"
+                ? "settings.account.dissolveRefused"
+                : "settings.account.dissolveFailed")}
           </p>
         ) : null}
       </div>
