@@ -46,6 +46,8 @@ type UseUpdateControllerResult = {
   readonly updateLifecycleStatus: UpdateLifecycleStatus;
   readonly updaterChecking: boolean;
   readonly updaterDownloading: boolean;
+  /** 0..1 of the update payload transferred, or null when the size is unknown. */
+  readonly updaterDownloadProgress: number | null;
   readonly updaterError: string | null;
   readonly updaterInstalling: boolean;
   readonly updaterMessage: string | null;
@@ -81,6 +83,7 @@ export function useUpdateController({
   const [backgroundUpdatesEnabled, setBackgroundUpdatesEnabled] = useState(resolveInitialBackgroundUpdatesEnabled);
   const [updaterChecking, setUpdaterChecking] = useState(false);
   const [updaterDownloading, setUpdaterDownloading] = useState(false);
+  const [updaterDownloadProgress, setUpdaterDownloadProgress] = useState<number | null>(null);
   const [updaterInstalling, setUpdaterInstalling] = useState(false);
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
@@ -128,11 +131,34 @@ export function useUpdateController({
     updaterOperatingRef.current = true;
     setUpdaterInstalling(true);
     setUpdaterError(null);
+    setUpdaterDownloadProgress(null);
 
     try {
       const updateToInstall = await resolveUpdate();
       if (!updateToInstall) return;
-      await updateToInstall.downloadAndInstall();
+      // The updater already reports its transfer; ignoring it left the app
+      // sitting on a disabled "Preparing" button for the whole download, which
+      // is the moment people are most worried about an app that restarts itself.
+      let contentLength = 0;
+      let downloadedBytes = 0;
+      await updateToInstall.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          contentLength = event.data.contentLength ?? 0;
+          downloadedBytes = 0;
+          // A source without a content length gets no invented percentage.
+          setUpdaterDownloadProgress(contentLength > 0 ? 0 : null);
+          return;
+        }
+        if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+          if (contentLength > 0) {
+            setUpdaterDownloadProgress(Math.min(1, downloadedBytes / contentLength));
+          }
+          return;
+        }
+        // "Finished" covers the transfer only; installing continues after it.
+        if (contentLength > 0) setUpdaterDownloadProgress(1);
+      });
       markPostUpdateRelaunchFocusPending();
       await invoke<void>("app_restart_after_update");
     } catch (nextError) {
@@ -142,6 +168,7 @@ export function useUpdateController({
       releaseOperation();
       updaterOperatingRef.current = false;
       setUpdaterInstalling(false);
+      setUpdaterDownloadProgress(null);
     }
   }, []);
 
@@ -405,6 +432,7 @@ export function useUpdateController({
     updateLifecycleStatus,
     updaterChecking,
     updaterDownloading,
+    updaterDownloadProgress,
     updaterError,
     updaterInstalling,
     updaterMessage,

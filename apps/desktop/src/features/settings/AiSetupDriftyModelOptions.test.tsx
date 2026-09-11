@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { useLocalization } from "../localization/LocalizationContext";
 import { driftyModelOptions } from "./AiSetupDriftyModelOptions";
 import { MANAGED_LOCAL_AI_FALLBACK_CATALOG } from "./managedLocalAiCatalog";
+import { managedModelResourceDescription } from "./managedModelPresentation";
 import { SettingsSelect } from "./SettingsSelect";
 import { ENGLISH_TRANSLATIONS } from "../localization/translations";
 import type { ManagedLocalAiStatus } from "./managedLocalAiClient";
@@ -60,6 +61,34 @@ describe("managed model requirements in settings", () => {
     expect(installedOption.contains(installedLabel)).toBe(true);
     expect(installedOption.getAttribute("aria-describedby")?.split(" ")).toContain(installedLabel.id);
     expect(installedLabel.closest(".settings-select-control__option-actions")).toBeNull();
+  });
+
+  it("replaces the downloading row's static size blurb with live transfer progress", () => {
+    const t = (key: keyof typeof ENGLISH_TRANSLATIONS) => ENGLISH_TRANSLATIONS[key];
+    const base = {
+      catalog: MANAGED_LOCAL_AI_FALLBACK_CATALOG,
+      actionModelId: null,
+      cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: "Upgrade",
+      cloudSelectable: false, canManageBilling: false,
+      onInstallModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
+      onDeleteModel: vi.fn(), onRevealArtifact: vi.fn(),
+      t,
+    };
+    const model = MANAGED_LOCAL_AI_FALLBACK_CATALOG[0];
+    const status: ManagedLocalAiStatus = {
+      state: "installing", selectedModelId: model.id, installedModels: [],
+      baseUrl: null, model: null, message: "", artifactDir: null,
+      progress: { percent: 44, downloadedBytes: 1_200_000_000, totalBytes: 2_740_937_888 },
+      errorKind: null, memoryUsageBytes: null,
+    };
+
+    expect(driftyModelOptions({ ...base, status, downloadRemainingLabel: "about 3 min left" })[1].description)
+      .toBe("1.2/2.7 GB · about 3 min left");
+    // Without a trustworthy estimate the row still reports what has arrived.
+    expect(driftyModelOptions({ ...base, status })[1].description).toBe("1.2/2.7 GB");
+    // An idle row keeps the memory-and-size guidance that helps someone choose.
+    expect(driftyModelOptions({ ...base, status: null })[1].description)
+      .toBe(managedModelResourceDescription(model, t));
   });
   it("exposes requirements and prevents unsupported downloads while allowing a fitting model", () => {
     const install = vi.fn();

@@ -100,8 +100,13 @@ export type UseFirstDayPreparationOptions = {
   readonly startOfDayMinutes: number;
   readonly selectedDayRef: MutableRefObject<string>;
   readonly clearLocalActivityCaches: () => void;
-  /** Ends the gate and reveals the dashboard (e.g. `setPreparingFirstDay(false)`). */
-  readonly onReveal: () => void;
+  /**
+   * Ends the gate and reveals the dashboard (e.g. `setPreparingFirstDay(false)`).
+   * `complete` means the day was actually prepared and has earned a closing beat;
+   * `continue` means the user chose to move on from a paused run, where a
+   * congratulatory finish would be a lie.
+   */
+  readonly onReveal: (outcome: "complete" | "continue") => void;
   readonly refresh: RefreshDashboard;
   readonly selectDay: (day: string, options?: { readonly userSelected?: boolean }) => void;
   readonly setPhase: (phase: FirstDayPreparationPhase) => void;
@@ -177,7 +182,7 @@ export function useFirstDayPreparation({
 
   const continueAnyway = useCallback(() => {
     setFailure(null);
-    onReveal();
+    onReveal("continue");
   }, [onReveal]);
 
   useEffect(() => {
@@ -227,7 +232,7 @@ export function useFirstDayPreparation({
       settled = true;
       revealed = true;
       setFailure(null);
-      onReveal();
+      onReveal("complete");
       captureOutcome("success");
     };
     const fail = (reason: FirstDayPreparationFailureReason, detail?: unknown) => {

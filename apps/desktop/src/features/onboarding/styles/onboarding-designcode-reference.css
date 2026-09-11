@@ -1401,6 +1401,64 @@
   animation: dcOnbSpin 0.8s linear infinite;
 }
 
+/* ---- Managed model download ---- */
+.dc-onb-download {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: -4px 0 4px;
+}
+
+.dc-onb-download__track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dc-onb-line);
+  overflow: hidden;
+}
+
+.dc-onb-download__fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f7b267, #f4845f 45%, #b18cff 100%);
+  transition: width 480ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* A download that has not reported a byte yet: the source may still be
+   resolving, so the bar moves without claiming a position. */
+.dc-onb-download__fill--indeterminate {
+  width: 34%;
+  transition: none;
+  animation: dcOnbDownloadSlide 1.4s ease-in-out infinite;
+}
+
+.dc-onb-download__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--dc-onb-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.dc-onb-download__meta > span + span::before {
+  content: "·";
+  margin-right: 8px;
+  opacity: 0.55;
+}
+
+.dc-onb-download__percent {
+  font-weight: 600;
+  color: var(--dc-onb-text);
+}
+
+@keyframes dcOnbDownloadSlide {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
 .dc-onb-local-card {
   display: flex;
   align-items: center;
@@ -2081,6 +2139,10 @@
   .dc-onb-dot::before {
     animation: none;
     transition: none;
+  }
+
+  .dc-onb-download__fill--indeterminate {
+    animation-duration: 2.8s;
   }
 }
 

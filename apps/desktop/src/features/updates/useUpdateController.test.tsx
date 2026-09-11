@@ -11,6 +11,10 @@ vi.mock("./updatePolicy", async (importOriginal) => {
 import { acquireUpdateOperation, pauseUpdatesForVersionTest, resumeUpdatesAfterVersionTest } from "./versionSwitchState";
 import { useUpdateController } from "./useUpdateController";
 import { POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY, fetchUpdatePolicy, fallbackUpdatePolicy } from "./updatePolicy";
+type DownloadEvent =
+  | { readonly event: "Started"; readonly data: { readonly contentLength?: number } }
+  | { readonly event: "Progress"; readonly data: { readonly chunkLength: number } }
+  | { readonly event: "Finished" };
 function update(version = "1.10.9") {
   return { version, body: null, close: vi.fn().mockResolvedValue(undefined), download: vi.fn().mockResolvedValue(undefined), install: vi.fn().mockResolvedValue(undefined), downloadAndInstall: vi.fn().mockResolvedValue(undefined) };
 }
@@ -91,6 +95,56 @@ describe("manual and automatic update interaction", () => {
     expect(result.current.updaterError).toContain("signature mismatch");
     expect(invokeMock).not.toHaveBeenCalled();
     expect(localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBeNull();
+  });
+  it("reports the update transfer instead of leaving a blank Preparing button", async () => {
+    let emit: ((event: DownloadEvent) => void) | undefined;
+    let finishTransfer!: () => void;
+    const release = update();
+    release.downloadAndInstall = vi.fn((onEvent?: (event: DownloadEvent) => void) => new Promise<void>((resolve) => {
+      emit = onEvent;
+      finishTransfer = () => resolve();
+    }));
+    checkMock.mockResolvedValue(release);
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: false }));
+    await act(async () => { await result.current.handleCheckForUpdates(); });
+
+    let installed!: Promise<unknown>;
+    act(() => { installed = result.current.handleInstallUpdate(); });
+    await waitFor(() => expect(release.downloadAndInstall).toHaveBeenCalledTimes(1));
+
+    act(() => emit?.({ event: "Started", data: { contentLength: 1_000 } }));
+    expect(result.current.updaterDownloadProgress).toBe(0);
+    act(() => emit?.({ event: "Progress", data: { chunkLength: 400 } }));
+    expect(result.current.updaterDownloadProgress).toBeCloseTo(0.4, 5);
+    act(() => emit?.({ event: "Progress", data: { chunkLength: 400 } }));
+    expect(result.current.updaterDownloadProgress).toBeCloseTo(0.8, 5);
+    act(() => emit?.({ event: "Finished" }));
+    expect(result.current.updaterDownloadProgress).toBe(1);
+
+    await act(async () => { finishTransfer(); await installed; });
+    expect(result.current.updaterDownloadProgress).toBeNull();
+  });
+  it("invents no percentage when the update source reports no size", async () => {
+    let emit: ((event: DownloadEvent) => void) | undefined;
+    let finishTransfer!: () => void;
+    const release = update();
+    release.downloadAndInstall = vi.fn((onEvent?: (event: DownloadEvent) => void) => new Promise<void>((resolve) => {
+      emit = onEvent;
+      finishTransfer = () => resolve();
+    }));
+    checkMock.mockResolvedValue(release);
+    const { result } = renderHook(() => useUpdateController({ backgroundPreparationSupported: false }));
+    await act(async () => { await result.current.handleCheckForUpdates(); });
+
+    let installed!: Promise<unknown>;
+    act(() => { installed = result.current.handleInstallUpdate(); });
+    await waitFor(() => expect(release.downloadAndInstall).toHaveBeenCalledTimes(1));
+
+    act(() => emit?.({ event: "Started", data: {} }));
+    act(() => emit?.({ event: "Progress", data: { chunkLength: 400 } }));
+    expect(result.current.updaterDownloadProgress).toBeNull();
+
+    await act(async () => { finishTransfer(); await installed; });
   });
   it("releases the native resource after unmount", async () => {
     const release = update(); checkMock.mockResolvedValue(release);

@@ -1,6 +1,7 @@
 import type { SettingsSelectOption, SettingsSelectRowAction } from "./SettingsSelect";
 import type { ManagedLocalAiModel, ManagedLocalAiStatus } from "./managedLocalAiClient";
 import { isRetryableManagedModelError } from "./managedLocalAiLabels";
+import { managedLocalAiProgressText } from "./managedLocalAiProgressText";
 import type { LocalizationController } from "../localization/LocalizationContext";
 import { managedModelChoiceTitle, managedModelResourceDescription } from "./managedModelPresentation";
 
@@ -27,6 +28,12 @@ export type DriftyModelOptionsParams = {
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onDeleteModel: (modelId: string) => void | Promise<void>;
   readonly onRevealArtifact: (artifactDir: string) => void | Promise<void>;
+  /**
+   * Coarse remaining-time copy for the model currently downloading, when the
+   * transfer rate is measurable. Resolved by the caller because the estimate
+   * needs a hook and this builder is pure.
+   */
+  readonly downloadRemainingLabel?: string | null;
   readonly t: LocalizationController["t"];
 };
 
@@ -50,6 +57,7 @@ export function driftyModelOptions({
   onManageCloudBilling,
   onDeleteModel,
   onRevealArtifact,
+  downloadRemainingLabel = null,
   t,
 }: DriftyModelOptionsParams): readonly SettingsSelectOption<string>[] {
   const cloudActionAriaLabel = cloudSubscribeActionLabel === null
@@ -138,10 +146,16 @@ export function driftyModelOptions({
       const installing = status?.selectedModelId === model.id && status.state === "installing";
       const failed = status?.selectedModelId === model.id && status.state === "error" && isRetryableManagedModelError(status.errorKind);
       const busy = actionModelId === model.id || installing;
+      // While the transfer runs, the row's static memory-and-size blurb is the
+      // least useful thing it could say. Spend the line on live progress.
+      const downloadingDescription = installing
+        ? [managedLocalAiProgressText(status?.progress ?? null), downloadRemainingLabel].filter(Boolean).join(" · ")
+        : "";
       return {
         value: model.id,
         label: model.label,
         ...presentation,
+        ...(downloadingDescription ? { description: downloadingDescription } : {}),
         disabled: true,
         actionLabel: localizedDownloadButtonLabel(busy, failed, status?.progress?.percent ?? null, t),
         actionAriaLabel: t("settings.ai.downloadManagedModelAria", { model: model.label }),

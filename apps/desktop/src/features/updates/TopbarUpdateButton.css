@@ -21,7 +21,7 @@
     opacity var(--transition-fast);
 }
 
-.topbar-update-button:hover:not(:disabled) {
+.topbar-update-button:hover:not([aria-disabled="true"]) {
   background: color-mix(in srgb, var(--accent-soft) 82%, transparent);
   border-color: color-mix(in srgb, var(--accent) 42%, transparent);
   color: var(--window-chrome-icon-hover);
@@ -33,13 +33,68 @@
   outline-offset: 2px;
 }
 
-.topbar-update-button:disabled {
+.topbar-update-button[aria-disabled="true"] {
   cursor: default;
   opacity: 0.68;
+}
+
+/* A transfer that reports its size fills the pill itself, so the chrome gains a
+   progress bar without gaining a row — or a single pixel of width. */
+.topbar-update-button--progress {
+  position: relative;
+  overflow: hidden;
+}
+
+.topbar-update-button--progress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--topbar-update-progress, 0%);
+  background: color-mix(in srgb, var(--accent) 34%, transparent);
+  transition: width 320ms cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.topbar-update-button--progress > * {
+  position: relative;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar-update-button--progress::before {
+    transition: none;
+  }
 }
 
 .topbar-update-button svg {
   flex: 0 0 auto;
   height: 14px;
   width: 14px;
+}
+
+/* The label layers share one grid cell, so the pill is always as wide as the
+   widest thing it can say and the counting percentage never resizes it. */
+.topbar-update-button__label {
+  display: grid;
+  justify-items: center;
+  /* Both layers must share the numeric metrics, or the hidden reserve measures a
+     narrower "100%" than the one actually rendered and under-reserves the pill. */
+  font-variant-numeric: tabular-nums;
+}
+
+.topbar-update-button__label > * {
+  grid-area: 1 / 1;
+}
+
+.topbar-update-button__label-reserve {
+  display: grid;
+  visibility: hidden;
+}
+
+.topbar-update-button__label-reserve > span {
+  grid-area: 1 / 1;
+  white-space: nowrap;
+}
+
+.topbar-update-button__label-text {
+  white-space: nowrap;
 }

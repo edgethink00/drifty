@@ -5,6 +5,7 @@ import { isManagedLocalReady } from "../../onboardingManagedLocalStatus";
 import { useLocalModelSetupAnalytics } from "../../useLocalModelSetupAnalytics";
 import type { SetupChoice } from "../../onboardingFlow";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
+import { ManagedModelDownloadProgress } from "./ManagedModelDownloadProgress";
 import { SpinnerIcon, SuccessIcon } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
 import { localizedManagedModelDetail, localizedManagedModelFitDetail, localizedManagedModelTier } from "../../../localization/managedModelTranslations";
@@ -50,6 +51,7 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
         {statusBusy ? <SpinnerIcon /> : statusReady ? <SuccessIcon /> : null}
         {statusMessage}
       </div> : null}
+      <ManagedModelDownloadProgress status={status} />
       <div className="dc-onb-local__cards">
         {flow.managedLocalAi.catalog.map((model) => (
           <LocalModelCard
@@ -91,7 +93,6 @@ function LocalModelCard({
   const actionLabel = localModelActionLabel({
     failed: failedThisModel,
     installing: installingThisModel,
-    progress: installingThisModel ? status?.progress ?? null : null,
     ready,
     t,
   });
@@ -144,8 +145,9 @@ function LocalModelCard({
 }
 
 function localModelStatusMessage(loading: boolean, status: ManagedLocalAiStatus | null, t: LocalizationController["t"]): string {
-  const progressText = managedLocalAiProgressText(status?.progress ?? null);
-  if (status?.progress && progressText) return `${t("onboarding.connection.downloadingPercent", { percent: status.progress.percent.toFixed(0) })} · ${progressText}`;
+  // Numbers live on the progress bar now, so the status line stays a sentence —
+  // and a localized one, which the backend's own message is not.
+  if (status?.state === "installing") return t("onboarding.connection.downloading");
   if (status) return status.message;
   return loading ? t("onboarding.connection.looking") : t("onboarding.connection.chooseModel");
 }
@@ -158,19 +160,20 @@ function localModelIsReady(modelId: string, status: ManagedLocalAiStatus | null)
 function localModelActionLabel({
   failed,
   installing,
-  progress,
   ready,
   t,
 }: {
   readonly failed: boolean;
   readonly installing: boolean;
-  readonly progress: ManagedLocalAiStatus["progress"];
   readonly ready: boolean;
   readonly t: LocalizationController["t"];
 }): string {
   if (ready) return t("onboarding.connection.ready");
   if (failed) return t("onboarding.connection.retry");
-  if (installing) return progress === null ? t("onboarding.connection.downloading") : t("onboarding.connection.downloadingPercent", { percent: progress.percent.toFixed(0) });
+  // The button says which model is being fetched; the progress bar above owns
+  // the number. Repeating the percentage in both made the card argue with
+  // itself over the same value.
+  if (installing) return t("onboarding.connection.downloading");
   return t("onboarding.connection.download");
 }
 

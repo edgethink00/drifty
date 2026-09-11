@@ -10,7 +10,9 @@ import {
   MANAGED_LOCAL_AI_FALLBACK_CATALOG,
   type ManagedLocalAiStatus,
 } from "../settings/managedLocalAiClient";
-import { managedLocalAiProgressText } from "../settings/managedLocalAiProgressText";
+import { managedLocalAiProgressText, managedLocalAiProgressValue } from "../settings/managedLocalAiProgressText";
+import { remainingLabelText } from "../loading/remainingEstimateCopy";
+import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 import type { LocalAiProvider } from "../settings/localAiSetup";
 
 import "./SidebarCtaSlot.css";
@@ -57,6 +59,8 @@ type SidebarCtaDownloadState = {
   readonly kind: "download";
   readonly modelLabel: string | null;
   readonly progressPercent: number;
+  /** 0..1 completion from bytes, for the remaining-time read. */
+  readonly progressValue: number | null;
   readonly progressText: string;
   readonly titleKey: TranslationKey;
   readonly tone: "download";
@@ -352,6 +356,7 @@ function managedLocalDownloadState(status: ManagedLocalAiStatus | null): Sidebar
     kind: "download",
     modelLabel: model?.label ?? null,
     progressPercent,
+    progressValue: managedLocalAiProgressValue(status.progress),
     progressText: managedLocalAiProgressText(status.progress) ?? (fallbackTotal ? `0.0/${fallbackTotal}` : "0%"),
     titleKey: "sidebar.cta.download.title",
     tone: "download",
@@ -481,6 +486,14 @@ export function SidebarCtaSlot({
   readonly state: SidebarCtaSlotState;
 }) {
   const { effectiveLanguage, t } = useLocalization();
+  // Held above the branch because hooks cannot follow the slot's kind. The
+  // download is the app's longest wait, and the sidebar is the one place it
+  // stays visible no matter where it was started.
+  const downloadRemaining = useRemainingEstimate({
+    enabled: state.kind === "download",
+    resetKey: state.kind === "download" ? state.modelLabel ?? "download" : "idle",
+    value: state.kind === "download" ? state.progressValue : null,
+  });
   const offerRef = useProFunnelExposure<HTMLButtonElement>(funnelEnabled,
     state.kind === "upgrade" || state.kind === "trial" || state.kind === "trial-ended"
       ? { step: "pro_offer_viewed", offer_surface: "sidebar",
@@ -491,7 +504,13 @@ export function SidebarCtaSlot({
   if (state.kind === "download") {
     const title = t(state.titleKey);
     const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");
-    const detail = state.downloadSizeLabel ? `${modelLabel} · ${state.downloadSizeLabel}` : modelLabel;
+    // The meta row below already reports the transferred size against the total,
+    // so this line spends its second slot on the one thing nothing else says:
+    // how much longer. The static size stays as the fallback until the transfer
+    // rate is measurable.
+    const remainingCopy = remainingLabelText(downloadRemaining, t);
+    const detailSuffix = remainingCopy ?? state.downloadSizeLabel;
+    const detail = detailSuffix ? `${modelLabel} · ${detailSuffix}` : modelLabel;
     const style = { "--sidebar-download-progress": `${state.progressPercent}%` } as CSSProperties;
     return (
       <div className="sidebar-cta-slot-wrap">

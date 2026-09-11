@@ -8,6 +8,19 @@ export function managedLocalAiProgressText(progress: ManagedLocalAiStatus["progr
   return `${formatGigabyteValue(progress.downloadedBytes)}/${formatGigabytes(progress.totalBytes)}`;
 }
 
+/**
+ * 0..1 completion for a remaining-time estimate. Bytes are the honest measure;
+ * the reported percentage is the fallback for a source that never sent a
+ * content length.
+ */
+export function managedLocalAiProgressValue(progress: ManagedLocalAiStatus["progress"]): number | null {
+  if (progress === null) return null;
+  const value = progress.totalBytes > 0
+    ? progress.downloadedBytes / progress.totalBytes
+    : progress.percent / 100;
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : null;
+}
+
 function formatGigabytes(bytes: number): string {
   return `${formatGigabyteValue(bytes)} GB`;
 }

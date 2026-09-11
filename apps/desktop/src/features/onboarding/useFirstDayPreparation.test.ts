@@ -721,6 +721,8 @@ describe("useFirstDayPreparation", () => {
       await flushAsync(30);
     });
     expect(options.onReveal).toHaveBeenCalledTimes(1);
+    // A finished run has earned its closing beat.
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
 
     const secondOptions = makeOptions({ canUseCloudAiClassificationRef: { current: false } });
     const second = renderHook(() => useFirstDayPreparation(secondOptions));
@@ -731,6 +733,8 @@ describe("useFirstDayPreparation", () => {
     });
     act(() => second.result.current.continueAnyway());
     expect(secondOptions.onReveal).toHaveBeenCalledTimes(1);
+    // Moving on from a paused run has not; it must not be dressed up as success.
+    expect(secondOptions.onReveal).toHaveBeenCalledWith("continue");
   });
 
   it("runs once per arm: a second preparingFirstDay=true is ignored until rearm()", async () => {

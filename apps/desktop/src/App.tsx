@@ -155,7 +155,8 @@ import {
   readUserOnboardingState,
   type UserOnboardingState,
 } from "./features/onboarding/OnboardingModal";
-import { FirstDayPreparationScreen, type FirstDayPreparationPhase } from "./features/onboarding/FirstDayPreparationScreen";
+import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
+import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
 import { isInitialDailyFocusQuietPeriod, isInstallDayReviewEligible } from "./features/onboarding/initialExperiencePolicy";
 import { useFirstDayPreparation } from "./features/onboarding/useFirstDayPreparation";
 import { PostOnboardingSidebarGuide } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
@@ -654,6 +655,7 @@ export default function App() {
     updateLifecycleStatus,
     updaterChecking,
     updaterDownloading,
+    updaterDownloadProgress,
     updaterError,
     updaterInstalling,
     updaterMessage,
@@ -1362,6 +1364,10 @@ export default function App() {
   const [preparingFirstDay, setPreparingFirstDay] = useState(false);
   const [firstDayPreparationPhase, setFirstDayPreparationPhase] = useState<FirstDayPreparationPhase>("importing");
   const [firstDayPreparationProgress, setFirstDayPreparationProgress] = useState<number | null>(null);
+  // Phases this run expects, so the gate can spend one bar across all of them
+  // instead of restarting it at every handoff.
+  const [firstDayPreparationPlan, setFirstDayPreparationPlan] = useState<FirstDayPreparationPlan>(["classifying"]);
+  const firstDayRevealTimerRef = useRef<number | null>(null);
   // First work activity from the just-finished onboarding, echoed in the gate's loading copy.
   const [firstDayWorkLabel, setFirstDayWorkLabel] = useState<string | null>(null);
   const [historyDeleting, setHistoryDeleting] = useState(false);
@@ -3909,7 +3915,26 @@ export default function App() {
     cloudAiSelected,
     localAiClassificationOptionsRef,
     managedLocalSelected,
-    onReveal: () => setPreparingFirstDay(false),
+    onReveal: (outcome) => {
+      if (firstDayRevealTimerRef.current !== null) {
+        window.clearTimeout(firstDayRevealTimerRef.current);
+        firstDayRevealTimerRef.current = null;
+      }
+      // Moving on from a paused run has nothing to celebrate, so it cuts
+      // straight through.
+      if (outcome !== "complete") {
+        setPreparingFirstDay(false);
+        return;
+      }
+      // Otherwise land the wait: fill the bar, say the day is ready, and only
+      // then hand over to the dashboard.
+      setFirstDayPreparationPhase("ready");
+      setFirstDayPreparationProgress(1);
+      firstDayRevealTimerRef.current = window.setTimeout(() => {
+        firstDayRevealTimerRef.current = null;
+        setPreparingFirstDay(false);
+      }, FIRST_DAY_PREPARATION_READY_HOLD_MS);
+    },
     preparingFirstDay,
     refresh,
     runAiClassification: runFirstDayAiClassification,
@@ -3922,6 +3947,10 @@ export default function App() {
     shouldBlockLocalTrackerAccess,
     startOfDayMinutes,
   });
+
+  useEffect(() => () => {
+    if (firstDayRevealTimerRef.current !== null) window.clearTimeout(firstDayRevealTimerRef.current);
+  }, []);
 
   const loadMoreHistorySegments = useCallback(async (): Promise<void> => {
     if (historyLoadingMore || !historyHasMoreSegments || historyNextCursor === null || historySegmentsLoadedRange === null) return;
@@ -8340,6 +8369,15 @@ export default function App() {
     if (shouldPrepareFirstDay) {
       rearmFirstDayPreparation();
       setFirstDayWorkLabel(state.workType);
+      const preparationPlan: FirstDayPreparationPhase[] = [];
+      if (state.browserHistoryBootstrapEnabled) preparationPlan.push("importing");
+      if (managedLocalSelected || localAiClassificationOptions?.localProvider.provider === "managed_local") {
+        preparationPlan.push("downloading");
+      }
+      if (cloudAiSelected || managedLocalSelected || localAiClassificationOptions) {
+        preparationPlan.push("classifying");
+      }
+      setFirstDayPreparationPlan(preparationPlan.length > 0 ? preparationPlan : ["classifying"]);
       setFirstDayPreparationPhase(state.browserHistoryBootstrapEnabled ? "importing" : "classifying");
       setFirstDayPreparationProgress(null);
       setPreparingFirstDay(true);
@@ -9118,6 +9156,7 @@ export default function App() {
             onContinueAnyway={continueFirstDayPreparationAnyway}
             onRetry={retryFirstDayPreparation}
             phase={firstDayPreparationPhase}
+            plan={firstDayPreparationPlan}
             progress={firstDayPreparationProgress}
             workActivityLabel={firstDayWorkLabel}
           />
@@ -9172,6 +9211,7 @@ export default function App() {
           {titlebarUpdateVersion ? (
             <TopbarUpdateButton
               onInstall={() => void handleInstallUpdate()}
+              progress={updaterDownloadProgress}
               status={updateLifecycleStatus}
               version={titlebarUpdateVersion}
             />

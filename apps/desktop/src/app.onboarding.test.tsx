@@ -1934,13 +1934,17 @@ describe("App onboarding", () => {
     fireEvent.click(within(defaultModel).getByRole("button", { name: /^download$/i }));
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
     expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
-    await waitFor(() => expect(within(defaultModel).getByRole("button", { name: /^downloading 44%$/i })).toBeTruthy(), { timeout: 2_000 });
+    // The card button names the model being fetched; the number lives on the bar.
+    await waitFor(() => expect(within(localDialog).getByRole("progressbar", { name: /downloading/i }).getAttribute("aria-valuenow")).toBe("44"), { timeout: 2_000 });
+    expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
     await waitFor(() => {
       const statusPollCount = invokeMock.mock.calls.filter(([command]) => command === "managed_ai_status").length;
       expect(statusPollCount).toBeGreaterThan(statusPollCountBeforeDownload);
     }, { timeout: 2_000 });
     expect(within(localDialog).getAllByText(/1\.2\/2\.7 GB/i).length).toBeGreaterThan(0);
     expect(within(localDialog).queryByRole("button", { name: /^downloading 42%$/i })).toBeNull();
+    // A multi-gigabyte wait gets a real bar, not just a percentage in a button.
+    expect(within(localDialog).getByRole("progressbar", { name: /downloading/i }).getAttribute("aria-valuenow")).toBe("44");
 
     // A started download no longer blocks onboarding — the first-day gate (and the
     // app-level attach watcher) finish the setup once the model lands.
@@ -2084,8 +2088,9 @@ describe("App onboarding", () => {
       });
     });
 
-    expect(within(defaultModel).getByRole("button", { name: /^downloading 44%$/i })).toBeTruthy();
+    expect(within(defaultModel).getByRole("button", { name: /^downloading\.\.\.$/i })).toBeTruthy();
     expect(within(localDialog).getAllByText(/1\.2\/2\.7 GB/i).length).toBeGreaterThan(0);
+    expect(within(localDialog).getByRole("progressbar", { name: /downloading/i }).getAttribute("aria-valuenow")).toBe("44");
 
     await act(async () => {
       installDeferred.resolve(installManagedModel("drifty-qwen3-5-4b-default"));

@@ -16,6 +16,9 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { localizeAiConnectionTestMessage, localizeAiStatusLabel } from "../localization/aiStatusTranslations";
 import { AiResourceNote } from "./AiResourceNote";
 import { managedModelResourceDescription } from "./managedModelPresentation";
+import { managedLocalAiProgressValue } from "./managedLocalAiProgressText";
+import { remainingLabelText } from "../loading/remainingEstimateCopy";
+import { useRemainingEstimate } from "../loading/useRemainingEstimate";
 
 const CUSTOM_ENDPOINT_MODEL_ID = "custom_endpoint";
 type AiSetupModelBeingUsedProps = {
@@ -100,6 +103,18 @@ export function AiSetupModelBeingUsed({
     label: localizeAiStatusLabel(connectionStatus.label, t),
     providerLabel: localizeAiStatusLabel(connectionStatus.providerLabel, t),
   };
+  // Same estimate and wording the onboarding download and the sidebar use, so a
+  // single transfer never reads differently depending on where you watch it.
+  const downloadRemainingLabel = remainingLabelText(
+    useRemainingEstimate({
+      enabled: managedLocalStatus?.state === "installing",
+      resetKey: managedLocalStatus?.selectedModelId ?? "",
+      value: managedLocalStatus?.state === "installing"
+        ? managedLocalAiProgressValue(managedLocalStatus.progress)
+        : null,
+    }),
+    t,
+  );
   const providerOptions = [
     { value: "drifty", label: "Drifty", icon: aiProviderBrandMark("drifty", { pick: true }) },
     { value: "openrouter", label: "OpenRouter", icon: aiProviderBrandMark("openrouter", { pick: true }), muted: localAiSetup.openRouterApiKey.trim().length === 0 },
@@ -133,6 +148,7 @@ export function AiSetupModelBeingUsed({
           onManageCloudBilling,
           onDeleteModel: requestDeleteModel,
           onRevealArtifact: revealManagedModelArtifact,
+          downloadRemainingLabel,
           t,
         });
       case "openrouter":

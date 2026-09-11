@@ -32,9 +32,28 @@
   88%, 100% { transform: rotate(360deg); }
 }
 
-@keyframes firstDayPrepIndeterminate {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(320%); }
+/* The fill now holds whatever the run has already earned, so an unmeasurable
+   step sweeps a sheen across the track instead of replacing the fill with a
+   floating block that reads as "back to nothing". */
+@keyframes firstDayPrepSheen {
+  0% { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
+}
+
+@keyframes firstDayPrepReadyPop {
+  0% { transform: scale(0.86); }
+  55% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@keyframes firstDayPrepReadyGlow {
+  0% { opacity: 0.3; transform: scale(0.9); }
+  45% { opacity: 1; transform: scale(1.22); }
+  100% { opacity: 0.7; transform: scale(1.06); }
+}
+
+@keyframes firstDayPrepCheckDraw {
+  to { stroke-dashoffset: 0; }
 }
 
 .first-day-prep {
@@ -107,6 +126,26 @@
   animation: none;
 }
 
+/* ---- Completion beat ---- */
+.first-day-prep__mark--ready {
+  animation: firstDayPrepReadyPop 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.first-day-prep__mark--ready .first-day-prep__mark-glow {
+  animation: firstDayPrepReadyGlow 900ms ease-out both;
+}
+
+.first-day-prep__mark--ready .first-day-prep__hourglass {
+  animation: none;
+  transform: none;
+}
+
+.first-day-prep__check {
+  stroke-dasharray: 700;
+  stroke-dashoffset: 700;
+  animation: firstDayPrepCheckDraw 560ms cubic-bezier(0.65, 0, 0.35, 1) 60ms forwards;
+}
+
 /* ---- Copy ---- */
 .first-day-prep__copy {
   display: flex;
@@ -121,6 +160,7 @@
   font-size: 20px;
   font-weight: 600;
   letter-spacing: -0.015em;
+  animation: firstDayPrepLineIn 460ms ease both;
 }
 
 .first-day-prep__line {
@@ -152,10 +192,20 @@
   transition: width 520ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.first-day-prep__progress--indeterminate .first-day-prep__progress-fill {
-  width: 38%;
-  transition: none;
-  animation: firstDayPrepIndeterminate 1.25s ease-in-out infinite;
+.first-day-prep__progress-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 0%, rgba(244, 132, 95, 0.55) 46%, rgba(177, 140, 255, 0.4) 58%, transparent 100%);
+  animation: firstDayPrepSheen 1.9s ease-in-out infinite;
+}
+
+.first-day-prep__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  min-height: 15px;
 }
 
 .first-day-prep__percent {
@@ -164,6 +214,39 @@
   letter-spacing: 0.02em;
   color: #a5a299;
   font-variant-numeric: tabular-nums;
+}
+
+.first-day-prep__remaining {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: #a5a299;
+  font-variant-numeric: tabular-nums;
+  animation: firstDayPrepLineIn 420ms ease both;
+}
+
+.first-day-prep__remaining::before {
+  content: "·";
+  margin-right: 8px;
+  opacity: 0.55;
+}
+
+/* Always laid out, only faded in, so the panel does not jump when the
+   reassurance finally appears. */
+.first-day-prep__note {
+  margin: 0;
+  max-width: min(420px, calc(100vw - 64px));
+  font-size: 12px;
+  line-height: 1.5;
+  text-wrap: balance;
+  color: #99968e;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 620ms ease, transform 620ms ease;
+}
+
+.first-day-prep__note--visible {
+  opacity: 1;
+  transform: none;
 }
 
 .first-day-prep__actions {
@@ -205,12 +288,23 @@
   .first-day-prep__mark,
   .first-day-prep__mark-glow,
   .first-day-prep__panel,
-  .first-day-prep__line {
+  .first-day-prep__line,
+  .first-day-prep__title,
+  .first-day-prep__remaining,
+  .first-day-prep__mark--ready,
+  .first-day-prep__mark--ready .first-day-prep__mark-glow {
     animation: none;
   }
 
-  .first-day-prep__progress--indeterminate .first-day-prep__progress-fill {
-    animation-duration: 2.4s;
+  /* The check is drawn by its dash animation, so it has to be shown outright
+     rather than left at its hidden start frame. */
+  .first-day-prep__check {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  .first-day-prep__progress-sheen {
+    animation-duration: 3.2s;
   }
 }
 :root[data-theme="dark"] .first-day-prep {
@@ -225,6 +319,14 @@
 
 :root[data-theme="dark"] .first-day-prep__percent {
   color: #8f8c82;
+}
+
+:root[data-theme="dark"] .first-day-prep__remaining {
+  color: #8f8c82;
+}
+
+:root[data-theme="dark"] .first-day-prep__note {
+  color: #918e85;
 }
 
 :root[data-theme="dark"] .first-day-prep__progress {

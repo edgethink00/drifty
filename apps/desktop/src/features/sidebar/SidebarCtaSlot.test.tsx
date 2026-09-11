@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
@@ -29,7 +29,10 @@ const baseInput = {
   now: NOW,
 } as const;
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("SidebarCtaSlot", () => {
   it("keeps a ready managed local route out of the expired-Cloud lock state", () => {
@@ -622,6 +625,47 @@ describe("SidebarCtaSlot", () => {
     expect(screen.getByRole("progressbar", { name: "Downloading model" }).getAttribute("aria-valuenow")).toBe("42");
     expect(container.querySelector(".sidebar-cta-slot__action")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("spends the download line on how much longer once the transfer rate is measurable", () => {
+    vi.useFakeTimers();
+    const downloadState = (percent: number, downloadedBytes: number) => {
+      const state = resolveSidebarCtaSlot({
+        ...baseInput,
+        aiStatus: { issueKind: null, label: "AI setup needed", providerLabel: "Open settings", tone: "error" },
+        billingEntitlement: null,
+        managedLocalAiStatus: {
+          state: "installing",
+          selectedModelId: "drifty-qwen3-5-4b-default",
+          installedModels: [],
+          baseUrl: null,
+          model: null,
+          message: "Downloading managed local model...",
+          artifactDir: null,
+          progress: { percent, downloadedBytes, totalBytes: 2_800_000_000 },
+          errorKind: null,
+          memoryUsageBytes: null,
+        },
+      });
+      if (!state || state.kind !== "download") throw new Error("Expected download state");
+      return state;
+    };
+
+    const { rerender } = render(<SidebarCtaSlot state={downloadState(10, 280_000_000)} onAction={vi.fn()} />);
+    // Nothing measurable yet, so the line falls back to the total size.
+    expect(screen.getByText(/Qwen 3.5 4B · ~2.8 GB/)).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    rerender(<SidebarCtaSlot state={downloadState(20, 560_000_000)} onAction={vi.fn()} />);
+    act(() => {
+      vi.advanceTimersByTime(1_200);
+    });
+
+    expect(screen.getByText(/Qwen 3.5 4B · about 1 min left/)).toBeTruthy();
+    // The transferred size stays on the meta row, so nothing is lost.
+    expect(screen.getByText("0.6/2.8 GB")).toBeTruthy();
   });
 
   it("localizes the complete CTA state instead of only its action", () => {

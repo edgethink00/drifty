@@ -1,12 +1,18 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LocalizationTestProvider } from "../localization/LocalizationContext";
 import { FirstDayPreparationScreen } from "./FirstDayPreparationScreen";
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
 });
+
+function progressFillWidth(): number {
+  const fill = document.querySelector(".first-day-prep__progress-fill") as HTMLElement | null;
+  return Number.parseFloat(fill?.style.width ?? "0");
+}
 
 describe("FirstDayPreparationScreen", () => {
   it("shows an indeterminate state with no percent while importing", () => {
@@ -106,5 +112,97 @@ describe("FirstDayPreparationScreen", () => {
     expect(screen.getByRole("button", { name: "Continue for now" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Continue for now" }));
+  });
+
+  it("spends one bar across the planned phases instead of restarting it at each handoff", () => {
+    const plan = ["importing", "classifying"] as const;
+    const { rerender } = render(<FirstDayPreparationScreen phase="importing" plan={plan} progress={null} />);
+
+    rerender(<FirstDayPreparationScreen phase="classifying" plan={plan} progress={0} />);
+
+    // Classification opening at zero still stands on everything the import earned.
+    expect(progressFillWidth()).toBeGreaterThan(0);
+    expect(screen.getByText("17%")).toBeTruthy();
+  });
+
+  it("keeps creeping while a step reports nothing, without running away from the work", () => {
+    vi.useFakeTimers();
+    render(<FirstDayPreparationScreen phase="importing" progress={null} />);
+    // A hard zero reads as "nothing is happening", so the track opens on a nub.
+    const opening = progressFillWidth();
+    expect(opening).toBeGreaterThan(0);
+    expect(opening).toBeLessThan(6);
+
+    act(() => {
+      vi.advanceTimersByTime(3_000);
+    });
+
+    expect(progressFillWidth()).toBeGreaterThan(opening);
+    expect(progressFillWidth()).toBeLessThan(56);
+    // An unmeasurable step still prints no number it cannot back up.
+    expect(screen.getByText("Working…")).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBeNull();
+  });
+
+  it("offers a coarse remaining-time read once classification throughput is measurable", () => {
+    vi.useFakeTimers();
+    const { rerender } = render(<FirstDayPreparationScreen phase="classifying" progress={0.1} />);
+    expect(screen.queryByText(/left$/)).toBeNull();
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    rerender(<FirstDayPreparationScreen phase="classifying" progress={0.2} />);
+    act(() => {
+      vi.advanceTimersByTime(1_200);
+    });
+
+    expect(screen.getByText("about 1 min left")).toBeTruthy();
+  });
+
+  it("explains the wait only once it has run long enough to feel wrong", () => {
+    vi.useFakeTimers();
+    render(<FirstDayPreparationScreen phase="classifying" progress={0.3} />);
+    const note = document.querySelector(".first-day-prep__note") as HTMLElement;
+    expect(note.className).not.toContain("first-day-prep__note--visible");
+
+    act(() => {
+      vi.advanceTimersByTime(26_000);
+    });
+
+    expect(note.className).toContain("first-day-prep__note--visible");
+    expect(note.textContent).toContain("only happens once");
+  });
+
+  it("lands the wait on a finished bar and an answer before the dashboard takes over", () => {
+    render(<FirstDayPreparationScreen phase="ready" progress={1} />);
+
+    expect(screen.getByText("Your day is ready")).toBeTruthy();
+    expect(screen.getByText("100%")).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
+    expect(document.querySelector(".first-day-prep__check")).toBeTruthy();
+  });
+
+  it("announces the copy but not every tick of the moving bar", () => {
+    render(<FirstDayPreparationScreen phase="classifying" progress={0.5} />);
+
+    const live = document.querySelector("[aria-live='polite']") as HTMLElement;
+    expect(live.className).toContain("first-day-prep__copy");
+    expect(live.querySelector(".first-day-prep__percent")).toBeNull();
+    expect(document.querySelector(".first-day-prep__meta")?.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  it("keeps the completion beat out of the paused state", () => {
+    render(
+      <FirstDayPreparationScreen
+        failure="classification_incomplete"
+        phase="classifying"
+        progress={0.5}
+        onContinueAnyway={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText("Your day is ready")).toBeNull();
+    expect(document.querySelector(".first-day-prep__check")).toBeNull();
   });
 });
