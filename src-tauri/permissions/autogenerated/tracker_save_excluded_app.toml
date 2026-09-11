@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-save-excluded-app"
+description = "Enables the tracker_save_excluded_app command without any pre-configured scope."
+commands.allow = ["tracker_save_excluded_app"]
+
+[[permission]]
+identifier = "deny-tracker-save-excluded-app"
+description = "Denies the tracker_save_excluded_app command without any pre-configured scope."
+commands.deny = ["tracker_save_excluded_app"]

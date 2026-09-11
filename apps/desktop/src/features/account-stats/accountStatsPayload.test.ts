@@ -182,4 +182,20 @@ describe("buildAccountStatsPayloadFromTracker", () => {
     expect(payload.topApps7d.map((entry) => entry.appName)).toEqual(["Safari"]);
     expect(payload.dailySeries30d.find((point) => point.day === today)?.focus).toBe(3600);
   });
+
+  it("excludes redacted app segments from top apps and focus aggregates", async () => {
+    const today = todayIsoDate();
+    const excluded: ActivitySegment = {
+      ...makeSegment(today, 7200, "[Redacted]"),
+      exclusionSource: "default",
+    };
+    vi.mocked(trackerClient.getTimeline).mockResolvedValue([makeSegment(today, 3600), excluded]);
+
+    const payload = await buildAccountStatsPayloadFromTracker({ ...baseInput, windowEndDay: today });
+
+    expect(payload.focusSecondsToday).toBe(3600);
+    expect(payload.focusSeconds7d).toBe(3600);
+    expect(payload.topApps7d.map((entry) => entry.appName)).toEqual(["Safari"]);
+    expect(payload.topApps7d.some((entry) => entry.appName === "[Redacted]")).toBe(false);
+  });
 });

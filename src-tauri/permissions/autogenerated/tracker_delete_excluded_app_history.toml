@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-delete-excluded-app-history"
+description = "Enables the tracker_delete_excluded_app_history command without any pre-configured scope."
+commands.allow = ["tracker_delete_excluded_app_history"]
+
+[[permission]]
+identifier = "deny-tracker-delete-excluded-app-history"
+description = "Denies the tracker_delete_excluded_app_history command without any pre-configured scope."
+commands.deny = ["tracker_delete_excluded_app_history"]

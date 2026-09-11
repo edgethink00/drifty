@@ -1,4 +1,4 @@
-import type { ActivityCategory, ActivitySegment, CurrentActivitySnapshot, HourBucket, ProductivityLabel, SiteDuration, StoredClassificationSource, TrackerStatus } from "./activity";
+import type { ActivityCategory, ActivitySegment, CurrentActivitySnapshot, ExcludedAppRule, HourBucket, ProductivityLabel, SiteDuration, StoredClassificationSource, TrackerStatus } from "./activity";
 import type { AdaptiveContextSourceFamily } from "./adaptiveContentContext";
 import type { ProjectPassWindowSegmentOverlap } from "./projectPassWindow";
 
@@ -25,6 +25,12 @@ export const trackerInvokeCommands = [
   "tracker_get_classification_rules",
   "tracker_save_classification_rule",
   "tracker_delete_classification_rule",
+  "tracker_get_excluded_apps",
+  "tracker_save_excluded_app",
+  "tracker_delete_excluded_app",
+  "tracker_get_excluded_app_history_count",
+  "tracker_delete_excluded_app_history",
+  "tracker_get_recent_apps",
   "tracker_delete_activity_segments",
   "tracker_delete_history_range",
   "tracker_search_classification_rule_candidates",
@@ -112,6 +118,12 @@ export type TrackerCommandMap = {
   tracker_get_classification_rules: { args: undefined; result: ClassificationRule[] };
   tracker_save_classification_rule: { args: { query: { input: ClassificationRuleInput } }; result: ClassificationRule };
   tracker_delete_classification_rule: { args: { query: { id: string } }; result: { deleted: number } };
+  tracker_get_excluded_apps: { args: undefined; result: ExcludedAppRule[] };
+  tracker_save_excluded_app: { args: { query: ExcludedAppRule }; result: ExcludedAppRule };
+  tracker_delete_excluded_app: { args: { query: { id: string } }; result: { deleted: boolean } };
+  tracker_get_excluded_app_history_count: { args: { query: { name: string; bundleId?: string | null } }; result: { count: number } };
+  tracker_delete_excluded_app_history: { args: { query: { name: string; bundleId?: string | null } }; result: { deleted: number } };
+  tracker_get_recent_apps: { args: { query?: { limit?: number } }; result: Array<{ name: string; bundleId: string | null; lastSeenAt: string; totalSeconds: number }> };
   tracker_delete_activity_segments: { args: { query: { ids: readonly string[] } }; result: { deleted: number } };
   tracker_delete_history_range: { args: { query: DeleteHistoryRangeQuery }; result: DeleteHistoryRangeResult };
   tracker_search_classification_rule_candidates: {
@@ -864,6 +876,12 @@ export interface TrackerApi {
   getClassificationRules(): Promise<ClassificationRule[]>;
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
+  getExcludedApps(): Promise<ExcludedAppRule[]>;
+  saveExcludedApp(rule: ExcludedAppRule): Promise<ExcludedAppRule>;
+  deleteExcludedApp(id: string): Promise<{ deleted: boolean }>;
+  getExcludedAppHistoryCount(query: { name: string; bundleId?: string | null }): Promise<{ count: number }>;
+  deleteExcludedAppHistory(query: { name: string; bundleId?: string | null }): Promise<{ deleted: number }>;
+  getRecentApps(query?: { limit?: number }): Promise<Array<{ name: string; bundleId: string | null; lastSeenAt: string; totalSeconds: number }>>;
   deleteActivitySegments(ids: readonly string[]): Promise<{ deleted: number }>;
   deleteHistoryRange(query: DeleteHistoryRangeQuery): Promise<DeleteHistoryRangeResult>;
   searchClassificationRuleCandidates(query: ClassificationRuleCandidateQuery): Promise<ClassificationRuleCandidate[]>;

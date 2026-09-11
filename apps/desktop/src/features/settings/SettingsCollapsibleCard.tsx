@@ -9,6 +9,7 @@ type SettingsCollapsibleCardProps = {
   readonly title: string;
   readonly searchReveal?: string;
   readonly settingId?: string;
+  readonly leading?: ReactNode;
   readonly subtitle?: string;
   readonly summary?: ReactNode;
   readonly defaultExpanded?: boolean;
@@ -17,6 +18,7 @@ type SettingsCollapsibleCardProps = {
 
 export function SettingsCollapsibleCard({
   title,
+  leading,
   searchReveal,
   settingId,
   subtitle,
@@ -34,7 +36,7 @@ export function SettingsCollapsibleCard({
   const buttonId = `settings-collapsible-${reactId}-button`;
 
   return (
-    <section data-setting-id={settingId} className={`settings-collapsible-card${expanded ? " is-expanded" : ""}`}>
+    <section data-setting-id={settingId} className={`settings-collapsible-card${expanded ? " is-expanded" : ""}${leading ? " settings-collapsible-card--has-leading" : ""}`}>
       <button
         aria-controls={panelId}
         aria-expanded={expanded}
@@ -43,6 +45,7 @@ export function SettingsCollapsibleCard({
         type="button"
         onClick={() => setExpanded((current) => !current)}
       >
+        {leading ? <span className="settings-collapsible-card__leading" aria-hidden="true">{leading}</span> : null}
         <span className="settings-collapsible-card__copy">
           <strong>{title}</strong>
           {subtitle ? <span>{subtitle}</span> : null}

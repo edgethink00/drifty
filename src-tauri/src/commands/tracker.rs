@@ -181,6 +181,39 @@ pub struct ClassificationRuleDeleteQuery {
     pub id: String,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcludedAppSaveQuery {
+    pub id: String,
+    pub name: String,
+    pub bundle_id: Option<String>,
+    #[serde(default = "default_user_source")]
+    pub source: String,
+}
+
+fn default_user_source() -> String {
+    "user".to_string()
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcludedAppDeleteQuery {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcludedAppHistoryQuery {
+    pub name: String,
+    pub bundle_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentAppsQuery {
+    pub limit: Option<usize>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteActivitySegmentsQuery {
@@ -825,6 +858,102 @@ pub async fn tracker_delete_classification_rule(
     async_runtime::spawn_blocking(move || {
         controller
             .delete_classification_rule(&app, query.id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_excluded_apps(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_excluded_apps(&app)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_save_excluded_app(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ExcludedAppSaveQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .save_excluded_app(&app, serde_json::to_value(&query).map_err(|e| e.to_string())?)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_excluded_app(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ExcludedAppDeleteQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_excluded_app(&app, query.id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_excluded_app_history_count(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ExcludedAppHistoryQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_excluded_app_history_count(&app, query.name, query.bundle_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_delete_excluded_app_history(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: ExcludedAppHistoryQuery,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    async_runtime::spawn_blocking(move || {
+        controller
+            .delete_excluded_app_history(&app, query.name, query.bundle_id)
+            .map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+pub async fn tracker_get_recent_apps(
+    app: AppHandle,
+    controller: State<'_, TrackerController>,
+    query: Option<RecentAppsQuery>,
+) -> Result<serde_json::Value, String> {
+    let controller = *controller.inner();
+    let limit = query.and_then(|q| q.limit).unwrap_or(50);
+    async_runtime::spawn_blocking(move || {
+        controller
+            .get_recent_apps(&app, limit)
             .map_err(|error| error.to_string())
     })
     .await

@@ -13,6 +13,7 @@ import {
   buildProductivityDurations,
   buildRollingFocusSeconds,
   isBrowserHistoryImportSegment,
+  isExcludedSegment,
   isRemoteDeviceSegment,
   logicalDayStartMs,
 } from "@drifty/domain";
@@ -39,6 +40,7 @@ export const TOP_APPS_MIN_SECONDS = 900;
 function buildTopApps7d(weekSegments: ActivitySegment[]): TopAppEntry[] {
   const totals = new Map<string, number>();
   for (const segment of weekSegments) {
+    if (isExcludedSegment(segment)) continue;
     const appName = segment.appName?.trim();
     if (!appName) continue;
     totals.set(appName, (totals.get(appName) ?? 0) + Math.max(0, segment.durationSeconds));
@@ -155,7 +157,7 @@ export async function buildAccountStatsPayloadFromTracker(input: AccountStatsInp
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const fetched = await trackerClient.getTimeline(getLogicalDayRange(monthStartDay, input.windowEndDay, input.startOfDayMinutes));
   const monthSegments = fetched.filter(
-    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment),
+    (segment) => !isBrowserHistoryImportSegment(segment) && !isRemoteDeviceSegment(segment) && !isExcludedSegment(segment),
   );
   return buildAccountStatsPayload(monthSegments, input);
 }

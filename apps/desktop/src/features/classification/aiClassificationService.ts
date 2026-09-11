@@ -1,4 +1,5 @@
 import { applyLiveShoppingEvidenceGuard, applyMatchedContextualDriftSafetyGuard, classifyActivityDetailed, confidenceForResolvedLiveActivityProductivity, isYouTubeBrowsePage, isYouTubeVideoSegment, LIVE_ACTIVITY_INTENTS, MATCHED_CONTEXTUAL_DRIFT_SAFETY_REASON, productivityForLiveActivityIntent, resolveLiveActivityClassificationProductivity, YOUTUBE_FEED_DRIFT_MINIMUM_SECONDS } from "@drifty/domain";
+import { isExcludedSegment } from "@drifty/domain";
 import type {
   AdaptiveContentContext,
   ActivityCategory,
@@ -614,6 +615,9 @@ async function runAiClassificationForUnknownThresholdImpl(query: UnclassifiedSeg
 }
 
 export async function classifyLiveActivityWithAi(segment: ActivitySegment, options: AiClassificationRunOptions = {}): Promise<LiveAiClassificationResult> {
+  if (isExcludedSegment(segment)) {
+    return unavailableLiveClassification("Skipped AI classification because the activity was excluded by privacy settings.");
+  }
   try {
     const privacySettings = readAiPrivacyRequestSettings();
     const promptIdentity = privacySettings.optional.workProfile
@@ -1024,6 +1028,9 @@ function toSystemSkippedClassificationRecord(
 }
 
 function skippedAiClassificationReason(segment: ActivitySegment): string | null {
+  if (isExcludedSegment(segment)) {
+    return "Skipped AI classification because the activity was excluded by privacy settings.";
+  }
   if (normalizeComparableText(segment.appName) === "unavailable") {
     return "Skipped AI classification because the tracker could not determine the frontmost app.";
   }

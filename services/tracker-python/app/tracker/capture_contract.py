@@ -72,3 +72,4 @@ class Snapshot:
     frontmost_fallback_error: str | None = None
     adaptive_content_context: AdaptiveContentContextPayload | None = None
     engagement_evidence: EngagementEvidence | None = None
+    exclusion_source: str | None = None

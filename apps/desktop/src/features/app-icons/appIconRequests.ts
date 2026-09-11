@@ -1,9 +1,10 @@
-import type { ActivitySegment, AppIconMap, AppIdentity } from "@drifty/domain";
+import { isExcludedSegment, type ActivitySegment, type AppIconMap, type AppIdentity } from "@drifty/domain";
 
 export function collectMissingAppIconRequests(segments: readonly ActivitySegment[], currentIcons: AppIconMap): AppIdentity[] {
   const requests = new Map<string, AppIdentity>();
 
   for (const segment of segments) {
+    if (isExcludedSegment(segment)) continue;
     const identity = segmentToAppIdentity(segment);
     const identityKey = appIconIdentityKey(identity);
     if (hasIconEntry(currentIcons, identityKey)) continue;

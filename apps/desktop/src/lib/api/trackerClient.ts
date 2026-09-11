@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { DEFAULT_EXCLUDED_APPS } from "@drifty/domain";
 import type {
   ActivityClassificationRecord,
   ActivitySegment,
@@ -21,6 +22,7 @@ import type {
   DeveloperDiagnosticsSettings,
   DriftAlarmTrayStatus,
   CurrentActivitySnapshot,
+  ExcludedAppRule,
   LiveTailQuery,
   Project,
   ProjectAnchor,
@@ -287,7 +289,9 @@ export const trackerClient: TrackerApi = {
   async getAppIcons(apps: AppIdentity[]) {
     if (shouldUsePreviewData()) return previewAppIcons(apps);
     const result = await safeInvoke("tracker_get_app_icons", { query: { apps } });
-    return result ?? {};
+    if (result) return result;
+    if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) return previewAppIcons(apps);
+    return {};
   },
   async getSiteIcons(domains: string[]) {
     if (shouldUsePreviewData()) return {};
@@ -331,6 +335,44 @@ export const trackerClient: TrackerApi = {
   async deleteClassificationRule(id: string) {
     const result = await safeInvoke("tracker_delete_classification_rule", { query: { id } });
     return result ?? { deleted: 0 };
+  },
+  async getExcludedApps() {
+    if (shouldUsePreviewData()) return [...DEFAULT_EXCLUDED_APPS];
+    const result = await safeInvoke("tracker_get_excluded_apps");
+    return result ?? [...DEFAULT_EXCLUDED_APPS];
+  },
+  async saveExcludedApp(rule: ExcludedAppRule) {
+    if (shouldUsePreviewData()) return rule;
+    const result = await safeInvoke("tracker_save_excluded_app", { query: rule });
+    return result ?? rule;
+  },
+  async deleteExcludedApp(id: string) {
+    if (shouldUsePreviewData()) return { deleted: true };
+    const result = await safeInvoke("tracker_delete_excluded_app", { query: { id } });
+    return result ?? { deleted: false };
+  },
+  async getExcludedAppHistoryCount(query: { name: string; bundleId?: string | null }) {
+    if (shouldUsePreviewData()) return { count: 0 };
+    const result = await safeInvoke("tracker_get_excluded_app_history_count", { query });
+    return result ?? { count: 0 };
+  },
+  async deleteExcludedAppHistory(query: { name: string; bundleId?: string | null }) {
+    if (shouldUsePreviewData()) return { deleted: 0 };
+    const result = await safeInvoke("tracker_delete_excluded_app_history", { query });
+    return result ?? { deleted: 0 };
+  },
+  async getRecentApps(query?: { limit?: number }) {
+    const previewRecents = [
+      { name: "Safari", bundleId: "com.apple.Safari", lastSeenAt: "2026-09-11T09:40:00.000Z", totalSeconds: 5400 },
+      { name: "Slack", bundleId: "com.tinyspeck.slackmacgap", lastSeenAt: "2026-09-11T09:10:00.000Z", totalSeconds: 3200 },
+      { name: "Visual Studio Code", bundleId: "com.microsoft.VSCode", lastSeenAt: "2026-09-11T08:50:00.000Z", totalSeconds: 9100 },
+      { name: "Spotify", bundleId: "com.spotify.client", lastSeenAt: "2026-09-11T08:20:00.000Z", totalSeconds: 1800 },
+    ].slice(0, query?.limit ?? 4);
+    if (shouldUsePreviewData()) return previewRecents;
+    const result = await safeInvoke("tracker_get_recent_apps", { query });
+    if (result) return result;
+    if (typeof window !== "undefined" && !("__TAURI_INTERNALS__" in window)) return previewRecents;
+    return [];
   },
   async deleteActivitySegments(ids: readonly string[]) {
     if (shouldUsePreviewData()) return previewDeleteActivitySegments(ids);

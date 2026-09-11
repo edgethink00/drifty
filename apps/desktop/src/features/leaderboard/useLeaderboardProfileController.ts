@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, SetStateAction } from "react";
-import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isPassiveSupportedSegment } from "@drifty/domain";
+import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isExcludedSegment, isPassiveSupportedSegment } from "@drifty/domain";
 import type { ActivitySegment, ClassificationOptions } from "@drifty/domain";
 import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { isPublicProfileLiveOffBoard } from "./publicProfileOffBoard";
@@ -393,7 +393,7 @@ export function useLeaderboardProfileController({
   const leaderboardLocalMetricsScopeKey = `${leaderboardWindowStartDay}:${leaderboardWindowEndDay}:${startOfDayMinutes}`;
   const publishableLeaderboardSegments = useMemo<ActivitySegment[]>(
     () => leaderboardSegments.filter((segment: ActivitySegment) => (
-      !isBrowserHistoryImportSegment(segment) && !isPassiveSupportedSegment(segment)
+      !isBrowserHistoryImportSegment(segment) && !isExcludedSegment(segment) && !isPassiveSupportedSegment(segment)
     )),
     [leaderboardSegments],
   );

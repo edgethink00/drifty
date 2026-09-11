@@ -9,6 +9,7 @@ import {
 import { DeleteHistoryModal } from "./DeleteHistoryModal";
 import { ModalPresence } from "../../components/ModalPresence";
 import "./PrivacySettingsSection.css";
+import { AppExclusionSettingsCard } from "./AppExclusionSettingsCard";
 import { SettingsCollapsibleCard } from "./SettingsCollapsibleCard";
 import { useLocalization } from "../localization/LocalizationContext";
 import { trackerClient } from "../../lib/api/trackerClient";
@@ -146,6 +147,7 @@ export function PrivacySettingsSection({
       >
         <AiPrivacyReview />
       </SettingsCollapsibleCard>
+      <AppExclusionSettingsCard />
       <div className="settings-block">
         <h3>{t("settings.privacy.localData")}</h3>
         <div data-setting-id="settings.data.database" className="settings-row">

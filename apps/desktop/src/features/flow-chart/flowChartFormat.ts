@@ -1,4 +1,4 @@
-import { secondsToLabel, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
+import { REDACTED_APP_NAME, secondsToLabel, type FlowBlock, type FlowIntervalMinutes } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import { formatCompactHourLabel } from "../../lib/formatting";
 import type { FlowBlockHoverGroup } from "./flowHoverGroups";
@@ -45,6 +45,9 @@ export function formatBlockEndTime(block: FlowBlock, intervalMinutes: FlowInterv
 }
 
 export function blockDisplayName(block: FlowBlock): string {
+  if (block.appName === REDACTED_APP_NAME) {
+    return "제외됨";
+  }
   return block.siteDomain ?? block.siteTitle ?? block.appName;
 }
 

@@ -45,6 +45,12 @@ const PREVIEW_APP_BUNDLE_IDS: Readonly<Record<string, string>> = {
 };
 
 const PREVIEW_APP_ICON_SOURCES: Readonly<Record<string, string>> = {
+  "com.1password.1password":
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%230a85ea'/><circle cx='24' cy='24' r='14' fill='none' stroke='%23ffffff' stroke-width='4'/><circle cx='24' cy='24' r='4' fill='%23ffffff'/><rect x='22' y='24' width='4' height='7' rx='1.5' fill='%23ffffff'/></svg>",
+  "com.apple.keychainaccess":
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%234a5568'/><circle cx='19' cy='22' r='7' fill='none' stroke='%23ecc94b' stroke-width='3.5'/><rect x='24' y='20' width='15' height='4' rx='1.5' fill='%23ecc94b'/><rect x='32' y='24' width='3' height='4' rx='1' fill='%23ecc94b'/><rect x='36' y='24' width='3' height='3' rx='1' fill='%23ecc94b'/></svg>",
+  "com.apple.Safari":
+    "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'><rect width='48' height='48' rx='11' fill='%23ffffff'/><circle cx='24' cy='24' r='18' fill='%23007aff'/><polygon points='24,10 28,24 24,24' fill='%23ff3b30'/><polygon points='24,38 20,24 24,24' fill='%23ffffff'/><polygon points='24,10 20,24 24,24' fill='%23ff9500'/><polygon points='24,38 28,24 24,24' fill='%23d1d1d6'/></svg>",
   "com.apple.mail": "./assets/mail-CrE6QGcD.png",
   "com.apple.MobileSMS": "./assets/messages-aYNxSzkK.png",
   // Preview icons are bundled assets only. This one used to point at the

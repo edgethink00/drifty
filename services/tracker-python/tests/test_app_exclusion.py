@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+SERVICE_ROOT = Path(__file__).resolve().parents[1]
+if str(SERVICE_ROOT) not in sys.path:
+    sys.path.insert(0, str(SERVICE_ROOT))
+
+from app.storage.db import TrackerDatabase
+from app.tracker.app_exclusion import (
+    DEFAULT_EXCLUDED_APPS,
+    REDACTED_APP_NAME,
+    ExcludedAppRule,
+    match_app_exclusion,
+    redact_snapshot,
+)
+from app.tracker.capture_contract import Snapshot
+from unittest.mock import patch
+from tests.support_cleanup import cleanup_temp_dir
+
+
+class AppExclusionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = TemporaryDirectory()
+        self.db_path = Path(self.tempdir.name) / "tracker.sqlite3"
+        self.database = TrackerDatabase(self.db_path)
+
+    def tearDown(self) -> None:
+        self.database.close()
+        cleanup_temp_dir(self.tempdir)
+
+    def test_seeds_16_default_excluded_apps_once(self) -> None:
+        apps = self.database.get_excluded_apps()
+        self.assertEqual(len(apps), 16)
+        names = {a["name"] for a in apps}
+        self.assertIn("1Password", names)
+        self.assertIn("Keychain Access", names)
+        self.assertIn("Bitwarden", names)
+        self.assertIn("Ledger Live", names)
+
+        # Re-opening database should not duplicate seeds
+        db2 = TrackerDatabase(self.db_path)
+        try:
+            self.assertEqual(len(db2.get_excluded_apps()), 16)
+        finally:
+            db2.close()
+
+    def test_match_app_exclusion_by_name_and_bundle_id(self) -> None:
+        rules = [
+            ExcludedAppRule(id="1", name="1Password", bundle_id="com.1password.1password", source="default"),
+            ExcludedAppRule(id="2", name="Secret Bank", bundle_id=None, source="user"),
+        ]
+        # Match by bundle id
+        m1 = match_app_exclusion("Different Name", "com.1password.1password", rules)
+        self.assertIsNotNone(m1)
+        self.assertEqual(m1.id, "1")
+
+        # Match by app name (case-insensitive)
+        m2 = match_app_exclusion("secret bank", None, rules)
+        self.assertIsNotNone(m2)
+        self.assertEqual(m2.id, "2")
+
+        # No match
+        self.assertIsNone(match_app_exclusion("Safari", "com.apple.Safari", rules))
+
+    def test_redact_snapshot_clears_content_fields(self) -> None:
+        snap = Snapshot(
+            observed_at="2026-09-11T10:00:00Z",
+            app_name="1Password",
+            bundle_id="com.1password.1password",
+            window_title="Vault Credentials",
+            source="frontmost",
+            browser_name=None,
+            site_domain="vault.1password.com",
+            site_title="Vault",
+            site_url="https://vault.1password.com",
+        )
+        redacted = redact_snapshot(snap, "default")
+        self.assertEqual(redacted.app_name, REDACTED_APP_NAME)
+        self.assertIsNone(redacted.bundle_id)
+        self.assertIsNone(redacted.window_title)
+        self.assertIsNone(redacted.site_domain)
+        self.assertIsNone(redacted.site_url)
+        self.assertEqual(redacted.exclusion_source, "default")
+        self.assertEqual(redacted.observed_at, snap.observed_at)
+
+    def test_record_snapshot_redacts_and_coalesces_excluded_app(self) -> None:
+        snap1 = Snapshot(
+            observed_at="2026-09-11T10:00:00Z",
+            app_name="1Password",
+            bundle_id="com.1password.1password",
+            window_title="Item details",
+            source="frontmost",
+        )
+        self.database.record_snapshot(snap1, sample_seconds=5)
+
+        timeline = self.database.fetch_timeline("2026-09-11")
+        self.assertEqual(len(timeline), 1)
+        seg = timeline[0]
+        self.assertEqual(seg["appName"], REDACTED_APP_NAME)
+        self.assertIsNone(seg["bundleId"])
+        self.assertIsNone(seg["windowTitle"])
+        self.assertEqual(seg["exclusionSource"], "default")
+        self.assertEqual(seg["durationSeconds"], 5)
+
+        # Second sample within merge gap should coalesce into one continuous segment
+        snap2 = Snapshot(
+            observed_at="2026-09-11T10:00:05Z",
+            app_name="1Password",
+            bundle_id="com.1password.1password",
+            window_title="Item details 2",
+            source="frontmost",
+        )
+        self.database.record_snapshot(snap2, sample_seconds=5)
+
+        timeline2 = self.database.fetch_timeline("2026-09-11")
+        self.assertEqual(len(timeline2), 1)
+        self.assertEqual(timeline2[0]["durationSeconds"], 10)
+        self.assertEqual(timeline2[0]["appName"], REDACTED_APP_NAME)
+
+    def test_non_excluded_app_records_normally(self) -> None:
+        snap = Snapshot(
+            observed_at="2026-09-11T10:00:00Z",
+            app_name="Xcode",
+            bundle_id="com.apple.dt.Xcode",
+            window_title="AppDelegate.swift",
+            source="frontmost",
+        )
+        self.database.record_snapshot(snap, sample_seconds=5)
+
+        timeline = self.database.fetch_timeline("2026-09-11")
+        self.assertEqual(len(timeline), 1)
+        self.assertEqual(timeline[0]["appName"], "Xcode")
+        self.assertEqual(timeline[0]["bundleId"], "com.apple.dt.Xcode")
+        self.assertIsNone(timeline[0].get("exclusionSource"))
+
+    def test_save_delete_and_history_operations(self) -> None:
+        # Pre-populate history with an app
+        snap = Snapshot(
+            observed_at="2026-09-11T09:00:00Z",
+            app_name="PersonalFinanceApp",
+            bundle_id="com.finance.personal",
+            window_title="Budget",
+            source="frontmost",
+        )
+        self.database.record_snapshot(snap, sample_seconds=300)
+
+        count = self.database.get_excluded_app_history_count("PersonalFinanceApp", "com.finance.personal")
+        self.assertEqual(count, 1)
+
+        # Add to exclusion list
+        saved = self.database.save_excluded_app(
+            id="com.finance.personal",
+            name="PersonalFinanceApp",
+            bundle_id="com.finance.personal",
+            source="user",
+        )
+        self.assertEqual(saved["source"], "user")
+
+        # Verify it is in list
+        apps = self.database.get_excluded_apps()
+        self.assertTrue(any(a["id"] == "com.finance.personal" for a in apps))
+
+        # Delete history for this app
+        deleted_count = self.database.delete_excluded_app_history("PersonalFinanceApp", "com.finance.personal")
+        self.assertEqual(deleted_count, 1)
+        self.assertEqual(self.database.get_excluded_app_history_count("PersonalFinanceApp"), 0)
+
+        # Delete rule
+        deleted_rule = self.database.delete_excluded_app("com.finance.personal")
+        self.assertTrue(deleted_rule)
+        apps_after = self.database.get_excluded_apps()
+        self.assertFalse(any(a["id"] == "com.finance.personal" for a in apps_after))
+
+    def test_get_current_snapshot_redacts_when_app_is_excluded(self) -> None:
+        from app.main import get_current_snapshot
+        mock_snap = Snapshot(
+            observed_at="2026-09-11T10:00:00Z",
+            app_name="1Password",
+            bundle_id="com.1password.1password",
+            window_title="Secret Vault",
+            source="frontmost",
+        )
+        with patch("app.main.database", return_value=self.database), \
+             patch("app.main.current_snapshot", return_value=mock_snap), \
+             patch("app.main.DB_PATH", self.db_path):
+            res = get_current_snapshot()
+            self.assertTrue(res["ok"])
+            data = res["data"]
+            self.assertEqual(data["appName"], REDACTED_APP_NAME)
+            self.assertIsNone(data["bundleId"])
+            self.assertIsNone(data["windowTitle"])
+
+
+if __name__ == "__main__":
+    unittest.main()

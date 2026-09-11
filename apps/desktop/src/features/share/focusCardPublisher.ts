@@ -10,6 +10,7 @@ import {
   CATEGORY_ORDER,
   classifyActivity,
   isBrowserHistoryImportSegment,
+  isExcludedSegment,
   isPassiveSupportedSegment,
   isRemoteDeviceSegment,
   logicalDayEndExclusiveMs,
@@ -150,7 +151,7 @@ export function buildHourlyFocusPattern(
  * Focus totals use the same rolling-focus math as the leaderboard (clipped to logical days).
  */
 export function buildFocusCardPayload(monthSegments: ActivitySegment[], input: FocusCardInput): FocusCardPayload {
-  const publishableMonthSegments = monthSegments.filter((segment) => !isPassiveSupportedSegment(segment));
+  const publishableMonthSegments = monthSegments.filter((segment) => !isPassiveSupportedSegment(segment) && !isExcludedSegment(segment));
   const monthStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "monthly");
   const weekStartDay = getLeaderboardWindowStartDay(input.windowEndDay, "weekly");
   const sod = input.startOfDayMinutes;
@@ -210,6 +211,7 @@ export async function buildFocusCardPayloadFromTracker(input: FocusCardInput): P
   // time, and segments synced from other devices never feed this published card.
   const monthSegments = fetched.filter(
     (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isExcludedSegment(segment)
       && !isPassiveSupportedSegment(segment)
       && !isRemoteDeviceSegment(segment),
   );

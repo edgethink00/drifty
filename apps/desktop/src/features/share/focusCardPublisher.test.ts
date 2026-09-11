@@ -207,4 +207,21 @@ describe("buildFocusCardPayload", () => {
     expect(payload).not.toHaveProperty("top_apps_7d");
     expect(JSON.stringify(payload)).not.toContain("Xcode");
   });
+
+  it("omits excluded app segments from published focus card payloads", () => {
+    const today = todayIsoDate();
+    const normal = makeSegment(today, 3600, "Xcode");
+    const excluded = {
+      ...makeSegment(today, 1800, "[Redacted]"),
+      exclusionSource: "default" as const,
+    };
+
+    const payload = buildFocusCardPayload([normal, excluded], {
+      windowEndDay: today,
+      startOfDayMinutes: 0,
+      includeAiClassifications: false,
+    });
+
+    expect(payload.focus_seconds_7d).toBe(3600);
+  });
 });

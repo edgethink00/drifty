@@ -27,6 +27,13 @@ from app.storage.database_maintenance import (
     permanent_deletion_guard,
     prepare_database,
 )
+from app.tracker.app_exclusion import (
+    DEFAULT_EXCLUDED_APPS,
+    REDACTED_APP_NAME,
+    ExcludedAppRule,
+    match_app_exclusion,
+    redact_snapshot,
+)
 
 if TYPE_CHECKING:
     from app.tracker.browser_automation import BrowserMetadata
@@ -521,11 +528,20 @@ class TrackerDatabase:
                 CREATE INDEX IF NOT EXISTS idx_agent_session_events_started
                 ON agent_session_events(datetime(started_at));
 
+                CREATE TABLE IF NOT EXISTS excluded_apps (
+                  id TEXT PRIMARY KEY,
+                  name TEXT NOT NULL,
+                  bundle_id TEXT,
+                  source TEXT NOT NULL,
+                  created_at TEXT NOT NULL
+                );
+
                 INSERT OR IGNORE INTO sync_counter(id, seq) VALUES (1, 0);
                 """
             )
             self._ensure_columns(conn)
             self._ensure_sync_schema(conn)
+            self._ensure_default_excluded_apps(conn)
 
     def _ensure_columns(self, conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(activity_segments)")}
@@ -542,6 +558,7 @@ class TrackerDatabase:
             "segment_uid": "TEXT",
             "origin_device_id": "TEXT",
             "sync_seq": "INTEGER NOT NULL DEFAULT 0",
+            "exclusion_source": "TEXT",
         }
         for column, column_type in optional_columns.items():
             if column not in existing:
@@ -745,6 +762,125 @@ class TrackerDatabase:
             """
         )
 
+    def _ensure_default_excluded_apps(self, conn: sqlite3.Connection) -> None:
+        seeded = conn.execute("SELECT value FROM tracker_meta WHERE key = 'did_seed_default_secret_apps'").fetchone()
+        if not seeded:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            for rule in DEFAULT_EXCLUDED_APPS:
+                conn.execute(
+                    "INSERT OR IGNORE INTO excluded_apps(id, name, bundle_id, source, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (rule.id, rule.name, rule.bundle_id, rule.source, now_iso),
+                )
+            conn.execute(
+                "INSERT OR REPLACE INTO tracker_meta(key, value) VALUES ('did_seed_default_secret_apps', '1')"
+            )
+
+    def _get_excluded_app_rules(self, conn: sqlite3.Connection) -> list[ExcludedAppRule]:
+        rows = conn.execute("SELECT id, name, bundle_id, source FROM excluded_apps").fetchall()
+        return [
+            ExcludedAppRule(
+                id=row["id"],
+                name=row["name"],
+                bundle_id=row["bundle_id"],
+                source=row["source"],
+            )
+            for row in rows
+        ]
+
+    def get_excluded_app_rules(self) -> list[ExcludedAppRule]:
+        with self.connect() as conn:
+            return self._get_excluded_app_rules(conn)
+
+    def get_excluded_apps(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute("SELECT id, name, bundle_id, source, created_at FROM excluded_apps ORDER BY created_at ASC").fetchall()
+            return [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "bundleId": row["bundle_id"],
+                    "source": row["source"],
+                    "createdAt": row["created_at"],
+                }
+                for row in rows
+            ]
+
+    def save_excluded_app(self, id: str, name: str, bundle_id: str | None = None, source: str = "user") -> dict[str, Any]:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO excluded_apps(id, name, bundle_id, source, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    bundle_id = excluded.bundle_id,
+                    source = excluded.source
+                """,
+                (id, name, bundle_id, source, now_iso),
+            )
+        return {"id": id, "name": name, "bundleId": bundle_id, "source": source, "createdAt": now_iso}
+
+    def delete_excluded_app(self, id: str) -> bool:
+        with self.connect() as conn:
+            cursor = conn.execute("DELETE FROM excluded_apps WHERE id = ?", (id,))
+            return cursor.rowcount > 0
+
+    def get_excluded_app_history_count(self, name: str, bundle_id: str | None = None) -> int:
+        with self.connect() as conn:
+            if bundle_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) as count FROM activity_segments WHERE lower(bundle_id) = lower(?) OR lower(app_name) = lower(?)",
+                    (bundle_id, name),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT COUNT(*) as count FROM activity_segments WHERE lower(app_name) = lower(?)",
+                    (name,),
+                ).fetchone()
+            return int(row["count"]) if row else 0
+
+    def delete_excluded_app_history(self, name: str, bundle_id: str | None = None) -> int:
+        with self.connect() as conn:
+            if bundle_id:
+                cursor = conn.execute(
+                    "DELETE FROM activity_segments WHERE lower(bundle_id) = lower(?) OR lower(app_name) = lower(?)",
+                    (bundle_id, name),
+                )
+            else:
+                cursor = conn.execute(
+                    "DELETE FROM activity_segments WHERE lower(app_name) = lower(?)",
+                    (name,),
+                )
+            return cursor.rowcount
+
+    def get_recent_apps(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT
+                    app_name,
+                    bundle_id,
+                    MAX(ended_at) AS last_seen_at,
+                    SUM(duration_seconds) AS total_seconds
+                FROM activity_segments
+                WHERE app_name != '[Redacted]' AND app_name IS NOT NULL AND app_name != ''
+                GROUP BY app_name, bundle_id
+                ORDER BY last_seen_at DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [
+                {
+                    "name": row["app_name"],
+                    "bundleId": row["bundle_id"],
+                    "lastSeenAt": row["last_seen_at"],
+                    "totalSeconds": int(row["total_seconds"] or 0),
+                }
+                for row in rows
+            ]
+
     def get_meta(self, key: str, default: str | None = None) -> str | None:
         with self.connect() as conn:
             row = conn.execute("SELECT value FROM tracker_meta WHERE key = ?", (key,)).fetchone()
@@ -868,6 +1004,11 @@ class TrackerDatabase:
 
     def record_snapshot(self, snapshot: Snapshot, sample_seconds: int, max_merge_gap_seconds: int | None = None) -> None:
         with self.connect() as conn:
+            excluded_rules = self._get_excluded_app_rules(conn)
+            match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
+            if match:
+                snapshot = redact_snapshot(snapshot, match.source)
+
             # Only coalesce against locally-originated segments. Segments pulled from
             # another synced device (origin_device_id IS NOT NULL) describe that device's
             # timeline; extending or trimming them here would corrupt the merge.
@@ -934,7 +1075,8 @@ class TrackerDatabase:
                         source = ?,
                         confidence = ?,
                         engagement_evidence = ?,
-                        raw_context_json = ?
+                        raw_context_json = ?,
+                        exclusion_source = ?
                     WHERE id = ?
                     """,
                     (
@@ -953,6 +1095,7 @@ class TrackerDatabase:
                         getattr(snapshot, "capture_confidence", 1.0),
                         snapshot_engagement_evidence,
                         self._snapshot_raw_context_json(snapshot),
+                        snapshot.exclusion_source,
                         last["id"],
                     ),
                 )
@@ -980,8 +1123,9 @@ class TrackerDatabase:
                     source,
                     confidence,
                     engagement_evidence,
-                    raw_context_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    raw_context_json,
+                    exclusion_source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     str(uuid.uuid4()),
@@ -1004,6 +1148,7 @@ class TrackerDatabase:
                     getattr(snapshot, "capture_confidence", 1.0),
                     snapshot_engagement_evidence,
                     self._snapshot_raw_context_json(snapshot),
+                    snapshot.exclusion_source,
                 ),
             )
 
@@ -3891,6 +4036,7 @@ class TrackerDatabase:
                 activity_segments.confidence,
                 activity_segments.engagement_evidence,
                 activity_segments.origin_device_id,
+                activity_segments.exclusion_source,
                 youtube_video_metadata.category AS youtube_category,
                 youtube_video_metadata.channel_name AS youtube_channel_name,
                 youtube_video_metadata.title AS youtube_title,

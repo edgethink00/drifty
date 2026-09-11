@@ -133,4 +133,17 @@ describe("aggregateTeamProjectDayTotals", () => {
       { project_id: "team-b", activity_date: "2026-07-08", seconds: 180 },
     ]);
   });
+
+  it("excludes redacted app segments from team project totals", () => {
+    const segments = [
+      segment("s1", "2026-07-08T03:00:00.000Z", 360, {
+        appName: "[Redacted]",
+        exclusionSource: "default",
+      }),
+    ];
+    const assignments: TeamProjectAssignmentRecord[] = [
+      { segmentId: "s1", teamProjectId: "team-a", source: "ai" },
+    ];
+    expect(aggregateTeamProjectDayTotals(assignments, segments, 0)).toEqual([]);
+  });
 });

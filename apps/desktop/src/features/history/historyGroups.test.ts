@@ -1,6 +1,6 @@
 import { logicalDayIsoDateForDate, type ActivitySegment } from "@drifty/domain";
 import { describe, expect, it } from "vitest";
-import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow } from "./historyGroups";
+import { buildHistoryDayGroups, buildHistoryRows, buildHistoryRowsWindow, historyRowTitle } from "./historyGroups";
 
 function historySegment(
   id: string,
@@ -106,6 +106,23 @@ describe("buildHistoryRowsWindow", () => {
 
     expect(windowedRows.hasMore).toBe(false);
     expect(windowedRows.rows.map((row) => row.segmentIds)).toEqual([["start", "end"]]);
+  });
+
+  it("formats excluded segments with truth-accurate label in history row title", () => {
+    const rows = buildHistoryRows([
+      historySegment("ex-default", "2026-06-10T01:00:00+00:00", "2026-06-10T01:10:00+00:00", 600, {
+        appName: "[Redacted]",
+        exclusionSource: "default",
+      }),
+      historySegment("ex-user", "2026-06-10T02:00:00+00:00", "2026-06-10T02:10:00+00:00", 600, {
+        appName: "[Redacted]",
+        exclusionSource: "user",
+      }),
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(historyRowTitle(rows[0]!)).toBe("제외됨 · 내 설정");
+    expect(historyRowTitle(rows[1]!)).toBe("제외됨 · Drifty 기본");
   });
 });
 

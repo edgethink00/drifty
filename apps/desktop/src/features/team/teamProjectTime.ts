@@ -1,5 +1,6 @@
 import {
   buildTeamProjectSliceProjection,
+  isExcludedSegment,
   isPassiveSupportedSegment,
   isRemoteDeviceSegment,
   logicalDayIsoDateForDate,
@@ -25,7 +26,7 @@ export function aggregateTeamProjectDayTotals(
   windowAssignments: readonly ProjectWindowAssignmentRecord[] = [],
 ): TeamProjectTotalsEntry[] {
   const localSegments = segments.filter(
-    (segment) => !isRemoteDeviceSegment(segment) && !isPassiveSupportedSegment(segment),
+    (segment) => !isRemoteDeviceSegment(segment) && !isPassiveSupportedSegment(segment) && !isExcludedSegment(segment),
   );
   const projection = buildTeamProjectSliceProjection(localSegments, windowAssignments, assignments);
 

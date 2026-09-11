@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   classifyActivity,
   isBrowserHistoryImportSegment,
+  isExcludedSegment,
   logicalDayEndExclusiveMs,
   logicalDayIsoDateForDate,
   shiftIsoDate,
@@ -82,7 +83,7 @@ export function useDailyProductivitySeries(input: UseDailyProductivityInput): Da
       try {
         const startDay = getLeaderboardWindowStartDay(windowEndDay, "monthly");
         const fetched = await trackerClient.getTimeline(getLogicalDayRange(startDay, windowEndDay, startOfDayMinutes));
-        const segments = fetched.filter((segment) => !isBrowserHistoryImportSegment(segment));
+        const segments = fetched.filter((segment) => !isBrowserHistoryImportSegment(segment) && !isExcludedSegment(segment));
         const next = buildDailyProductivitySeries(
           segments,
           startDay,

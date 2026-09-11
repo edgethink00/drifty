@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-tracker-delete-excluded-app"
+description = "Enables the tracker_delete_excluded_app command without any pre-configured scope."
+commands.allow = ["tracker_delete_excluded_app"]
+
+[[permission]]
+identifier = "deny-tracker-delete-excluded-app"
+description = "Denies the tracker_delete_excluded_app command without any pre-configured scope."
+commands.deny = ["tracker_delete_excluded_app"]

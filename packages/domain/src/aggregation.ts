@@ -13,6 +13,7 @@ import type {
   ProductivityLabel,
   SiteDuration,
 } from "./activity";
+import { isExcludedSegment } from "./activity";
 import { canonicalizeClassificationRuleSiteUrl } from "./classificationRuleUrl";
 import {
   DRIFTY_PRODUCTIVITY_RUBRIC_V1,
@@ -214,6 +215,7 @@ export function buildAppUsageSummaries(
   >();
 
   for (const segment of segments) {
+    if (isExcludedSegment(segment)) continue;
     const siteDomain = groupBy === "activity" ? normalizedSiteDomain(segment) : null;
     const siteTitle = groupBy === "activity" ? normalizedSiteTitle(segment) : null;
     const siteLabel = siteDomain ?? siteTitle;
@@ -851,6 +853,7 @@ export function buildRollingFocusSeconds(segments: ActivitySegment[], startDay: 
   let totalSeconds = 0;
 
   for (const segment of segments) {
+    if (isExcludedSegment(segment)) continue;
     const { productivity } = classifyActivity(segment, options);
     if (productivity !== "focus") continue;
 
@@ -885,6 +888,15 @@ export function classifyActivity(segment: ActivitySegment, options?: Classificat
 }
 
 export function classifyActivityDetailed(segment: ActivitySegment, options?: ClassificationOptions): ActivityClassificationDetail {
+  if (isExcludedSegment(segment)) {
+    return detail(
+      { category: "unknown", productivity: "neutral" },
+      "app",
+      "fallback",
+      1,
+      "Activity excluded by privacy settings",
+    );
+  }
   const stored = segment.classification;
   const storedUsable = stored && (stored.aiResult !== true || options?.includeAiClassifications !== false) ? stored : null;
   const surface: ClassificationSurface = isBrowserActivity(segment) ? "browser" : "app";
@@ -1140,6 +1152,7 @@ export function buildCategoryDurations(segments: ActivitySegment[], options?: Cl
   const totalSeconds = totalDurationSeconds(segments);
 
   for (const segment of segments) {
+    if (isExcludedSegment(segment)) continue;
     const { category } = classifyActivity(segment, options);
     const target = totals.find((entry) => entry.category === category);
     if (!target) continue;

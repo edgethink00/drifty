@@ -5,6 +5,7 @@ import {
   AI_CLASSIFICATION_BACKGROUND_THRESHOLD,
   AI_CLASSIFICATION_FOCUSED_IDLE_MS,
   AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD,
+  classifyLiveActivityWithAi,
   describeAiClassificationFailure,
   describeLocalAiClassificationFailure,
   diffAiClassificationUsageSummary,
@@ -3448,5 +3449,24 @@ describe("classification level clustering", () => {
     expect(forA.every((r) => r.category === "workspace" && r.productivity === "focus")).toBe(true);
     // each fanned record carries its own segment's fingerprint
     expect(expanded.find((r) => r.segmentId === "b")?.inputFingerprint).toBe("fp-b");
+  });
+
+  it("immediately skips live AI classification for excluded segments", async () => {
+    const segment: ActivitySegment = {
+      id: "seg-excluded",
+      startedAt: "2026-09-11T10:00:00.000Z",
+      endedAt: "2026-09-11T10:05:00.000Z",
+      durationSeconds: 300,
+      appName: "[Redacted]",
+      exclusionSource: "default",
+      platform: "macos",
+      source: "nsworkspace",
+    };
+
+    const result = await classifyLiveActivityWithAi(segment);
+    expect(result.kind).toBe("unavailable");
+    if (result.kind === "unavailable") {
+      expect(result.reason).toContain("excluded by privacy settings");
+    }
   });
 });

@@ -247,6 +247,14 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     reveal: "privacy-ai",
   },
   {
+    id: "settings.privacy.excludedApps",
+    section: "privacy",
+    titleKey: "settings.privacy.excludedAppsTitle",
+    keywords: "앱 제외 기록하지 않을 앱 password manager exclude unblock 비밀번호 관리자",
+    descriptionKey: "settings.privacy.excludedAppsSubtitle",
+    reveal: "privacy-excluded-apps",
+  },
+  {
     id: "settings.data.database",
     section: "privacy",
     titleKey: "settings.data.database",

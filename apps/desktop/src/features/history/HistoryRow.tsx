@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { AppIconMap } from "@drifty/domain";
+import { isExcludedSegment, type AppIconMap } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
@@ -26,6 +26,7 @@ export const HistoryRow = memo(function HistoryRow({
   const iconKey = row.bundleId ?? row.appName;
   const classification = row.classification;
   const category = localizedCategoryLabel(classification.category, t);
+  const isExcluded = isExcludedSegment(row);
 
   return (
     <label className="history-row" data-selected={selected ? "true" : "false"}>
@@ -51,7 +52,7 @@ export const HistoryRow = memo(function HistoryRow({
         </span>
         <div className="history-row__identity-copy">
           <strong>{title}</strong>
-          <span>{row.siteDomain ?? row.appName}</span>
+          <span>{isExcluded ? t("settings.privacy.excludedAppsDesc") : (row.siteDomain ?? row.appName)}</span>
         </div>
       </div>
       <div className="history-row__category" aria-label={t("history.categoryAria", { category })}>

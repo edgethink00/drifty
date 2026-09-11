@@ -117,6 +117,7 @@ export interface ActivitySegment {
   /** Local capture support only; foreground audio never proves productivity or attention. */
   engagementEvidence?: "foreground-audio" | null;
   confidence?: number | null;
+  exclusionSource?: ExclusionSource | null;
   /** cloud_devices.id of the originating Mac; null/absent = recorded on this Mac. */
   deviceId?: string | null;
   classification?: StoredActivityClassification | null;
@@ -137,6 +138,47 @@ export function isPassiveSupportedSegment(segment: Pick<ActivitySegment, "engage
  */
 export function isRemoteDeviceSegment(segment: Pick<ActivitySegment, "deviceId">): boolean {
   return segment.deviceId != null && segment.deviceId !== "";
+}
+
+export type ExclusionSource = "default" | "user";
+
+export const REDACTED_APP_NAME = "[Redacted]";
+
+export interface ExcludedAppRule {
+  readonly id: string;
+  readonly name: string;
+  readonly bundleId?: string | null;
+  readonly source: ExclusionSource;
+}
+
+export const DEFAULT_EXCLUDED_APPS: readonly ExcludedAppRule[] = [
+  { id: "com.1password.1password", name: "1Password", bundleId: "com.1password.1password", source: "default" },
+  { id: "com.authy.authy-mac", name: "Authy", bundleId: "com.authy.authy-mac", source: "default" },
+  { id: "com.bitwarden.desktop", name: "Bitwarden", bundleId: "com.bitwarden.desktop", source: "default" },
+  { id: "com.dashlane.dashlanephone6", name: "Dashlane", bundleId: "com.dashlane.dashlanephone6", source: "default" },
+  { id: "in.sinew.Enpass-Desktop", name: "Enpass", bundleId: "in.sinew.Enpass-Desktop", source: "default" },
+  { id: "com.keepersecurity.passwordmanager", name: "Keeper", bundleId: "com.keepersecurity.passwordmanager", source: "default" },
+  { id: "org.keepassxc.keepassxc", name: "KeePassXC", bundleId: "org.keepassxc.keepassxc", source: "default" },
+  { id: "com.apple.keychainaccess", name: "Keychain Access", bundleId: "com.apple.keychainaccess", source: "default" },
+  { id: "com.lastpass.LastPass", name: "LastPass", bundleId: "com.lastpass.LastPass", source: "default" },
+  { id: "com.ledger.live", name: "Ledger Live", bundleId: "com.ledger.live", source: "default" },
+  { id: "com.nordpass.osx", name: "NordPass", bundleId: "com.nordpass.osx", source: "default" },
+  { id: "com.apple.Passwords", name: "Passwords", bundleId: "com.apple.Passwords", source: "default" },
+  { id: "ch.protonpass.mac", name: "Proton Pass", bundleId: "ch.protonpass.mac", source: "default" },
+  { id: "com.outercorner.Secrets2", name: "Secrets", bundleId: "com.outercorner.Secrets2", source: "default" },
+  { id: "io.trezor.suite", name: "Trezor Suite", bundleId: "io.trezor.suite", source: "default" },
+  { id: "com.yubico.authenticator", name: "Yubico Authenticator", bundleId: "com.yubico.authenticator", source: "default" },
+];
+
+export function isExcludedSegment(
+  segment: { readonly exclusionSource?: ExclusionSource | null; readonly appName?: string | null }
+): boolean {
+  return segment.exclusionSource != null || segment.appName === REDACTED_APP_NAME;
+}
+
+export function exclusionSourceLabel(source?: ExclusionSource | null): string {
+  if (source === "user") return "제외됨 · 내 설정";
+  return "제외됨 · Drifty 기본";
 }
 
 /** "all" = merged timeline, "local" = this Mac only, otherwise a cloud device id. */

@@ -90,6 +90,27 @@ impl TrackerController {
         self.invoke::<Value>(app, "delete_classification_rule", json!({ "id": id }))
     }
 
+    pub fn save_excluded_app(&self, app: &AppHandle, input: Value) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "save_excluded_app", input)
+    }
+
+    pub fn delete_excluded_app(&self, app: &AppHandle, id: String) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "delete_excluded_app", json!({ "id": id }))
+    }
+
+    pub fn delete_excluded_app_history(
+        &self,
+        app: &AppHandle,
+        name: String,
+        bundle_id: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "delete_excluded_app_history",
+            json!({ "name": name, "bundleId": bundle_id }),
+        )
+    }
+
     pub fn delete_activity_segments(
         &self,
         app: &AppHandle,

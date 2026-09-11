@@ -394,6 +394,27 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_classification_rules", json!({}))
     }
 
+    pub fn get_excluded_apps(&self, app: &AppHandle) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_excluded_apps", json!({}))
+    }
+
+    pub fn get_excluded_app_history_count(
+        &self,
+        app: &AppHandle,
+        name: String,
+        bundle_id: Option<String>,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_excluded_app_history_count",
+            json!({ "name": name, "bundleId": bundle_id }),
+        )
+    }
+
+    pub fn get_recent_apps(&self, app: &AppHandle, limit: usize) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(app, "get_recent_apps", json!({ "limit": limit }))
+    }
+
     pub fn search_classification_rule_candidates(
         &self,
         app: &AppHandle,
@@ -1008,6 +1029,9 @@ fn sidecar_command_retry_safety(command: &str) -> SidecarCommandRetrySafety {
         | "get_unclassified_segments"
         | "get_reusable_ai_classifications"
         | "get_classification_rules"
+        | "get_excluded_apps"
+        | "get_excluded_app_history_count"
+        | "get_recent_apps"
         | "search_classification_rule_candidates"
         | "get_projects"
         | "get_project_assignments"
@@ -1925,6 +1949,9 @@ mod tests {
             "get_unclassified_segments",
             "get_reusable_ai_classifications",
             "get_classification_rules",
+            "get_excluded_apps",
+            "get_excluded_app_history_count",
+            "get_recent_apps",
             "search_classification_rule_candidates",
             "get_projects",
             "get_project_assignments",

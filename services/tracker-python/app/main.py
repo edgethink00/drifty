@@ -25,6 +25,7 @@ if str(PACKAGE_ROOT) not in sys.path:
     sys.path.insert(0, str(PACKAGE_ROOT))
 
 from app.storage.db import BrowserHistoryBackfillConfig, TrackerDatabase
+from app.tracker.app_exclusion import match_app_exclusion, redact_snapshot
 from app.platform_locks import (
     lock_exclusive,
     lock_exclusive_nonblocking,
@@ -1210,6 +1211,52 @@ def delete_classification_rule(payload: dict):
     return response(True, {"deleted": deleted})
 
 
+def get_excluded_apps(payload: dict):
+    return response(True, database().get_excluded_apps())
+
+
+def save_excluded_app(payload: dict):
+    rule_id = payload.get("id")
+    name = payload.get("name")
+    if not isinstance(rule_id, str) or not isinstance(name, str):
+        return response(False, error="id and name are required")
+    bundle_id = payload.get("bundleId") or payload.get("bundle_id")
+    source = payload.get("source", "user")
+    rule = database().save_excluded_app(rule_id, name, bundle_id, source)
+    return response(True, rule)
+
+
+def delete_excluded_app(payload: dict):
+    rule_id = payload.get("id")
+    if not isinstance(rule_id, str) or not rule_id:
+        return response(False, error="id is required")
+    deleted = database().delete_excluded_app(rule_id)
+    return response(True, {"deleted": deleted})
+
+
+def get_excluded_app_history_count(payload: dict):
+    name = payload.get("name")
+    if not isinstance(name, str):
+        return response(False, error="name is required")
+    bundle_id = payload.get("bundleId") or payload.get("bundle_id")
+    count = database().get_excluded_app_history_count(name, bundle_id)
+    return response(True, {"count": count})
+
+
+def delete_excluded_app_history(payload: dict):
+    name = payload.get("name")
+    if not isinstance(name, str):
+        return response(False, error="name is required")
+    bundle_id = payload.get("bundleId") or payload.get("bundle_id")
+    deleted = database().delete_excluded_app_history(name, bundle_id)
+    return response(True, {"deleted": deleted})
+
+
+def get_recent_apps(payload: dict):
+    limit = int(payload.get("limit", 50)) if isinstance(payload, dict) else 50
+    return response(True, database().get_recent_apps(limit))
+
+
 def delete_activity_segments(payload: dict):
     raw_ids = payload.get("ids")
     if not isinstance(raw_ids, list):
@@ -1580,6 +1627,11 @@ def get_current_snapshot():
     else:
         _apply_developer_diagnostics_defaults()
     snapshot = current_snapshot()
+    if DB_PATH.exists():
+        excluded_rules = database().get_excluded_app_rules()
+        match = match_app_exclusion(snapshot.app_name, snapshot.bundle_id, excluded_rules)
+        if match:
+            snapshot = redact_snapshot(snapshot, match.source)
     return response(
         True,
         {
@@ -1886,6 +1938,12 @@ COMMANDS = {
     "get_classification_rules": get_classification_rules,
     "save_classification_rule": save_classification_rule,
     "delete_classification_rule": delete_classification_rule,
+    "get_excluded_apps": get_excluded_apps,
+    "save_excluded_app": save_excluded_app,
+    "delete_excluded_app": delete_excluded_app,
+    "get_excluded_app_history_count": get_excluded_app_history_count,
+    "delete_excluded_app_history": delete_excluded_app_history,
+    "get_recent_apps": get_recent_apps,
     "delete_activity_segments": delete_activity_segments,
     "delete_history_range": delete_history_range,
     "search_classification_rule_candidates": search_classification_rule_candidates,

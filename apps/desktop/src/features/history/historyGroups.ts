@@ -1,5 +1,5 @@
-import { classifyActivityDetailed, logicalDayIsoDateForDate } from "@drifty/domain";
-import type { ActivityCategory, ActivitySegment, ClassificationOptions, ProductivityLabel } from "@drifty/domain";
+import { classifyActivityDetailed, exclusionSourceLabel, isExcludedSegment, logicalDayIsoDateForDate } from "@drifty/domain";
+import type { ActivityCategory, ActivitySegment, ClassificationOptions, ExclusionSource, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
@@ -24,6 +24,7 @@ export type HistoryRow = {
   readonly siteUrl?: string | null;
   readonly windowTitle?: string | null;
   readonly classification: HistoryClassification;
+  readonly exclusionSource?: ExclusionSource | null;
   readonly searchText: string;
 };
 
@@ -52,6 +53,7 @@ type MutableHistoryRow = {
   siteUrl?: string | null;
   windowTitle?: string | null;
   classification: HistoryClassification;
+  exclusionSource?: ExclusionSource | null;
   searchParts: string[];
 };
 
@@ -136,6 +138,9 @@ export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMin
 }
 
 export function historyRowTitle(row: HistoryRow): string {
+  if (isExcludedSegment(row)) {
+    return exclusionSourceLabel(row.exclusionSource);
+  }
   return row.siteTitle ?? row.windowTitle ?? row.siteDomain ?? row.appName;
 }
 
@@ -155,6 +160,7 @@ function startHistoryRow(segment: ActivitySegment, classificationOptions?: Class
     siteUrl: segment.siteUrl,
     windowTitle: segment.windowTitle,
     classification,
+    exclusionSource: segment.exclusionSource,
     searchParts: [...historySearchParts(segment), classification.categoryLabel, classification.productivityLabel],
   };
 }
@@ -176,6 +182,7 @@ function finishHistoryRow(row: MutableHistoryRow): HistoryRow {
     siteUrl: row.siteUrl,
     windowTitle: row.windowTitle,
     classification: row.classification,
+    exclusionSource: row.exclusionSource,
     searchText: row.searchParts.filter(Boolean).join(" ").toLowerCase(),
   };
 }
@@ -209,6 +216,7 @@ function prependIntoHistoryRow(row: MutableHistoryRow, segment: ActivitySegment,
 }
 
 function sameApp(row: MutableHistoryRow, segment: ActivitySegment): boolean {
+  if (isExcludedSegment(row) && isExcludedSegment(segment)) return true;
   const rowBundleId = row.bundleId ?? null;
   const segmentBundleId = segment.bundleId ?? null;
   if (rowBundleId !== null && segmentBundleId !== null) return rowBundleId === segmentBundleId;

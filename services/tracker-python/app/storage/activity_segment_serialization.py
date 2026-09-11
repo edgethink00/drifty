@@ -69,6 +69,7 @@ def serialize_activity_row(row: Mapping[str, RowValue]) -> dict[str, SerializedV
         "source": row.get("source", "unknown"),
         "confidence": row.get("confidence"),
         "deviceId": row.get("origin_device_id"),
+        "exclusionSource": row.get("exclusion_source"),
     }
     engagement_evidence = row_engagement_evidence(row)
     if engagement_evidence is not None:
@@ -109,6 +110,7 @@ def serialize_dashboard_week_activity_row(row: Mapping[str, RowValue]) -> dict[s
         "youtubeCategory": row.get("youtube_category"),
         "youtubeChannelName": row.get("youtube_channel_name"),
         "youtubeTitle": row.get("youtube_title"),
+        "exclusionSource": row.get("exclusion_source"),
     }
     for key, value in optional_fields.items():
         if value is not None and value != "":

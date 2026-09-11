@@ -239,4 +239,28 @@ describe("leaderboardPublisher", () => {
       windowEndDay: closedDay,
     });
   });
+
+  it("keeps excluded app time local instead of publishing it", async () => {
+    const today = todayIsoDate();
+    getTimeline.mockResolvedValue([
+      makeSegment(today, 3600),
+      {
+        ...makeSegment(today, 1800),
+        id: `${today}-excluded-app`,
+        appName: "[Redacted]",
+        exclusionSource: "default",
+      },
+    ]);
+
+    const result = await buildLeaderboardPublishPayloads({
+      profileDisplayName: "Alex",
+      leaderboardWindowEndDay: today,
+      timezone: "Asia/Seoul",
+      startOfDayMinutes: 0,
+      showAiClassificationImpact: false,
+    });
+
+    expect(result.segmentCount).toBe(1);
+    expect(result.payloads[0]?.focusSeconds).toBe(3600);
+  });
 });

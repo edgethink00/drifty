@@ -1,4 +1,4 @@
-import { classifyActivityDetailed, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
+import { classifyActivityDetailed, exclusionSourceLabel, isExcludedSegment, logicalDayEndExclusiveMs, logicalDayStartMs, shiftIsoDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ClassificationSource, ProductivityLabel } from "@drifty/domain";
 import { DEFAULT_START_OF_WEEK } from "../settings/settingsStorage";
 import type { StartOfWeek } from "../settings/settingsStorage";
@@ -243,10 +243,17 @@ export function buildWeekCalendarEvents(
   }
 
   function weekCalendarSegmentLabel(segment: ActivitySegment): string {
+    if (isExcludedSegment(segment)) {
+      return exclusionSourceLabel(segment.exclusionSource);
+    }
     return segment.siteDomain?.trim() || segment.siteTitle?.trim() || segment.appName;
   }
 
   function weekCalendarSegmentIdentity(segment: ActivitySegment): WeekCalendarIdentity {
+    if (isExcludedSegment(segment)) {
+      const label = exclusionSourceLabel(segment.exclusionSource);
+      return { id: "excluded", label, appName: label, bundleId: null, browserName: null, siteDomain: null, siteTitle: null };
+    }
     const appName = segment.appName.trim() || "Unknown app";
     const bundleId = segment.bundleId?.trim() || null;
     const browserName = segment.browserName?.trim() || null;

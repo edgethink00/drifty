@@ -1,4 +1,4 @@
-import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isPassiveSupportedSegment, isRemoteDeviceSegment } from "@drifty/domain";
+import { buildRollingFocusSeconds, isBrowserHistoryImportSegment, isExcludedSegment, isPassiveSupportedSegment, isRemoteDeviceSegment } from "@drifty/domain";
 import type { ActivitySegment } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { getLogicalDayRange, logicalTodayIsoDate } from "../../lib/formatting";
@@ -70,6 +70,7 @@ export async function buildLeaderboardPublishPayloads(
   // would double-publish the same time.
   const allPeriodSegments = fetchedSegments.filter(
     (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isExcludedSegment(segment)
       && !isPassiveSupportedSegment(segment)
       && !isRemoteDeviceSegment(segment),
   );
@@ -94,6 +95,7 @@ export async function buildLeaderboardCheckpointPayload(
   ));
   const publishableSegments = fetchedSegments.filter(
     (segment) => !isBrowserHistoryImportSegment(segment)
+      && !isExcludedSegment(segment)
       && !isPassiveSupportedSegment(segment)
       && !isRemoteDeviceSegment(segment),
   );
