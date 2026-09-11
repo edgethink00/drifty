@@ -315,14 +315,13 @@ describe("AgentsPage shared dashboard controls", () => {
   it("shows cell facts in Day and the whole run in Week", async () => {
     renderAgentsPage();
 
-    const dayCell = screen.getByRole("img", { name: /Agent activity, drifty_mac, 01:00–01:03/i });
+    const dayCell = screen.getByRole("img", { name: /Agent activity, drifty_mac, 01:00–02:00/i });
     fireEvent(dayCell, new MouseEvent("pointermove", { bubbles: true, clientX: 80, clientY: 80 }));
     await waitFor(() => expect(document.querySelector(".agents-hover-card")?.textContent).toContain("drifty_mac"));
     expect(document.querySelector(".agents-hover-card")?.textContent).toContain("Peak concurrent×1");
-    expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("01:00–01:03");
-    expect(document.querySelector(".agents-hover-card__context")?.textContent).toBe("Surrounding activity 01:00–02:00");
-    expect(document.querySelector(".agents-hover-card__head")?.textContent).toContain("3m active");
-    expect(document.querySelector(".agents-hover-card__facts")?.textContent).not.toContain("Commits");
+    expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("01:00–02:00");
+    expect(document.querySelector(".agents-hover-card__head")?.textContent).toContain("1h active");
+    expect(document.querySelector(".agents-hover-card__facts")?.textContent).toContain("Commits in interval1");
     expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Workspace");
     expect(document.querySelector(".agents-hover-card")?.textContent).not.toContain("Delete activity");
     expect(document.querySelector('.week-activity-inspector[data-mode="peek"]')).toBeNull();
@@ -426,19 +425,24 @@ describe("AgentsPage shared dashboard controls", () => {
 
     const later = document.querySelector<HTMLElement>('[data-flow-minute="642"]')!;
     fireEvent(later, new MouseEvent("pointermove", { bubbles: true }));
-    await waitFor(() => expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("10:42–10:45"));
+    await waitFor(() => expect(document.querySelector(".agents-hover-card__head strong")?.textContent).toBe("10:42–10:51"));
     expect(screen.getByRole("tooltip").textContent).toContain("Peak concurrent×1");
     expect(screen.getByRole("tooltip").textContent).not.toMatch(/alpha|model-a|Commits in interval/);
     act(() => later.focus());
     fireEvent.click(screen.getByRole("button", { name: "Project" }));
-    expect(later.dataset.agentHoverId).toContain(":cell:642:3");
+    expect(later.dataset.agentHoverId).toContain(":cell:642:9");
     expect(document.querySelector<HTMLElement>(".agents-hover-card__tone")?.style.getPropertyValue("--agents-hover-tone"))
       .toBe(later.style.getPropertyValue("--flow-project-color"));
   });
 
   it("offers one Day tab stop and navigates cells in logical time across midnight", () => {
     vi.mocked(useAgentsData).mockReturnValue({ days: [{ ...source,
-      turns: [[1197, 1206, "codex", "alpha"]], commits: [],
+      turns: [
+        [1197, 1200, "codex", "alpha", "model-a"],
+        [1200, 1203, "codex", "alpha", "model-b"],
+        [1203, 1206, "claude", "beta", "model-c"],
+      ],
+      commits: [],
     }], loading: false, live: true });
     renderAgentsPage({ startOfDayMinutes: 4 * 60 });
     const first = screen.getByRole("img", { name: /23:57–00:00/ });

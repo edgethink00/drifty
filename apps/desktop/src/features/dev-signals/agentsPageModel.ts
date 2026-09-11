@@ -25,6 +25,7 @@ export type SpanTuple = readonly [number, number];
 export type TurnTuple =
   | readonly [number, number, string]
   | readonly [number, number, string, string]
+  | readonly [number, number, string, string, string]
   | readonly [number, number, string, string, string, number];
 /** [minute, insertions, deletions, files, sha, repo] */
 export type CommitTuple = readonly [number, number, number, number, string, string];
@@ -592,6 +593,99 @@ export function buildAgentsGridCells(
     });
   }
   return result;
+}
+
+export type AgentsDayCellGroup = {
+  readonly startMinute: number;
+  readonly endMinute: number;
+  readonly cells: readonly AgentsGridCell[];
+  readonly concurrency: number;
+  readonly topRepo: string | null;
+  readonly activeMinutes: number;
+  readonly repos: readonly { readonly repo: string | null; readonly providers: readonly string[] }[];
+  readonly models: readonly string[];
+  readonly commitCount: number;
+};
+
+/**
+ * Equivalence key for merging adjacent Day timeline cells into one hover group.
+ *
+ * Current criteria:
+ * 1. Peak concurrency matches
+ * 2. Dominant repo (topRepo) matches (ensures visual color continuity in repo mode)
+ * 3. Exact active tools per repo match
+ * 4. Active models match
+ *
+ * NOTE: Model equality is currently required so we start with conservative,
+ * fine-grained grouping. In future iterations, model equality may be relaxed
+ * or excluded so that model switches within the same continuous agent session
+ * do not fracture the hover group.
+ */
+export function agentsCellEquivalenceKey(cell: AgentsGridCell): string {
+  const repoProviders = [...cell.repos]
+    .sort((a, b) => (a.repo ?? "").localeCompare(b.repo ?? ""))
+    .map(({ repo, providers }) => `${repo ?? ""}:[${[...providers].sort().join(",")}]`)
+    .join(";");
+  const models = [...cell.models].sort().join(",");
+  return `c:${cell.concurrency}|top:${cell.topRepo ?? ""}|rp:${repoProviders}|m:${models}`;
+}
+
+/**
+ * Merge adjacent Day grid cells that share the exact same active agent state
+ * into continuous hover groups.
+ */
+export function buildAgentsDayCellGroups(
+  cells: ReadonlyMap<number, AgentsGridCell>,
+  intervalMinutes: number,
+): AgentsDayCellGroup[] {
+  if (cells.size === 0) return [];
+  const safeInterval = Math.max(1, Math.floor(intervalMinutes));
+  const orderedCells = [...cells.values()].sort((left, right) => left.minuteOfDay - right.minuteOfDay);
+
+  const cellGroups: AgentsGridCell[][] = [];
+  let currentGroup: AgentsGridCell[] = [];
+  let currentKey: string | null = null;
+  let previousMinute: number | null = null;
+
+  for (const cell of orderedCells) {
+    const key = agentsCellEquivalenceKey(cell);
+    const isAdjacent = previousMinute !== null && cell.minuteOfDay === previousMinute + safeInterval;
+    if (currentGroup.length > 0 && isAdjacent && key === currentKey) {
+      currentGroup.push(cell);
+      previousMinute = cell.minuteOfDay;
+      continue;
+    }
+    if (currentGroup.length > 0) {
+      cellGroups.push(currentGroup);
+    }
+    currentGroup = [cell];
+    currentKey = key;
+    previousMinute = cell.minuteOfDay;
+  }
+  if (currentGroup.length > 0) {
+    cellGroups.push(currentGroup);
+  }
+
+  return cellGroups.map((group) => {
+    const firstCell = group[0]!;
+    const lastCell = group[group.length - 1]!;
+    const startMinute = firstCell.minuteOfDay;
+    const endMinute = lastCell.minuteOfDay + safeInterval;
+    const activeMinutes = group.reduce((sum, c) => sum + c.activeMinutes, 0);
+    const commitCount = group.reduce((sum, c) => sum + c.commitCount, 0);
+
+    return {
+      startMinute,
+      endMinute,
+      cells: group,
+      concurrency: firstCell.concurrency,
+      topRepo: firstCell.topRepo,
+      activeMinutes: Math.round(activeMinutes * 10) / 10,
+      repos: firstCell.repos,
+      models: firstCell.models,
+      commitCount,
+    };
+  });
 }
 
 /** Cell width that gives a Week run its internal texture. */

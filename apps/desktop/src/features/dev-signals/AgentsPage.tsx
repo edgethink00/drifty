@@ -54,6 +54,7 @@ import { FOCUS_DRIFT_GRID_PATH } from "../dashboard/focusDriftChart";
 import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath } from "../dashboard/focusDriftGeometry";
 import {
   buildAgentsDayModel,
+  buildAgentsDayCellGroups,
   buildAgentsGridCells,
   buildAgentsRunSegments,
   buildAgentsRunStretches,
@@ -437,49 +438,58 @@ function AgentsDayTimeline({ model, source, colorMode, intervalMinutes, intensit
     const detailsById = new Map<string, AgentsHoverDetails>();
     const idsByCell = new Map<number, string>();
     const ariaLabelsById = new Map<string, string>();
-    const orderedCells = [...gridCells.values()].sort((left, right) => left.minuteOfDay - right.minuteOfDay);
+    const cellGroups = buildAgentsDayCellGroups(gridCells, intervalMinutes);
 
-    for (const cell of orderedCells) {
-      const start = cell.minuteOfDay;
-      const end = start + intervalMinutes;
-      const block = gridBlocks.get(`${clockMinuteForLogicalMinute(start, boundaryMinutes)}`);
-      if (!block) continue;
-      const id = `${model.day}:cell:${start}:${intervalMinutes}`;
+    for (const group of cellGroups) {
+      const start = group.startMinute;
+      const end = group.endMinute;
+      const blocks = group.cells.flatMap((cell) => {
+        const block = gridBlocks.get(`${clockMinuteForLogicalMinute(cell.minuteOfDay, boundaryMinutes)}`);
+        return block ? [block] : [];
+      });
+      if (blocks.length === 0) continue;
+      const block = blocks[0]!;
+      const id = `${model.day}:cell:${start}:${end - start}`;
+      const activeSeconds = Math.round(group.activeMinutes * 60);
       const flowGroup: FlowBlockHoverGroup = {
         block,
-        blocks: [block],
+        blocks,
         segmentIds: [],
         startMinuteOfDay: block.minuteOfDay,
         endMinuteOfDay: clockMinuteForLogicalMinute(end, boundaryMinutes),
-        durationSeconds: Math.round(cell.activeMinutes * 60),
+        durationSeconds: activeSeconds,
       };
       const overlappingStretches = runStretches.filter((stretch) => start < stretch.end && end > stretch.start);
       const surrounding = overlappingStretches.length === 1 ? overlappingStretches[0] : undefined;
-      // A coarse cell can touch two separate runs. Do not imply that either
-      // alone contains its activity, or that a run is one agent session.
+      // A coarse cell or sub-run can sit inside a larger multi-stage run.
       const surroundingRangeLabel = surrounding && (surrounding.start < start || surrounding.end > end)
         ? formatAgentRunTimeRange(surrounding.start, surrounding.end, boundaryMinutes, effectiveLanguage)
         : undefined;
       const details: AgentsHoverDetails = {
         id,
-        repo: cell.topRepo,
+        repo: group.topRepo,
         timeRangeLabel: formatAgentRunTimeRange(start, end, boundaryMinutes, effectiveLanguage),
-        activeSeconds: Math.round(cell.activeMinutes * 60),
-        peakConcurrency: cell.concurrency,
-        providerLabels: [...new Set(cell.repos.flatMap((repo) => repo.providers).map(agentToolName))],
-        modelLabels: cell.models.map(shortModelName),
-        commitCount: cell.commitCount,
+        activeSeconds,
+        peakConcurrency: group.concurrency,
+        providerLabels: [...new Set(group.repos.flatMap((repo) => repo.providers).map(agentToolName))],
+        modelLabels: group.models.map(shortModelName),
+        commitCount: group.commitCount,
         tone: block.projectColor ?? AGENTS_UNKNOWN_COLOR,
         flowGroup,
         cellSummary: {
-          repos: cell.repos.map(({ repo, providers }) => ({ repo, providerLabels: [...new Set(providers.map(agentToolName))] })),
+          repos: group.repos.map(({ repo, providers }) => ({
+            repo,
+            providerLabels: [...new Set(providers.map(agentToolName))],
+          })),
           ...(surroundingRangeLabel ? { surroundingRangeLabel } : {}),
         },
       };
       detailsById.set(id, details);
       ariaLabelsById.set(id, agentsHoverAriaLabel(details, effectiveLanguage, t));
-      groupsByCell.set(block.minuteOfDay, flowGroup);
-      idsByCell.set(block.minuteOfDay, id);
+      for (const groupedBlock of blocks) {
+        groupsByCell.set(groupedBlock.minuteOfDay, flowGroup);
+        idsByCell.set(groupedBlock.minuteOfDay, id);
+      }
     }
 
     return {

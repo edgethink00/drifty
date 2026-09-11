@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAgentsDayModel,
+  buildAgentsDayCellGroups,
   buildAgentsGridCells,
   buildAgentsIntensityBands,
   buildAgentsRunSegments,
@@ -496,5 +497,97 @@ describe("buildAgentsRunSegments", () => {
       { start: 7, end: 15 },
       { start: 45, end: 52 },
     ]);
+  });
+});
+
+describe("buildAgentsDayCellGroups", () => {
+  it("merges adjacent cells with identical tools, repos, concurrency, and models into one group", () => {
+    const sample: AgentsDaySource = {
+      day: "2026-08-28",
+      attention: [],
+      turns: [
+        [60, 90, "codex", "alpha", "model-a"],
+      ],
+      commits: [
+        [70, 1, 0, 1, "sha1", "alpha"],
+        [85, 2, 0, 1, "sha2", "alpha"],
+      ],
+    };
+    const cells = buildAgentsGridCells(sample, 15, ["alpha"]);
+    const groups = buildAgentsDayCellGroups(cells, 15);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({
+      startMinute: 60,
+      endMinute: 90,
+      concurrency: 1,
+      topRepo: "alpha",
+      activeMinutes: 30,
+      models: ["model-a"],
+      commitCount: 2,
+    });
+    expect(groups[0]?.cells).toHaveLength(2);
+  });
+
+  it("splits groups when models differ (conservative grouping rule)", () => {
+    const sample: AgentsDaySource = {
+      day: "2026-08-28",
+      attention: [],
+      turns: [
+        [60, 75, "codex", "alpha", "model-a"],
+        [75, 90, "codex", "alpha", "model-b"],
+      ],
+      commits: [],
+    };
+    const cells = buildAgentsGridCells(sample, 15, ["alpha"]);
+    const groups = buildAgentsDayCellGroups(cells, 15);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.models).toEqual(["model-a"]);
+    expect(groups[1]?.models).toEqual(["model-b"]);
+    expect(groups[0]?.endMinute).toBe(75);
+    expect(groups[1]?.startMinute).toBe(75);
+  });
+
+  it("splits groups when concurrency changes", () => {
+    const sample: AgentsDaySource = {
+      day: "2026-08-28",
+      attention: [],
+      turns: [
+        [60, 90, "codex", "alpha", "model-a"],
+        [75, 90, "claude", "beta", "model-b"],
+      ],
+      commits: [],
+    };
+    const cells = buildAgentsGridCells(sample, 15, ["alpha", "beta"]);
+    const groups = buildAgentsDayCellGroups(cells, 15);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.concurrency).toBe(1);
+    expect(groups[1]?.concurrency).toBe(2);
+    expect(groups[0]?.startMinute).toBe(60);
+    expect(groups[0]?.endMinute).toBe(75);
+    expect(groups[1]?.startMinute).toBe(75);
+    expect(groups[1]?.endMinute).toBe(90);
+  });
+
+  it("splits groups across gaps between non-adjacent cells", () => {
+    const sample: AgentsDaySource = {
+      day: "2026-08-28",
+      attention: [],
+      turns: [
+        [0, 15, "codex", "alpha", "model-a"],
+        [30, 45, "codex", "alpha", "model-a"],
+      ],
+      commits: [],
+    };
+    const cells = buildAgentsGridCells(sample, 15, ["alpha"]);
+    const groups = buildAgentsDayCellGroups(cells, 15);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]?.startMinute).toBe(0);
+    expect(groups[0]?.endMinute).toBe(15);
+    expect(groups[1]?.startMinute).toBe(30);
+    expect(groups[1]?.endMinute).toBe(45);
   });
 });
