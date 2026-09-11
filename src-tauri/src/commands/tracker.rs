@@ -189,6 +189,8 @@ pub struct ExcludedAppSaveQuery {
     pub bundle_id: Option<String>,
     #[serde(default = "default_user_source")]
     pub source: String,
+    pub tombstone: Option<bool>,
+    pub updated_at: Option<String>,
 }
 
 fn default_user_source() -> String {
@@ -212,6 +214,12 @@ pub struct ExcludedAppHistoryQuery {
 #[serde(rename_all = "camelCase")]
 pub struct RecentAppsQuery {
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExcludedAppsQuery {
+    pub include_tombstones: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -868,11 +876,13 @@ pub async fn tracker_delete_classification_rule(
 pub async fn tracker_get_excluded_apps(
     app: AppHandle,
     controller: State<'_, TrackerController>,
+    query: Option<ExcludedAppsQuery>,
 ) -> Result<serde_json::Value, String> {
     let controller = *controller.inner();
+    let include_tombstones = query.and_then(|q| q.include_tombstones).unwrap_or(false);
     async_runtime::spawn_blocking(move || {
         controller
-            .get_excluded_apps(&app)
+            .get_excluded_apps(&app, include_tombstones)
             .map_err(|error| error.to_string())
     })
     .await

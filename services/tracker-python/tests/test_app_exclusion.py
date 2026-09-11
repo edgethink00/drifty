@@ -174,6 +174,9 @@ class AppExclusionTests(unittest.TestCase):
         self.assertTrue(deleted_rule)
         apps_after = self.database.get_excluded_apps()
         self.assertFalse(any(a["id"] == "com.finance.personal" for a in apps_after))
+        records = self.database.list_excluded_app_records()
+        tombstoned = next(item for item in records if item["id"] == "com.finance.personal")
+        self.assertTrue(tombstoned["tombstone"])
 
     def test_get_current_snapshot_redacts_when_app_is_excluded(self) -> None:
         from app.main import get_current_snapshot
@@ -193,6 +196,27 @@ class AppExclusionTests(unittest.TestCase):
             self.assertEqual(data["appName"], REDACTED_APP_NAME)
             self.assertIsNone(data["bundleId"])
             self.assertIsNone(data["windowTitle"])
+
+    def test_apply_synced_segments_redacts_excluded_remote_rows(self) -> None:
+        remote = {
+            "segmentUid": "11111111-1111-4111-8111-111111111111",
+            "originDeviceId": "22222222-2222-4222-8222-222222222222",
+            "startedAt": "2026-09-11T10:00:00Z",
+            "endedAt": "2026-09-11T10:01:00Z",
+            "durationSeconds": 60,
+            "appName": "1Password",
+            "bundleId": "com.1password.1password",
+            "windowTitle": "Vault",
+            "platform": "macos",
+            "source": "unknown",
+        }
+        self.database.set_meta("sync_device_id", "33333333-3333-4333-8333-333333333333")
+        result = self.database.apply_synced_segments([remote])
+        self.assertEqual(result["inserted"], 1)
+        timeline = self.database.fetch_timeline("2026-09-11")
+        self.assertEqual(timeline[0]["appName"], REDACTED_APP_NAME)
+        self.assertIsNone(timeline[0]["windowTitle"])
+        self.assertEqual(timeline[0]["exclusionSource"], "default")
 
 
 if __name__ == "__main__":

@@ -118,7 +118,7 @@ export type TrackerCommandMap = {
   tracker_get_classification_rules: { args: undefined; result: ClassificationRule[] };
   tracker_save_classification_rule: { args: { query: { input: ClassificationRuleInput } }; result: ClassificationRule };
   tracker_delete_classification_rule: { args: { query: { id: string } }; result: { deleted: number } };
-  tracker_get_excluded_apps: { args: undefined; result: ExcludedAppRule[] };
+  tracker_get_excluded_apps: { args: { query?: { includeTombstones?: boolean } }; result: ExcludedAppRule[] };
   tracker_save_excluded_app: { args: { query: ExcludedAppRule }; result: ExcludedAppRule };
   tracker_delete_excluded_app: { args: { query: { id: string } }; result: { deleted: boolean } };
   tracker_get_excluded_app_history_count: { args: { query: { name: string; bundleId?: string | null } }; result: { count: number } };
@@ -801,6 +801,7 @@ export interface SyncOutboxSegment {
   confidence?: number | null;
   syncSeq: number;
   classification?: SyncOutboxClassification | null;
+  exclusionSource?: "default" | "user" | null;
 }
 
 export interface SyncOutboxPage {
@@ -876,7 +877,7 @@ export interface TrackerApi {
   getClassificationRules(): Promise<ClassificationRule[]>;
   saveClassificationRule(input: ClassificationRuleInput): Promise<ClassificationRule>;
   deleteClassificationRule(id: string): Promise<{ deleted: number }>;
-  getExcludedApps(): Promise<ExcludedAppRule[]>;
+  getExcludedApps(query?: { includeTombstones?: boolean }): Promise<ExcludedAppRule[]>;
   saveExcludedApp(rule: ExcludedAppRule): Promise<ExcludedAppRule>;
   deleteExcludedApp(id: string): Promise<{ deleted: boolean }>;
   getExcludedAppHistoryCount(query: { name: string; bundleId?: string | null }): Promise<{ count: number }>;

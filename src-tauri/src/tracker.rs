@@ -394,8 +394,16 @@ impl TrackerController {
         self.invoke::<Value>(app, "get_classification_rules", json!({}))
     }
 
-    pub fn get_excluded_apps(&self, app: &AppHandle) -> Result<Value, TrackerError> {
-        self.invoke::<Value>(app, "get_excluded_apps", json!({}))
+    pub fn get_excluded_apps(
+        &self,
+        app: &AppHandle,
+        include_tombstones: bool,
+    ) -> Result<Value, TrackerError> {
+        self.invoke::<Value>(
+            app,
+            "get_excluded_apps",
+            json!({ "includeTombstones": include_tombstones }),
+        )
     }
 
     pub fn get_excluded_app_history_count(

@@ -564,6 +564,16 @@ class TrackerDatabase:
             if column not in existing:
                 conn.execute(f"ALTER TABLE activity_segments ADD COLUMN {column} {column_type}")
 
+        excluded_existing = {row["name"] for row in conn.execute("PRAGMA table_info(excluded_apps)")}
+        excluded_optional = {
+            "tombstone": "INTEGER NOT NULL DEFAULT 0",
+            "updated_at": "TEXT",
+        }
+        for column, column_type in excluded_optional.items():
+            if column not in excluded_existing:
+                conn.execute(f"ALTER TABLE excluded_apps ADD COLUMN {column} {column_type}")
+        conn.execute("UPDATE excluded_apps SET updated_at = created_at WHERE updated_at IS NULL")
+
         metadata_existing = {row["name"] for row in conn.execute("PRAGMA table_info(youtube_video_metadata)")}
         metadata_optional_columns = {
             "title": "TEXT",
@@ -776,7 +786,7 @@ class TrackerDatabase:
             )
 
     def _get_excluded_app_rules(self, conn: sqlite3.Connection) -> list[ExcludedAppRule]:
-        rows = conn.execute("SELECT id, name, bundle_id, source FROM excluded_apps").fetchall()
+        rows = conn.execute("SELECT id, name, bundle_id, source FROM excluded_apps WHERE COALESCE(tombstone, 0) = 0").fetchall()
         return [
             ExcludedAppRule(
                 id=row["id"],
@@ -793,7 +803,9 @@ class TrackerDatabase:
 
     def get_excluded_apps(self) -> list[dict[str, Any]]:
         with self.connect() as conn:
-            rows = conn.execute("SELECT id, name, bundle_id, source, created_at FROM excluded_apps ORDER BY created_at ASC").fetchall()
+            rows = conn.execute(
+                "SELECT id, name, bundle_id, source, created_at, tombstone, updated_at FROM excluded_apps WHERE COALESCE(tombstone, 0) = 0 ORDER BY created_at ASC"
+            ).fetchall()
             return [
                 {
                     "id": row["id"],
@@ -815,7 +827,9 @@ class TrackerDatabase:
                 ON CONFLICT(id) DO UPDATE SET
                     name = excluded.name,
                     bundle_id = excluded.bundle_id,
-                    source = excluded.source
+                    source = excluded.source,
+                    tombstone = 0,
+                    updated_at = excluded.created_at
                 """,
                 (id, name, bundle_id, source, now_iso),
             )
@@ -823,8 +837,57 @@ class TrackerDatabase:
 
     def delete_excluded_app(self, id: str) -> bool:
         with self.connect() as conn:
-            cursor = conn.execute("DELETE FROM excluded_apps WHERE id = ?", (id,))
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cursor = conn.execute(
+                "UPDATE excluded_apps SET tombstone = 1, updated_at = ? WHERE id = ? AND COALESCE(tombstone, 0) = 0",
+                (now_iso, id),
+            )
             return cursor.rowcount > 0
+
+    def list_excluded_app_records(self) -> list[dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT id, name, bundle_id, source, created_at, tombstone, updated_at FROM excluded_apps"
+            ).fetchall()
+            return [
+                {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "bundleId": row["bundle_id"],
+                    "source": row["source"],
+                    "createdAt": row["created_at"],
+                    "tombstone": bool(row["tombstone"]),
+                    "updatedAt": row["updated_at"] or row["created_at"],
+                }
+                for row in rows
+            ]
+
+    def apply_excluded_app_record(self, record: dict[str, Any]) -> None:
+        now_iso = record.get("updatedAt") or datetime.now(timezone.utc).isoformat()
+        tombstone = 1 if record.get("tombstone") else 0
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO excluded_apps(id, name, bundle_id, source, created_at, tombstone, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    bundle_id = excluded.bundle_id,
+                    source = excluded.source,
+                    tombstone = excluded.tombstone,
+                    updated_at = excluded.updated_at
+                WHERE excluded.updated_at >= COALESCE(excluded_apps.updated_at, excluded_apps.created_at)
+                """,
+                (
+                    record["id"],
+                    record["name"],
+                    record.get("bundleId"),
+                    record.get("source") or "user",
+                    now_iso,
+                    tombstone,
+                    now_iso,
+                ),
+            )
 
     def get_excluded_app_history_count(self, name: str, bundle_id: str | None = None) -> int:
         with self.connect() as conn:
@@ -2025,6 +2088,7 @@ class TrackerDatabase:
             "confidence": row["confidence"],
             "syncSeq": row["sync_seq"],
             "classification": classification,
+            "exclusionSource": row["exclusion_source"] if "exclusion_source" in row.keys() else None,
         }
 
     def get_sync_outbox(self, after_seq: int, limit: int = 500, hot_grace_seconds: int | None = None) -> dict[str, Any]:
@@ -2174,6 +2238,23 @@ class TrackerDatabase:
                 # Strict receive allow-list: engagement_evidence and raw_context_json
                 # are local sensor/context fields and are intentionally ignored even
                 # if a malformed or older peer includes them in a sync payload.
+                rules = self._get_excluded_app_rules(conn)
+                match = match_app_exclusion(item.get("appName"), item.get("bundleId"), rules)
+                exclusion_source = item.get("exclusionSource")
+                if match or exclusion_source or item.get("appName") == REDACTED_APP_NAME:
+                    item = {
+                        **item,
+                        "appName": REDACTED_APP_NAME,
+                        "bundleId": None,
+                        "windowTitle": None,
+                        "siteDomain": None,
+                        "siteTitle": None,
+                        "siteUrl": None,
+                        "youtubeVideoId": None,
+                        "youtubePlaylistId": None,
+                        "browserName": None,
+                        "exclusionSource": exclusion_source or (match.source if match else "user"),
+                    }
                 values = (
                     item.get("startedAt"),
                     item.get("endedAt"),
@@ -2193,6 +2274,7 @@ class TrackerDatabase:
                     item.get("source") or "unknown",
                     item.get("confidence"),
                     origin_device_id,
+                    item.get("exclusionSource"),
                 )
                 existing = conn.execute(
                     "SELECT id, origin_device_id FROM activity_segments WHERE segment_uid = ?",
@@ -2214,7 +2296,8 @@ class TrackerDatabase:
                             bundle_id = ?, window_title = ?, site_domain = ?, site_title = ?,
                             site_url = ?, youtube_video_id = ?, youtube_playlist_id = ?,
                             youtube_is_shorts = ?, browser_name = ?, site_source = ?,
-                            platform = ?, source = ?, confidence = ?, origin_device_id = ?
+                            platform = ?, source = ?, confidence = ?, origin_device_id = ?,
+                            exclusion_source = ?
                         WHERE id = ?
                         """,
                         values + (segment_id,),
@@ -2227,8 +2310,8 @@ class TrackerDatabase:
                             started_at, ended_at, duration_seconds, app_name, bundle_id,
                             window_title, site_domain, site_title, site_url, youtube_video_id,
                             youtube_playlist_id, youtube_is_shorts, browser_name, site_source,
-                            platform, source, confidence, origin_device_id, segment_uid
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            platform, source, confidence, origin_device_id, exclusion_source, segment_uid
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         values + (segment_uid,),
                     )

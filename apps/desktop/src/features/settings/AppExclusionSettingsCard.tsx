@@ -50,7 +50,7 @@ function compareName(a: string, b: string): number {
   return a.localeCompare(b, undefined, { sensitivity: "base" });
 }
 
-export function AppExclusionSettingsCard() {
+export function AppExclusionSettingsCard({ deviceSyncEnabled = false }: { readonly deviceSyncEnabled?: boolean } = {}) {
   const { t } = useLocalization();
   const pickerId = useId();
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -243,6 +243,9 @@ export function AppExclusionSettingsCard() {
         }}
       >
         <p className="excluded-apps-card__desc">{t("settings.privacy.excludedAppsDesc")}</p>
+        {deviceSyncEnabled ? (
+          <p className="excluded-apps-card__desc">{t("settings.privacy.excludedAppsSyncOn")}</p>
+        ) : null}
 
         {!loading ? (
           <>

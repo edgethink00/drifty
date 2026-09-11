@@ -147,7 +147,7 @@ export function PrivacySettingsSection({
       >
         <AiPrivacyReview />
       </SettingsCollapsibleCard>
-      <AppExclusionSettingsCard />
+      <AppExclusionSettingsCard deviceSyncEnabled={deviceSyncEnabled} />
       <div className="settings-block">
         <h3>{t("settings.privacy.localData")}</h3>
         <div data-setting-id="settings.data.database" className="settings-row">

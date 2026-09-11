@@ -57,6 +57,7 @@ export type DeviceSyncEngineDeps = {
   readonly syncAccountId?: string;
   /** Re-checks the live auth owner after each awaited cloud request. */
   readonly isSyncAccountCurrent?: () => boolean;
+  readonly syncExcludedApps?: (accountId: string) => Promise<void>;
 };
 
 function defaultSleep(ms: number): Promise<void> {
@@ -254,6 +255,9 @@ export type SyncCycleResult = {
 };
 
 export async function runSyncCycle(deps: DeviceSyncEngineDeps, reason: DeviceSyncCycleReason): Promise<SyncCycleResult> {
+  if (deps.syncAccountId && deps.syncExcludedApps) {
+    await deps.syncExcludedApps(deps.syncAccountId);
+  }
   const pushStatus = await runSyncPushCycle(deps, reason);
   const pull = await runSyncPullCycle(deps);
   return {

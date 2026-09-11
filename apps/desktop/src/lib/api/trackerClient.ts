@@ -336,9 +336,9 @@ export const trackerClient: TrackerApi = {
     const result = await safeInvoke("tracker_delete_classification_rule", { query: { id } });
     return result ?? { deleted: 0 };
   },
-  async getExcludedApps() {
+  async getExcludedApps(query?: { includeTombstones?: boolean }) {
     if (shouldUsePreviewData()) return [...DEFAULT_EXCLUDED_APPS];
-    const result = await safeInvoke("tracker_get_excluded_apps");
+    const result = await safeInvoke("tracker_get_excluded_apps", { query });
     return result ?? [...DEFAULT_EXCLUDED_APPS];
   },
   async saveExcludedApp(rule: ExcludedAppRule) {

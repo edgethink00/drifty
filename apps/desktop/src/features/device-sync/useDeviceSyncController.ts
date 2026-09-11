@@ -4,6 +4,7 @@ import { shouldUsePreviewData } from "../../lib/api/previewData";
 import { DeviceSyncHttpError, fetchSyncDevices, fetchSyncedDeletionsPage, fetchSyncedSegmentsPage, pushSyncBatch } from "./deviceSyncApi";
 import { prepareDeviceSyncAccountScope } from "./deviceSyncAccountScope";
 import { runSyncCycle, SYNC_DEVICE_ID_KEY, SYNC_GENERATION_KEY } from "./deviceSyncEngine";
+import { syncExcludedAppsForAccount } from "../settings/excludedAppsAccountSync";
 import { buildSyncStateAfterCloudPurge } from "./deviceSyncPurgeState";
 import {
   findDeviceSyncCycleRecord,
@@ -140,6 +141,7 @@ export function useDeviceSyncController({
             resolveDeviceId: refreshDeviceLabels,
             syncAccountId: accountId,
             isSyncAccountCurrent: isScopeCurrent,
+            syncExcludedApps: syncExcludedAppsForAccount,
           },
           reason,
         );

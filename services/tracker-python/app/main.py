@@ -1212,6 +1212,8 @@ def delete_classification_rule(payload: dict):
 
 
 def get_excluded_apps(payload: dict):
+    if payload.get("includeTombstones"):
+        return response(True, database().list_excluded_app_records())
     return response(True, database().get_excluded_apps())
 
 
@@ -1222,6 +1224,26 @@ def save_excluded_app(payload: dict):
         return response(False, error="id and name are required")
     bundle_id = payload.get("bundleId") or payload.get("bundle_id")
     source = payload.get("source", "user")
+    if payload.get("tombstone"):
+        database().apply_excluded_app_record({
+            "id": rule_id,
+            "name": name,
+            "bundleId": bundle_id,
+            "source": source,
+            "tombstone": True,
+            "updatedAt": payload.get("updatedAt"),
+        })
+        return response(True, {"id": rule_id, "name": name, "bundleId": bundle_id, "source": source, "tombstone": True})
+    if payload.get("updatedAt"):
+        database().apply_excluded_app_record({
+            "id": rule_id,
+            "name": name,
+            "bundleId": bundle_id,
+            "source": source,
+            "tombstone": False,
+            "updatedAt": payload.get("updatedAt"),
+        })
+        return response(True, {"id": rule_id, "name": name, "bundleId": bundle_id, "source": source})
     rule = database().save_excluded_app(rule_id, name, bundle_id, source)
     return response(True, rule)
 

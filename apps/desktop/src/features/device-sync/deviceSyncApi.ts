@@ -159,6 +159,7 @@ type SyncedSegmentRow = {
   readonly classification_reason: string | null;
   readonly classification_classified_at: string | null;
   readonly server_updated_at: string;
+  readonly exclusion_source?: "default" | "user" | null;
 };
 
 function toSyncedSegmentInput(row: SyncedSegmentRow): SyncedSegmentInput {
@@ -182,6 +183,7 @@ function toSyncedSegmentInput(row: SyncedSegmentRow): SyncedSegmentInput {
     platform: row.platform,
     source: row.source,
     confidence: row.confidence,
+    exclusionSource: row.exclusion_source ?? null,
     classification: row.classification_category
       ? {
           category: row.classification_category,

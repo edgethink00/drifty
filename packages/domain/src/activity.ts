@@ -149,6 +149,9 @@ export interface ExcludedAppRule {
   readonly name: string;
   readonly bundleId?: string | null;
   readonly source: ExclusionSource;
+  readonly tombstone?: boolean;
+  readonly updatedAt?: string;
+  readonly createdAt?: string;
 }
 
 export const DEFAULT_EXCLUDED_APPS: readonly ExcludedAppRule[] = [
