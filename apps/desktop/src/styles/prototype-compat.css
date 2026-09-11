@@ -731,8 +731,8 @@ body:has(.account-popover) .sidebar:not(.sidebar--collapsed) .tracker-control {
   font-family: inherit;
   font-size: var(--type-input-size);
   padding: 6px 10px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
+  background: var(--field-bg);
+  border: 1px solid var(--field-line);
   border-radius: 6px;
   color: var(--text);
   min-width: 180px;

@@ -1169,8 +1169,8 @@
 }
 
 .team-modal textarea.settings-input {
-  min-height: 4.2rem;
-  resize: vertical;
+  min-height: 5rem;
+  resize: none;
   line-height: 1.45;
   padding-top: 0.5rem;
 }

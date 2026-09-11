@@ -322,10 +322,11 @@
 
 .companion-import-controls textarea {
   width: 100%;
-  resize: vertical;
-  border: 1px solid var(--line);
+  resize: none;
+  min-height: 5rem;
+  border: 1px solid var(--field-line);
   border-radius: 10px;
-  background: var(--surface-strong);
+  background: var(--field-bg);
   color: var(--text);
   padding: 10px 11px;
   font-family: var(--font-mono);
@@ -561,8 +562,8 @@
 .settings-input {
   font-family: var(--font-mono);
   font-size: var(--type-input-size);
-  background: var(--bg-2);
-  border: 1px solid var(--line);
+  background: var(--field-bg);
+  border: 1px solid var(--field-line);
   border-radius: 7px;
   padding: 6px 10px;
   color: var(--text);

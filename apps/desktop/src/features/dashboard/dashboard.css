@@ -523,9 +523,9 @@
 }
 
 .dashboard-ai-recovery {
-  --settings-control-bg: color-mix(in srgb, var(--surface) 82%, var(--bg-2));
+  --settings-control-bg: var(--field-bg);
   --settings-control-bg-hover: color-mix(in srgb, var(--surface-strong) 88%, var(--surface));
-  --settings-control-border: color-mix(in srgb, var(--text) 11%, var(--line));
+  --settings-control-border: var(--field-line);
   --settings-control-height: 2.25rem;
   --settings-control-radius: var(--radius-sm);
   align-items: center;

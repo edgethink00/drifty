@@ -590,11 +590,11 @@
 }
 
 .auth-modal__field input {
-  background: var(--surface-strong);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  border: 1px solid var(--field-line);
+  border-radius: var(--field-radius);
   padding: .65rem .85rem;
-  font-size: .95rem;
+  font-size: .88rem;
   color: var(--text);
   outline: none;
   transition: border-color var(--transition-fast);
@@ -784,9 +784,9 @@
 .feedback-modal__input,
 .feedback-modal__textarea {
   width: 100%;
-  background: color-mix(in srgb, var(--bg-2) 70%, var(--surface-strong));
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  background: var(--field-bg);
+  border: 1px solid var(--field-line);
+  border-radius: var(--field-radius);
   padding: .65rem .85rem;
   color: var(--text);
   font-size: .88rem;
@@ -796,18 +796,18 @@
 }
 
 .feedback-modal__input {
-  padding-top: .41rem;
-  padding-bottom: .41rem;
-}
-
-:root[data-theme="dark"] .feedback-modal__input,
-:root[data-theme="dark"] .feedback-modal__textarea {
-  background: color-mix(in srgb, var(--bg-2) 80%, #ffffff);
+  padding-top: .53rem;
+  padding-bottom: .53rem;
 }
 
 .feedback-modal__textarea {
-  min-height: 144px;
-  resize: vertical;
+  /* The native resize grip is drawn inside the corner square and cannot be
+     styled, so at the writing field's 11px radius it cuts across the border
+     arc and reads as a rendering artifact rather than a control. Dropping the
+     handle costs manual resizing, so the resting box grows to pay for it; the
+     dialog still scrolls past that and the counter marks the real limit. */
+  min-height: 168px;
+  resize: none;
 }
 
 .feedback-modal__input:focus,

@@ -37,10 +37,12 @@
 }
 
 .project-editor-field__textarea {
-  min-height: 6rem;
+  /* No native grip on a rounded writing field; see --field-radius in
+     tokens-base.css. The resting box grows to pay for the lost handle. */
+  min-height: 7rem;
   padding: 0.58rem 0.7rem;
   line-height: 1.48;
-  resize: vertical;
+  resize: none;
 }
 
 /* ── Identity field: color chip + name in one frame ─────────────────────── */
@@ -55,9 +57,9 @@
   gap: 0.5rem;
   width: 100%;
   padding: 4px 10px 4px 5px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--field-line);
   border-radius: 7px;
-  background: var(--bg-2);
+  background: var(--field-bg);
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), border-radius var(--transition-fast);
 }
 

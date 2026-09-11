@@ -38,7 +38,35 @@ html {
 }
 
 :root {
-  --field-focus-border: var(--line);
+  /* Writing fields are drawn by their outline, not by a dug-out fill.
+
+     The app used to say "type here" by digging the box out of the paper, and
+     it said it four different ways: settings sat on --bg-2, feedback on a
+     70/30 mix of --bg-2 and --surface-strong, sign-in on --surface-strong,
+     and account deletion on plain --surface. The mix was the weakest of the
+     four and read as dirty white rather than as a well.
+
+     A field now sits on the same paper as the panel around it and a slightly
+     stronger hairline carries the boundary. Measured against --surface that
+     edge reaches 1.30:1, above the 1.21:1 the --bg-2 well managed with its
+     fill, so dropping the fill makes the field clearer rather than quieter.
+     Onboarding already shipped this shape through --onb-line-strong.
+
+     --bg-2 keeps its other jobs: inset tracks, neutral hover fills, and the
+     surfaces a user reads instead of types into.
+
+     --field-radius is the modal-scale field at --field-height. Compact
+     settings controls keep their own smaller radius on purpose: the shared
+     shape language is the ratio to the control height, not one number. */
+  --field-bg: var(--surface);
+  --field-line: color-mix(in srgb, var(--text) 13%, transparent);
+  --field-radius: 11px;
+  --field-height: 2.5rem;
+  /* Focus has to out-rank rest. While every field carried an 8% hairline this
+     token could equal --line and lean on the shadow alone; against a 13% rest
+     edge that same value would have made a focused field read *weaker* than
+     an idle one. */
+  --field-focus-border: color-mix(in srgb, var(--text) 30%, transparent);
   --field-focus-shadow: 0 0 6px 1px color-mix(in srgb, var(--text) 10%, transparent);
   /* One easing for every surface that arrives next to a control: chart hover
      cards, the classification popover, and the anchored menus. Modals own a

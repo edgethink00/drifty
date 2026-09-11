@@ -531,10 +531,11 @@
   }
 }
 
-/* Sign-in inputs run a touch shorter vertically to balance the taller shell. */
+/* Sign-in inputs share the writing-field height with the feedback dialog so
+   the two dialogs stop shipping two different field sizes. */
 .auth-modal .auth-modal__field input {
-  padding-top: 0.34rem;
-  padding-bottom: 0.34rem;
+  padding-top: 0.53rem;
+  padding-bottom: 0.53rem;
 }
 
 /* ── Public-profile / edit-preview social links as chips ────────────────── */

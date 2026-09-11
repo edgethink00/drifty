@@ -11,6 +11,25 @@ import "./AuthModal.css";
 type AuthMode = "sign-in" | "sign-up";
 type AuthView = "credentials" | "forgot-password";
 
+/* The reveal control sits inside the field, so it is drawn rather than
+   labelled: a text button there reads as content typed into an empty box, and
+   next to the forgot link it produced two identical underlined actions on
+   different levels. The accessible name still carries the wording. */
+const EYE_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+const EYE_OFF_ICON = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c5.18 0 8.77 3.62 9.94 6.35a1 1 0 0 1 0 .7 15.9 15.9 0 0 1-2.4 3.56" />
+    <path d="M6.61 6.61A16 16 0 0 0 2.06 11.65a1 1 0 0 0 0 .7C3.23 15.08 6.82 19 12 19a10.9 10.9 0 0 0 5.39-1.39" />
+    <path d="m14.12 14.12a3 3 0 0 1-4.24-4.24" />
+    <path d="m2 2 20 20" />
+  </svg>
+);
+
 export function AuthModal({
   onClose,
   showGoogleSignIn = true,
@@ -343,7 +362,7 @@ export function AuthModal({
           }}
           disabled={isBusy}
         >
-          {activePasswordVisible ? t("auth.modal.hidePassword") : t("auth.modal.showPassword")}
+          {activePasswordVisible ? EYE_OFF_ICON : EYE_ICON}
         </button>
       </div>
     </div>

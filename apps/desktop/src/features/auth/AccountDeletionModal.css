@@ -61,8 +61,8 @@
 }
 
 .account-deletion-modal__confirmation input {
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: var(--field-bg);
+  border: 1px solid var(--field-line);
   border-radius: var(--radius-sm);
   color: var(--text);
   font: inherit;

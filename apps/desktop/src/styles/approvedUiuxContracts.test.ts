@@ -18,6 +18,11 @@ const flowChart = read("../features/flow-chart/flow-chart.css");
 const settingsSearch = read("../features/settings/SettingsSearch.css");
 const projects = read("../features/projects/projects.css");
 const leaderboard = read("../features/leaderboard/leaderboard.css");
+const tokens = read("./tokens-base.css");
+const sharedSurfaces = read("./shared-surfaces.css");
+const authModal = read("../features/auth/AuthModal.css");
+const projectEditorFields = read("../components/project-editor-fields.css");
+const team = read("../features/team/team.css");
 
 /** The declaration block that follows an exact selector line. */
 function ruleBody(source: string, selector: string): string {
@@ -158,5 +163,59 @@ describe("approved UI polish contracts", () => {
     const knob = ruleBody(prototype, ".account-menu-toggle__knob {");
     expect(knob).toContain("width: 14px;");
     expect(knob).toContain("height: 14px;");
+  });
+
+  it("draws every writing field with one outline rule instead of four fills", () => {
+    // Approved 2026-09-11. Settings dug the box out of --bg-2, feedback used a
+    // 70/30 mix that read as dirty white, sign-in used --surface-strong, and
+    // account deletion used bare --surface. A later edit could restore any of
+    // those four by "matching the surrounding panel", so pin the token.
+    expect(tokens).toContain("--field-bg: var(--surface);");
+    expect(tokens).toContain("--field-line: color-mix(in srgb, var(--text) 13%, transparent);");
+    expect(tokens).toContain("--field-radius: 11px;");
+
+    for (const [source, selector] of [
+      [settings, ".settings-input {"],
+      [prototype, ".settings-input,"],
+      [sharedSurfaces, ".auth-modal__field input {"],
+      [sharedSurfaces, ".feedback-modal__input,"],
+    ] as const) {
+      const body = ruleBody(source, selector);
+      expect(body).toContain("background: var(--field-bg);");
+      expect(body).toContain("border: 1px solid var(--field-line);");
+    }
+
+    // The dark theme used to lift the feedback field with a white mix, which
+    // floated it above the dialog instead of sitting it on the same paper.
+    expect(sharedSurfaces).not.toContain('color-mix(in srgb, var(--bg-2) 80%, #ffffff)');
+    // Focus has to out-rank rest now that idle fields carry a 13% edge.
+    expect(tokens).toContain("--field-focus-border: color-mix(in srgb, var(--text) 30%, transparent);");
+  });
+
+  it("draws the reveal control instead of labelling it with a second link", () => {
+    // "Show password" used to be a text button inside an empty field, styled
+    // exactly like the "Forgot password?" link stacked under it. Two identical
+    // text actions on different levels read as a defect. The icon is the fix;
+    // the recovery link stays under the field where the reading order wants it.
+    const toggle = ruleBody(authModal, ".auth-modal__password-toggle {");
+    expect(toggle).toContain("width: 28px;");
+    expect(toggle).toContain("text-decoration: none;");
+    // The 8rem reserve only existed to hold the old text label.
+    expect(ruleBody(authModal, ".auth-modal .auth-modal__password-control input {")).toContain("padding-right: 2.5rem;");
+    // Flush right keeps it in one column with the fields and the submit button.
+    expect(ruleBody(authModal, ".auth-modal__forgot-row {")).not.toContain("padding-right");
+  });
+
+  it("drops the feedback resize grip that cut across the field corner", () => {
+    // The native handle is drawn in the corner square and cannot be styled, so
+    // it crossed the border arc once the field radius grew to 11px.
+    expect(sharedSurfaces).toContain("min-height: 168px;");
+    expect(sharedSurfaces).toContain("resize: none;");
+    // Every writing textarea, not just the one that surfaced the defect. Three
+    // of the app's seven already shipped resize: none, so the odd ones out were
+    // the four that still drew a handle over a rounded corner.
+    for (const source of [sharedSurfaces, projectEditorFields, settings, leaderboard, team]) {
+      expect(source).not.toContain("resize: vertical");
+    }
   });
 });

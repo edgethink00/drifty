@@ -19,8 +19,8 @@
 }
 
 .settings-textarea {
-  min-height: 84px;
-  resize: vertical;
+  min-height: 98px;
+  resize: none;
 }
 
 .capture-recency--error {

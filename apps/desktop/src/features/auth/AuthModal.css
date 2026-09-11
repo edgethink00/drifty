@@ -4,10 +4,11 @@
 
 .auth-modal .auth-modal__password-control input {
   width: 100%;
-  padding-right: 8rem;
+  /* Clears the reveal button: 0.5rem gutter + 28px target + 0.5rem breathing.
+     The old 8rem reserve existed to hold a "Show password" text label. */
+  padding-right: 2.5rem;
 }
 
-.auth-modal__password-toggle,
 .auth-modal__text-action,
 .auth-modal__connection-retry {
   appearance: none;
@@ -22,11 +23,41 @@
   text-underline-offset: 3px;
 }
 
+/* Reveal control: an icon target inside the field, not a second text link. */
 .auth-modal__password-toggle {
   position: absolute;
   top: 50%;
-  right: 0.75rem;
+  right: 0.5rem;
   transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color var(--transition-fast), background var(--transition-fast);
+}
+
+.auth-modal__password-toggle svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.auth-modal__password-toggle:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--bg-2);
+}
+
+.auth-modal__password-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .auth-modal__password-toggle:disabled,
@@ -36,6 +67,11 @@
   opacity: 0.55;
 }
 
+/* Recovery sits under the field, where the eye reaches it after the password
+   attempt fails rather than before it starts. It stays flush to the field's
+   right edge, so it shares one column with both inputs and the submit button.
+   The pairing that used to read as a defect was two identical text links on
+   different levels; the reveal control becoming an icon is what fixed that. */
 .auth-modal__forgot-row {
   display: flex;
   justify-content: flex-end;
