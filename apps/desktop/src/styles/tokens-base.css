@@ -294,6 +294,10 @@ html {
   --danger-soft: #f0deda;
   --danger-line: rgba(158,66,56,.3);
   --shadow: 0 10px 24px rgba(38, 38, 32, 0.05);
+  /* Week event blocks share the Day flow cells' surface tint, but the Day cells
+     carry no text. In light mode the tint pushes the block toward its own near
+     white label, so the light theme uses a lighter dose than dark. */
+  --week-event-surface-tint: 12%;
 }
 
 :root[data-theme="dark"] {
@@ -370,6 +374,7 @@ html {
   --danger-soft: #2e1a18;
   --danger-line: rgba(200,90,78,.3);
   --shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  --week-event-surface-tint: 20%;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
