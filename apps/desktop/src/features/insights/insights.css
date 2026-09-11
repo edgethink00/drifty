@@ -1321,18 +1321,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.8rem;
-  flex-wrap: wrap;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
   padding: 0 0.15rem;
+  min-width: 0;
 }
 
 .weekly-productivity-trend-card__head > div:not(.wt-toggle) {
   display: grid;
   gap: 0.16rem;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .weekly-productivity-trend-card__head .insight-section__label {
   margin-bottom: 0;
+  letter-spacing: 0.07em;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .weekly-productivity-trend-card__legend {
@@ -1390,7 +1396,7 @@
   font-weight: 600;
   letter-spacing: 0.01em;
   line-height: 1;
-  padding: 0.2rem 0.58rem;
+  padding: 0.2rem 0.46rem;
   border-radius: 5px;
   color: var(--text-soft);
   white-space: nowrap;
