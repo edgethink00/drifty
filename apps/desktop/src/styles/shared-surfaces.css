@@ -17,130 +17,277 @@
 .cmd-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28,28,25,.3);
+  background: color-mix(in srgb, var(--text) 12%, transparent);
   z-index: 100;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 15vh;
+  padding-top: 14vh;
   animation: fadeIn .12s ease;
 }
 
 :root[data-theme="dark"] .cmd-overlay {
-  background: rgba(0,0,0,.5);
+  background: color-mix(in srgb, #000 28%, transparent);
 }
 
 .cmd-box {
-  width: 500px;
+  width: 512px;
+  max-width: calc(100vw - 32px);
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  box-shadow: 0 16px 48px rgba(0,0,0,.15);
+  box-shadow: 0 16px 40px rgba(28, 28, 25, 0.14);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-theme="dark"] .cmd-box {
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.45);
 }
 
 .cmd-input-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 13px 16px;
+  height: 48px;
+  padding: 0 12px 0 14px;
   border-bottom: 1px solid var(--line);
 }
 
-.cmd-input-row svg { width: 15px; height: 15px; color: var(--text-soft); flex-shrink: 0; }
+:root[data-theme="dark"] .cmd-input-row {
+  border-bottom-color: var(--line);
+}
+
+.cmd-input-row svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-soft);
+  flex-shrink: 0;
+}
+
+:root[data-theme="dark"] .cmd-input-row svg {
+  color: var(--text-soft);
+}
 
 .cmd-input-row input {
   flex: 1;
   border: none;
   outline: none;
   font-family: var(--font-sans);
-  font-size: 0.875rem;
+  font-size: 14px;
   background: transparent;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+:root[data-theme="dark"] .cmd-input-row input {
   color: var(--text);
 }
 
-.cmd-input-row input::placeholder { color: var(--text-soft); }
+.cmd-input-row input::placeholder {
+  color: var(--text-soft);
+}
 
 .cmd-input-row .esc-key {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-soft);
   background: var(--bg-2);
+  border: 1px solid var(--line);
   padding: 2px 6px;
   border-radius: 4px;
   cursor: pointer;
-  border: 1px solid var(--line);
   white-space: nowrap;
+  user-select: none;
+  line-height: 1;
+  appearance: none;
+}
+
+:root[data-theme="dark"] .cmd-input-row .esc-key {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: var(--line);
+  color: var(--text-soft);
+}
+
+.cmd-list {
+  max-height: 440px;
+  overflow-y: auto;
+  padding: 6px 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .cmd-section-label {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: .12em;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--text-soft);
-  padding: 8px 16px 3px;
+  padding: 8px 10px 4px 36px;
+  user-select: none;
+}
+
+:root[data-theme="dark"] .cmd-section-label {
+  color: var(--text-soft);
+}
+
+.cmd-section-label:first-child {
+  padding-top: 4px;
 }
 
 .cmd-item {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 16px;
+  gap: 10px;
+  min-height: 40px;
+  height: auto;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
   cursor: pointer;
-  transition: background .1s;
+  color: var(--text);
+  transition: background-color .06s ease, color .06s ease;
+  user-select: none;
+  scroll-margin-bottom: 8px;
 }
 
-.cmd-item:hover { background: var(--accent-soft); }
+:root[data-theme="dark"] .cmd-item {
+  color: var(--text);
+}
+
+.cmd-item:hover,
+.cmd-item[data-selected="true"],
+.cmd-item--selected,
+.cmd-item:focus-visible {
+  background: var(--accent-soft);
+  outline: none;
+}
+
+:root[data-theme="dark"] .cmd-item:hover,
+:root[data-theme="dark"] .cmd-item[data-selected="true"],
+:root[data-theme="dark"] .cmd-item--selected,
+:root[data-theme="dark"] .cmd-item:focus-visible {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+}
 
 .cmd-item .cmd-icon {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: var(--bg-2);
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  color: var(--text-soft);
+  transition: color .06s ease;
 }
 
-.cmd-item .cmd-icon svg { width: 13px; height: 13px; }
-.cmd-item .cmd-label { font-size: 0.8125rem; font-weight: 500; flex: 1; }
-.cmd-item .cmd-sub { font-family: var(--font-mono); font-size: 0.71875rem; color: var(--text-soft); margin-top: 1px; }
+:root[data-theme="dark"] .cmd-item .cmd-icon {
+  color: var(--text-soft);
+}
+
+.cmd-item:hover .cmd-icon,
+.cmd-item[data-selected="true"] .cmd-icon,
+.cmd-item--selected .cmd-icon {
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .cmd-item:hover .cmd-icon,
+:root[data-theme="dark"] .cmd-item[data-selected="true"] .cmd-icon,
+:root[data-theme="dark"] .cmd-item--selected .cmd-icon {
+  color: var(--text);
+}
+
+.cmd-item .cmd-icon svg { width: 16px; height: 16px; }
+.cmd-item .cmd-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cmd-item .cmd-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+:root[data-theme="dark"] .cmd-item .cmd-label {
+  color: var(--text);
+}
+
+.cmd-item .cmd-sub {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--text-soft);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+:root[data-theme="dark"] .cmd-item .cmd-sub {
+  color: var(--text-soft);
+}
 
 .cmd-item .cmd-kbd {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-soft);
   background: var(--bg-2);
-  padding: 2px 7px;
+  border: 1px solid var(--line);
+  padding: 2px 6px;
   border-radius: 4px;
-  border: 1px solid var(--line);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
-.cmd-footer {
-  padding: 8px 16px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  gap: 12px;
+:root[data-theme="dark"] .cmd-item .cmd-kbd {
+  color: var(--text-soft);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: var(--line);
 }
 
-.cmd-hint {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+.cmd-empty {
+  padding: 32px 16px;
+  text-align: center;
   color: var(--text-soft);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
 }
 
-.cmd-hint kbd {
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 1px 5px;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
+.cmd-empty__title {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+:root[data-theme="dark"] .cmd-empty__title {
+  color: var(--text);
+}
+
+.cmd-empty__hint {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+:root[data-theme="dark"] .cmd-empty__hint {
+  color: var(--text-soft);
 }
 
 /* ── Empty state / App glyph ── */

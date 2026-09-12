@@ -10355,6 +10355,25 @@ export default function App() {
           includeProjects={projectClassificationFeatureEnabled}
           onDismiss={() => setCmdOpen(false)}
           onNavigate={handleCmdNav}
+          onToggleTracking={() => {
+            void (status?.running && !isTrackerDegraded ? handleStopTracking() : handleStartTracking());
+            setCmdOpen(false);
+          }}
+          isTrackingRunning={Boolean(status?.running && !isTrackerDegraded)}
+          onToggleTheme={() => {
+            toggleTheme();
+            setCmdOpen(false);
+          }}
+          onOpenAiSettings={() => {
+            openAiSetupSettings();
+            setCmdOpen(false);
+          }}
+          onNewProject={() => {
+            handleCmdNav("projects");
+          }}
+          onReclassifyRecent={() => {
+            handleCmdNav("classification");
+          }}
         />
       ) : null}</ModalPresence>
 
