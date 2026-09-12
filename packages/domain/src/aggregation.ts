@@ -99,7 +99,7 @@ export interface DayRibbonSegment {
 }
 
 export type ClassificationSurface = "browser" | "app";
-export type ClassificationSource = "youtube" | "domain-db" | "app-db" | "context" | "fallback" | "llm" | "manual" | "rule" | "stored" | "unknown";
+export type ClassificationSource = "youtube" | "domain-db" | "app-db" | "context" | "fallback" | "llm" | "manual" | "rule" | "stored" | "unknown" | "sustained-social-dwell";
 
 export interface ActivityClassificationDetail extends ActivityClassification {
   surface: ClassificationSurface;

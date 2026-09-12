@@ -1,6 +1,6 @@
 import type { DriftAlarmEvent, DriftAlarmFocusTarget } from "./driftAlarmEvent";
 import { isTauriRuntime } from "./watcherBridge";
-import { classifyActivity, classifyActivityDetailed, isUnresolvedSocialSurface } from "@drifty/domain";
+import { classifyActivity, classifyActivityDetailed, isSocialSite, isPurposefulSocialSurface, isUnresolvedSocialSurface, isYouTubeShortsSegment, SUSTAINED_SOCIAL_DWELL_MINIMUM_SEGMENTS, SUSTAINED_SOCIAL_DWELL_MINIMUM_SECONDS } from "@drifty/domain";
 import type { ActivityCategory, ActivityClassificationDetail, ActivitySegment, AppIconMap, ClassificationOptions, CurrentActivitySnapshot } from "@drifty/domain";
 import { invoke } from "@tauri-apps/api/core";
 import { getLatestWatcherSegment } from "./watcherData";
@@ -166,6 +166,22 @@ export function buildDriftAlarmCandidates({
       }];
     }
 
+    // Sustained social dwell: when the current segment is on a registered
+    // social domain but could not be classified as drift (unknown/neutral,
+    // typically because siteUrl was not captured or AI is unavailable),
+    // check whether the user has been continuously dwelling on the same
+    // social domain across multiple segments. Four or more consecutive
+    // segments totalling at least 60 seconds is doomscrolling, not a
+    // quick DM check.
+    const sustainedSocialCandidate = buildSustainedSocialDwellCandidate({
+      segment: currentSegment,
+      sourceSegmentId,
+      classification: currentClassification,
+      segments,
+      minimumDurationSeconds,
+    });
+    if (sustainedSocialCandidate) return [sustainedSocialCandidate];
+
     return [];
   }
 
@@ -196,7 +212,17 @@ export function buildDriftAlarmCandidates({
       classificationOptions,
       minimumDurationSeconds,
     })
-  ) return [];
+  ) {
+    const sustainedSocialCandidate = buildSustainedSocialDwellCandidate({
+      segment: latestSegment,
+      sourceSegmentId: latestSegment.id,
+      classification: latestClassification,
+      segments,
+      minimumDurationSeconds,
+    });
+    if (sustainedSocialCandidate) return [sustainedSocialCandidate];
+    return [];
+  }
 
   return [{
     alertKey: latestEpisode.episodeKey,
@@ -311,6 +337,80 @@ function sumNearbyShoppingDriftSeconds(candidate: ActivitySegment, segments: Act
     const overlapMs = Math.max(0, Math.min(segmentEnd, windowEnd) - Math.max(segmentStart, windowStart));
     return total + Math.round(overlapMs / 1000);
   }, candidate.durationSeconds);
+}
+
+/**
+ * Detects sustained short-form-video dwell that warrants a drift alarm even
+ * without AI classification. When a user scrolls through 4+ consecutive
+ * segments on the same social domain (or YouTube Shorts) totalling ≥ 60
+ * seconds, that behavioural signal alone is strong enough to classify the
+ * episode as drift — no URL-path evidence or AI verdict required.
+ *
+ * Purposeful segments (DMs, notifications, settings) break the chain.
+ * Non-Shorts YouTube segments (tutorials, music) also break the chain.
+ */
+function buildSustainedSocialDwellCandidate(input: {
+  readonly segment: ActivitySegment;
+  readonly sourceSegmentId: string | null;
+  readonly classification: ActivityClassificationDetail;
+  readonly segments: readonly ActivitySegment[];
+  readonly minimumDurationSeconds: number;
+}): DriftAlarmCandidate | null {
+  // Only triggers when normal classification could not resolve the segment
+  // as drift — i.e. it came back unknown/neutral, typically because the
+  // siteUrl was not captured or AI is unavailable.
+  if (input.classification.productivity === "drift") return null;
+  // Respect explicit user decisions: a manual correction or a classification
+  // rule means the user said this surface is not drift. The hard rule must
+  // not override that intent.
+  const src = input.classification.source;
+  if (src === "manual" || src === "rule") return null;
+
+  const isSocial = isSocialSite(input.segment.siteDomain) && !isPurposefulSocialSurface(input.segment);
+  const isShorts = isYouTubeShortsSegment(input.segment);
+  if (!isSocial && !isShorts) return null;
+
+  const episode = buildContinuousDriftAlarmEpisode({
+    currentSegment: input.segment as ActivitySegment,
+    segments: input.segments as ActivitySegment[],
+    isEligibleDrift: (segment) => {
+      // Social site segments (Instagram, TikTok, X, Facebook) are eligible
+      // unless they're on a purposeful surface (DM, notifications, settings).
+      if (isSocialSite(segment.siteDomain) && !isPurposefulSocialSurface(segment)) return true;
+      // YouTube Shorts segments are eligible — rapid short-form video
+      // consumption is the same doomscroll pattern.
+      if (isYouTubeShortsSegment(segment)) return true;
+      return false;
+    },
+  });
+
+  if (!episode) return null;
+  if (episode.segmentIds.length < SUSTAINED_SOCIAL_DWELL_MINIMUM_SEGMENTS) return null;
+  if (episode.durationSeconds < SUSTAINED_SOCIAL_DWELL_MINIMUM_SECONDS) return null;
+
+  // Apply the user's configured delay threshold as well — the sustained
+  // dwell must also meet the general minimum-duration-seconds setting.
+  if (episode.durationSeconds < input.minimumDurationSeconds) return null;
+
+  const category = isShorts && !isSocial ? "entertainment" as ActivityCategory : "social_media" as ActivityCategory;
+  const surfaceLabel = input.segment.siteDomain ?? "social site";
+
+  return {
+    alertKey: episode.episodeKey,
+    episodeKey: episode.episodeKey,
+    driftDurationSeconds: episode.durationSeconds,
+    category,
+    classification: {
+      ...input.classification,
+      category,
+      productivity: "drift" as const,
+      source: "sustained-social-dwell" as const,
+      confidence: 1,
+      reason: `Sustained social dwell: ${episode.segmentIds.length} segments, ${Math.round(episode.durationSeconds)}s on ${surfaceLabel}`,
+    },
+    segment: input.segment,
+    sourceSegmentId: input.sourceSegmentId,
+  };
 }
 
 export function buildRecentFocusTargets(segments: ActivitySegment[], historySegments: ActivitySegment[], classificationOptions: ClassificationOptions, appIcons: AppIconMap, siteIcons: Readonly<Record<string, string | null>> = {}): DriftAlarmFocusTarget[] {
@@ -430,6 +530,7 @@ const RESOLVED_DRIFT_SOURCES: ReadonlySet<ActivityClassificationDetail["source"]
   "manual",
   "rule",
   "llm",
+  "sustained-social-dwell",
 ]);
 
 export function formatFocusTargetDetail({

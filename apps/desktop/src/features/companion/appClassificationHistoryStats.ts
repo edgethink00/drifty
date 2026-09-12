@@ -19,6 +19,7 @@ const HISTORY_SOURCE_WEIGHTS = {
   context: 0.5,
   fallback: 0.5,
   unknown: 0,
+  "sustained-social-dwell": 0.95,
 } satisfies Record<ClassificationSource, number>;
 
 export type AppClassificationHistoryStats = {

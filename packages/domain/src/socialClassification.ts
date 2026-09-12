@@ -13,6 +13,18 @@ import type { ActivityClassification, ActivitySegment } from "./activity";
  */
 export const SOCIAL_FEED_DRIFT_MINIMUM_SECONDS = 30;
 
+/**
+ * When the same social domain accumulates this many continuous segments
+ * whose total dwell time meets SUSTAINED_SOCIAL_DWELL_MINIMUM_SECONDS,
+ * the pattern alone is enough to classify the activity as drift — no AI
+ * or URL-path evidence required. Four segments at 60 seconds means the
+ * user scrolled through at least four distinct surfaces (reels, posts,
+ * videos) and stayed for a full minute: that is doomscrolling, not a
+ * quick DM check or a single reference link.
+ */
+export const SUSTAINED_SOCIAL_DWELL_MINIMUM_SEGMENTS = 4;
+export const SUSTAINED_SOCIAL_DWELL_MINIMUM_SECONDS = 60;
+
 type SocialSiteId = "instagram" | "x" | "facebook" | "tiktok";
 
 type SocialSiteRules = {
@@ -123,6 +135,16 @@ export function classifySocialActivity(segment: ActivitySegment): ActivityClassi
   // Purposeful surfaces, brief home-feed glances, and specific profiles or
   // posts stay unknown: neutral here means "not yet judged", not "fine".
   return { category: "unknown", productivity: "neutral" };
+}
+
+/**
+ * Whether a segment is on a social surface that has been explicitly
+ * identified as purposeful by its URL path. These segments must not
+ * count toward sustained-dwell drift detection.
+ */
+export function isPurposefulSocialSurface(segment: ActivitySegment): boolean {
+  const surface = resolveSocialSurface(segment);
+  return surface !== null && surface.kind === "purposeful";
 }
 
 function findSocialSiteRules(siteDomain?: string | null): SocialSiteRules | null {

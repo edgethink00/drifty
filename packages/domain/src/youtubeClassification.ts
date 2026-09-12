@@ -140,6 +140,18 @@ export function isYouTubeVideoSegment(segment: ActivitySegment): boolean {
   return Boolean(path && (path === "/watch" || path.startsWith("/shorts/")));
 }
 
+/**
+ * Whether a segment is a YouTube Shorts video. Used by the sustained social
+ * dwell hard rule to include Shorts alongside Instagram Reels, TikTok, etc.
+ */
+export function isYouTubeShortsSegment(segment: ActivitySegment): boolean {
+  const site = normalizeYouTubeSite(segment.siteDomain);
+  if (!isYouTubeSite(site)) return false;
+  if (segment.youtubeIsShorts) return true;
+  const path = youtubePathFromUrl(segment.siteUrl);
+  return Boolean(path && path.startsWith("/shorts/"));
+}
+
 function hasYouTubeMusicMetadata(segment: ActivitySegment, officialCategory: string): boolean {
   if (!YOUTUBE_MUSIC_METADATA_CATEGORIES.has(officialCategory)) return false;
   return matchesAny(youtubeMetadataText(segment), YOUTUBE_MUSIC_METADATA_HINTS);
