@@ -84,7 +84,7 @@ export const OPEN_AT_LOGIN_STATUSES = [
 export const STARTUP_BACKENDS = ["sm_app_service", "registry_run_key", "unsupported", "unknown"] as const;
 export const STARTUP_REGISTRATION_PHASES = ["onboarding", "settings"] as const;
 /** Local model download is the only onboarding step a machine can be unable to pass. */
-export const LOCAL_MODEL_SETUP_PHASES = ["viewed", "download_started", "download_failed", "model_ready"] as const;
+export const LOCAL_MODEL_SETUP_PHASES = ["viewed", "download_started", "download_failed", "model_ready", "switched_to_cloud"] as const;
 export const LOCAL_MODEL_FITS = ["good", "tight", "insufficient", "unknown"] as const;
 export const MANAGED_MODEL_TIERS = ["economy", "default", "gemma", "smart", "unknown"] as const;
 export const CLOUD_AUTH_ACTIONS = ["sign_in_started", "sign_in_completed", "sign_out", "sign_up_completed"] as const;
@@ -256,6 +256,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     row_count_bucket: COUNT_BUCKETS,
     segment_count_bucket: COUNT_BUCKETS,
     error_kind: ERROR_KINDS,
+    profile_made_private: "boolean",
   },
   ai_setup_action: {
     action: AI_SETUP_ACTIONS,

@@ -98,7 +98,7 @@ describe("useDeveloperPreReleaseUpdateController", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Install latest build$/i }));
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("developer_install_pre_release_update"));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false }));
     expect(window.localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
   });
 
@@ -117,7 +117,7 @@ describe("useDeveloperPreReleaseUpdateController", () => {
       expect(invokeMock).not.toHaveBeenCalledWith("developer_install_pre_release_update");
     } finally { release?.(); }
     fireEvent.click(screen.getByRole("button", { name: /^Install latest build$/i }));
-    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update"));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false }));
     expect(invokeMock.mock.calls.filter(([command]) => command === "developer_install_pre_release_update")).toHaveLength(1);
   });
 

@@ -179,11 +179,6 @@ export function isExcludedSegment(
   return segment.exclusionSource != null || segment.appName === REDACTED_APP_NAME;
 }
 
-export function exclusionSourceLabel(source?: ExclusionSource | null): string {
-  if (source === "user") return "제외됨 · 내 설정";
-  return "제외됨 · Drifty 기본";
-}
-
 /** "all" = merged timeline, "local" = this Mac only, otherwise a cloud device id. */
 export type DeviceTimelineFilter = "all" | "local" | (string & {});
 

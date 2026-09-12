@@ -5,7 +5,7 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import { historyRowTitle } from "./historyGroups";
 import type { HistoryRow as HistoryRowModel } from "./historyGroups";
-import { localizedCategoryLabel } from "../localization/activityTranslations";
+import { excludedActivityLabel, localizedCategoryLabel } from "../localization/activityTranslations";
 import { useLocalization } from "../localization/LocalizationContext";
 
 type HistoryRowProps = {
@@ -22,7 +22,7 @@ export const HistoryRow = memo(function HistoryRow({
   selected,
 }: HistoryRowProps) {
   const { effectiveLanguage, t } = useLocalization();
-  const title = historyRowTitle(row);
+  const title = isExcludedSegment(row) ? excludedActivityLabel(row.exclusionSource, t) : historyRowTitle(row);
   const iconKey = row.bundleId ?? row.appName;
   const classification = row.classification;
   const category = localizedCategoryLabel(classification.category, t);

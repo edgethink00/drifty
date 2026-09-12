@@ -25,6 +25,9 @@ vi.mock("../../lib/api/trackerClient", () => ({
   },
 }));
 
+import { optOutLeaderboard } from "./leaderboardService";
+import { saveOwnProfile } from "../profile/profileService";
+
 function defaultProps() {
   return {
     activeTab: "other", // Avoid mounting 5-minute background refresh interval
@@ -143,5 +146,40 @@ describe("useLeaderboardProfileController - AI gate & catch-up UX", () => {
     rerender();
 
     expect(result.current.leaderboardActionError).toBeNull();
+  });
+});
+
+describe("useLeaderboardProfileController - leave privacy", () => {
+  beforeEach(() => {
+    vi.mocked(optOutLeaderboard).mockResolvedValue({ success: true, error: null });
+    vi.mocked(saveOwnProfile).mockResolvedValue({ success: true, error: null, data: { display_name: "member" } as never });
+    vi.mocked(saveOwnProfile).mockClear();
+    vi.mocked(optOutLeaderboard).mockClear();
+  });
+
+  it("does not change profile visibility when leaving without the privacy option", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
+    await act(async () => {
+      await result.current.handleLeaderboardOptOut();
+    });
+    expect(optOutLeaderboard).toHaveBeenCalled();
+    expect(saveOwnProfile).not.toHaveBeenCalled();
+  });
+
+  it("makes the public profile private when leaving with that option", async () => {
+    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
+    await act(async () => {
+      await result.current.handleLeaderboardOptOut({ makeProfilePrivate: true });
+    });
+    expect(saveOwnProfile).toHaveBeenCalledWith(expect.objectContaining({ is_public: false }));
+  });
+
+  it("keeps the leaderboard leave and reports when hiding the profile fails", async () => {
+    vi.mocked(saveOwnProfile).mockResolvedValueOnce({ success: false, error: "write failed" });
+    const { result } = renderHook(() => useLeaderboardProfileController(defaultProps()));
+    await act(async () => {
+      await result.current.handleLeaderboardOptOut({ makeProfilePrivate: true });
+    });
+    expect(result.current.leaderboardActionError).toMatch(/public profile page is still on/i);
   });
 });

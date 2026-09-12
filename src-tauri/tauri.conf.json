@@ -34,7 +34,8 @@
           "x": 14,
           "y": 19
         },
-        "label": "main"
+        "label": "main",
+        "visible": false
       }
     ],
     "security": {

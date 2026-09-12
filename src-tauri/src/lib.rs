@@ -19,6 +19,7 @@ mod tray;
 
 use std::{
     panic::{self, AssertUnwindSafe},
+    path::{Path, PathBuf},
     sync::{Condvar, Mutex},
 };
 
@@ -429,8 +430,75 @@ fn run_update_restart(cleanup: impl FnOnce(), restart: impl FnOnce()) {
     restart();
 }
 
+const UPDATE_RELAUNCH_SILENT_MARKER: &str = "update-relaunch-silent";
+
+fn update_relaunch_silent_marker_path(app_data_dir: &Path) -> PathBuf {
+    app_data_dir.join(UPDATE_RELAUNCH_SILENT_MARKER)
+}
+
+fn mark_silent_update_relaunch(app_data_dir: &Path) {
+    let path = update_relaunch_silent_marker_path(app_data_dir);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(path, b"");
+}
+
+/// Returns true when this launch should keep the main window hidden because a
+/// silent post-update relaunch marker was present. The marker is consumed even
+/// when deletion fails, so a stuck file cannot suppress every future launch.
+fn consume_silent_update_relaunch(app_data_dir: &Path) -> bool {
+    let path = update_relaunch_silent_marker_path(app_data_dir);
+    if !path.exists() {
+        return false;
+    }
+    if std::fs::remove_file(&path).is_err() {
+        let _ = std::fs::remove_file(&path);
+        if path.exists() {
+            let backup = app_data_dir.join(format!("{UPDATE_RELAUNCH_SILENT_MARKER}.stale"));
+            let _ = std::fs::rename(&path, backup);
+        }
+    }
+    true
+}
+
+fn should_keep_main_window_hidden_on_ready(app: &AppHandle) -> bool {
+    #[cfg(target_os = "windows")]
+    if commands::windows_background_launch_requested() {
+        return true;
+    }
+    app.path()
+        .app_data_dir()
+        .ok()
+        .is_some_and(|dir| consume_silent_update_relaunch(&dir))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReadyMainWindowAction {
+    RevealIsolatedWithoutActivation,
+    KeepHidden,
+    RevealAndFocus,
+}
+
+/// Isolated QA must keep its own non-activating reveal even when a silent
+/// update marker is present, so background Computer Use still has a window.
+fn ready_main_window_action(isolated_dev: bool, keep_hidden: bool) -> ReadyMainWindowAction {
+    if isolated_dev {
+        ReadyMainWindowAction::RevealIsolatedWithoutActivation
+    } else if keep_hidden {
+        ReadyMainWindowAction::KeepHidden
+    } else {
+        ReadyMainWindowAction::RevealAndFocus
+    }
+}
+
 #[tauri::command]
-fn app_restart_after_update(app: AppHandle) {
+fn app_restart_after_update(app: AppHandle, silent: Option<bool>) {
+    if silent.unwrap_or(false) {
+        if let Ok(app_data_dir) = app.path().app_data_dir() {
+            mark_silent_update_relaunch(&app_data_dir);
+        }
+    }
     run_update_restart(|| shutdown_app_for_exit(&app), || app.restart());
 }
 
@@ -547,11 +615,6 @@ pub fn run() {
                     }
                 }
             });
-
-            #[cfg(target_os = "windows")]
-            if !commands::windows_background_launch_requested() {
-                reveal_main_window(app.handle());
-            }
 
             let app_handle = app.handle().clone();
             // Installs that were already tracking before activation existed keep
@@ -844,17 +907,30 @@ pub fn run() {
         std::env::var_os("DRIFTY_ISOLATED_DEV").as_deref(),
         cfg!(debug_assertions),
     );
+    #[cfg(not(target_os = "macos"))]
+    let isolated_dev = false;
     app.run(move |handle, event| {
-        #[cfg(target_os = "macos")]
-        if isolated_dev && matches!(event, tauri::RunEvent::Ready) {
-            // Launch finished under Prohibited with the main window hidden,
-            // so tao's key-window activation hack has already been skipped.
-            // Keep Prohibited for the whole background-QA session: the
-            // generated .app bundle gives Computer Use a stable identity
-            // without making the process activatable.
-            if let Err(error) = reveal_isolated_main_window_without_activation(handle) {
-                eprintln!("could not reveal isolated Drifty window: {error}");
+        if !matches!(event, tauri::RunEvent::Ready) {
+            return;
+        }
+
+        match ready_main_window_action(
+            isolated_dev,
+            should_keep_main_window_hidden_on_ready(handle),
+        ) {
+            ReadyMainWindowAction::RevealIsolatedWithoutActivation => {
+                // Launch finished under Prohibited with the main window hidden,
+                // so tao's key-window activation hack has already been skipped.
+                // Keep Prohibited for the whole background-QA session: the
+                // generated .app bundle gives Computer Use a stable identity
+                // without making the process activatable.
+                #[cfg(target_os = "macos")]
+                if let Err(error) = reveal_isolated_main_window_without_activation(handle) {
+                    eprintln!("could not reveal isolated Drifty window: {error}");
+                }
             }
+            ReadyMainWindowAction::KeepHidden => {}
+            ReadyMainWindowAction::RevealAndFocus => reveal_main_window(handle),
         }
     });
 }

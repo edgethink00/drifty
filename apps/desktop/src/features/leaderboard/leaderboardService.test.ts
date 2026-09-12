@@ -325,6 +325,98 @@ describe("leaderboardService", () => {
         updated_at: "2026-04-07T09:00:00.000Z",
       },
     });
+    expect(result.data).not.toHaveProperty("publicly_valid");
+  });
+
+  it("does not claim a failed validation when own-entry omits validation_version", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-2", email: "no-name@example.com" } satisfies AuthUser },
+      error: null,
+    });
+    client.rpc.mockResolvedValue({
+      data: [{
+        rank: 3,
+        participant_count: 120,
+        display_name: "no-name",
+        period: "weekly",
+        focus_seconds: 1200,
+        window_start_date: "2026-04-01",
+        window_end_date: "2026-04-07",
+        timezone: "Asia/Seoul",
+        opted_in: true,
+        updated_at: "2026-04-07T09:00:00.000Z",
+        validation_version: null,
+      }],
+      error: null,
+    });
+
+    const result = await fetchOwnLeaderboardEntry(client);
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty("publicly_valid");
+  });
+
+  it("ignores unknown own-entry columns from a newer RPC", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-2", email: "no-name@example.com" } satisfies AuthUser },
+      error: null,
+    });
+    client.rpc.mockResolvedValue({
+      data: [{
+        rank: 3,
+        participant_count: 120,
+        display_name: "no-name",
+        period: "weekly",
+        focus_seconds: 1200,
+        window_start_date: "2026-04-01",
+        window_end_date: "2026-04-07",
+        timezone: "Asia/Seoul",
+        opted_in: true,
+        updated_at: "2026-04-07T09:00:00.000Z",
+        validation_version: 1,
+        unexpected_column: "keep-going",
+      }],
+      error: null,
+    });
+
+    const result = await fetchOwnLeaderboardEntry(client);
+    expect(result.success).toBe(true);
+    expect(result.data?.publicly_valid).toBe(true);
+    expect(result.data).not.toHaveProperty("unexpected_column");
+  });
+
+  it("exposes public validity from own-entry validation_version", async () => {
+    const client = createClient();
+    client.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-2", email: "no-name@example.com" } satisfies AuthUser },
+      error: null,
+    });
+    const row = {
+      rank: 3,
+      participant_count: 120,
+      display_name: "no-name",
+      period: "weekly",
+      focus_seconds: 1200,
+      window_start_date: "2026-04-01",
+      window_end_date: "2026-04-07",
+      timezone: "Asia/Seoul",
+      opted_in: true,
+      updated_at: "2026-04-07T09:00:00.000Z",
+    };
+    client.rpc.mockResolvedValueOnce({
+      data: [{ ...row, validation_version: 0 }],
+      error: null,
+    });
+    const invalid = await fetchOwnLeaderboardEntry(client);
+    expect(invalid.data?.publicly_valid).toBe(false);
+
+    client.rpc.mockResolvedValueOnce({
+      data: [{ ...row, validation_version: 1 }],
+      error: null,
+    });
+    const valid = await fetchOwnLeaderboardEntry(client);
+    expect(valid.data?.publicly_valid).toBe(true);
   });
 
   it("returns null when the current user has never joined the leaderboard", async () => {

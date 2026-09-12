@@ -75,3 +75,26 @@ describe("onboardingFlowSelectors", () => {
     })).toBe("Enable Accessibility to continue.");
   });
 });
+
+describe("local model blocked hint", () => {
+  const localBlock = {
+    accessibilityRecheckPending: false,
+    canAdvance: false,
+    connectionPhase: "idle" as const,
+    customEndpointBaseUrlIssue: null,
+    customEndpointModelIssue: null,
+    isCustomEndpointSetup: false,
+    isManagedProviderSetup: true,
+    step: "connect_server" as const,
+  };
+
+  it("asks for a download when an installable model exists", () => {
+    expect(blockedHintForStep({ ...localBlock, hasInstallableLocalModel: true }))
+      .toBe("Start a local model download to continue.");
+  });
+
+  it("sends the user to Cloud when no local model can run", () => {
+    expect(blockedHintForStep({ ...localBlock, hasInstallableLocalModel: false }))
+      .toBe("No local model can run on this Mac. Switch to Cloud to continue.");
+  });
+});

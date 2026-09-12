@@ -5,6 +5,8 @@ import { isManagedLocalReady } from "../../onboardingManagedLocalStatus";
 import { useLocalModelSetupAnalytics } from "../../useLocalModelSetupAnalytics";
 import type { SetupChoice } from "../../onboardingFlow";
 import type { OnboardingFlow } from "../../useOnboardingFlow";
+import { isLocalModelUnsupported, recommendedModelFit } from "../../localModelSetupAnalytics";
+import { capturePostHogEvent } from "../../../../lib/analytics/posthogClient";
 import { ManagedModelDownloadProgress } from "./ManagedModelDownloadProgress";
 import { SpinnerIcon, SuccessIcon } from "./shared";
 import { useLocalization, type LocalizationController } from "../../../localization/LocalizationContext";
@@ -15,9 +17,13 @@ const DEFAULT_LOCAL_MODEL_ID = "drifty-qwen3-5-4b-default";
 
 export function ConnectServerStep({ flow }: { readonly flow: OnboardingFlow }) {
   const { t } = useLocalization();
+  const hideLocalCatalog = flow.setupChoice === "local_ai"
+    && isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);
   return (
     <>
-      <p className="dc-onb-copy dc-onb-server-copy">{serverDescriptionForSetup(flow.setupChoice, t)}</p>
+      {hideLocalCatalog ? null : (
+        <p className="dc-onb-copy dc-onb-server-copy">{serverDescriptionForSetup(flow.setupChoice, t)}</p>
+      )}
       {flow.setupChoice === "local_ai" ? <LocalAiSetup flow={flow} /> : null}
       {flow.isCustomEndpointSetup ? <CustomEndpointSetup flow={flow} /> : null}
       {flow.isByokSetup ? <ByokSetup flow={flow} /> : null}
@@ -43,6 +49,31 @@ function LocalAiSetup({ flow }: { readonly flow: OnboardingFlow }) {
   const statusMessage = statusReady
     ? t("onboarding.connection.modelReady")
     : localModelStatusMessage(flow.managedLocalAi.loading, status, t);
+
+  if (showLocalModelUnsupportedNotice(flow)) {
+    return (
+      <div className="dc-onb-local">
+        <div className="dc-onb-local-unsupported" role="status">
+          <strong>{t("onboarding.connection.localModelUnsupportedTitle")}</strong>
+          <p>{t("onboarding.connection.localModelUnsupportedBody")}</p>
+          <button
+            type="button"
+            className="dc-onb-secondary-button"
+            onClick={() => {
+              capturePostHogEvent("local_model_setup", {
+                phase: "switched_to_cloud",
+                any_installable: false,
+                recommended_fit: recommendedModelFit(flow.managedLocalAi.catalog),
+              });
+              flow.handleSetupChoice("simple");
+            }}
+          >
+            {t("onboarding.connection.switchToCloud")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="dc-onb-local">
@@ -269,6 +300,10 @@ function ByokSetup({ flow }: { readonly flow: OnboardingFlow }) {
       </label>
     </div>
   );
+}
+
+function showLocalModelUnsupportedNotice(flow: OnboardingFlow): boolean {
+  return isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);
 }
 
 function serverDescriptionForSetup(setupChoice: SetupChoice | null, t: LocalizationController["t"]): string {

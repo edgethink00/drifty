@@ -40,7 +40,7 @@ export function DevVersionSwitchBlock() {
     setRestarting(true);
     try {
       markPostUpdateRelaunchFocusPending();
-      await invoke("app_restart_after_update");
+      await invoke("app_restart_after_update", { silent: false });
     } catch (cause) {
       clearPostUpdateRelaunchFocusPending();
       setError(`Version installed, but restart failed. Quit and reopen Drifty. ${toErrorMessage(cause)}`);

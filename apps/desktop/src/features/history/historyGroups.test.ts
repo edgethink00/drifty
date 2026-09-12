@@ -121,8 +121,8 @@ describe("buildHistoryRowsWindow", () => {
     ]);
 
     expect(rows).toHaveLength(2);
-    expect(historyRowTitle(rows[0]!)).toBe("제외됨 · 내 설정");
-    expect(historyRowTitle(rows[1]!)).toBe("제외됨 · Drifty 기본");
+    expect(rows.map((row) => row.exclusionSource).sort()).toEqual(["default", "user"]);
+    expect(rows.every((row) => historyRowTitle(row) === "")).toBe(true);
   });
 });
 

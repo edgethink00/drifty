@@ -3,10 +3,13 @@ import type { OnboardingFlow } from "../../useOnboardingFlow";
 import { TRIAL_DAYS } from "./shared";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { formatBillingAccessEndDate } from "../../../billing/billingAccessCopy";
+import { isLocalModelUnsupported } from "../../localModelSetupAnalytics";
 
 type SetupCardProps = {
   readonly badge?: string;
+  readonly badgeTone?: "accent" | "muted";
   readonly description: string;
+  readonly disabled?: boolean;
   readonly icon: ReactNode;
   readonly label: string;
   readonly selected: boolean;
@@ -25,6 +28,7 @@ export function SetupChoiceStep({
   const { effectiveLanguage, t } = useLocalization();
   const promotionEndLabel = formatBillingAccessEndDate(flow.promotionEndsAt, effectiveLanguage)
     ?? t("onboarding.promo.activePeriod");
+  const localUnsupported = isLocalModelUnsupported(flow.managedLocalAi.catalog, flow.managedLocalAi.loading);
   return (
     <div className="dc-onb-setup">
       <SetupCard
@@ -38,10 +42,13 @@ export function SetupChoiceStep({
         onClick={() => flow.handleSetupChoice("simple")}
       />
       <SetupCard
-        description={t("onboarding.setup.localDescription")}
+        badge={localUnsupported ? t("onboarding.setup.localUnavailable") : undefined}
+        badgeTone={localUnsupported ? "muted" : undefined}
+        description={localUnsupported ? t("onboarding.setup.localUnavailableDescription") : t("onboarding.setup.localDescription")}
+        disabled={localUnsupported}
         icon={<LocalIcon />}
         label={t("onboarding.setup.local")}
-        selected={flow.setupChoice === "local_ai"}
+        selected={!localUnsupported && flow.setupChoice === "local_ai"}
         onClick={() => flow.handleSetupChoice("local_ai")}
       />
       <button
@@ -75,11 +82,12 @@ export function SetupChoiceStep({
   );
 }
 
-function SetupCard({ badge, description, icon, label, selected, onClick }: SetupCardProps) {
+function SetupCard({ badge, badgeTone = "accent", description, disabled, icon, label, selected, onClick }: SetupCardProps) {
   return (
     <button
       type="button"
-      className={`dc-onb-setup-card${selected ? " dc-onb-setup-card--selected" : ""}`}
+      className={`dc-onb-setup-card${selected ? " dc-onb-setup-card--selected" : ""}${disabled ? " dc-onb-setup-card--disabled" : ""}`}
+      disabled={disabled}
       onClick={onClick}
       aria-pressed={selected}
     >
@@ -87,7 +95,7 @@ function SetupCard({ badge, description, icon, label, selected, onClick }: Setup
       <span className="dc-onb-setup-card__copy">
         <span className="dc-onb-setup-card__title-line">
           <span className="dc-onb-setup-card__title">{label}</span>
-          {badge ? <span className="dc-onb-setup-card__badge">{badge}</span> : null}
+          {badge ? <span className={`dc-onb-setup-card__badge${badgeTone === "muted" ? " dc-onb-setup-card__badge--muted" : ""}`}>{badge}</span> : null}
         </span>
         <span className="dc-onb-setup-card__desc">{description}</span>
       </span>

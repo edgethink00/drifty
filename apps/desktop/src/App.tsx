@@ -1381,7 +1381,14 @@ export default function App() {
   const [debugLogPreview, setDebugLogPreview] = useState<{ readonly text: string; readonly exportedAt: string } | null>(null);
   const [resumeOnboardingAfterAuthModal, setResumeOnboardingAfterAuthModal] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
-  canSafelyRestartRef.current = () => !onboardingOpen && !authModalOpen && !upgradePlanModalOpen;
+  canSafelyRestartRef.current = () => (
+    !onboardingOpen
+    && !authModalOpen
+    && !upgradePlanModalOpen
+    && driftAlarmEvent === null
+    && !petModeActive
+    && driftAlarmSnooze === null
+  );
   // One-shot: armed only by completing onboarding in this session — never re-read
   // from storage, so the bootstrap import cannot re-fire on later launches.
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(false);
@@ -9943,6 +9950,7 @@ export default function App() {
               ? leaderboardRows.length
               : ownLeaderboardEntry?.participant_count ?? null}
             ownRank={leaderboardUsesPreviewProfile ? 6 : ownLeaderboardEntry?.rank ?? null}
+            publiclyValid={leaderboardUsesPreviewProfile ? true : ownLeaderboardEntry?.publicly_valid ?? null}
             profileDisplayName={leaderboardProfileDisplayName}
             publicProfile={{
               card: focusCard,
@@ -9967,7 +9975,7 @@ export default function App() {
             statusTone={leaderboardStatusTone}
             totalFocusSeconds7d={totalLeaderboardFocusSeconds}
             onOptIn={() => void handleLeaderboardOptIn()}
-            onOptOut={() => void handleLeaderboardOptOut()}
+            onOptOut={(options) => void handleLeaderboardOptOut(options)}
             onPeriodChange={setActiveLeaderboardPeriod}
             onSelectProfile={(row) => void handleSelectLeaderboardProfile(row)}
             onSignIn={() => void handleLeaderboardOptIn()}

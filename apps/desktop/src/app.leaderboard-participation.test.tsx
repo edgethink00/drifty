@@ -1269,6 +1269,10 @@ describe("App leaderboard participation", () => {
     const leaveButton = await screen.findByRole("button", { name: /^leave leaderboard$/i });
     fireEvent.click(leaveButton);
 
+    const leaveDialog = await screen.findByRole("dialog", { name: /leave the leaderboard/i });
+    fireEvent.click(within(leaveDialog).getByRole("checkbox"));
+    fireEvent.click(within(leaveDialog).getByRole("button", { name: /^leave leaderboard$/i }));
+
     await waitFor(() => {
       expect(optOutLeaderboard).toHaveBeenCalledTimes(3);
       expect(optOutLeaderboard).toHaveBeenCalledWith("daily");

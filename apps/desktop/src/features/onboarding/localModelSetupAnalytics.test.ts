@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ManagedLocalAiModel } from "../settings/managedLocalAiCatalog";
-import { anyModelInstallable, modelTier, recommendedModelFit } from "./localModelSetupAnalytics";
+import { anyModelInstallable, isLocalModelUnsupported, modelTier, recommendedModelFit, shouldClearUnsupportedLocalChoice } from "./localModelSetupAnalytics";
 
 function model(overrides: Partial<ManagedLocalAiModel>): ManagedLocalAiModel {
   return {
@@ -37,6 +37,34 @@ describe("anyModelInstallable", () => {
   it("treats an unknown fit as installable because its button stays enabled", () => {
     expect(anyModelInstallable([model({ id: "a", fit: null })])).toBe(true);
     expect(anyModelInstallable([])).toBe(true);
+  });
+});
+
+describe("isLocalModelUnsupported", () => {
+  it("waits until the catalog has finished loading", () => {
+    expect(isLocalModelUnsupported([model({ fit: "insufficient" })], true)).toBe(false);
+  });
+
+  it("is a dead end only when every loaded model is insufficient", () => {
+    expect(isLocalModelUnsupported([model({ fit: "insufficient" })], false)).toBe(true);
+    expect(isLocalModelUnsupported([model({ fit: "tight" })], false)).toBe(false);
+    expect(isLocalModelUnsupported([], false)).toBe(false);
+  });
+});
+
+describe("shouldClearUnsupportedLocalChoice", () => {
+  const deadEnd = [model({ fit: "insufficient" as const })];
+
+  it("clears a local pick only on the setup step after the catalog is known", () => {
+    expect(shouldClearUnsupportedLocalChoice("choose_setup", "local_ai", deadEnd, false)).toBe(true);
+  });
+
+  it("leaves the user on connect_server so Cloud switch can still be used", () => {
+    expect(shouldClearUnsupportedLocalChoice("connect_server", "local_ai", deadEnd, false)).toBe(false);
+  });
+
+  it("does not bounce while the catalog is still loading", () => {
+    expect(shouldClearUnsupportedLocalChoice("choose_setup", "local_ai", deadEnd, true)).toBe(false);
   });
 });
 

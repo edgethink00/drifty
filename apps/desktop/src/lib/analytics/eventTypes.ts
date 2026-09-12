@@ -145,6 +145,7 @@ export type PostHogEventPropertiesByName = {
     readonly row_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly segment_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
+    readonly profile_made_private?: boolean;
   };
   readonly ai_setup_action: {
     readonly action: (typeof AI_SETUP_ACTIONS)[number];

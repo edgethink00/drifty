@@ -18,6 +18,9 @@ type DownloadEvent =
 function update(version = "1.10.9") {
   return { version, body: null, close: vi.fn().mockResolvedValue(undefined), download: vi.fn().mockResolvedValue(undefined), install: vi.fn().mockResolvedValue(undefined), downloadAndInstall: vi.fn().mockResolvedValue(undefined) };
 }
+function restartInvocations() {
+  return invokeMock.mock.calls.filter((call) => call[0] === "app_restart_after_update");
+}
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); invokeMock.mockResolvedValue(undefined); });
 afterEach(() => { cleanup(); localStorage.clear(); });
 describe("manual and automatic update interaction", () => {
@@ -83,7 +86,7 @@ describe("manual and automatic update interaction", () => {
     await act(async () => { await result.current.handleInstallUpdate(); });
     expect(old.downloadAndInstall).not.toHaveBeenCalled();
     expect(latest.downloadAndInstall).toHaveBeenCalledTimes(1);
-    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false });
     expect(localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
   });
   it("does not restart on failed installation", async () => {
@@ -204,7 +207,7 @@ it("allows an explicitly selected stable recovery install while the seven-day pa
   expect(next.download).not.toHaveBeenCalled();
   await act(async () => { await result.current.handleInstallUpdate(); });
   expect(next.downloadAndInstall).toHaveBeenCalledTimes(1);
-  expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+  expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false });
   expect(localStorage.getItem("drifty.updates.nextAutomaticCheckAt.v1")).toBe(deadline);
   expect(localStorage.getItem("drifty.updates.backgroundApply.v2")).toBe("0");
 });
@@ -281,21 +284,22 @@ describe("background update and idle auto-restart", () => {
       });
 
       expect(result.current.preparedUpdateVersion).toBe("1.11.6");
-      expect(invokeMock).not.toHaveBeenCalledWith("app_restart_after_update");
+      expect(restartInvocations()).toHaveLength(0);
 
       // Advance timer while user is active
       idleSec = 60; // 1 min
       await act(async () => {
         await vi.advanceTimersByTimeAsync(30_000);
       });
-      expect(invokeMock).not.toHaveBeenCalledWith("app_restart_after_update");
+      expect(restartInvocations()).toHaveLength(0);
 
       // User becomes idle for 15+ minutes
       idleSec = 15 * 60 + 1;
       await act(async () => {
         await vi.advanceTimersByTimeAsync(30_000);
       });
-      expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+      expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: true });
+      expect(localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBeNull();
       unmount();
     } finally {
       vi.useRealTimers();
@@ -334,9 +338,87 @@ describe("background update and idle auto-restart", () => {
         await vi.advanceTimersByTimeAsync(60_000);
       });
 
-      expect(invokeMock).not.toHaveBeenCalledWith("app_restart_after_update");
+      expect(restartInvocations()).toHaveLength(0);
       unmount();
     } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts silently after 3 idle minutes when the window is hidden", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      const next = update("1.11.6");
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+        version: "1.11.6",
+        policyVersion: 2,
+        urgency: "general",
+        promptAfterMs: 72 * 60 * 60 * 1000,
+        backgroundDownloadEligible: true,
+        installBehavior: "next-launch",
+        message: null,
+      });
+
+      const getIdleSeconds = vi.fn(async () => 3 * 60);
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        getIdleSeconds,
+        canSafelyRestart: () => true,
+      }));
+
+      await act(async () => {
+        await result.current.handleCheckForUpdates("automatic");
+      });
+      expect(result.current.preparedUpdateVersion).toBe("1.11.6");
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: true });
+      expect(localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBeNull();
+      unmount();
+    } finally {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not restart when idle seconds are unknown", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" });
+    try {
+      const next = update("1.11.6");
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+        version: "1.11.6",
+        policyVersion: 2,
+        urgency: "general",
+        promptAfterMs: 72 * 60 * 60 * 1000,
+        backgroundDownloadEligible: true,
+        installBehavior: "next-launch",
+        message: null,
+      });
+
+      const getIdleSeconds = vi.fn(async () => null);
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        getIdleSeconds,
+        canSafelyRestart: () => true,
+      }));
+
+      await act(async () => {
+        await result.current.handleCheckForUpdates("automatic");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15 * 60 * 1000);
+      });
+      expect(restartInvocations()).toHaveLength(0);
+      unmount();
+    } finally {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
       vi.useRealTimers();
     }
   });
@@ -366,7 +448,7 @@ describe("background update and idle auto-restart", () => {
       await result.current.handleInstallUpdate();
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update");
+    expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: false });
     expect(localStorage.getItem(POST_UPDATE_RELAUNCH_FOCUS_STORAGE_KEY)).toBe("1");
   });
 

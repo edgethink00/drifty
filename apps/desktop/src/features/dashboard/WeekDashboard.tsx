@@ -34,7 +34,7 @@ import type { FlowLegendHoverState } from "../flow-chart/FlowChartHoverCards";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { useLocalization, type LocalizationController } from "../localization/LocalizationContext";
-import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { GoogleCalendarWeekEvent } from "../calendar/googleCalendarWeek";
 import type { GoogleCalendarWeekStatus } from "../calendar/useGoogleCalendarWeek";
 import { WeekDashboardLoadingBreakdown, WeekDashboardLoadingLegend } from "./WeekDashboardLoadingState";
@@ -242,7 +242,7 @@ export function WeekCalendarIdentityIcon({ identity, appIcons }: { identity: Wee
     return <SiteFavicon domain={identity.siteDomain} size={16} fallbackIconSrc={iconSrc} />;
   }
 
-  return <AppGlyph appName={identity.label} iconSrc={identity.siteTitle ? null : iconSrc} size="sm" />;
+  return <AppGlyph appName={identity.appName || identity.label} iconSrc={identity.siteTitle ? null : iconSrc} size="sm" />;
 }
 
 export function WeekDashboard({
@@ -412,7 +412,7 @@ export function WeekDashboard({
           `${startLabel}–${endLabel} · ${categoryName}`,
           `${formatLocalizedCompactDurationFromSeconds(event.activeDurationMinutes * 60, effectiveLanguage)} · ${recordLabel}`,
           ...event.identities.slice(0, 3).map((identity) => (
-            `${identity.label} · ${formatLocalizedCompactDurationFromSeconds(identity.seconds, effectiveLanguage)}`
+            `${localizedExcludedIdentityLabel(identity, t)} · ${formatLocalizedCompactDurationFromSeconds(identity.seconds, effectiveLanguage)}`
           )),
         ].join("\n");
 
@@ -771,7 +771,7 @@ export function WeekDashboard({
                                 aria-hidden="true"
                               >
                                 {event.identities.slice(0, identityStrip.visibleCount).map((identity) => (
-                                  <span className="week-v2-calendar__identity" key={identity.id} title={identity.label}>
+                                  <span className="week-v2-calendar__identity" key={identity.id} title={localizedExcludedIdentityLabel(identity, t)}>
                                     {canMountIdentityIcons ? <WeekCalendarIdentityIcon appIcons={appIcons} identity={identity} /> : null}
                                   </span>
                                 ))}

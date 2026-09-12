@@ -29,7 +29,7 @@ export async function installAndRelaunchDeveloperPreReleaseUpdate(): Promise<boo
 
   markPostUpdateRelaunchFocusPending();
   try {
-    await invoke<void>("app_restart_after_update");
+    await invoke<void>("app_restart_after_update", { silent: false });
     return true;
   } catch (error) {
     clearPostUpdateRelaunchFocusPending();

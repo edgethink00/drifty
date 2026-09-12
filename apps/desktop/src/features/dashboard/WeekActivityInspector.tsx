@@ -7,6 +7,7 @@ import {
   type ActivitySegment,
   type AppIconMap,
   type ClassificationOptions,
+  type ExclusionSource,
   type ProductivityLabel,
 } from "@drifty/domain";
 import {
@@ -28,7 +29,7 @@ import { SiteFavicon } from "../../components/SiteFavicon";
 import { CATEGORY_COLORS, PRODUCTIVITY_COLORS } from "../../lib/activityLabels";
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import { useLocalization } from "../localization/LocalizationContext";
-import { localizedCategoryLabel, localizedProductivityLabel } from "../localization/activityTranslations";
+import { localizedCategoryLabel, localizedExcludedIdentityLabel, localizedProductivityLabel } from "../localization/activityTranslations";
 import type { DisplayLanguage } from "../localization/languagePreference";
 
 const INSPECTOR_WIDTH_PX = 304;
@@ -80,6 +81,7 @@ export type ActivityInspectorEvent = {
     readonly bundleId: string | null;
     readonly siteDomain: string | null;
     readonly seconds?: number;
+    readonly exclusionSource?: ExclusionSource | null;
   }[];
   readonly hiddenIdentityCount?: number;
   readonly hasMixedProject?: boolean;
@@ -446,11 +448,15 @@ function identityIconSrc(event: ActivityInspectorEvent, appIcons: AppIconMap): s
 }
 
 function InspectorIdentityIcon({ event, appIcons }: { readonly event: ActivityInspectorEvent; readonly appIcons: AppIconMap }) {
+  const { t } = useLocalization();
   const identity = event.identities[0] ?? null;
   const iconSrc = identityIconSrc(event, appIcons);
+  const glyphName = identity
+    ? localizedExcludedIdentityLabel(identity, t) || identity.appName || event.appName
+    : event.appName;
   return identity?.siteDomain
     ? <SiteFavicon domain={identity.siteDomain} size={20} fallbackIconSrc={iconSrc} />
-    : <AppGlyph appName={identity?.label ?? event.appName} iconSrc={iconSrc} size="sm" />;
+    : <AppGlyph appName={glyphName} iconSrc={iconSrc} size="sm" />;
 }
 
 function ActivityInspectorHeader({
@@ -471,19 +477,22 @@ function ActivityInspectorHeader({
   const { effectiveLanguage, t } = useLocalization();
   const identityCount = event.identities.length + (event.hiddenIdentityCount ?? 0);
   const primaryIdentity = event.identities[0] ?? null;
+  const primaryLabel = primaryIdentity
+    ? localizedExcludedIdentityLabel(primaryIdentity, t) || event.appName
+    : event.appName;
   const title = event.surface === "week" && primaryIdentity && identityCount >= 3
     ? t("dashboard.week.inspector.activitySummaryTitle", {
-        activity: primaryIdentity.label,
+        activity: primaryLabel,
         count: identityCount - 1,
       })
-    : event.appName;
+    : (event.appName.trim() || primaryLabel);
   return (
     <header className="week-activity-inspector__header">
       <span className="week-activity-inspector__identity" aria-hidden="true">
         <InspectorIdentityIcon event={event} appIcons={appIcons} />
       </span>
       <div className="week-activity-inspector__heading">
-        <strong id={titleId} title={event.appName}>{title}</strong>
+        <strong id={titleId} title={event.appName.trim() || primaryLabel}>{title}</strong>
         {event.detailLabel ? (
           <span className="week-activity-inspector__context" title={event.detailLabel}>{event.detailLabel}</span>
         ) : null}
@@ -719,9 +728,10 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
       {visibleIdentities.map((identity, index) => {
         const iconSrc = appIcons[identity.bundleId ?? identity.appName] ?? appIcons[identity.appName] ?? null;
         const isDominant = isFlowComposition && index === 0;
+        const identityLabel = localizedExcludedIdentityLabel(identity, t);
         const rowLabel = isDominant
-          ? `${identity.label} · ${t("dashboard.week.inspector.dominant")}`
-          : identity.label;
+          ? `${identityLabel} · ${t("dashboard.week.inspector.dominant")}`
+          : identityLabel;
         return (
           <div
             className={isDominant
@@ -733,7 +743,7 @@ function ActivityBreakdown({ event, appIcons }: { readonly event: ActivityInspec
             <span className="usage-identity-icon usage-identity-icon--sm" aria-hidden="true">
               {identity.siteDomain
                 ? <SiteFavicon domain={identity.siteDomain} size={18} fallbackIconSrc={iconSrc} />
-                : <AppGlyph appName={identity.label} iconSrc={iconSrc} size="sm" />}
+                : <AppGlyph appName={identity.appName || identityLabel} iconSrc={iconSrc} size="sm" />}
             </span>
             <span title={rowLabel}>{rowLabel}</span>
             {identity.seconds !== undefined

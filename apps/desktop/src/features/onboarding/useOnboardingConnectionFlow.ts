@@ -1,4 +1,4 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
   DEFAULT_LOCAL_AI_SETUP,
   type LocalAiSetupState,
@@ -49,7 +49,11 @@ export function useOnboardingConnectionFlow({
   const isCustomEndpointSetup = setupChoice === "custom_endpoint";
   const isManagedProviderSetup = setupChoice === "local_ai";
   const isUserManagedProviderSetup = isByokSetup || isCustomEndpointSetup;
-  const managedLocalAi = useManagedLocalAiSetup(setupChoice === "local_ai", onLocalAiSetupChange, true);
+  const managedLocalAi = useManagedLocalAiSetup(
+    step === "choose_setup" || setupChoice === "local_ai",
+    onLocalAiSetupChange,
+    true,
+  );
   const managedLocalReady = isManagedLocalReady(managedLocalAi.status);
   const managedLocalStarted = hasManagedLocalInstallStarted(managedLocalAi.status);
   const connectionChecks = connectionChecksForSetup(setupChoice);
@@ -116,11 +120,13 @@ export function useOnboardingConnectionFlow({
     setConnectionFailureLabel(null);
   }
 
-  function handleSetupChoice(nextChoice: SetupChoice) {
+  const handleSetupChoice = useCallback((nextChoice: SetupChoice) => {
     setSetupChoice(nextChoice);
-    resetConnectionValidation();
+    setConnectionPhase("idle");
+    setCheckStatuses([]);
+    setConnectionFailureLabel(null);
     setMaskedApiKey(null);
-  }
+  }, []);
 
   function handleApiKeyChange(value: string) {
     setApiKeyTouched(true);

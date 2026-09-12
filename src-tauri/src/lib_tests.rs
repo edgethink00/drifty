@@ -482,3 +482,63 @@ fn update_restart_runs_exit_cleanup_before_restart() {
         ["cleanup", "restart"].as_slice()
     );
 }
+
+#[test]
+fn silent_update_relaunch_marker_absent_does_not_hide_window() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    assert!(!consume_silent_update_relaunch(directory.path()));
+    assert!(!update_relaunch_silent_marker_path(directory.path()).exists());
+}
+
+#[test]
+fn silent_update_relaunch_marker_is_consumed_and_deleted() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    mark_silent_update_relaunch(directory.path());
+    let marker = update_relaunch_silent_marker_path(directory.path());
+    assert!(marker.is_file());
+    assert!(consume_silent_update_relaunch(directory.path()));
+    assert!(!marker.exists());
+    assert!(!consume_silent_update_relaunch(directory.path()));
+}
+
+#[test]
+fn ready_window_policy_reveals_and_focuses_a_normal_launch() {
+    assert_eq!(
+        ready_main_window_action(false, false),
+        ReadyMainWindowAction::RevealAndFocus
+    );
+}
+
+#[test]
+fn ready_window_policy_keeps_a_silent_or_background_launch_hidden() {
+    assert_eq!(
+        ready_main_window_action(false, true),
+        ReadyMainWindowAction::KeepHidden
+    );
+}
+
+#[test]
+fn ready_window_policy_prefers_isolated_reveal_over_the_silent_marker() {
+    assert_eq!(
+        ready_main_window_action(true, true),
+        ReadyMainWindowAction::RevealIsolatedWithoutActivation
+    );
+    assert_eq!(
+        ready_main_window_action(true, false),
+        ReadyMainWindowAction::RevealIsolatedWithoutActivation
+    );
+}
+
+#[test]
+fn silent_update_relaunch_marker_delete_failure_still_hides_this_launch() {
+    let directory = tempfile::tempdir().expect("temp dir");
+    let marker = update_relaunch_silent_marker_path(directory.path());
+    std::fs::create_dir(&marker).expect("marker directory that remove_file cannot delete");
+    assert!(consume_silent_update_relaunch(directory.path()));
+    assert!(!marker.exists());
+    assert!(directory
+        .path()
+        .join(format!("{UPDATE_RELAUNCH_SILENT_MARKER}.stale"))
+        .exists());
+    assert!(!consume_silent_update_relaunch(directory.path()));
+}

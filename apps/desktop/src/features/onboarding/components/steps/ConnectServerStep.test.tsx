@@ -49,3 +49,49 @@ describe("onboarding local model choice", () => {
     expect(installModel).toHaveBeenCalledWith("drifty-qwen3-5-4b-default");
   });
 });
+
+describe("onboarding local model unsupported Mac", () => {
+  function renderLocalCatalog(options: {
+    readonly fit: "good" | "insufficient";
+    readonly loading?: boolean;
+  }) {
+    const handleSetupChoice = vi.fn();
+    const catalog = MANAGED_LOCAL_AI_FALLBACK_CATALOG.map((model) => ({
+      ...model,
+      fit: options.fit,
+    }));
+    const flow = {
+      setupChoice: "local_ai",
+      handleSetupChoice,
+      managedLocalAi: {
+        catalog,
+        loading: options.loading ?? false,
+        actionModelId: null,
+        installModel: vi.fn(),
+        status: null,
+      },
+    } as unknown as OnboardingFlow;
+    render(<ConnectServerStep flow={flow} />);
+    return { handleSetupChoice };
+  }
+
+  it("shows a Cloud switch when every model is insufficient", () => {
+    const { handleSetupChoice } = renderLocalCatalog({ fit: "insufficient" });
+    expect(screen.getByText("This Mac doesn't meet the local model requirements")).toBeTruthy();
+    expect(screen.queryAllByRole("article")).toEqual([]);
+    expect(screen.queryByText(/choose a managed local model/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Switch to Cloud" }));
+    expect(handleSetupChoice).toHaveBeenCalledWith("simple");
+  });
+
+  it("hides the Cloud switch when at least one model can install", () => {
+    renderLocalCatalog({ fit: "good" });
+    expect(screen.queryByText("This Mac doesn't meet the local model requirements")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch to Cloud" })).toBeNull();
+  });
+
+  it("hides the Cloud switch while the catalog is loading", () => {
+    renderLocalCatalog({ fit: "insufficient", loading: true });
+    expect(screen.queryByRole("button", { name: "Switch to Cloud" })).toBeNull();
+  });
+});

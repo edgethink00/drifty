@@ -68,6 +68,20 @@ export function getOnboardingSteps(setupChoice: SetupChoice | null, options: Onb
   return baseSteps;
 }
 
+export function remapOnboardingStepForSetupChoice(
+  step: OnboardingStep,
+  fromChoice: SetupChoice | null,
+  toChoice: SetupChoice,
+  options: OnboardingStepsOptions = {},
+): OnboardingStep {
+  const nextSteps = getOnboardingSteps(toChoice, options);
+  if (nextSteps.some((item) => item.id === step)) return step;
+  const previousSteps = getOnboardingSteps(fromChoice, options);
+  const previousIndex = previousSteps.findIndex((item) => item.id === step);
+  if (previousIndex < 0) return nextSteps[0]?.id ?? "welcome";
+  return nextSteps[Math.min(previousIndex, nextSteps.length - 1)]?.id ?? "welcome";
+}
+
 export const PRIVACY_RECORDED = [
   "App name",
   "Window title",

@@ -9,10 +9,11 @@ import {
   buildDailyTotals,
   buildRollingFocusSeconds,
   classifyActivityDetailed,
-  exclusionSourceLabel,
   isExcludedSegment,
   type ActivitySegment,
 } from "@drifty/domain";
+import { excludedActivityLabel } from "./features/localization/activityTranslations";
+import { ENGLISH_TRANSLATIONS, KOREAN_TRANSLATIONS } from "./features/localization/translations";
 
 type ExclusionBoundary = {
   readonly label: string;
@@ -110,9 +111,13 @@ describe("App exclusion privacy boundaries and contracts", () => {
     });
 
     it("formats truth-accurate labels based on exclusion source", () => {
-      expect(exclusionSourceLabel("default")).toBe("제외됨 · Drifty 기본");
-      expect(exclusionSourceLabel("user")).toBe("제외됨 · 내 설정");
-      expect(exclusionSourceLabel(null)).toBe("제외됨 · Drifty 기본");
+      const koreanT = (key: keyof typeof KOREAN_TRANSLATIONS) => KOREAN_TRANSLATIONS[key];
+      const englishT = (key: keyof typeof ENGLISH_TRANSLATIONS) => ENGLISH_TRANSLATIONS[key];
+      expect(excludedActivityLabel("default", koreanT)).toBe("제외됨 · Drifty 기본");
+      expect(excludedActivityLabel("user", koreanT)).toBe("제외됨 · 내 설정");
+      expect(excludedActivityLabel(null, koreanT)).toBe("제외됨 · Drifty 기본");
+      expect(excludedActivityLabel("default", englishT)).toBe("Excluded · Drifty default");
+      expect(excludedActivityLabel("user", englishT)).toBe("Excluded · My settings");
     });
 
     it("classifies excluded segments strictly as unknown/neutral", () => {

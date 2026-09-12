@@ -35,6 +35,7 @@ export interface OwnLeaderboardEntry {
   timezone: string;
   opted_in: boolean;
   updated_at: string;
+  publicly_valid?: boolean | null;
 }
 
 /**
@@ -153,6 +154,7 @@ type OwnLeaderboardRpcRow = LeaderboardRpcRow & {
   rank: number | string | null;
   timezone: string;
   opted_in: boolean | string;
+  validation_version?: number | string | null;
 };
 
 type CommunityFocusPercentileModelRpcRow = {
@@ -288,6 +290,9 @@ function normalizeOwnLeaderboardRow(row: OwnLeaderboardRpcRow): OwnLeaderboardEn
     timezone: String(row.timezone ?? ""),
     opted_in: row.opted_in === true || row.opted_in === "true",
     updated_at: String(row.updated_at ?? ""),
+    ...(row.validation_version === null || row.validation_version === undefined || row.validation_version === ""
+      ? {}
+      : { publicly_valid: Number(row.validation_version) === 1 }),
   };
 }
 

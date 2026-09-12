@@ -63,6 +63,7 @@ export function blockedHintForStep({
   connectionPhase,
   customEndpointBaseUrlIssue,
   customEndpointModelIssue,
+  hasInstallableLocalModel = true,
   isCustomEndpointSetup,
   isManagedProviderSetup,
   step,
@@ -72,6 +73,7 @@ export function blockedHintForStep({
   readonly connectionPhase: ConnectionPhase;
   readonly customEndpointBaseUrlIssue: string | null;
   readonly customEndpointModelIssue: string | null;
+  readonly hasInstallableLocalModel?: boolean;
   readonly isCustomEndpointSetup: boolean;
   readonly isManagedProviderSetup: boolean;
   readonly step: OnboardingStep;
@@ -81,7 +83,11 @@ export function blockedHintForStep({
     case "account":
       return t?.("onboarding.block.account") ?? "Connect an account to continue.";
     case "connect_server":
-      if (isManagedProviderSetup) return t?.("onboarding.block.localModel") ?? "Start a local model download to continue.";
+      if (isManagedProviderSetup) {
+        return hasInstallableLocalModel
+          ? t?.("onboarding.block.localModel") ?? "Start a local model download to continue."
+          : t?.("onboarding.block.localModelInsufficient") ?? "No local model can run on this Mac. Switch to Cloud to continue.";
+      }
       if (isCustomEndpointSetup) return customEndpointBaseUrlIssue ?? customEndpointModelIssue ?? (t?.("onboarding.block.customEndpoint") ?? "Enter your custom endpoint details.");
       return t?.("onboarding.block.openRouter") ?? "Enter an OpenRouter key that starts with sk-or-.";
     case "test_connection":

@@ -19,6 +19,7 @@ import type { AuthState } from "../auth/AuthContext";
 import { buildPublicProfileUrl, copyTextToClipboard, type ProfileDraft } from "../profile/ProfileModals";
 import { readImageFileAsDataUrl } from "../profile/profileImage";
 import { fallbackDisplayName, fetchOwnProfile, fetchPublicProfile, saveOwnProfile } from "../profile/profileService";
+import { useLocalization } from "../localization/LocalizationContext";
 import type { PublicProfile, UserProfile } from "../profile/profileService";
 import type { ClassificationAvailabilityReason, ClassificationAvailabilityState } from "../classification/classificationAvailability";
 import {
@@ -136,7 +137,7 @@ type UseLeaderboardProfileControllerResult = {
   readonly closeProfileEditor: () => void;
   readonly closeSelectedProfile: () => void;
   readonly handleLeaderboardOptIn: () => Promise<void>;
-  readonly handleLeaderboardOptOut: () => Promise<void>;
+  readonly handleLeaderboardOptOut: (options?: { readonly makeProfilePrivate?: boolean }) => Promise<void>;
   readonly handleProfilePhotoSelected: (event: ChangeEvent<HTMLInputElement>) => Promise<void>;
   readonly handleProfileVisibilityChange: (isPublic: boolean) => Promise<boolean>;
   readonly handleSaveProfile: () => Promise<boolean>;
@@ -396,6 +397,7 @@ export function useLeaderboardProfileController({
   user,
   onAuthRequired,
 }: UseLeaderboardProfileControllerInput): UseLeaderboardProfileControllerResult {
+  const { t } = useLocalization();
   const [leaderboardRows, setLeaderboardRows] = useState<LeaderboardRow[]>([]);
   const [ownLeaderboardEntry, setOwnLeaderboardEntry] = useState<OwnLeaderboardEntry | null>(null);
   const [activeLeaderboardPeriod, setActiveLeaderboardPeriod] = useState<LeaderboardPeriod>(DEFAULT_LEADERBOARD_PERIOD);
@@ -1262,10 +1264,11 @@ export function useLeaderboardProfileController({
     }
   }, [activeLeaderboardPeriod, allowsEffectiveAnonymousAuth, authMetadataAvatarUrl, builtInHeuristicsUnavailableSince, classificationAssessmentReady, hasRequiredAccountAuth, includeBuiltInHeuristics, isEffectiveAuthRequired, leaderboardTimezone, leaderboardWindowEndDay, onAuthRequired, profile, profileError, profileLoading, profileReadyUserId, refreshLeaderboardData, showAiClassificationImpact, signInAnonymously, startOfDayMinutes, user]);
 
-  const handleLeaderboardOptOut = useCallback(async () => {
+  const handleLeaderboardOptOut = useCallback(async (options?: { readonly makeProfilePrivate?: boolean }) => {
     setLeaderboardActionLoading(true);
     leaderboardManualActionInFlightRef.current = true;
     setLeaderboardActionError(null);
+    const makeProfilePrivate = options?.makeProfilePrivate === true;
 
     try {
       const optOutResults = await Promise.all(LEADERBOARD_PERIODS.map((period) => optOutLeaderboard(period)));
@@ -1286,10 +1289,29 @@ export function useLeaderboardProfileController({
       clearLeaderboardAutoPublishRecordsForUser(leaderboardOwnEntryScopeKey);
       setOwnLeaderboardEntry(null);
       await refreshLeaderboardData();
+      if (makeProfilePrivate) {
+        const nextDraft = { ...profileDraft, isPublic: false };
+        setProfileDraft(nextDraft);
+        const hidden = await saveOwnProfile({
+          display_name: nextDraft.displayName,
+          bio: nextDraft.bio,
+          avatar_url: nextDraft.avatarUrl,
+          website_url: nextDraft.websiteUrl,
+          github_url: nextDraft.githubUrl,
+          linkedin_url: nextDraft.linkedinUrl,
+          timezone: leaderboardTimezone,
+          is_public: false,
+        });
+        if (!hidden.success) {
+          setProfileDraft(profileDraft);
+          setLeaderboardActionError(t("leaderboard.leaveProfileStillPublic"));
+        }
+      }
       capturePostHogEvent("leaderboard_action", {
         action: "opt_out",
         result: "success",
         period: activeLeaderboardPeriod,
+        profile_made_private: makeProfilePrivate,
       });
     } catch (nextError) {
       setLeaderboardActionError(toErrorMessage(nextError));
@@ -1303,7 +1325,7 @@ export function useLeaderboardProfileController({
       leaderboardManualActionInFlightRef.current = false;
       setLeaderboardActionLoading(false);
     }
-  }, [leaderboardOwnEntryScopeKey, refreshLeaderboardData]);
+  }, [activeLeaderboardPeriod, leaderboardOwnEntryScopeKey, leaderboardTimezone, profileDraft, refreshLeaderboardData, t]);
 
   const saveProfileDraft = useCallback(async (nextDraft: ProfileDraft) => {
     setProfileSaving(true);

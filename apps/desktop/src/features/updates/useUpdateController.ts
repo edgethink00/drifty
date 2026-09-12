@@ -172,7 +172,7 @@ export function useUpdateController({
         if (contentLength > 0) setUpdaterDownloadProgress(1);
       });
       markPostUpdateRelaunchFocusPending();
-      await invoke<void>("app_restart_after_update");
+      await invoke<void>("app_restart_after_update", { silent: false });
     } catch (nextError) {
       clearPostUpdateRelaunchFocusPending();
       setUpdaterError(`Update install failed: ${toErrorMessage(nextError)}`);
@@ -329,7 +329,7 @@ export function useUpdateController({
   const handleInstallUpdate = useCallback(async () => {
     if (preparedUpdateVersionRef.current) {
       markPostUpdateRelaunchFocusPending();
-      await invoke<void>("app_restart_after_update");
+      await invoke<void>("app_restart_after_update", { silent: false });
       return;
     }
     const offeredUpdate = availableUpdateRef.current;
@@ -453,22 +453,6 @@ export function useUpdateController({
 
     let disposed = false;
     let restartInFlight = false;
-    let hiddenSinceMs: number | null = typeof document !== "undefined" && document.visibilityState === "hidden"
-      ? Date.now()
-      : null;
-
-    const handleVisibilityChange = () => {
-      if (typeof document === "undefined") return;
-      if (document.visibilityState === "hidden") {
-        if (hiddenSinceMs === null) hiddenSinceMs = Date.now();
-      } else {
-        hiddenSinceMs = null;
-      }
-    };
-
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", handleVisibilityChange);
-    }
 
     const intervalId = window.setInterval(async () => {
       if (disposed || restartInFlight) return;
@@ -486,8 +470,6 @@ export function useUpdateController({
         } else if (isHidden && idleSeconds >= UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS) {
           isSafeToRestart = true;
         }
-      } else if (isHidden && hiddenSinceMs !== null && Date.now() - hiddenSinceMs >= UPDATE_IDLE_RESTART_THRESHOLD_SECONDS * 1000) {
-        isSafeToRestart = true;
       }
 
       if (!isSafeToRestart) return;
@@ -496,10 +478,7 @@ export function useUpdateController({
       if (!releaseOperation) return;
       restartInFlight = true;
       try {
-        if (!isHidden) {
-          markPostUpdateRelaunchFocusPending();
-        }
-        await invoke<void>("app_restart_after_update");
+        await invoke<void>("app_restart_after_update", { silent: true });
       } catch (error) {
         console.warn("Failed to restart app after background update:", toErrorMessage(error));
         restartInFlight = false;
@@ -511,9 +490,6 @@ export function useUpdateController({
     return () => {
       disposed = true;
       window.clearInterval(intervalId);
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", handleVisibilityChange);
-      }
     };
   }, [
     backgroundPreparationSupported,

@@ -1,4 +1,4 @@
-import { classifyActivityDetailed, exclusionSourceLabel, isExcludedSegment, logicalDayIsoDateForDate } from "@drifty/domain";
+import { classifyActivityDetailed, isExcludedSegment, logicalDayIsoDateForDate } from "@drifty/domain";
 import type { ActivityCategory, ActivitySegment, ClassificationOptions, ExclusionSource, ProductivityLabel } from "@drifty/domain";
 import { categoryLabel, productivityLabel } from "../../lib/activityLabels";
 import type { DisplayLanguage } from "../localization/languagePreference";
@@ -139,7 +139,7 @@ export function buildHistoryDayGroups(rows: readonly HistoryRow[], startOfDayMin
 
 export function historyRowTitle(row: HistoryRow): string {
   if (isExcludedSegment(row)) {
-    return exclusionSourceLabel(row.exclusionSource);
+    return "";
   }
   return row.siteTitle ?? row.windowTitle ?? row.siteDomain ?? row.appName;
 }

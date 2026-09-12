@@ -2466,6 +2466,89 @@
   opacity: 0.6;
 }
 
+.leaderboard-hero__status--fail {
+  border-color: color-mix(in srgb, var(--warn) 46%, transparent);
+  background: color-mix(in srgb, var(--warn-soft) 70%, transparent);
+  color: var(--warn);
+}
+
+.leaderboard-leave-dialog {
+  width: min(100%, 22rem);
+}
+
+.leaderboard-leave-dialog .modal-head {
+  margin-bottom: 12px;
+  padding-right: 0;
+}
+
+.leaderboard-leave-dialog .modal-foot {
+  margin-top: 14px;
+  padding-top: 12px;
+}
+
+.leaderboard-leave-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-2) 70%, var(--surface));
+  cursor: pointer;
+}
+
+.leaderboard-leave-check:hover {
+  border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);
+}
+
+.leaderboard-leave-check__input {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.leaderboard-leave-check__input:checked {
+  background: var(--text);
+  border-color: var(--text);
+}
+
+.leaderboard-leave-check__input:checked::after {
+  content: "";
+  width: 8px;
+  height: 5px;
+  margin-top: -1px;
+  border: 1.5px solid var(--surface);
+  border-top: 0;
+  border-right: 0;
+  transform: rotate(-46deg);
+}
+
+.leaderboard-leave-check__input:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+.leaderboard-leave-check__copy {
+  min-width: 0;
+  padding-top: 1px;
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
 /* Hero actions follow the shared app button shape. */
 .hero-action-btn {
   display: inline-flex;

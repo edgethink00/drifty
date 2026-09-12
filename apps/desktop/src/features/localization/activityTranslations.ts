@@ -1,4 +1,4 @@
-import type { ActivityCategory, ProductivityLabel } from "@drifty/domain";
+import type { ActivityCategory, ExclusionSource, ProductivityLabel } from "@drifty/domain";
 import type { LocalizationController } from "./LocalizationContext";
 
 export function localizedCategoryLabel(category: ActivityCategory, t: LocalizationController["t"]): string {
@@ -22,4 +22,19 @@ export function localizedProductivityLabel(productivity: ProductivityLabel, t: L
     case "drift": return t("activity.productivity.drift");
     case "neutral": return t("activity.productivity.neutral");
   }
+}
+
+export function excludedActivityLabel(
+  source: ExclusionSource | null | undefined,
+  t: LocalizationController["t"],
+): string {
+  return source === "user" ? t("activity.excluded.user") : t("activity.excluded.default");
+}
+
+export function localizedExcludedIdentityLabel(
+  identity: { readonly id: string; readonly label: string; readonly exclusionSource?: ExclusionSource | null },
+  t: LocalizationController["t"],
+): string {
+  if (identity.id === "excluded") return excludedActivityLabel(identity.exclusionSource, t);
+  return identity.label;
 }

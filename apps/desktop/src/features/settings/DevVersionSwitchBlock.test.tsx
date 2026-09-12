@@ -30,7 +30,7 @@ describe("Dev version switching", () => {
     render(<DevVersionSwitchBlock />); await select();
     expect(mock.invoke).not.toHaveBeenCalledWith("developer_install_release", expect.anything());
     fireEvent.click(screen.getByText("Back up, install & restart"));
-    await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith("app_restart_after_update"));
+    await waitFor(() => expect(mock.invoke).toHaveBeenCalledWith("app_restart_after_update", { silent: false }));
     expect(mock.invoke).toHaveBeenCalledWith("developer_install_release", { tag: "v1.10.0" });
     expect(Number(localStorage.getItem("drifty.updates.nextAutomaticCheckAt.v1"))).toBeGreaterThan(Date.now());
     expect(localStorage.getItem("drifty.updates.autoInstallFuture")).toBe("0");
@@ -41,7 +41,7 @@ describe("Dev version switching", () => {
     render(<DevVersionSwitchBlock />); await select();
     fireEvent.click(screen.getByText("Back up, install & restart"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Backup failed");
-    expect(mock.invoke).not.toHaveBeenCalledWith("app_restart_after_update");
+    expect(mock.invoke.mock.calls.filter(([command]) => command === "app_restart_after_update")).toHaveLength(0);
     fireEvent.click(screen.getByText("Resume automatic checks"));
     expect(localStorage.getItem("drifty.updates.nextAutomaticCheckAt.v1")).toBeNull();
   });
@@ -89,7 +89,7 @@ it("refuses to replace the app if persisting the update pause fails", async () =
     fireEvent.click(screen.getByText("Back up, install & restart"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Storage full");
     expect(mock.invoke.mock.calls.filter(([command]) => command === "developer_install_release")).toHaveLength(0);
-    expect(mock.invoke).not.toHaveBeenCalledWith("app_restart_after_update");
+    expect(mock.invoke.mock.calls.filter(([command]) => command === "app_restart_after_update")).toHaveLength(0);
     const release = acquireUpdateOperation();
     expect(release).not.toBeNull();
     act(() => release?.());

@@ -19,13 +19,14 @@ export type LeaderboardPageProps = {
   ownFocusSeconds?: number | null;
   ownParticipantCount?: number | null;
   ownRank?: number | null;
+  publiclyValid?: boolean | null;
   profileDisplayName?: string | null;
   publicProfile?: LeaderboardPublicProfileControls;
   statusMessage?: string | null;
   statusTone?: "error" | "neutral";
   totalFocusSeconds7d: number;
   onOptIn: () => void;
-  onOptOut: () => void;
+  onOptOut: (options?: { readonly makeProfilePrivate?: boolean }) => void;
   onPeriodChange: (period: LeaderboardPeriod) => void;
   onSelectProfile: (row: LeaderboardRow) => void;
   onSignIn: () => void;
@@ -47,6 +48,7 @@ export function LeaderboardPage({
   ownFocusSeconds,
   ownParticipantCount,
   ownRank,
+  publiclyValid,
   profileDisplayName,
   publicProfile,
   statusMessage,
@@ -78,6 +80,7 @@ export function LeaderboardPage({
           ownFocusSeconds={ownFocusSeconds}
           ownParticipantCount={ownParticipantCount}
           ownRank={ownRank}
+          publiclyValid={publiclyValid}
           activePeriod={activePeriod}
           leaderboard={leaderboard}
           totalFocusSeconds7d={totalFocusSeconds7d}

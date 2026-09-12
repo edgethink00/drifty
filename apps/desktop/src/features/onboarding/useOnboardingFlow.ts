@@ -14,7 +14,7 @@ import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedN
 import type { BillingEntitlement } from "../billing/billingService";
 import type { LocalAiSetupState } from "../settings/localAiSetup";
 import { completeOnboardingAction } from "./onboardingCompleteAction";
-import { getOnboardingSteps, type OnboardingStep } from "./onboardingFlow";
+import { getOnboardingSteps, remapOnboardingStepForSetupChoice, type OnboardingStep, type SetupChoice } from "./onboardingFlow";
 import {
   blockedHintForStep,
   canAdvanceOnboarding,
@@ -28,6 +28,7 @@ import {
   writeOnboardingProgress,
 } from "./onboardingProgress";
 import type { UserOnboardingState } from "./onboardingState";
+import { hasInstallableLocalModel, isLocalModelUnsupported, shouldClearUnsupportedLocalChoice } from "./localModelSetupAnalytics";
 import { useMainActivities } from "./useMainActivities";
 import { useOnboardingConnectionFlow } from "./useOnboardingConnectionFlow";
 import { useOnboardingModalA11y } from "./useOnboardingModalA11y";
@@ -180,22 +181,26 @@ export function useOnboardingFlow({
     step,
     workContextProvided: mainActivities.length > 0 || workDescription.trim().length > 0,
   });
+  const catalogInstallable = hasInstallableLocalModel(connection.managedLocalAi.catalog);
   const blockedHint = useMemo(() => blockedHintForStep({
     accessibilityRecheckPending: permissions.accessibilityRecheckPending,
     canAdvance,
     connectionPhase: connection.connectionPhase,
     customEndpointBaseUrlIssue: connection.customEndpointBaseUrlIssue,
     customEndpointModelIssue: connection.customEndpointModelIssue,
+    hasInstallableLocalModel: connection.managedLocalAi.loading || catalogInstallable,
     isCustomEndpointSetup: connection.isCustomEndpointSetup,
     isManagedProviderSetup: connection.isManagedProviderSetup,
     step,
   }, t), [
     canAdvance,
+    catalogInstallable,
     connection.connectionPhase,
     connection.customEndpointBaseUrlIssue,
     connection.customEndpointModelIssue,
     connection.isCustomEndpointSetup,
     connection.isManagedProviderSetup,
+    connection.managedLocalAi.loading,
     permissions.accessibilityRecheckPending,
     step,
     t,
@@ -224,6 +229,22 @@ export function useOnboardingFlow({
   useEffect(() => {
     capturePostHogEvent("onboarding_step_viewed", { step });
   }, [step]);
+
+  useEffect(() => {
+    if (!shouldClearUnsupportedLocalChoice(
+      step,
+      connection.setupChoice,
+      connection.managedLocalAi.catalog,
+      connection.managedLocalAi.loading,
+    )) return;
+    connection.handleSetupChoice("simple");
+  }, [
+    connection.handleSetupChoice,
+    connection.managedLocalAi.catalog,
+    connection.managedLocalAi.loading,
+    connection.setupChoice,
+    step,
+  ]);
 
   // Hold for active verification and a confirmed account mismatch. A transport
   // failure is deferred so setup can continue while Pro access remains gated.
@@ -361,8 +382,23 @@ export function useOnboardingFlow({
     void completeOnboarding();
   }
 
+  function handleSetupChoice(nextChoice: SetupChoice) {
+    if (nextChoice === "local_ai" && isLocalModelUnsupported(connection.managedLocalAi.catalog, connection.managedLocalAi.loading)) {
+      return;
+    }
+    const nextStep = remapOnboardingStepForSetupChoice(
+      step,
+      connection.setupChoice,
+      nextChoice,
+      { skipAccountStep },
+    );
+    connection.handleSetupChoice(nextChoice);
+    if (nextStep !== step) setStep(nextStep);
+  }
+
   return {
     ...connection,
+    handleSetupChoice,
     ...permissions,
     safariHistoryPermission,
     accountConnected,

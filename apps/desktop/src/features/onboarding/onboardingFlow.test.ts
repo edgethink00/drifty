@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getOnboardingSteps, type SetupChoice } from "./onboardingFlow";
+import { getOnboardingSteps, remapOnboardingStepForSetupChoice, type SetupChoice } from "./onboardingFlow";
 
 function stepIds(setupChoice: SetupChoice) {
   return getOnboardingSteps(setupChoice).map((step) => step.id);
@@ -51,5 +51,16 @@ describe("getOnboardingSteps", () => {
       expect(steps.indexOf("nudges")).toBe(steps.indexOf("permissions") + 1);
       expect(steps.indexOf("ready")).toBe(steps.indexOf("nudges") + 1);
     }
+  });
+});
+
+describe("remapOnboardingStepForSetupChoice", () => {
+  it("keeps a step that exists in both paths", () => {
+    expect(remapOnboardingStepForSetupChoice("choose_setup", "local_ai", "simple")).toBe("choose_setup");
+    expect(remapOnboardingStepForSetupChoice("permissions", "local_ai", "simple")).toBe("permissions");
+  });
+
+  it("moves connect_server to the same index on the Cloud path", () => {
+    expect(remapOnboardingStepForSetupChoice("connect_server", "local_ai", "simple")).toBe("permissions");
   });
 });
