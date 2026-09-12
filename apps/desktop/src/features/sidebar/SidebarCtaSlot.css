@@ -267,6 +267,7 @@
   font-weight: 600;
   line-height: 1.54;
   overflow-wrap: break-word;
+  word-break: keep-all;
   text-wrap: wrap;
 }
 

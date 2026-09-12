@@ -391,6 +391,7 @@ describe("SidebarCtaSlot", () => {
       kind: "billing",
       titleKey: "sidebar.cta.billing.title",
       actionLabelKey: "sidebar.cta.billing.action",
+      copyKey: "sidebar.cta.billing.detail",
     });
     expect(locked("billing_missing")).toMatchObject({
       kind: "upgrade",
@@ -403,6 +404,20 @@ describe("SidebarCtaSlot", () => {
       actionLabelKey: "sidebar.cta.device.action",
       alert: "warn",
     });
+  });
+
+  it("tells a payment-locked account that tracking continues", () => {
+    const state = resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" },
+      billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "payment_required" },
+    });
+    if (!state || state.kind === "download") throw new Error("Expected billing recovery state");
+
+    render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
+
+    expect(screen.getByText(/Activity tracking continues/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Fix billing/i })).toBeTruthy();
   });
 
   it("prioritizes an explicit billing lock over a simultaneous AI warning", () => {

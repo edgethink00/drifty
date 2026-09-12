@@ -58,6 +58,9 @@ export function DashboardAiRecoveryOverlay({
         <div className="dashboard-ai-recovery__copy">
           <h2>{t(state.titleKey)}</h2>
           <p>{t(showsTrialEndedDecision ? "billing.upgradeModal.endedDescription" : state.bodyKey)}</p>
+          {recoversExistingSubscription ? (
+            <p className="dashboard-ai-recovery__meta">{t("dashboard.aiRecovery.billingSafeNote")}</p>
+          ) : null}
         </div>
         {recoversExistingSubscription ? (
           <div className="dashboard-ai-recovery__actions">

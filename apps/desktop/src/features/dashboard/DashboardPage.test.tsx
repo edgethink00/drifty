@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment, FlowBlock } from "@drifty/domain";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { DashboardPage } from "./DashboardPage";
+import { DashboardAiRecoveryOverlay } from "./DashboardAiRecoveryOverlay";
 import type { DashboardAiUnavailableState } from "./dashboardAiUnavailableState";
 import { LocalizationTestProvider, type DisplayLanguage } from "../localization/LocalizationContext";
+import { ENGLISH_TRANSLATIONS } from "../localization/translations";
 
 // Auto-cleanup isn't unmounting between cases here, so broad role/text queries
 // otherwise collide with a prior render's DOM. Tear down explicitly.
@@ -450,6 +452,31 @@ describe("DashboardPage billing recovery overlay", () => {
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onSelectBillingPlan).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /choose drifty pro plan/i })).toBeNull();
+    expect(screen.getByText(/Activity tracking and the timeline keep running on this Mac/i)).toBeTruthy();
+    expect(screen.getByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeTruthy();
+  });
+
+  it("keeps the payment-safe note off trial-ended recovery", () => {
+    render(
+      <LocalizationTestProvider language="en">
+        <DashboardAiRecoveryOverlay
+          billingCheckoutLoadingInterval={null}
+          state={{
+            variant: "trial-ended",
+            titleKey: "dashboard.aiRecovery.trialEndedTitle",
+            bodyKey: "dashboard.aiRecovery.trialEndedBody",
+            ctaLabelKey: "billing.plan.proCta",
+          }}
+          onClose={noop}
+          onOpenAiSetup={noop}
+          onSelectBillingPlan={noop}
+        />
+      </LocalizationTestProvider>,
+    );
+
+    expect(screen.getByRole("heading", { name: ENGLISH_TRANSLATIONS["dashboard.aiRecovery.trialEndedTitle"] })).toBeTruthy();
+    expect(screen.queryByText(ENGLISH_TRANSLATIONS["dashboard.aiRecovery.billingSafeNote"])).toBeNull();
+    expect(screen.queryByText(/Activity tracking and the timeline keep running on this Mac/i)).toBeNull();
   });
 });
 

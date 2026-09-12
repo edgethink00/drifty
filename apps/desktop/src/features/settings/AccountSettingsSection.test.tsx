@@ -455,7 +455,7 @@ describe("AccountSettingsSection", () => {
       />,
     );
 
-    expect(screen.getByText(/Update payment on this subscription to resume Cloud AI/i)).toBeTruthy();
+    expect(screen.getByText(/Activity tracking continues. Update payment to resume Cloud AI/i)).toBeTruthy();
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^Fix billing$/i })); });
     expect(onManageCloudBilling).toHaveBeenCalledTimes(1);
     expect(onStartCloudSetup).not.toHaveBeenCalled();
