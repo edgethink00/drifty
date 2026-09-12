@@ -106,6 +106,26 @@ describe("resolveClassificationAvailability", () => {
     });
   });
 
+  it("locks Cloud after a confirmed quota and upgrades only a daily limit", () => {
+    expect(resolveClassificationAvailability(input({
+      cloudQuotaExceeded: true,
+      cloudQuotaDaily: true,
+    }))).toMatchObject({
+      state: "cloud_locked",
+      reason: "cloud_quota_exceeded",
+      recoveryAction: "upgrade",
+      allowAutomaticClassification: false,
+    });
+    expect(resolveClassificationAvailability(input({
+      cloudQuotaExceeded: true,
+      cloudQuotaDaily: false,
+    }))).toMatchObject({
+      state: "cloud_locked",
+      reason: "cloud_quota_exceeded",
+      recoveryAction: "retry",
+    });
+  });
+
   it("waits while provider or entitlement readiness is still being checked", () => {
     expect(resolveClassificationAvailability(input({
       route: "local",

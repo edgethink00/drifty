@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cloudAiBackoffMessage,
   CloudAiRequestBackoffRegistry,
+  isDailyCloudQuotaBackoff,
 } from "./cloudAiRequestBackoff";
 
 const NOW = Date.parse("2026-08-26T10:00:00.000Z");
@@ -107,5 +108,25 @@ describe("CloudAiRequestBackoffRegistry", () => {
     expect(cloudAiBackoffMessage(entry, NOW)).toBe(
       "Cloud AI classification is paused after HTTP 429. Automatic requests resume in about 2 minutes. Rate limited",
     );
+  });
+
+  it("reports the next live expiry and distinguishes a daily quota from a short pause", () => {
+    const registry = new CloudAiRequestBackoffRegistry();
+    const minute = registry.record({
+      key: "user-1",
+      status: 429,
+      message: "Minute AI classification quota exceeded.",
+      nowMs: NOW,
+    });
+    expect(isDailyCloudQuotaBackoff(minute)).toBe(false);
+    expect(registry.nextExpiryMs(NOW)).toBe(minute.retryAtMs);
+    expect(registry.nextExpiryMs(minute.retryAtMs)).toBeNull();
+    const daily = registry.record({
+      key: "user-2",
+      status: 429,
+      message: "Daily AI classification quota exceeded. Please try again tomorrow.",
+      nowMs: NOW,
+    });
+    expect(isDailyCloudQuotaBackoff(daily)).toBe(true);
   });
 });

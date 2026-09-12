@@ -61,6 +61,7 @@ export type ClassificationAvailabilityInput = {
   readonly billingEntitlementError: string | null;
   readonly cloudConnectionCheck: CloudAiConnectionCheck | null;
   readonly cloudQuotaExceeded?: boolean;
+  readonly cloudQuotaDaily?: boolean;
 };
 
 export function resolveClassificationAvailability(input: ClassificationAvailabilityInput): ClassificationAvailability {
@@ -183,7 +184,7 @@ function resolveCloudAvailability(input: ClassificationAvailabilityInput): Class
   if (input.cloudQuotaExceeded) {
     return availability("cloud_locked", "cloud", "cloud_quota_exceeded", {
       showRecovery: true,
-      recoveryAction: "upgrade",
+      recoveryAction: input.cloudQuotaDaily ? "upgrade" : "retry",
     });
   }
   if (input.billingEntitlement?.status === "locked") {

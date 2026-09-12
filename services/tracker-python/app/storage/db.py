@@ -48,6 +48,10 @@ VALID_RULE_DETAIL_KINDS = {"title", "windowTitle", "siteTitle", "youtubeTitle", 
 
 VALID_PROJECT_STATUSES = {"active", "archived"}
 VALID_PROJECT_ANCHOR_KINDS = {"app", "domain", "keyword", "repo_path"}
+
+# SQLite default SQLITE_MAX_VARIABLE_NUMBER is 999. Keep a margin for extra
+# bound values in the same statement when deleting by id.
+ACTIVITY_SEGMENT_DELETE_BATCH_SIZE = 900
 DEFAULT_PROJECT_COLOR = "#6366f1"
 DEFAULT_RULE_CONFIDENCE = 1.0
 DEFAULT_TIMELINE_PAGE_LIMIT = 200
@@ -891,31 +895,34 @@ class TrackerDatabase:
 
     def get_excluded_app_history_count(self, name: str, bundle_id: str | None = None) -> int:
         with self.connect() as conn:
-            if bundle_id:
-                row = conn.execute(
-                    "SELECT COUNT(*) as count FROM activity_segments WHERE lower(bundle_id) = lower(?) OR lower(app_name) = lower(?)",
-                    (bundle_id, name),
-                ).fetchone()
-            else:
-                row = conn.execute(
-                    "SELECT COUNT(*) as count FROM activity_segments WHERE lower(app_name) = lower(?)",
-                    (name,),
-                ).fetchone()
+            row = conn.execute(
+                f"SELECT COUNT(*) as count FROM activity_segments WHERE {self._excluded_app_history_predicate(bundle_id)}",
+                self._excluded_app_history_params(name, bundle_id),
+            ).fetchone()
             return int(row["count"]) if row else 0
 
     def delete_excluded_app_history(self, name: str, bundle_id: str | None = None) -> int:
         with self.connect() as conn:
-            if bundle_id:
-                cursor = conn.execute(
-                    "DELETE FROM activity_segments WHERE lower(bundle_id) = lower(?) OR lower(app_name) = lower(?)",
-                    (bundle_id, name),
-                )
-            else:
-                cursor = conn.execute(
-                    "DELETE FROM activity_segments WHERE lower(app_name) = lower(?)",
-                    (name,),
-                )
-            return cursor.rowcount
+            rows = conn.execute(
+                f"SELECT id FROM activity_segments WHERE {self._excluded_app_history_predicate(bundle_id)}",
+                self._excluded_app_history_params(name, bundle_id),
+            ).fetchall()
+        segment_ids = [str(row["id"]) for row in rows]
+        if not segment_ids:
+            return 0
+        return self.delete_activity_segments(segment_ids)
+
+    @staticmethod
+    def _excluded_app_history_predicate(bundle_id: str | None) -> str:
+        if bundle_id:
+            return "lower(bundle_id) = lower(?) OR lower(app_name) = lower(?)"
+        return "lower(app_name) = lower(?)"
+
+    @staticmethod
+    def _excluded_app_history_params(name: str, bundle_id: str | None) -> tuple[str, ...]:
+        if bundle_id:
+            return (bundle_id, name)
+        return (name,)
 
     def get_recent_apps(self, limit: int = 50) -> list[dict[str, Any]]:
         with self.connect() as conn:
@@ -1858,7 +1865,6 @@ class TrackerDatabase:
         if not normalized_ids:
             return 0
 
-        placeholders = ",".join("?" for _ in normalized_ids)
         with permanent_deletion_guard(
             self.db_path,
             self.connect(),
@@ -1866,10 +1872,16 @@ class TrackerDatabase:
             refresh_backup=refresh_recovery_backup,
         ) as invalidate_recovery_copies:
             with self.connect() as conn:
-                rows = conn.execute(
-                    f"SELECT id, segment_uid FROM activity_segments WHERE id IN ({placeholders})",
-                    tuple(normalized_ids),
-                ).fetchall()
+                rows: list[sqlite3.Row] = []
+                for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                    batch = normalized_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                    placeholders = ",".join("?" for _ in batch)
+                    rows.extend(
+                        conn.execute(
+                            f"SELECT id, segment_uid FROM activity_segments WHERE id IN ({placeholders})",
+                            tuple(batch),
+                        ).fetchall()
+                    )
                 if not rows:
                     return 0
 
@@ -1879,16 +1891,21 @@ class TrackerDatabase:
                 self._delete_project_windows_for_segment_ids(
                     conn, {str(row["id"]) for row in rows}
                 )
-                cursor = conn.execute(
-                    f"DELETE FROM activity_segments WHERE id IN ({placeholders})",
-                    tuple(normalized_ids),
-                )
+                deleted = 0
+                for start in range(0, len(normalized_ids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                    batch = normalized_ids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                    placeholders = ",".join("?" for _ in batch)
+                    cursor = conn.execute(
+                        f"DELETE FROM activity_segments WHERE id IN ({placeholders})",
+                        tuple(batch),
+                    )
+                    deleted += cursor.rowcount
                 deleted_uids = [
                     row["segment_uid"] for row in rows if row["segment_uid"] is not None
                 ]
                 if record_tombstone and deleted_uids:
                     self._record_sync_deletion(conn, "uids", segment_uids=deleted_uids)
-                return cursor.rowcount
+                return deleted
 
     @staticmethod
     def _expand_history_range_bound(value: str | None, *, end_of_day: bool) -> str | None:

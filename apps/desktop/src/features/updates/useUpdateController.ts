@@ -77,6 +77,10 @@ export function useUpdateController({
   getIdleSeconds,
   canSafelyRestart,
 }: UseUpdateControllerOptions): UseUpdateControllerResult {
+  const getIdleSecondsRef = useRef(getIdleSeconds);
+  const canSafelyRestartRef = useRef(canSafelyRestart);
+  getIdleSecondsRef.current = getIdleSeconds;
+  canSafelyRestartRef.current = canSafelyRestart;
   const versionTestPauseUntil = useVersionTestPauseUntil();
   const updaterCheckingRef = useRef(false);
   const manualCheckRequestedRef = useRef(false);
@@ -453,38 +457,49 @@ export function useUpdateController({
 
     let disposed = false;
     let restartInFlight = false;
+    let idleCheckInFlight = false;
 
-    const intervalId = window.setInterval(async () => {
-      if (disposed || restartInFlight) return;
+    const intervalId = window.setInterval(() => {
+      if (disposed || restartInFlight || idleCheckInFlight) return;
       if (updaterOperatingRef.current) return;
-      if (canSafelyRestart && !canSafelyRestart()) return;
+      const canRestart = canSafelyRestartRef.current;
+      if (canRestart && !canRestart()) return;
 
-      const isHidden = typeof document !== "undefined" && document.visibilityState === "hidden";
-      const idleSeconds = getIdleSeconds ? await getIdleSeconds().catch(() => null) : null;
-      if (disposed || restartInFlight) return;
+      const getIdle = getIdleSecondsRef.current;
+      idleCheckInFlight = true;
+      void (async () => {
+        try {
+          const isHiddenBefore = typeof document !== "undefined" && document.visibilityState === "hidden";
+          const idleSeconds = getIdle ? await getIdle().catch(() => null) : null;
+          if (disposed || restartInFlight) return;
+          if (canSafelyRestartRef.current && !canSafelyRestartRef.current()) return;
 
-      let isSafeToRestart = false;
-      if (idleSeconds !== null && Number.isFinite(idleSeconds)) {
-        if (idleSeconds >= UPDATE_IDLE_RESTART_THRESHOLD_SECONDS) {
-          isSafeToRestart = true;
-        } else if (isHidden && idleSeconds >= UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS) {
-          isSafeToRestart = true;
+          const isHiddenAfter = typeof document !== "undefined" && document.visibilityState === "hidden";
+          let isSafeToRestart = false;
+          if (idleSeconds !== null && Number.isFinite(idleSeconds)) {
+            if (idleSeconds >= UPDATE_IDLE_RESTART_THRESHOLD_SECONDS) {
+              isSafeToRestart = true;
+            } else if (isHiddenBefore && isHiddenAfter && idleSeconds >= UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS) {
+              isSafeToRestart = true;
+            }
+          }
+          if (!isSafeToRestart) return;
+
+          const releaseOperation = acquireUpdateOperation();
+          if (!releaseOperation) return;
+          restartInFlight = true;
+          try {
+            await invoke<void>("app_restart_after_update", { silent: true });
+          } catch (error) {
+            console.warn("Failed to restart app after background update:", toErrorMessage(error));
+            restartInFlight = false;
+          } finally {
+            releaseOperation();
+          }
+        } finally {
+          idleCheckInFlight = false;
         }
-      }
-
-      if (!isSafeToRestart) return;
-
-      const releaseOperation = acquireUpdateOperation();
-      if (!releaseOperation) return;
-      restartInFlight = true;
-      try {
-        await invoke<void>("app_restart_after_update", { silent: true });
-      } catch (error) {
-        console.warn("Failed to restart app after background update:", toErrorMessage(error));
-        restartInFlight = false;
-      } finally {
-        releaseOperation();
-      }
+      })();
     }, UPDATE_IDLE_CHECK_INTERVAL_MS);
 
     return () => {
@@ -494,8 +509,6 @@ export function useUpdateController({
   }, [
     backgroundPreparationSupported,
     backgroundUpdatesEnabled,
-    canSafelyRestart,
-    getIdleSeconds,
     preparedUpdateVersion,
   ]);
 

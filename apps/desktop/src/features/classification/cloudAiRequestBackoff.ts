@@ -24,6 +24,18 @@ export class CloudAiRequestBackoffRegistry {
     return null;
   }
 
+  nextExpiryMs(nowMs = Date.now()): number | null {
+    let next: number | null = null;
+    for (const [key, entry] of [...this.#entries.entries()]) {
+      if (entry.retryAtMs <= nowMs) {
+        this.#entries.delete(key);
+        continue;
+      }
+      if (next === null || entry.retryAtMs < next) next = entry.retryAtMs;
+    }
+    return next;
+  }
+
   record(input: {
     readonly key: string;
     readonly status: CloudAiBackoffStatus;
@@ -99,4 +111,10 @@ function retryAfterAt(value: string | null | undefined, nowMs: number): number |
   const parsedDate = Date.parse(normalized);
   if (!Number.isFinite(parsedDate) || parsedDate <= nowMs) return null;
   return Math.min(parsedDate, nowMs + MAX_RETRY_AFTER_MS);
+}
+
+export function isDailyCloudQuotaBackoff(entry: CloudAiRequestBackoff): boolean {
+  if (entry.status !== 429) return false;
+  const normalized = entry.message.toLowerCase();
+  return normalized.includes("daily") || normalized.includes("tomorrow");
 }

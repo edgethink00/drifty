@@ -89,6 +89,37 @@ describe("buildAlarmFollowThrough", () => {
     expect(result.pathCounts.noReturn).toBe(1);
   });
 
+
+  it("does not treat confirmed drift gaps as focus even when they sit inside a 5-minute merge window", () => {
+    const drift = {
+      id: "d1",
+      startedAt: "2026-09-02T09:01:00.000Z",
+      endedAt: "2026-09-02T09:04:00.000Z",
+      durationSeconds: 180,
+      appName: "Safari",
+      siteDomain: "netflix.com",
+    } as ActivitySegment;
+    const result = build(
+      [shown("a", "2026-09-02T09:00:00.000Z")],
+      [
+        focus("f1", "2026-09-02T09:00:00.000Z", 1),
+        drift,
+        focus("f2", "2026-09-02T09:04:00.000Z", 2),
+        { ...drift, id: "d2", startedAt: "2026-09-02T09:06:00.000Z", endedAt: "2026-09-02T09:09:00.000Z" },
+        focus("f3", "2026-09-02T09:09:00.000Z", 1),
+      ],
+    );
+    expect(result.recoveredAlarms).toBe(0);
+    expect(result.pathCounts.noReturn).toBe(1);
+  });
+
+  it("still qualifies a split focus run whose actual focus union reaches ten minutes", () => {
+    const result = build(
+      [shown("a", "2026-09-02T09:00:00.000Z")],
+      [focus("f1", "2026-09-02T09:05:00.000Z", 6), focus("f2", "2026-09-02T09:12:00.000Z", 5)],
+    );
+    expect(result.recoveredAlarms).toBe(1);
+  });
   it("merges adjacent focus segments so a split run still qualifies", () => {
     const result = build(
       [shown("a", "2026-09-02T09:00:00.000Z")],

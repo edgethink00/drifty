@@ -39,17 +39,44 @@ function buildFocusRuns(segments: readonly ActivitySegment[], options: Classific
     .filter((entry) => !Number.isNaN(entry.startMs) && classifyActivity(entry.segment, options).productivity === "focus")
     .sort((left, right) => left.startMs - right.startMs);
 
-  const runs: { startMs: number; endMs: number }[] = [];
+  const runs: { startMs: number; intervals: { startMs: number; endMs: number }[] }[] = [];
   for (const { segment, startMs } of focusSegments) {
     const endMs = startMs + segment.durationSeconds * 1000;
     const previous = runs[runs.length - 1];
-    if (previous && startMs - previous.endMs <= FOCUS_RUN_GAP_MS) {
-      previous.endMs = Math.max(previous.endMs, endMs);
+    const previousEndMs = previous?.intervals[previous.intervals.length - 1]?.endMs;
+    if (previous && previousEndMs !== undefined && startMs - previousEndMs <= FOCUS_RUN_GAP_MS) {
+      previous.intervals.push({ startMs, endMs });
       continue;
     }
-    runs.push({ startMs, endMs });
+    runs.push({ startMs, intervals: [{ startMs, endMs }] });
   }
-  return runs.map((run) => ({ startMs: run.startMs, durationMs: run.endMs - run.startMs }));
+  return runs.map((run) => ({ startMs: run.startMs, durationMs: unionDurationMs(run.intervals) }));
+}
+
+function unionDurationMs(intervals: readonly { startMs: number; endMs: number }[]): number {
+  const sorted = [...intervals].sort((left, right) => left.startMs - right.startMs);
+  let durationMs = 0;
+  let currentStart = Number.NaN;
+  let currentEnd = Number.NaN;
+  for (const interval of sorted) {
+    if (!Number.isFinite(interval.startMs) || !Number.isFinite(interval.endMs) || interval.endMs <= interval.startMs) {
+      continue;
+    }
+    if (Number.isNaN(currentStart)) {
+      currentStart = interval.startMs;
+      currentEnd = interval.endMs;
+      continue;
+    }
+    if (interval.startMs <= currentEnd) {
+      currentEnd = Math.max(currentEnd, interval.endMs);
+      continue;
+    }
+    durationMs += currentEnd - currentStart;
+    currentStart = interval.startMs;
+    currentEnd = interval.endMs;
+  }
+  if (!Number.isNaN(currentStart)) durationMs += currentEnd - currentStart;
+  return durationMs;
 }
 
 function median(values: readonly number[]): number | null {

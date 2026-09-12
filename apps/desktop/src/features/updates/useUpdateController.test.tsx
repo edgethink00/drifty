@@ -306,6 +306,56 @@ describe("background update and idle auto-restart", () => {
     }
   });
 
+  it("keeps the idle check alive when parent callbacks are recreated every render", async () => {
+    vi.useFakeTimers();
+    try {
+      const next = update("1.11.6");
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+        version: "1.11.6",
+        policyVersion: 2,
+        urgency: "general",
+        promptAfterMs: 72 * 60 * 60 * 1000,
+        backgroundDownloadEligible: true,
+        installBehavior: "next-launch",
+        message: null,
+      });
+      const getIdleSeconds = vi.fn(async () => 20 * 60);
+      const { result, rerender, unmount } = renderHook(
+        ({ nonce }: { nonce: number }) => useUpdateController({
+          backgroundPreparationSupported: true,
+          getIdleSeconds: async () => {
+            void nonce;
+            return getIdleSeconds();
+          },
+          canSafelyRestart: () => {
+            void nonce;
+            return true;
+          },
+        }),
+        { initialProps: { nonce: 0 } },
+      );
+      await act(async () => {
+        await result.current.handleCheckForUpdates("automatic");
+      });
+      expect(result.current.preparedUpdateVersion).toBe("1.11.6");
+      for (let index = 1; index <= 8; index += 1) {
+        rerender({ nonce: index });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(3_000);
+        });
+      }
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(getIdleSeconds).toHaveBeenCalled();
+      expect(invokeMock).toHaveBeenCalledWith("app_restart_after_update", { silent: true });
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not restart when canSafelyRestart returns false", async () => {
     vi.useFakeTimers();
     try {

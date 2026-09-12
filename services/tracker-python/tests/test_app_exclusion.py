@@ -10,6 +10,7 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app.storage.db import TrackerDatabase
+from app.storage.database_maintenance import create_rotating_backup, database_backup_dir, database_quarantine_dir
 from app.tracker.app_exclusion import (
     DEFAULT_EXCLUDED_APPS,
     REDACTED_APP_NAME,
@@ -178,6 +179,144 @@ class AppExclusionTests(unittest.TestCase):
         tombstoned = next(item for item in records if item["id"] == "com.finance.personal")
         self.assertTrue(tombstoned["tombstone"])
 
+
+    def test_delete_excluded_app_history_uses_permanent_delete_contract(self) -> None:
+        keep = Snapshot(
+            observed_at="2026-09-11T09:00:00Z",
+            app_name="Safari",
+            bundle_id="com.apple.Safari",
+            window_title="Keep",
+            source="frontmost",
+        )
+        target = Snapshot(
+            observed_at="2026-09-11T09:05:00Z",
+            app_name="PersonalFinanceApp",
+            bundle_id="com.finance.personal",
+            window_title="Budget",
+            source="frontmost",
+        )
+        self.database.record_snapshot(keep, sample_seconds=60)
+        self.database.record_snapshot(target, sample_seconds=60)
+        self.database.set_sync_state({"sync_account_id": "account-a"})
+        older_backup = create_rotating_backup(
+            self.database.connect(),
+            self.db_path,
+            interval_seconds=0,
+        )
+        self.assertIsNotNone(older_backup)
+        quarantine_dir = database_quarantine_dir(self.db_path)
+        quarantine_dir.mkdir(parents=True, exist_ok=True)
+        quarantined_copy = quarantine_dir / "tracker-corrupt-excluded-app.sqlite3"
+        quarantined_copy.write_bytes(self.db_path.read_bytes())
+
+        deleted_count = self.database.delete_excluded_app_history(
+            "PersonalFinanceApp",
+            "com.finance.personal",
+        )
+
+        self.assertEqual(deleted_count, 1)
+        self.assertEqual(
+            self.database.get_excluded_app_history_count("PersonalFinanceApp", "com.finance.personal"),
+            0,
+        )
+        self.assertEqual(
+            self.database.get_excluded_app_history_count("Safari", "com.apple.Safari"),
+            1,
+        )
+        self.assertFalse(older_backup.exists())
+        self.assertFalse(quarantined_copy.exists())
+        pending = self.database.get_pending_sync_deletions()
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["kind"], "uids")
+        self.assertEqual(len(pending[0]["segmentUids"]), 1)
+        refreshed_backups = list(database_backup_dir(self.db_path).glob("tracker-*.sqlite3"))
+        self.assertEqual(len(refreshed_backups), 1)
+        import sqlite3
+        from contextlib import closing
+        with closing(sqlite3.connect(refreshed_backups[0])) as snapshot:
+            remaining = snapshot.execute(
+                "SELECT app_name FROM activity_segments ORDER BY app_name"
+            ).fetchall()
+        self.assertEqual([row[0] for row in remaining], ["Safari"])
+        self.assertEqual(
+            self.database.delete_excluded_app_history("PersonalFinanceApp", "com.finance.personal"),
+            0,
+        )
+
+    def test_excluded_app_history_uid_deletion_replays_on_a_second_database(self) -> None:
+        from tempfile import TemporaryDirectory
+        target = Snapshot(
+            observed_at="2026-09-11T09:05:00Z",
+            app_name="PersonalFinanceApp",
+            bundle_id="com.finance.personal",
+            window_title="Budget",
+            source="frontmost",
+        )
+        keep = Snapshot(
+            observed_at="2026-09-11T09:06:00Z",
+            app_name="Safari",
+            bundle_id="com.apple.Safari",
+            window_title="Keep",
+            source="frontmost",
+        )
+        self.database.record_snapshot(target, sample_seconds=60)
+        self.database.record_snapshot(keep, sample_seconds=60)
+        self.database.set_sync_state({"sync_account_id": "account-a"})
+        with self.database.connect() as conn:
+            target_uid = conn.execute(
+                "SELECT segment_uid FROM activity_segments WHERE app_name = ?",
+                ("PersonalFinanceApp",),
+            ).fetchone()["segment_uid"]
+
+        deleted = self.database.delete_excluded_app_history(
+            "PersonalFinanceApp",
+            "com.finance.personal",
+        )
+        self.assertEqual(deleted, 1)
+        pending = self.database.get_pending_sync_deletions()
+        self.assertEqual(pending[0]["segmentUids"], [target_uid])
+
+        other_dir = TemporaryDirectory()
+        self.addCleanup(other_dir.cleanup)
+        other = TrackerDatabase(Path(other_dir.name) / "other.sqlite3")
+        other.set_sync_state({"sync_account_id": "account-a"})
+        other.apply_synced_segments([
+            {
+                "segmentUid": target_uid,
+                "originDeviceId": "22222222-2222-4222-8222-222222222222",
+                "startedAt": "2026-09-11T09:05:00Z",
+                "endedAt": "2026-09-11T09:06:00Z",
+                "durationSeconds": 60,
+                "appName": "PersonalFinanceApp",
+                "bundleId": "com.finance.personal",
+                "windowTitle": "Budget",
+                "platform": "macos",
+                "source": "unknown",
+            },
+            {
+                "segmentUid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "originDeviceId": "22222222-2222-4222-8222-222222222222",
+                "startedAt": "2026-09-11T09:06:00Z",
+                "endedAt": "2026-09-11T09:07:00Z",
+                "durationSeconds": 60,
+                "appName": "Safari",
+                "bundleId": "com.apple.Safari",
+                "windowTitle": "Keep",
+                "platform": "macos",
+                "source": "unknown",
+            },
+        ])
+        applied = other.apply_synced_deletions([
+            {
+                "deletionUid": pending[0]["deletionUid"],
+                "kind": pending[0]["kind"],
+                "segmentUids": pending[0]["segmentUids"],
+            }
+        ])
+        self.assertEqual(applied, {"applied": 1, "skipped": 0})
+        self.assertEqual(other.get_excluded_app_history_count("PersonalFinanceApp", "com.finance.personal"), 0)
+        self.assertEqual(other.get_excluded_app_history_count("Safari", "com.apple.Safari"), 1)
+        other.close()
     def test_get_current_snapshot_redacts_when_app_is_excluded(self) -> None:
         from app.main import get_current_snapshot
         mock_snap = Snapshot(

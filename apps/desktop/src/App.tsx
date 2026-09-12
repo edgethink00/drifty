@@ -74,7 +74,7 @@ import {
 import { appIconIdentityKey, collectMissingAppIconRequests, mergeAppIconResults, type AppIconLoadRequest } from "./features/app-icons/appIconRequests";
 import { collectMissingSiteIconRequests, mergeSiteIconResults, normalizeSiteIconDomain, type SiteIconMap } from "./features/app-icons/siteIconRequests";
 import { SiteIconProvider } from "./components/SiteIconContext";
-import { cloudAiRequestBackoffs } from "./features/classification/cloudAiRequestBackoff";
+import { cloudAiRequestBackoffs, isDailyCloudQuotaBackoff } from "./features/classification/cloudAiRequestBackoff";
 import { AI_CLASSIFICATION_BACKGROUND_THRESHOLD, AI_CLASSIFICATION_FOCUSED_IDLE_MS, AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD, classifyLiveActivityWithAi, clearCloudAiRequestBackoff, describeAiClassificationFailure, describeLocalAiClassificationFailure, diffAiClassificationUsageSummary, projectAiClassificationCost, runAiClassification, runAiClassificationForUnknownThreshold, runAiClassificationUntilEmpty, toClassificationQueryForDay, type AiClassificationSummary, type AiClassificationUsageSummary } from "./features/classification/aiClassificationService";
 import { useClassificationActivity } from "./features/classification/classificationActivity";
 import { materializeBuiltInHeuristicClassifications, scheduleBuiltInHeuristicClassificationPersistence, type BuiltInHeuristicClassificationMaterialization } from "./features/classification/heuristicClassificationMaterialization";
@@ -311,7 +311,10 @@ import {
 import {
   applyNativePetModeLabTarget,
   getNativePetInputBounds,
+  isNativePetCursorInside,
+  isNativePetQuickControlsCursorInside,
   listenToNativePetAlignment,
+  listenToNativePetQuickControlsMenuState,
   listenToNativePetPointer,
   listenToNativePetQuickControlsAction,
   setNativePetQuickControlsVisible,
@@ -642,6 +645,7 @@ export default function App() {
     if (contentRef.current) contentRef.current.scrollTop = 0;
   }, []);
   const canSafelyRestartRef = useRef<() => boolean>(() => true);
+  const petOccupancyRef = useRef({ enabled: false, hiddenUntil: null as number | null, menuOpen: false });
   const {
     backgroundUpdatesEnabled,
     availableUpdate,
@@ -667,6 +671,16 @@ export default function App() {
     backgroundPreparationSupported: hostPlatform === "macos",
     getIdleSeconds: async () => {
       try {
+        const occupancy = petOccupancyRef.current;
+        if (occupancy.enabled && occupancy.hiddenUntil === null) {
+          if (occupancy.menuOpen) return 0;
+          const [petCursorInside, controlsCursorInside] = await Promise.all([
+            isNativePetCursorInside(),
+            isNativePetQuickControlsCursorInside(),
+          ]);
+          // A failed occupancy probe is not proof the pet is idle.
+          if (petCursorInside !== false || controlsCursorInside === true) return 0;
+        }
         const s = await trackerClient.getStatus();
         // If the tracker is actively recording (e.g. video, meeting, or interactive work),
         // treat as active even if the mouse hasn't moved
@@ -923,6 +937,11 @@ export default function App() {
   // A temporary hide suppresses the pet without touching its on/off preference,
   // so the one-hour timer below can restore exactly what the user had.
   const petModeActive = petModeEnabled && petModeHiddenUntil === null;
+  petOccupancyRef.current = {
+    enabled: petModeEnabled,
+    hiddenUntil: petModeHiddenUntil,
+    menuOpen: petOccupancyRef.current.menuOpen,
+  };
   const handledPetModeRevealRevisionRef = useRef(0);
   const pendingPetModeRevealRevisionsRef = useRef(new Set<number>());
   const petModeRevealRetryAttemptsRef = useRef(new Map<number, number>());
@@ -1386,7 +1405,6 @@ export default function App() {
     && !authModalOpen
     && !upgradePlanModalOpen
     && driftAlarmEvent === null
-    && !petModeActive
     && driftAlarmSnooze === null
   );
   // One-shot: armed only by completing onboarding in this session — never re-read
@@ -1407,6 +1425,7 @@ export default function App() {
   const [aiClassificationUsageDay, setAiClassificationUsageDay] = useState<string | null>(null);
   const [classificationActionLoading, setClassificationActionLoading] = useState(false);
   const [classificationSummary, setClassificationSummary] = useState<AiClassificationSummary | null>(null);
+  const [, setCloudAiBackoffTick] = useState(0);
   const [cloudAiConnectionCheck, setCloudAiConnectionCheck] = useState<CloudAiConnectionCheck | null>(null);
   const cloudAiConnectionGenerationRef = useRef(0);
   const recordCloudAiClassificationSummary = useCallback((summary: AiClassificationSummary, generation: number) => {
@@ -1681,10 +1700,20 @@ export default function App() {
   const hasSelectedAiClassificationProvider = Boolean(
     selectedLocalAiClassificationOptions || canUseSelectedCloudAiClassification,
   );
-  const isCloudQuotaExceeded = selectedClassificationRoute === "cloud" && (
-    (Boolean(user?.id) && cloudAiRequestBackoffs.current(user?.id ?? "")?.status === 429)
-    || (classificationSummary?.status === "error" && classificationSummary.message.includes("429"))
-  );
+  const cloudRateLimitBackoff = selectedClassificationRoute === "cloud" && user?.id
+    ? cloudAiRequestBackoffs.current(user.id)
+    : null;
+  const isCloudQuotaExceeded = cloudRateLimitBackoff?.status === 429;
+  useEffect(() => {
+    if (selectedClassificationRoute !== "cloud" || !user?.id) return undefined;
+    const retryAtMs = cloudAiRequestBackoffs.nextExpiryMs();
+    if (retryAtMs === null) return undefined;
+    const delayMs = Math.max(0, retryAtMs - Date.now()) + 10;
+    const timer = window.setTimeout(() => {
+      setCloudAiBackoffTick((value) => value + 1);
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [selectedClassificationRoute, user?.id, cloudRateLimitBackoff?.retryAtMs]);
   const classificationAvailabilityInput = {
     localProviderStatus: localAiProviderStatus,
     localConsecutiveFailures: localAiConnectionFailureCount,
@@ -1697,6 +1726,7 @@ export default function App() {
     billingEntitlementError,
     cloudConnectionCheck: cloudAiConnectionCheck,
     cloudQuotaExceeded: isCloudQuotaExceeded,
+    cloudQuotaDaily: Boolean(cloudRateLimitBackoff && isDailyCloudQuotaBackoff(cloudRateLimitBackoff)),
   };
   const cloudClassificationAvailability = resolveClassificationAvailability({
     ...classificationAvailabilityInput,
@@ -6708,6 +6738,21 @@ export default function App() {
       console.warn("Failed to update Pet Mode snapshot", nextError);
     });
   }, [petModeActive, petModeLiveSnapshot]);
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenToNativePetQuickControlsMenuState((open) => {
+      if (disposed) return;
+      petOccupancyRef.current = { ...petOccupancyRef.current, menuOpen: open };
+    }).then((nextUnlisten) => {
+      if (disposed) nextUnlisten?.();
+      else unlisten = nextUnlisten;
+    }).catch(() => undefined);
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
