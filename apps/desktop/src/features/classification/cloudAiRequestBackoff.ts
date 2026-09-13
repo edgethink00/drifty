@@ -1,8 +1,12 @@
 export type CloudAiBackoffStatus = 402 | 429;
 
+/** Quota window reported by the edge function; "unknown" is never stored. */
+export type CloudAiQuotaWindow = "minute" | "hour" | "day";
+
 export type CloudAiRequestBackoff = {
   readonly status: CloudAiBackoffStatus;
   readonly message: string;
+  readonly quotaWindow?: CloudAiQuotaWindow | null;
   readonly retryAtMs: number;
 };
 
@@ -40,15 +44,17 @@ export class CloudAiRequestBackoffRegistry {
     readonly key: string;
     readonly status: CloudAiBackoffStatus;
     readonly message: string;
+    readonly quotaWindow?: CloudAiQuotaWindow | null;
     readonly retryAfter?: string | null;
     readonly nowMs?: number;
   }): CloudAiRequestBackoff {
     const nowMs = input.nowMs ?? Date.now();
-    const semanticRetryAtMs = semanticRetryAt(input.status, input.message, nowMs);
+    const semanticRetryAtMs = semanticRetryAt(input.status, input.message, input.quotaWindow, nowMs);
     const headerRetryAtMs = retryAfterAt(input.retryAfter, nowMs);
     const proposed = {
       status: input.status,
       message: input.message,
+      quotaWindow: input.quotaWindow ?? null,
       retryAtMs: Math.max(semanticRetryAtMs, headerRetryAtMs ?? 0),
     } satisfies CloudAiRequestBackoff;
     const existing = this.current(input.key, nowMs);
@@ -83,9 +89,23 @@ export function cloudAiBackoffMessage(entry: CloudAiRequestBackoff, nowMs = Date
   return `Cloud AI classification is paused after HTTP ${entry.status}. Automatic requests resume in about ${remainingMinutes} ${remainingMinutes === 1 ? "minute" : "minutes"}. ${entry.message}`;
 }
 
-function semanticRetryAt(status: CloudAiBackoffStatus, message: string, nowMs: number): number {
+function semanticRetryAt(
+  status: CloudAiBackoffStatus,
+  message: string,
+  quotaWindow: CloudAiQuotaWindow | null | undefined,
+  nowMs: number,
+): number {
   if (status === 402) return nowMs + PAYMENT_REQUIRED_BACKOFF_MS;
 
+  if (quotaWindow === "day") {
+    const nextUtcDay = new Date(nowMs);
+    nextUtcDay.setUTCHours(24, 1, 0, 0);
+    return nextUtcDay.getTime();
+  }
+  if (quotaWindow === "hour") return nowMs + HOUR_RATE_LIMIT_BACKOFF_MS;
+  if (quotaWindow === "minute") return nowMs + MINUTE_RATE_LIMIT_BACKOFF_MS;
+
+  // No structured window: providers without one only get the string heuristics.
   const normalized = message.toLowerCase();
   if (normalized.includes("daily") || normalized.includes("tomorrow")) {
     const nextUtcDay = new Date(nowMs);
@@ -115,6 +135,7 @@ function retryAfterAt(value: string | null | undefined, nowMs: number): number |
 
 export function isDailyCloudQuotaBackoff(entry: CloudAiRequestBackoff): boolean {
   if (entry.status !== 429) return false;
+  if (entry.quotaWindow) return entry.quotaWindow === "day";
   const normalized = entry.message.toLowerCase();
   return normalized.includes("daily") || normalized.includes("tomorrow");
 }

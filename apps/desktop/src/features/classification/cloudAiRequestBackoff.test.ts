@@ -129,4 +129,32 @@ describe("CloudAiRequestBackoffRegistry", () => {
     });
     expect(isDailyCloudQuotaBackoff(daily)).toBe(true);
   });
+
+  it("uses the structured quota window when the message does not describe it", () => {
+    const registry = new CloudAiRequestBackoffRegistry();
+    const entry = registry.record({
+      key: "user-1",
+      status: 429,
+      message: "Upstream provider rate limit exceeded.",
+      quotaWindow: "day",
+      nowMs: NOW,
+    });
+
+    expect(entry.retryAtMs).toBe(Date.parse("2026-08-27T00:01:00.000Z"));
+    expect(isDailyCloudQuotaBackoff(entry)).toBe(true);
+  });
+
+  it("lets the structured window override a daily-sounding message", () => {
+    const registry = new CloudAiRequestBackoffRegistry();
+    const entry = registry.record({
+      key: "user-1",
+      status: 429,
+      message: "Daily burst limit hit; retry shortly.",
+      quotaWindow: "minute",
+      nowMs: NOW,
+    });
+
+    expect(entry.retryAtMs).toBe(NOW + 60 * 1000);
+    expect(isDailyCloudQuotaBackoff(entry)).toBe(false);
+  });
 });

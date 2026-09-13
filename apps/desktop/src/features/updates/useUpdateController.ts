@@ -29,6 +29,9 @@ export type UpdateCheckMode = "manual" | "automatic";
 export const UPDATE_IDLE_RESTART_THRESHOLD_SECONDS = 15 * 60;
 export const UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS = 3 * 60;
 export const UPDATE_IDLE_CHECK_INTERVAL_MS = 30 * 1000;
+// ~10 minutes of unanswered idle probes before the prepared update falls back
+// to normal prompting instead of waiting silently forever.
+export const UPDATE_IDLE_PROBE_FAILURE_THRESHOLD = 20;
 
 export type UpdateCheckResult =
   | { readonly kind: "available"; readonly version: string }
@@ -102,6 +105,7 @@ export function useUpdateController({
   const [updaterInstalling, setUpdaterInstalling] = useState(false);
   const [updaterMessage, setUpdaterMessage] = useState<string | null>(null);
   const [updaterError, setUpdaterError] = useState<string | null>(null);
+  const [idleProbeFailures, setIdleProbeFailures] = useState(0);
 
   useEffect(() => {
     if (versionTestPauseUntil > Date.now()) setBackgroundUpdatesEnabled(false);
@@ -395,6 +399,7 @@ export function useUpdateController({
     ? availableUpdatePolicy ?? fallbackUpdatePolicy(offeredUpdateVersion)
     : null;
   const availableUpdateInteraction = offeredUpdateVersion ? updateInteractions[offeredUpdateVersion] ?? null : null;
+  const idleProbeUnavailable = idleProbeFailures >= UPDATE_IDLE_PROBE_FAILURE_THRESHOLD;
   const shouldShowAvailableUpdateDialog = Boolean(
     availableUpdate
     && (availableUpdateSource === "manual" || versionTestPauseUntil <= Date.now())
@@ -410,6 +415,7 @@ export function useUpdateController({
           || !backgroundPreparationSupported
           || !currentUpdatePolicy.backgroundDownloadEligible
           || (availableUpdateInteraction?.backgroundPreparationFailureCount ?? 0) >= 3
+          || idleProbeUnavailable
         )
         && shouldShowAutomaticUpdateDialog({
           policy: currentUpdatePolicy,
@@ -477,11 +483,19 @@ export function useUpdateController({
           const isHiddenAfter = typeof document !== "undefined" && document.visibilityState === "hidden";
           let isSafeToRestart = false;
           if (idleSeconds !== null && Number.isFinite(idleSeconds)) {
+            setIdleProbeFailures(0);
             if (idleSeconds >= UPDATE_IDLE_RESTART_THRESHOLD_SECONDS) {
               isSafeToRestart = true;
             } else if (isHiddenBefore && isHiddenAfter && idleSeconds >= UPDATE_IDLE_RESTART_HIDDEN_THRESHOLD_SECONDS) {
               isSafeToRestart = true;
             }
+          } else {
+            // While the silent path claims the update, both the dialog and the
+            // titlebar badge stay hidden, so a probe that never answers would
+            // strand the update with no user-visible path at all. Count the
+            // unanswered probes so normal prompting eventually takes over.
+            setIdleProbeFailures((count) => count + 1);
+            return;
           }
           if (!isSafeToRestart) return;
 
@@ -512,7 +526,8 @@ export function useUpdateController({
     preparedUpdateVersion,
   ]);
 
-  const canAutoUpdateSilently = backgroundPreparationSupported
+  const canAutoUpdateSilently = !idleProbeUnavailable
+    && backgroundPreparationSupported
     && backgroundUpdatesEnabled
     && (preparedUpdateVersion !== null || (
       availableUpdateSource === "automatic"

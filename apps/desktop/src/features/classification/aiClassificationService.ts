@@ -1458,6 +1458,7 @@ async function classifyLivePayloadWithCloudAi(
             key: cloudAccess.requestKey,
             status: status as CloudAiBackoffStatus,
             message: failure.message,
+            quotaWindow: failure.quotaWindow && failure.quotaWindow !== "unknown" ? failure.quotaWindow : null,
             retryAfter: context instanceof Response ? context.headers.get("Retry-After") : null,
           });
         }
@@ -1493,6 +1494,7 @@ async function classifyCloudPayloadBatches(
           key: requestContext.requestKey,
           status: edgeError.status as CloudAiBackoffStatus,
           message: edgeError.message,
+          quotaWindow: edgeError.quotaWindow,
           retryAfter: context instanceof Response ? context.headers.get("Retry-After") : null,
         });
       }

@@ -682,6 +682,80 @@ class SyncDeletionTests(DeviceSyncTestCase):
         self.assertTrue(quick_check_database(backups[0], immutable=True))
         self.assertEqual(self.database.fetch_timeline("2026-07-06"), [])
 
+    def test_apply_synced_deletions_pages_past_the_bind_variable_limit(self) -> None:
+        for index in range(905):
+            self._insert_local_segment(index)
+        with self.database.connect() as conn:
+            uids = [row["segment_uid"] for row in conn.execute(
+                "SELECT segment_uid FROM activity_segments ORDER BY id"
+            ).fetchall()]
+
+        result = self.database.apply_synced_deletions([
+            {
+                "deletionUid": "77777777-0000-0000-0000-000000000099",
+                "kind": "uids",
+                "segmentUids": uids,
+            }
+        ])
+
+        self.assertEqual(result, {"applied": 1, "skipped": 0})
+        self.assertEqual(self.database.fetch_timeline("2026-07-06"), [])
+        with self.database.connect() as conn:
+            remaining = conn.execute("SELECT COUNT(*) AS count FROM activity_segments").fetchone()["count"]
+        self.assertEqual(remaining, 0)
+
+    def test_delete_activity_segments_splits_large_tombstones(self) -> None:
+        for index in range(901):
+            self._insert_local_segment(index)
+        with self.database.connect() as conn:
+            rows = conn.execute("SELECT id, segment_uid FROM activity_segments").fetchall()
+
+        self.database.delete_activity_segments([str(row["id"]) for row in rows])
+
+        pending = self.database.get_pending_sync_deletions()
+        self.assertEqual(len(pending), 2)
+        sizes = sorted(len(deletion["segmentUids"]) for deletion in pending)
+        self.assertEqual(sizes, [1, 900])
+        recorded = {uid for deletion in pending for uid in deletion["segmentUids"]}
+        self.assertEqual(recorded, {row["segment_uid"] for row in rows})
+
+    def test_mark_sync_deletions_pushed_pages_past_the_bind_variable_limit(self) -> None:
+        with self.database.connect() as conn:
+            for index in range(901):
+                conn.execute(
+                    """
+                    INSERT INTO sync_deletions (
+                        deletion_uid, account_id, kind, segment_uids_json, created_at
+                    ) VALUES (?, 'account-a', 'uids', '[]', '2026-07-06T00:00:00+00:00')
+                    """,
+                    (f"77777777-0000-0000-0000-{index:012d}",),
+                )
+
+        with self.database.connect() as conn:
+            uids = [row["deletion_uid"] for row in conn.execute(
+                "SELECT deletion_uid FROM sync_deletions"
+            ).fetchall()]
+        self.assertEqual(len(uids), 901)
+        marked = self.database.mark_sync_deletions_pushed(uids)
+        self.assertEqual(marked, 901)
+        self.assertEqual(self.database.get_pending_sync_deletions(), [])
+
+    def test_trim_latest_segment_records_tombstone_through_the_guarded_path(self) -> None:
+        self._insert_local_segment(
+            0,
+            started_at="2026-07-06T09:00:00+00:00",
+            ended_at="2026-07-06T09:01:00+00:00",
+        )
+        with self.database.connect() as conn:
+            uid = conn.execute("SELECT segment_uid FROM activity_segments").fetchone()["segment_uid"]
+
+        self.database.trim_latest_segment("2026-07-06T08:59:00+00:00")
+
+        self.assertEqual(self.database.fetch_timeline("2026-07-06"), [])
+        pending = self.database.get_pending_sync_deletions()
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["segmentUids"], [uid])
+
 
 if __name__ == "__main__":
     unittest.main()

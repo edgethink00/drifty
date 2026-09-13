@@ -1358,18 +1358,23 @@ class TrackerDatabase:
 
             started = self._timestamp_seconds(last["started_at"])
             duration_seconds = int(round(target - started))
-            if duration_seconds <= 0:
-                conn.execute("DELETE FROM activity_segments WHERE id = ?", (last["id"],))
-                return
+            collapse_id = last["id"] if duration_seconds <= 0 else None
 
-            conn.execute(
-                """
-                UPDATE activity_segments
-                SET ended_at = ?, duration_seconds = ?
-                WHERE id = ?
-                """,
-                (ended_at, duration_seconds, last["id"]),
-            )
+            if collapse_id is None:
+                conn.execute(
+                    """
+                    UPDATE activity_segments
+                    SET ended_at = ?, duration_seconds = ?
+                    WHERE id = ?
+                    """,
+                    (ended_at, duration_seconds, last["id"]),
+                )
+
+        if collapse_id is not None:
+            # A trim that erases a segment is still a permanent deletion: it must
+            # invalidate recovery copies and, when the segment already synced,
+            # leave a tombstone so other devices drop it too.
+            self.delete_activity_segments([str(collapse_id)])
 
     def insert_segment(self, segment: dict[str, Any]) -> None:
         with self.connect() as conn:
@@ -1805,22 +1810,34 @@ class TrackerDatabase:
             "SELECT value FROM tracker_meta WHERE key = 'sync_account_id'"
         ).fetchone()
         account_id = account_row["value"] if account_row and account_row["value"] else None
-        conn.execute(
-            """
-            INSERT INTO sync_deletions (
-                deletion_uid, account_id, kind, range_start, range_end, segment_uids_json, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                str(uuid.uuid4()),
-                account_id,
-                kind,
-                range_start,
-                range_end,
-                json.dumps(segment_uids) if segment_uids is not None else None,
-                datetime.now(timezone.utc).isoformat(),
-            ),
+        # A single tombstone must stay small enough to travel: the receiving
+        # device re-queries its uids with SQLite's bound-variable limit, and the
+        # row itself is pushed through PostgREST. Whole-app history purges can
+        # produce tens of thousands of uids, so one row per batch.
+        uid_chunks: list[list[str] | None] = (
+            [segment_uids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+             for start in range(0, len(segment_uids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE)]
+            if segment_uids
+            else [None]
         )
+        created_at = datetime.now(timezone.utc).isoformat()
+        for uid_chunk in uid_chunks:
+            conn.execute(
+                """
+                INSERT INTO sync_deletions (
+                    deletion_uid, account_id, kind, range_start, range_end, segment_uids_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    account_id,
+                    kind,
+                    range_start,
+                    range_end,
+                    json.dumps(uid_chunk) if uid_chunk is not None else None,
+                    created_at,
+                ),
+            )
 
     @staticmethod
     def _delete_project_windows_for_segment_ids(
@@ -1843,11 +1860,12 @@ class TrackerDatabase:
                 for overlap in overlaps
             ):
                 starts_to_delete.append(row["window_started_at"])
-        if starts_to_delete:
-            placeholders = ",".join("?" for _ in starts_to_delete)
+        for start in range(0, len(starts_to_delete), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+            batch = starts_to_delete[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+            placeholders = ",".join("?" for _ in batch)
             conn.execute(
                 f"DELETE FROM project_window_assignments WHERE window_started_at IN ({placeholders})",
-                starts_to_delete,
+                batch,
             )
 
     def delete_activity_segments(
@@ -2411,20 +2429,24 @@ class TrackerDatabase:
         uids = [uid for uid in deletion_uids if isinstance(uid, str) and uid]
         if not uids:
             return 0
-        placeholders = ",".join("?" for _ in uids)
+        updated = 0
         with self.connect() as conn:
-            cursor = conn.execute(
-                f"""
-                UPDATE sync_deletions
-                SET pushed = 1
-                WHERE deletion_uid IN ({placeholders})
-                  AND account_id = (
-                    SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
-                  )
-                """,
-                tuple(uids),
-            )
-            return cursor.rowcount
+            for start in range(0, len(uids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                batch = uids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                placeholders = ",".join("?" for _ in batch)
+                cursor = conn.execute(
+                    f"""
+                    UPDATE sync_deletions
+                    SET pushed = 1
+                    WHERE deletion_uid IN ({placeholders})
+                      AND account_id = (
+                        SELECT value FROM tracker_meta WHERE key = 'sync_account_id'
+                      )
+                    """,
+                    tuple(batch),
+                )
+                updated += cursor.rowcount
+        return updated
 
     def apply_synced_deletions(self, deletions: list[dict[str, Any]]) -> dict[str, int]:
         applied = 0
@@ -2461,15 +2483,21 @@ class TrackerDatabase:
                 else:
                     segment_uids = [uid for uid in (deletion.get("segmentUids") or []) if isinstance(uid, str) and uid]
                     if segment_uids:
-                        placeholders = ",".join("?" for _ in segment_uids)
+                        ids: list[str] = []
                         with self.connect() as conn:
-                            ids = [
-                                str(row["id"])
-                                for row in conn.execute(
-                                    f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})",
-                                    tuple(segment_uids),
+                            # Tombstones written before tombstone batching existed
+                            # (or after manual repair) can still exceed the
+                            # bound-variable limit; page the lookup.
+                            for start in range(0, len(segment_uids), ACTIVITY_SEGMENT_DELETE_BATCH_SIZE):
+                                batch = segment_uids[start:start + ACTIVITY_SEGMENT_DELETE_BATCH_SIZE]
+                                placeholders = ",".join("?" for _ in batch)
+                                ids.extend(
+                                    str(row["id"])
+                                    for row in conn.execute(
+                                        f"SELECT id FROM activity_segments WHERE segment_uid IN ({placeholders})",
+                                        tuple(batch),
+                                    )
                                 )
-                            ]
                         if ids:
                             recovery_backup_due = True
                             self.delete_activity_segments(

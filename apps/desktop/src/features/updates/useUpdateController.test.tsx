@@ -473,6 +473,45 @@ describe("background update and idle auto-restart", () => {
     }
   });
 
+  it("hands a prepared update back to normal prompting when the idle probe never answers", async () => {
+    vi.useFakeTimers();
+    try {
+      const next = update("1.11.6");
+      checkMock.mockResolvedValue(next);
+      vi.mocked(fetchUpdatePolicy).mockResolvedValueOnce({
+        version: "1.11.6",
+        policyVersion: 2,
+        urgency: "general",
+        promptAfterMs: 72 * 60 * 60 * 1000,
+        backgroundDownloadEligible: true,
+        installBehavior: "next-launch",
+        message: null,
+      });
+
+      const getIdleSeconds = vi.fn(async () => null);
+      const { result, unmount } = renderHook(() => useUpdateController({
+        backgroundPreparationSupported: true,
+        getIdleSeconds,
+        canSafelyRestart: () => true,
+      }));
+
+      await act(async () => {
+        await result.current.handleCheckForUpdates("automatic");
+      });
+      expect(result.current.preparedUpdateVersion).toBe("1.11.6");
+      expect(result.current.canAutoUpdateSilently).toBe(true);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20 * 30_000);
+      });
+      expect(restartInvocations()).toHaveLength(0);
+      expect(result.current.canAutoUpdateSilently).toBe(false);
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("restarts immediately on handleInstallUpdate when update is already prepared", async () => {
     const next = update("1.11.6");
     checkMock.mockResolvedValue(next);
