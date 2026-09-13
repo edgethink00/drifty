@@ -201,18 +201,20 @@ export function HistoryView({
               placeholder={t("history.search")}
             />
           </label>
-          <button
-            type="button"
-            className="app-btn app-btn--danger"
-            disabled={selectedCount === 0 || deleting}
-            onClick={() => setConfirmOpen(true)}
-          >
-            {selectedCount === 0 ? t("history.deleteSelected") : deleteLabel}
-          </button>
-          {onOpenDeleteHistory ? (
+          {selectedCount > 0 ? (
             <button
               type="button"
               className="app-btn app-btn--danger"
+              disabled={deleting}
+              onClick={() => setConfirmOpen(true)}
+            >
+              {deleteLabel}
+            </button>
+          ) : null}
+          {onOpenDeleteHistory ? (
+            <button
+              type="button"
+              className="app-btn app-btn--secondary history-delete-all"
               disabled={!hasAnySegments || deleting}
               onClick={onOpenDeleteHistory}
             >

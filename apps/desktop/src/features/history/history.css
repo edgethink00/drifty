@@ -37,13 +37,12 @@
   transform: none;
 }
 
-/* While nothing is selected the destructive fill reads as noise next to the
-   search field; keep the disabled state a quiet outline until it is usable. */
-.history-view .app-btn--danger:disabled {
-  background: transparent;
-  border-color: var(--line);
-  color: var(--text-soft);
-  opacity: 0.8;
+/* "Delete history" stays quiet next to search; the destructive fill only
+   appears on hover so the action is discoverable without shouting at rest. */
+.history-view .history-delete-all:hover:not(:disabled) {
+  background: var(--button-danger-hover-bg);
+  border-color: var(--button-danger-hover-border);
+  color: var(--button-danger-ink);
 }
 
 .history-view__toolbar {
@@ -60,12 +59,15 @@
 .history-search {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-  min-height: 44px;
-  width: min(100%, 780px);
+  min-height: 32px;
+  height: 32px;
+  width: auto;
+  max-width: none;
   flex: 1 1 auto;
-  padding: 0 16px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-2) 76%, var(--surface));
   color: var(--text-soft);
@@ -73,6 +75,8 @@
 
 .history-search svg {
   flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -90,7 +94,7 @@
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   outline: none;
 }
 

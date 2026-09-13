@@ -165,9 +165,9 @@ describe("HistoryView", () => {
 
     fireEvent.click(firstRow);
     expect(checkbox.checked).toBe(false);
-    const deleteButton = screen.getByRole("button", { name: /^delete selected$/i });
-    if (!(deleteButton instanceof HTMLButtonElement)) throw new Error("Delete selected control was not a button");
-    expect(deleteButton.disabled).toBe(true);
+    // With nothing selected the selection-delete action leaves the toolbar
+    // entirely instead of lingering as a disabled button.
+    expect(screen.queryByRole("button", { name: /delete selected/i })).toBeNull();
   });
 
   it("hides row-management controls in the initial empty state", () => {
@@ -207,7 +207,7 @@ describe("HistoryView", () => {
     });
 
     expect(screen.getByRole("searchbox", { name: /search history/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^delete selected$/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /delete selected/i })).toBeNull();
     expect(screen.getByRole("button", { name: /^delete history/i })).toBeTruthy();
     expect(screen.getByText("Try another search.")).toBeTruthy();
   });

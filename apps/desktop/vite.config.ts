@@ -104,6 +104,8 @@ export default defineConfig(({ command, mode }) => {
     server: {
       port: 1420,
       strictPort: true,
+      // Allow the Tailscale MagicDNS host so Air can reach dev previews.
+      allowedHosts: [".ts.net"],
     },
     test: {
       environment: "node",
