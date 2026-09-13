@@ -2446,6 +2446,18 @@
   --cadence-gap: 2px;
   --cadence-weekday-label: 16px;
   --cadence-edge-buffer: 3px;
+  --focus-calendar-month-row-height: 14px;
+  --focus-calendar-layout-row-gap: 5px;
+  --focus-calendar-shell-padding-block-start: 1px;
+  --focus-calendar-shell-padding-block-end: 5px;
+  --focus-calendar-week-grid-height: calc(7 * var(--cadence-cell) + 6 * var(--cadence-gap));
+  --focus-calendar-ready-content-height: calc(
+    var(--focus-calendar-month-row-height)
+    + var(--focus-calendar-layout-row-gap)
+    + var(--focus-calendar-week-grid-height)
+    + var(--focus-calendar-shell-padding-block-start)
+    + var(--focus-calendar-shell-padding-block-end)
+  );
   padding: var(--space-4);
   min-width: 0;
 }
@@ -2458,12 +2470,19 @@
 .focus-calendar__head { justify-content: space-between; margin-bottom: var(--space-3); }
 .focus-calendar__head .insight-section__label { margin: 0; }
 .focus-calendar__head > span { font-size: var(--type-setting-desc-size); color: var(--text-soft); }
+.focus-calendar .contribution-grid-shell {
+  padding-block: var(--focus-calendar-shell-padding-block-start) var(--focus-calendar-shell-padding-block-end);
+}
 .focus-calendar .contribution-grid__layout {
   --cadence-grid-min: calc(var(--cadence-cell) * var(--cadence-week-count) + var(--cadence-gap) * (var(--cadence-week-count) - 1));
+  row-gap: var(--focus-calendar-layout-row-gap);
 }
 .focus-calendar .contribution-grid__months,
 .focus-calendar .contribution-grid__weekdays {
   font-size: var(--type-caption-size);
+}
+.focus-calendar .contribution-grid__months {
+  min-height: var(--focus-calendar-month-row-height);
 }
 .focus-calendar .contribution-grid__months span { white-space: nowrap; }
 .focus-calendar .contribution-grid__months span:last-child { justify-self: end; }
@@ -2573,7 +2592,7 @@
 [data-calendar-placement^="right-"] .focus-calendar .contribution-grid__week,
 [data-calendar-placement^="right-"] .focus-calendar .contribution-grid__weekdays {
   grid-template-rows: repeat(7, var(--cadence-cell));
-  height: calc(7 * var(--cadence-cell) + 6 * var(--cadence-gap));
+  height: var(--focus-calendar-week-grid-height);
   align-content: start;
 }
 [data-calendar-placement^="right-"] .focus-calendar .contribution-grid__weekdays span {
@@ -2587,7 +2606,9 @@
   min-height: 0;
   border-radius: 2px;
 }
-[data-calendar-placement^="right-"] .focus-calendar__state { min-height: 6rem; }
+[data-calendar-placement^="right-"] .focus-calendar__state {
+  min-height: var(--focus-calendar-ready-content-height);
+}
 [data-calendar-placement^="right-"] .focus-calendar__head { display: none; }
 [data-calendar-placement^="right-"] .focus-calendar { padding-block: var(--space-2); }
 [data-calendar-placement^="right-"] .weekly-productivity-trend-card .wt-plot {
