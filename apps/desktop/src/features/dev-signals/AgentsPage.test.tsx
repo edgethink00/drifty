@@ -85,7 +85,8 @@ describe("AgentsPage shared dashboard controls", () => {
   it("renders the Day and Week agent surfaces in Korean", () => {
     renderAgentsPage({}, "ko");
 
-    expect(screen.getByRole("heading", { name: "에이전트가 1시간 실행됐습니다" }).textContent).toBe("에이전트 실행1시간");
+    expect(screen.getByRole("heading", { name: "에이전트 작업량 1시간" }).textContent).toBe("에이전트 작업1시간");
+    expect(screen.getAllByText("실제 경과 1시간 · 최대 1개 동시 실행").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "이전 에이전트 날짜 보기" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "오늘" })).toBeTruthy();
     expect(screen.getByText("에이전트 리듬 · 시간대별")).toBeTruthy();
@@ -238,14 +239,14 @@ describe("AgentsPage shared dashboard controls", () => {
 
     const heading = screen.getByRole("heading", { name: "Loading agent activity" });
     expect(heading).toBeTruthy();
-    expect(heading.textContent).toBe("Agents ran");
+    expect(heading.textContent).toBe("Agent work");
     expect(heading.querySelector(".loading-skeleton-line--metric")).toBeTruthy();
     expect(screen.queryByText("Loading agent activity")).toBeNull();
     expect(screen.queryByText(/sample/i)).toBeNull();
     expect(document.querySelector(".page--agents")?.getAttribute("aria-busy")).toBe("true");
   });
 
-  it("keeps Agents ran visible when the requested day is still loading", () => {
+  it("keeps Agent work visible when the requested day is still loading", () => {
     const { rerender } = render(
       <AgentsPage
         flowIntervalMinutes={3}
@@ -258,7 +259,7 @@ describe("AgentsPage shared dashboard controls", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Agents ran for 1.0h" }).textContent).toBe("Agents ran1.0h");
+    expect(screen.getByRole("heading", { name: "1.0h of agent work" }).textContent).toBe("Agent work1.0h");
 
     vi.mocked(useAgentsData).mockReturnValue({
       days: [{ day: "2026-08-27", attention: [], turns: [], commits: [] }],
@@ -278,9 +279,30 @@ describe("AgentsPage shared dashboard controls", () => {
     );
 
     const loadingHeading = screen.getByRole("heading", { name: "Loading agent activity" });
-    expect(loadingHeading.textContent).toBe("Agents ran");
+    expect(loadingHeading.textContent).toBe("Agent work");
     expect(loadingHeading.querySelector(".loading-skeleton-line--metric")).toBeTruthy();
     expect(screen.queryByText("Loading agent activity")).toBeNull();
+  });
+
+  it("counts concurrent agents independently in the headline", () => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{
+        ...source,
+        turns: [
+          [60, 120, "codex", "drifty_mac"],
+          [60, 120, "claude_code", "drifty_mac"],
+          [60, 120, "gemini", "drifty_mac"],
+          [60, 120, "opencode", "drifty_mac"],
+        ],
+      }],
+      loading: false,
+      live: true,
+    });
+
+    renderAgentsPage();
+
+    expect(screen.getByRole("heading", { name: "4.0h of agent work" }).textContent).toBe("Agent work4.0h");
+    expect(screen.getAllByText("1.0h elapsed · peak ×4 concurrent").length).toBeGreaterThan(0);
   });
 
   it("keeps sub-minute agent time out of the headline", () => {

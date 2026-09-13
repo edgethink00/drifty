@@ -33,11 +33,12 @@ const source: AgentsDaySource = {
 };
 
 describe("buildAgentsDayModel", () => {
-  it("merges overlapping turns into wall-clock, never the cumulative sum", () => {
+  it("keeps cumulative agent-hours separate from elapsed wall-clock", () => {
     const model = buildAgentsDayModel(source);
     // Turns span 600-780 merged (180) plus 900-960 (60): wall-clock 240,
     // while the cumulative sum would be 120+120+60 = 300.
-    expect(model.agentMinutes).toBe(240);
+    expect(model.wallClockMinutes).toBe(240);
+    expect(model.cumulativeMinutes).toBe(300);
     // The model rounds to one decimal for display: 300/240 = 1.25 → 1.3.
     expect(model.parallelFactor).toBe(1.3);
     expect(model.concurrencyPeak).toBe(2);
@@ -82,11 +83,12 @@ describe("buildAgentsWeekModel", () => {
     const dayA = buildAgentsDayModel(source);
     const dayB = buildAgentsDayModel({ ...source, day: "2026-08-21" });
     const week = buildAgentsWeekModel([dayB, dayA]);
-    expect(week.agentMinutes).toBe(480);
+    expect(week.wallClockMinutes).toBe(480);
+    expect(week.cumulativeMinutes).toBe(600);
     expect(week.unattendedMinutes).toBe(280);
     expect(week.commitCount).toBe(6);
     expect(week.repos[0]).toMatchObject({ repo: "drifty_mac", commitCount: 4 });
-    expect(week.peakDayAgentMinutes).toBe(240);
+    expect(week.peakDayCumulativeMinutes).toBe(300);
     expect(week.days.map((day) => day.weekdayLabel)).toEqual(["Fri", "Sat"]);
   });
 });
@@ -117,11 +119,13 @@ describe("agentMinutesByRepo", () => {
     expect(byRepo.has("")).toBe(false);
   });
 
-  it("is cumulative, so the breakdown charts must rescale it to wall-clock", () => {
-    const cumulative = [...agentMinutesByRepo([labelled]).values()].reduce((sum, minutes) => sum + minutes, 0);
-    // Parallel turns on one repo are counted twice here; wall-clock merges them.
-    expect(cumulative).toBe(300);
-    expect(buildAgentsDayModel(labelled).agentMinutes).toBe(270);
+  it("keeps repo allocation cumulative while omitting unlabelled time", () => {
+    const labelledCumulative = [...agentMinutesByRepo([labelled]).values()].reduce((sum, minutes) => sum + minutes, 0);
+    // Parallel turns count independently. The extra 30 minutes without a repo
+    // stay in the headline total but cannot be assigned to a repo slice.
+    expect(labelledCumulative).toBe(300);
+    expect(buildAgentsDayModel(labelled).wallClockMinutes).toBe(270);
+    expect(buildAgentsDayModel(labelled).cumulativeMinutes).toBe(330);
   });
 });
 

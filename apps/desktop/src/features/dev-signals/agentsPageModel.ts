@@ -2,9 +2,10 @@
  * Model for the Your Agents tab.
  *
  * The tab owns its own surface, unlike the earlier day-view overlays, but the
- * arithmetic contract is unchanged and inherited from devSignalsModel: agent
- * wall-clock time and attention time measure the same clock and are never
- * added together; cumulative time appears only as a parallelism factor.
+ * The page keeps two clocks explicit. Cumulative agent time is the amount of
+ * work performed across every concurrent run (four agents for one hour is four
+ * agent-hours). Wall-clock time is the elapsed portion of the day covered by at
+ * least one run, which is the only duration comparable with user attention.
  *
  * Sources arrive as compact tuples (see agentsWeekFixture.ts) so a week of
  * real data stays a reviewable file. This module expands them once into the
@@ -68,7 +69,10 @@ export type AgentsDayModel = {
   readonly commits: readonly AgentsCommit[];
   readonly repos: readonly AgentsRepoRow[];
   readonly attentionMinutes: number;
-  readonly agentMinutes: number;
+  /** Elapsed minutes covered by at least one agent run. */
+  readonly wallClockMinutes: number;
+  /** Sum of every turn duration; concurrent runs count independently. */
+  readonly cumulativeMinutes: number;
   /** Agent minutes with no captured attention over them. */
   readonly unattendedMinutes: number;
   readonly commitCount: number;
@@ -93,7 +97,7 @@ export function buildAgentsDayModel(source: AgentsDaySource): AgentsDayModel {
   const turnSpans = toSpans(source.turns);
   const agent = mergeSpans(turnSpans);
   const attentionMinutes = total(attention);
-  const agentMinutes = total(agent);
+  const wallClockMinutes = total(agent);
   const cumulative = source.turns.reduce((sum, [start, end]) => sum + Math.max(0, end - start), 0);
 
   const commits: AgentsCommit[] = source.commits
@@ -123,13 +127,14 @@ export function buildAgentsDayModel(source: AgentsDaySource): AgentsDayModel {
     commits,
     repos,
     attentionMinutes,
-    agentMinutes,
-    unattendedMinutes: Math.max(0, agentMinutes - overlapMinutes(agent, attention)),
+    wallClockMinutes,
+    cumulativeMinutes: cumulative,
+    unattendedMinutes: Math.max(0, wallClockMinutes - overlapMinutes(agent, attention)),
     commitCount: commits.length,
     insertions: commits.reduce((sum, commit) => sum + commit.ins, 0),
     deletions: commits.reduce((sum, commit) => sum + commit.del, 0),
     concurrencyPeak: peakConcurrency(turnSpans),
-    parallelFactor: agentMinutes > 0 ? Number((cumulative / agentMinutes).toFixed(1)) : 0,
+    parallelFactor: wallClockMinutes > 0 ? Number((cumulative / wallClockMinutes).toFixed(1)) : 0,
     providers,
   };
 }
@@ -138,22 +143,24 @@ export type AgentsWeekDayColumn = {
   readonly day: string;
   /** Mon, Tue, ... */
   readonly weekdayLabel: string;
-  readonly agentMinutes: number;
+  readonly wallClockMinutes: number;
+  readonly cumulativeMinutes: number;
   readonly attentionMinutes: number;
   readonly commitCount: number;
 };
 
 export type AgentsWeekModel = {
   readonly days: readonly AgentsWeekDayColumn[];
-  readonly agentMinutes: number;
+  readonly wallClockMinutes: number;
+  readonly cumulativeMinutes: number;
   readonly attentionMinutes: number;
   readonly unattendedMinutes: number;
   readonly commitCount: number;
   readonly insertions: number;
   readonly deletions: number;
   readonly repos: readonly AgentsRepoRow[];
-  /** Max per-day agent minutes, for scaling the columns. */
-  readonly peakDayAgentMinutes: number;
+  /** Max per-day cumulative work, for summary statistics. */
+  readonly peakDayCumulativeMinutes: number;
 };
 
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
@@ -169,7 +176,8 @@ export function buildAgentsWeekModel(models: readonly AgentsDayModel[]): AgentsW
   const days: AgentsWeekDayColumn[] = models.map((model) => ({
     day: model.day,
     weekdayLabel: weekdayLabelFor(model.day),
-    agentMinutes: model.agentMinutes,
+    wallClockMinutes: model.wallClockMinutes,
+    cumulativeMinutes: model.cumulativeMinutes,
     attentionMinutes: model.attentionMinutes,
     commitCount: model.commitCount,
   }));
@@ -187,14 +195,15 @@ export function buildAgentsWeekModel(models: readonly AgentsDayModel[]): AgentsW
 
   return {
     days,
-    agentMinutes: models.reduce((sum, model) => sum + model.agentMinutes, 0),
+    wallClockMinutes: models.reduce((sum, model) => sum + model.wallClockMinutes, 0),
+    cumulativeMinutes: models.reduce((sum, model) => sum + model.cumulativeMinutes, 0),
     attentionMinutes: models.reduce((sum, model) => sum + model.attentionMinutes, 0),
     unattendedMinutes: models.reduce((sum, model) => sum + model.unattendedMinutes, 0),
     commitCount: models.reduce((sum, model) => sum + model.commitCount, 0),
     insertions: models.reduce((sum, model) => sum + model.insertions, 0),
     deletions: models.reduce((sum, model) => sum + model.deletions, 0),
     repos: [...byRepo.entries()].map(([repo, row]) => ({ repo, ...row })).sort((a, b) => b.commitCount - a.commitCount),
-    peakDayAgentMinutes: Math.max(0, ...days.map((day) => day.agentMinutes)),
+    peakDayCumulativeMinutes: Math.max(0, ...days.map((day) => day.cumulativeMinutes)),
   };
 }
 
@@ -980,7 +989,7 @@ export type AgentsInsightNumbers = {
   readonly activeSpanMinutes: number;
   readonly firstActivityMinute: number | null;
   readonly lastActivityMinute: number | null;
-  /** Commits per agent wall-clock hour. */
+  /** Commits per cumulative agent-hour. */
   readonly commitsPerAgentHour: number;
   /** Median merged-turn stretch length, minutes. */
   readonly medianStretchMinutes: number;
@@ -1028,9 +1037,9 @@ export function agentsInsightNumbers(
     activeSpanMinutes: first !== null && last !== null ? last - first : 0,
     firstActivityMinute: first,
     lastActivityMinute: last,
-    commitsPerAgentHour: model.agentMinutes > 0 ? model.commitCount / (model.agentMinutes / 60) : 0,
+    commitsPerAgentHour: model.cumulativeMinutes > 0 ? model.commitCount / (model.cumulativeMinutes / 60) : 0,
     medianStretchMinutes: median,
-    nightSharePercent: model.agentMinutes > 0 ? (nightMinutes / model.agentMinutes) * 100 : 0,
+    nightSharePercent: model.wallClockMinutes > 0 ? (nightMinutes / model.wallClockMinutes) * 100 : 0,
     tokens,
     sessions,
     tokensPerSession: sessions > 0 ? tokens / sessions : 0,

@@ -18,6 +18,8 @@ from .discovery import default_discovery_roots, discover_repositories
 
 DEFAULT_BACKFILL_DAYS = 30
 WATERMARK_KEY_PREFIX = "dev_signals_watermark_"
+IDENTITY_VERSION_KEY_PREFIX = "dev_signals_identity_version_"
+CODEX_IDENTITY_VERSION = 2
 
 #: Repository discovery walks the filesystem, so it runs on its own slower
 #: cadence than session ingestion rather than on every refresh.
@@ -62,6 +64,17 @@ def _read_watermark(database, provider: str) -> float:
 
 def _write_watermark(database, provider: str, value: float) -> None:
     database.set_meta(_watermark_key(provider), repr(float(value)))
+
+
+def _prepare_provider_identity(database, adapter: ProviderAdapter) -> None:
+    """Schedule a one-time Codex reparse when its stored identity changes."""
+    if adapter.key != "codex" or not adapter.replace_sessions:
+        return
+    version_key = f"{IDENTITY_VERSION_KEY_PREFIX}{adapter.key}"
+    if database.get_meta(version_key) == str(CODEX_IDENTITY_VERSION):
+        return
+    database.set_meta(_watermark_key(adapter.key), "0.0")
+    database.set_meta(version_key, str(CODEX_IDENTITY_VERSION))
 
 
 def _candidate_files(
@@ -169,6 +182,7 @@ def ingest_agent_sessions(
     total_skipped = 0
 
     for adapter in PROVIDERS:
+        _prepare_provider_identity(database, adapter)
         watermark = _read_watermark(database, adapter.key)
         try:
             roots = adapter.discover()
@@ -203,7 +217,10 @@ def ingest_agent_sessions(
                 continue
             batch.extend(rows)
 
-        total_turns += database.save_agent_session_events(batch)
+        total_turns += database.save_agent_session_events(
+            batch,
+            replace_sessions=adapter.replace_sessions,
+        )
         # Only advance the watermark past files this pass actually reached, so a
         # truncated batch resumes instead of skipping the remainder.
         _write_watermark(database, adapter.key, highest)

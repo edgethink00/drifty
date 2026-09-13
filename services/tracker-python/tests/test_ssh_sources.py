@@ -183,7 +183,7 @@ class SshCollectionTests(unittest.TestCase):
                 {
                     "provider": "gemini",
                     "sessionKey": remote_key,
-                    "turnIndex": 0,
+                    "turnIndex": 2_000_000,
                     "startedAt": "2026-09-01T01:00:00+00:00",
                     "endedAt": "2026-09-01T01:01:00+00:00",
                     "activeSeconds": 60,
@@ -218,6 +218,7 @@ class SshCollectionTests(unittest.TestCase):
         self.assertEqual(len(database.events), 1)
         event = database.events[0]
         self.assertTrue(event["sessionKey"].startswith("ssh:"))
+        self.assertEqual(event["turnIndex"], 2_000_000)
         self.assertNotIn("worker", event["sessionKey"])
         self.assertIsNone(event["cwdKey"])
         self.assertNotIn("prompt", event)

@@ -190,6 +190,7 @@ from pathlib import Path
 
 MAX_FILES = 400
 MAX_TURNS = 5000
+MAX_TURN_INDEX = 2**31 - 1
 #: Commit collection runs git on the remote host, so it is bounded twice: by
 #: how many repositories it will visit and by how long it may spend in total.
 #: The SSH call itself has a fixed timeout, and losing the agent turns because
@@ -299,7 +300,7 @@ def public_turn(provider, value, cutoff):
     started = parsed_time(value.started_at)
     ended = parsed_time(value.ended_at)
     active = safe_int(value.active_seconds, 7 * 86400)
-    index = safe_int(value.turn_index, 1000000)
+    index = safe_int(value.turn_index, MAX_TURN_INDEX)
     if started is None or ended is None or not active or index is None or ended.timestamp() < cutoff:
         return None
     observed = int((ended - started).total_seconds())
@@ -624,7 +625,7 @@ def _normalize_turns(host: str, payload: object) -> list[dict[str, Any]] | None:
         session = raw.get("sessionKey")
         started_at = _parse_time(raw.get("startedAt"))
         ended_at = _parse_time(raw.get("endedAt"))
-        turn_index = _bounded_int(raw.get("turnIndex"), maximum=1_000_000)
+        turn_index = _bounded_int(raw.get("turnIndex"), maximum=2**31 - 1)
         active_seconds = _bounded_int(raw.get("activeSeconds"), maximum=7 * 86400)
         model = raw.get("model")
         if not isinstance(session, str) or not session.startswith("remote-") or len(session) != 39:

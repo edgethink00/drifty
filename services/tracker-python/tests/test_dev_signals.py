@@ -236,6 +236,69 @@ class CodexSessionTests(TempDirTestCase):
         self.assertEqual(len(turns), 1)
         self.assertEqual(turns[0].active_seconds, UNTERMINATED_TURN_CAP_SECONDS)
 
+    def test_turn_identity_survives_older_events_inserted_before_it(self) -> None:
+        session_meta = {
+            "timestamp": "2026-08-21T09:00:00.000Z",
+            "type": "session_meta",
+            "payload": {"session_id": "stable-session", "cwd": str(self.tmp_path)},
+        }
+        later_turn = [
+            {
+                "timestamp": "2026-08-21T10:00:00.000Z",
+                "type": "event_msg",
+                "payload": {"type": "task_started"},
+            },
+            {
+                "timestamp": "2026-08-21T10:05:00.000Z",
+                "type": "event_msg",
+                "payload": {"type": "task_complete"},
+            },
+        ]
+        session = self._write("stable.jsonl", [session_meta, *later_turn])
+        original_index = parse_codex_session(session)[0].turn_index
+        self.assertGreaterEqual(original_index, 0)
+        self.assertLessEqual(original_index, 2**31 - 1)
+
+        earlier_turn = [
+            {
+                "timestamp": "2026-08-21T09:30:00.000Z",
+                "type": "event_msg",
+                "payload": {"type": "task_started"},
+            },
+            {
+                "timestamp": "2026-08-21T09:35:00.000Z",
+                "type": "event_msg",
+                "payload": {"type": "task_complete"},
+            },
+        ]
+        session = self._write("stable.jsonl", [session_meta, *earlier_turn, *later_turn])
+        reparsed = parse_codex_session(session)
+
+        self.assertEqual(len(reparsed), 2)
+        self.assertEqual(reparsed[1].turn_index, original_index)
+        self.assertNotEqual(reparsed[0].turn_index, reparsed[1].turn_index)
+
+    def test_explicit_turn_id_keeps_identity_when_the_event_timestamp_changes(self) -> None:
+        started = {
+            "timestamp": "2026-08-21T10:00:00.000Z",
+            "type": "event_msg",
+            "payload": {"type": "task_started", "turn_id": "turn-1"},
+        }
+        completed = {
+            "timestamp": "2026-08-21T10:05:00.000Z",
+            "type": "event_msg",
+            "payload": {"type": "task_complete"},
+        }
+        session = self._write("explicit.jsonl", [started, completed])
+        original_index = parse_codex_session(session)[0].turn_index
+
+        session = self._write("explicit.jsonl", [
+            {**started, "timestamp": "2026-08-21T10:00:01.000Z"},
+            completed,
+        ])
+
+        self.assertEqual(parse_codex_session(session)[0].turn_index, original_index)
+
     def test_malformed_lines_are_skipped(self) -> None:
         session = self.tmp_path / "broken.jsonl"
         session.write_text(
@@ -438,6 +501,42 @@ class StorageTests(GitRepoTestCase):
         self.assertEqual(rows[0]["endedAt"], "2026-08-21T10:05:00+00:00")
         self.assertEqual(rows[0]["totalTokens"], 40)
         self.assertEqual(rows[0]["turnIndex"], 7)
+
+    def test_agent_session_replacement_removes_rows_no_longer_parsed(self) -> None:
+        database = self._database()
+
+        def event(session: str, index: int, start: str) -> dict:
+            return {
+                "provider": "codex",
+                "sessionKey": session,
+                "turnIndex": index,
+                "startedAt": start,
+                "endedAt": "2026-08-21T10:10:00+00:00",
+                "activeSeconds": 60,
+                "cwdKey": "k",
+                "model": "m",
+                "totalTokens": 10,
+            }
+
+        database.save_agent_session_events([
+            event("rewritten", 0, "2026-08-21T10:00:00+00:00"),
+            event("rewritten", 1, "2026-08-21T10:01:00+00:00"),
+            event("untouched", 0, "2026-08-21T10:02:00+00:00"),
+        ])
+        database.save_agent_session_events(
+            [event("rewritten", 42, "2026-08-21T10:03:00+00:00")],
+            replace_sessions=True,
+        )
+
+        rows = database.fetch_agent_session_events(
+            "2026-08-21T00:00:00+00:00",
+            "2026-08-22T00:00:00+00:00",
+        )
+        by_session = {}
+        for row in rows:
+            by_session.setdefault(row["sessionKey"], []).append(row["turnIndex"])
+        self.assertEqual(by_session["rewritten"], [42])
+        self.assertEqual(by_session["untouched"], [0])
 
     def test_range_queries_normalize_timezone(self) -> None:
         database = self._database()
@@ -1747,6 +1846,61 @@ class IngestRegistryTests(TempDirTestCase):
                     for row in conn.execute("SELECT session_key FROM agent_session_events")
                 }
             self.assertEqual(keys, {"a", "b", "c", "d", "e"})
+        finally:
+            ingest_mod.PROVIDERS = original_providers
+
+    def test_codex_identity_upgrade_reparses_files_behind_the_old_watermark_once(self) -> None:
+        from app.tracker.dev_signals import ingest as ingest_mod
+        from app.tracker.dev_signals.adapters import ProviderAdapter
+        from app.tracker.dev_signals.agent_sessions import AgentTurn
+
+        root = self.tmp_path / "codex"
+        root.mkdir()
+        path = root / "session.jsonl"
+        path.write_text("{}", encoding="utf-8")
+        modified = path.stat().st_mtime
+        parse_calls = 0
+
+        def parse(_path):
+            nonlocal parse_calls
+            parse_calls += 1
+            return [
+                AgentTurn(
+                    provider="codex",
+                    session_key="session",
+                    turn_index=42,
+                    started_at="2026-09-09T01:00:00+00:00",
+                    ended_at="2026-09-09T01:10:00+00:00",
+                    active_seconds=600,
+                    cwd_key=None,
+                    model=None,
+                    total_tokens=None,
+                )
+            ]
+
+        adapter = ProviderAdapter(
+            "codex",
+            lambda: [root],
+            parse,
+            ("*.jsonl",),
+            replace_sessions=True,
+        )
+        original_providers = ingest_mod.PROVIDERS
+        ingest_mod.PROVIDERS = (adapter,)
+        try:
+            database = TrackerDatabase(self.tmp_path / "tracker.sqlite3")
+            database.set_meta("dev_signals_watermark_codex", repr(modified + 60))
+
+            ingest_agent_sessions(database, backfill_days=1)
+            ingest_agent_sessions(database, backfill_days=1)
+
+            self.assertEqual(parse_calls, 1)
+            self.assertEqual(database.get_meta("dev_signals_identity_version_codex"), "2")
+            rows = database.fetch_agent_session_events(
+                "2026-09-09T00:00:00+00:00",
+                "2026-09-10T00:00:00+00:00",
+            )
+            self.assertEqual([row["turnIndex"] for row in rows], [42])
         finally:
             ingest_mod.PROVIDERS = original_providers
 

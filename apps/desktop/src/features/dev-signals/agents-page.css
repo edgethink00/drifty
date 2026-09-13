@@ -7,6 +7,20 @@
    rhythm and models details. Colour comes from
    existing tokens; no dark-mode rules needed. */
 
+.page--agents .dashboard-page-head__summary {
+  gap: 0.2rem;
+}
+
+.agents-headline-context {
+  margin: 0;
+  color: var(--text-soft);
+  font-family: var(--font-display, inherit);
+  font-size: var(--type-overline-size);
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  line-height: 1.25;
+}
+
 /* ── period toggle (ported from studyhall's dashboard-period-toggle) ──────── */
 
 /* studyhall solved the in-page Day/Week switch on this same design system: a

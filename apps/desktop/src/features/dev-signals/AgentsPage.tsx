@@ -6,7 +6,8 @@
  * read as a foreign surface. This version reuses the day view's actual
  * skeleton, so the two pages feel like siblings:
  *
- *   - the "Focused for Xh" headline pattern → "Agents ran Xh"
+ *   - the "Focused for Xh" headline pattern → cumulative agent work, with
+ *     elapsed time kept directly underneath
  *   - day-split main column + the shared Breakdown side panel, with the
  *     summary tiles living in the side panel exactly like the day breakdown
  *   - the timeline as a flow-chart-card, sharing the flow chart's axis and
@@ -1113,22 +1114,22 @@ function agentsWeekStatEntries(
   const week = buildAgentsWeekModel(models);
   const tokens = sources.reduce((sum, source) => sum + (source.tokens ?? 0), 0);
   const sessions = sources.reduce((sum, source) => sum + (source.sessions ?? 0), 0);
-  const activeDays = week.days.filter((day) => day.agentMinutes > 0).length;
+  const activeDays = week.days.filter((day) => day.cumulativeMinutes > 0).length;
   const netLines = week.insertions - week.deletions;
-  const agentHours = week.agentMinutes / 60;
+  const agentHours = week.cumulativeMinutes / 60;
   // The busiest single day gives the week's spread a reference point, and
   // keeps the tile count even so the two-up grid has no orphan cell.
   const peakDay = week.days.reduce(
-    (best, day) => (day.agentMinutes > best.agentMinutes ? day : best),
-    week.days[0] ?? { day: "", weekdayLabel: "—", agentMinutes: 0, attentionMinutes: 0, commitCount: 0 },
+    (best, day) => (day.cumulativeMinutes > best.cumulativeMinutes ? day : best),
+    week.days[0] ?? { day: "", weekdayLabel: "—", wallClockMinutes: 0, cumulativeMinutes: 0, attentionMinutes: 0, commitCount: 0 },
   );
   return [
     { label: t("agents.stats.commits"), value: String(week.commitCount), detail: agentHours > 0 ? t("agents.stats.perAgentHour", { value: (week.commitCount / agentHours).toFixed(1) }) : undefined },
     { label: t("agents.stats.netLines"), value: `${netLines >= 0 ? "+" : ""}${netLines.toLocaleString()}`, detail: repoCountDetail(week.repos.length, t) },
     { label: t("agents.stats.sessions"), value: String(sessions), detail: t("agents.stats.activeDays", { count: activeDays }) },
     { label: t("agents.stats.tokens"), value: formatTokens(tokens), detail: sessions > 0 ? t("agents.stats.perSession", { value: formatTokens(tokens / sessions) }) : undefined },
-    { label: t("agents.stats.dailyAverage"), value: formatAgentDuration(activeDays > 0 ? week.agentMinutes / activeDays : 0, language), detail: t("agents.stats.perActiveDay") },
-    { label: t("agents.stats.peakDay"), value: formatAgentDuration(peakDay.agentMinutes, language), detail: peakDay.day ? localizedWeekday(peakDay.day, language) : "—" },
+    { label: t("agents.stats.dailyAverage"), value: formatAgentDuration(activeDays > 0 ? week.cumulativeMinutes / activeDays : 0, language), detail: t("agents.stats.perActiveDay") },
+    { label: t("agents.stats.peakDay"), value: formatAgentDuration(peakDay.cumulativeMinutes, language), detail: peakDay.day ? localizedWeekday(peakDay.day, language) : "—" },
     { label: t("agents.stats.churn"), value: `+${formatTokens(week.insertions)}`, detail: t("agents.stats.removed", { count: formatTokens(week.deletions) }) },
     { label: t("agents.stats.topRepo"), value: week.repos[0]?.repo ?? "—", detail: week.repos[0] ? t("agents.repo.commitCount", { count: week.repos[0].commitCount }) : undefined },
   ];
@@ -1273,8 +1274,14 @@ export function AgentsPage({
   const daySource = days[days.length - 1] ?? null;
 
   const headlineMinutes = period === "Today"
-    ? dayModel?.agentMinutes ?? 0
-    : models.reduce((sum, model) => sum + model.agentMinutes, 0);
+    ? dayModel?.cumulativeMinutes ?? 0
+    : models.reduce((sum, model) => sum + model.cumulativeMinutes, 0);
+  const wallClockMinutes = period === "Today"
+    ? dayModel?.wallClockMinutes ?? 0
+    : models.reduce((sum, model) => sum + model.wallClockMinutes, 0);
+  const concurrencyPeak = period === "Today"
+    ? dayModel?.concurrencyPeak ?? 0
+    : Math.max(0, ...models.map((model) => model.concurrencyPeak));
   const headlineDuration = headlineMinutes >= 1 ? formatAgentDuration(headlineMinutes, effectiveLanguage) : null;
   const titleAriaLabel = loading
     ? t("agents.headline.loadingAria")
@@ -1338,6 +1345,14 @@ export function AgentsPage({
                 <><span className="dashboard-page-head__focus-word">{t("agents.headline.ranLead")}</span><span className="dashboard-page-head__focus-value">{headlineDuration}</span></>
               )}
             </h1>
+            {!loading && headlineDuration !== null ? (
+              <p className="agents-headline-context">
+                {t("agents.headline.elapsed", {
+                  duration: formatAgentDuration(wallClockMinutes, effectiveLanguage),
+                  count: concurrencyPeak,
+                })}
+              </p>
+            ) : null}
           </div>
           <div className="agents-ssh-controls">
             <button

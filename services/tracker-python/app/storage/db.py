@@ -2851,7 +2851,19 @@ class TrackerDatabase:
             for row in rows
         ]
 
-    def save_agent_session_events(self, events: list[dict[str, Any]]) -> int:
+    def save_agent_session_events(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        replace_sessions: bool = False,
+    ) -> int:
+        """Persist turns, optionally replacing each represented session.
+
+        Replacement is valid only when ``events`` contains the complete parsed
+        contents of every represented session. Empty or unreadable sources are
+        deliberately not represented, so a parser failure cannot erase the
+        last known rows.
+        """
         if not events:
             return 0
         timestamp = datetime.now(timezone.utc).isoformat()
@@ -2891,6 +2903,19 @@ class TrackerDatabase:
                 ).fetchone()
                 if row is not None:
                     existing.add((provider, session_key, turn_index))
+            if replace_sessions:
+                session_scopes = {
+                    (provider, session_key)
+                    for provider, session_key, _ in keys
+                    if provider is not None and session_key is not None
+                }
+                conn.executemany(
+                    """
+                    DELETE FROM agent_session_events
+                    WHERE provider = ? AND session_key = ?
+                    """,
+                    sorted(session_scopes),
+                )
             conn.executemany(
                 """
                 INSERT INTO agent_session_events

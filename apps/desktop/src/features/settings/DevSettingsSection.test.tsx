@@ -441,6 +441,7 @@ describe("DevSettingsSection", () => {
     expect(screen.getByRole("heading", { name: "Feature flags" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Product preview flags" })).toBeTruthy();
     expect(screen.getByText("Team preview (beta)")).toBeTruthy();
+    expect(screen.getByText("Your Agents (beta)")).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Debug logs$/ })).toBeNull();
   });
 

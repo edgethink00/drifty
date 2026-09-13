@@ -13,6 +13,7 @@ soft: an unparseable line is skipped, never raised.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,18 @@ DEFAULT_GAP_CEILING_SECONDS = 300
 
 #: Cap applied to a turn with no completion event (crash, force-quit).
 UNTERMINATED_TURN_CAP_SECONDS = 120
+
+
+def stable_turn_index(*parts: object) -> int:
+    """Return a deterministic SQLite-safe identity for one logical turn.
+
+    Session files can be rewritten with older turns inserted before rows that
+    were already ingested. A list position then changes the identity of every
+    later turn. Hashing the session and start event keeps an existing turn's
+    key stable across that rewrite without storing any additional source data.
+    """
+    raw = "\x1f".join(str(part) for part in parts).encode("utf-8")
+    return int.from_bytes(hashlib.sha256(raw).digest()[:8], "big") % (2**31 - 1)
 
 
 @dataclass(frozen=True)
@@ -282,6 +295,7 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
     cache_read: int | None = None
     cache_write: int | None = None
     start: datetime | None = None
+    turn_identity: str | None = None
     last_seen: datetime | None = None
 
     for record in _iter_json_lines(file_path):
@@ -329,17 +343,20 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
 
         if event_type == "task_started" and stamp is not None:
             start = stamp
+            explicit_turn_id = payload.get("turn_id")
+            turn_identity = explicit_turn_id if isinstance(explicit_turn_id, str) and explicit_turn_id else stamp.isoformat()
             continue
 
         if event_type == "task_complete" and stamp is not None and start is not None:
             turns.append(
                 _build_turn(
-                    PROVIDER_CODEX, session_key, len(turns), start, stamp,
+                    PROVIDER_CODEX, session_key, stable_turn_index(session_key, turn_identity), start, stamp,
                     cwd_key, model, total_tokens,
                     tokens_in, tokens_out, cache_read, cache_write,
                 )
             )
             start = None
+            turn_identity = None
 
     # A turn with no completion event means the session died mid-run. Cap it at
     # the last observed event rather than extending to file mtime, which would
@@ -349,7 +366,7 @@ def parse_codex_session(path: str | Path) -> list[AgentTurn]:
         end = start + timedelta(seconds=min(observed, float(UNTERMINATED_TURN_CAP_SECONDS)))
         turns.append(
             _build_turn(
-                PROVIDER_CODEX, session_key, len(turns), start, end,
+                PROVIDER_CODEX, session_key, stable_turn_index(session_key, turn_identity), start, end,
                 cwd_key, model, total_tokens,
                 tokens_in, tokens_out, cache_read, cache_write,
             )

@@ -57,6 +57,9 @@ class ProviderAdapter:
     discover: Callable[[], list[Path]]
     parse: Callable[[Path], list[AgentTurn]]
     patterns: tuple[str, ...] = ("*.jsonl",)
+    # True only when one parsed source returns a complete session. Empty or
+    # unreadable sources intentionally leave the last known rows untouched.
+    replace_sessions: bool = False
 
 
 def _existing_file(path: Path) -> Path | None:
@@ -1987,7 +1990,12 @@ def parse_jsonl_tree(parser: Callable[[Path], list[AgentTurn]], root: Path) -> l
 
 
 PROVIDERS: tuple[ProviderAdapter, ...] = (
-    ProviderAdapter(PROVIDER_CODEX, discover_codex, lambda path: parse_jsonl_tree(parse_codex_session, path)),
+    ProviderAdapter(
+        PROVIDER_CODEX,
+        discover_codex,
+        lambda path: parse_jsonl_tree(parse_codex_session, path),
+        replace_sessions=True,
+    ),
     ProviderAdapter(PROVIDER_CLAUDE_CODE, discover_claude, lambda path: parse_jsonl_tree(parse_claude_session, path)),
     ProviderAdapter(PROVIDER_ASIDE, discover_aside, parse_aside_store, ("*.db",)),
     ProviderAdapter(PROVIDER_OPENCODE, discover_opencode, parse_opencode_store, ("*.db", "*.json")),
