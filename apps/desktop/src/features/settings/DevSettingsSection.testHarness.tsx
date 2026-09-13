@@ -78,8 +78,6 @@ export function renderProductionDevSettings(
     onProfileBetaChange: vi.fn(),
     onAgentsBetaChange: vi.fn(),
     onAiAvailabilityGateDevDisabledChange: vi.fn(),
-    legacyShellBlurPreviewEnabled: false,
-    onLegacyShellBlurPreviewEnabledChange: vi.fn(),
     onPreviewDashboardAiUnavailableCase: vi.fn(),
     onReplayDashboardDemo: vi.fn(),
     onResetDemoDashboardReplaySettings: vi.fn(),

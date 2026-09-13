@@ -116,49 +116,6 @@ fn set_titlebar_controls_visible(_app: &AppHandle, _visible: bool) -> Result<(),
     Ok(())
 }
 
-/// Dev-only A/B switch for the shell glass. Applies or removes the native
-/// window material on the main window at runtime.
-///
-/// This exists because Tauri's own `clearEffects()` is a silent no-op on
-/// macOS: `tauri::vibrancy::set_window_effects` only calls a clear routine in
-/// its Windows branch, so the JS API can add the NSVisualEffectView but never
-/// remove it. window-vibrancy's `clear_vibrancy` removes the tagged view the
-/// same crate inserted (Tauri's config-time effects use this crate too).
-#[tauri::command]
-pub fn window_set_native_shell_blur(app: AppHandle, enabled: bool) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let handle = app.clone();
-        app.run_on_main_thread(move || {
-            let Some(window) = handle.get_webview_window(MAIN_WINDOW_LABEL) else {
-                return;
-            };
-            if enabled {
-                // apply_vibrancy inserts a new tagged NSVisualEffectView on
-                // every call; clear first so re-enabling never stacks views.
-                let _ = window_vibrancy::clear_vibrancy(&window);
-                let _ = window_vibrancy::apply_vibrancy(
-                    &window,
-                    // Must match app.windows[].windowEffects in tauri.conf.json.
-                    window_vibrancy::NSVisualEffectMaterial::HudWindow,
-                    Some(window_vibrancy::NSVisualEffectState::Active),
-                    None,
-                );
-            } else {
-                let _ = window_vibrancy::clear_vibrancy(&window);
-            }
-        })
-        .map_err(|error| error.to_string())?;
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (app, enabled);
-    }
-
-    Ok(())
-}
-
 /// Pin the main window's appearance to the app's own theme.
 ///
 /// The native shell material renders in the window's effective appearance. When

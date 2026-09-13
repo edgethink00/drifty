@@ -15,21 +15,6 @@
   transition: grid-template-columns var(--sidebar-duration) var(--sidebar-ease);
 }
 
-/* Dev-only before/after preview: the retired CSS blur, reinstated only while
-   Dev settings set data-legacy-shell-blur. This is the implementation that
-   flickered on the transparent webview; it exists so the old and new glass
-   can be compared live and must never ship as the default. */
-:root[data-legacy-shell-blur="true"] .app-shell {
-  /* Pre-fix values: the CSS blur added no frost, so the tint carried it. */
-  --shell-glass-bg: rgba(237, 239, 236, 0.78);
-  backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
-  -webkit-backdrop-filter: blur(34px) saturate(1.18) brightness(1.03);
-}
-
-:root[data-theme="dark"][data-legacy-shell-blur="true"] .app-shell {
-  --shell-glass-bg: rgba(33, 34, 31, 0.74);
-}
-
 /* Browser-only fallback: outside the native shell there is no window material,
    so without this the sidebar would render as a flat tint. The compositing bug
    this change works around is specific to the transparent native webview, so

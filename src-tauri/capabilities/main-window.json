@@ -169,7 +169,6 @@
     "allow-pet-mode-input-bounds",
     "allow-system-open-settings-pane",
     "allow-window-set-onboarding-presentation",
-    "allow-window-set-native-shell-blur",
     "allow-window-set-theme-appearance",
     "allow-watcher-peek-show",
     "allow-watcher-peek-hide",

@@ -93,7 +93,7 @@ use commands::{
     watcher_companion_visibility_action, watcher_peek_cursor_inside, watcher_peek_dismiss,
     watcher_peek_end_of_day_review_action, watcher_peek_end_of_day_review_displayed,
     watcher_peek_extreme_nudge_action, watcher_peek_hide, watcher_peek_respond,
-    watcher_peek_set_interactive, watcher_peek_show, window_set_native_shell_blur,
+    watcher_peek_set_interactive, watcher_peek_show,
     window_set_onboarding_presentation, window_set_theme_appearance,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
@@ -813,7 +813,6 @@ pub fn run() {
             startup_set_open_at_login_enabled,
             startup_get_install_location,
             system_open_settings_pane,
-            window_set_native_shell_blur,
             window_set_onboarding_presentation,
             window_set_theme_appearance,
             watcher_peek_show,

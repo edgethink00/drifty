@@ -30,12 +30,6 @@ export const TEAMS_BETA_STORAGE_KEY = "drifty.dev.teamsBeta";
 export const PROFILE_BETA_STORAGE_KEY = "drifty.dev.profileBeta";
 export const AGENTS_BETA_STORAGE_KEY = "drifty.dev.agentsBeta";
 export const FLOATING_COMPANION_DEV_STORAGE_KEY = "drifty.dev.floatingCompanion";
-/** Dev-only before/after switch for the shell glass: "1" restores the
- * previous CSS backdrop-filter implementation (the one that flickered) so it
- * can be compared against the new native under-window blur. Default off
- * (= native blur, the production behavior). */
-export const LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY = "drifty.dev.legacyShellBlurPreview";
-
 export const ENHANCED_CONTEXT_ENABLED_STORAGE_KEY = "drifty.dev.enhancedContext.enabled";
 export const ENHANCED_CONTEXT_CAPTURE_LOCAL_STORAGE_KEY = "drifty.dev.enhancedContext.captureLocal";
 export const ENHANCED_CONTEXT_RETRY_LOW_CONFIDENCE_STORAGE_KEY = "drifty.dev.enhancedContext.retryLowConfidence";
@@ -543,11 +537,6 @@ export function resolveInitialProfileBetaEnabled(): boolean {
 export function resolveInitialAgentsBetaEnabled(): boolean {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(AGENTS_BETA_STORAGE_KEY) === "1";
-}
-
-export function resolveInitialLegacyShellBlurPreviewEnabled(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(LEGACY_SHELL_BLUR_PREVIEW_STORAGE_KEY) === "1";
 }
 
 /** Floating remains a Dev-only preview while the menu-bar Companion ships. */
