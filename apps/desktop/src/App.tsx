@@ -7167,6 +7167,10 @@ export default function App() {
 
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
+    // Product captures should stay deterministic. Preview/demo surfaces can
+    // still opt into the explicit Day Review preview above, but must not
+    // inherit time-based automatic moments from the live app.
+    if (isPreviewSurface) return;
     if (!hasLoadedOnce) return;
     if (selectedDay !== todayDay || segmentsLoadedDay !== todayDay) return;
     if (!status?.running) return;
@@ -7259,7 +7263,7 @@ export default function App() {
     })().finally(() => {
       endOfDayReviewAutomaticInFlightRef.current = false;
     });
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, currentMinuteOfDay, endOfDayReviewMinute, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, onboardingCompletedAt, publishLeaderboardCheckpoint, segments, segmentsLoadedDay, selectedDay, showEndOfDayReview, startOfDayMinutes, status?.running, syncLeaderboardPublication, todayDay]);
 
   /* Yesterday's review, once, if it never got shown: the machine was closed
      before the review time, or Drifty was not running. It loads its own
@@ -7268,6 +7272,7 @@ export default function App() {
   const endOfDayReviewCatchUpAttemptedRef = useRef(false);
   useEffect(() => {
     if (!END_OF_DAY_REVIEW_AUTOMATIC_NOTIFICATIONS_ENABLED) return;
+    if (isPreviewSurface) return;
     if (!hasLoadedOnce || shouldBlockLocalTrackerAccess) return;
     if (!status?.running) return;
     if (classificationAvailabilityGateEnabled
@@ -7323,7 +7328,7 @@ export default function App() {
          browser fallback, where a successful show is already visible. */
       if (shown && !isTauriRuntime()) persistEndOfDayReviewCatchUpHandledDay(catchUp.day);
     })();
-  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, isPolicySignedIn, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
+  }, [buildEndOfDayReviewEvent, classificationAssessmentReady, classificationAvailability.state, classificationAvailabilityGateEnabled, hasLoadedOnce, isPolicySignedIn, isPreviewSurface, isSupabaseConfigured, materializeBuiltInHeuristicTimeline, onboardingCompletedAt, shouldBlockLocalTrackerAccess, showEndOfDayReview, startOfDayMinutes, status?.running, todayDay]);
 
   const insightCategoryTotals = useMemo(() => buildCategoryDurations(activeInsightSegments, insightClassificationOptions), [activeInsightSegments, insightClassificationOptions]);
   const activeInsightCategoryTotals = useMemo(
