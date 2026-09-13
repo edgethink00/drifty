@@ -15,6 +15,11 @@ const MICRO_EVENT_MAX_ACTIVE_MINUTES = 3;
 const TINY_EVENT_MAX_ACTIVE_MINUTES = 10;
 const MICRO_EVENT_HEIGHT_PX = 6;
 const TINY_EVENT_HEIGHT_PX = 12;
+// Grouped cards reserve an 18px identity strip. These thresholds keep the
+// optional text rows within the card instead of asking flexbox to compress the
+// icon strip below its tile height.
+const GROUPED_IDENTITY_AND_TIME_MIN_HEIGHT_PX = 37;
+const GROUPED_IDENTITY_TIME_AND_DETAIL_MIN_HEIGHT_PX = 49;
 
 export type WeekIdentityStripPlan = {
   readonly visibleCount: number;
@@ -144,10 +149,12 @@ export function buildWeekCalendarEventLayout(
           )
         : Math.max(28, rawEventHeight - 4);
   const isCompactEvent = event.isShort
-    || eventHeight < 36
+    || eventHeight < (event.isGroupedCluster ? GROUPED_IDENTITY_AND_TIME_MIN_HEIGHT_PX : 36)
     || event.laneCount > 2;
   const showsIdentityStrip = event.isGroupedCluster && !isTinyEvent;
-  const showsInlineDetail = !isCompactEvent && event.sessionCount <= 1;
+  const showsInlineDetail = !isCompactEvent
+    && event.sessionCount <= 1
+    && (!showsIdentityStrip || eventHeight >= GROUPED_IDENTITY_TIME_AND_DETAIL_MIN_HEIGHT_PX);
 
   return {
     eventHeight,

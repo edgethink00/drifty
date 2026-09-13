@@ -123,6 +123,54 @@ describe("buildWeekCalendarEventLayout", () => {
     expect(atCompressed.isTinyEvent).toBe(false);
     expect(atCompressed.showsIdentityStrip).toBe(true);
   });
+
+  it("shows grouped time and detail only when their rows fit beside the identity strip", () => {
+    const oneHour = buildWeekCalendarEventLayout(makeWeekCalendarEvent({
+      activeDurationMinutes: 60,
+      durationMinutes: 60,
+      sessionCount: 1,
+      isShort: false,
+    }), 42);
+    expect(oneHour.eventHeight).toBe(38);
+    expect(oneHour.isCompactEvent).toBe(false);
+    expect(oneHour.showsIdentityStrip).toBe(true);
+    expect(oneHour.showsInlineDetail).toBe(false);
+
+    const taller = buildWeekCalendarEventLayout(makeWeekCalendarEvent({
+      activeDurationMinutes: 76,
+      durationMinutes: 76,
+      sessionCount: 1,
+      isShort: false,
+    }), 42);
+    expect(taller.eventHeight).toBeGreaterThanOrEqual(49);
+    expect(taller.showsInlineDetail).toBe(true);
+  });
+
+  it("keeps grouped row visibility stable at the exact height boundaries", () => {
+    const layoutAtHeight = (durationMinutes: number) => buildWeekCalendarEventLayout(makeWeekCalendarEvent({
+      activeDurationMinutes: durationMinutes,
+      durationMinutes,
+      sessionCount: 1,
+      isShort: false,
+    }), 60);
+
+    const belowTimeThreshold = layoutAtHeight(40);
+    expect(belowTimeThreshold.eventHeight).toBe(36);
+    expect(belowTimeThreshold.isCompactEvent).toBe(true);
+
+    const atTimeThreshold = layoutAtHeight(41);
+    expect(atTimeThreshold.eventHeight).toBe(37);
+    expect(atTimeThreshold.isCompactEvent).toBe(false);
+    expect(atTimeThreshold.showsInlineDetail).toBe(false);
+
+    const belowDetailThreshold = layoutAtHeight(52);
+    expect(belowDetailThreshold.eventHeight).toBe(48);
+    expect(belowDetailThreshold.showsInlineDetail).toBe(false);
+
+    const atDetailThreshold = layoutAtHeight(53);
+    expect(atDetailThreshold.eventHeight).toBe(49);
+    expect(atDetailThreshold.showsInlineDetail).toBe(true);
+  });
 });
 
 describe("planWeekIdentityStrip", () => {

@@ -1438,9 +1438,12 @@
 .week-v2-calendar__identity-strip {
   align-items: center;
   display: flex;
+  flex: 0 0 var(--week-identity-tile, 18px);
   gap: var(--week-identity-gap, 3px);
+  height: var(--week-identity-tile, 18px);
   justify-content: flex-start;
   max-width: 100%;
+  min-height: var(--week-identity-tile, 18px);
   min-width: 0;
   overflow: hidden;
 }
@@ -1602,12 +1605,12 @@
 }
 
 .week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) .week-v2-calendar__identity-strip {
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 
 .week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) {
   gap: 0;
-  padding-block: 2px 3px;
+  padding: 0;
 }
 
 .week-v2-calendar__event--grouped.week-v2-calendar__event--compact {
@@ -2638,7 +2641,17 @@
 
 .week-v2-calendar__event--grouped:not(.week-v2-calendar__event--compact) .week-v2-calendar__event-open {
   gap: 0;
-  padding-block: 2px 3px;
+  padding-block: 1px 2px;
+}
+
+.week-v2-calendar__event--grouped.week-v2-calendar__event--compact .week-v2-calendar__event-open {
+  justify-content: center;
+  padding-block: 0;
+}
+
+.week-v2-calendar__event--grouped .week-v2-calendar__event-open > small,
+.week-v2-calendar__event--grouped .week-v2-calendar__event-open > em {
+  flex: 0 0 auto;
 }
 
 .week-v2-calendar__event--dense .week-v2-calendar__event-open {
