@@ -1,6 +1,6 @@
 import type { LeaderboardRow } from "../leaderboard/leaderboardService";
 import { getLeaderboardPeriodFocusLabel } from "../leaderboard/leaderboardWindow";
-import { getDailyAverageSeconds } from "../leaderboard/leaderboardViewHelpers";
+import { getDailyAverageSeconds, ProfileAvatar } from "../leaderboard/leaderboardViewHelpers";
 import { getLeaderFocusSeconds, getLeaderShareRatio, getRankGap, getRankTier, getTopPercentile } from "../leaderboard/leaderboardStanding";
 import type { PublicProfile } from "./profileService";
 import { formatLocalizedCompactDurationFromSeconds, formatRelativeTime } from "../../lib/formatting";
@@ -37,7 +37,10 @@ export function ProfileModal({
   onClose: () => void;
 }) {
   const { effectiveLanguage, t } = useLocalization();
-  const displayName = profile?.display_name || row.display_name;
+  // Keep the clicked leaderboard identity stable while the profile details resolve.
+  // The row already carries the public name and avatar shown immediately before this modal.
+  const displayName = row.display_name || profile?.display_name || "Member";
+  const avatarUrl = row.avatar_url?.trim() || profile?.avatar_url?.trim() || "";
   const bio = profile?.bio?.trim();
   const focusSeconds = row.focus_seconds;
   const rank = row.rank;
@@ -61,15 +64,16 @@ export function ProfileModal({
     : rank <= 3
       ? t("profile.standingRankOfParticipants", { rank, participants: participantLabel })
       : t("profile.standingPercentile", { rank, participants: participantLabel, percent: percentile });
+  const profileState = isLoading ? "loading" : error ? "error" : profile ? "ready" : "unavailable";
   useModalDismiss(onClose);
 
   return (
     <div className="auth-modal__overlay" onClick={onClose}>
-      <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" role="dialog" aria-modal="true" aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
+      <section className="auth-modal modal-shell profile-modal" data-modal-variant="standard" data-profile-state={profileState} role="dialog" aria-modal="true" aria-busy={isLoading || undefined} aria-labelledby="public-profile-title" onClick={(event) => event.stopPropagation()}>
         <ModalCloseButton label={t("profile.close")} onClick={onClose} />
         <div className="profile-modal__header">
           <span className="profile-modal__crest" data-rank-tier={rankTier ?? undefined}>
-            {profile?.avatar_url ? <img className="profile-modal__avatar" src={profile.avatar_url} alt="" aria-hidden="true" /> : <span className="profile-modal__avatar" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span>}
+            <ProfileAvatar className="profile-modal__avatar" name={displayName} src={avatarUrl} />
             <span className="profile-modal__rank-badge" aria-hidden="true">#{rank}</span>
           </span>
           <div className="profile-modal__identity">
@@ -77,10 +81,23 @@ export function ProfileModal({
             <p className="profile-modal__standing">{standing}</p>
           </div>
         </div>
-        {isLoading ? <p className="capture-recency">{t("profile.loading")}</p> : null}
-        {error ? <p className="capture-recency capture-recency--error">{error}</p> : null}
-        <p className={`profile-modal__bio ${bio ? "" : "profile-modal__bio--empty"}`.trim()}>{bio || t("profile.noBio")}</p>
-        <ProfileSocialLinks profile={profile ?? { website_url: null, github_url: null, linkedin_url: null }} hideWhenEmpty />
+        {isLoading ? (
+          <>
+            <p className="sr-only" role="status" aria-live="polite">{t("profile.loading")}</p>
+            <p className="profile-modal__bio profile-modal__bio--empty profile-modal__bio--loading" aria-hidden="true">
+              <span className="profile-modal__bio-placeholder" />
+            </p>
+          </>
+        ) : error ? (
+          <p className="profile-modal__bio profile-modal__bio--error" role="alert">{error}</p>
+        ) : profile ? (
+          <>
+            <p className={`profile-modal__bio ${bio ? "" : "profile-modal__bio--empty"}`.trim()}>{bio || t("profile.noBio")}</p>
+            <ProfileSocialLinks profile={profile} hideWhenEmpty />
+          </>
+        ) : (
+          <p className="profile-modal__bio profile-modal__bio--empty">{t("profile.unavailable")}</p>
+        )}
         <div className="profile-modal__hero" data-rank-tier={rankTier ?? undefined}>
           <span className="eyebrow">{periodFocusLabel}</span>
           <strong className="profile-modal__hero-value">{formatLocalizedCompactDurationFromSeconds(focusSeconds, effectiveLanguage)}</strong>

@@ -348,6 +348,81 @@ describe("LeaderboardView", () => {
     expect(screen.getByRole("dialog", { name: /alex/i }).getAttribute("aria-modal")).toBe("true");
   });
 
+  it("keeps loading separate from the public bio state and reuses the leaderboard avatar", () => {
+    const row = makeLeaderboardRow({
+      display_name: "Alex",
+      avatar_url: "data:image/png;base64,leaderboard-avatar",
+      focus_seconds: 3600,
+      rank: 2,
+      period: "weekly",
+    });
+
+    render(
+      <ProfileModal
+        row={row}
+        profile={null}
+        isLoading
+        error={null}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /alex/i });
+    expect(dialog.getAttribute("aria-busy")).toBe("true");
+    expect(dialog.getAttribute("data-profile-state")).toBe("loading");
+    expect(within(dialog).getByRole("status").textContent).toMatch(/loading public profile/i);
+    expect(within(dialog).queryByText(/no public bio yet/i)).toBeNull();
+    expect(dialog.querySelector(".profile-modal__bio-placeholder")).toBeTruthy();
+    expect(dialog.querySelector<HTMLImageElement>(".profile-modal__avatar")?.src).toBe(row.avatar_url);
+  });
+
+  it("shows the empty-bio copy only after a profile resolves", () => {
+    render(
+      <ProfileModal
+        row={makeLeaderboardRow({ display_name: "Alex", focus_seconds: 3600, rank: 2, period: "weekly" })}
+        profile={{
+          public_id: "profile-1",
+          display_name: "Alex",
+          bio: "",
+          avatar_url: "",
+          website_url: "",
+          github_url: "",
+          linkedin_url: "",
+          focus_seconds_7d: 3600,
+          rank: 2,
+          updated_at: "2026-04-07T12:00:00.000Z",
+        }}
+        isLoading={false}
+        error={null}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog", { name: /alex/i });
+    expect(dialog.hasAttribute("aria-busy")).toBe(false);
+    expect(dialog.getAttribute("data-profile-state")).toBe("ready");
+    expect(within(dialog).getByText(/no public bio yet/i)).toBeTruthy();
+    expect(within(dialog).queryByRole("status")).toBeNull();
+  });
+
+  it("does not label an unavailable or failed profile as an empty bio", () => {
+    const row = makeLeaderboardRow({ display_name: "Alex", focus_seconds: 3600, rank: 2, period: "weekly" });
+    const { rerender } = render(
+      <ProfileModal row={row} profile={null} isLoading={false} error={null} onClose={vi.fn()} />,
+    );
+
+    let dialog = screen.getByRole("dialog", { name: /alex/i });
+    expect(dialog.getAttribute("data-profile-state")).toBe("unavailable");
+    expect(within(dialog).getByText(/public profile is no longer available/i)).toBeTruthy();
+    expect(within(dialog).queryByText(/no public bio yet/i)).toBeNull();
+
+    rerender(<ProfileModal row={row} profile={null} isLoading={false} error="Unable to load profile" onClose={vi.fn()} />);
+    dialog = screen.getByRole("dialog", { name: /alex/i });
+    expect(dialog.getAttribute("data-profile-state")).toBe("error");
+    expect(within(dialog).getByRole("alert").textContent).toBe("Unable to load profile");
+    expect(within(dialog).queryByText(/no public bio yet/i)).toBeNull();
+  });
+
   it("renders a loading state while leaderboard data is being fetched", () => {
     renderView({ isLoading: true });
 

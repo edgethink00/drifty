@@ -1332,6 +1332,100 @@ describe("App leaderboard participation", () => {
     expect(compactRefreshStatus?.closest(".capture-recency--error")).toBeNull();
   });
 
+  it("ignores a late profile response after the viewer switches to another leaderboard member", async () => {
+    const firstProfile = createDeferred<{
+      success: boolean;
+      error: null;
+      data: {
+        public_id: string;
+        display_name: string;
+        bio: string;
+        avatar_url: string;
+        website_url: string;
+        github_url: string;
+        linkedin_url: string;
+        focus_seconds_7d: number;
+        rank: number;
+        updated_at: string;
+      };
+    }>();
+    const secondProfile = createDeferred<{
+      success: boolean;
+      error: null;
+      data: {
+        public_id: string;
+        display_name: string;
+        bio: string;
+        avatar_url: string;
+        website_url: string;
+        github_url: string;
+        linkedin_url: string;
+        focus_seconds_7d: number;
+        rank: number;
+        updated_at: string;
+      };
+    }>();
+    const firstRow = { ...makeLeaderboardRow("weekly"), public_id: "profile-first", display_name: "First", rank: 1 };
+    const secondRow = { ...makeLeaderboardRow("weekly"), public_id: "profile-second", display_name: "Second", rank: 2 };
+    getTimeline.mockResolvedValue([]);
+    fetchGlobalLeaderboard.mockResolvedValue({ success: true, error: null, data: [firstRow, secondRow] });
+    fetchPublicProfile
+      .mockReturnValueOnce(firstProfile.promise)
+      .mockReturnValueOnce(secondProfile.promise);
+
+    render(<App />);
+    await openSocialLeaderboard();
+
+    fireEvent.click(await screen.findByRole("button", { name: /view first profile/i }));
+    const firstDialog = await screen.findByRole("dialog", { name: "First" });
+    fireEvent.click(within(firstDialog).getByRole("button", { name: /close profile/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /view second profile/i }));
+
+    await act(async () => {
+      secondProfile.resolve({
+        success: true,
+        error: null,
+        data: {
+          public_id: "profile-second",
+          display_name: "Second",
+          bio: "Second profile bio",
+          avatar_url: "",
+          website_url: "",
+          github_url: "",
+          linkedin_url: "",
+          focus_seconds_7d: 3600,
+          rank: 2,
+          updated_at: new Date().toISOString(),
+        },
+      });
+    });
+    expect(await screen.findByText("Second profile bio")).toBeTruthy();
+
+    await act(async () => {
+      firstProfile.resolve({
+        success: true,
+        error: null,
+        data: {
+          public_id: "profile-first",
+          display_name: "First",
+          bio: "First profile bio",
+          avatar_url: "",
+          website_url: "",
+          github_url: "",
+          linkedin_url: "",
+          focus_seconds_7d: 3600,
+          rank: 1,
+          updated_at: new Date().toISOString(),
+        },
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole("dialog", { name: "Second" })).toBeTruthy();
+    expect(screen.getByText("Second profile bio")).toBeTruthy();
+    expect(screen.queryByText("First profile bio")).toBeNull();
+  });
+
   it("renders remote rankings before local focus totals finish", async () => {
     const deferredTimeline = createDeferred<ActivitySegment[]>();
     getTimeline.mockReset().mockReturnValue(deferredTimeline.promise);

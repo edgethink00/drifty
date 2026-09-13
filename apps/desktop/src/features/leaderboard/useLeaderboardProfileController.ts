@@ -420,6 +420,7 @@ export function useLeaderboardProfileController({
   const [selectedPublicProfile, setSelectedPublicProfile] = useState<PublicProfile | null>(null);
   const [selectedProfileLoading, setSelectedProfileLoading] = useState(false);
   const [selectedProfileError, setSelectedProfileError] = useState<string | null>(null);
+  const selectedProfileRequestRef = useRef(0);
   const [leaderboardSegments, setLeaderboardSegments] = useState<ActivitySegment[]>([]);
   const [leaderboardLocalMetricsStatus, setLeaderboardLocalMetricsStatus] = useState<"loading" | "ready" | "error">("loading");
   const leaderboardRefreshRequestRef = useRef(0);
@@ -447,6 +448,10 @@ export function useLeaderboardProfileController({
   classificationAvailabilityStateRef.current = classificationAvailabilityState;
   const classificationAvailabilityReasonRef = useRef(classificationAvailabilityReason);
   classificationAvailabilityReasonRef.current = classificationAvailabilityReason;
+
+  useEffect(() => () => {
+    selectedProfileRequestRef.current += 1;
+  }, []);
 
   const classificationAssessmentReadyRef = useRef(classificationAssessmentReady);
   const classificationAssessmentRevisionRef = useRef(0);
@@ -1077,9 +1082,11 @@ export function useLeaderboardProfileController({
   const closeProfileEditor = useCallback(() => setIsProfileEditorOpen(false), []);
 
   const closeSelectedProfile = useCallback(() => {
+    selectedProfileRequestRef.current += 1;
     setSelectedLeaderboardRow(null);
     setSelectedPublicProfile(null);
     setSelectedProfileError(null);
+    setSelectedProfileLoading(false);
   }, []);
 
   const handleLeaderboardOptIn = useCallback(async () => {
@@ -1426,6 +1433,7 @@ export function useLeaderboardProfileController({
   );
 
   const handleSelectLeaderboardProfile = useCallback(async (row: LeaderboardRow) => {
+    const requestId = ++selectedProfileRequestRef.current;
     setSelectedLeaderboardRow(row);
     setSelectedPublicProfile(null);
     setSelectedProfileError(null);
@@ -1438,15 +1446,17 @@ export function useLeaderboardProfileController({
     setSelectedProfileLoading(true);
     try {
       const result = await fetchPublicProfile(row.public_id, row.period);
+      if (selectedProfileRequestRef.current !== requestId) return;
       if (!result.success) {
         setSelectedProfileError(result.error ?? "Unable to load profile");
         return;
       }
       setSelectedPublicProfile(result.data ?? null);
     } catch (nextError) {
+      if (selectedProfileRequestRef.current !== requestId) return;
       setSelectedProfileError(toErrorMessage(nextError));
     } finally {
-      setSelectedProfileLoading(false);
+      if (selectedProfileRequestRef.current === requestId) setSelectedProfileLoading(false);
     }
   }, []);
 

@@ -229,6 +229,26 @@
   line-height: 1.5;
 }
 
+.profile-modal__bio--loading {
+  align-items: center;
+  display: flex;
+  min-height: 1.21875rem;
+}
+
+/* A static placeholder preserves the empty-bio line box without adding another
+   animation to a modal that is already entering. */
+.profile-modal__bio-placeholder {
+  background: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  border-radius: var(--radius-pill);
+  display: block;
+  height: 0.5rem;
+  width: min(10.5rem, 55%);
+}
+
+.profile-modal__bio--error {
+  color: var(--warn);
+}
+
 .profile-modal__bio:has(+ .profile-socials) {
   margin-bottom: var(--space-3);
 }
