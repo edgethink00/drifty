@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   DEVICE_SYNC_FAILURE_BACKOFF_MS,
   DEVICE_SYNC_MIN_CYCLE_INTERVAL_MS,
+  DEVICE_SYNC_TRANSIENT_BACKOFF_BASE_MS,
   DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY,
   DEVICE_SYNC_STATE_STORAGE_KEY,
   clearPendingDeviceSyncAccountReset,
   findDeviceSyncCycleRecord,
+  getDeviceSyncFailureBackoffMs,
+  getDeviceSyncNextAutomaticAttemptAt,
   hasPendingDeviceSyncAccountReset,
   markDeviceSyncAccountResetPending,
   readPendingDeviceSyncAccountReset,
@@ -42,6 +45,7 @@ describe("shouldRunDeviceSyncCycle", () => {
       lastAttemptAt: new Date(NOW.getTime() - 60_000).toISOString(),
       lastSuccessAt: null,
       lastErrorAt: new Date(NOW.getTime() - DEVICE_SYNC_FAILURE_BACKOFF_MS + 1_000).toISOString(),
+      lastErrorHttpStatus: 402,
     };
     expect(shouldRunDeviceSyncCycle({ record, now: NOW, reason: "interval" })).toEqual({
       shouldRun: false,
@@ -55,8 +59,40 @@ describe("shouldRunDeviceSyncCycle", () => {
       lastAttemptAt: new Date(NOW.getTime() - DEVICE_SYNC_FAILURE_BACKOFF_MS - 1_000).toISOString(),
       lastSuccessAt: null,
       lastErrorAt: new Date(NOW.getTime() - DEVICE_SYNC_FAILURE_BACKOFF_MS - 1_000).toISOString(),
+      lastErrorHttpStatus: 402,
     };
     expect(shouldRunDeviceSyncCycle({ record, now: NOW, reason: "interval" }).shouldRun).toBe(true);
+  });
+
+  it("retries transient failures exponentially and caps the delay", () => {
+    const record = {
+      userScopeKey: "user-1",
+      lastAttemptAt: NOW.toISOString(),
+      lastSuccessAt: null,
+      lastErrorAt: NOW.toISOString(),
+      consecutiveFailureCount: 4,
+      lastErrorCode: "client_error",
+      lastErrorHttpStatus: null,
+      lastErrorLockedReason: null,
+    };
+    expect(getDeviceSyncFailureBackoffMs(record)).toBe(DEVICE_SYNC_TRANSIENT_BACKOFF_BASE_MS * 8);
+    expect(getDeviceSyncFailureBackoffMs({ ...record, consecutiveFailureCount: 99 })).toBe(DEVICE_SYNC_FAILURE_BACKOFF_MS);
+    expect(getDeviceSyncNextAutomaticAttemptAt(record)).toBe(
+      new Date(NOW.getTime() + DEVICE_SYNC_TRANSIENT_BACKOFF_BASE_MS * 8).toISOString(),
+    );
+  });
+
+  it("holds permanent and rate-limited failures at the maximum automatic delay", () => {
+    const record = {
+      userScopeKey: "user-1",
+      lastAttemptAt: NOW.toISOString(),
+      lastSuccessAt: null,
+      lastErrorAt: NOW.toISOString(),
+      consecutiveFailureCount: 1,
+    };
+    expect(getDeviceSyncFailureBackoffMs({ ...record, lastErrorHttpStatus: 402 })).toBe(DEVICE_SYNC_FAILURE_BACKOFF_MS);
+    expect(getDeviceSyncFailureBackoffMs({ ...record, lastErrorHttpStatus: 429 })).toBe(DEVICE_SYNC_FAILURE_BACKOFF_MS);
+    expect(getDeviceSyncFailureBackoffMs({ ...record, lastErrorCode: "sync_paused" })).toBe(DEVICE_SYNC_FAILURE_BACKOFF_MS);
   });
 
   it("skips rapid-fire triggers inside the minimum interval", () => {

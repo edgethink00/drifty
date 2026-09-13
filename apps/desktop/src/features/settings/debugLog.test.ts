@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
 import type { ContextualGuardAuditEvent } from "../classification/contextualGuardAuditLog";
 import type { AiDebugLogInput, EnhancedContextDebugEvent } from "./debugLog";
-import { buildDebugLogPayload } from "./debugLog";
+import { buildDebugLogPayload, buildDeviceSyncDebugSummary } from "./debugLog";
 
 const driftAlarm: DriftAlarmTrayStatus = {
   enabled: true,
@@ -59,6 +59,72 @@ const baseAiDebug: AiDebugLogInput = {
     summary: null,
   },
 };
+
+describe("buildDeviceSyncDebugSummary", () => {
+  it("exports operational state without account, device, or raw error values", () => {
+    const rawDeviceId = "11111111-2222-3333-4444-555555555555";
+    const rawAccountScope = "private-account-scope";
+    const rawServerError = "request failed for private@example.test";
+    const summary = buildDeviceSyncDebugSummary({
+      featureVisible: true,
+      optedIn: true,
+      gateActive: true,
+      accountResetPending: false,
+      gates: {
+        accountScopeReady: true,
+        cloudOnline: true,
+        supabaseConfigured: true,
+        signedIn: true,
+        billingEligible: true,
+      },
+      status: {
+        enabled: true,
+        deviceId: rawDeviceId,
+        lastPushedAt: "2026-09-13T01:00:00.000Z",
+        lastPulledAt: "2026-09-13T01:01:00.000Z",
+        pendingPushCount: 7,
+        backfill: { totalSeq: 20, pushedSeq: 5 },
+        lastError: rawServerError,
+        lastErrorCode: "sync_generation_mismatch",
+        lastErrorHttpStatus: 409,
+        lastErrorLockedReason: "private value that must be sanitized",
+      },
+      cycleRecord: {
+        userScopeKey: rawAccountScope,
+        lastAttemptAt: "2026-09-13T01:02:00.000Z",
+        lastSuccessAt: null,
+        lastErrorAt: "2026-09-13T01:02:00.000Z",
+        consecutiveFailureCount: 2,
+        lastErrorCode: "sync_generation_mismatch",
+        lastErrorHttpStatus: 409,
+        lastErrorLockedReason: "payment_required",
+      },
+    });
+
+    expect(summary).toMatchObject({
+      runtime: {
+        hasDeviceIdentity: true,
+        pendingPushCount: 7,
+        backfill: { totalSeq: 20, pushedSeq: 5, completionRatio: 0.25 },
+        error: {
+          present: true,
+          code: "sync_generation_mismatch",
+          httpStatus: 409,
+          lockedReason: "unknown",
+        },
+      },
+      pacing: {
+        consecutiveFailureCount: 2,
+        nextAutomaticAttemptAt: "2026-09-13T01:17:00.000Z",
+      },
+    });
+    const exported = JSON.stringify(summary);
+    expect(exported).not.toContain(rawDeviceId);
+    expect(exported).not.toContain(rawAccountScope);
+    expect(exported).not.toContain(rawServerError);
+    expect(exported).not.toContain("private value");
+  });
+});
 
 const driftAlarmDebugEvent: DriftAlarmDebugEvent = {
   id: "2026-06-13T15:05:00.000Z:fresh_candidate_result:test",

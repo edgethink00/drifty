@@ -71,6 +71,8 @@ describe("Korean translations", () => {
   it("describes raw history against public and AI boundaries, not as always local", () => {
     expect(KOREAN_TRANSLATIONS["settings.privacy.rawChip"]).toBe("원본 기록은 공개 안 함");
     expect(KOREAN_TRANSLATIONS["settings.aiPrivacy.rawLocal"]).toContain("AI 제공업체에 전송하지 않음");
+    expect(KOREAN_TRANSLATIONS["settings.account.syncDescription"]).toMatch(/Pro 이용이 끝나면.*60일.*삭제/);
+    expect(KOREAN_TRANSLATIONS["settings.account.deleteCloudDescription"]).toMatch(/각 기기에 저장된 활동은 그대로/);
   });
 
   it("keeps Korean account-deletion claims aligned with actual deletion and retention behavior", () => {

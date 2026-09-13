@@ -549,6 +549,23 @@ export function AccountSettingsSection({
                 </button>
               </div>
             </div>
+          ) : isSignedIn ? (
+            <div className="settings-row settings-row--stacked-action">
+              <div>
+                <div className="lbl">{t("settings.account.cloudCopy")}</div>
+                <div className="desc">{t("settings.account.deleteCloudDescription")}</div>
+              </div>
+              <div className="ctrl">
+                <button
+                  type="button"
+                  className="settings-btn danger"
+                  onClick={() => void onPurgeDeviceSyncData?.()}
+                  disabled={!onPurgeDeviceSyncData || deviceSyncPurging}
+                >
+                  {deviceSyncPurging ? t("settings.account.deleting") : t("settings.account.deleteCloud")}
+                </button>
+              </div>
+            </div>
           ) : null}
         </div>
       ) : null}

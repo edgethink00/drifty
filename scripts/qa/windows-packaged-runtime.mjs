@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { createServer } from "node:http";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -158,6 +159,75 @@ export function requireManagedAiLoopbackEndpoint(baseUrl, expectedPort = MANAGED
 
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function closeServer(server) {
+  if (!server?.listening) return;
+  await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+}
+
+async function startDeviceSyncTransportProbe() {
+  const challengeNonce = randomUUID();
+  const bearerToken = `drifty-device-sync-qa-bearer-${randomUUID()}`;
+  const apikey = `drifty-device-sync-qa-apikey-${randomUUID()}`;
+  const requestBody = {
+    action: "devices",
+    accountId: "packaged-runtime-qa",
+    challengeNonce,
+  };
+  let resolveObservation;
+  const observation = new Promise((resolve) => { resolveObservation = resolve; });
+  const server = createServer((request, response) => {
+    const chunks = [];
+    let byteLength = 0;
+    request.on("data", (chunk) => {
+      byteLength += chunk.length;
+      if (byteLength > 1024 * 1024) request.destroy(new Error("Device sync QA probe exceeded one MiB."));
+      else chunks.push(chunk);
+    });
+    request.on("end", () => {
+      let parsedBody = null;
+      try {
+        parsedBody = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      } catch {
+        // The observation below records the malformed body without retaining it.
+      }
+      const result = {
+        methodPost: request.method === "POST",
+        pathMatched: request.url === "/functions/v1/sync-activity",
+        contentTypeJson: String(request.headers["content-type"] ?? "").toLowerCase().startsWith("application/json"),
+        bearerTokenMatched: request.headers.authorization === `Bearer ${bearerToken}`,
+        apiKeyMatched: request.headers.apikey === apikey,
+        bodyMatched: parsedBody?.action === requestBody.action
+          && parsedBody?.accountId === requestBody.accountId
+          && parsedBody?.challengeNonce === requestBody.challengeNonce,
+      };
+      const responseBody = JSON.stringify({ ok: true, challengeNonce });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(responseBody);
+      resolveObservation({ ...result, responseBody });
+    });
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  const address = server.address();
+  if (!address || typeof address === "string" || address.address !== "127.0.0.1") {
+    await closeServer(server);
+    throw new Error("Device sync QA transport probe did not bind to IPv4 loopback.");
+  }
+  return {
+    server,
+    observation,
+    request: {
+      url: `http://127.0.0.1:${address.port}/functions/v1/sync-activity`,
+      bearerToken,
+      apikey,
+      bodyJson: requestBody,
+      timeoutMs: 30_000,
+    },
+  };
 }
 
 function appendError(existing, addition) {
@@ -610,7 +680,7 @@ async function writeEvidence(evidencePath, value) {
 
 function makeResult(options) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     passed: false,
     startedAtUtc: new Date().toISOString(),
     completedAtUtc: null,
@@ -678,6 +748,27 @@ function makeResult(options) {
       platformIsWindows: false,
       installIdStable: false,
     },
+    deviceSyncRuntime: {
+      nativeHttp: {
+        loopbackOnly: false,
+        requestObserved: false,
+        methodPost: false,
+        pathMatched: false,
+        contentTypeJson: false,
+        bearerTokenMatched: false,
+        apiKeyMatched: false,
+        bodyMatched: false,
+        responseStatusMatched: false,
+        responseBodyMatched: false,
+      },
+      trackerBridge: {
+        stateRead: false,
+        stateWriteRead: false,
+        stateRestored: false,
+        emptyOutboxRead: false,
+        pendingDeletionsRead: false,
+      },
+    },
     managedLocalAi: {
       modelId: options.modelId,
       alreadyInstalled: false,
@@ -720,6 +811,7 @@ async function runQa(options) {
   let appProcess = null;
   let cdp = null;
   let credentialMutationStarted = false;
+  let deviceSyncProbeServer = null;
 
   try {
     result.harness.sha256 = await sha256File(fileURLToPath(import.meta.url));
@@ -885,6 +977,75 @@ async function runQa(options) {
       throw new Error("Cloud device identity was not stable or did not report the Windows platform.");
     }
 
+    const transportProbe = await startDeviceSyncTransportProbe();
+    deviceSyncProbeServer = transportProbe.server;
+    result.deviceSyncRuntime.nativeHttp.loopbackOnly = true;
+    try {
+      const nativeResponse = await cdp.invoke("cloud_sync_http_post", { request: transportProbe.request }, 45_000);
+      const observed = await transportProbe.observation;
+      result.deviceSyncRuntime.nativeHttp = {
+        loopbackOnly: true,
+        requestObserved: true,
+        methodPost: observed.methodPost,
+        pathMatched: observed.pathMatched,
+        contentTypeJson: observed.contentTypeJson,
+        bearerTokenMatched: observed.bearerTokenMatched,
+        apiKeyMatched: observed.apiKeyMatched,
+        bodyMatched: observed.bodyMatched,
+        responseStatusMatched: nativeResponse?.status === 200,
+        responseBodyMatched: nativeResponse?.body === observed.responseBody,
+      };
+      if (!Object.values(result.deviceSyncRuntime.nativeHttp).every(Boolean)) {
+        throw new Error("Windows native device sync HTTP transport did not preserve the expected request and response contract.");
+      }
+    } finally {
+      await closeServer(deviceSyncProbeServer);
+      deviceSyncProbeServer = null;
+    }
+
+    const trackerProbe = await cdp.evaluate(`
+      (async () => {
+        const invoke = window.__TAURI_INTERNALS__.invoke;
+        // Tracker sync metadata deliberately accepts only the sync_ namespace.
+        // Keep this task-owned probe inside that contract so the write/read
+        // assertion exercises persistence instead of an expected rejection.
+        const key = "sync_packaged_runtime_qa_probe";
+        const sentinel = ${JSON.stringify(`drifty-device-sync-qa-${randomUUID()}`)};
+        const before = await invoke("tracker_get_sync_state", {});
+        if (!before || typeof before.state !== "object" || before.state === null) {
+          throw new Error("tracker_get_sync_state returned an invalid payload");
+        }
+        const original = typeof before.state[key] === "string" ? before.state[key] : null;
+        let stateWriteRead = false;
+        let stateRestored = false;
+        let emptyOutboxRead = false;
+        let pendingDeletionsRead = false;
+        try {
+          await invoke("tracker_set_sync_state", { query: { entries: { [key]: sentinel } } });
+          const afterWrite = await invoke("tracker_get_sync_state", {});
+          stateWriteRead = afterWrite?.state?.[key] === sentinel;
+          const outbox = await invoke("tracker_get_sync_outbox", {
+            query: { afterSeq: Number.MAX_SAFE_INTEGER, limit: 1, hotGraceSeconds: 0 }
+          });
+          emptyOutboxRead = Array.isArray(outbox?.items) && outbox.items.length === 0
+            && Number.isSafeInteger(outbox?.counterSeq) && Number.isSafeInteger(outbox?.pendingCount);
+          const deletions = await invoke("tracker_get_pending_sync_deletions", { query: { limit: 1 } });
+          pendingDeletionsRead = Array.isArray(deletions);
+        } finally {
+          await invoke("tracker_set_sync_state", { query: { entries: { [key]: original } } });
+          const afterRestore = await invoke("tracker_get_sync_state", {});
+          stateRestored = original === null
+            ? !Object.prototype.hasOwnProperty.call(afterRestore?.state ?? {}, key)
+            : afterRestore?.state?.[key] === original;
+        }
+        return { stateRead: true, stateWriteRead, stateRestored, emptyOutboxRead, pendingDeletionsRead };
+      })()
+    `, 60_000);
+    result.deviceSyncRuntime.trackerBridge = trackerProbe;
+    if (!Object.values(result.deviceSyncRuntime.trackerBridge).every(Boolean)) {
+      throw new Error("Windows packaged tracker did not satisfy the device sync bridge contract or restore its QA state.");
+    }
+
     const catalog = await cdp.invoke("managed_ai_catalog");
     if (!Array.isArray(catalog) || catalog.filter((model) => model?.id === options.modelId).length !== 1) {
       throw new Error(`Managed local AI catalog does not contain model ${options.modelId}.`);
@@ -1004,6 +1165,14 @@ async function runQa(options) {
   } catch (error) {
     result.error = redactEvidenceText(error instanceof Error ? error.message : String(error));
   } finally {
+    if (deviceSyncProbeServer) {
+      try {
+        await closeServer(deviceSyncProbeServer);
+      } catch (error) {
+        result.passed = false;
+        result.error = appendError(result.error, `Device sync transport probe cleanup also failed: ${error.message}`);
+      }
+    }
     if (credentialMutationStarted && cdp) {
       try {
         const restoreOutcome = await restoreCredential(cdp);

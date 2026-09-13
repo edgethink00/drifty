@@ -165,6 +165,10 @@ export function useDeviceSyncController({
             lastAttemptAt: attemptAt,
             lastSuccessAt: new Date().toISOString(),
             lastErrorAt: null,
+            consecutiveFailureCount: 0,
+            lastErrorCode: null,
+            lastErrorHttpStatus: null,
+            lastErrorLockedReason: null,
           }),
         );
         if (deviceLabelById.size === 0 || result.pulledCount > 0) {
@@ -176,7 +180,16 @@ export function useDeviceSyncController({
       } catch (error) {
         if (!isScopeCurrent()) return;
         const message = error instanceof Error ? error.message : String(error);
-        setStatus((previous) => ({ ...previous, enabled: true, lastError: message }));
+        const httpError = error instanceof DeviceSyncHttpError ? error : null;
+        const lastErrorCode = httpError?.code ?? (error instanceof Error ? "client_error" : "unknown_error");
+        setStatus((previous) => ({
+          ...previous,
+          enabled: true,
+          lastError: message,
+          lastErrorCode,
+          lastErrorHttpStatus: httpError?.status ?? null,
+          lastErrorLockedReason: httpError?.lockedReason ?? null,
+        }));
         if (
           error instanceof DeviceSyncHttpError
           && (error.code === "sync_paused" || error.code === "sync_generation_mismatch")
@@ -189,6 +202,10 @@ export function useDeviceSyncController({
             lastAttemptAt: attemptAt,
             lastSuccessAt: record?.lastSuccessAt ?? null,
             lastErrorAt: new Date().toISOString(),
+            consecutiveFailureCount: (record?.consecutiveFailureCount ?? 0) + 1,
+            lastErrorCode,
+            lastErrorHttpStatus: httpError?.status ?? null,
+            lastErrorLockedReason: httpError?.lockedReason ?? null,
           }),
         );
         console.warn("device sync cycle failed", error);

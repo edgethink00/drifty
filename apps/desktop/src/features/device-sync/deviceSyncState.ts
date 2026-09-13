@@ -6,7 +6,9 @@ import type { DeviceSyncCycleReason } from "./deviceSyncTypes";
 // auto-publish state machine (leaderboardAutoPublishState.ts).
 export const DEVICE_SYNC_STATE_STORAGE_KEY = "drifty.deviceSync.state.v1";
 export const DEVICE_SYNC_ACCOUNT_RESET_PENDING_STORAGE_KEY = "drifty.deviceSync.accountResetPending.v1";
+/** Maximum and permanent-failure automatic retry delay. Manual retries bypass it. */
 export const DEVICE_SYNC_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
+export const DEVICE_SYNC_TRANSIENT_BACKOFF_BASE_MS = 60 * 1000;
 export const DEVICE_SYNC_MIN_CYCLE_INTERVAL_MS = 60 * 1000;
 
 export type DeviceSyncCycleRecord = {
@@ -14,6 +16,11 @@ export type DeviceSyncCycleRecord = {
   readonly lastAttemptAt: string;
   readonly lastSuccessAt: string | null;
   readonly lastErrorAt: string | null;
+  /** Optional for compatibility with records written by earlier builds. */
+  readonly consecutiveFailureCount?: number;
+  readonly lastErrorCode?: string | null;
+  readonly lastErrorHttpStatus?: number | null;
+  readonly lastErrorLockedReason?: string | null;
 };
 
 export type DeviceSyncCycleDecision = {
@@ -35,6 +42,20 @@ function nullableString(value: unknown): string | null | undefined {
   return undefined;
 }
 
+function optionalNullableString(value: unknown): string | null | undefined {
+  return value === undefined ? undefined : nullableString(value);
+}
+
+function optionalNullableHttpStatus(value: unknown): number | null | undefined {
+  if (value === undefined || value === null) return value;
+  return Number.isInteger(value) && Number(value) >= 100 && Number(value) <= 599 ? Number(value) : undefined;
+}
+
+function optionalFailureCount(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  return Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
+}
+
 function parseRecord(value: unknown): DeviceSyncCycleRecord | null {
   if (typeof value !== "object" || value === null) return null;
   if (!("userScopeKey" in value) || !("lastAttemptAt" in value) || !("lastSuccessAt" in value) || !("lastErrorAt" in value)) {
@@ -42,15 +63,32 @@ function parseRecord(value: unknown): DeviceSyncCycleRecord | null {
   }
   const lastSuccessAt = nullableString(value.lastSuccessAt);
   const lastErrorAt = nullableString(value.lastErrorAt);
+  const consecutiveFailureCount = optionalFailureCount("consecutiveFailureCount" in value ? value.consecutiveFailureCount : undefined);
+  const lastErrorCode = optionalNullableString("lastErrorCode" in value ? value.lastErrorCode : undefined);
+  const lastErrorHttpStatus = optionalNullableHttpStatus("lastErrorHttpStatus" in value ? value.lastErrorHttpStatus : undefined);
+  const lastErrorLockedReason = optionalNullableString("lastErrorLockedReason" in value ? value.lastErrorLockedReason : undefined);
   if (
     typeof value.userScopeKey !== "string" ||
     typeof value.lastAttemptAt !== "string" ||
     lastSuccessAt === undefined ||
-    lastErrorAt === undefined
+    lastErrorAt === undefined ||
+    ("consecutiveFailureCount" in value && consecutiveFailureCount === undefined) ||
+    ("lastErrorCode" in value && lastErrorCode === undefined) ||
+    ("lastErrorHttpStatus" in value && lastErrorHttpStatus === undefined) ||
+    ("lastErrorLockedReason" in value && lastErrorLockedReason === undefined)
   ) {
     return null;
   }
-  return { userScopeKey: value.userScopeKey, lastAttemptAt: value.lastAttemptAt, lastSuccessAt, lastErrorAt };
+  return {
+    userScopeKey: value.userScopeKey,
+    lastAttemptAt: value.lastAttemptAt,
+    lastSuccessAt,
+    lastErrorAt,
+    ...(consecutiveFailureCount === undefined ? {} : { consecutiveFailureCount }),
+    ...(lastErrorCode === undefined ? {} : { lastErrorCode }),
+    ...(lastErrorHttpStatus === undefined ? {} : { lastErrorHttpStatus }),
+    ...(lastErrorLockedReason === undefined ? {} : { lastErrorLockedReason }),
+  };
 }
 
 function parseStoredRecords(value: string | null): readonly DeviceSyncCycleRecord[] {
@@ -121,7 +159,8 @@ export function shouldRunDeviceSyncCycle({
   }
   const nowMs = now.getTime();
   const lastErrorMs = toTimestamp(record.lastErrorAt);
-  if (lastErrorMs !== null && nowMs - lastErrorMs < DEVICE_SYNC_FAILURE_BACKOFF_MS) {
+  const failureBackoffMs = getDeviceSyncFailureBackoffMs(record);
+  if (lastErrorMs !== null && nowMs - lastErrorMs < failureBackoffMs) {
     return { shouldRun: false, reason: "failure_backoff" };
   }
   const lastAttemptMs = toTimestamp(record.lastAttemptAt);
@@ -129,6 +168,33 @@ export function shouldRunDeviceSyncCycle({
     return { shouldRun: false, reason: "too_soon" };
   }
   return { shouldRun: true, reason: "due" };
+}
+
+export function getDeviceSyncFailureBackoffMs(record: DeviceSyncCycleRecord): number {
+  if (!record.lastErrorAt) return 0;
+  const status = record.lastErrorHttpStatus;
+  const code = record.lastErrorCode;
+  const isRetryableHttp = status === null
+    || status === undefined
+    || status === 408
+    || status === 425
+    || status === 429
+    || (typeof status === "number" && status >= 500);
+  const isStoppedState = code === "sync_paused" || code === "sync_generation_mismatch" || code === "sync_account_changed";
+  if (!isRetryableHttp || isStoppedState || status === 429) return DEVICE_SYNC_FAILURE_BACKOFF_MS;
+  const failureCount = Math.max(1, record.consecutiveFailureCount ?? 1);
+  return Math.min(
+    DEVICE_SYNC_FAILURE_BACKOFF_MS,
+    DEVICE_SYNC_TRANSIENT_BACKOFF_BASE_MS * (2 ** Math.min(failureCount - 1, 8)),
+  );
+}
+
+export function getDeviceSyncNextAutomaticAttemptAt(record: DeviceSyncCycleRecord | null): string | null {
+  if (!record) return null;
+  const lastErrorMs = toTimestamp(record.lastErrorAt);
+  if (lastErrorMs !== null) return new Date(lastErrorMs + getDeviceSyncFailureBackoffMs(record)).toISOString();
+  const lastAttemptMs = toTimestamp(record.lastAttemptAt);
+  return lastAttemptMs === null ? null : new Date(lastAttemptMs + DEVICE_SYNC_MIN_CYCLE_INTERVAL_MS).toISOString();
 }
 
 export function clearDeviceSyncCycleRecordsForUser(userScopeKey: string): void {

@@ -54,8 +54,8 @@ async function postSyncAction<TResponse>(
   if (!sessionAccountId || sessionAccountId !== expectedAccountId) {
     throw new DeviceSyncHttpError(409, "The signed-in account changed during device sync.", null, "sync_account_changed");
   }
-  const cloudDevice = await readCloudDevicePayload();
-  if (!cloudDevice) {
+  const cloudDevice = action === "purge" ? null : await readCloudDevicePayload();
+  if (action !== "purge" && !cloudDevice) {
     throw new Error("Device identity is unavailable.");
   }
 
@@ -66,7 +66,12 @@ async function postSyncAction<TResponse>(
       url: `${supabaseUrl}/functions/v1/${SYNC_EDGE_FUNCTION}`,
       bearerToken: accessToken,
       apikey: anonKey,
-      bodyJson: { ...extra, action, accountId: expectedAccountId, cloudDevice },
+      bodyJson: {
+        ...extra,
+        action,
+        accountId: expectedAccountId,
+        ...(cloudDevice ? { cloudDevice } : {}),
+      },
       timeoutMs: SYNC_HTTP_TIMEOUT_MS,
     },
   });
@@ -104,10 +109,10 @@ export async function pushSyncBatch(
 
 export async function purgeCloudSyncData(
   expectedAccountId: string,
-  expectedSyncGeneration: number,
+  expectedSyncGeneration?: number,
 ): Promise<SyncPurgeResponse> {
   return postSyncAction<SyncPurgeResponse>("purge", expectedAccountId, {
-    expectedSyncGeneration,
+    ...(expectedSyncGeneration === undefined ? {} : { expectedSyncGeneration }),
   });
 }
 

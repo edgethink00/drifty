@@ -259,8 +259,10 @@ import { useSshAgentSourceSyncController } from "./features/dev-signals/useSshAg
 import {
   clearDeviceSyncCycleRecordsForUser,
   clearPendingDeviceSyncAccountReset,
+  findDeviceSyncCycleRecord,
   hasPendingDeviceSyncAccountReset,
   markDeviceSyncAccountResetPending,
+  readDeviceSyncCycleRecords,
   readPendingDeviceSyncAccountReset,
 } from "./features/device-sync/deviceSyncState";
 import {
@@ -2040,13 +2042,10 @@ export default function App() {
       const purgeOperationGeneration = deviceSyncToggleGenerationRef.current + 1;
       deviceSyncToggleGenerationRef.current = purgeOperationGeneration;
       setDeviceSyncEnabled(false);
-      const accountState = await fetchSyncDevices(purgeAccountId);
-      if (
-        deviceSyncAccountIdRef.current !== purgeAccountId
-        || deviceSyncToggleGenerationRef.current !== purgeOperationGeneration
-      ) return;
       await trackerClient.setSyncState({ [SYNC_GENERATION_KEY]: null });
-      const purge = await purgeCloudSyncData(purgeAccountId, accountState.syncGeneration);
+      // Purge must not depend on the paid devices endpoint: an expired Pro
+      // account still owns its cloud copy and can delete it immediately.
+      const purge = await purgeCloudSyncData(purgeAccountId);
       if (deviceSyncAccountIdRef.current !== purgeAccountId) return;
       if (deviceSyncToggleGenerationRef.current !== purgeOperationGeneration) {
         // The cloud deletion still happened. Reconcile its local copy even if
@@ -8899,10 +8898,25 @@ export default function App() {
           summary: aiClassificationUsage,
         },
       },
+      deviceSync: {
+        featureVisible: deviceSyncFeatureVisible,
+        optedIn: deviceSyncEnabled,
+        gateActive: deviceSyncActive,
+        accountResetPending: deviceSyncAccountResetPending,
+        gates: {
+          accountScopeReady: deviceSyncAccountId !== null && deviceSyncPreferenceOwnerId === deviceSyncAccountId,
+          cloudOnline: isCloudOnline,
+          supabaseConfigured: isSupabaseConfigured,
+          signedIn: isPolicySignedIn,
+          billingEligible: billingEntitlement?.canUseApp === true,
+        },
+        status: deviceSyncStatus,
+        cycleRecord: findDeviceSyncCycleRecord(readDeviceSyncCycleRecords(), deviceSyncUserScopeKey),
+      },
       error,
     });
     setDebugLogPreview({ text: JSON.stringify(payload, null, 2), exportedAt: payload.exportedAt });
-  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devModeEnabled, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
+  }, [accessibilityGranted, aiClassificationUsage, aiClassificationUsageDay, aiConnectionStatus, appThemeColorOverrides, billingEntitlement, billingEntitlementError, billingEntitlementLoading, canUseCloudAiClassification, categoryColorOverrides, classificationActionLoading, classificationSummary, devDeviceSyncPreviewEnabled, devModeEnabled, deviceSyncAccountId, deviceSyncAccountResetPending, deviceSyncActive, deviceSyncEnabled, deviceSyncFeatureVisible, deviceSyncPreferenceOwnerId, deviceSyncStatus, deviceSyncUserScopeKey, driftAlarmTrayStatus, effectiveEnhancedContextSettings, error, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, hasRequiredAccountAuth, hasSelectedAiClassificationProvider, historySegments, isCloudOnline, isPolicySignedIn, isSupabaseConfigured, leaderboardSegments, localAiClassificationOptions, localAiConnectionPersistentFailure, localAiConnectionProviderLabel, localAiProviderStatus, segments, selectedClassificationRoute, selectedDay, startOfDayMinutes, startOfWeek, status, theme]);
   const handleDownloadDebugLogs = useCallback(() => {
     if (!debugLogPreview) return;
     const blob = new Blob([debugLogPreview.text], { type: "application/json" });

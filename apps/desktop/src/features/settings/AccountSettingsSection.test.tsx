@@ -577,6 +577,26 @@ describe("AccountSettingsSection organization seat", () => {
     openUrlMock.mockResolvedValue(undefined);
   });
 
+  it("keeps owner cloud deletion available when device sync is off or Pro access has expired", () => {
+    const onPurgeDeviceSyncData = vi.fn();
+    render(
+      <AccountSettingsSection
+        {...accountProps({
+          billingEntitlementLockedReason: "billing_missing",
+          billingEntitlementStatus: "locked",
+          deviceSyncEnabled: false,
+          onDeviceSyncEnabledChange: vi.fn(),
+          onPurgeDeviceSyncData,
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/cloud copy is kept for 60 days/i)).toBeTruthy();
+    expect(screen.getByText(/Activity saved on your devices stays there/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Delete cloud copy$/i }));
+    expect(onPurgeDeviceSyncData).toHaveBeenCalledTimes(1);
+  });
+
   it("renders an individual entitlement as a personal plan with no organization row or seat management", () => {
     render(<AccountSettingsSection {...accountProps({ billingEntitlement: individualEntitlement })} />);
 

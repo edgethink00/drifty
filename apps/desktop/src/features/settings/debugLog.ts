@@ -6,6 +6,8 @@ import type { AiClassificationSummary, AiClassificationUsageSummary } from "../c
 import type { ContentContextDropReason } from "../classification/contentContextEgressPolicy";
 import type { ContextualGuardAuditEvent } from "../classification/contextualGuardAuditLog";
 import type { DriftAlarmDebugEvent } from "../companion/driftAlarmDebugLog";
+import { getDeviceSyncNextAutomaticAttemptAt, type DeviceSyncCycleRecord } from "../device-sync/deviceSyncState";
+import type { DeviceSyncStatus } from "../device-sync/deviceSyncTypes";
 import { DEFAULT_ENHANCED_CONTEXT_SETTINGS, ENHANCED_CONTEXT_SOURCE_FAMILY_OPTIONS } from "./settingsStorage";
 import type {
   AppThemeColorOverrides,
@@ -237,7 +239,24 @@ type BuildDebugLogPayloadInput = {
   readonly historySegments: readonly ActivitySegment[];
   readonly leaderboardSegments: readonly ActivitySegment[];
   readonly ai: AiDebugLogInput;
+  readonly deviceSync?: DeviceSyncDebugInput;
   readonly error: string | null;
+};
+
+export type DeviceSyncDebugInput = {
+  readonly featureVisible: boolean;
+  readonly optedIn: boolean;
+  readonly gateActive: boolean;
+  readonly accountResetPending: boolean;
+  readonly gates: {
+    readonly accountScopeReady: boolean;
+    readonly cloudOnline: boolean;
+    readonly supabaseConfigured: boolean;
+    readonly signedIn: boolean;
+    readonly billingEligible: boolean;
+  };
+  readonly status: DeviceSyncStatus;
+  readonly cycleRecord: DeviceSyncCycleRecord | null;
 };
 
 export type AiDebugLogInput = {
@@ -368,6 +387,7 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
       recentEvents: input.contextualGuardAuditEvents ?? [],
     },
     enhancedContext,
+    deviceSync: buildDeviceSyncDebugSummary(input.deviceSync),
     ai: buildAiDebugSummary(input.ai),
     counts: {
       todaySegments: input.segments.length,
@@ -376,6 +396,54 @@ export function buildDebugLogPayload(input: BuildDebugLogPayloadInput) {
     },
     error: input.error,
   };
+}
+
+export function buildDeviceSyncDebugSummary(input: DeviceSyncDebugInput | null | undefined) {
+  if (!input) return null;
+  const { status, cycleRecord } = input;
+  const totalSeq = status.backfill?.totalSeq ?? 0;
+  const pushedSeq = status.backfill?.pushedSeq ?? 0;
+  return {
+    featureVisible: input.featureVisible,
+    optedIn: input.optedIn,
+    gateActive: input.gateActive,
+    accountResetPending: input.accountResetPending,
+    gates: input.gates,
+    runtime: {
+      enabled: status.enabled,
+      hasDeviceIdentity: Boolean(status.deviceId),
+      lastPushedAt: status.lastPushedAt,
+      lastPulledAt: status.lastPulledAt,
+      pendingPushCount: status.pendingPushCount,
+      backfill: status.backfill
+        ? {
+            totalSeq,
+            pushedSeq,
+            completionRatio: totalSeq <= 0 ? 1 : ratio(Math.min(pushedSeq, totalSeq), totalSeq),
+          }
+        : null,
+      error: {
+        present: status.lastError !== null,
+        code: sanitizeDeviceSyncDiagnosticToken(status.lastErrorCode),
+        httpStatus: status.lastErrorHttpStatus,
+        lockedReason: sanitizeDeviceSyncDiagnosticToken(status.lastErrorLockedReason),
+      },
+    },
+    pacing: cycleRecord
+      ? {
+          lastAttemptAt: cycleRecord.lastAttemptAt,
+          lastSuccessAt: cycleRecord.lastSuccessAt,
+          lastErrorAt: cycleRecord.lastErrorAt,
+          consecutiveFailureCount: cycleRecord.consecutiveFailureCount ?? (cycleRecord.lastErrorAt ? 1 : 0),
+          nextAutomaticAttemptAt: getDeviceSyncNextAutomaticAttemptAt(cycleRecord),
+        }
+      : null,
+  };
+}
+
+function sanitizeDeviceSyncDiagnosticToken(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return /^[a-z][a-z0-9_]{0,63}$/u.test(value) ? value : "unknown";
 }
 
 export function buildEnhancedContextDebugSummary(input: EnhancedContextDebugInput | null | undefined): EnhancedContextDebugSummary {

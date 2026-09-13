@@ -13,6 +13,10 @@ export type DeviceSyncStatus = {
   readonly pendingPushCount: number;
   readonly backfill: DeviceSyncBackfillProgress | null;
   readonly lastError: string | null;
+  /** Stable, privacy-safe support code; unlike lastError it carries no server prose. */
+  readonly lastErrorCode: string | null;
+  readonly lastErrorHttpStatus: number | null;
+  readonly lastErrorLockedReason: string | null;
 };
 
 export const IDLE_DEVICE_SYNC_STATUS: DeviceSyncStatus = {
@@ -23,6 +27,9 @@ export const IDLE_DEVICE_SYNC_STATUS: DeviceSyncStatus = {
   pendingPushCount: 0,
   backfill: null,
   lastError: null,
+  lastErrorCode: null,
+  lastErrorHttpStatus: null,
+  lastErrorLockedReason: null,
 };
 
 export type DeviceSyncCycleReason = "startup" | "interval" | "focus" | "visibility" | "manual";
@@ -52,7 +59,7 @@ export type SyncDevicesResponse = {
 };
 
 export type SyncPurgeResponse = {
-  readonly deviceId: string;
+  readonly deviceId: string | null;
   readonly syncGeneration: number;
   readonly syncStatus: "paused";
   readonly purgedSegments: number | null;

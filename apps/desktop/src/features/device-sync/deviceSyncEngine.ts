@@ -157,6 +157,9 @@ export async function runSyncPushCycle(deps: DeviceSyncEngineDeps, _reason: Devi
       pushedSeq: afterSeq,
     },
     lastError: null,
+    lastErrorCode: null,
+    lastErrorHttpStatus: null,
+    lastErrorLockedReason: null,
   };
 }
 
