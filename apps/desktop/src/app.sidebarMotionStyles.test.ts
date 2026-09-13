@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readAppStyles } from "./test/readStyles";
 
@@ -217,6 +219,7 @@ describe("sidebar motion styles", () => {
     expect(navLabelMotionBlock).not.toMatch(/transition:[^;]*(?:width|max-width|padding|margin)/);
     expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("visibility: hidden;");
     expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("transition: none;");
+    expect(cssBlock(styles, ".sidebar--collapsed .sidebar-cta-slot-wrap")).toContain("margin: 0;");
     expect(cssBlock(styles, ".sidebar--collapsed .live-pill .k")).toContain("width: 8px;");
     expect(collapsedToggleRule(styles)).toContain("height: 2.25rem;");
     expect(collapsedToggleRule(styles)).toContain("sidebar-collapsed-toggle-ride");
@@ -224,6 +227,19 @@ describe("sidebar motion styles", () => {
     expect(collapsedNavItemBlock).toContain("justify-content: flex-start;");
     expect(collapsedNavItemBlock).toContain("width: 100%;");
     expect(collapsedNavItemBlock).toContain("padding: 0 10px;");
+  });
+
+
+  it("lets the CTA glow sit in a wrap bleed instead of clipping at the card edge", () => {
+    const styles = readFileSync(resolve("src/features/sidebar/SidebarCtaSlot.css"), "utf8");
+    const wrap = cssBlock(styles, ".sidebar-cta-slot-wrap");
+    const tone = cssBlock(styles, ".sidebar-cta-slot[data-tone]");
+
+    expect(wrap).toContain("margin: -12px;");
+    expect(wrap).toContain("padding: 12px;");
+    expect(wrap).toContain("overflow-x: clip;");
+    expect(tone).toContain("0 6px 14px");
+    expect(tone).not.toContain("0 10px 24px");
   });
 
   it("keeps the settings sidebar column the same width as the dashboard sidebar", () => {

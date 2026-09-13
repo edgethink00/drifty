@@ -13,8 +13,16 @@
  * grows the card instead of squeezing the space above the action.
  */
 .sidebar-cta-slot-wrap {
+  /* The coloured shadow is larger than the card. Horizontal clip still has to
+     stay so the pinned-width card does not poke out while the rail collapses,
+     so the wrap grows a 12px bleed: same layout slot, room for the quieter
+     14px glow on the left and right. Vertical overflow stays visible because
+     the foot already has gap above the tracker. */
   position: relative;
-  width: 100%;
+  box-sizing: border-box;
+  width: calc(100% + 24px);
+  margin: -12px;
+  padding: 12px;
   overflow-x: clip;
   overflow-y: visible;
 }
@@ -136,7 +144,7 @@
 .sidebar-cta-slot[data-tone="billing"] {
   --cta-tone-fill: var(--warn-soft);
   --cta-tone-glow: var(--warn-wash);
-  --cta-tone-strength: 30%;
+  --cta-tone-strength: 18%;
 }
 
 .sidebar-cta-slot[data-tone="upgrade"],
@@ -144,13 +152,13 @@
 .sidebar-cta-slot[data-tone="download"] {
   --cta-tone-fill: var(--accent-soft);
   --cta-tone-glow: var(--accent-wash);
-  --cta-tone-strength: 34%;
+  --cta-tone-strength: 20%;
 }
 
 .sidebar-cta-slot[data-tone="device"] {
   --cta-tone-fill: var(--gold-soft);
   --cta-tone-glow: var(--gold-wash);
-  --cta-tone-strength: 30%;
+  --cta-tone-strength: 18%;
 }
 
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone="ai"],
@@ -177,10 +185,10 @@
      ~90% floor where the canvas starts greying the pastel out. Dark canvases
      show the same alpha more strongly, so they run two points higher. */
   --cta-surface-alpha: 95%;
-  --cta-shadow-ambient: 16%;
-  --cta-shadow-contact: 9%;
-  --cta-shadow-ambient-hover: 21%;
-  --cta-shadow-contact-hover: 12%;
+  --cta-shadow-ambient: 8%;
+  --cta-shadow-contact: 5%;
+  --cta-shadow-ambient-hover: 11%;
+  --cta-shadow-contact-hover: 7%;
   --cta-inset-strength: 62%;
   --cta-surface: color-mix(
     in srgb,
@@ -189,23 +197,23 @@
   );
   background: var(--cta-surface);
   box-shadow:
-    0 10px 24px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient), transparent),
-    0 2px 7px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-contact), transparent),
+    0 6px 14px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-ambient), transparent),
+    0 1px 4px color-mix(in srgb, var(--cta-tone-glow) var(--cta-shadow-contact), transparent),
     inset 0 1px 0 color-mix(in srgb, white var(--cta-inset-strength), transparent);
 }
 
 .sidebar-cta-slot[data-alert="critical"] {
-  --cta-shadow-ambient: 20%;
-  --cta-shadow-contact: 12%;
-  --cta-shadow-ambient-hover: 25%;
-  --cta-shadow-contact-hover: 15%;
+  --cta-shadow-ambient: 10%;
+  --cta-shadow-contact: 6%;
+  --cta-shadow-ambient-hover: 13%;
+  --cta-shadow-contact-hover: 8%;
 }
 
 .sidebar-cta-slot[data-alert="warn"] {
-  --cta-shadow-ambient: 17%;
-  --cta-shadow-contact: 11%;
-  --cta-shadow-ambient-hover: 21%;
-  --cta-shadow-contact-hover: 13%;
+  --cta-shadow-ambient: 9%;
+  --cta-shadow-contact: 6%;
+  --cta-shadow-ambient-hover: 11%;
+  --cta-shadow-contact-hover: 7%;
 }
 
 .sidebar-cta-slot[data-tone]::before {
@@ -426,25 +434,25 @@
 :root[data-theme="dark"] .sidebar-cta-slot[data-tone] {
   --cta-tone-fill-strength: 34%;
   --cta-surface-alpha: 97%;
-  --cta-shadow-ambient: 8%;
-  --cta-shadow-contact: 5%;
-  --cta-shadow-ambient-hover: 12%;
-  --cta-shadow-contact-hover: 7%;
+  --cta-shadow-ambient: 4%;
+  --cta-shadow-contact: 3%;
+  --cta-shadow-ambient-hover: 6%;
+  --cta-shadow-contact-hover: 4%;
   --cta-inset-strength: 4.5%;
 }
 
 :root[data-theme="dark"] .sidebar-cta-slot[data-alert="critical"] {
-  --cta-shadow-ambient: 13%;
-  --cta-shadow-contact: 8%;
-  --cta-shadow-ambient-hover: 17%;
-  --cta-shadow-contact-hover: 10%;
+  --cta-shadow-ambient: 7%;
+  --cta-shadow-contact: 4%;
+  --cta-shadow-ambient-hover: 9%;
+  --cta-shadow-contact-hover: 5%;
 }
 
 :root[data-theme="dark"] .sidebar-cta-slot[data-alert="warn"] {
-  --cta-shadow-ambient: 11%;
-  --cta-shadow-contact: 7%;
-  --cta-shadow-ambient-hover: 14%;
-  --cta-shadow-contact-hover: 9%;
+  --cta-shadow-ambient: 6%;
+  --cta-shadow-contact: 4%;
+  --cta-shadow-ambient-hover: 7%;
+  --cta-shadow-contact-hover: 5%;
 }
 
 @media (prefers-reduced-motion: reduce) {
