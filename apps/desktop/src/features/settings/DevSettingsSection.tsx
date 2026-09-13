@@ -59,6 +59,7 @@ import {
 
 type DevSettingsSectionProps = {
   readonly activeSubsection: DevSettingsSubsection;
+  readonly onSubsectionChange: (subsection: DevSettingsSubsection) => void;
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
   readonly sidebarCtaPreviewCase: SidebarCtaPreviewCase | null;
@@ -134,6 +135,7 @@ type DevSettingsSectionProps = {
 
 export function DevSettingsSection({
   activeSubsection,
+  onSubsectionChange,
   dashboardAiUnavailablePreview,
   dashboardAiUnavailablePreviewCase,
   sidebarCtaPreviewCase,
@@ -235,7 +237,7 @@ export function DevSettingsSection({
   const driftHuntCarryTiers = resolvePetModeDriftCursorReturnTiers(driftHuntSettings);
 
   useEffect(() => {
-    if (activeSubsection !== "petCompanion") return undefined;
+    if (activeSubsection !== "lab") return undefined;
 
     let disposed = false;
     let unlisten: (() => void) | null = null;
@@ -301,11 +303,54 @@ export function DevSettingsSection({
   const subsectionTitle = t(activeSubsectionOption.labelKey);
 
   return (
-    <div data-setting-id={`dev-${activeSubsection}`} className="settings-section settings-section--dev" aria-labelledby="dev-settings-page-title">
+    <div data-setting-id={`dev-${activeSubsection}`} className="settings-section settings-section--dev" aria-labelledby="dev-settings-subsection-title">
       <header className="dev-settings-page-header">
-        <h2 id="dev-settings-page-title">{subsectionTitle}</h2>
+        <div>
+          <h2 id="dev-settings-page-title">Dev</h2>
+          <h3 id="dev-settings-subsection-title">{subsectionTitle}</h3>
+        </div>
+        <div className="dev-settings-tabs" role="tablist" aria-label={t("settings.dev.subsectionsLabel")}>
+          {DEV_SETTINGS_SUBSECTIONS.map((subsection, index) => (
+            <button
+              key={subsection.id}
+              id={`dev-settings-tab-${subsection.id}`}
+              type="button"
+              role="tab"
+              className={`dev-settings-tab${activeSubsection === subsection.id ? " is-active" : ""}`}
+              aria-selected={activeSubsection === subsection.id}
+              aria-controls="dev-settings-tabpanel"
+              tabIndex={activeSubsection === subsection.id ? 0 : -1}
+              onClick={() => onSubsectionChange(subsection.id)}
+              onKeyDown={(event) => {
+                const lastIndex = DEV_SETTINGS_SUBSECTIONS.length - 1;
+                const nextIndex = event.key === "ArrowRight"
+                  ? (index + 1) % DEV_SETTINGS_SUBSECTIONS.length
+                  : event.key === "ArrowLeft"
+                    ? (index - 1 + DEV_SETTINGS_SUBSECTIONS.length) % DEV_SETTINGS_SUBSECTIONS.length
+                    : event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? lastIndex
+                        : null;
+                if (nextIndex === null) return;
+                event.preventDefault();
+                const nextSubsection = DEV_SETTINGS_SUBSECTIONS[nextIndex];
+                onSubsectionChange(nextSubsection.id);
+                document.getElementById(`dev-settings-tab-${nextSubsection.id}`)?.focus();
+              }}
+            >
+              {t(subsection.labelKey)}
+            </button>
+          ))}
+        </div>
       </header>
 
+      <div
+        id="dev-settings-tabpanel"
+        className="dev-settings-tabpanel"
+        role="tabpanel"
+        aria-labelledby={`dev-settings-tab-${activeSubsection}`}
+      >
       {activeSubsection === "diagnostics" ? (
         <>
           <DevSettingsDebugLogsBlock onOpenDebugLogs={onOpenDebugLogs} />
@@ -336,7 +381,7 @@ export function DevSettingsSection({
         </>
       ) : null}
 
-      {activeSubsection === "petCompanion" ? (
+      {activeSubsection === "lab" ? (
         <>
           <div className="settings-block settings-block--dev-preview">
             <h3>Pet Mode Lab</h3>
@@ -367,35 +412,37 @@ export function DevSettingsSection({
               <div className="lbl">Motion</div>
               <div className="desc">Choose the experimental renderer used by fast intervention travel.</div>
             </div>
-            <div className="pet-mode-lab__experiment-policy" data-active={petModeRunBetaEnabled}>
-              <span>
-                <strong className="settings-label-with-badge" id={fastRunLabelId}>
-                  {t("settings.pet.fastRun")} <span className="status-badge status-badge--beta">{t("common.beta")}</span>
-                </strong>
-                <small id={fastRunDescriptionId}>{t("settings.pet.fastRunDescription")}</small>
-              </span>
-              <Toggle
-                checked={petModeRunBetaEnabled}
-                disabled={!petModeEnabled}
-                onChange={onPetModeRunBetaEnabledChange}
-                ariaLabel={t("settings.pet.toggleFastRun")}
-                ariaDescribedBy={`${fastRunLabelId} ${fastRunDescriptionId}`}
-              />
-            </div>
-            <div className="pet-mode-lab__experiment-policy" data-active={danceOnCloseBetaEnabled}>
-              <span>
-                <strong className="settings-label-with-badge" id="dance-on-close-beta-label">
-                  Dance on close <span className="status-badge status-badge--beta">Beta</span>
-                </strong>
-                <small id="dance-on-close-beta-desc">Celebrates with a 4-beat dance after closing a distracting window</small>
-              </span>
-              <Toggle
-                checked={danceOnCloseBetaEnabled}
-                disabled={!petModeEnabled}
-                onChange={updateDanceOnCloseBeta}
-                ariaLabel="Toggle Dance on close beta"
-                ariaDescribedBy="dance-on-close-beta-label dance-on-close-beta-desc"
-              />
+            <div className="pet-mode-lab__target-stack">
+              <div className="pet-mode-lab__experiment-policy" data-active={petModeRunBetaEnabled}>
+                <span>
+                  <strong className="settings-label-with-badge" id={fastRunLabelId}>
+                    {t("settings.pet.fastRun")} <span className="status-badge status-badge--beta">{t("common.beta")}</span>
+                  </strong>
+                  <small id={fastRunDescriptionId}>{t("settings.pet.fastRunDescription")}</small>
+                </span>
+                <Toggle
+                  checked={petModeRunBetaEnabled}
+                  disabled={!petModeEnabled}
+                  onChange={onPetModeRunBetaEnabledChange}
+                  ariaLabel={t("settings.pet.toggleFastRun")}
+                  ariaDescribedBy={`${fastRunLabelId} ${fastRunDescriptionId}`}
+                />
+              </div>
+              <div className="pet-mode-lab__experiment-policy" data-active={danceOnCloseBetaEnabled}>
+                <span>
+                  <strong className="settings-label-with-badge" id="dance-on-close-beta-label">
+                    Dance on close <span className="status-badge status-badge--beta">Beta</span>
+                  </strong>
+                  <small id="dance-on-close-beta-desc">Celebrates with a 4-beat dance after closing a distracting window</small>
+                </span>
+                <Toggle
+                  checked={danceOnCloseBetaEnabled}
+                  disabled={!petModeEnabled}
+                  onChange={updateDanceOnCloseBeta}
+                  ariaLabel="Toggle Dance on close beta"
+                  ariaDescribedBy="dance-on-close-beta-label dance-on-close-beta-desc"
+                />
+              </div>
             </div>
           </div>
           <div className="pet-mode-lab__row">
@@ -496,8 +543,8 @@ export function DevSettingsSection({
                 <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Center drop. Temporary screen-center placement" title="Temporary screen-center placement, then use Walk to verify resident Y" disabled={isPetModeLabActionDisabled("intervention")} onClick={onPlacePetModeCenter}>Center drop</button>
                 <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Browser tab X. Latest observed tab" title="Move to the latest observed tab X and verify paw contact" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeBrowserTabClose}>Browser tab X</button>
                 <button type="button" className="settings-btn pet-mode-lab__action" aria-label="Intercept card. Show the card a caught cat produces" title="Shows the card that appears when the cat is caught before its paw lands, without needing to win the grab first. Nothing is closed." onClick={onRehearsePetModeIntercept}>Intercept card</button>
-                <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
                 <button type="button" className={`settings-btn pet-mode-lab__action${petModeGuidesEnabled ? " is-active" : ""}`} aria-label="Guide lines. Toggle feet contact, drop calibration, live drop preview, and AX obstacle status" title="Toggle feet contact line (93pt), calibration guides, live drop preview, and AX FREE or BUTTON OVERLAP status on the pet overlay" onClick={onTogglePetModeGuides}>Guide lines</button>
+                <button type="button" className="settings-btn pet-mode-lab__action pet-mode-lab__action--warning" aria-label="Drifty window X. Closes this window" title="Closes this window" disabled={petModeLabTargetBusy} onClick={onPreviewPetModeDriftyWindowClose}>Drifty window X</button>
               </div>
               <PetModeHuntRange
                 label="하단집"
@@ -603,17 +650,10 @@ export function DevSettingsSection({
               </div>
             </div>
           </div>
-          <DevSettingsCompanionPillBlock
-            floatingEnabled={floatingCompanionDevEnabled}
-            onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
-            onPreviewMilestone={onPreviewCompanionMilestone}
-            onPreviewMoment={onPreviewCompanionMoment}
-            onPreviewDayReview={onPreviewCompanionDayReview}
-          />
         </>
       ) : null}
 
-      {activeSubsection === "featureFlags" ? (
+      {activeSubsection === "flags" ? (
         <div className="settings-block settings-block--dev-preview">
           <h3 className="settings-block__title-with-badge" aria-label="Product preview flags">
             <span>Product preview flags</span>
@@ -654,10 +694,19 @@ export function DevSettingsSection({
             <Toggle checked={agentsBetaEnabled} onChange={onAgentsBetaChange} ariaLabel="Toggle Your Agents beta" />
           </div>
         </div>
+        <div className="settings-row">
+          <div>
+            <div className="lbl">AI availability gate rollback</div>
+            <div className="desc">Disable the provider-readiness gate and restore legacy built-in classification behavior for diagnosis.</div>
+          </div>
+          <div className="ctrl">
+            <Toggle checked={aiAvailabilityGateDevDisabled} onChange={onAiAvailabilityGateDevDisabledChange} ariaLabel="Disable AI availability gate" />
+          </div>
+        </div>
         </div>
       ) : null}
 
-      {activeSubsection === "aiCapture" ? (
+      {activeSubsection === "diagnostics" ? (
         <>
           <SettingsCollapsibleCard title="Enhanced context dogfood">
             <DevSettingsEnhancedContextBlock settings={enhancedContextSettings} onDebugLoggingChange={onEnhancedContextDebugLoggingChange} onSourceFamilyChange={onEnhancedContextSourceFamilyChange} />
@@ -667,6 +716,18 @@ export function DevSettingsSection({
             projectClassificationCorrectionsBusy={projectClassificationCorrectionsBusy}
             projectPassRuns={projectPassRuns}
             onRevertProjectClassificationCorrection={onRevertProjectClassificationCorrection}
+          />
+        </>
+      ) : null}
+
+      {activeSubsection === "previews" ? (
+        <>
+          <DevSettingsCompanionPillBlock
+            floatingEnabled={floatingCompanionDevEnabled}
+            onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}
+            onPreviewMilestone={onPreviewCompanionMilestone}
+            onPreviewMoment={onPreviewCompanionMoment}
+            onPreviewDayReview={onPreviewCompanionDayReview}
           />
           {AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED ? (
             <div className="settings-block settings-block--dev-preview">
@@ -679,42 +740,17 @@ export function DevSettingsSection({
                   </div>
                 </div>
                 <div className="ctrl settings-row__actions">
-                  <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="AI unavailable preview cases">
-                    {DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS.map((option) => (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className={`settings-mode-option${dashboardAiUnavailablePreviewCase === option.id ? " is-active" : ""}`}
-                        role="radio"
-                        aria-checked={dashboardAiUnavailablePreviewCase === option.id}
-                        onClick={() => onDashboardAiUnavailablePreviewCaseChange(option.id)}
-                      >
-                        <span>{option.label}</span>
-                        <small>{option.detail}</small>
-                      </button>
-                    ))}
-                  </div>
+                  <select className="settings-select dev-preview-select" aria-label="AI unavailable preview cases" value={dashboardAiUnavailablePreviewCase} onChange={(event) => onDashboardAiUnavailablePreviewCaseChange(event.target.value as DashboardAiUnavailablePreviewCase)}>
+                    {DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+                  </select>
                   <button type="button" className="settings-btn settings-btn--primary" onClick={onPreviewDashboardAiUnavailableCase}>Preview 3 days ago</button>
                   {dashboardAiUnavailablePreview ? <button type="button" className="settings-btn" onClick={onClearDashboardAiUnavailablePreview}>Clear preview</button> : null}
                 </div>
               </div>
             </div>
           ) : null}
-        </>
-      ) : null}
-
-      {activeSubsection === "uiFlows" ? (
         <div className="settings-block settings-block--dev-preview">
           <h3>Flow previews</h3>
-        <div className="settings-row">
-          <div>
-            <div className="lbl">AI availability gate rollback</div>
-            <div className="desc">Disable the provider-readiness gate and restore legacy built-in classification behavior for diagnosis.</div>
-          </div>
-          <div className="ctrl">
-            <Toggle checked={aiAvailabilityGateDevDisabled} onChange={onAiAvailabilityGateDevDisabledChange} ariaLabel="Disable AI availability gate" />
-          </div>
-        </div>
         <div className="settings-row">
           <div>
             <div className="lbl">Startup loading screen</div>
@@ -747,24 +783,10 @@ export function DevSettingsSection({
             </div>
           </div>
           <div className="ctrl settings-row__actions">
-            <div className="settings-mode-switch settings-mode-switch--quad" role="radiogroup" aria-label="Sidebar CTA preview cases">
-              {SIDEBAR_CTA_PREVIEW_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  className={`settings-mode-option${sidebarCtaPreviewCase === option.id ? " is-active" : ""}`}
-                  role="radio"
-                  aria-checked={sidebarCtaPreviewCase === option.id}
-                  onClick={() => onSidebarCtaPreviewCaseChange(sidebarCtaPreviewCase === option.id ? null : option.id)}
-                >
-                  <span>{option.label}</span>
-                  <small>{option.detail}</small>
-                </button>
-              ))}
-            </div>
-            {sidebarCtaPreviewCase ? (
-              <button type="button" className="settings-btn" onClick={() => onSidebarCtaPreviewCaseChange(null)}>Clear preview</button>
-            ) : null}
+            <select className="settings-select dev-preview-select" aria-label="Sidebar CTA preview cases" value={sidebarCtaPreviewCase ?? ""} onChange={(event) => onSidebarCtaPreviewCaseChange(event.target.value ? event.target.value as SidebarCtaPreviewCase : null)}>
+              <option value="">Live state</option>
+              {SIDEBAR_CTA_PREVIEW_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}
+            </select>
           </div>
         </div>
         {REPLAY_ONBOARDING_DEV_TOOL_ENABLED ? (
@@ -790,7 +812,9 @@ export function DevSettingsSection({
           </>
         ) : null}
         </div>
+        </>
       ) : null}
+      </div>
     </div>
   );
 }

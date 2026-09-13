@@ -1,11 +1,8 @@
 import { SettingsSearch } from "./SettingsSearch";
 import { PetIcon } from "../../components/PetIcon";
 import { useLocalization } from "../localization/LocalizationContext";
-import { Fragment, useRef, useState } from "react";
-import {
-  DEV_SETTINGS_SUBSECTIONS,
-  type DevSettingsSubsection,
-} from "./devSettingsNavigation";
+import { useRef, useState } from "react";
+import type { DevSettingsSubsection } from "./devSettingsNavigation";
 
 export const DRIFTY_DISCORD_INVITE_URL = "https://discord.gg/NxcubTe2KD";
 
@@ -117,11 +114,9 @@ function ExternalLinkIcon() {
 
 export function SettingsSidebar({
   activeSection,
-  activeDevSubsection = "diagnostics",
   isCollapsed,
   showDevSection,
   onBack,
-  onDevSubsectionChange = () => undefined,
   onSectionChange,
   onSendFeedback,
 }: SettingsSidebarProps) {
@@ -172,44 +167,18 @@ export function SettingsSidebar({
               {group.items.map((item) => {
                 const label = t(item.labelKey);
                 const isActive = activeSection === item.id;
-                const showsDevSubnav = item.id === "dev" && isActive && !isCollapsed;
                 return (
-                  <Fragment key={item.id}>
-                    <button
+                    <button key={item.id}
                       type="button"
-                      aria-controls={showsDevSubnav ? "settings-dev-subnav" : undefined}
-                      aria-current={isActive && (item.id !== "dev" || isCollapsed) ? "page" : undefined}
-                      aria-expanded={item.id === "dev" && !isCollapsed ? showsDevSubnav : undefined}
-                      className={`settings-nav-item${isActive ? " on" : ""}${item.id === "dev" ? " settings-nav-item--dev-parent" : ""}`}
+                      aria-current={isActive ? "page" : undefined}
+                      className={`settings-nav-item${isActive ? " on" : ""}`}
                       data-rail-label={label.slice(0, 1)}
                       onClick={() => onSectionChange(item.id)}
                     >
                       <span className="settings-nav-item__icon" aria-hidden="true"><SettingsSectionIcon section={item.id} /></span>
                       <span className="settings-nav-item__label">{label}</span>
-                      {item.id === "dev" ? <span className="settings-nav-item__chevron" aria-hidden="true" /> : null}
                       {isCollapsed ? <span className="nav-item__hover-label" aria-hidden="true">{label}</span> : null}
                     </button>
-                    {showsDevSubnav ? (
-                      <div id="settings-dev-subnav" className="settings-dev-subnav" role="group" aria-label={t("settings.dev.subsectionsLabel")}>
-                        {DEV_SETTINGS_SUBSECTIONS.map((subsection) => {
-                          const subsectionLabel = t(subsection.labelKey);
-                          const isCurrent = activeDevSubsection === subsection.id;
-                          return (
-                            <button
-                              key={subsection.id}
-                              type="button"
-                              aria-current={isCurrent ? "page" : undefined}
-                              className={`settings-nav-subitem${isCurrent ? " on" : ""}`}
-                              onClick={() => onDevSubsectionChange(subsection.id)}
-                              onFocus={(event) => event.currentTarget.scrollIntoView?.({ block: "nearest", inline: "nearest" })}
-                            >
-                              <span>{subsectionLabel}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : null}
-                  </Fragment>
                 );
               })}
             </div>

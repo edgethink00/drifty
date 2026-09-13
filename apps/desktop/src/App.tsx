@@ -131,6 +131,7 @@ import { PermissionsSettingsSection } from "./features/settings/PermissionsSetti
 import { SettingsSidebar, type SettingsSection } from "./features/settings/SettingsSidebar";
 import {
   DEV_SETTINGS_SUBSECTION_STORAGE_KEY,
+  resolveDevSettingsReviewSubsection,
   resolveDevSettingsSubsection,
   type DevSettingsSubsection,
 } from "./features/settings/devSettingsNavigation";
@@ -552,6 +553,7 @@ function managedLocalAiTopbarLabel(status: ManagedLocalAiStatus | null): string 
 
 export default function App() {
   const localization = useLocalizationController();
+  const devSettingsReviewSubsection = resolveDevSettingsReviewSubsection(window.location.search);
   useEffect(() => {
     readContextualGuardAuditEvents();
   }, []);
@@ -566,7 +568,13 @@ export default function App() {
   }, []);
   const contentRef = useRef<HTMLElement>(null);
   const previousSurfaceAnalyticsKeyRef = useRef<string | null>(null);
-  const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>({ entries: [{ tabId: "dashboard", dashPeriod: "Today" }], index: 0 });
+  const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryState>(() => ({
+    entries: [{
+      tabId: devSettingsReviewSubsection ? "settings" : "dashboard",
+      dashPeriod: "Today",
+    }],
+    index: 0,
+  }));
   const activeSnapshot = navigationHistory.entries[navigationHistory.index] ?? { tabId: "dashboard", dashPeriod: "Today" };
   const rawActiveTab = activeSnapshot.tabId;
   const activeTab = rawActiveTab === "profile" ? "leaderboard" : rawActiveTab;
@@ -636,9 +644,12 @@ export default function App() {
   const [classificationCorrectionDraft, setClassificationCorrectionDraft] = useState<ClassificationCorrectionDraft | null>(null);
   const [classificationCorrectionNotice, setClassificationCorrectionNotice] = useState<ClassificationCorrectionNotice | null>(null);
   const [classificationCorrectionSaving, setClassificationCorrectionSaving] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>(
+    devSettingsReviewSubsection ? "dev" : "general",
+  );
   const [devSettingsSubsection, setDevSettingsSubsection] = useState(() => (
-    resolveDevSettingsSubsection(window.localStorage.getItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY))
+    devSettingsReviewSubsection
+      ?? resolveDevSettingsSubsection(window.localStorage.getItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY))
   ));
   const handleDevSettingsSubsectionChange = useCallback((subsection: DevSettingsSubsection) => {
     setDevSettingsSubsection(subsection);
@@ -702,7 +713,7 @@ export default function App() {
   const [manualUpdateNoticeVisible, setManualUpdateNoticeVisible] = useState(false);
   const [latestBuildNoticeVisible, setLatestBuildNoticeVisible] = useState(false);
   const [devModeEnabled, setDevModeEnabled] = useState(
-    () => isDevOnboardingBypassEnabled() || resolveInitialDevModeEnabled(),
+    () => devSettingsReviewSubsection !== null || isDevOnboardingBypassEnabled() || resolveInitialDevModeEnabled(),
   );
   const [teamsBetaEnabled, setTeamsBetaEnabled] = useState(resolveInitialTeamsBetaEnabled);
   const [profileBetaEnabled, setProfileBetaEnabled] = useState(resolveInitialProfileBetaEnabled);
@@ -1244,7 +1255,7 @@ export default function App() {
       setPetModeLabInputBounds(null);
       return;
     }
-    if (activeTab !== "settings" || settingsSection !== "dev" || devSettingsSubsection !== "petCompanion") return;
+    if (activeTab !== "settings" || settingsSection !== "dev" || devSettingsSubsection !== "lab") return;
     let disposed = false;
     const refresh = () => {
       void getNativePetInputBounds().then((bounds) => {
@@ -4508,15 +4519,18 @@ export default function App() {
   }, [devWebAccountPreviewEnabled]);
 
   useEffect(() => {
+    if (devSettingsReviewSubsection) return;
     window.localStorage.setItem(DEV_SETTINGS_SUBSECTION_STORAGE_KEY, devSettingsSubsection);
-  }, [devSettingsSubsection]);
+  }, [devSettingsReviewSubsection, devSettingsSubsection]);
 
   // Leaving the Projects tab visible after the preview is switched off would strand
   // the user on a hidden surface — send them back to the dashboard.
 
   useEffect(() => {
     const effectiveDevModeEnabled = DEV_SETTINGS_ENABLED && devModeEnabled;
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
+    if (!devSettingsReviewSubsection) {
+      window.localStorage.setItem(DEV_MODE_STORAGE_KEY, effectiveDevModeEnabled ? "1" : "0");
+    }
     if (effectiveDevModeEnabled) return;
     if (settingsSection === "dev") setSettingsSection("general");
     if (teamsBetaEnabled) setTeamsBetaEnabled(false);
@@ -4531,7 +4545,7 @@ export default function App() {
     // The pet is deliberately absent here. It is a production feature now, so
     // turning Dev mode off must leave it exactly as the user set it; only the
     // Pet Mode Lab is gated behind Dev.
-  }, [devModeEnabled, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
+  }, [devModeEnabled, devSettingsReviewSubsection, devWebAccountPreviewEnabled, floatingCompanionDevEnabled, forceBrowserHistoryUrlFallbackEnabled, forceChromiumAxCaptureEnabled, forceChromiumAxExtremeNudgeEnabled, forceFrontmostFallbackCaptureEnabled, agentsBetaEnabled, profileBetaEnabled, settingsSection, teamsBetaEnabled]);
 
   useEffect(() => {
     window.localStorage.setItem(FLOATING_COMPANION_DEV_STORAGE_KEY, floatingCompanionDevActive ? "1" : "0");
@@ -8376,6 +8390,11 @@ export default function App() {
   }, [user?.id]);
 
   useEffect(() => {
+    if (devSettingsReviewSubsection) {
+      setOnboardingOpen(false);
+      return;
+    }
+
     if (isDevOnboardingBypassEnabled()) {
       setOnboardingOpen(false);
       return;
@@ -8412,7 +8431,7 @@ export default function App() {
     }
 
     setOnboardingOpen(!hasCompletedUserOnboarding("local"));
-  }, [authStatus, hasRequiredAccountAuth, isEffectiveAuthRequired, profileReadyUserId, user?.id]);
+  }, [authStatus, devSettingsReviewSubsection, hasRequiredAccountAuth, isEffectiveAuthRequired, profileReadyUserId, user?.id]);
 
   function handleOnboardingComplete(state: UserOnboardingState) {
     const displayName = state.displayName.trim();
@@ -10244,6 +10263,7 @@ export default function App() {
                 {settingsSection === "dev" && DEV_SETTINGS_ENABLED && devModeEnabled && (
                   <DevSettingsSection
                     activeSubsection={devSettingsSubsection}
+                    onSubsectionChange={handleDevSettingsSubsectionChange}
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
                     dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
                     sidebarCtaPreviewCase={sidebarCtaPreviewCase}

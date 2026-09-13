@@ -11,6 +11,7 @@ export function renderProductionDevSettings(
 ) {
   const props = {
     activeSubsection: "diagnostics" as const,
+    onSubsectionChange: vi.fn(),
     aiAvailabilityGateDevDisabled: false,
     dashboardAiUnavailablePreview: null,
     dashboardAiUnavailablePreviewCase: "connect-ai",

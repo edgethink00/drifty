@@ -5,6 +5,7 @@ import {
   type CompanionMomentPreviewId,
 } from "../companion/companionPillPreview";
 import { Toggle } from "../../components/Toggle";
+import { useState } from "react";
 
 type DevSettingsCompanionPillBlockProps = {
   readonly floatingEnabled: boolean;
@@ -21,9 +22,12 @@ export function DevSettingsCompanionPillBlock({
   onPreviewMoment,
   onPreviewDayReview,
 }: DevSettingsCompanionPillBlockProps) {
+  const [milestonePreview, setMilestonePreview] = useState<CompanionMilestonePreviewId>(COMPANION_MILESTONE_PREVIEW_OPTIONS[0].id);
+  const [momentPreview, setMomentPreview] = useState<CompanionMomentPreviewId | "dayReview">(COMPANION_MOMENT_PREVIEW_OPTIONS[0].id);
+
   return (
     <div className="settings-block settings-block--dev-preview">
-      <h3>Companion Lab</h3>
+      <h3>Companion previews</h3>
       <div className="settings-row settings-row--companion-previews">
         <div>
           <div className="lbl">Use floating Companion</div>
@@ -44,21 +48,11 @@ export function DevSettingsCompanionPillBlock({
             Fire the real milestone event. With Companion off, it appears as a standalone alert.
           </div>
         </div>
-        <div
-          className="ctrl settings-row__actions settings-row__actions--wrap"
-          role="group"
-          aria-label="Companion milestone previews"
-        >
-          {COMPANION_MILESTONE_PREVIEW_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className="settings-btn"
-              onClick={() => onPreviewMilestone(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="ctrl dev-preview-picker">
+          <select className="settings-select" aria-label="Companion milestone preview" value={milestonePreview} onChange={(event) => setMilestonePreview(event.target.value as CompanionMilestonePreviewId)}>
+            {COMPANION_MILESTONE_PREVIEW_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+          <button type="button" className="settings-btn settings-btn--primary" onClick={() => onPreviewMilestone(milestonePreview)}>Preview</button>
         </div>
       </div>
       <div className="settings-row settings-row--companion-previews">
@@ -69,28 +63,12 @@ export function DevSettingsCompanionPillBlock({
             standalone route as production alerts.
           </div>
         </div>
-        <div
-          className="ctrl settings-row__actions settings-row__actions--wrap"
-          role="group"
-          aria-label="Companion moment previews"
-        >
-          {COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className="settings-btn"
-              onClick={() => onPreviewMoment(option.id)}
-            >
-              {option.label}
-            </button>
-          ))}
-          <button
-            type="button"
-            className="settings-btn"
-            onClick={onPreviewDayReview}
-          >
-            Day review
-          </button>
+        <div className="ctrl dev-preview-picker">
+          <select className="settings-select" aria-label="Companion moment preview" value={momentPreview} onChange={(event) => setMomentPreview(event.target.value as CompanionMomentPreviewId | "dayReview")}>
+            {COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            <option value="dayReview">Day review</option>
+          </select>
+          <button type="button" className="settings-btn settings-btn--primary" onClick={() => momentPreview === "dayReview" ? onPreviewDayReview() : onPreviewMoment(momentPreview)}>Preview</button>
         </div>
       </div>
     </div>

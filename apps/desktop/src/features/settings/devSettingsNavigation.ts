@@ -8,20 +8,16 @@ export const DEV_SETTINGS_SUBSECTIONS = [
     labelKey: "settings.dev.subsection.diagnostics",
   },
   {
-    id: "featureFlags",
-    labelKey: "settings.dev.subsection.featureFlags",
+    id: "flags",
+    labelKey: "settings.dev.subsection.flags",
   },
   {
-    id: "petCompanion",
-    labelKey: "settings.dev.subsection.petCompanion",
+    id: "previews",
+    labelKey: "settings.dev.subsection.previews",
   },
   {
-    id: "aiCapture",
-    labelKey: "settings.dev.subsection.aiCapture",
-  },
-  {
-    id: "uiFlows",
-    labelKey: "settings.dev.subsection.uiFlows",
+    id: "lab",
+    labelKey: "settings.dev.subsection.lab",
   },
 ] as const satisfies ReadonlyArray<{
   readonly id: string;
@@ -31,7 +27,24 @@ export const DEV_SETTINGS_SUBSECTIONS = [
 export type DevSettingsSubsection = (typeof DEV_SETTINGS_SUBSECTIONS)[number]["id"];
 
 export function resolveDevSettingsSubsection(value: string | null): DevSettingsSubsection {
+  const legacySubsections: Readonly<Record<string, DevSettingsSubsection>> = {
+    featureFlags: "flags",
+    uiFlows: "previews",
+    petCompanion: "lab",
+    aiCapture: "diagnostics",
+  };
+  if (value && legacySubsections[value]) return legacySubsections[value];
   return DEV_SETTINGS_SUBSECTIONS.some((option) => option.id === value)
     ? value as DevSettingsSubsection
     : "diagnostics";
+}
+
+export function resolveDevSettingsReviewSubsection(
+  search: string,
+  enabled = import.meta.env.DEV,
+): DevSettingsSubsection | null {
+  if (!enabled) return null;
+  const query = new URLSearchParams(search);
+  if (query.get("review") !== "dev-settings") return null;
+  return resolveDevSettingsSubsection(query.get("subsection"));
 }

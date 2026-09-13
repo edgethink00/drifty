@@ -103,53 +103,7 @@ describe("SettingsSidebar", () => {
     expect(onSectionChange).toHaveBeenCalledWith("dev");
   });
 
-  it("reveals task-based Dev subnavigation only while Dev is active", () => {
-    const onDevSubsectionChange = vi.fn();
-    const { rerender } = render(
-      <SettingsSidebar
-        activeSection="general"
-        activeDevSubsection="diagnostics"
-        isCollapsed={false}
-        showDevSection
-        onBack={vi.fn()}
-        onDevSubsectionChange={onDevSubsectionChange}
-        onSectionChange={vi.fn()}
-        onSendFeedback={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByRole("group", { name: "Dev sections" })).toBeNull();
-
-    rerender(
-      <SettingsSidebar
-        activeSection="dev"
-        activeDevSubsection="petCompanion"
-        isCollapsed={false}
-        showDevSection
-        onBack={vi.fn()}
-        onDevSubsectionChange={onDevSubsectionChange}
-        onSectionChange={vi.fn()}
-        onSendFeedback={vi.fn()}
-      />,
-    );
-
-    const devButton = screen.getByRole("button", { name: /^Dev$/ });
-    const devSubnav = screen.getByRole("group", { name: "Dev sections" });
-    expect(devButton.getAttribute("aria-expanded")).toBe("true");
-    expect(within(devSubnav).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Diagnostics",
-      "Feature flags",
-      "Pet & Companion",
-      "AI & capture",
-      "UI & flows",
-    ]);
-    expect(within(devSubnav).getByRole("button", { name: "Pet & Companion" }).getAttribute("aria-current")).toBe("page");
-
-    fireEvent.click(within(devSubnav).getByRole("button", { name: "AI & capture" }));
-    expect(onDevSubsectionChange).toHaveBeenCalledWith("aiCapture");
-  });
-
-  it("keeps the focused Dev subsection visible in a horizontally scrollable rail", () => {
+  it("keeps Dev as one settings item without nested sidebar navigation", () => {
     render(
       <SettingsSidebar
         activeSection="dev"
@@ -163,14 +117,8 @@ describe("SettingsSidebar", () => {
       />,
     );
 
-    const uiFlowsButton = within(screen.getByRole("group", { name: "Dev sections" }))
-      .getByRole("button", { name: "UI & flows" });
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(uiFlowsButton, "scrollIntoView", { configurable: true, value: scrollIntoView });
-
-    fireEvent.focus(uiFlowsButton);
-
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest", inline: "nearest" });
+    expect(screen.getByRole("button", { name: /^Dev$/ }).getAttribute("aria-current")).toBe("page");
+    expect(screen.queryByRole("navigation", { name: "Dev sections" })).toBeNull();
   });
 
   it("routes to the public Agents & CLI section without dev gates", () => {
