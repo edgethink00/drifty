@@ -2389,13 +2389,6 @@ export default function App() {
     && sidebarCtaSlot !== null
     && !sidebarUpgradeDismissed;
   const billingEntitlementSupportsUpgrade = canStartIndividualCheckout(billingEntitlement);
-  const handleStartDriftyCloudSetup = useCallback(async () => {
-    if (!isSupabaseConfigured || !user || !hasRequiredAccountAuth) {
-      requestCloudBillingAuth();
-      return;
-    }
-    openAccountSettings();
-  }, [hasRequiredAccountAuth, isSupabaseConfigured, openAccountSettings, requestCloudBillingAuth, user]);
   const handleOpenUpgradePlanModal = useCallback(() => {
     if (!isSupabaseConfigured) {
       requestCloudBillingAuth();
@@ -10230,7 +10223,7 @@ export default function App() {
                     onDialogOpenChange={setAiSetupDialogOpen}
                     onLocalAiSetupChange={setLocalAiSetup}
                     onManageCloudBilling={handleManageCloudBilling}
-                    onStartCloudSetup={handleStartDriftyCloudSetup}
+                    onStartCloudSetup={handleOpenUpgradePlanModal}
                   />
                 )}
                 {settingsSection === "pet" && (
