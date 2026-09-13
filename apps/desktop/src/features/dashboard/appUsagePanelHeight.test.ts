@@ -82,4 +82,22 @@ describe("app usage panel height coupling", () => {
     expect(featureBodies).toMatch(/align-content:\s*stretch/u);
     expect(featureBodies).not.toMatch(/align-content:\s*(?:start|space-between)/u);
   });
+
+  it("drops rank six one pixel before each viewport-scale tier would overflow", () => {
+    const compactMedia = /@media \(max-width:\s*1050px\),\s*\(max-height:\s*804px\),\s*\(min-width:\s*1600px\) and \(max-height:\s*835px\),\s*\(min-width:\s*2000px\) and \(max-height:\s*876px\),\s*\(min-width:\s*2400px\) and \(max-height:\s*917px\)\s*\{[\s\S]*?\.app-usage-panel--short-compact \.app-usage-row:nth-child\(n \+ 5\)\s*\{[^}]*display:\s*none/u;
+
+    expect(styles).toMatch(compactMedia);
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1050px\),[\s\S]*?\.app-usage-panel--short-compact \.app-usage-feature\s*\{[^}]*min-height:\s*9\.6rem/u,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1050px\),[\s\S]*?\.app-usage-panel--short-compact \.app-usage-feature__topline\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/u,
+    );
+  });
+
+  it("keeps the primary name readable when width, rather than height, triggers compaction", () => {
+    expect(styles).toMatch(
+      /@media \(max-width:\s*1050px\) and \(min-height:\s*805px\)\s*\{[\s\S]*?\.app-usage-panel--short-compact \.app-usage-feature__topline\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/u,
+    );
+  });
 });

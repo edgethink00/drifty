@@ -1329,3 +1329,81 @@ span.flow-hover-card__identity-pill {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Preserve the six-rank composition until the dashboard's real content edge.
+   The app's root rem scale steps up at 1600, 2000, and 2400px wide, so the
+   height needed by the flow chart, focus chart, and six-rank block steps up at
+   those same widths. Mirror that scale here: at each tier, compact one pixel
+   before the six-rank dashboard would create the outer content scrollbar.
+   The narrow-width edge remains independent because the feature footer folds
+   there and produces the same pressure. From any edge, the feature card and
+   four supporting rows form a balanced five-rank block without a nested
+   scroller. */
+@media (max-width: 1050px),
+       (max-height: 804px),
+       (min-width: 1600px) and (max-height: 835px),
+       (min-width: 2000px) and (max-height: 876px),
+       (min-width: 2400px) and (max-height: 917px) {
+  .app-usage-panel--short-compact.editorial-panel {
+    padding-block: 8px;
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature {
+    min-height: 9.6rem;
+    gap: var(--space-1);
+    padding: var(--space-2);
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature__topline {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature__identity {
+    grid-template-columns: 40px minmax(0, 1fr);
+    min-width: 0;
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature .usage-identity-icon--md,
+  .app-usage-panel--short-compact .app-usage-feature .usage-identity-icon--md .app-glyph--md,
+  .app-usage-panel--short-compact .app-usage-feature .usage-identity-icon--md .app-icon--md,
+  .app-usage-panel--short-compact .app-usage-feature .usage-identity-icon--md .site-favicon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature__measure {
+    justify-content: flex-end;
+    text-align: right;
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature__meter-block {
+    gap: var(--space-1);
+    padding-top: var(--space-1);
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature__stats div {
+    gap: 0.12rem;
+    padding: 0.32rem 0.4rem;
+  }
+
+  .app-usage-panel--short-compact .app-usage-row:nth-child(n + 5) {
+    display: none;
+  }
+}
+
+/* A tall-but-narrow window has vertical room, so keep the primary measure on
+   its own line instead of taking width away from the app or repository name.
+   Short windows retain the two-column topline above to save height. */
+@media (max-width: 1050px) and (min-height: 805px) {
+  .app-usage-panel--short-compact .app-usage-feature__topline {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .app-usage-panel--short-compact .app-usage-feature__measure {
+    justify-content: space-between;
+    text-align: left;
+  }
+}

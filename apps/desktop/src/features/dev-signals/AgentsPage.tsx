@@ -608,12 +608,12 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
   readonly topAgentRepo?: { readonly repo: string; readonly duration: string } | null;
 }) {
   const { effectiveLanguage, t } = useLocalization();
-  const [featured, ...rest] = repos;
+  const [featured, ...rest] = repos.slice(0, 6);
   const activityAria = t("agents.repo.activityAria", { period: periodLabel });
 
   if (!featured) {
     return (
-      <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={activityAria}>
+      <section className="app-usage-panel app-usage-panel--short-compact editorial-panel editorial-panel--soft" aria-label={activityAria}>
         <div className="app-usage-empty empty-state">
           <span className="eyebrow">{t("agents.repo.noCommits")}</span>
           <strong>{topAgentRepo ? t("agents.repo.activeWithoutCommits", { repo: topAgentRepo.repo, duration: topAgentRepo.duration }) : t("agents.repo.noActivity")}</strong>
@@ -626,7 +626,7 @@ function RepoUsagePanel({ repos, totalCommits, showActive, periodLabel, repoProv
   const featuredShare = shareOfCommits(featured, totalCommits);
 
   return (
-    <section className="app-usage-panel editorial-panel editorial-panel--soft" aria-label={activityAria}>
+    <section className="app-usage-panel app-usage-panel--short-compact editorial-panel editorial-panel--soft" aria-label={activityAria}>
       <div className="app-usage-content">
         <article
           className="app-usage-feature"

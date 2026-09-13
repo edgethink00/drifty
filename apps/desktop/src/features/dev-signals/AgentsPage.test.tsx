@@ -391,6 +391,31 @@ describe("AgentsPage shared dashboard controls", () => {
     expect(weekPage?.querySelector(".agents-week-calendar__foot")).toBeNull();
   });
 
+  it("keeps the Day repository ranking to six items before the short-window CSS trims it to five", () => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{
+        ...source,
+        commits: Array.from({ length: 7 }, (_, index) => [
+          100 + index,
+          10 + index,
+          index,
+          1,
+          `sha-${index + 1}`,
+          `repo-${index + 1}`,
+        ]),
+      }],
+      loading: false,
+      live: true,
+    });
+
+    renderAgentsPage();
+
+    const panel = document.querySelector(".page--agents .app-usage-panel");
+    expect(panel?.classList.contains("app-usage-panel--short-compact")).toBe(true);
+    expect(panel?.querySelectorAll(".app-usage-row")).toHaveLength(5);
+    expect(screen.queryByText("repo-7")).toBeNull();
+  });
+
   it("paints a week run with its cells without adding keyboard stops", async () => {
     vi.mocked(useAgentsData).mockReturnValue({
       days: [{

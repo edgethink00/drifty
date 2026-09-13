@@ -71,6 +71,7 @@ describe("AppUsagePanel", () => {
     expect(notes.getByText("02")).toBeTruthy();
     expect(notes.getByText("30m")).toBeTruthy();
     expect(notes.getByText("25% · 1 session · 30m avg")).toBeTruthy();
+    expect(document.querySelector(".app-usage-panel")?.classList.contains("app-usage-panel--short-compact")).toBe(true);
   });
 
   it("renders an empty state when no app usage is available", () => {
