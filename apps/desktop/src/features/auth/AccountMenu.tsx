@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useLocalization, type DisplayLanguage } from "../localization/LocalizationContext";
 import { FeatureNewBadge } from "../discovery/FeatureNewBadge";
+import { BUILD_INFO } from "../../buildInfo";
 
 const menuIconProps: SVGProps<SVGSVGElement> = {
   viewBox: "0 0 24 24",
@@ -330,25 +331,7 @@ export function AccountMenu({
       role="menu"
       aria-label={t("account.menu")}
     >
-      <div className="account-popover__account">
-        <span className={shouldShowUserAvatar ? "account-avatar" : "account-avatar account-avatar--placeholder"}>
-          {shouldShowUserAvatar ? (
-            <img src={trimmedUserAvatarUrl} alt="" aria-hidden="true" />
-          ) : (
-            <svg viewBox="0 0 28 28" fill="none" stroke="currentColor" aria-hidden="true" focusable="false">
-              <circle cx="14" cy="10.4" r="3.5" />
-              <path d="M7.6 22c1.2-4 3.6-6.1 6.4-6.1s5.2 2.1 6.4 6.1" />
-            </svg>
-          )}
-        </span>
-        <div className="account-popover__user-info">
-          <div className="account-popover__name">{isSignedIn ? displayName : t("account.notSignedIn")}</div>
-          {isSignedIn && userEmail ? (
-            <div className="account-popover__email" title={userEmail}>{userEmail}</div>
-          ) : null}
-        </div>
-      </div>
-      <div className="account-menu-separator account-menu-separator--account" role="separator" />
+      <div className="account-menu-version">v{BUILD_INFO.version}</div>
       <button type="button" className="account-menu-item" onClick={onSettings} role="menuitem">
         <span className="account-menu-icon account-menu-icon--settings"><SettingsIcon /></span>
         <span>{t("common.settings")}</span>

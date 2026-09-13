@@ -15,6 +15,7 @@ import {
   type DisplayLanguage,
 } from "../localization/LocalizationContext";
 import { DISPLAY_LANGUAGE_STORAGE_KEY } from "../localization/languagePreference";
+import { BUILD_INFO } from "../../buildInfo";
 
 type RenderAccountMenuOptions = {
   readonly userAvatarUrl?: string | null;
@@ -167,18 +168,20 @@ describe("AccountMenu", () => {
     expect(container.querySelector(".account-avatar img")).toBeNull();
   });
 
-  it("keeps account metadata above the first menu separator", () => {
+  it("replaces duplicate account metadata with the app version and keeps sign-out visible", () => {
     renderAccountMenu({ userEmail: "pat.lee93@example.com" });
     fireEvent.click(screen.getByRole("button", { name: /^pat\.lee93$/i }));
 
     const menu = screen.getByRole("menu", { name: /account menu/i });
     const firstChildren = Array.from(menu.children).slice(0, 2);
 
-    expect(firstChildren[0]?.classList.contains("account-popover__account")).toBe(true);
-    expect(firstChildren[0]?.textContent).toContain("pat.lee93");
-    expect(firstChildren[0]?.textContent).toContain("pat.lee93@example.com");
-    expect(firstChildren[1]?.classList.contains("account-menu-separator")).toBe(true);
-    expect(firstChildren[1]?.getAttribute("role")).toBe("separator");
+    expect(firstChildren[0]?.classList.contains("account-menu-version")).toBe(true);
+    expect(firstChildren[0]?.textContent).toBe(`v${BUILD_INFO.version}`);
+    expect(firstChildren[0]?.textContent).not.toContain("pat.lee93");
+    expect(menu.textContent).not.toContain("pat.lee93@example.com");
+    expect(firstChildren[1]?.classList.contains("account-menu-item")).toBe(true);
+    expect(firstChildren[1]?.textContent).toBe("Settings");
+    expect(screen.getByRole("menuitem", { name: /^Log out$/ })).toBeTruthy();
   });
 
   it("groups language with quick preferences below settings destinations", () => {
@@ -294,7 +297,8 @@ describe("AccountMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "게스트" }));
 
     expect(screen.getByRole("menu", { name: "계정 메뉴" })).toBeTruthy();
-    expect(screen.getByText("로그인하지 않음")).toBeTruthy();
+    expect(screen.getByText(`v${BUILD_INFO.version}`)).toBeTruthy();
+    expect(screen.queryByText("로그인하지 않음")).toBeNull();
     expect(screen.getByRole("menuitem", { name: "설정" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "언어 한국어" })).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: "AI 설정" })).toBeTruthy();
