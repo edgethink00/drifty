@@ -139,7 +139,7 @@ export function TrendsPage({
       {bodyReady ? (
         <Suspense fallback={bodyFallback ?? null}>
           <TrendsPageBody
-            calendar={<FocusCalendarCard endDay={calendarEndDay} startOfDayMinutes={calendarStartOfDayMinutes} loadHistory={loadCalendarHistory} recentSegments={insightSegments} classificationOptions={insightClassificationOptions} />}
+            calendar={<FocusCalendarCard endDay={calendarEndDay} endDayIsInProgress={isTodaySelected} startOfDayMinutes={calendarStartOfDayMinutes} loadHistory={loadCalendarHistory} recentSegments={insightSegments} classificationOptions={insightClassificationOptions} />}
             activeTab={visibleTab}
             weekly={weeklyBreakdown}
             range={trendsRange}

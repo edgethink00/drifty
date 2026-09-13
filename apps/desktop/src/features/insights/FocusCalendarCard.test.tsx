@@ -3,12 +3,13 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
 import type { CompactHistoryLoad } from "../dashboard/compactHistoryCache";
+import { readAppStyles } from "../../test/readStyles";
 import { alignCalendarTooltip, FOCUS_CALENDAR_TOOLTIP_DELAY_MS, FocusCalendarCard } from "./FocusCalendarCard";
 
 const emptyLoad = { materialized: { segments: [] } } as unknown as CompactHistoryLoad;
-const base = { endDay: "2026-09-09", startOfDayMinutes: 0, recentSegments: [], classificationOptions: {}, variant: "year" as const };
+const base = { endDay: "2026-09-09", endDayIsInProgress: true, startOfDayMinutes: 0, recentSegments: [], classificationOptions: {}, variant: "year" as const };
 
-function focusSegment(startedAt: string, endedAt: string): ActivitySegment {
+function activitySegment(startedAt: string, endedAt: string, productivity: "focus" | "drift" = "focus"): ActivitySegment {
   return {
     id: startedAt,
     startedAt,
@@ -18,15 +19,16 @@ function focusSegment(startedAt: string, endedAt: string): ActivitySegment {
     windowTitle: "",
     platform: "macos",
     source: "nsworkspace",
-    classification: { category: "workspace", productivity: "focus", source: "manual", confidence: 1, reason: "fixture" },
+    classification: { category: "workspace", productivity, source: "manual", confidence: 1, reason: "fixture" },
   };
 }
 
 const focusedLoad = {
   materialized: {
     segments: [
-      focusSegment("2026-09-08T10:00:00", "2026-09-08T11:00:00"),
-      focusSegment("2026-09-09T10:00:00", "2026-09-09T12:00:00"),
+      activitySegment("2026-09-07T10:00:00", "2026-09-07T11:00:00", "drift"),
+      activitySegment("2026-09-08T10:00:00", "2026-09-08T11:00:00"),
+      activitySegment("2026-09-09T10:00:00", "2026-09-09T12:00:00"),
     ],
   },
 } as unknown as CompactHistoryLoad;
@@ -59,8 +61,11 @@ describe("FocusCalendarCard", () => {
     await waitFor(() => expect(document.querySelectorAll(".focus-calendar__cell")).toHaveLength(365));
     expect(screen.queryByText("0 days with focus")).toBeNull();
     expect(document.querySelector(".focus-calendar__footer")).toBeNull();
-    expect(document.querySelector(".focus-calendar__legend")).toBeNull();
-    expect(screen.getByRole("group", { name: /Daily focus time/ }).getAttribute("aria-description")).toContain("under 1 hour");
+    expect(document.querySelector(".focus-calendar__legend")).not.toBeNull();
+    expect(screen.getByText("Relative scale starts after a completed focus day")).toBeTruthy();
+    expect(screen.getByRole("group", { name: /Daily focus time/ }).getAttribute("aria-description")).toContain("relative");
+    expect(screen.getByRole("group", { name: /Daily focus time/ }).getAttribute("aria-description")).toContain("after the selected date");
+    expect(document.querySelector<HTMLButtonElement>(".focus-calendar__cell:disabled")?.getAttribute("aria-label")).toMatch(/After the selected date/);
     expect(document.querySelector(".focus-calendar__detail")).toBeNull();
     expect(document.querySelector(".contribution-grid__day--selected")).toBeNull();
     expect(document.querySelector(".focus-calendar__cell")?.getAttribute("aria-label")).toMatch(/No record/);
@@ -86,7 +91,7 @@ describe("FocusCalendarCard", () => {
     render(<FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
     await waitFor(() => expect(document.querySelectorAll(".focus-calendar__cell")).toHaveLength(365));
     const first = document.querySelector<HTMLButtonElement>(".contribution-grid__day--2")!;
-    const next = document.querySelector<HTMLButtonElement>(".contribution-grid__day--3")!;
+    const next = document.querySelector<HTMLButtonElement>(".contribution-grid__day--4")!;
     const grid = document.querySelector(".contribution-grid")!;
     vi.useFakeTimers();
     try {
@@ -105,24 +110,33 @@ describe("FocusCalendarCard", () => {
       vi.useRealTimers();
     }
   });
-  it("does not show a tooltip on colorless days with no focus", async () => {
+  it("explains unrecorded and tracked-without-focus days in tooltips", async () => {
     render(<FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(focusedLoad)} />);
     await waitFor(() => expect(document.querySelectorAll(".focus-calendar__cell")).toHaveLength(365));
-    const empty = document.querySelector<HTMLButtonElement>(".contribution-grid__day--0")!;
+    const empty = document.querySelector<HTMLButtonElement>(".focus-calendar__cell--untracked")!;
+    const trackedWithoutFocus = document.querySelector<HTMLButtonElement>(".focus-calendar__cell--tracked-zero")!;
     vi.useFakeTimers();
     try {
       fireEvent.pointerOver(empty);
       act(() => { vi.advanceTimersByTime(FOCUS_CALENDAR_TOOLTIP_DELAY_MS); });
-      expect(document.querySelector(".focus-calendar__tooltip")).toBeNull();
-      const focused = document.querySelector<HTMLButtonElement>(".contribution-grid__day--3")!;
-      fireEvent.pointerOver(focused);
-      act(() => { vi.advanceTimersByTime(FOCUS_CALENDAR_TOOLTIP_DELAY_MS); });
+      expect(document.querySelector(".focus-calendar__tooltip")?.textContent).toMatch(/No recorded activity/);
+      fireEvent.pointerOver(trackedWithoutFocus);
       expect(document.querySelector(".focus-calendar__tooltip")?.textContent).toMatch(/Focus/);
-      fireEvent.pointerOver(empty);
-      expect(document.querySelector(".focus-calendar__tooltip")).toBeNull();
     } finally {
       vi.useRealTimers();
     }
+  });
+  it("does not make a relative claim before the first completed focus day", async () => {
+    const firstFocusLoad = {
+      materialized: { segments: [activitySegment("2026-09-09T10:00:00", "2026-09-09T12:00:00")] },
+    } as unknown as CompactHistoryLoad;
+    render(<FocusCalendarCard {...base} loadHistory={vi.fn().mockResolvedValue(firstFocusLoad)} />);
+    await waitFor(() => expect(document.querySelectorAll(".focus-calendar__cell")).toHaveLength(365));
+    const firstFocus = document.querySelector<HTMLButtonElement>('.focus-calendar__cell[aria-label*="Building your comparison baseline"]')!;
+    expect(firstFocus).toBeTruthy();
+    expect(firstFocus.classList.contains("contribution-grid__day--2")).toBe(true);
+    expect(firstFocus.getAttribute("aria-label")).not.toMatch(/usual focus day|strongest focus days/);
+    expect(screen.getByText("Relative scale starts after a completed focus day")).toBeTruthy();
   });
 });
 
@@ -135,5 +149,16 @@ describe("alignCalendarTooltip", () => {
   });
   it("leaves a centered cell unshifted", () => {
     expect(alignCalendarTooltip(500, 200, 1000, 12)).toEqual({ left: 500, caretShift: 0 });
+  });
+});
+
+describe("focus calendar intensity styles", () => {
+  it("derives every adaptive level from the active accent color", () => {
+    const styles = readAppStyles();
+    expect(styles).toContain("--focus-calendar-level-1: color-mix(in srgb, var(--accent) 18%, var(--surface-strong));");
+    expect(styles).toContain("--focus-calendar-level-2: color-mix(in srgb, var(--accent) 36%, var(--surface-strong));");
+    expect(styles).toContain("--focus-calendar-level-3: color-mix(in srgb, var(--accent) 62%, var(--surface-strong));");
+    expect(styles).toContain("--focus-calendar-level-4: var(--accent);");
+    expect(styles).toContain(".focus-calendar__cell--tracked-zero");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivitySegment } from "@drifty/domain";
-import { buildFocusCalendar, focusCalendarLevel, focusCalendarWindow } from "./focusCalendar";
+import { buildFocusCalendar, focusCalendarLevel, focusCalendarQuartiles, focusCalendarWindow } from "./focusCalendar";
 
 function segment(startedAt: string, endedAt: string, productivity: "focus" | "drift" = "focus"): ActivitySegment {
   return {
@@ -43,7 +43,30 @@ describe("focus calendar", () => {
       segment("2026-09-09T10:00:00", "2026-09-09T09:00:00"),
     ], "2026-09-09", "2026-09-09")[0].trackedSeconds).toBe(0);
   });
-  it("uses stable, explicit hour thresholds rather than relative maxima", () => {
-    expect([0, 1, 3599, 3600, 7199, 7200, 14399, 14400].map(focusCalendarLevel)).toEqual([0, 1, 1, 2, 2, 3, 3, 4]);
+  it("uses adaptive quartiles across positive focus days", () => {
+    const quartiles = focusCalendarQuartiles([3600, 7200, 10800, 14400]);
+    expect(quartiles).toEqual([6300, 9000, 11700]);
+    expect([0, 3600, 7200, 10800, 14400].map(seconds => focusCalendarLevel(seconds, quartiles))).toEqual([0, 1, 2, 3, 4]);
+  });
+  it("keeps tied focus durations in the same middle intensity", () => {
+    const quartiles = focusCalendarQuartiles([3600, 3600, 3600, 3600]);
+    expect(quartiles).toEqual([3600, 3600, 3600]);
+    expect(focusCalendarLevel(1800, quartiles)).toBe(1);
+    expect(focusCalendarLevel(3600, quartiles)).toBe(2);
+    expect(focusCalendarLevel(7200, quartiles)).toBe(4);
+  });
+  it("ignores zero and invalid values when calibrating the relative scale", () => {
+    expect(focusCalendarQuartiles([0, -1, Number.NaN, Number.POSITIVE_INFINITY])).toBeNull();
+    expect(focusCalendarLevel(1800, null)).toBe(2);
+  });
+  it("does not let the selected in-progress day recalibrate earlier dates", () => {
+    const days = buildFocusCalendar([
+      segment("2026-09-05T08:00:00", "2026-09-05T09:00:00"),
+      segment("2026-09-06T08:00:00", "2026-09-06T10:00:00"),
+      segment("2026-09-07T08:00:00", "2026-09-07T11:00:00"),
+      segment("2026-09-08T08:00:00", "2026-09-08T12:00:00"),
+      segment("2026-09-09T00:00:00", "2026-09-09T08:00:00"),
+    ], "2026-09-05", "2026-09-09", undefined, 0, "2026-09-08");
+    expect(days.map(day => day.level)).toEqual([1, 2, 3, 4, 4]);
   });
 });

@@ -12,8 +12,9 @@ export type FocusCalendarDay = {
 };
 
 export type FocusCalendarVariant = "year" | "half" | "half-compact" | "quarter";
+export type FocusCalendarQuartiles = readonly [number, number, number] | null;
 
-/** Review alternatives share the same date aggregation and colour thresholds. */
+/** Review alternatives share the same date aggregation and adaptive colour scale. */
 export function focusCalendarWindow(endDay: string, variant: FocusCalendarVariant) {
   if (variant === "year") return { startDay: `${endDay.slice(0, 4)}-01-01`, gridEndDay: `${endDay.slice(0, 4)}-12-31` };
   const [year, month, day] = endDay.split("-").map(Number);
@@ -24,18 +25,36 @@ export function focusCalendarWindow(endDay: string, variant: FocusCalendarVarian
   return { startDay: shiftIsoDate(boundary, 1), gridEndDay: endDay };
 }
 
-/** Fixed hour thresholds make the same colour comparable across dates. */
-export function focusCalendarLevel(seconds: number): number {
-  if (seconds <= 0) return 0;
-  if (seconds < 3600) return 1;
-  if (seconds < 7200) return 2;
-  if (seconds < 14400) return 3;
-  return 4;
+function quantile(sorted: readonly number[], probability: number): number {
+  const index = (sorted.length - 1) * probability;
+  const lower = Math.floor(index);
+  const weight = index - lower;
+  return sorted[lower] + ((sorted[lower + 1] ?? sorted[lower]) - sorted[lower]) * weight;
+}
+
+/** GitHub-style relative intensity: zero is separate, positive focus days form four quartiles. */
+export function focusCalendarQuartiles(values: readonly number[]): FocusCalendarQuartiles {
+  const sorted = values.filter(value => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return null;
+  return [quantile(sorted, 0.25), quantile(sorted, 0.5), quantile(sorted, 0.75)];
+}
+
+export function focusCalendarLevel(seconds: number, quartiles: FocusCalendarQuartiles): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  // With no completed comparison day, use the neutral midpoint. The UI marks
+  // this as an uncalibrated value instead of making a relative claim.
+  if (!quartiles) return 2;
+
+  const lowerLevel = 1 + quartiles.filter(threshold => seconds > threshold).length;
+  const upperLevel = 1 + quartiles.filter(threshold => seconds >= threshold).length;
+  // Duplicate quartile boundaries are common when daily totals tie. Their
+  // midpoint keeps equal durations in one honest, non-extreme colour bucket.
+  return Math.floor((lowerLevel + upperLevel) / 2);
 }
 
 export function buildFocusCalendar(
   segments: readonly ActivitySegment[], startDay: string, endDay: string,
-  options?: ClassificationOptions, startOfDayMinutes = 0,
+  options?: ClassificationOptions, startOfDayMinutes = 0, calibrationEndDay = endDay,
 ): FocusCalendarDay[] {
   const totals = new Map<string, { trackedSeconds: number; focusSeconds: number }>();
   const rangeStart = logicalDayStartMs(startDay, startOfDayMinutes);
@@ -67,10 +86,13 @@ export function buildFocusCalendar(
       cursor = next;
     }
   }
-  const result: FocusCalendarDay[] = [];
+  const result: Array<Omit<FocusCalendarDay, "level">> = [];
   for (let day = startDay; day <= endDay; day = shiftIsoDate(day, 1)) {
     const total = totals.get(day) ?? { trackedSeconds: 0, focusSeconds: 0 };
-    result.push({ day, ...total, level: focusCalendarLevel(total.focusSeconds) });
+    result.push({ day, ...total });
   }
-  return result;
+  const quartiles = focusCalendarQuartiles(result
+    .filter(day => day.day <= calibrationEndDay)
+    .map(day => day.focusSeconds));
+  return result.map(day => ({ ...day, level: focusCalendarLevel(day.focusSeconds, quartiles) }));
 }

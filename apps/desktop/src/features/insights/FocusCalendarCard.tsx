@@ -36,6 +36,7 @@ type CalendarTooltip = {
 
 export type FocusCalendarCardProps = {
   readonly endDay: string;
+  readonly endDayIsInProgress?: boolean;
   readonly startOfDayMinutes: number;
   readonly recentSegments: ActivitySegment[];
   readonly classificationOptions: ClassificationOptions;
@@ -43,7 +44,7 @@ export type FocusCalendarCardProps = {
   readonly variant?: FocusCalendarVariant;
 };
 
-export function FocusCalendarCard({ endDay, startOfDayMinutes, recentSegments, classificationOptions, loadHistory, variant: suppliedVariant }: FocusCalendarCardProps) {
+export function FocusCalendarCard({ endDay, endDayIsInProgress = false, startOfDayMinutes, recentSegments, classificationOptions, loadHistory, variant: suppliedVariant }: FocusCalendarCardProps) {
   const { effectiveLanguage, t } = useLocalization();
   // Five months is the selected default; explicit parameters retain review alternatives.
   const requested = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("focusCalendar");
@@ -89,26 +90,44 @@ export function FocusCalendarCard({ endDay, startOfDayMinutes, recentSegments, c
     node.style.setProperty("--caret-shift", `${aligned.caretShift}px`);
   }, [tooltip]);
   const ready = history?.key === key;
+  const calibrationEndDay = endDayIsInProgress ? shiftIsoDate(endDay, -1) : endDay;
   const days = useMemo(() => {
     if (!ready || !history) return [];
     const segments = mergeActivitySegments(history.segments, recentSegments);
-    return buildFocusCalendar(segments, startDay, gridEndDay, { ...classificationOptions, fallbackCandidates: segments }, startOfDayMinutes)
+    return buildFocusCalendar(segments, startDay, gridEndDay, { ...classificationOptions, fallbackCandidates: segments }, startOfDayMinutes, calibrationEndDay)
       .map(day => day.day > endDay ? { ...day, trackedSeconds: 0, focusSeconds: 0, level: 0 } : day);
-  }, [ready, history, recentSegments, startDay, gridEndDay, endDay, classificationOptions, startOfDayMinutes]);
+  }, [ready, history, recentSegments, startDay, gridEndDay, endDay, calibrationEndDay, classificationOptions, startOfDayMinutes]);
+  const hasRelativeBasis = days.some(day => day.day <= calibrationEndDay && day.focusSeconds > 0);
   const offset = (new Date(`${startDay}T12:00:00`).getDay() + 6) % 7;
   const columns = Math.ceil((offset + days.length) / 7);
   const lastSelectable = days.findIndex(day => day.day === endDay);
   const activeDay = days.find(day => day.day === selectedDay && day.day <= endDay) ?? days[lastSelectable];
   const locale = effectiveLanguage === "ko" ? "ko-KR" : "en-US";
   const dateLabel = (day: string) => new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", weekday: "short" }).format(new Date(`${day}T12:00:00`));
-  const description = (day: (typeof days)[number]) => `${dateLabel(day.day)} · ${day.day > endDay ? t("trends.calendar.afterSelected") : day.trackedSeconds <= 0 ? t("trends.calendar.noRecord") : t("trends.calendar.focusDuration", { duration: formatLocalizedCompactDurationFromSeconds(day.focusSeconds, effectiveLanguage) })}`;
+  const relativeDescription = (level: number) => {
+    if (level === 1) return t("trends.calendar.relativeLighter");
+    if (level === 2) return t("trends.calendar.relativeTypical");
+    if (level === 3) return t("trends.calendar.relativeStronger");
+    return t("trends.calendar.relativeStrongest");
+  };
+  const description = (day: (typeof days)[number]) => {
+    const status = day.day > endDay
+      ? t("trends.calendar.afterSelected")
+      : day.trackedSeconds <= 0
+        ? t("trends.calendar.noRecord")
+        : t("trends.calendar.focusDuration", { duration: formatLocalizedCompactDurationFromSeconds(day.focusSeconds, effectiveLanguage) });
+    const relative = day.focusSeconds > 0
+      ? ` · ${hasRelativeBasis ? relativeDescription(day.level) : t("trends.calendar.relativeBuilding")}`
+      : "";
+    return `${dateLabel(day.day)} · ${status}${relative}`;
+  };
   function tooltipAnchor(el: HTMLElement): CalendarTooltip {
     const rect = el.getBoundingClientRect();
     const placement: CalendarTooltip["placement"] = rect.top < 44 ? "below" : "above";
     return { text: "", x: rect.left + rect.width / 2, y: placement === "above" ? rect.top : rect.bottom, placement };
   }
   function showTooltip(day: FocusCalendarDay, el: HTMLElement) {
-    if (day.focusSeconds <= 0) {
+    if (day.day > endDay) {
       hideTooltip();
       return;
     }
@@ -187,14 +206,19 @@ export function FocusCalendarCard({ endDay, startOfDayMinutes, recentSegments, c
               <div className="contribution-grid__weekdays" aria-hidden="true">
                 {(effectiveLanguage === "ko" ? ["월", "", "수", "", "금", "", ""] : ["M", "", "W", "", "F", "", ""]).map((label, index) => <span key={index}>{label}</span>)}
               </div>
-              <div className="contribution-grid" ref={grid} role="group" aria-label={t("trends.calendar.daysAria")} aria-description={t("trends.calendar.scale")} onPointerOver={onGridPointerOver} onPointerLeave={onGridPointerLeave} onBlur={onGridBlur}>
+              <div className="contribution-grid" ref={grid} role="group" aria-label={t("trends.calendar.daysAria")} aria-description={t(hasRelativeBasis ? "trends.calendar.scale" : "trends.calendar.scalePending")} onPointerOver={onGridPointerOver} onPointerLeave={onGridPointerLeave} onBlur={onGridBlur}>
                 {Array.from({ length: columns }, (_, column) => <div className="contribution-grid__week" key={column}>
                   {Array.from({ length: 7 }, (_, weekday) => {
                     const index = column * 7 + weekday - offset;
                     const day = days[index];
                     if (!day) return <span className="focus-calendar__pad" key={weekday} />;
+                    const recordState = day.trackedSeconds <= 0
+                      ? " focus-calendar__cell--untracked"
+                      : day.focusSeconds <= 0
+                        ? " focus-calendar__cell--tracked-zero"
+                        : "";
                     return <button
-                      key={day.day} type="button" className={`focus-calendar__cell contribution-grid__day contribution-grid__day--${day.level}`}
+                      key={day.day} type="button" className={`focus-calendar__cell contribution-grid__day contribution-grid__day--${day.level}${recordState}`}
                       data-day-index={index} aria-label={description(day)}
                       disabled={day.day > endDay}
                       tabIndex={activeDay?.day === day.day ? 0 : -1}
@@ -205,6 +229,16 @@ export function FocusCalendarCard({ endDay, startOfDayMinutes, recentSegments, c
                 </div>)}
               </div>
             </div>
+          </div>
+          <div className="focus-calendar__legend contribution-grid__legend" aria-hidden="true">
+            {hasRelativeBasis ? (
+              <>
+                <span className="focus-calendar__legend-basis">{t("trends.calendar.relativeBasis")}</span>
+                <span>{t("trends.calendar.relativeLower")}</span>
+                {[1, 2, 3, 4].map(level => <i className={`contribution-grid__day--${level}`} key={level} />)}
+                <span>{t("trends.calendar.relativeHigher")}</span>
+              </>
+            ) : <span className="focus-calendar__legend-basis">{t("trends.calendar.relativePending")}</span>}
           </div>
           {tooltip && createPortal(
             <div ref={tooltipRef} className={`focus-calendar__tooltip focus-calendar__tooltip--${tooltip.placement}`} style={{ left: tooltip.x, top: tooltip.y }} role="tooltip" aria-hidden="true">
