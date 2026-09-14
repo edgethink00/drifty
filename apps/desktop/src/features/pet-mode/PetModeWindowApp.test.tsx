@@ -19,6 +19,7 @@ import {
   PET_MODE_MUSIC_NOTE_DURATION_MS,
   PET_MODE_GUARANTEED_OUTCOMES_STORAGE_KEY,
   PET_MODE_GUIDES_STORAGE_KEY,
+  PET_MODE_INTERVENTION_PAW_LEAD_MS,
   PET_MODE_PRESENT_MS,
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
   PET_MODE_RUN_BETA_STORAGE_KEY,
@@ -1608,6 +1609,17 @@ describe("PetModeWindowApp", () => {
       false,
       "renderer_focus_resting",
     );
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "run",
+        travelDistance: 152,
+        durationMs: 533,
+        startDelayMs: 34,
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
 
     act(() => {
@@ -1625,6 +1637,16 @@ describe("PetModeWindowApp", () => {
     await act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
     expect(bridge.cancelNativePetMotion).toHaveBeenCalled();
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "run",
+        travelDistance: 152,
+        durationMs: 533,
+        startDelayMs: 34,
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
   });
 
@@ -1668,7 +1690,83 @@ describe("PetModeWindowApp", () => {
 
     expect(bridge.reportNativePetContact).not.toHaveBeenCalled();
     expect(bridge.moveNativePetToTarget).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("sit");
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "run",
+        travelDistance: 152,
+        durationMs: 533,
+        startDelayMs: 34,
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
     expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+  });
+
+  it("starts paw preparation 150ms before the native run arrives", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem(PET_MODE_STORAGE_KEY, "1");
+    window.localStorage.setItem(PET_MODE_RUN_BETA_STORAGE_KEY, "1");
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    bridge.listenToNativePetModeEvent.mockImplementation(async (handler: (event: PetModeWindowEvent) => void) => {
+      bridge.eventHandler = handler;
+      return vi.fn();
+    });
+    let finishMove!: () => void;
+    bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
+      finishMove = () => resolve({
+        facing: "left",
+        targetKind: "browser_tab_close",
+        motionOutcome: "completed",
+        confidence: "high",
+        diagnostic: "ax_selected_tab_close",
+        targetX: 640,
+        targetY: 48,
+      });
+    }));
+
+    render(<PetModeWindowApp />);
+    await act(async () => undefined);
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "intervention",
+        target: {
+          id: "settled-arrival",
+          appName: "Google Chrome",
+          browserName: "Google Chrome",
+          preview: false,
+        },
+      });
+    });
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    act(() => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "run",
+        travelDistance: 152,
+        durationMs: 533,
+        startDelayMs: 34,
+      });
+    });
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+
+    const pawLeadDelay = 34 + 533 - PET_MODE_INTERVENTION_PAW_LEAD_MS;
+    await act(async () => { await vi.advanceTimersByTimeAsync(pawLeadDelay - 1); });
+    expect(screen.getByLabelText("Drifty pet cat").getAttribute("data-phase")).toBe("run");
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    const cat = screen.getByLabelText("Drifty pet cat");
+    expect(cat.getAttribute("data-phase")).toBe("paw");
+    expect(cat.classList.contains("is-fast-run-paw-grounded")).toBe(true);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(PET_MODE_INTERVENTION_PAW_LEAD_MS); });
+    await act(async () => {
+      finishMove();
+      await Promise.resolve();
+    });
+    expect(cat.getAttribute("data-phase")).toBe("paw");
   });
 
   it("accepts the native run gait after standing up from a focus sit", async () => {

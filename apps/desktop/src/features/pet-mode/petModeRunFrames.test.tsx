@@ -3,7 +3,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, waitFor } from "@testing-library/react";
 import { PetModeCat } from "./PetModeCat";
-import { PET_MODE_RUN_FRAME_COUNT } from "./petModeData";
+import {
+  PET_MODE_PAW_ARRIVAL_OFFSET_X_PX,
+  PET_MODE_PAW_GROUND_OFFSET_Y_PX,
+  PET_MODE_PAW_PREP_DURATION_MS,
+  PET_MODE_RUN_FRAME_COUNT,
+} from "./petModeData";
 import { getPetModeRunFrameSource } from "./petModeRunFrames";
 
 const petModeCss = readFileSync("src/features/pet-mode/petMode.css", "utf8");
@@ -114,6 +119,67 @@ describe("pet mode run frames", () => {
     finishDecode();
     await waitFor(() => expect(view.container.querySelector(".pet-mode-cat__raster--run")).not.toBeNull());
     expect(view.container.querySelector(".pet-mode-cat__vector")).toBeNull();
+  });
+
+  it("settles the fast-run landing into the first paw frames without an opacity blend", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: vi.fn().mockResolvedValue({ frames: ["M0 0 L150 0 L150 120 Z"], cycleSeconds: 1 }),
+    }));
+    vi.stubGlobal("Image", class {
+      src = "";
+      decode() { return Promise.resolve(); }
+    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+
+    const view = render(
+      <PetModeCat
+        phase="run"
+        facing="right"
+        pawFrame={0}
+        fastRunBetaEnabled
+        frameOverride={6}
+        publishHitRegion={false}
+      />,
+    );
+    await waitFor(() => expect(view.container.querySelector(".pet-mode-cat__raster--run")).not.toBeNull());
+
+    view.rerender(
+      <PetModeCat
+        phase="paw"
+        facing="right"
+        pawFrame={0}
+        fastRunBetaEnabled
+        fastRunPawArrival
+        publishHitRegion={false}
+      />,
+    );
+    const cat = view.container.querySelector<HTMLElement>(".pet-mode-cat")!;
+    expect(cat.classList.contains("is-fast-run-paw-grounded")).toBe(true);
+    expect(cat.classList.contains("is-fast-run-paw-arrival")).toBe(true);
+    expect(cat.style.getPropertyValue("--pet-paw-arrival-duration")).toBe(`${PET_MODE_PAW_PREP_DURATION_MS}ms`);
+    expect(cat.style.getPropertyValue("--pet-paw-arrival-x")).toBe(`${PET_MODE_PAW_ARRIVAL_OFFSET_X_PX}px`);
+    expect(cat.style.getPropertyValue("--pet-paw-ground-offset-y")).toBe(`${PET_MODE_PAW_GROUND_OFFSET_Y_PX}px`);
+    expect(petModeCss).toContain("@keyframes pet-mode-paw-arrival-bridge");
+    const bridgeRuleStart = petModeCss.indexOf(
+      ".pet-mode-cat.is-fast-run-paw-arrival .pet-mode-cat__raster--paw",
+    );
+    const bridgeRule = petModeCss.slice(bridgeRuleStart, petModeCss.indexOf("}", bridgeRuleStart) + 1);
+    expect(bridgeRule).toContain("animation: pet-mode-paw-arrival-bridge");
+    expect(bridgeRule).not.toContain("opacity");
+
+    view.rerender(
+      <PetModeCat
+        phase="paw"
+        facing="right"
+        pawFrame={7}
+        fastRunBetaEnabled
+        fastRunPawArrival
+        publishHitRegion={false}
+      />,
+    );
+    expect(cat.classList.contains("is-fast-run-paw-arrival")).toBe(false);
+    expect(cat.classList.contains("is-fast-run-paw-grounded")).toBe(true);
+    expect(cat.getAttribute("data-region-id")).toBe("paw-grounded:7");
   });
 
   it("falls back to the vector gait when beta frame decoding fails", async () => {

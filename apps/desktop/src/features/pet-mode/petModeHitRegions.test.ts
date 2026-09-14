@@ -167,4 +167,60 @@ describe("Pet Mode hit-region transitions", () => {
     expect(clear.revision).toBeLessThan(retry.revision);
     expect(retry.revision).toBeLessThan(reveal.revision);
   });
+
+  it("expands early paw masks across the complete fast-run arrival translation", async () => {
+    vi.resetModules();
+    const { publishPetModeHitRegion: publish } = await import("./petModeHitRegions");
+    const artifact = JSON.parse(readFileSync("public/pet-mode/hit-regions-v1.json", "utf8"));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => artifact,
+    }));
+
+    await publish({ regionId: "paw-arrival:0", mirrored: false, interactive: true });
+
+    const calls = bridge.updateNativePetHitRegion.mock.calls;
+    const request = calls[calls.length - 1]?.[0];
+    const original = artifact.regions["paw:0"] as number[];
+    const originalRows = Array.from({ length: original.length / 3 }, (_, index) => original[index * 3]);
+    const originalEnds = Array.from({ length: original.length / 3 }, (_, index) => original[index * 3 + 2]);
+    const expandedRows = Array.from(
+      { length: request.spans.length / 3 },
+      (_, index) => request.spans[index * 3],
+    );
+    const expandedEnds = Array.from(
+      { length: request.spans.length / 3 },
+      (_, index) => request.spans[index * 3 + 2],
+    );
+    expect(request.regionId).toBe("paw-arrival:0");
+    expect(request.spans.length % 3).toBe(0);
+    expect(request.spans.length).toBeLessThanOrEqual(4_096);
+    expect(Math.max(...expandedRows)).toBe(Math.min(artifact.height - 1, Math.max(...originalRows) + 12));
+    expect(Math.min(...expandedRows)).toBe(Math.min(...originalRows) + 12);
+    expect(Math.max(...expandedEnds)).toBe(Math.max(...originalEnds));
+  });
+
+  it("moves every later fast-run paw mask onto the same ground line", async () => {
+    vi.resetModules();
+    const { publishPetModeHitRegion: publish } = await import("./petModeHitRegions");
+    const artifact = JSON.parse(readFileSync("public/pet-mode/hit-regions-v1.json", "utf8"));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => artifact,
+    }));
+
+    await publish({ regionId: "paw-grounded:14", mirrored: false, interactive: true });
+
+    const calls = bridge.updateNativePetHitRegion.mock.calls;
+    const request = calls[calls.length - 1]?.[0];
+    const original = artifact.regions["paw:14"] as number[];
+    const originalRows = Array.from({ length: original.length / 3 }, (_, index) => original[index * 3]);
+    const groundedRows = Array.from(
+      { length: request.spans.length / 3 },
+      (_, index) => request.spans[index * 3],
+    );
+    expect(request.regionId).toBe("paw-grounded:14");
+    expect(Math.min(...groundedRows)).toBe(Math.min(...originalRows) + 12);
+    expect(Math.max(...groundedRows)).toBe(Math.min(artifact.height - 1, Math.max(...originalRows) + 12));
+  });
 });

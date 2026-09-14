@@ -17,9 +17,16 @@ import {
   PET_MODE_DANCE_FRAME_COUNT,
   PET_MODE_DANCE_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
+  PET_MODE_PAW_PREP_DURATION_MS,
+  PET_MODE_PAW_PREP_FRAME_COUNT,
+  PET_MODE_PAW_ARRIVAL_OFFSET_X_PX,
+  PET_MODE_PAW_GROUND_OFFSET_Y_PX,
+  PET_MODE_INTERVENTION_PAW_LEAD_MS,
+  PET_MODE_INTERVENTION_RUN_LANDING_FRAME,
   PET_MODE_RUN_FRAME_COUNT,
   PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS,
   getPetModeGaitFramesPerSecond,
+  getPetModeInterventionFrameIndex,
   getPetModeRunFrameIndex,
 } from "./petModeData";
 import { publishPetModeHitRegion, stagePetModeHitRegionTransition } from "./petModeHitRegions";
@@ -79,6 +86,11 @@ export function PetModeCat({
   facing,
   pawFrame,
   fastRunBetaEnabled = false,
+  fastRunPawArrival = false,
+  runSequence = 0,
+  runTravelDistance,
+  runDurationMs,
+  runStartDelayMs,
   entrySequence = 0,
   preserveEntryLanding = false,
   entryTravelDistance,
@@ -108,6 +120,12 @@ export function PetModeCat({
   readonly facing: "left" | "right";
   readonly pawFrame: number;
   readonly fastRunBetaEnabled?: boolean;
+  /** True only while an intervention paw overlaps the end of a fast run. */
+  readonly fastRunPawArrival?: boolean;
+  readonly runSequence?: number;
+  readonly runTravelDistance?: number;
+  readonly runDurationMs?: number;
+  readonly runStartDelayMs?: number;
   readonly entrySequence?: number;
   readonly preserveEntryLanding?: boolean;
   readonly entryTravelDistance?: number;
@@ -334,6 +352,21 @@ export function PetModeCat({
       entryTravelDistance,
       entryDurationMs,
     );
+    const synchronizedRun = motion === "run"
+      && typeof runTravelDistance === "number"
+      && runTravelDistance > 0
+      && typeof runDurationMs === "number"
+      && runDurationMs > 0;
+    const synchronizedRunOptions = synchronizedRun
+      ? {
+        travelDistance: runTravelDistance,
+        durationMs: runDurationMs,
+        startDelayMs: runStartDelayMs,
+        sizeScale,
+        landingFrame: PET_MODE_ENTRY_REST_FRAME,
+        handoffLeadMs: fastRunBetaEnabled ? PET_MODE_INTERVENTION_PAW_LEAD_MS : 0,
+      }
+      : undefined;
     // Entry is synchronized to native's own travel clock. Later motion phases
     // continue from the silhouette already on screen so stalk -> bite ->
     // return never snaps back to the first gait drawing.
@@ -341,8 +374,10 @@ export function PetModeCat({
       ? getPetModeGaitFrameIndex("entry", 0, walkFrames.length, {
         travelDistance: entryTravelDistance, durationMs: resolvedEntryDurationMs, sizeScale,
       })
+      : synchronizedRun
+        ? getPetModeInterventionFrameIndex(0, walkFrames.length, synchronizedRunOptions)
       : walkFrameRef.current;
-    if (phase === "entry") {
+    if (phase === "entry" || synchronizedRun) {
       walkFrameRef.current = startingFrame;
       setWalkFrame(startingFrame);
     }
@@ -358,18 +393,24 @@ export function PetModeCat({
       // The prototype advances gait in its requestAnimationFrame loop. Do the
       // same here: at run speed it may skip source indices, but it never queues
       // several full-silhouette React updates between display refreshes.
-      const timelineFrame = getPetModeGaitFrameIndex(
-        motion,
-        now - startedAt,
-        walkFrames.length,
-        motion === "entry"
-          ? {
-            travelDistance: entryTravelDistance,
-            durationMs: resolvedEntryDurationMs,
-            sizeScale,
-          }
-          : undefined,
-      );
+      const timelineFrame = synchronizedRun
+        ? getPetModeInterventionFrameIndex(
+          now - startedAt,
+          walkFrames.length,
+          synchronizedRunOptions,
+        )
+        : getPetModeGaitFrameIndex(
+          motion,
+          now - startedAt,
+          walkFrames.length,
+          motion === "entry"
+            ? {
+              travelDistance: entryTravelDistance,
+              durationMs: resolvedEntryDurationMs,
+              sizeScale,
+            }
+            : undefined,
+        );
       const settleProgress = reducedMotion
         ? 1
         : Math.min(1, Math.max(0, now - startedAt) / PET_MODE_ENTRY_SETTLE_DURATION_MS);
@@ -377,6 +418,8 @@ export function PetModeCat({
         ? (startingFrame + Math.floor(settleProgress * settleFrames)) % walkFrames.length
         : motion === "entry"
           ? timelineFrame
+          : synchronizedRun
+            ? timelineFrame
           : (startingFrame + timelineFrame) % walkFrames.length;
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
@@ -417,7 +460,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, settlingEntry, reducedMotion, runUsesVectorFallback, sizeScale, suspended, walkFrames.length]);
+  }, [entryDurationMs, entrySequence, entryTravelDistance, facing, hitRegionInteractive, phase, settlingEntry, reducedMotion, runDurationMs, runSequence, runStartDelayMs, runTravelDistance, runUsesVectorFallback, sizeScale, suspended, walkFrames.length]);
 
   useLayoutEffect(() => {
     if (suspended) return undefined;
@@ -441,7 +484,19 @@ export function PetModeCat({
     let disposed = false;
     const render = (now: number) => {
       if (disposed) return;
-      const nextFrame = getPetModeRunFrameIndex(now - startedAt);
+      const nextFrame = typeof runTravelDistance === "number"
+        && runTravelDistance > 0
+        && typeof runDurationMs === "number"
+        && runDurationMs > 0
+        ? getPetModeInterventionFrameIndex(now - startedAt, PET_MODE_RUN_FRAME_COUNT, {
+          travelDistance: runTravelDistance,
+          durationMs: runDurationMs,
+          startDelayMs: runStartDelayMs,
+          sizeScale,
+          landingFrame: PET_MODE_INTERVENTION_RUN_LANDING_FRAME,
+          handoffLeadMs: PET_MODE_INTERVENTION_PAW_LEAD_MS,
+        })
+        : getPetModeRunFrameIndex(now - startedAt);
       if (nextFrame !== displayedFrame && !stagingFrame) {
         const commitFrame = () => {
           if (disposed) return;
@@ -474,7 +529,7 @@ export function PetModeCat({
       window.cancelAnimationFrame(animationFrameId);
       window.cancelAnimationFrame(stagingReleaseFrameId);
     };
-  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runFramesFailed, runFramesReady, suspended]);
+  }, [facing, fastRunBetaEnabled, frameOverride, hitRegionInteractive, phase, reducedMotion, runDurationMs, runFramesFailed, runFramesReady, runSequence, runStartDelayMs, runTravelDistance, sizeScale, suspended]);
 
   useLayoutEffect(() => {
     if (suspended || phase !== "dance" || reducedMotion) return undefined;
@@ -571,7 +626,15 @@ export function PetModeCat({
   const usesLiveD = selectedSitVariant.kind === "live-raster";
   const hasLiveDSitGaze = phase === "sit" && usesLiveD && (gazeOffset.x !== 0 || gazeOffset.y !== 0);
   const hasLiveDNeutralSit = phase === "sit" && usesLiveD && !hasLiveDSitGaze;
-  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${entrySettled ? " is-entry-settled" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
+  const groundsFastRunPawArrival = phase === "paw"
+    && fastRunPawArrival
+    && fastRunBetaEnabled
+    && runFramesReady
+    && !runFramesFailed
+    && !reducedMotion;
+  const bridgesFastRunPawArrival = groundsFastRunPawArrival
+    && pawFrame < PET_MODE_PAW_PREP_FRAME_COUNT;
+  const rootClass = `pet-mode-cat pet-mode-cat--${phase}${mirrored ? " is-mirrored" : ""}${drowsyWalk ? " is-sleepwalking" : ""}${holdsRenderedEntryVector ? " is-entry-landed" : ""}${entrySettled ? " is-entry-settled" : ""}${usesSourceLockedSit ? " is-source-locked-sit" : ""}${hasLiveDNeutralSit ? " is-d-live-neutral" : ""}${hasLiveDSitGaze ? " is-d-live-gazing" : ""}${groundsFastRunPawArrival ? " is-fast-run-paw-grounded" : ""}${bridgesFastRunPawArrival ? " is-fast-run-paw-arrival" : ""}${playfulPaw ? " is-playful-paw" : ""}${huntAlertVisible ? " has-hunt-alert" : ""}${musicNoteVisible ? " has-music-note" : ""}${quietNotice ? " is-quiet-notice" : ""}${sleepDriftExpression || driftCue !== "none" ? " has-sleep-drift-expression" : ""}${driftCue !== "none" ? ` has-sleep-drift-cue is-${driftCue}` : ""}`;
   const usesSeparatedFace = phase === "blink"
     || phase === "happy"
     || phase === "drowsy";
@@ -593,6 +656,9 @@ export function PetModeCat({
     "--pet-anger-duration": `${PET_MODE_SLEEP_WAKE_ANGER_DURATION_MS}ms`,
     "--pet-gait-baseline-shift": `${PET_MODE_GAIT_BASELINE_SHIFT_PX}px`,
     "--pet-gait-center-shift": `${PET_MODE_GAIT_CENTER_SHIFT_PX}px`,
+    "--pet-paw-arrival-duration": `${PET_MODE_PAW_PREP_DURATION_MS}ms`,
+    "--pet-paw-arrival-x": `${PET_MODE_PAW_ARRIVAL_OFFSET_X_PX}px`,
+    "--pet-paw-ground-offset-y": `${PET_MODE_PAW_GROUND_OFFSET_Y_PX}px`,
     "--pet-gaze-x": `${gazeOffset.x.toFixed(2)}px`,
     "--pet-gaze-y": `${gazeOffset.y.toFixed(2)}px`,
     "--pet-gaze-body-x": `${(gazeOffset.x * (PET_MODE_GAZE_BODY_MAX_PX / 1.52)).toFixed(2)}px`,
@@ -667,7 +733,11 @@ export function PetModeCat({
     : holdsRenderedEntryVector || phase === "entry" || phase === "walk" || phase === "run" || phase === "stalk" || phase === "bite" || phase === "return"
     ? (walkFrames.length > 0 ? `gait:${renderedWalkFrame}` : "idle")
     : phase === "paw"
-      ? `paw:${pawFrame}`
+      ? (bridgesFastRunPawArrival
+        ? `paw-arrival:${pawFrame}`
+        : groundsFastRunPawArrival
+          ? `paw-grounded:${pawFrame}`
+          : `paw:${pawFrame}`)
       : phase === "stretch" || phase === "tail"
         ? `${phase}:${renderedLifeMotionFrame}`
         : phase === "happy"

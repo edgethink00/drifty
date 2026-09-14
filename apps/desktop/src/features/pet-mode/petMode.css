@@ -565,6 +565,23 @@
   object-fit: fill;
 }
 
+/* F12's source registration sits above the selected run baseline. Keep every
+   paw frame on the measured ground line and settle only the optional X delta
+   during the near-static anticipation. This is a rigid translation, not an
+   opacity blend: translucent silhouettes flicker through the native panel. */
+@keyframes pet-mode-paw-arrival-bridge {
+  from { transform: translate(var(--pet-paw-arrival-x), var(--pet-paw-ground-offset-y)); }
+  to { transform: translate(0, var(--pet-paw-ground-offset-y)); }
+}
+
+.pet-mode-cat.is-fast-run-paw-grounded .pet-mode-cat__raster--paw {
+  transform: translateY(var(--pet-paw-ground-offset-y));
+}
+
+.pet-mode-cat.is-fast-run-paw-arrival .pet-mode-cat__raster--paw {
+  animation: pet-mode-paw-arrival-bridge var(--pet-paw-arrival-duration) cubic-bezier(.16, 1, .3, 1) both;
+}
+
 /* Flow life-motion frames include a transparent 36/12/20/20 source-pixel
    gutter. Map the original 797×581 idle canvas back onto the exact approved
    position while letting tails and stretched paws use the surrounding native

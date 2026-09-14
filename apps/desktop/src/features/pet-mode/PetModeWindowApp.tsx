@@ -91,8 +91,10 @@ import {
   PET_MODE_POST_DROP_LOOK_DURATION_MS,
   PET_MODE_PAW_CONTACT_FRAME,
   PET_MODE_PAW_FPS,
+  PET_MODE_PAW_PREP_FRAME_COUNT,
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
+  PET_MODE_INTERVENTION_PAW_LEAD_MS,
   PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
   PET_MODE_HIDDEN_UNTIL_STORAGE_KEY,
@@ -179,6 +181,10 @@ type PetModeAxProbeDisplay = {
   readonly kind: PetModeAxProbeKind;
   readonly label: string;
 };
+type PetModeInterventionRunTiming = {
+  readonly durationMs: number;
+  readonly startDelayMs: number;
+};
 
 function guaranteedOutcomesEnabled(): boolean {
   return window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "1"
@@ -230,6 +236,10 @@ export function PetModeWindowApp() {
     const { width } = getPetModeWindowSize(resolveInitialPetModeSize());
     return resolvePetModeEntryDurationMs(getPetModeDefaultEntryTravelDistance(width));
   });
+  const [runSequence, setRunSequence] = useState(0);
+  const [runTravelDistance, setRunTravelDistance] = useState<number | undefined>(undefined);
+  const [runDurationMs, setRunDurationMs] = useState<number | undefined>(undefined);
+  const [runStartDelayMs, setRunStartDelayMs] = useState<number | undefined>(undefined);
   const [petModeSize, setPetModeSize] = useState(resolveInitialPetModeSize);
   const [fastRunBetaEnabled, setFastRunBetaEnabled] = useState(resolveInitialPetModeRunBetaEnabled);
   const [danceOnCloseBetaEnabled, setDanceOnCloseBetaEnabled] = useState(resolveInitialPetModeDanceOnCloseBetaEnabled);
@@ -294,6 +304,10 @@ export function PetModeWindowApp() {
   // nudge to retain motion ownership.
   const automaticInterventionRef = useRef(false);
   const interventionSceneRef = useRef<{ id: string; token: number } | null>(null);
+  const interventionRunTimingRef = useRef<{
+    readonly token: number;
+    readonly resolve: (timing: PetModeInterventionRunTiming) => void;
+  } | null>(null);
   // The action token says only that ownership changed. These refs retain why an
   // automatic intervention lost ownership so a focus transition or renderer
   // failure can never impersonate the one destructive-action veto the user
@@ -1413,8 +1427,59 @@ export function PetModeWindowApp() {
       }
       await revealForAction();
       if (token !== actionTokenRef.current) return;
-      commitPhase("run");
-      const resolved = await moveNativePetToTarget(target);
+      const reducedMotion = prefersReducedMotion();
+      const overlapsRunAndPaw = fastRunBetaEnabled && !reducedMotion;
+      let resolveRunTiming: ((timing: PetModeInterventionRunTiming) => void) | null = null;
+      const runTimingPromise = overlapsRunAndPaw
+        ? new Promise<PetModeInterventionRunTiming>((resolve) => {
+          resolveRunTiming = resolve;
+        })
+        : null;
+      if (resolveRunTiming) {
+        interventionRunTimingRef.current = { token, resolve: resolveRunTiming };
+      }
+      const movePromise = moveNativePetToTarget(target);
+      let pawTimelineStartIndex = 0;
+      let resolved: Awaited<ReturnType<typeof moveNativePetToTarget>>;
+      if (runTimingPromise) {
+        const first = await Promise.race([
+          movePromise.then((moveResult) => ({ kind: "move" as const, moveResult })),
+          runTimingPromise.then(async (timing) => {
+            await delay(Math.max(
+              0,
+              timing.startDelayMs + timing.durationMs - PET_MODE_INTERVENTION_PAW_LEAD_MS,
+            ));
+            return { kind: "paw_lead" as const };
+          }),
+        ]);
+        if (first.kind === "move") {
+          resolved = first.moveResult;
+          if (interventionRunTimingRef.current?.token === token) {
+            interventionRunTimingRef.current = null;
+          }
+        } else {
+          if (token !== actionTokenRef.current) return;
+          setPawFrame(0);
+          void commitPhase("paw");
+          // These seven source frames are the near-static preparation. Playing
+          // them now makes the pose develop through the final 150ms of native
+          // deceleration; the first readable lift still occurs after arrival.
+          for (const step of PET_MODE_PAW_TIMELINE.slice(0, PET_MODE_PAW_PREP_FRAME_COUNT)) {
+            if (token !== actionTokenRef.current) return;
+            await stagePetModeHitRegionTransition({
+              regionId: `transition:paw:${step.frame}`,
+              mirrored: facingRef.current === "left",
+            });
+            if (token !== actionTokenRef.current) return;
+            setPawFrame(step.frame);
+            await delay(step.durationUnits * 1000 / PET_MODE_PAW_FPS);
+          }
+          resolved = await movePromise;
+          pawTimelineStartIndex = PET_MODE_PAW_PREP_FRAME_COUNT;
+        }
+      } else {
+        resolved = await movePromise;
+      }
       if (token !== actionTokenRef.current) return;
       if (resolved.targetKind === "fallback" && !target.preview) {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
@@ -1441,12 +1506,13 @@ export function PetModeWindowApp() {
       }
       movedToTarget = true;
       commitFacing(resolved.facing);
-      setPawFrame(0);
-      commitPhase("paw");
+      if (pawTimelineStartIndex === 0) {
+        setPawFrame(0);
+        void commitPhase("paw");
+      }
 
-      const reducedMotion = prefersReducedMotion();
       const unitMilliseconds = reducedMotion ? 8 : 1000 / PET_MODE_PAW_FPS;
-      for (const step of PET_MODE_PAW_TIMELINE) {
+      for (const step of PET_MODE_PAW_TIMELINE.slice(pawTimelineStartIndex)) {
         if (token !== actionTokenRef.current) return;
         if (!contacted && step.frame === PET_MODE_PAW_CONTACT_FRAME) {
           const hitTargetRect = hitTargetRef.current?.getBoundingClientRect();
@@ -1487,6 +1553,7 @@ export function PetModeWindowApp() {
       throw error;
     } finally {
       if (interventionSceneRef.current?.token === token) interventionSceneRef.current = null;
+      if (interventionRunTimingRef.current?.token === token) interventionRunTimingRef.current = null;
       // Report exactly one terminal non-contact result. The old blanket
       // `user_intercepted` fallback also covered focus changes, native movement
       // errors, and the already-reported target-unavailable branch. That both
@@ -1534,7 +1601,7 @@ export function PetModeWindowApp() {
         commitPhase(focusRestingRef.current ? "sit" : "idle");
       }
     }
-  }, [commitFacing, commitPhase, endWatchForVisit, revealForAction, stopMusicNote]);
+  }, [commitFacing, commitPhase, endWatchForVisit, fastRunBetaEnabled, revealForAction, stopMusicNote]);
 
   const playOuting = useCallback(async (awayMilliseconds: number) => {
     if (!petOutingsEnabledRef.current) return;
@@ -2053,6 +2120,27 @@ export function PetModeWindowApp() {
           petModeEnabledRef.current = true;
           commitVisibility(true);
           setPetModeEnabled(true);
+        } else if (event.motion === "run") {
+          setRunTravelDistance(event.travelDistance);
+          setRunDurationMs(event.durationMs);
+          setRunStartDelayMs(event.startDelayMs);
+          setRunSequence((sequence) => sequence + 1);
+          const pendingTiming = interventionRunTimingRef.current;
+          if (
+            pendingTiming
+            && pendingTiming.token === actionTokenRef.current
+            && typeof event.durationMs === "number"
+            && Number.isFinite(event.durationMs)
+            && event.durationMs > 0
+            && typeof event.startDelayMs === "number"
+            && Number.isFinite(event.startDelayMs)
+          ) {
+            interventionRunTimingRef.current = null;
+            pendingTiming.resolve({
+              durationMs: event.durationMs,
+              startDelayMs: Math.max(0, event.startDelayMs),
+            });
+          }
         } else {
           setPreserveEntryLanding(false);
         }
@@ -3214,6 +3302,12 @@ export function PetModeWindowApp() {
             facing={facing}
             pawFrame={pawFrame}
             fastRunBetaEnabled={fastRunBetaEnabled}
+            fastRunPawArrival={phase === "paw"
+              && interventionSceneRef.current?.token === actionTokenRef.current}
+            runSequence={runSequence}
+            runTravelDistance={runTravelDistance}
+            runDurationMs={runDurationMs}
+            runStartDelayMs={runStartDelayMs}
             entrySequence={entrySequence}
             entryTravelDistance={entryTravelDistance}
             entryDurationMs={entryDurationMs}

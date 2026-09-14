@@ -4,6 +4,10 @@ import {
   PET_MODE_AWAY_MS,
   PET_MODE_BLINK_DURATION_MS,
   PET_MODE_RETURN_SPEED,
+  PET_MODE_INTERVENTION_RUN_LANDING_FRAME,
+  PET_MODE_INTERVENTION_PAW_LEAD_MS,
+  PET_MODE_INTERVENTION_RUN_SPEED,
+  PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
   PET_MODE_RUN_CYCLE_DURATION_MS,
   PET_MODE_RUN_BETA_STORAGE_KEY,
   PET_MODE_RUN_FRAME_COUNT,
@@ -30,6 +34,12 @@ import {
   PET_MODE_MUSIC_NOTE_CHANCE,
   PET_MODE_PRESENCE_RATIO,
   PET_MODE_PAW_CONTACT_FRAME,
+  PET_MODE_PAW_ARRIVAL_OFFSET_X_PX,
+  PET_MODE_PAW_GROUND_OFFSET_Y_PX,
+  PET_MODE_PAW_FPS,
+  PET_MODE_PAW_PREP_DURATION_MS,
+  PET_MODE_PAW_PREP_DURATION_UNITS,
+  PET_MODE_PAW_PREP_FRAME_COUNT,
   PET_MODE_PAW_TIMELINE,
   PET_MODE_PRESENT_MS,
   PET_MODE_SETTLED_ACTION_INTERVAL_MS,
@@ -41,6 +51,8 @@ import {
   getPetModeEntryDurationMs,
   getPetModeGaitFramesPerSecond,
   getPetModeGaitFrameIndex,
+  getPetModeInterventionFrameIndex,
+  getPetModeInterventionRunProgress,
   getPetModeRunFrameIndex,
   getPetModeGaitStride,
   getPetModeEntryProgress,
@@ -186,7 +198,7 @@ describe("petModeData", () => {
     expect(getPetModeGaitFrameIndex("entry", PET_MODE_ENTRY_DURATION_MS + 500)).toBe(0);
     expect(getPetModeGaitFrameIndex("entry", 0, 0)).toBe(0);
     expect(getPetModeGaitFramesPerSecond("walk")).toBeCloseTo(21.6, 6);
-    expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(112.5, 6);
+    expect(getPetModeGaitFramesPerSecond("run")).toBeCloseTo(106.875, 6);
     expect(getPetModeGaitFramesPerSecond("stalk")).toBeCloseTo(95.8064516, 6);
     expect(getPetModeGaitFramesPerSecond("return")).toBeCloseTo(58.6956522, 6);
     expect(PET_MODE_STALK_SPEED).toBe(220);
@@ -210,8 +222,58 @@ describe("petModeData", () => {
     }
   });
 
-  it("keeps the approved F12 v1.6 paw timeline frame-for-frame", () => {
+  it("slows intervention travel by 5% and lands every run on the planted frame", () => {
+    expect(PET_MODE_INTERVENTION_RUN_SPEED).toBe(285);
+    expect(PET_MODE_INTERVENTION_PAW_LEAD_MS).toBe(150);
+    expect(PET_MODE_INTERVENTION_RUN_LANDING_FRAME).toBe(5);
+    for (const sizeScale of [0.5, 0.75, 1, 1.25]) {
+      for (const travelDistance of [152, 400, 900]) {
+        const durationMs = travelDistance / PET_MODE_INTERVENTION_RUN_SPEED * 1000;
+        const options = {
+          travelDistance,
+          durationMs,
+          startDelayMs: PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
+          sizeScale,
+          handoffLeadMs: PET_MODE_INTERVENTION_PAW_LEAD_MS,
+        };
+        expect(getPetModeInterventionFrameIndex(0, 17, options)).toBe(
+          getPetModeInterventionFrameIndex(PET_MODE_INTERVENTION_RUN_START_DELAY_MS, 17, options),
+        );
+        expect(getPetModeInterventionFrameIndex(
+          PET_MODE_INTERVENTION_RUN_START_DELAY_MS
+            + durationMs
+            - PET_MODE_INTERVENTION_PAW_LEAD_MS,
+          17,
+          options,
+        )).toBe(PET_MODE_INTERVENTION_RUN_LANDING_FRAME);
+        expect(getPetModeInterventionFrameIndex(
+          PET_MODE_INTERVENTION_RUN_START_DELAY_MS + durationMs + 500,
+          30,
+          { ...options, landingFrame: 0 },
+        )).toBe(0);
+      }
+    }
+  });
+
+  it("decelerates the final intervention segment instead of stopping linearly", () => {
+    const durationMs = 900 / PET_MODE_INTERVENTION_RUN_SPEED * 1000;
+    const offset = PET_MODE_INTERVENTION_RUN_START_DELAY_MS;
+    const samples = [0.8, 0.85, 0.9, 0.95, 1].map((ratio) => (
+      getPetModeInterventionRunProgress(offset + durationMs * ratio, durationMs, offset)
+    ));
+    const deltas = samples.slice(1).map((value, index) => value - samples[index]);
+    expect(deltas.every((value) => value > 0)).toBe(true);
+    expect(deltas[deltas.length - 1]).toBeLessThan(deltas[0]);
+    expect(getPetModeInterventionRunProgress(offset + durationMs, durationMs, offset)).toBe(1);
+  });
+
+  it("compresses only the near-static paw preparation while preserving the authored arc", () => {
     expect(PET_MODE_PAW_CONTACT_FRAME).toBe(14);
+    expect(PET_MODE_PAW_PREP_FRAME_COUNT).toBe(7);
+    expect(PET_MODE_PAW_PREP_DURATION_UNITS).toBeCloseTo(2 / 3);
+    expect(PET_MODE_PAW_PREP_DURATION_MS).toBeCloseTo(194.44, 2);
+    expect(PET_MODE_PAW_ARRIVAL_OFFSET_X_PX).toBe(0);
+    expect(PET_MODE_PAW_GROUND_OFFSET_Y_PX).toBe(6);
     expect(PET_MODE_PAW_TIMELINE).toHaveLength(29);
     expect(PET_MODE_PAW_TIMELINE.slice(0, 15).map((step) => step.frame)).toEqual(
       Array.from({ length: 15 }, (_, frame) => frame),
@@ -219,7 +281,17 @@ describe("petModeData", () => {
     expect(PET_MODE_PAW_TIMELINE.slice(15).map((step) => step.frame)).toEqual(
       Array.from({ length: 14 }, (_, offset) => 13 - offset),
     );
+    expect(PET_MODE_PAW_TIMELINE.slice(0, 7).every(
+      (step) => step.durationUnits === PET_MODE_PAW_PREP_DURATION_UNITS,
+    )).toBe(true);
+    expect(PET_MODE_PAW_TIMELINE.slice(7, 15).every((step) => step.durationUnits === 1)).toBe(true);
     expect(PET_MODE_PAW_TIMELINE.slice(15).every((step) => step.durationUnits === 0.75)).toBe(true);
+
+    const visibleLiftAfterArrivalMs = PET_MODE_PAW_PREP_FRAME_COUNT
+      * PET_MODE_PAW_PREP_DURATION_UNITS * 1000 / PET_MODE_PAW_FPS
+      - PET_MODE_INTERVENTION_PAW_LEAD_MS;
+    expect(visibleLiftAfterArrivalMs).toBeCloseTo(44.44, 2);
+    expect(visibleLiftAfterArrivalMs).toBeGreaterThan(0);
   });
 
   it("only quiets autonomous life actions during focused work", () => {

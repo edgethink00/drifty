@@ -1,4 +1,8 @@
 import { updateNativePetHitRegion } from "./petModeBridge";
+import {
+  PET_MODE_PAW_ARRIVAL_OFFSET_X_PX,
+  PET_MODE_PAW_GROUND_OFFSET_Y_PX,
+} from "./petModeData";
 
 export const PET_MODE_HIT_REGION_VERSION = 1;
 const generationClock = globalThis as typeof globalThis & {
@@ -59,6 +63,64 @@ type PetModeHitRegionArtifact = {
 };
 
 let artifactPromise: Promise<PetModeHitRegionArtifact> | null = null;
+
+function translateHitRegionSpans(
+  spans: readonly number[],
+  sweepOffsetX: number,
+  offsetY: number,
+  width: number,
+  height: number,
+): readonly number[] {
+  const rows = new Map<number, Array<[number, number]>>();
+  for (let index = 0; index < spans.length; index += 3) {
+    const y = spans[index];
+    const start = spans[index + 1];
+    const end = spans[index + 2];
+    const shiftedY = y + offsetY;
+    if (shiftedY < 0 || shiftedY >= height) continue;
+    const intervals = rows.get(shiftedY) ?? [];
+    intervals.push([
+      Math.max(0, Math.min(start, start + sweepOffsetX)),
+      Math.min(width, Math.max(end, end + sweepOffsetX)),
+    ]);
+    rows.set(shiftedY, intervals);
+  }
+
+  const expanded: number[] = [];
+  for (const [y, intervals] of [...rows.entries()].sort(([a], [b]) => a - b)) {
+    intervals.sort(([a], [b]) => a - b);
+    let [mergedStart, mergedEnd] = intervals[0];
+    for (const [start, end] of intervals.slice(1)) {
+      if (start <= mergedEnd) {
+        mergedEnd = Math.max(mergedEnd, end);
+      } else {
+        expanded.push(y, mergedStart, mergedEnd);
+        [mergedStart, mergedEnd] = [start, end];
+      }
+    }
+    expanded.push(y, mergedStart, mergedEnd);
+  }
+  return expanded;
+}
+
+function resolveHitRegionSpans(
+  artifact: PetModeHitRegionArtifact,
+  regionId: string,
+): readonly number[] | undefined {
+  const pawArrival = regionId.match(/^paw-arrival:(\d+)$/);
+  const pawGrounded = regionId.match(/^paw-grounded:(\d+)$/);
+  const pawFrame = pawArrival?.[1] ?? pawGrounded?.[1];
+  if (pawFrame === undefined) return artifact.regions[regionId];
+  const spans = artifact.regions[`paw:${Number(pawFrame)}`];
+  if (!spans) return undefined;
+  return translateHitRegionSpans(
+    spans,
+    pawArrival ? PET_MODE_PAW_ARRIVAL_OFFSET_X_PX * artifact.subpixelResolution : 0,
+    PET_MODE_PAW_GROUND_OFFSET_Y_PX * artifact.subpixelResolution,
+    artifact.width,
+    artifact.height,
+  );
+}
 
 function loadArtifact(): Promise<PetModeHitRegionArtifact> {
   artifactPromise ??= fetch(`/pet-mode/hit-regions-v${PET_MODE_HIT_REGION_VERSION}.json`)
@@ -160,7 +222,7 @@ export async function publishPetModeHitRegion(request: {
       return;
     }
     const artifact = await loadArtifact();
-    const spans = artifact.regions[request.regionId];
+    const spans = resolveHitRegionSpans(artifact, request.regionId);
     if (!spans) throw new Error(`Unknown Pet Mode hit region: ${request.regionId}`);
     await updateNativePetHitRegion({
       version: artifact.version,

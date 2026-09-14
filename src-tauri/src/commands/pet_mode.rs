@@ -58,6 +58,15 @@ const PET_MODE_HOME_EDGE_INSET: f64 = 24.0;
 // AX obstacle safety is intentionally evaluated across the full work area.
 const PET_MODE_RESIDENT_BAND_RATIO: f64 = 0.32;
 const PET_MODE_RUN_SPEED: f64 = 300.0;
+// Automatic-close approaches are 5% calmer than Show Pet and preview return.
+// Keeping this separate prevents an intervention polish pass from changing
+// unrelated entry and homecoming behavior.
+const PET_MODE_INTERVENTION_RUN_SPEED: f64 = 285.0;
+const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_SECONDS: f64 = 0.080;
+const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_SECONDS: f64 = 0.160;
+const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO: f64 = 0.08;
+const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO: f64 = 0.20;
+const PET_MODE_INTERVENTION_RUN_START_DELAY_MS: u64 = 34;
 const PET_MODE_WALK_SPEED: f64 = 20.8;
 // Manual drops get one compact, same-level walk. At the approved walk speed
 // this is just over four seconds, long enough to read without becoming roam.
@@ -1069,9 +1078,29 @@ fn animate_pet_entry_window(
 }
 
 fn pet_entry_travel_progress(progress: f64) -> f64 {
+    pet_travel_progress(
+        progress,
+        PET_MODE_ENTRY_ACCELERATION_RATIO,
+        PET_MODE_ENTRY_DECELERATION_RATIO,
+    )
+}
+
+fn pet_intervention_run_travel_progress(progress: f64, duration_seconds: f64) -> f64 {
+    let acceleration_duration = (PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_SECONDS
+        / duration_seconds)
+        .min(PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO);
+    let deceleration_duration = (PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_SECONDS
+        / duration_seconds)
+        .min(PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO);
+    pet_travel_progress(progress, acceleration_duration, deceleration_duration)
+}
+
+fn pet_travel_progress(
+    progress: f64,
+    acceleration_duration: f64,
+    deceleration_duration: f64,
+) -> f64 {
     let progress = progress.clamp(0.0, 1.0);
-    let acceleration_duration = PET_MODE_ENTRY_ACCELERATION_RATIO;
-    let deceleration_duration = PET_MODE_ENTRY_DECELERATION_RATIO;
     let deceleration_start = 1.0 - deceleration_duration;
     let cruise_duration = deceleration_start - acceleration_duration;
     let travel_area = acceleration_duration / 2.0 + cruise_duration + deceleration_duration / 2.0;
@@ -2517,7 +2546,7 @@ fn probe_current_pet_ax_seat(
 fn move_pet_to_target(
     app: &AppHandle,
     target: &PetModeInterventionTarget,
-    _reduced_motion: bool,
+    reduced_motion: bool,
 ) -> Result<PetModeResolvedTarget, String> {
     let window = app
         .get_webview_window(PET_MODE_WINDOW_LABEL)
@@ -2525,7 +2554,7 @@ fn move_pet_to_target(
     let home_monitor = resolve_pet_home_monitor(app)
         .ok_or_else(|| "No monitor is available for Pet Mode".to_string())?;
     if target.preview {
-        return move_pet_to_preview_target(&window, &home_monitor);
+        return move_pet_to_preview_target(&window, &home_monitor, reduced_motion);
     }
     if target.lab_target == Some(PetModeLabTargetKind::BrowserTabX) {
         activate_lab_target_app(&target.app_name)?;
@@ -2536,7 +2565,7 @@ fn move_pet_to_target(
             &target.app_name,
             target.browser_name.as_deref(),
         ) {
-            return pet_fullscreen::approach(app, &window, target, frame, _reduced_motion);
+            return pet_fullscreen::approach(app, &window, target, frame, reduced_motion);
         }
     }
     let point = if target.lab_target == Some(PetModeLabTargetKind::DriftyWindowX) {
@@ -2576,15 +2605,19 @@ fn move_pet_to_target(
     // while it runs. The actual close action is performed by the native nudge
     // bridge after the contact frame, so the pet never needs to pass a user's
     // click into Drifty's main dashboard while crossing the target.
-    let motion_completed = animate_pet_window_with_facing_guarded(
-        &window,
-        target_position,
-        facing,
-        PET_MODE_RUN_SPEED,
-        PET_MODE_RUN_MAX_SECONDS,
-        "run",
-        None,
-    )?;
+    let motion_completed = if reduced_motion {
+        move_pet_window_immediately(&window, target_position, facing)?
+    } else {
+        animate_pet_window_with_facing_guarded(
+            &window,
+            target_position,
+            facing,
+            PET_MODE_INTERVENTION_RUN_SPEED,
+            PET_MODE_RUN_MAX_SECONDS,
+            "run",
+            None,
+        )?
+    };
 
     Ok(PetModeResolvedTarget {
         facing,
@@ -2604,6 +2637,7 @@ fn move_pet_to_target(
 fn move_pet_to_preview_target(
     window: &WebviewWindow,
     monitor: &Monitor,
+    reduced_motion: bool,
 ) -> Result<PetModeResolvedTarget, String> {
     let current = current_pet_logical_position(window)?;
     *PET_MODE_PREVIEW_RETURN_POSITION
@@ -2631,15 +2665,19 @@ fn move_pet_to_preview_target(
         work_size.width,
         work_size.height,
     );
-    let motion_completed = animate_pet_window_with_facing_guarded(
-        window,
-        target_position,
-        facing,
-        PET_MODE_RUN_SPEED,
-        0.8,
-        "run",
-        None,
-    )?;
+    let motion_completed = if reduced_motion {
+        move_pet_window_immediately(window, target_position, facing)?
+    } else {
+        animate_pet_window_with_facing_guarded(
+            window,
+            target_position,
+            facing,
+            PET_MODE_INTERVENTION_RUN_SPEED,
+            0.8,
+            "run",
+            None,
+        )?
+    };
     Ok(PetModeResolvedTarget {
         facing,
         target_kind: PetModeTargetKind::Fallback,
@@ -4530,11 +4568,22 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
     purpose: Option<&'static str>,
     expected_motion_revision: Option<u64>,
 ) -> Result<bool, String> {
+    let start = current_pet_logical_position(window)?;
+    let distance = ((target.x - start.x).powi(2) + (target.y - start.y).powi(2)).sqrt();
+    let duration_seconds = movement_duration_seconds(distance, speed, max_duration_seconds);
+    let synchronized_intervention_run =
+        motion == "run" && (speed - PET_MODE_INTERVENTION_RUN_SPEED).abs() < f64::EPSILON;
+    let timing = synchronized_intervention_run.then_some((
+        distance,
+        (duration_seconds * 1_000.0).round() as u64,
+        PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
+    ));
     let Some(motion_revision) = begin_pet_window_motion(
         window,
         facing,
         motion,
         purpose,
+        timing,
         outing_generation,
         expected_motion_revision,
     )?
@@ -4542,12 +4591,16 @@ fn animate_pet_window_with_facing_guarded_and_purpose(
         return Ok(false);
     };
     // Give the webview one paint boundary to flip before the native window moves.
-    thread::sleep(Duration::from_millis(34));
+    thread::sleep(Duration::from_millis(
+        PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
+    ));
     let result = animate_pet_window(
         window,
+        start,
         target,
-        speed,
-        max_duration_seconds,
+        distance,
+        duration_seconds,
+        synchronized_intervention_run,
         motion_revision,
         outing_generation,
     );
@@ -4560,6 +4613,7 @@ fn begin_pet_window_motion(
     facing: &'static str,
     motion: &'static str,
     purpose: Option<&'static str>,
+    timing: Option<(f64, u64, u64)>,
     outing_generation: Option<u64>,
     expected_motion_revision: Option<u64>,
 ) -> Result<Option<u64>, String> {
@@ -4614,10 +4668,26 @@ fn begin_pet_window_motion(
     }
     #[cfg(debug_assertions)]
     eprintln!("[pet-mode-motion] motion={motion} purpose={purpose:?} facing={facing}");
-    let motion_event = if let Some(purpose) = purpose {
-        json!({ "kind": "motion", "motion": motion, "purpose": purpose })
-    } else {
-        json!({ "kind": "motion", "motion": motion })
+    let motion_event = match (purpose, timing) {
+        (Some(purpose), Some((travel_distance, duration_ms, start_delay_ms))) => json!({
+            "kind": "motion",
+            "motion": motion,
+            "purpose": purpose,
+            "travelDistance": travel_distance,
+            "durationMs": duration_ms,
+            "startDelayMs": start_delay_ms,
+        }),
+        (Some(purpose), None) => {
+            json!({ "kind": "motion", "motion": motion, "purpose": purpose })
+        }
+        (None, Some((travel_distance, duration_ms, start_delay_ms))) => json!({
+            "kind": "motion",
+            "motion": motion,
+            "travelDistance": travel_distance,
+            "durationMs": duration_ms,
+            "startDelayMs": start_delay_ms,
+        }),
+        (None, None) => json!({ "kind": "motion", "motion": motion }),
     };
     if let Err(error) = emit_pet_event(window, motion_event) {
         motion_state.active = None;
@@ -4706,16 +4776,29 @@ fn finish_pet_window_motion(motion_revision: u64) {
     }
 }
 
-fn animate_pet_window(
+fn move_pet_window_immediately(
     window: &WebviewWindow,
     target: LogicalPosition<f64>,
-    speed: f64,
-    max_duration_seconds: f64,
+    facing: &'static str,
+) -> Result<bool, String> {
+    cancel_pet_motion();
+    emit_pet_event(window, json!({ "kind": "facing", "facing": facing }))?;
+    window
+        .set_position(target)
+        .map_err(|error| error.to_string())?;
+    Ok(true)
+}
+
+fn animate_pet_window(
+    window: &WebviewWindow,
+    start: LogicalPosition<f64>,
+    target: LogicalPosition<f64>,
+    distance: f64,
+    duration_seconds: f64,
+    synchronized_intervention_run: bool,
     motion_revision: u64,
     outing_generation: Option<u64>,
 ) -> Result<bool, String> {
-    let start = current_pet_logical_position(window)?;
-    let distance = ((target.x - start.x).powi(2) + (target.y - start.y).powi(2)).sqrt();
     if distance < 1.0 {
         if !pet_window_motion_is_current(motion_revision, outing_generation) {
             return Ok(false);
@@ -4727,7 +4810,6 @@ fn animate_pet_window(
             outing_generation,
         );
     }
-    let duration_seconds = movement_duration_seconds(distance, speed, max_duration_seconds);
     let duration = Duration::from_secs_f64(duration_seconds);
     let started_at = Instant::now();
     loop {
@@ -4735,11 +4817,16 @@ fn animate_pet_window(
             return Ok(false);
         }
         let progress = (started_at.elapsed().as_secs_f64() / duration_seconds).min(1.0);
+        let travel_progress = if synchronized_intervention_run {
+            pet_intervention_run_travel_progress(progress, duration_seconds)
+        } else {
+            progress
+        };
         let applied = apply_pet_window_position_if_motion_current(
             window,
             LogicalPosition::new(
-                start.x + (target.x - start.x) * progress,
-                start.y + (target.y - start.y) * progress,
+                start.x + (target.x - start.x) * travel_progress,
+                start.y + (target.y - start.y) * travel_progress,
             ),
             motion_revision,
             outing_generation,
@@ -5303,6 +5390,30 @@ mod tests {
         assert!((pet_entry_travel_progress(0.91) - 0.973_837_209_302_325_5).abs() < 1e-12);
         assert!((pet_entry_travel_progress(1.0) - 1.0).abs() < f64::EPSILON);
         assert!((pet_entry_travel_progress(2.0) - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn intervention_run_slows_and_settles_into_its_target() {
+        assert!((PET_MODE_INTERVENTION_RUN_SPEED / PET_MODE_RUN_SPEED - 0.95).abs() < f64::EPSILON);
+        assert_eq!(PET_MODE_INTERVENTION_RUN_START_DELAY_MS, 34);
+        assert_eq!(PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_SECONDS, 0.080);
+        assert_eq!(PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_SECONDS, 0.160);
+        assert_eq!(PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO, 0.08);
+        assert_eq!(PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO, 0.20);
+
+        let duration = movement_duration_seconds(152.0, PET_MODE_INTERVENTION_RUN_SPEED, 0.8);
+        assert!((duration - 152.0 / 285.0).abs() < f64::EPSILON);
+        assert_eq!(pet_intervention_run_travel_progress(0.0, duration), 0.0);
+        assert!((pet_intervention_run_travel_progress(1.0, duration) - 1.0).abs() < f64::EPSILON);
+
+        let p80 = pet_intervention_run_travel_progress(0.80, duration);
+        let p85 = pet_intervention_run_travel_progress(0.85, duration);
+        let p90 = pet_intervention_run_travel_progress(0.90, duration);
+        let p95 = pet_intervention_run_travel_progress(0.95, duration);
+        let p100 = pet_intervention_run_travel_progress(1.0, duration);
+        assert!(p85 - p80 > p90 - p85);
+        assert!(p90 - p85 > p95 - p90);
+        assert!(p95 - p90 > p100 - p95);
     }
 
     #[test]

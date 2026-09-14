@@ -67,7 +67,10 @@ export const PET_MODE_BASE_WIDTH = 144;
 export const PET_MODE_BASE_HEIGHT = 99;
 export const PET_MODE_WALK_SPEED = 20.8;
 export const PET_MODE_WALK_STRIDE = 26;
+// Entry and preview return keep their shipped pace. Automatic-close approaches
+// are intentionally 5% calmer so the target reads before the paw reaches it.
 export const PET_MODE_RUN_SPEED = 300;
+export const PET_MODE_INTERVENTION_RUN_SPEED = 285;
 export const PET_MODE_RUN_STRIDE = 72;
 export const PET_MODE_STALK_SPEED = 220;
 export const PET_MODE_STALK_STRIDE = 62;
@@ -82,6 +85,19 @@ export const PET_MODE_GAIT_FRAME_COUNT = 30;
 // run rather than a vertical hop or a dragged still.
 export const PET_MODE_RUN_FRAME_COUNT = 17;
 export const PET_MODE_RUN_CYCLE_DURATION_MS = 616;
+// Native emits the run frame before waiting for the WebView's paint boundary.
+// The renderer subtracts the same handoff so its travel clock begins with the
+// panel instead of spending the first frame running in place.
+export const PET_MODE_INTERVENTION_RUN_START_DELAY_MS = 34;
+export const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_MS = 80;
+export const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_MS = 160;
+export const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO = 0.08;
+export const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO = 0.2;
+// Loop 5 frame 6 is the reviewed planted pose for the overlapping handoff.
+// Paw preparation begins during native deceleration, so this is the last run
+// frame the renderer can show rather than a separate post-arrival hold.
+export const PET_MODE_INTERVENTION_RUN_LANDING_FRAME = 5;
+export const PET_MODE_INTERVENTION_PAW_LEAD_MS = 150;
 export const PET_MODE_HOME_EDGE_INSET = 24;
 // Native translation duration only. The hidden pre-paint hold and renderer
 // handoff happen before this clock starts. Default-home travel at 100% size is
@@ -193,14 +209,30 @@ export const PET_MODE_DANCE_DURATION_MS = PET_MODE_DANCE_CYCLE_MS * PET_MODE_DAN
 // A manual drop is direct attention from the user, so the rare acknowledgement
 // can answer quickly before the longer authored tail motion takes over.
 export const PET_MODE_POST_DROP_LOOK_DURATION_MS = 840;
-// Locked to the approved prototype's F12 v1.6 action. The cat reaches on
-// source frames 0…14, contacts on 14, then returns over the same clean arc.
-// Keep this as data rather than a CSS tween so every rendered pose remains a
-// reviewed source frame.
+// Locked to the approved prototype's F12 v1.6 action. Frames 0…6 are a nearly
+// static anticipation before the paw becomes readable on frame 7, so only
+// that preparation runs at 1.5x. The visible lift, contact on 14, and clean
+// return keep their reviewed cadence and source-frame order.
 export const PET_MODE_PAW_FPS = 24;
 export const PET_MODE_PAW_CONTACT_FRAME = 14;
+export const PET_MODE_PAW_PREP_FRAME_COUNT = 7;
+export const PET_MODE_PAW_PREP_DURATION_UNITS = 2 / 3;
+export const PET_MODE_PAW_PREP_DURATION_MS = (
+  PET_MODE_PAW_PREP_FRAME_COUNT * PET_MODE_PAW_PREP_DURATION_UNITS * 1000 / PET_MODE_PAW_FPS
+);
+// The selected Loop 5 frame 6 already matches F12 horizontally. F12's source
+// registration sits 6px above the run baseline, however, so every paw frame in
+// this specific arrival stays 6px lower. Keeping Y invariant prevents the cat
+// from floating upward when the early anticipation ends.
+export const PET_MODE_PAW_ARRIVAL_OFFSET_X_PX = 0;
+export const PET_MODE_PAW_GROUND_OFFSET_Y_PX = 6;
 export const PET_MODE_PAW_TIMELINE = [
-  ...Array.from({ length: PET_MODE_PAW_CONTACT_FRAME + 1 }, (_, frame) => ({ frame, durationUnits: 1 })),
+  ...Array.from({ length: PET_MODE_PAW_CONTACT_FRAME + 1 }, (_, frame) => ({
+    frame,
+    durationUnits: frame < PET_MODE_PAW_PREP_FRAME_COUNT
+      ? PET_MODE_PAW_PREP_DURATION_UNITS
+      : 1,
+  })),
   ...Array.from({ length: PET_MODE_PAW_CONTACT_FRAME }, (_, offset) => ({
     frame: PET_MODE_PAW_CONTACT_FRAME - 1 - offset,
     durationUnits: 0.75,
@@ -282,6 +314,7 @@ export type PetModeWindowEvent =
     readonly purpose?: "seat_correction" | "drowsy_seat_correction";
     readonly travelDistance?: number;
     readonly durationMs?: number;
+    readonly startDelayMs?: number;
   }
   | { readonly kind: "entry_complete" }
   | { readonly kind: "preview_action"; readonly action: PetModePreviewAction }
@@ -329,7 +362,9 @@ export function getPetModeGaitFramesPerSecond(motion: PetModeMotionKind): number
       ? PET_MODE_RETURN_SPEED
     : motion === "stalk"
       ? PET_MODE_STALK_SPEED
-      : PET_MODE_RUN_SPEED;
+    : motion === "entry"
+      ? PET_MODE_RUN_SPEED
+      : PET_MODE_INTERVENTION_RUN_SPEED;
   return PET_MODE_GAIT_FRAME_COUNT * speed / getPetModeGaitStride(motion);
 }
 
@@ -385,13 +420,24 @@ export function getPetModeEntryProgress(
   elapsedMilliseconds: number,
   durationMs = PET_MODE_ENTRY_DURATION_MS,
 ): number {
-  const duration = durationMs > 0 ? durationMs : PET_MODE_ENTRY_DURATION_MS;
+  return getPetModeTravelProgress(
+    elapsedMilliseconds,
+    durationMs > 0 ? durationMs : PET_MODE_ENTRY_DURATION_MS,
+    PET_MODE_ENTRY_ACCELERATION_RATIO,
+    PET_MODE_ENTRY_DECELERATION_RATIO,
+  );
+}
+
+function getPetModeTravelProgress(
+  elapsedMilliseconds: number,
+  durationMs: number,
+  accelerationDuration: number,
+  decelerationDuration: number,
+): number {
   const linearProgress = Math.min(
     1,
-    Math.max(0, elapsedMilliseconds) / duration,
+    Math.max(0, elapsedMilliseconds) / durationMs,
   );
-  const accelerationDuration = PET_MODE_ENTRY_ACCELERATION_RATIO;
-  const decelerationDuration = PET_MODE_ENTRY_DECELERATION_RATIO;
   const decelerationStart = 1 - decelerationDuration;
   const cruiseDuration = decelerationStart - accelerationDuration;
   // The unscaled area under the velocity profile: two triangular ramps plus
@@ -411,6 +457,28 @@ export function getPetModeEntryProgress(
   const decelerationDistance = decelerationElapsed
     - decelerationElapsed * decelerationElapsed / (2 * decelerationDuration);
   return (distanceBeforeDeceleration + decelerationDistance) / travelArea;
+}
+
+export function getPetModeInterventionRunProgress(
+  elapsedMilliseconds: number,
+  durationMs: number,
+  startDelayMs = PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
+): number {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return 0;
+  const accelerationDuration = Math.min(
+    PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO,
+    PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_MS / durationMs,
+  );
+  const decelerationDuration = Math.min(
+    PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO,
+    PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_MS / durationMs,
+  );
+  return getPetModeTravelProgress(
+    Math.max(0, elapsedMilliseconds - Math.max(0, startDelayMs)),
+    durationMs,
+    accelerationDuration,
+    decelerationDuration,
+  );
 }
 
 export function getPetModeGaitFrameIndex(
@@ -448,6 +516,65 @@ export function getPetModeGaitFrameIndex(
     Math.max(0, elapsedMilliseconds) * getPetModeGaitFramesPerSecond(motion) / 1000,
   );
   return rawFrame % frameCount;
+}
+
+export function getPetModeInterventionFrameIndex(
+  elapsedMilliseconds: number,
+  frameCount = PET_MODE_RUN_FRAME_COUNT,
+  options?: {
+    readonly travelDistance?: number;
+    readonly durationMs?: number;
+    readonly startDelayMs?: number;
+    readonly sizeScale?: number;
+    readonly landingFrame?: number;
+    readonly handoffLeadMs?: number;
+  },
+): number {
+  if (!Number.isInteger(frameCount) || frameCount < 1) return 0;
+  const travelDistance = options?.travelDistance;
+  const durationMs = options?.durationMs;
+  if (
+    typeof travelDistance !== "number"
+    || !Number.isFinite(travelDistance)
+    || travelDistance <= 0
+    || typeof durationMs !== "number"
+    || !Number.isFinite(durationMs)
+    || durationMs <= 0
+  ) return 0;
+  const sizeScale = options?.sizeScale && options.sizeScale > 0 ? options.sizeScale : 1;
+  const stride = getPetModeGaitStride("run") * sizeScale;
+  const totalFrames = travelDistance / stride * frameCount;
+  const landingFrame = (
+    (Math.trunc(options?.landingFrame ?? PET_MODE_INTERVENTION_RUN_LANDING_FRAME) % frameCount)
+    + frameCount
+  ) % frameCount;
+  // Start from whichever leg phase completes the measured distance on the
+  // authored planted pose. The half-frame center avoids a floating boundary at
+  // completion while preserving the exact distance-driven cadence.
+  const handoffLeadMs = typeof options?.handoffLeadMs === "number"
+    && Number.isFinite(options.handoffLeadMs)
+    ? Math.max(0, options.handoffLeadMs)
+    : 0;
+  const startDelayMs = typeof options?.startDelayMs === "number"
+    && Number.isFinite(options.startDelayMs)
+    ? Math.max(0, options.startDelayMs)
+    : PET_MODE_INTERVENTION_RUN_START_DELAY_MS;
+  const handoffElapsedMs = Math.max(startDelayMs, startDelayMs + durationMs - handoffLeadMs);
+  const framesAtHandoff = getPetModeInterventionRunProgress(
+    handoffElapsedMs,
+    durationMs,
+    startDelayMs,
+  ) * totalFrames;
+  const landingFrameCenter = landingFrame + 0.5;
+  const startFrame = (
+    (landingFrameCenter - framesAtHandoff) % frameCount + frameCount
+  ) % frameCount;
+  const progress = getPetModeInterventionRunProgress(
+    Math.min(elapsedMilliseconds, handoffElapsedMs),
+    durationMs,
+    startDelayMs,
+  );
+  return Math.floor(startFrame + progress * totalFrames) % frameCount;
 }
 
 export function getPetModeRunFrameIndex(

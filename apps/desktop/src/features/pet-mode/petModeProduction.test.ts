@@ -13,6 +13,12 @@ import {
   PET_MODE_ENTRY_TRANSPARENT_GUTTER_PX,
   PET_MODE_GAIT_BASELINE_SHIFT_PX,
   PET_MODE_GAIT_CENTER_SHIFT_PX,
+  PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_MS,
+  PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO,
+  PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_MS,
+  PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO,
+  PET_MODE_INTERVENTION_RUN_SPEED,
+  PET_MODE_INTERVENTION_RUN_START_DELAY_MS,
   PET_MODE_SIZES,
   PET_MODE_SIZE_STORAGE_KEY,
   PET_MODE_STORAGE_KEY,
@@ -233,6 +239,41 @@ describe("pet entry motion contract", () => {
     expect(petModeCssContract).toContain(
       ".pet-mode-cat.is-entry-landed .pet-mode-cat__motion",
     );
+  });
+
+  it("keeps the intervention run clock and native travel profile aligned", () => {
+    const rustSpeed = petModeRustContract.match(
+      /const PET_MODE_INTERVENTION_RUN_SPEED: f64 = ([\d.]+);/,
+    );
+    const rustStartDelay = petModeRustContract.match(
+      /const PET_MODE_INTERVENTION_RUN_START_DELAY_MS: u64 = (\d+);/,
+    );
+    const rustAccelerationSeconds = petModeRustContract.match(
+      /const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_SECONDS: f64 = ([\d.]+);/,
+    );
+    const rustDecelerationSeconds = petModeRustContract.match(
+      /const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_SECONDS: f64 = ([\d.]+);/,
+    );
+    const rustAccelerationRatio = petModeRustContract.match(
+      /const PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO: f64 = ([\d.]+);/,
+    );
+    const rustDecelerationRatio = petModeRustContract.match(
+      /const PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO: f64 = ([\d.]+);/,
+    );
+
+    expect(Number(rustSpeed?.[1])).toBe(PET_MODE_INTERVENTION_RUN_SPEED);
+    expect(Number(rustStartDelay?.[1])).toBe(PET_MODE_INTERVENTION_RUN_START_DELAY_MS);
+    expect(Number(rustAccelerationSeconds?.[1]) * 1000).toBe(PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_MS);
+    expect(Number(rustDecelerationSeconds?.[1]) * 1000).toBe(PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_MS);
+    expect(Number(rustAccelerationRatio?.[1])).toBe(PET_MODE_INTERVENTION_RUN_ACCELERATION_MAX_RATIO);
+    expect(Number(rustDecelerationRatio?.[1])).toBe(PET_MODE_INTERVENTION_RUN_DECELERATION_MAX_RATIO);
+    expect(petModeRustContract).toContain('"travelDistance": travel_distance');
+    expect(petModeRustContract).toContain('"durationMs": duration_ms');
+    expect(petModeRustContract).toContain('"startDelayMs": start_delay_ms');
+    expect(petModeRustContract).toContain("move_pet_window_immediately(&window, target_position, facing)");
+    expect(petModeWindowContract).toContain("runTravelDistance={runTravelDistance}");
+    expect(petModeWindowContract).toContain("runDurationMs={runDurationMs}");
+    expect(petModeWindowContract).toContain("runStartDelayMs={runStartDelayMs}");
   });
 });
 

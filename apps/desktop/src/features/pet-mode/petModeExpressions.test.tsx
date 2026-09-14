@@ -157,7 +157,7 @@ describe("pet expressions", () => {
     expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
   });
 
-  it("keeps the neutral face while approaching Drifty and during other walks", async () => {
+  it("waits for native movement, then keeps the neutral face while approaching Drifty", async () => {
     vi.useFakeTimers();
     let finishMove!: () => void;
     bridge.moveNativePetToTarget.mockImplementationOnce(() => new Promise((resolve) => {
@@ -188,6 +188,16 @@ describe("pet expressions", () => {
     });
     await act(async () => { await Promise.resolve(); });
 
+    expect(phase()).toBe("idle");
+    await act(async () => {
+      bridge.eventHandler?.({
+        kind: "motion",
+        motion: "run",
+        travelDistance: 152,
+        durationMs: 533.333,
+        startDelayMs: 34,
+      });
+    });
     expect(phase()).toBe("run");
     expect(document.querySelector(".pet-mode-cat__walk-eyes--proud")).toBeNull();
 
