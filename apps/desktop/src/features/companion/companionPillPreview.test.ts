@@ -5,7 +5,6 @@ import {
   buildCompanionMilestonePreview,
   buildCompanionDriftAlarmPreview,
   buildCompanionExtremeNudgePreview,
-  buildCompanionReentryPreview,
 } from "./companionPillPreview";
 
 describe("companion milestone previews", () => {
@@ -35,12 +34,11 @@ describe("companion milestone previews", () => {
 /* The decision cards previously had no preview at all: they only appeared after
    real drift, so their copy and spacing could not be reviewed on demand. */
 describe("companion moment previews", () => {
-  it("offers every decision and return moment", () => {
+  it("offers every decision moment", () => {
     expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.id)).toEqual([
       "drift-alarm",
       "break-return",
       "extreme-nudge",
-      "reentry",
     ]);
     expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.label)).toContain("Automatic close");
     expect(COMPANION_MOMENT_PREVIEW_OPTIONS.map((option) => option.label)).not.toContain("Extreme nudge");
@@ -78,18 +76,6 @@ describe("companion moment previews", () => {
     expect(event.breakOptions).toEqual([5, 15, 30, 60]);
   });
 
-  it("builds a re-entry observation without making a sleep claim", () => {
-    const event = buildCompanionReentryPreview(123);
-
-    expect(event.kind).toBe("reentry");
-    expect(event.awaySeconds).toBe(8 * 3600 + 12 * 60);
-    expect(event.title).toBe("Back after 8h 12m");
-    expect(`${event.title} ${event.subtitle}`.toLowerCase()).not.toContain("sleep");
-    expect(buildCompanionReentryPreview(123, "ko")).toMatchObject({
-      title: "8시간 12분 만에 돌아왔어요",
-      subtitle: "마지막 활동은 오전 1:18에 끝났어요",
-    });
-  });
 });
 
 /* A milestone headline states the threshold that was crossed, not where the

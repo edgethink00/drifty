@@ -2,7 +2,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WatcherWindowApp } from "./WatcherWindowApp";
-import { buildCompanionReentryPreview } from "./companionPillPreview";
 import type { WatcherPeekEvent } from "./watcherPeekTypes";
 import type { CompanionPillWindowEvent } from "./watcherBridge";
 
@@ -125,26 +124,7 @@ describe("WatcherWindowApp", () => {
     expect(bridge.setNativeWatcherInteractive).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Open leaderboard" }));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", undefined, "milestone:weekly-final-rank-3");
-  });
-
-  it("opens the last activity day from a standalone re-entry card", async () => {
-    bridge.listenToNativeWatcherShow.mockImplementation(async (handler: (event: CompanionPillWindowEvent) => void) => {
-      bridge.showHandler = handler;
-      return vi.fn();
-    });
-    const reentry = buildCompanionReentryPreview();
-
-    render(<WatcherWindowApp />);
-    await act(async () => undefined);
-    act(() => bridge.showHandler?.(reentry));
-
-    fireEvent.click(screen.getByRole("button", { name: "See last session" }));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
-      "openActivityDay",
-      reentry.lastActiveAt,
-      `reentry:${reentry.id}`,
-    );
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", "milestone:weekly-final-rank-3");
   });
 
 });

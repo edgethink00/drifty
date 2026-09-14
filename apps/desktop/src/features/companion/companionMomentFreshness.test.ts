@@ -14,11 +14,9 @@ import {
 describe("companion moment freshness", () => {
   const NOW = Date.parse("2026-08-18T12:00:00.000Z");
 
-  it("reads generatedAt, falls back to returnedAt, and tolerates missing timestamps", () => {
+  it("reads generatedAt and tolerates missing timestamps", () => {
     expect(companionMomentReferenceMs({ generatedAt: "2026-08-18T11:59:00.000Z" }))
       .toBe(Date.parse("2026-08-18T11:59:00.000Z"));
-    expect(companionMomentReferenceMs({ returnedAt: "2026-08-18T11:58:00.000Z" }))
-      .toBe(Date.parse("2026-08-18T11:58:00.000Z"));
     expect(companionMomentReferenceMs({})).toBeNull();
     expect(companionMomentReferenceMs({ generatedAt: "not-a-date" })).toBeNull();
   });

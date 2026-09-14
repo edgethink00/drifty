@@ -4,7 +4,7 @@ import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompanionWindowApp } from "./CompanionWindowApp";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
-import { buildCompanionDriftAlarmPreview, buildCompanionExtremeNudgePreview, buildCompanionReentryPreview } from "./companionPillPreview";
+import { buildCompanionDriftAlarmPreview, buildCompanionExtremeNudgePreview } from "./companionPillPreview";
 import { readCompanionEngagementMetrics } from "./companionEngagementMetrics";
 import { DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS } from "./driftAlarmEvent";
 import type { WatcherPeekEvent } from "./watcherPeekTypes";
@@ -308,7 +308,7 @@ describe("CompanionWindowApp", () => {
     actions.onHideForOneHour();
     actions.onTurnOffCompanion();
 
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openSettings", undefined, undefined);
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openSettings", undefined);
     expect(bridge.triggerNativeCompanionVisibilityAction).toHaveBeenNthCalledWith(1, "hideOneHour");
     expect(bridge.triggerNativeCompanionVisibilityAction).toHaveBeenNthCalledWith(2, "turnOff");
   });
@@ -323,7 +323,7 @@ describe("CompanionWindowApp", () => {
     act(() => vi.advanceTimersByTime(180));
 
     fireEvent.click(getByRole("button", { name: "AI settings" }));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openAiSettings", undefined, expect.any(String));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openAiSettings", expect.any(String));
   });
 
   it("renders production milestone preview payloads with their celebration tier", async () => {
@@ -384,7 +384,7 @@ describe("CompanionWindowApp", () => {
     fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(160));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", undefined, expect.any(String));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openLeaderboard", expect.any(String));
   });
 
   /* The panel is much larger than the capsule it draws: the card floats inside
@@ -475,7 +475,7 @@ describe("CompanionWindowApp", () => {
     fireEvent.click(container.querySelector(".mile__action")!);
     expect(bridge.triggerNativeEndOfDayReviewAction).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(160));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard", undefined, expect.any(String));
+    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith("openDashboard", expect.any(String));
   });
 
   it("reveals a hidden menu-bar moment only after its final card is committed", async () => {
@@ -675,34 +675,6 @@ describe("CompanionWindowApp", () => {
 
     act(() => vi.advanceTimersByTime(1));
     expect(container.textContent).toContain("3 hours of focus today");
-  });
-
-  it("presents a re-entry as low-priority context and records the local aggregate", async () => {
-    vi.useFakeTimers();
-    const { container } = render(<CompanionWindowApp />);
-    await act(async () => undefined);
-
-    const reentry = buildCompanionReentryPreview();
-    act(() => bridge.showHandler?.(reentry));
-    act(() => bridge.transitionHandler?.({ state: "reentry", phase: "started", anchor: "center" }));
-    act(() => vi.advanceTimersByTime(180));
-
-    expect(container.querySelector<HTMLElement>(".pill")?.dataset.state).toBe("reentry");
-    expect(container.textContent).toContain("Back after 8h 12m");
-    expect(readCompanionEngagementMetrics()).toMatchObject({ reentry_shown: 1 });
-
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".reentry__action")!);
-    act(() => vi.advanceTimersByTime(160));
-    expect(bridge.triggerNativeEndOfDayReviewAction).toHaveBeenCalledWith(
-      "openActivityDay",
-      reentry.lastActiveAt,
-      `reentry:${reentry.id}`,
-    );
-    expect(readCompanionEngagementMetrics()).toMatchObject({ reentry_opened: 1 });
-
-    act(() => bridge.showHandler?.(buildCompanionExtremeNudgePreview()));
-    expect(container.textContent).toContain("Closed YouTube for you.");
-    expect(container.textContent).not.toContain("Back after 8h 12m");
   });
 
   it("lets an extreme nudge preempt and permanently discard an active milestone", async () => {

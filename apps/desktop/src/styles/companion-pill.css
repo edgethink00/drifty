@@ -96,9 +96,6 @@ html[data-surface="companion"] #root {
 .companion-pill-surface .pill[data-state="milestone"] {
   width: 410px;
 }
-.companion-pill-surface .pill[data-state="reentry"] {
-  width: 410px;
-}
 .companion-pill-surface .pill[data-state="drift"],
 .companion-pill-surface .pill[data-state="nudge"] {
   width: 352px;
@@ -581,10 +578,6 @@ html[data-surface="companion"] #root {
   --pill-card-width: 410px;
   --pill-card-height: 54px;
 }
-.companion-pill-surface .pill[data-card-state="reentry"] {
-  --pill-card-width: 410px;
-  --pill-card-height: 54px;
-}
 .companion-pill-surface .pill[data-card-state="drift"],
 .companion-pill-surface .pill[data-card-state="nudge"] {
   --pill-card-width: 352px;
@@ -811,84 +804,6 @@ html[data-surface="companion"] #root {
 }
 .companion-pill-surface .pill[data-state="milestone"] {
   box-shadow: var(--pill-shadow), 0 0 30px color-mix(in srgb, var(--accent) 26%, transparent);
-}
-
-/* ---------- re-entry ----------
-   A calm temporal hand-off, not a celebration and not an alarm. The returning
-   plain clock sets context; the exact gap, last-active time, and a quiet path
-   back to that session own the hierarchy. */
-.companion-pill-surface .view--reentry {
-  gap: 10px;
-  padding: 0 46px 0 10px;
-}
-.companion-pill-surface .reentry__mark {
-  border-radius: 50%;
-  color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--accent) 24%, transparent);
-}
-.companion-pill-surface .reentry__mark svg {
-  width: 15px;
-  height: 15px;
-}
-.companion-pill-surface .reentry__copy {
-  display: block;
-}
-.companion-pill-surface .view--reentry .card__close--float {
-  position: absolute;
-  top: 50%;
-  right: 14px;
-  left: auto;
-  z-index: 2;
-  transform: translateY(-50%);
-}
-.companion-pill-surface .reentry__title {
-  color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.companion-pill-surface .reentry__sub {
-  color: var(--text-soft);
-}
-.companion-pill-surface .reentry__title,
-.companion-pill-surface .reentry__sub .mile__subtext {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.companion-pill-surface .reentry__action {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: var(--pill-moment-control-size);
-  padding: 0 8px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--accent-strong);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  font: 650 10.5px/1 var(--font-body);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background .16s ease, color .16s ease, transform .16s ease;
-}
-.companion-pill-surface .reentry__action svg {
-  width: 10px;
-  height: 10px;
-}
-.companion-pill-surface .reentry__action:hover,
-.companion-pill-surface .reentry__action:focus-visible {
-  color: var(--text);
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  outline: none;
-}
-.companion-pill-surface .reentry__action:active { transform: scale(.97); }
-.companion-pill-surface .pill[data-state="reentry"] {
-  background: color-mix(in srgb, var(--accent) 4%, rgba(var(--pill-rgb), var(--pill-alpha, .93)));
-  box-shadow: var(--pill-shadow), 0 0 28px color-mix(in srgb, var(--accent) 14%, transparent);
-}
-.companion-pill-surface .pill[data-state="reentry"] .card__close-ring circle {
-  stroke: color-mix(in srgb, var(--accent) 58%, transparent);
 }
 
 /* sparks */
@@ -1215,7 +1130,6 @@ html[data-surface="companion"] #root {
    desktop behind it was showing through the text. It sits with the drift
    alarm: a moment that asks to be read gets the same backing. */
 .companion-pill-surface .pill[data-state="milestone"],
-.companion-pill-surface .pill[data-state="reentry"],
 .companion-pill-surface .pill[data-state="nudge"] { --pill-alpha: .93; }
 .companion-pill-surface .pill[data-state="eod"] { --pill-alpha: .95; }
 

@@ -172,7 +172,6 @@ import {
   type CompanionMilestonePreviewId,
   buildCompanionDriftAlarmPreview,
   buildCompanionExtremeNudgePreview,
-  buildCompanionReentryPreview,
   type CompanionMomentPreviewId,
 } from "./features/companion/companionPillPreview";
 import {
@@ -212,7 +211,6 @@ import {
   setNativeCompanionSurfacePolicy,
   showNativeCompanionDriftAlarm,
   showNativeCompanionMilestone,
-  showNativeCompanionReentry,
   showNativeEndOfDayReview,
   showNativeExtremeNudgeToast,
   showNativeWatcherPeek,
@@ -346,7 +344,6 @@ import { useCompanionFocusRunMilestones } from "./features/companion/useCompanio
 import { useCompanionLeaderboardMilestones } from "./features/companion/useCompanionLeaderboardMilestones";
 import { useCompanionCommunityMilestones } from "./features/companion/useCompanionCommunityMilestones";
 import { toLeaderboardCelebration, type LeaderboardCelebration } from "./features/companion/companionLeaderboardMilestones";
-import { useCompanionReentryMoment } from "./features/companion/useCompanionReentryMoment";
 import { buildBreakRecoveryAttempt, buildBreakSnooze, readDriftAlarmInteractions, recordDriftAlarmInteraction, resolveBreakRecoveryOutcome } from "./features/companion/driftAlarmRecovery";
 import { buildAlarmFollowThrough } from "./features/insights/alarmFollowThrough";
 import type { BreakRecoveryOutcome, DriftAlarmBreakSnooze, DriftAlarmInteraction } from "./features/companion/driftAlarmRecovery";
@@ -727,7 +724,6 @@ export default function App() {
     companionTemporarilyHidden,
   );
   const companionPillVisible = effectiveCompanionSurfacePolicy === "floating";
-  const companionResidentMomentsEnabled = effectiveCompanionSurfacePolicy !== "momentsOnly";
 
   const handleCompanionSurfacePolicyChange = useCallback((policy: CompanionResidentPreference) => {
     setCompanionSurfacePolicy((currentPolicy) => {
@@ -1338,17 +1334,8 @@ export default function App() {
     navigateToTab("dashboard", "Today");
   }, [navigateToTab, startOfDayMinutes]);
 
-  const handleEndOfDayReviewAction = useCallback((action: EndOfDayReviewAction, activityAt?: string) => {
+  const handleEndOfDayReviewAction = useCallback((action: EndOfDayReviewAction) => {
     setEndOfDayReviewEvent(null);
-
-    if (action === "openActivityDay" && activityAt) {
-      const activityDate = new Date(activityAt);
-      if (Number.isFinite(activityDate.getTime())) {
-        selectDay(logicalDayIsoDateForDate(activityDate, startOfDayMinutes));
-        navigateToTab("dashboard", "Today");
-        return;
-      }
-    }
 
     if (action === "openSettings") {
       openCompanionNotificationSettings();
@@ -1376,7 +1363,7 @@ export default function App() {
     }
 
     openEndOfDayReviewDashboard();
-  }, [navigateToTab, openAiSetupSettings, openCompanionNotificationSettings, openEndOfDayReviewDashboard, openEndOfDayReviewSettings, startOfDayMinutes]);
+  }, [navigateToTab, openAiSetupSettings, openCompanionNotificationSettings, openEndOfDayReviewDashboard, openEndOfDayReviewSettings]);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authModalShowsGoogle, setAuthModalShowsGoogle] = useState(true);
   const [authModalIntent, setAuthModalIntent] = useState<"default" | "promo">("default");
@@ -3125,11 +3112,9 @@ export default function App() {
   /* The decision cards could not be reviewed without waiting for real drift, so
      they are fired through the same native path the tracker uses. */
   const previewCompanionMoment = useCallback((previewId: CompanionMomentPreviewId) => {
-    const sent = previewId === "reentry"
-      ? showNativeCompanionReentry(buildCompanionReentryPreview())
-      : previewId === "extreme-nudge"
-        ? showNativeExtremeNudgeToast(buildCompanionExtremeNudgePreview())
-        : showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
+    const sent = previewId === "extreme-nudge"
+      ? showNativeExtremeNudgeToast(buildCompanionExtremeNudgePreview())
+      : showNativeCompanionDriftAlarm(buildCompanionDriftAlarmPreview(previewId));
     void sent.catch((error: unknown) => {
       console.warn("Failed to preview companion moment", toErrorMessage(error));
     });
@@ -6913,13 +6898,6 @@ export default function App() {
     /* Visibility controls only the resident capsule. A milestone is an alert,
        so a running tracker may announce it through the standalone surface. */
     announcementsEnabled: companionAchievementAnnouncementsEnabled,
-  });
-
-  useCompanionReentryMoment({
-    ready: hasLoadedOnce && !shouldBlockLocalTrackerAccess,
-    announcementsEnabled: companionResidentMomentsEnabled && status?.running === true,
-    activitySignal: status?.lastEventAt ?? currentSnapshot?.observedAt ?? null,
-    locale: localization.effectiveLanguage === "ko" ? "ko-KR" : "en-US",
   });
 
   useCompanionFocusRunMilestones({

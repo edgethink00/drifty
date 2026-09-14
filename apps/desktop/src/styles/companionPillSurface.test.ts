@@ -102,7 +102,6 @@ describe("companion pill surface", () => {
   it("keeps moment content at its final geometry while AppKit reveals it", () => {
     const transition = cssRule('.companion-pill-surface .pill[data-transition] .view:not(.view--collapsed)');
     const milestone = cssRule('.companion-pill-surface .pill[data-card-state="milestone"]');
-    const reentry = cssRule('.companion-pill-surface .pill[data-card-state="reentry"]');
     const right = cssRule('.companion-pill-surface .pill[data-transition][data-anchor="right"] .view:not(.view--collapsed)');
     const center = cssRule('.companion-pill-surface .pill[data-transition][data-anchor="center"] .view:not(.view--collapsed)');
 
@@ -110,8 +109,6 @@ describe("companion pill surface", () => {
     expect(transition).toContain("height: var(--pill-card-height);");
     expect(milestone).toContain("--pill-card-width: 410px;");
     expect(milestone).toContain("--pill-card-height: 54px;");
-    expect(reentry).toContain("--pill-card-width: 410px;");
-    expect(reentry).toContain("--pill-card-height: 54px;");
     expect(right).toContain("right: 0;");
     expect(center).toContain("left: 50%;");
     expect(center).toContain("transform: translateX(-50%);");
@@ -244,7 +241,6 @@ describe("companion pill surface", () => {
     const title = cssRule(".companion-pill-surface .mile__title");
     const stat = cssRule(".companion-pill-surface .mile__stat");
     const action = cssRule(".companion-pill-surface .mile__action");
-    const reentryAction = cssRule(".companion-pill-surface .reentry__action");
     const dismiss = cssRule(".companion-pill-surface .card__close");
     const overflow = cssRule(".companion-pill-surface .card__more");
 
@@ -254,7 +250,6 @@ describe("companion pill surface", () => {
     expect(title).toContain("font-size: 13px;");
     expect(stat).toContain("font-size: 13.5px;");
     expect(action).toContain("height: var(--pill-moment-control-size);");
-    expect(reentryAction).toContain("height: var(--pill-moment-control-size);");
     expect(dismiss).toContain("width: var(--pill-moment-control-size); height: var(--pill-moment-control-size);");
     expect(overflow).toContain("width: var(--pill-moment-control-size); height: var(--pill-moment-control-size);");
     expect(action).toContain("padding: 0 8px;");
@@ -277,7 +272,6 @@ describe("companion pill surface", () => {
   it("gives every short reading moment the same solid backing as the drift nudge", () => {
     expect(pillStyles).toContain(
       '.companion-pill-surface .pill[data-state="milestone"],\n' +
-      '.companion-pill-surface .pill[data-state="reentry"],\n' +
       '.companion-pill-surface .pill[data-state="nudge"] { --pill-alpha: .93; }',
     );
     expect(pillStyles).toContain(

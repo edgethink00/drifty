@@ -1,6 +1,6 @@
 //! Ambient context for companion moments.
 //!
-//! Informational moments (day review, milestones, celebrations, reentry) are
+//! Informational moments (day review, milestones, celebrations) are
 //! "right now" objects with no decision attached. Popping one over a
 //! fullscreen app — a keynote, a film, a game — is the kind of exposure that
 //! turns a companion into a nuisance, so the surfaces ask here before

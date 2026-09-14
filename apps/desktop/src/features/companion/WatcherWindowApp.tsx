@@ -7,7 +7,6 @@ import {
   type CompanionPillDismissReason,
   type CompanionPillMilestoneEvent,
 } from "./CompanionPillMoment";
-import type { CompanionReentryEvent } from "./companionReentry";
 import { isCompanionMomentStale } from "./companionMomentFreshness";
 import {
   isInformationalMomentEvent,
@@ -108,7 +107,7 @@ export function WatcherWindowApp() {
   }, [event]);
 
   const handleOpenDashboard = useCallback(() => {
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", undefined, event ? companionEventIdentity(event) : undefined));
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", event ? companionEventIdentity(event) : undefined));
   }, [event]);
 
   const handleExtremeNudgeAction = useCallback((action: Parameters<typeof triggerNativeExtremeNudgeAction>[0]) => {
@@ -136,28 +135,22 @@ export function WatcherWindowApp() {
       : destination === "insights"
         ? "openTrends"
         : "openDashboard";
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction(action, undefined, event ? companionEventIdentity(event) : undefined));
+    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction(action, event ? companionEventIdentity(event) : undefined));
   }, [event]);
-
-  const handleOpenReentry = useCallback((reentry: CompanionReentryEvent) => {
-    setEvent(null);
-    ignoreWatcherBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", reentry.lastActiveAt, companionEventIdentity(reentry)));
-  }, []);
 
   const isExtremeNudgeToastEvent = isExtremeNudgeToast(event);
   const isMilestone = isMilestoneEvent(event);
-  const isReentry = isReentryEvent(event);
 
   useEffect(() => {
-    if (isExtremeNudgeToastEvent || isMilestone || isReentry) {
+    if (isExtremeNudgeToastEvent || isMilestone) {
       ignoreWatcherBridgePromise(setNativeWatcherInteractive(true));
     }
-  }, [isExtremeNudgeToastEvent, isMilestone, isReentry]);
+  }, [isExtremeNudgeToastEvent, isMilestone]);
 
   return (
     <main
-      className={`watcher-window-surface${isMilestone || isReentry || isExtremeNudgeToastEvent ? " companion-pill-surface" : ""}`}
-      data-state={isMilestone ? "milestone" : isReentry ? "reentry" : isExtremeNudgeToastEvent ? "nudge" : undefined}
+      className={`watcher-window-surface${isMilestone || isExtremeNudgeToastEvent ? " companion-pill-surface" : ""}`}
+      data-state={isMilestone ? "milestone" : isExtremeNudgeToastEvent ? "nudge" : undefined}
       aria-label="Drifty watcher window"
     >
       {isMilestone ? (
@@ -166,13 +159,6 @@ export function WatcherWindowApp() {
           onDismiss={handleMilestoneDismiss}
           onOpenDashboard={handleOpenDashboard}
           onOpenDestination={handleOpenMilestoneDestination}
-        />
-      ) : isReentry ? (
-        <StandaloneReentry
-          event={event}
-          onDismiss={handleMilestoneDismiss}
-          onOpenDashboard={handleOpenDashboard}
-          onOpenReentry={handleOpenReentry}
         />
       ) : isExtremeNudgeToastEvent ? (
         <StandaloneNudge event={event} onAction={handleExtremeNudgeAction} onDismiss={handleToastDismiss} />
@@ -187,10 +173,6 @@ function isExtremeNudgeToast(event: CompanionPillWindowEvent | null): event is E
 
 function isMilestoneEvent(event: CompanionPillWindowEvent | null): event is CompanionPillMilestoneEvent {
   return event !== null && "kind" in event && event.kind === "milestone";
-}
-
-function isReentryEvent(event: CompanionPillWindowEvent | null): event is CompanionReentryEvent {
-  return event !== null && "kind" in event && event.kind === "reentry";
 }
 
 function ignoreWatcherBridgePromise(promise: Promise<unknown>) {
@@ -233,31 +215,6 @@ function StandaloneMilestone({
           <i key={index} style={style} />
         ))}
       </span>
-    </div>
-  );
-}
-
-function StandaloneReentry({
-  event,
-  onDismiss,
-  onOpenDashboard,
-  onOpenReentry,
-}: {
-  readonly event: CompanionReentryEvent;
-  readonly onDismiss: (reason: CompanionPillDismissReason) => void;
-  readonly onOpenDashboard: () => void;
-  readonly onOpenReentry: (event: CompanionReentryEvent) => void;
-}) {
-  return (
-    <div className="pill" data-state="reentry" data-mood="neutral">
-      <div className="pill__clip">
-        <CompanionPillMoment
-          event={event}
-          onDismiss={onDismiss}
-          onOpenDashboard={onOpenDashboard}
-          onOpenReentry={onOpenReentry}
-        />
-      </div>
     </div>
   );
 }

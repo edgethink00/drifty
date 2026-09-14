@@ -8,7 +8,6 @@ import {
 } from "react";
 import type { EndOfDayReviewEvent } from "./endOfDayReviewModel";
 import type { ExtremeNudgeToastEvent } from "./extremeNudgeData";
-import type { CompanionReentryEvent } from "./companionReentry";
 import {
   DRIFT_ALARM_CORRECTION_FEEDBACK_COPY,
   DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS,
@@ -21,7 +20,6 @@ import {
   PillFeedbackCheckIcon,
   PillMilestoneKindIcon,
   PillOpenArrowIcon,
-  PillReentryIcon,
   PillTrophyIcon,
 } from "./CompanionPillIcons";
 import { CompanionPillDayReview } from "./CompanionPillDayReview";
@@ -81,7 +79,6 @@ export type CompanionPillDriftEvent = {
 export type CompanionPillMomentEvent =
   | CompanionPillMilestoneEvent
   | CompanionPillDriftEvent
-  | CompanionReentryEvent
   | ExtremeNudgeToastEvent
   | EndOfDayReviewEvent;
 
@@ -93,7 +90,6 @@ const COMPANION_BREAK_RETURN_AUTO_DISMISS_MS = 12_500;
 /** Informational cards stay short; decision cards leave enough time to act without lingering. */
 export const COMPANION_PILL_AUTO_DISMISS_MS: Record<string, number> = {
   milestone: 4_000,
-  reentry: 8_000,
   driftAlarm: 9_000,
   extremeNudgeToast: EXTREME_NUDGE_TOAST_VISIBLE_MS,
   endOfDayReview: 12_000,
@@ -105,7 +101,6 @@ export function resolveCompanionPillAutoDismissMs(event: CompanionPillMomentEven
     return DRIFT_ALARM_CORRECTION_FEEDBACK_DURATION_MS;
   }
   if (event.kind === "milestone") return event.destination ? 6_000 : 4_000;
-  if (event.kind === "reentry") return 8_000;
   if (event.kind === "driftAlarm") {
     return event.mode === "break_return"
       ? COMPANION_BREAK_RETURN_AUTO_DISMISS_MS
@@ -220,7 +215,6 @@ export function CompanionPillMoment({
   onDismiss,
   onOpenDashboard,
   onOpenAiSettings,
-  onOpenReentry,
   onOpenDestination,
   onAction,
 }: {
@@ -232,7 +226,6 @@ export function CompanionPillMoment({
   onDismiss: (reason: CompanionPillDismissReason) => void;
   onOpenDashboard: () => void;
   onOpenAiSettings?: () => void;
-  onOpenReentry?: (event: CompanionReentryEvent) => void;
   onOpenDestination?: (destination: NonNullable<CompanionPillMilestoneEvent["destination"]>) => void;
   onAction?: (action: DriftAlarmAction) => void;
 }) {
@@ -354,32 +347,6 @@ export function CompanionPillMoment({
           onOpenDashboard={onOpenDashboard}
           onOpenAiSettings={onOpenAiSettings}
         />
-      </div>
-    );
-  }
-
-  if (event.kind === "reentry") {
-    return (
-      <div
-        className={`view view--reentry${isActive ? " is-active" : ""}`}
-        data-view="reentry"
-        data-auto={autoDismissState}
-        aria-hidden={!isActive}
-        style={autoDismissStyle}
-        {...holdHandlers}
-      >
-        <span className="mile__mark reentry__mark" aria-hidden="true"><PillReentryIcon /></span>
-        <div className="mile__text reentry__copy" data-sensitive={event.id.startsWith("companion-preview-") ? undefined : true}>
-          <div className="mile__title reentry__title">{event.title}</div>
-          <div className="mile__sub reentry__sub"><span className="mile__subtext">{event.subtitle}</span></div>
-        </div>
-        <button className="reentry__action" type="button" onClick={() => onOpenReentry?.(event)}>
-          <span>{event.actionLabel}</span>
-          <PillOpenArrowIcon />
-        </button>
-        <button className="card__close card__close--float" type="button" title="Dismiss" onClick={() => onDismiss("explicit")}>
-          <PillDismissIcon />
-        </button>
       </div>
     );
   }

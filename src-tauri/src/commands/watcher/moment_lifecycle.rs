@@ -154,8 +154,7 @@ pub(super) fn payload_expired(payload: &Value, now: i64) -> bool {
         payload
     };
     event
-        .get("returnedAt")
-        .or_else(|| event.get("generatedAt"))
+        .get("generatedAt")
         .and_then(Value::as_str)
         .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
         .is_some_and(|time| now.saturating_sub(time.timestamp_millis()) > STALE_AFTER_MS)
@@ -266,10 +265,6 @@ mod tests {
         ));
         assert!(!payload_expired(
             &json!({"kind":"milestone", "generatedAt":"2026-09-08T11:50:00Z"}),
-            now
-        ));
-        assert!(payload_expired(
-            &json!({"kind":"reentry", "generatedAt":"2026-09-08T12:00:00Z", "returnedAt":"2026-09-08T11:00:00Z"}),
             now
         ));
     }

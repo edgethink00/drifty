@@ -39,7 +39,6 @@ export type CompanionPillProps = {
   onDismissMoment: (reason: CompanionPillDismissReason) => void;
   onOpenDashboard: () => void;
   onOpenDayReviewAiSettings?: () => void;
-  onOpenReentry?: (event: Extract<CompanionPillMomentEvent, { kind: "reentry" }>) => void;
   onOpenMilestoneDestination?: (destination: "leaderboard" | "insights" | "dashboard") => void;
   onOpenSettings: () => void;
   onOpenMenu?: () => Promise<unknown> | unknown;
@@ -89,7 +88,6 @@ function resolvePillState(
     }
     if (momentEvent.kind === "extremeNudgeToast") return "nudge";
     if (momentEvent.kind === "milestone") return "milestone";
-    if (momentEvent.kind === "reentry") return "reentry";
     return "drift";
   }
   return "collapsed";
@@ -109,7 +107,6 @@ export function CompanionPill({
   onDismissMoment,
   onOpenDashboard,
   onOpenDayReviewAiSettings,
-  onOpenReentry,
   onOpenMilestoneDestination,
   onOpenSettings,
   onOpenMenu,
@@ -319,11 +316,6 @@ export function CompanionPill({
     finishMomentAfterVisualExit(onOpenDashboard);
   }, [finishMomentAfterVisualExit, onOpenDashboard]);
 
-  const handleOpenReentry = useCallback((event: Extract<CompanionPillMomentEvent, { kind: "reentry" }>) => {
-    if (!onOpenReentry) return;
-    finishMomentAfterVisualExit(() => onOpenReentry(event));
-  }, [finishMomentAfterVisualExit, onOpenReentry]);
-
   const handleOpenMomentDestination = useCallback((destination: "leaderboard" | "insights" | "dashboard") => {
     if (!onOpenMilestoneDestination) return;
     finishMomentAfterVisualExit(() => onOpenMilestoneDestination(destination));
@@ -491,7 +483,6 @@ export function CompanionPill({
             onDismiss={handleDismissMoment}
             onOpenDashboard={handleOpenMomentDashboard}
             onOpenAiSettings={onOpenDayReviewAiSettings}
-            onOpenReentry={handleOpenReentry}
             onOpenDestination={handleOpenMomentDestination}
             onAction={handleMomentAction}
           />

@@ -106,9 +106,6 @@ fn identifies_only_event_cards_as_direct_menu_bar_moments() {
     assert!(is_companion_moment_payload(&serde_json::json!({
         "kind": "companionDriftAlarm"
     })));
-    assert!(is_companion_moment_payload(&serde_json::json!({
-        "kind": "reentry"
-    })));
     assert!(!is_companion_moment_payload(&serde_json::json!({
         "focusSecondsToday": 3_600,
         "productivity": "focus"
@@ -117,14 +114,7 @@ fn identifies_only_event_cards_as_direct_menu_bar_moments() {
 
 #[test]
 fn every_menu_bar_card_reenters_from_the_status_item() {
-    for state in [
-        "milestone",
-        "reentry",
-        "drift",
-        "nudge",
-        "eod",
-        "eodPending",
-    ] {
+    for state in ["milestone", "drift", "nudge", "eod", "eodPending"] {
         assert!(should_prepare_direct_menu_bar_card(true, state));
     }
     for state in ["collapsed", "peek"] {
@@ -339,10 +329,6 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
         (410.0, 54.0)
     );
     assert_eq!(
-        companion_pill_capsule_size("reentry").unwrap(),
-        (410.0, 54.0)
-    );
-    assert_eq!(
         companion_pill_capsule_size("drift").unwrap(),
         (352.0, 130.0)
     );
@@ -375,13 +361,6 @@ fn sizes_each_companion_pill_state_to_its_interactive_surface() {
     );
     assert_eq!(
         companion_pill_dimensions("milestone").unwrap(),
-        (
-            COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
-            54.0 + COMPANION_PILL_GUTTER_Y * 2.0
-        )
-    );
-    assert_eq!(
-        companion_pill_dimensions("reentry").unwrap(),
         (
             COMPANION_PILL_CANVAS_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
             54.0 + COMPANION_PILL_GUTTER_Y * 2.0
@@ -428,21 +407,6 @@ fn sizes_standalone_milestone_for_the_capsule_and_confetti_gutter() {
             STANDALONE_MILESTONE_WINDOW_HEIGHT,
         )
     );
-}
-
-#[test]
-fn sizes_standalone_reentry_for_its_calm_companion_card() {
-    let payload = serde_json::json!({"kind": "reentry"});
-
-    assert_eq!(
-        watcher_window_dimensions_for_payload(&payload),
-        (
-            COMPANION_PILL_REENTRY_WIDTH + COMPANION_PILL_GUTTER_X * 2.0,
-            COMPANION_PILL_REENTRY_HEIGHT + COMPANION_PILL_GUTTER_Y * 2.0,
-        )
-    );
-    assert!(is_reentry_payload(&payload));
-    assert!(!should_ignore_cursor_events_for_payload(&payload));
 }
 
 #[test]

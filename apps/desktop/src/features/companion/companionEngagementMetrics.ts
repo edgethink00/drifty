@@ -7,8 +7,6 @@ export const COMPANION_ENGAGEMENT_METRIC_KEYS = [
   "companion_hidden_one_hour",
   "companion_shown_now",
   "milestone_shown",
-  "reentry_shown",
-  "reentry_opened",
   "drift_alarm_shown",
   "extreme_nudge_shown",
   "day_review_shown",

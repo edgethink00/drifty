@@ -103,10 +103,6 @@ describe("companion pill geometry", () => {
     expect(COMPANION_PILL_SIZES.milestone).toEqual({ width: 410, height: 54 });
   });
 
-  it("keeps re-entry on the milestone block geometry", () => {
-    expect(COMPANION_PILL_SIZES.reentry).toEqual(COMPANION_PILL_SIZES.milestone);
-  });
-
   it("keeps the resting capsule the smallest state", () => {
     const heights = Object.values(COMPANION_PILL_SIZES).map((size) => size.height);
     expect(COMPANION_PILL_SIZES.collapsed.height).toBe(Math.min(...heights));

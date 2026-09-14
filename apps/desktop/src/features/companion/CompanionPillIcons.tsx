@@ -60,17 +60,6 @@ export function PillTrophyIcon() {
   );
 }
 
-/** A plain clock: elapsed time, without refresh, power, or sleep semantics. */
-export function PillReentryIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="10" cy="10" r="6.7" />
-      <path d="M10 6.2v4.2l2.8 1.6" />
-      <circle cx="10" cy="10.4" r=".7" fill="currentColor" stroke="none" />
-    </svg>
-  );
-}
-
 export function PillMilestoneKindIcon({ kind }: { kind: "total" | "record" | "recovery" | "rank" }) {
   /* The stylesheet hides every glyph in `.mile__kind` and re-shows only the one
      matching `[data-kind-icon]` for the pill's milestone kind. Without the

@@ -10,7 +10,6 @@ import {
 import {
   buildCompanionExtremeNudgePreview,
   buildCompanionMilestonePreview,
-  buildCompanionReentryPreview,
 } from "./companionPillPreview";
 
 const nativeBridge = vi.hoisted(() => ({
@@ -107,34 +106,6 @@ describe("CompanionPill native interactions", () => {
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "compact" })).toBe(10_000);
     expect(resolveCompanionPillAutoDismissMs({ ...review, layout: "minimal" })).toBe(8_000);
     expect(resolveCompanionPillAutoDismissMs(buildCompanionExtremeNudgePreview(1))).toBe(12_500);
-    expect(resolveCompanionPillAutoDismissMs(buildCompanionReentryPreview(1))).toBe(8_000);
-  });
-
-  it("renders re-entry as a quiet observation with a last-session CTA", () => {
-    vi.useFakeTimers();
-    const onOpenReentry = vi.fn();
-    const { container } = render(
-      <CompanionPill
-        peekEvent={null}
-        momentEvent={buildCompanionReentryPreview()}
-        onDismissMoment={vi.fn()}
-        onOpenDashboard={vi.fn()}
-        onOpenReentry={onOpenReentry}
-        onOpenSettings={vi.fn()}
-      />,
-    );
-
-    expect(container.querySelector<HTMLElement>(".pill")?.dataset.state).toBe("reentry");
-    expect(container.querySelector(".reentry__mark svg")).not.toBeNull();
-    expect(container.textContent).toContain("Back after 8h 12m");
-    expect(container.textContent).toContain("Last activity ended at 1:18 AM");
-    fireEvent.click(container.querySelector<HTMLButtonElement>(".reentry__action")!);
-    act(() => vi.advanceTimersByTime(160));
-    expect(onOpenReentry).toHaveBeenCalledWith(expect.objectContaining({
-      kind: "reentry",
-      lastActiveAt: expect.any(String),
-    }));
-    expect(container.querySelector(".sparks")).toBeNull();
   });
 
   it("samples from pointer-down without styling a simple click as a drag", async () => {
@@ -384,7 +355,6 @@ describe("CompanionPill native interactions", () => {
   });
 
   it.each([
-    ["re-entry", buildCompanionReentryPreview(), ".view--reentry .reentry__copy"],
     ["extreme nudge", buildCompanionExtremeNudgePreview(), ".view--nudge .card__copy"],
     ["day review", {
       kind: "endOfDayReview" as const,

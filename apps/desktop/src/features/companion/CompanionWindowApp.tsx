@@ -23,7 +23,6 @@ import { openNativeCompanionPillMenu } from "./companionPillNativeMenu";
 import {
   buildCompanionDayReviewPreview,
   buildCompanionDriftAlarmPreview,
-  buildCompanionReentryPreview,
 } from "./companionPillPreview";
 import { reportEndOfDayReviewInteraction, useEndOfDayReviewDisplayedReporter } from "./useEndOfDayReviewDisplayedReporter";
 import { companionMomentReferenceMs, COMPANION_MOMENT_STALE_AFTER_MS, isCompanionMomentStale } from "./companionMomentFreshness";
@@ -359,19 +358,19 @@ export function CompanionWindowApp() {
     recordCompanionEngagementMetric("dashboard_opened");
     const current = momentEventRef.current;
     if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", undefined, current ? companionMomentIdentity(current) : undefined));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openDashboard", current ? companionMomentIdentity(current) : undefined));
   }, []);
 
   const handleOpenSettings = useCallback(() => {
     recordCompanionEngagementMetric("settings_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings", undefined, momentEventRef.current ? companionMomentIdentity(momentEventRef.current) : undefined));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openSettings", momentEventRef.current ? companionMomentIdentity(momentEventRef.current) : undefined));
   }, []);
 
   const handleOpenDayReviewAiSettings = useCallback(() => {
     const current = momentEventRef.current;
     if (current?.kind === "endOfDayReview") reportEndOfDayReviewInteraction(current);
     recordCompanionEngagementMetric("settings_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openAiSettings", undefined, current ? companionMomentIdentity(current) : undefined));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openAiSettings", current ? companionMomentIdentity(current) : undefined));
   }, []);
 
   const handleOpenMilestoneDestination = useCallback((destination: "leaderboard" | "insights" | "dashboard") => {
@@ -386,13 +385,7 @@ export function CompanionWindowApp() {
       : destination === "insights"
         ? "openTrends"
         : "openDashboard";
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction(action, undefined, lastMomentKeyRef.current));
-  }, [finishCurrentMoment]);
-
-  const handleOpenReentry = useCallback((event: Extract<CompanionPillMomentEvent, { kind: "reentry" }>) => {
-    finishCurrentMoment();
-    recordCompanionEngagementMetric("reentry_opened");
-    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction("openActivityDay", event.lastActiveAt, companionMomentIdentity(event)));
+    ignoreCompanionBridgePromise(triggerNativeEndOfDayReviewAction(action, lastMomentKeyRef.current));
   }, [finishCurrentMoment]);
 
   const handleHideForOneHour = useCallback(() => {
@@ -626,7 +619,6 @@ export function CompanionWindowApp() {
         onDismissMoment={handleDismiss}
         onOpenDashboard={handleOpenDashboard}
         onOpenDayReviewAiSettings={handleOpenDayReviewAiSettings}
-        onOpenReentry={handleOpenReentry}
         onOpenMilestoneDestination={handleOpenMilestoneDestination}
         onOpenSettings={handleOpenSettings}
         onOpenMenu={handleOpenMenu}
@@ -670,7 +662,6 @@ function companionMomentState(event: CompanionPillMomentEvent): CompanionPillSta
   }
   if (event.kind === "extremeNudgeToast") return "nudge";
   if (event.kind === "milestone") return "milestone";
-  if (event.kind === "reentry") return "reentry";
   return "drift";
 }
 
@@ -684,7 +675,6 @@ function toCompanionPillMoment(event: CompanionPillWindowEvent): CompanionPillMo
   if ("kind" in event && event.kind === "endOfDayReview") return event;
   if ("kind" in event && event.kind === "extremeNudgeToast") return event;
   if ("kind" in event && event.kind === "milestone") return event;
-  if ("kind" in event && event.kind === "reentry") return event;
   if (isCompanionDriftAlarmEvent(event)) {
     return toCompanionDriftAlarmMoment(event.alarm);
   }
@@ -704,7 +694,6 @@ function isInterruptingMoment(event: CompanionPillMomentEvent): boolean {
 
 function companionShownMetric(event: CompanionPillMomentEvent): CompanionEngagementMetricKey {
   if (event.kind === "milestone") return "milestone_shown";
-  if (event.kind === "reentry") return "reentry_shown";
   if (event.kind === "driftAlarm") return "drift_alarm_shown";
   if (event.kind === "extremeNudgeToast") return "extreme_nudge_shown";
   return "day_review_shown";
@@ -732,9 +721,6 @@ function ignoreCompanionBridgeRejection() {
 function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   const preview = isDevelopmentPreview();
   const correctionStatus = resolveDevelopmentCorrectionStatus();
-  const language = new URLSearchParams(window.location.search).get("driftyCompanionLanguage") === "ko"
-    ? "ko"
-    : "en";
   if (preview === "drift-alarm") {
     return {
       ...toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("drift-alarm")),
@@ -744,7 +730,6 @@ function resolveDevelopmentPreviewMoment(): CompanionPillMomentEvent | null {
   if (preview === "break-return") {
     return toCompanionDriftAlarmMoment(buildCompanionDriftAlarmPreview("break-return"));
   }
-  if (preview === "reentry") return buildCompanionReentryPreview(Date.now(), language);
   if (preview === "dayReview") return buildCompanionDayReviewPreview();
   return null;
 }

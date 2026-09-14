@@ -3,7 +3,7 @@ import { isTauriRuntime } from "./watcherBridge";
 import type { CompanionMomentTimestamps } from "./companionMomentFreshness";
 
 /**
- * Informational moments (day review, milestones, celebrations, reentry) carry
+ * Informational moments (day review, milestones, celebrations) carry
  * no decision, so they must never pop over a fullscreen app — a keynote, a
  * film, a game. Interventions (drift alarm, extreme nudge) deliberately skip
  * this gate: late-night drift is exactly when they matter.
@@ -20,12 +20,12 @@ let cachedSuppression = false;
 let refreshInFlight: Promise<void> | null = null;
 
 export function isInformationalMomentKind(kind: string): boolean {
-  return kind === "milestone" || kind === "reentry" || kind === "endOfDayReview";
+  return kind === "milestone" || kind === "endOfDayReview";
 }
 
 /** Every informational kind carries a wall-clock anchor for staleness. */
 export type InformationalMomentEvent = CompanionMomentTimestamps & {
-  kind: "milestone" | "reentry" | "endOfDayReview";
+  kind: "milestone" | "endOfDayReview";
 };
 
 export function isInformationalMomentEvent<T extends { kind: string }>(
