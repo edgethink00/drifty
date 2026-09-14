@@ -14,6 +14,7 @@
     "dev:web:auth-required": "VITE_DRIFTY_AUTH_MODE=required npm --prefix apps/desktop run dev",
     "build:web": "npm --prefix apps/desktop run build",
     "build:tracker-sidecar": "node scripts/build-tracker-sidecar.mjs",
+    "test:domain": "vitest run --config packages/domain/vitest.config.ts",
     "typecheck": "npm --prefix apps/desktop run typecheck",
     "test:python": "node scripts/run-python-tests.mjs",
     "test:rust": "node scripts/run-rust-tests.mjs",
@@ -22,7 +23,9 @@
     "tauri:dev:onboarding": "FORCE_ONBOARDING=1 ALLOW_ONBOARDING_AUTH_SKIP=1 VITE_DRIFTY_AUTH_MODE=optional npm run tauri:dev",
     "tauri:dev:skip-onboarding": "SKIP_ONBOARDING=1 npm run tauri:dev",
     "tauri:dev:auth-optional": "VITE_DRIFTY_AUTH_MODE=optional npm run tauri:dev",
-    "tauri:build": "node scripts/run-tauri.mjs build"
+    "tauri:build": "node scripts/run-tauri.mjs build",
+    "test:web": "npm run test:domain && npm --prefix apps/desktop run test -- --run",
+    "test": "npm run test:web && npm run test:python && npm run test:rust"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
