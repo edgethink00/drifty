@@ -136,6 +136,12 @@ import {
   resolveDevSettingsSubsection,
   type DevSettingsSubsection,
 } from "./features/settings/devSettingsNavigation";
+import {
+  applyDarkPalettePreview,
+  persistDarkPalettePreview,
+  resolveInitialDarkPalettePreview,
+  type DarkPalettePreview,
+} from "./features/settings/darkPalettePreview";
 import { analysisModelDisplayLabel } from "./features/settings/analysisModelSetup";
 import {
   AI_PRIVACY_REQUEST_SETTINGS_CHANGED_EVENT,
@@ -560,6 +566,7 @@ export default function App() {
   const canNavigateBack = navigationHistory.index > 0;
   const canNavigateForward = navigationHistory.index < navigationHistory.entries.length - 1;
   const [theme, setTheme] = useState<ThemeMode>(resolveInitialTheme);
+  const [darkPalettePreview, setDarkPalettePreview] = useState(resolveInitialDarkPalettePreview);
   const toggleTheme = useCallback(() => {
     setTheme((currentTheme) => (currentTheme === "dark" ? "light" : "dark"));
   }, []);
@@ -4422,6 +4429,15 @@ export default function App() {
       // Appearance is cosmetic; a failed invoke must not break theming.
     });
   }, [theme]);
+
+  useLayoutEffect(() => {
+    applyDarkPalettePreview(document.documentElement, darkPalettePreview, isDevModeActive);
+  }, [darkPalettePreview, isDevModeActive]);
+
+  const handleDarkPalettePreviewChange = useCallback((preview: DarkPalettePreview) => {
+    setDarkPalettePreview(preview);
+    persistDarkPalettePreview(preview);
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(START_OF_DAY_STORAGE_KEY, String(startOfDayMinutes));
@@ -10230,6 +10246,8 @@ export default function App() {
                   <DevSettingsSection
                     activeSubsection={devSettingsSubsection}
                     onSubsectionChange={handleDevSettingsSubsectionChange}
+                    darkPalettePreview={darkPalettePreview}
+                    onDarkPalettePreviewChange={handleDarkPalettePreviewChange}
                     dashboardAiUnavailablePreview={dashboardAiUnavailablePreview}
                     dashboardAiUnavailablePreviewCase={dashboardAiUnavailablePreviewCase}
                     sidebarCtaPreviewCase={sidebarCtaPreviewCase}

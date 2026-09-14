@@ -1,5 +1,12 @@
 import { DevVersionSwitchBlock } from "./DevVersionSwitchBlock";
-import { useEffect, useId, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { Toggle } from "../../components/Toggle";
 import { AI_UNAVAILABLE_CASE_PREVIEWS_ENABLED, DEMO_DASHBOARD_REPLAY_DEV_TOOL_ENABLED, REPLAY_ONBOARDING_DEV_TOOL_ENABLED } from "../../appFeatureSwitches";
 import { DASHBOARD_AI_UNAVAILABLE_PREVIEW_OPTIONS, type DashboardAiUnavailablePreviewCase, type DashboardAiUnavailablePreviewState } from "../dashboard/dashboardAiUnavailablePreview";
@@ -56,10 +63,16 @@ import {
   DEV_SETTINGS_SUBSECTIONS,
   type DevSettingsSubsection,
 } from "./devSettingsNavigation";
+import {
+  DARK_PALETTE_PREVIEW_OPTIONS,
+  type DarkPalettePreview,
+} from "./darkPalettePreview";
 
 type DevSettingsSectionProps = {
   readonly activeSubsection: DevSettingsSubsection;
   readonly onSubsectionChange: (subsection: DevSettingsSubsection) => void;
+  readonly darkPalettePreview: DarkPalettePreview;
+  readonly onDarkPalettePreviewChange: (preview: DarkPalettePreview) => void;
   readonly dashboardAiUnavailablePreview: DashboardAiUnavailablePreviewState | null;
   readonly dashboardAiUnavailablePreviewCase: DashboardAiUnavailablePreviewCase;
   readonly sidebarCtaPreviewCase: SidebarCtaPreviewCase | null;
@@ -136,6 +149,8 @@ type DevSettingsSectionProps = {
 export function DevSettingsSection({
   activeSubsection,
   onSubsectionChange,
+  darkPalettePreview,
+  onDarkPalettePreviewChange,
   dashboardAiUnavailablePreview,
   dashboardAiUnavailablePreviewCase,
   sidebarCtaPreviewCase,
@@ -208,6 +223,32 @@ export function DevSettingsSection({
   onReplayDashboardDemo,
   onResetDemoDashboardReplaySettings,
 }: DevSettingsSectionProps) {
+  const darkPaletteOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  const handleDarkPaletteKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const currentIndex = darkPaletteOptionRefs.current.findIndex(
+      (element) => element === event.target,
+    );
+    if (currentIndex < 0) return;
+
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      nextIndex = (currentIndex + 1) % DARK_PALETTE_PREVIEW_OPTIONS.length;
+    } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      nextIndex = (currentIndex - 1 + DARK_PALETTE_PREVIEW_OPTIONS.length)
+        % DARK_PALETTE_PREVIEW_OPTIONS.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = DARK_PALETTE_PREVIEW_OPTIONS.length - 1;
+    }
+
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const option = DARK_PALETTE_PREVIEW_OPTIONS[nextIndex];
+    onDarkPalettePreviewChange(option.id);
+    darkPaletteOptionRefs.current[nextIndex]?.focus();
+  };
   const { t } = useLocalization();
   const fastRunId = useId().replace(/:/g, "");
   const fastRunLabelId = `pet-run-beta-label-${fastRunId}`;
@@ -722,6 +763,40 @@ export function DevSettingsSection({
 
       {activeSubsection === "previews" ? (
         <>
+          <div className="settings-block settings-block--dev-preview">
+            <h3>Appearance previews</h3>
+            <div className="settings-row settings-row--fallback" role="group" aria-label="Dark palette preview">
+              <div>
+                <div className="lbl">Dark palette</div>
+                <div className="desc">Compare the shipping dark palette with two lighter surface studies across the whole app. Light mode is unchanged.</div>
+              </div>
+              <div className="ctrl settings-row__actions">
+                <div
+                  className="settings-mode-switch settings-mode-switch--triple"
+                  role="radiogroup"
+                  aria-label="Dark palette variants"
+                  aria-orientation="horizontal"
+                  onKeyDown={handleDarkPaletteKeyDown}
+                >
+                  {DARK_PALETTE_PREVIEW_OPTIONS.map((option, index) => (
+                    <button
+                      key={option.id}
+                      ref={(element) => { darkPaletteOptionRefs.current[index] = element; }}
+                      type="button"
+                      className={`settings-mode-option${darkPalettePreview === option.id ? " is-active" : ""}`}
+                      role="radio"
+                      aria-checked={darkPalettePreview === option.id}
+                      tabIndex={darkPalettePreview === option.id ? 0 : -1}
+                      onClick={() => onDarkPalettePreviewChange(option.id)}
+                    >
+                      <span>{option.label}</span>
+                      <small>{option.detail}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
           <DevSettingsCompanionPillBlock
             floatingEnabled={floatingCompanionDevEnabled}
             onFloatingEnabledChange={onFloatingCompanionDevEnabledChange}

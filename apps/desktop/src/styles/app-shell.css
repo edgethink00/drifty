@@ -29,6 +29,10 @@
   --shell-glass-bg: rgba(33, 34, 31, 0.74);
 }
 
+:root[data-theme="dark"][data-runtime="browser"][data-dark-palette-preview="v21"] .app-shell {
+  --shell-glass-bg: rgba(46, 48, 42, 0.64);
+}
+
 .app-shell--sidebar-collapsed {
   grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
 }

@@ -456,6 +456,33 @@ describe("DevSettingsSection", () => {
     expect(props.onSubsectionChange).toHaveBeenCalledWith("flags");
   });
 
+  it("switches the app-wide dark palette preview from the Previews tab", () => {
+    const props = renderProductionDevSettings({ activeSubsection: "previews" });
+
+    const current = screen.getByRole("radio", { name: /Current/ });
+    const v1 = screen.getByRole("radio", { name: /^V1/ });
+    const v21 = screen.getByRole("radio", { name: /V2\.1/ });
+    expect(current.getAttribute("aria-checked")).toBe("true");
+    expect(current.getAttribute("tabindex")).toBe("0");
+    expect(v1.getAttribute("tabindex")).toBe("-1");
+    fireEvent.click(v21);
+
+    expect(props.onDarkPalettePreviewChange).toHaveBeenCalledWith("v21");
+
+    current.focus();
+    fireEvent.keyDown(current, { key: "ArrowRight" });
+    expect(props.onDarkPalettePreviewChange).toHaveBeenLastCalledWith("v1");
+    expect(document.activeElement).toBe(v1);
+
+    fireEvent.keyDown(v1, { key: "End" });
+    expect(props.onDarkPalettePreviewChange).toHaveBeenLastCalledWith("v21");
+    expect(document.activeElement).toBe(v21);
+
+    fireEvent.keyDown(v21, { key: "Home" });
+    expect(props.onDarkPalettePreviewChange).toHaveBeenLastCalledWith("current");
+    expect(document.activeElement).toBe(current);
+  });
+
   it("previews the real startup loading screen for seven seconds", () => {
     renderProductionDevSettings({ activeSubsection: "previews" });
 

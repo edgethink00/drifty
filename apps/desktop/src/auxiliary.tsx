@@ -7,6 +7,9 @@ import {
   captureSentryException,
   scheduleSentryInitialization,
 } from "./lib/observability/sentryClient";
+import { DEV_SETTINGS_ENABLED } from "./appFeatureSwitches";
+import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
+import { installDarkPalettePreviewStorageSync } from "./features/settings/darkPalettePreview";
 import "./styles/tokens-base.css";
 import "./styles/companion.css";
 import "./styles/companion-pill.css";
@@ -98,6 +101,12 @@ const surface = resolveAuxiliarySurface(window.location.search);
 if (surface) {
   document.documentElement.dataset.surface = surface;
 }
+installDarkPalettePreviewStorageSync(
+  window,
+  document.documentElement,
+  DEV_SETTINGS_ENABLED,
+  DEV_MODE_STORAGE_KEY,
+);
 
 window.addEventListener("unhandledrejection", (event) => {
   captureSentryException(event.reason, {

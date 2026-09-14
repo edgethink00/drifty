@@ -28,6 +28,9 @@ import "./styles/chartHoverMotion.css";
 import "./styles/popover-motion.css";
 import "./styles/modal-chrome.css";
 import { hideBootShell } from "./features/loading/bootShell";
+import { DEV_SETTINGS_ENABLED } from "./appFeatureSwitches";
+import { DEV_MODE_STORAGE_KEY } from "./features/settings/settingsStorage";
+import { installDarkPalettePreviewStorageSync } from "./features/settings/darkPalettePreview";
 
 declare global {
   interface Window {
@@ -47,6 +50,12 @@ if (initialSurface !== "app") document.documentElement.dataset.surface = initial
 // so the shell keeps a CSS blur fallback. Marking the document here lets the
 // stylesheet scope that fallback without touching the packaged app path.
 if (!("__TAURI_INTERNALS__" in window)) document.documentElement.dataset.runtime = "browser";
+installDarkPalettePreviewStorageSync(
+  window,
+  document.documentElement,
+  DEV_SETTINGS_ENABLED,
+  DEV_MODE_STORAGE_KEY,
+);
 
 class BootstrapErrorBoundary extends React.Component<
   React.PropsWithChildren,
