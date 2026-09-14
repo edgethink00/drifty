@@ -106,6 +106,41 @@ describe("SidebarCtaSlot", () => {
     })).toMatchObject({ kind: "download", progressPercent: 100 });
   });
 
+  it("shows runtime preparation without misreporting another model download at zero percent", () => {
+    const state = resolveSidebarCtaSlot({
+      ...baseInput,
+      aiStatus: { issueKind: null, label: "AI setup needed", providerLabel: "Open settings", tone: "error" },
+      billingEntitlement: activeEntitlement,
+      managedLocalAiStatus: {
+        state: "installing",
+        selectedModelId: "drifty-qwen3-5-2b-economy",
+        installedModels: [{ id: "drifty-qwen3-5-2b-economy", artifactDir: "/managed/models/qwen-2b" }],
+        baseUrl: "http://127.0.0.1:39217/v1",
+        model: "qwen-2b",
+        message: "Preparing managed local AI runtime...",
+        artifactDir: "/managed/models/qwen-2b",
+        progress: null,
+        errorKind: null,
+        memoryUsageBytes: null,
+      },
+    });
+    expect(state).toMatchObject({
+      kind: "preparing",
+      modelLabel: "Qwen 3.5 2B",
+      titleKey: "sidebar.cta.download.preparingTitle",
+    });
+    if (!state || state.kind !== "preparing") throw new Error("Expected runtime preparation state");
+
+    const { container } = render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
+
+    expect(screen.getByRole("status", {
+      name: /Preparing Local AI.*Qwen 3\.5 2B.*Runtime setup.*model already downloaded/i,
+    })).toBeTruthy();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+    expect(screen.queryByText("0%")).toBeNull();
+    expect(container.querySelector(".sidebar-cta-slot__action")).toBeNull();
+  });
+
   it("prioritizes a confirmed AI disconnection", () => {
     expect(resolveSidebarCtaSlot({
       ...baseInput,
@@ -172,6 +207,8 @@ describe("SidebarCtaSlot", () => {
     ["insufficient_memory", "sidebar.cta.ai.localMemoryTitle", "sidebar.cta.ai.localMemoryDetail"],
     ["insufficient_storage", "sidebar.cta.ai.localStorageTitle", "sidebar.cta.ai.localStorageDetail"],
     ["runtime_missing", "sidebar.cta.ai.localRuntimeMissingTitle", "sidebar.cta.ai.localRuntimeMissingDetail"],
+    ["runtime_download_failed", "sidebar.cta.ai.localRuntimeDownloadFailedTitle", "sidebar.cta.ai.localRuntimeDownloadFailedDetail"],
+    ["runtime_port_conflict", "sidebar.cta.ai.localRuntimePortConflictTitle", "sidebar.cta.ai.localRuntimePortConflictDetail"],
     ["runtime_failed", "sidebar.cta.ai.localRuntimeFailedTitle", "sidebar.cta.ai.localRuntimeFailedDetail"],
   ] as const)("surfaces the structured managed-local %s recovery", (errorKind, titleKey, copyKey) => {
     expect(resolveSidebarCtaSlot({
@@ -412,7 +449,7 @@ describe("SidebarCtaSlot", () => {
       aiStatus: { issueKind: null, label: "Connected", providerLabel: "Drifty Cloud", tone: "ok" },
       billingEntitlement: { ...activeEntitlement, status: "locked", canUseApp: false, lockedReason: "payment_required" },
     });
-    if (!state || state.kind === "download") throw new Error("Expected billing recovery state");
+    if (!state || state.kind === "download" || state.kind === "preparing") throw new Error("Expected billing recovery state");
 
     render(<SidebarCtaSlot state={state} onAction={vi.fn()} />);
 
@@ -542,7 +579,15 @@ describe("SidebarCtaSlot", () => {
     ],
     [
       "runtime_missing",
-      /Local AI runtime is missing.*Activity tracking continues.*Reinstall Local AI in AI settings.*Open AI settings/i,
+      /Local AI runtime is missing.*Activity tracking continues.*Retry Local AI in AI settings.*model does not need to be downloaded again.*Open AI settings/i,
+    ],
+    [
+      "runtime_download_failed",
+      /Local AI setup download failed.*Activity tracking continues.*Retry in AI settings.*only the runtime setup.*model is already installed.*Open AI settings/i,
+    ],
+    [
+      "runtime_port_conflict",
+      /Local AI port is in use.*Activity tracking continues.*Close the app using local AI port 39217.*retry in AI settings.*Open AI settings/i,
     ],
     [
       "runtime_failed",

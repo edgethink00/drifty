@@ -18,7 +18,7 @@ describe("managed model requirements in settings", () => {
       actionModelId: null,
       cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: "Upgrade",
       cloudSelectable: false, canManageBilling: false,
-      onInstallModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
+      onInstallModel: vi.fn(), onStartModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
       onDeleteModel: vi.fn(), onRevealArtifact: vi.fn(),
       t: (key: keyof typeof ENGLISH_TRANSLATIONS) => ENGLISH_TRANSLATIONS[key],
     };
@@ -47,12 +47,55 @@ describe("managed model requirements in settings", () => {
     expect(installed.actionLabel).toBeUndefined();
     expect(installed.actions?.map((action) => action.key)).toEqual(["reveal", "delete"]);
     expect(installed.actions?.every((action) => !action.onHover)).toBe(true);
+    const preparing = driftyModelOptions({
+      ...base,
+      status: {
+        ...status,
+        artifactDir: "/tmp/qa-model",
+        installedModels: [{ id: modelId, artifactDir: "/tmp/qa-model" }],
+      },
+    })[1];
+    expect(preparing.statusLabel).toBe("Preparing");
+    expect(preparing.disabled).toBe(true);
     const running = driftyModelOptions({
       ...base,
       status: { ...status, state: "running", installedModels: [{ id: modelId, artifactDir: "/tmp/qa-model" }] },
     })[1];
     expect(running.statusLabel).toBe("In use");
     expect(running.actions?.every((action) => !action.onHover)).toBe(true);
+
+    const retryStart = vi.fn();
+    const runtimeFailure = driftyModelOptions({
+      ...base,
+      onStartModel: retryStart,
+      status: {
+        ...status,
+        state: "error",
+        errorKind: "runtime_port_conflict",
+        installedModels: [{ id: modelId, artifactDir: "/tmp/qa-model" }],
+      },
+    })[1];
+    expect(runtimeFailure.actions?.map((action) => action.key)).toEqual([
+      "retry-runtime",
+      "reveal",
+      "delete",
+    ]);
+    runtimeFailure.actions?.[0].onAction();
+    expect(retryStart).toHaveBeenCalledWith(modelId);
+    const runtimeDownloadFailure = driftyModelOptions({
+      ...base,
+      status: {
+        ...status,
+        state: "error",
+        errorKind: "runtime_download_failed",
+        installedModels: [{ id: modelId, artifactDir: "/tmp/qa-model" }],
+      },
+    })[1];
+    expect(runtimeDownloadFailure.actions?.map((action) => action.key)).toEqual([
+      "retry-runtime",
+      "reveal",
+      "delete",
+    ]);
 
     render(<SettingsSelect ariaLabel="AI model" value="drifty_cloud" options={[idle[0], installed]} onChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("combobox", { name: "AI model" }));
@@ -70,7 +113,7 @@ describe("managed model requirements in settings", () => {
       actionModelId: null,
       cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: "Upgrade",
       cloudSelectable: false, canManageBilling: false,
-      onInstallModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
+      onInstallModel: vi.fn(), onStartModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
       onDeleteModel: vi.fn(), onRevealArtifact: vi.fn(),
       t,
     };
@@ -101,7 +144,7 @@ describe("managed model requirements in settings", () => {
         status: null, actionModelId: null,
         cloudSubscribeActionDisabled: false, cloudSubscribeActionLabel: null,
         cloudSelectable: true, canManageBilling: false,
-        onInstallModel: install, onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
+        onInstallModel: install, onStartModel: vi.fn(), onStartCloudSetup: vi.fn(), onManageCloudBilling: vi.fn(),
         onDeleteModel: vi.fn(), onRevealArtifact: vi.fn(), t,
       });
       return <SettingsSelect ariaLabel="AI model" value="drifty_cloud" options={options} onChange={vi.fn()} />;

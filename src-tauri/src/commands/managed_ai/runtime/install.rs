@@ -124,6 +124,7 @@ pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiErro
     let archive = runtime_archive_for_current_arch()?;
     let runtime_path = runtime_path(root);
     if runtime_install_complete(root, archive) {
+        ensure_runtime_executable(&runtime_path)?;
         return Ok(runtime_path);
     }
 
@@ -141,6 +142,16 @@ pub(super) fn require_runtime_path(root: &Path) -> Result<PathBuf, ManagedAiErro
 
 pub(super) fn expected_runtime_path(root: &Path) -> PathBuf {
     debug_env_runtime_path().unwrap_or_else(|| runtime_path(root))
+}
+
+pub(super) fn runtime_assets_ready(root: &Path) -> Result<bool, ManagedAiError> {
+    if debug_env_runtime_path().is_some() {
+        return Ok(true);
+    }
+    Ok(runtime_install_complete(
+        root,
+        runtime_archive_for_current_arch()?,
+    ))
 }
 
 fn debug_env_runtime_path() -> Option<PathBuf> {
@@ -171,11 +182,16 @@ fn download_runtime_archive(archive: &RuntimeArchive) -> Result<Vec<u8>, Managed
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(RUNTIME_ARCHIVE_TIMEOUT_SECS))
         .user_agent("Drifty managed local AI runtime installer")
-        .build()?;
-    let mut response = client.get(archive.url).send()?.error_for_status()?;
+        .build()
+        .map_err(|error| ManagedAiError::RuntimeDownloadFailed(error.to_string()))?;
+    let mut response = client
+        .get(archive.url)
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| ManagedAiError::RuntimeDownloadFailed(error.to_string()))?;
     if let Some(content_length) = response.content_length() {
         if content_length != archive.expected_size_bytes {
-            return Err(ManagedAiError::RuntimeFailed(format!(
+            return Err(ManagedAiError::RuntimeDownloadFailed(format!(
                 "runtime archive size mismatch: expected {} bytes, server declared {content_length}",
                 archive.expected_size_bytes
             )));
@@ -191,9 +207,10 @@ fn read_archive_bytes(
     let mut bytes = Vec::with_capacity(expected_size_bytes as usize);
     reader
         .take(expected_size_bytes.saturating_add(1))
-        .read_to_end(&mut bytes)?;
+        .read_to_end(&mut bytes)
+        .map_err(|error| ManagedAiError::RuntimeDownloadFailed(error.to_string()))?;
     if bytes.len() as u64 != expected_size_bytes {
-        return Err(ManagedAiError::RuntimeFailed(format!(
+        return Err(ManagedAiError::RuntimeDownloadFailed(format!(
             "runtime archive size mismatch: expected {expected_size_bytes} bytes, received {}",
             bytes.len()
         )));
@@ -276,7 +293,7 @@ fn verify_archive_sha256(bytes: &[u8], expected: &str) -> Result<(), ManagedAiEr
     if actual == expected {
         Ok(())
     } else {
-        Err(ManagedAiError::RuntimeFailed(format!(
+        Err(ManagedAiError::RuntimeDownloadFailed(format!(
             "runtime checksum mismatch: expected {expected}, got {actual}"
         )))
     }
@@ -356,7 +373,10 @@ mod tests {
     fn runtime_checksum_rejects_modified_archive_bytes() {
         let archive = runtime_archive_for("macos", "aarch64").expect("arm64 runtime archive");
         let result = verify_archive_sha256(b"not a runtime", archive.sha256);
-        assert!(result.is_err());
+        assert!(matches!(
+            result,
+            Err(ManagedAiError::RuntimeDownloadFailed(_))
+        ));
     }
 
     #[test]
@@ -403,8 +423,35 @@ mod tests {
             read_archive_bytes(&mut Cursor::new(b"1234"), 4).expect("exact body"),
             b"1234"
         );
-        assert!(read_archive_bytes(&mut Cursor::new(b"123"), 4).is_err());
-        assert!(read_archive_bytes(&mut Cursor::new(b"12345"), 4).is_err());
+        assert!(matches!(
+            read_archive_bytes(&mut Cursor::new(b"123"), 4),
+            Err(ManagedAiError::RuntimeDownloadFailed(_))
+        ));
+        assert!(matches!(
+            read_archive_bytes(&mut Cursor::new(b"12345"), 4),
+            Err(ManagedAiError::RuntimeDownloadFailed(_))
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn complete_runtime_reapplies_executable_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().expect("create runtime root");
+        write_runtime_completion_fixture(root.path()).expect("write runtime fixture");
+        let path = runtime_path(root.path());
+        let mut permissions = fs::metadata(&path).expect("runtime metadata").permissions();
+        permissions.set_mode(0o644);
+        fs::set_permissions(&path, permissions).expect("remove executable permission");
+
+        let required = require_runtime_path(root.path()).expect("repair complete runtime");
+        let mode = fs::metadata(required)
+            .expect("repaired metadata")
+            .permissions()
+            .mode();
+
+        assert_ne!(mode & 0o111, 0);
     }
 
     #[cfg(target_os = "windows")]

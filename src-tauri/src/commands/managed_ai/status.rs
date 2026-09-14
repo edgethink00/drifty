@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use super::{
     is_install_active, require_model, runtime, status_artifact_dir, ManagedAiError,
@@ -10,6 +12,7 @@ use super::{
 };
 
 const STATUS_FILE_NAME: &str = "status.json";
+static STATUS_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -53,6 +56,8 @@ pub enum ManagedAiStatusErrorKind {
     InsufficientMemory,
     InsufficientStorage,
     RuntimeMissing,
+    RuntimeDownloadFailed,
+    RuntimePortConflict,
     RuntimeFailed,
 }
 
@@ -180,12 +185,51 @@ fn read_status_with_runtime_reconciliation(
 }
 
 pub(super) fn write_status(root: &Path, status: &ManagedAiStatus) -> Result<(), ManagedAiError> {
+    let _write_guard = STATUS_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     fs::create_dir_all(root)?;
     let status_path = root.join(STATUS_FILE_NAME);
-    let temp_path = root.join(format!("{STATUS_FILE_NAME}.tmp"));
+    // A process-local lock keeps ordinary writers ordered. The unique staging
+    // name additionally prevents another app process or a stale temp file from
+    // corrupting this writer's atomic rename.
+    let temp_path = root.join(format!(".{STATUS_FILE_NAME}.{}.tmp", Uuid::new_v4()));
     fs::write(&temp_path, serde_json::to_vec_pretty(status)?)?;
-    fs::rename(temp_path, status_path)?;
+    if let Err(error) = replace_status_file(&temp_path, &status_path) {
+        let _ = fs::remove_file(temp_path);
+        return Err(error.into());
+    }
     Ok(())
+}
+
+#[cfg(not(windows))]
+fn replace_status_file(temp_path: &Path, status_path: &Path) -> std::io::Result<()> {
+    fs::rename(temp_path, status_path)
+}
+
+#[cfg(windows)]
+fn replace_status_file(temp_path: &Path, status_path: &Path) -> std::io::Result<()> {
+    use std::{iter, os::windows::ffi::OsStrExt};
+    use windows_sys::Win32::Storage::FileSystem::{
+        MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+    };
+
+    let temp_path = temp_path
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    let status_path = status_path
+        .as_os_str()
+        .encode_wide()
+        .chain(iter::once(0))
+        .collect::<Vec<_>>();
+    let flags = MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH;
+    if unsafe { MoveFileExW(temp_path.as_ptr(), status_path.as_ptr(), flags) } == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 pub(super) fn default_status() -> ManagedAiStatus {
@@ -254,15 +298,29 @@ fn normalize_status_with_artifact_lookup_and_runtime_mode(
         if matches!(status.state, ManagedAiInstallState::Installing) && !install_was_active {
             status.progress = None;
             if status.artifact_dir.is_some() {
-                status.state = ManagedAiInstallState::Installed;
-                status.message = "Managed local model downloaded.".to_string();
-                status.error_kind = None;
+                if runtime::runtime_assets_ready(root)? {
+                    status.state = ManagedAiInstallState::Installed;
+                    status.message = "Managed local AI is ready to start.".to_string();
+                    status.error_kind = None;
+                } else {
+                    status.state = ManagedAiInstallState::Error;
+                    status.message = "Managed local model is downloaded, but runtime setup was interrupted. Retry to finish setup.".to_string();
+                    status.error_kind = Some(ManagedAiStatusErrorKind::RuntimeMissing);
+                }
             } else {
                 status.state = ManagedAiInstallState::Error;
                 status.message =
                     "Managed local AI download was interrupted. Try downloading again.".to_string();
                 status.error_kind = Some(ManagedAiStatusErrorKind::DownloadFailed);
             }
+        }
+        if matches!(status.state, ManagedAiInstallState::Installed)
+            && status.artifact_dir.is_some()
+            && !runtime::runtime_assets_ready(root)?
+        {
+            status.state = ManagedAiInstallState::Error;
+            status.message = "Managed local model is downloaded, but its runtime needs to be prepared. Retry to finish setup.".to_string();
+            status.error_kind = Some(ManagedAiStatusErrorKind::RuntimeMissing);
         }
         if status.artifact_dir.is_none()
             && matches!(

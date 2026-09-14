@@ -31,7 +31,7 @@ export function applyManagedLocalAiRuntimeStatus(
   if (status.state === "starting" || status.state === "installed") {
     return {
       tone: "neutral",
-      label: status.state === "starting" ? "Starting" : "Checking",
+      label: status.state === "starting" ? "Starting" : "Ready",
       providerLabel,
       memoryLabel: connectionStatus.memoryLabel,
       issueKind: null,
@@ -41,7 +41,7 @@ export function applyManagedLocalAiRuntimeStatus(
   if (status.state === "installing") {
     return {
       tone: "neutral",
-      label: "Downloading",
+      label: status.artifactDir ? "Preparing" : "Downloading",
       providerLabel,
       memoryLabel: null,
       issueKind: null,
@@ -89,6 +89,10 @@ function managedLocalAiRuntimeErrorLabel(status: ManagedLocalAiStatus): string |
       return "Storage needed";
     case "runtime_missing":
       return "Runtime missing";
+    case "runtime_download_failed":
+      return "Setup download failed";
+    case "runtime_port_conflict":
+      return "Port in use";
     case "runtime_failed":
       return "Start failed";
     case null:

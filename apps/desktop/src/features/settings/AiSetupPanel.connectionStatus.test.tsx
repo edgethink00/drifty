@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_LOCAL_AI_SETUP } from "./localAiSetup";
 import {
@@ -18,6 +18,8 @@ const { testCloudAiConnectionMock } = vi.hoisted(() => ({
 vi.mock("./cloudAiConnectionTest", () => ({
   testCloudAiConnection: testCloudAiConnectionMock,
 }));
+
+afterEach(cleanup);
 
 describe("AiSetupPanel connection status", () => {
   beforeEach(() => {

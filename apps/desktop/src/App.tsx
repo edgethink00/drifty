@@ -9574,7 +9574,7 @@ export default function App() {
                   openAccountSettings();
                   return;
                 }
-                if (sidebarCtaSlot.kind === "download") return;
+                if (sidebarCtaSlot.kind === "download" || sidebarCtaSlot.kind === "preparing") return;
                 if (sidebarCtaSlot.kind === "billing") {
                   // Existing subscription with a blocked payment: recover it in
                   // the portal instead of starting a second one.

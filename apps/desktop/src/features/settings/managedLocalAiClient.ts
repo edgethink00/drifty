@@ -24,6 +24,8 @@ export type ManagedLocalAiStatusErrorKind =
   | "insufficient_memory"
   | "insufficient_storage"
   | "runtime_missing"
+  | "runtime_download_failed"
+  | "runtime_port_conflict"
   | "runtime_failed";
 
 export type ManagedLocalAiStatus = {
@@ -161,6 +163,8 @@ function parseErrorKind(value: unknown): ManagedLocalAiStatusErrorKind | null {
     case "insufficient_memory":
     case "insufficient_storage":
     case "runtime_missing":
+    case "runtime_download_failed":
+    case "runtime_port_conflict":
     case "runtime_failed":
       return value;
     default:

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock } from "./AiSetupPanel.testHarness";
+
+afterEach(cleanup);
 
 describe("AiSetupPanel managed local progress", () => {
   beforeEach(() => {
@@ -69,6 +71,37 @@ describe("AiSetupPanel managed local progress", () => {
     fireEvent.click(retryButton!);
 
     await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_install", { modelId: "drifty-qwen3-5-4b-default" }));
+  });
+
+  it("routes the installed-model Retry button directly to managed runtime start", async () => {
+    setManagedStatusMock({
+      state: "error",
+      selectedModelId: "drifty-qwen3-5-2b-economy",
+      installedModels: [{
+        id: "drifty-qwen3-5-2b-economy",
+        artifactDir: "/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-2b-economy",
+      }],
+      baseUrl: "http://127.0.0.1:39217/v1",
+      model: "drifty-qwen3.5-2b-local",
+      message: "Managed local AI port is unavailable: port 39217 is already in use.",
+      artifactDir: "/Users/test/Library/Application Support/Drifty/managed-ai/models/drifty-qwen3-5-2b-economy",
+      progress: null,
+      errorKind: "runtime_port_conflict",
+      memoryUsageBytes: null,
+    });
+    renderPanel();
+
+    const modelBeingUsed = screen.getByRole("region", { name: /^Model being used$/i });
+    fireEvent.click(within(modelBeingUsed).getByRole("combobox", { name: /^AI model$/i }));
+    const retry = await within(modelBeingUsed).findByRole("button", {
+      name: /^Retry starting Qwen 3\.5 2B$/i,
+    });
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("managed_ai_start", {
+      modelId: "drifty-qwen3-5-2b-economy",
+    }));
+    expect(invokeMock).not.toHaveBeenCalledWith("managed_ai_install", expect.anything());
   });
 
   it("blocks a second installed-model selection while the current runtime is starting", async () => {

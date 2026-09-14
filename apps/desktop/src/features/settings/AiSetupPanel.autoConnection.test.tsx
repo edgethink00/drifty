@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { invokeMock, renderPanel, resetManagedStatusMock, revealItemInDirMock, setManagedStatusMock } from "./AiSetupPanel.testHarness";
+
+afterEach(cleanup);
 
 describe("AiSetupPanel automatic local connection test", () => {
   beforeEach(() => {

@@ -150,6 +150,7 @@ export function AiSetupModelBeingUsed({
           cloudSelectable,
           canManageBilling,
           onInstallModel,
+          onStartModel,
           onStartCloudSetup,
           onManageCloudBilling,
           onDeleteModel: requestDeleteModel,

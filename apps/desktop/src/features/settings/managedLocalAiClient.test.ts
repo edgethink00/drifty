@@ -59,6 +59,8 @@ describe("getManagedLocalAiStatus", () => {
     "insufficient_memory",
     "insufficient_storage",
     "runtime_missing",
+    "runtime_download_failed",
+    "runtime_port_conflict",
     "runtime_failed",
   ] as const)("preserves the structured %s recovery kind", async (errorKind) => {
     invokeMock.mockResolvedValue({

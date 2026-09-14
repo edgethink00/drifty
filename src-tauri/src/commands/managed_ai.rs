@@ -72,6 +72,10 @@ enum ManagedAiError {
     DownloadFailed(String),
     #[error("Managed local AI runtime is missing: {0}")]
     RuntimeMissing(String),
+    #[error("Managed local AI runtime download failed: {0}")]
+    RuntimeDownloadFailed(String),
+    #[error("Managed local AI port is unavailable: {0}")]
+    RuntimePortConflict(String),
     #[error("Managed local AI runtime failed: {0}")]
     RuntimeFailed(String),
 }
@@ -181,11 +185,12 @@ fn install_model_at_root(
     app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
-    install_model_at_root_with_preflight_and_downloader(
+    install_model_at_root_with_components(
         root,
         model_id,
-        || model_resource_error_status(root, spec, true, app),
+        |needs_model_download| model_resource_error_status(root, spec, needs_model_download, app),
         download_model_artifact,
+        runtime::prepare_runtime,
         app,
     )
 }
@@ -201,19 +206,21 @@ fn install_model_at_root_with_downloader(
     ) -> Result<PathBuf, ManagedAiError>,
     app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
-    install_model_at_root_with_preflight_and_downloader(
+    install_model_at_root_with_components(
         root,
         model_id,
-        || Ok(None),
+        |_| Ok(None),
         downloader,
+        runtime::write_runtime_completion_fixture,
         app,
     )
 }
 
+#[cfg(test)]
 fn install_model_at_root_with_preflight_and_downloader(
     root: &Path,
     model_id: &str,
-    preflight: impl FnOnce() -> Result<Option<ManagedAiStatus>, ManagedAiError>,
+    preflight: impl FnOnce(bool) -> Result<Option<ManagedAiStatus>, ManagedAiError>,
     downloader: impl FnOnce(
         &Path,
         ManagedAiModelSpec,
@@ -221,39 +228,89 @@ fn install_model_at_root_with_preflight_and_downloader(
     ) -> Result<PathBuf, ManagedAiError>,
     app: Option<&AppHandle>,
 ) -> Result<ManagedAiStatus, ManagedAiError> {
+    install_model_at_root_with_components(
+        root,
+        model_id,
+        preflight,
+        downloader,
+        runtime::write_runtime_completion_fixture,
+        app,
+    )
+}
+
+#[cfg(test)]
+fn install_model_at_root_with_runtime_preparer(
+    root: &Path,
+    model_id: &str,
+    downloader: impl FnOnce(
+        &Path,
+        ManagedAiModelSpec,
+        &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+    ) -> Result<PathBuf, ManagedAiError>,
+    runtime_preparer: impl FnOnce(&Path) -> Result<(), ManagedAiError>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    install_model_at_root_with_components(
+        root,
+        model_id,
+        |_| Ok(None),
+        downloader,
+        runtime_preparer,
+        None,
+    )
+}
+
+fn install_model_at_root_with_components(
+    root: &Path,
+    model_id: &str,
+    preflight: impl FnOnce(bool) -> Result<Option<ManagedAiStatus>, ManagedAiError>,
+    downloader: impl FnOnce(
+        &Path,
+        ManagedAiModelSpec,
+        &mut dyn FnMut(ManagedAiDownloadProgress) -> Result<(), ManagedAiError>,
+    ) -> Result<PathBuf, ManagedAiError>,
+    runtime_preparer: impl FnOnce(&Path) -> Result<(), ManagedAiError>,
+    app: Option<&AppHandle>,
+) -> Result<ManagedAiStatus, ManagedAiError> {
     let spec = require_model(model_id)?;
     // Own the root before preflight can write a resource error over another
     // model's in-flight progress. status.json is shared by all local models.
     let active_install = match ActiveInstallGuard::acquire(root, spec.id) {
         Ok(guard) => guard,
-        Err(active) if active.status_ready => return read_status(root),
-        Err(active) => {
-            let active_spec = require_model(&active.model_id)?;
-            return status_with_installed_models(
-                root,
-                status_for_spec(
-                    ManagedAiInstallState::Installing,
-                    active_spec,
-                    None,
-                    "Downloading managed local model...",
-                ),
-            );
-        }
+        Err(active) => return status_for_active_install(root, &active),
     };
-    if let Some(status) = preflight()? {
-        return Ok(status);
-    }
-    let installing = status_with_installed_models(
-        root,
-        status_for_spec(
-            ManagedAiInstallState::Installing,
-            spec,
-            None,
-            "Downloading managed local model...",
-        ),
-    )?;
-    write_and_emit_status(root, &installing, app)?;
-    active_install.mark_status_ready();
+    // Installing and starting share one persisted status document. Claim the
+    // operation before waiting for the lifecycle lock, then supersede any
+    // queued start monitor. A child that has not yet become ready must also be
+    // stopped so the install cannot strand an unmonitored cold start.
+    invalidate_runtime_status_monitor(root);
+    let existing_artifact_dir = {
+        let _lifecycle_guard = RUNTIME_LIFECYCLE_LOCK
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        runtime::stop_unready_runtime(root)?;
+        let existing_artifact_dir = status_artifact_dir(root, spec)?;
+        let needs_model_download = existing_artifact_dir.is_none();
+        if let Some(status) = preflight(needs_model_download)? {
+            return Ok(status);
+        }
+        let installing = status_with_installed_models(
+            root,
+            status_for_spec(
+                ManagedAiInstallState::Installing,
+                spec,
+                existing_artifact_dir.clone(),
+                if needs_model_download {
+                    "Downloading managed local model..."
+                } else {
+                    "Preparing managed local AI runtime..."
+                },
+            ),
+        )?;
+        write_and_emit_status(root, &installing, app)?;
+        active_install.mark_status_ready();
+        existing_artifact_dir
+    };
+    let reused_existing_artifact = existing_artifact_dir.is_some();
 
     let mut progress_gate = DownloadProgressWriteGate::default();
     let mut report_progress = |progress: ManagedAiDownloadProgress| {
@@ -265,27 +322,55 @@ fn install_model_at_root_with_preflight_and_downloader(
         write_and_emit_status(root, &status, app)
     };
 
-    let artifact_dir = match downloader(root, spec, &mut report_progress) {
-        Ok(path) => path,
-        Err(error) => {
-            let status = match model_retry_error_kind(&error) {
-                Some(error_kind) => {
-                    status_for_model_error(spec, None, &error.to_string(), error_kind)
-                }
-                None => status_for_global_error(&error.to_string()),
-            };
-            let status = status_with_installed_models(root, status)?;
-            write_and_emit_status(root, &status, app)?;
-            return Ok(status);
+    let artifact_dir = if let Some(artifact_dir) = existing_artifact_dir {
+        artifact_dir
+    } else {
+        match downloader(root, spec, &mut report_progress) {
+            Ok(path) => path,
+            Err(error) => {
+                let status = match model_retry_error_kind(&error) {
+                    Some(error_kind) => {
+                        status_for_model_error(spec, None, &error.to_string(), error_kind)
+                    }
+                    None => status_for_global_error(&error.to_string()),
+                };
+                let status = status_with_installed_models(root, status)?;
+                write_and_emit_status(root, &status, app)?;
+                return Ok(status);
+            }
         }
     };
+
+    if !reused_existing_artifact {
+        let preparing = status_with_installed_models(
+            root,
+            status_for_spec(
+                ManagedAiInstallState::Installing,
+                spec,
+                Some(artifact_dir.clone()),
+                "Preparing managed local AI runtime...",
+            ),
+        )?;
+        write_and_emit_status(root, &preparing, app)?;
+    }
+
+    if let Err(error) = runtime_preparer(root) {
+        let error_kind = runtime_error_kind(&error);
+        let status = status_with_installed_models(
+            root,
+            status_for_model_error(spec, Some(artifact_dir), &error.to_string(), error_kind),
+        )?;
+        write_and_emit_status(root, &status, app)?;
+        return Ok(status);
+    }
+
     let status = status_with_installed_models(
         root,
         status_for_spec(
             ManagedAiInstallState::Installed,
             spec,
             Some(artifact_dir),
-            "Managed local model downloaded.",
+            "Managed local AI is ready to start.",
         ),
     )?;
     write_and_emit_status(root, &status, app)?;
@@ -351,12 +436,42 @@ impl Drop for ActiveInstallGuard {
 }
 
 fn is_install_active(root: &Path, model_id: &str) -> bool {
+    active_install(root)
+        .map(|install| install.model_id == model_id)
+        .unwrap_or(false)
+}
+
+fn active_install(root: &Path) -> Option<ActiveInstall> {
     ACTIVE_INSTALLS
         .lock()
         .unwrap_or_else(|error| error.into_inner())
         .get(root)
-        .map(|install| install.model_id == model_id)
-        .unwrap_or(false)
+        .cloned()
+}
+
+fn status_for_active_install(
+    root: &Path,
+    active: &ActiveInstall,
+) -> Result<ManagedAiStatus, ManagedAiError> {
+    if active.status_ready {
+        return read_status(root);
+    }
+    let spec = require_model(&active.model_id)?;
+    let artifact_dir = status_artifact_dir(root, spec)?;
+    let message = if artifact_dir.is_some() {
+        "Preparing managed local AI runtime..."
+    } else {
+        "Downloading managed local model..."
+    };
+    status_with_installed_models(
+        root,
+        status_for_spec(
+            ManagedAiInstallState::Installing,
+            spec,
+            artifact_dir,
+            message,
+        ),
+    )
 }
 
 fn write_and_emit_status(
@@ -420,6 +535,9 @@ fn start_model_at_root_for_generation(
     {
         return read_status(root);
     }
+    if let Some(active) = active_install(root) {
+        return status_for_active_install(root, &active);
+    }
     let spec = require_model(model_id)?;
     if let Some(status) = model_resource_error_status(root, spec, false, app)? {
         return Ok(status);
@@ -455,32 +573,72 @@ fn start_model_at_root_for_generation(
 fn spawn_runtime_status_monitor(root: PathBuf, model_id: String, generation: u64, app: AppHandle) {
     async_runtime::spawn_blocking(move || loop {
         thread::sleep(RUNTIME_STATUS_POLL_INTERVAL);
-        if !runtime_status_monitor_is_current(&root, generation) {
-            return;
+        match poll_runtime_status_monitor(&root, &model_id, generation, Some(&app)) {
+            Ok(RuntimeStatusMonitorPoll::Continue) => {}
+            Ok(RuntimeStatusMonitorPoll::Finished) | Err(_) => return,
         }
-
-        let status = match reconcile_status(&root) {
-            Ok(status) => status,
-            Err(_) => {
-                finish_runtime_status_monitor(&root, generation);
-                return;
-            }
-        };
-        if !runtime_status_monitor_is_current(&root, generation) {
-            return;
-        }
-        if status.selected_model_id.as_deref() != Some(model_id.as_str()) {
-            finish_runtime_status_monitor(&root, generation);
-            return;
-        }
-        if matches!(status.state, ManagedAiInstallState::Starting) {
-            continue;
-        }
-
-        let _ = write_and_emit_status(&root, &status, Some(&app));
-        finish_runtime_status_monitor(&root, generation);
-        return;
     });
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeStatusMonitorPoll {
+    Continue,
+    Finished,
+}
+
+fn poll_runtime_status_monitor(
+    root: &Path,
+    model_id: &str,
+    generation: u64,
+    app: Option<&AppHandle>,
+) -> Result<RuntimeStatusMonitorPoll, ManagedAiError> {
+    poll_runtime_status_monitor_with_before_publish(root, model_id, generation, app, || {})
+}
+
+fn poll_runtime_status_monitor_with_before_publish(
+    root: &Path,
+    model_id: &str,
+    generation: u64,
+    app: Option<&AppHandle>,
+    before_publish: impl FnOnce(),
+) -> Result<RuntimeStatusMonitorPoll, ManagedAiError> {
+    // Reconciliation and publication are one lifecycle transaction. If a
+    // newer install/start/delete invalidates this generation while waiting,
+    // this poll observes that before touching status.json. If invalidation
+    // happens after the final check, the newer operation cannot publish until
+    // this guard is released, so its status necessarily wins last.
+    let _lifecycle_guard = RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    if !runtime_status_monitor_is_current(root, generation) {
+        return Ok(RuntimeStatusMonitorPoll::Finished);
+    }
+
+    let status = match reconcile_status(root) {
+        Ok(status) => status,
+        Err(error) => {
+            finish_runtime_status_monitor(root, generation);
+            return Err(error);
+        }
+    };
+    if !runtime_status_monitor_is_current(root, generation) {
+        return Ok(RuntimeStatusMonitorPoll::Finished);
+    }
+    if status.selected_model_id.as_deref() != Some(model_id) {
+        finish_runtime_status_monitor(root, generation);
+        return Ok(RuntimeStatusMonitorPoll::Finished);
+    }
+    if matches!(status.state, ManagedAiInstallState::Starting) {
+        return Ok(RuntimeStatusMonitorPoll::Continue);
+    }
+
+    before_publish();
+    if let Err(error) = write_and_emit_status(root, &status, app) {
+        finish_runtime_status_monitor(root, generation);
+        return Err(error);
+    }
+    finish_runtime_status_monitor(root, generation);
+    Ok(RuntimeStatusMonitorPoll::Finished)
 }
 
 fn begin_runtime_status_monitor(root: &Path) -> u64 {
@@ -587,6 +745,9 @@ fn delete_model_at_root(
     let _lifecycle_guard = RUNTIME_LIFECYCLE_LOCK
         .lock()
         .unwrap_or_else(|error| error.into_inner());
+    if let Some(active) = active_install(root) {
+        return status_for_active_install(root, &active);
+    }
     let spec = require_model(model_id)?;
     runtime::stop_runtime_for_model(root, spec.id)?;
     let model_path = model_dir(root, spec.id);
@@ -665,6 +826,8 @@ fn model_retry_error_kind(error: &ManagedAiError) -> Option<ManagedAiStatusError
         | ManagedAiError::Io(_)
         | ManagedAiError::Json(_)
         | ManagedAiError::RuntimeMissing(_)
+        | ManagedAiError::RuntimeDownloadFailed(_)
+        | ManagedAiError::RuntimePortConflict(_)
         | ManagedAiError::RuntimeFailed(_) => None,
     }
 }
@@ -672,6 +835,8 @@ fn model_retry_error_kind(error: &ManagedAiError) -> Option<ManagedAiStatusError
 fn runtime_error_kind(error: &ManagedAiError) -> ManagedAiStatusErrorKind {
     match error {
         ManagedAiError::RuntimeMissing(_) => ManagedAiStatusErrorKind::RuntimeMissing,
+        ManagedAiError::RuntimeDownloadFailed(_) => ManagedAiStatusErrorKind::RuntimeDownloadFailed,
+        ManagedAiError::RuntimePortConflict(_) => ManagedAiStatusErrorKind::RuntimePortConflict,
         ManagedAiError::Io(error) if is_storage_full_error(error) => {
             ManagedAiStatusErrorKind::InsufficientStorage
         }

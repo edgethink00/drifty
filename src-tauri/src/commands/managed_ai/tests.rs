@@ -2,11 +2,12 @@ use std::path::{Path, PathBuf};
 
 use super::{
     begin_runtime_status_monitor, finish_runtime_status_monitor,
-    install_model_at_root_with_downloader, managed_ai_catalog, model_dir, model_resource_failure,
-    read_status, require_model, runtime, runtime_status_monitor_is_current, start_model_at_root,
-    start_model_at_root_for_generation, status_for_spec, write_status, DownloadProgressWriteGate,
-    ManagedAiDownloadProgress, ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec,
-    ManagedAiStatusErrorKind, MANAGED_ASSETS_MISSING_MESSAGE,
+    install_model_at_root_with_downloader, install_model_at_root_with_runtime_preparer,
+    managed_ai_catalog, model_dir, model_resource_failure, read_status, require_model, runtime,
+    runtime_status_monitor_is_current, start_model_at_root, start_model_at_root_for_generation,
+    status_for_spec, write_status, DownloadProgressWriteGate, ManagedAiDownloadProgress,
+    ManagedAiError, ManagedAiInstallState, ManagedAiModelSpec, ManagedAiStatusErrorKind,
+    MANAGED_ASSETS_MISSING_MESSAGE,
 };
 
 mod runtime_tests;
@@ -43,6 +44,134 @@ fn newer_runtime_monitor_generation_supersedes_stale_completion() {
 
     finish_runtime_status_monitor(root.path(), second);
     assert!(!runtime_status_monitor_is_current(root.path(), second));
+}
+
+#[test]
+fn invalidated_runtime_monitor_cannot_publish_after_newer_lifecycle_status() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let stale_spec = require_model("drifty-qwen3-5-4b-default").expect("stale model");
+    let current_spec = require_model("drifty-qwen3-5-2b-economy").expect("current model");
+    write_status(
+        root.path(),
+        &super::status_for_model_error(
+            stale_spec,
+            None,
+            "Stale monitor terminal status.",
+            ManagedAiStatusErrorKind::RuntimeFailed,
+        ),
+    )
+    .expect("write stale monitor status");
+    let stale_generation = begin_runtime_status_monitor(root.path());
+    let root_path = root.path();
+
+    std::thread::scope(|scope| {
+        let (publish_reached_tx, publish_reached_rx) = std::sync::mpsc::channel();
+        let (release_publish_tx, release_publish_rx) = std::sync::mpsc::channel();
+        let stale_poll = scope.spawn(move || {
+            super::poll_runtime_status_monitor_with_before_publish(
+                root_path,
+                stale_spec.id,
+                stale_generation,
+                None,
+                || {
+                    publish_reached_tx
+                        .send(())
+                        .expect("signal final publish boundary");
+                    release_publish_rx.recv().expect("release stale publish");
+                },
+            )
+        });
+        publish_reached_rx
+            .recv()
+            .expect("stale poll reached final publish boundary");
+        assert!(
+            matches!(
+                super::RUNTIME_LIFECYCLE_LOCK.try_lock(),
+                Err(std::sync::TryLockError::WouldBlock)
+            ),
+            "the monitor must retain lifecycle ownership through publication"
+        );
+
+        let current_generation = begin_runtime_status_monitor(root.path());
+        let current_writer = scope.spawn(move || {
+            let _lifecycle_guard = super::RUNTIME_LIFECYCLE_LOCK
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let current_status = super::status_for_model_error(
+                current_spec,
+                None,
+                "Newer lifecycle terminal status.",
+                ManagedAiStatusErrorKind::RuntimeFailed,
+            );
+            write_status(root_path, &current_status).expect("write newer lifecycle status");
+        });
+        release_publish_tx.send(()).expect("release stale publish");
+
+        assert_eq!(
+            stale_poll
+                .join()
+                .expect("join stale poll")
+                .expect("stale poll result"),
+            super::RuntimeStatusMonitorPoll::Finished
+        );
+        current_writer.join().expect("join newer lifecycle writer");
+        assert!(runtime_status_monitor_is_current(
+            root.path(),
+            current_generation
+        ));
+        finish_runtime_status_monitor(root.path(), current_generation);
+    });
+
+    let persisted: super::ManagedAiStatus = serde_json::from_slice(
+        &std::fs::read(root.path().join("status.json")).expect("read final status"),
+    )
+    .expect("parse final status");
+    assert!(matches!(persisted.state, ManagedAiInstallState::Error));
+    assert_eq!(
+        persisted.selected_model_id.as_deref(),
+        Some(current_spec.id)
+    );
+    assert_eq!(persisted.message, "Newer lifecycle terminal status.");
+}
+
+#[test]
+fn concurrent_status_writes_remain_atomic_and_parseable() {
+    let root = tempfile::tempdir().expect("create status root");
+    let spec = require_model("drifty-qwen3-5-2b-economy").expect("model spec");
+    let root_path = root.path();
+    std::thread::scope(|scope| {
+        let writes = (0..24)
+            .map(|index| {
+                scope.spawn(move || {
+                    let status = status_for_spec(
+                        ManagedAiInstallState::Error,
+                        spec,
+                        None,
+                        &format!("concurrent status {index}"),
+                    );
+                    write_status(root_path, &status)
+                })
+            })
+            .collect::<Vec<_>>();
+        for write in writes {
+            write
+                .join()
+                .expect("join status writer")
+                .expect("write status");
+        }
+    });
+
+    let bytes = std::fs::read(root.path().join("status.json")).expect("read final status");
+    let parsed: super::ManagedAiStatus =
+        serde_json::from_slice(&bytes).expect("parse final status");
+    assert!(matches!(parsed.state, ManagedAiInstallState::Error));
+    assert!(std::fs::read_dir(root.path())
+        .expect("read status root")
+        .all(|entry| !entry
+            .expect("status entry")
+            .file_name()
+            .to_string_lossy()
+            .starts_with(".status.json.")));
 }
 
 #[test]
@@ -224,6 +353,103 @@ fn install_downloads_model_artifact_before_marking_installed() {
 }
 
 #[test]
+fn install_marks_ready_only_after_runtime_preparation() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let runtime_prepared = std::cell::Cell::new(false);
+
+    let status = install_model_at_root_with_runtime_preparer(
+        root.path(),
+        spec.id,
+        fake_download,
+        |runtime_root| {
+            let preparing = read_status(runtime_root)?;
+            assert!(matches!(preparing.state, ManagedAiInstallState::Installing));
+            assert_eq!(preparing.selected_model_id.as_deref(), Some(spec.id));
+            assert!(preparing.progress.is_none());
+            assert!(preparing.artifact_dir.is_some());
+            assert_eq!(installed_model_ids(&preparing), vec![spec.id]);
+            runtime_prepared.set(true);
+            Ok(())
+        },
+    )
+    .expect("install model and prepare runtime");
+
+    assert!(runtime_prepared.get());
+    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert_eq!(status.message, "Managed local AI is ready to start.");
+}
+
+#[test]
+fn runtime_preparation_failure_keeps_the_downloaded_model_for_retry() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+
+    let status =
+        install_model_at_root_with_runtime_preparer(root.path(), spec.id, fake_download, |_| {
+            Err(ManagedAiError::RuntimeMissing(
+                "runtime download unavailable".to_string(),
+            ))
+        })
+        .expect("return recoverable runtime setup status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeMissing)
+    ));
+    assert_eq!(status.selected_model_id.as_deref(), Some(spec.id));
+    assert_eq!(installed_model_ids(&status), vec![spec.id]);
+    assert!(model_dir(root.path(), spec.id)
+        .join(spec.file_name)
+        .is_file());
+    assert!(!super::is_install_active(root.path(), spec.id));
+}
+
+#[test]
+fn runtime_archive_download_failure_keeps_the_model_and_uses_setup_recovery() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+
+    let status =
+        install_model_at_root_with_runtime_preparer(root.path(), spec.id, fake_download, |_| {
+            Err(ManagedAiError::RuntimeDownloadFailed(
+                "runtime archive request timed out".to_string(),
+            ))
+        })
+        .expect("return runtime download recovery status");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeDownloadFailed)
+    ));
+    assert_eq!(installed_model_ids(&status), vec![spec.id]);
+    assert!(model_dir(root.path(), spec.id)
+        .join(spec.file_name)
+        .is_file());
+}
+
+#[test]
+#[ignore = "downloads and verifies the pinned managed runtime over the network"]
+fn qa_model_install_prepares_the_real_runtime_before_ready() {
+    let root = tempfile::tempdir().expect("create QA root");
+    let spec = require_model("drifty-qwen3-5-2b-economy").expect("model spec");
+
+    let status = install_model_at_root_with_runtime_preparer(
+        root.path(),
+        spec.id,
+        fake_download,
+        runtime::prepare_runtime,
+    )
+    .expect("install model and pinned runtime");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert!(runtime::runtime_assets_ready(root.path()).expect("verify runtime assets"));
+    assert_eq!(status.message, "Managed local AI is ready to start.");
+}
+
+#[test]
 fn install_returns_error_status_when_download_fails() {
     let root = tempfile::tempdir().expect("create temp root");
     let status = install_model_at_root_with_downloader(
@@ -382,7 +608,7 @@ fn install_reuses_active_root_install_instead_of_starting_another_downloader() {
         let duplicate = super::install_model_at_root_with_preflight_and_downloader(
             &root_path,
             requested_model_id,
-            || panic!("duplicate preflight must not overwrite active download status"),
+            |_| panic!("duplicate preflight must not overwrite active download status"),
             unexpected_download,
             None,
         )
@@ -424,12 +650,12 @@ fn duplicate_during_preflight_preserves_owner_before_status_is_written() {
     let installed = super::install_model_at_root_with_preflight_and_downloader(
         root.path(),
         owner.id,
-        || {
+        |_| {
             for requested_model in [owner.id, previous.id] {
                 let duplicate = super::install_model_at_root_with_preflight_and_downloader(
                     root.path(),
                     requested_model,
-                    || panic!("duplicate request must not run preflight"),
+                    |_| panic!("duplicate request must not run preflight"),
                     unexpected_download,
                     None,
                 )?;
@@ -482,6 +708,49 @@ fn install_tracks_multiple_downloaded_models() {
     assert_eq!(
         installed_model_ids(&saved_status),
         vec!["drifty-qwen3-5-2b-economy", "drifty-qwen3-5-4b-default"]
+    );
+}
+
+#[test]
+fn runtime_setup_retry_reuses_valid_model_without_download_or_full_storage_preflight() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-2b-economy").expect("model spec");
+    let installed =
+        install_model_at_root_with_downloader(root.path(), spec.id, fake_download, None)
+            .expect("install model and runtime fixture");
+    let artifact_dir = installed
+        .artifact_dir
+        .as_deref()
+        .map(PathBuf::from)
+        .expect("installed artifact directory");
+    let artifact_path = artifact_dir.join(spec.file_name);
+    let artifact_size = std::fs::metadata(&artifact_path)
+        .expect("read installed model")
+        .len();
+    std::fs::remove_dir_all(root.path().join("runtime")).expect("remove runtime fixture");
+
+    let retried = super::install_model_at_root_with_preflight_and_downloader(
+        root.path(),
+        spec.id,
+        |needs_model_download| {
+            assert!(
+                !needs_model_download,
+                "a valid model must skip the full download storage preflight"
+            );
+            Ok(None)
+        },
+        unexpected_download,
+        None,
+    )
+    .expect("prepare only the missing runtime");
+
+    assert!(matches!(retried.state, ManagedAiInstallState::Installed));
+    assert!(runtime::runtime_assets_ready(root.path()).expect("runtime is restored"));
+    assert_eq!(
+        std::fs::metadata(artifact_path)
+            .expect("model remains installed")
+            .len(),
+        artifact_size
     );
 }
 
@@ -563,7 +832,7 @@ fn failed_preflight_and_download_release_install_for_retry() {
     let blocked = super::install_model_at_root_with_preflight_and_downloader(
         root.path(),
         spec.id,
-        || {
+        |_| {
             let status = super::status_for_model_error(
                 spec,
                 None,
@@ -616,6 +885,7 @@ fn status_read_during_install_completion_does_not_report_interruption() {
             // Complete the download after the reader observed no final file,
             // but before it can interpret that snapshot as an interruption.
             let artifact = fake_download(root, spec, &mut |_| Ok(()))?;
+            runtime::write_runtime_completion_fixture(root)?;
             write_status(
                 root,
                 &status_for_spec(
@@ -642,6 +912,7 @@ fn read_status_finishes_interrupted_install_when_artifact_was_promoted() {
     let root = tempfile::tempdir().expect("create temp root");
     let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
     let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write artifact");
+    runtime::write_runtime_completion_fixture(root.path()).expect("write runtime fixture");
     let stale_status = status_for_spec(
         ManagedAiInstallState::Installing,
         spec,
@@ -659,7 +930,55 @@ fn read_status_finishes_interrupted_install_when_artifact_was_promoted() {
     );
     assert!(status.progress.is_none());
     assert!(status.error_kind.is_none());
-    assert_eq!(status.message, "Managed local model downloaded.");
+    assert_eq!(status.message, "Managed local AI is ready to start.");
+}
+
+#[test]
+fn read_status_does_not_call_an_interrupted_install_ready_without_runtime() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write artifact");
+    let stale_status = status_for_spec(
+        ManagedAiInstallState::Installing,
+        spec,
+        None,
+        "Preparing managed local AI runtime...",
+    );
+    write_status(root.path(), &stale_status).expect("write interrupted status");
+
+    let status = read_status(root.path()).expect("normalize interrupted runtime setup");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeMissing)
+    ));
+    assert_eq!(installed_model_ids(&status), vec![spec.id]);
+    assert!(status.message.contains("runtime setup was interrupted"));
+}
+
+#[test]
+fn read_status_revalidates_runtime_before_calling_an_installed_model_ready() {
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write artifact");
+    let installed = status_for_spec(
+        ManagedAiInstallState::Installed,
+        spec,
+        Some(artifact_dir),
+        "Managed local AI is ready to start.",
+    );
+    write_status(root.path(), &installed).expect("write installed status");
+
+    let status = read_status(root.path()).expect("revalidate runtime assets");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeMissing)
+    ));
+    assert_eq!(installed_model_ids(&status), vec![spec.id]);
+    assert!(status.message.contains("runtime needs to be prepared"));
 }
 
 #[test]

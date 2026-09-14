@@ -15,6 +15,24 @@ fn lock_runtime_globals() -> MutexGuard<'static, ()> {
         .unwrap_or_else(PoisonError::into_inner)
 }
 
+#[cfg(unix)]
+fn start_runtime_and_mark_ready(
+    root: &Path,
+    spec: ManagedAiModelSpec,
+    artifact_dir: &Path,
+) -> super::super::ManagedAiStatus {
+    // The fake runtime cannot answer the real health endpoint, so these tests
+    // mark readiness manually. Keep that transition inside the production
+    // lifecycle lock so parallel install tests cannot stop the child in the
+    // artificial gap between a Starting result and the test-only mark.
+    let _lifecycle_guard = super::super::RUNTIME_LIFECYCLE_LOCK
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
+    let started = runtime::start_runtime(root, spec, artifact_dir).expect("start fake runtime");
+    runtime::mark_tracked_child_ready_for_tests(root, spec.id);
+    started
+}
+
 struct SufficientMemoryForTests;
 
 impl SufficientMemoryForTests {
@@ -157,6 +175,158 @@ fn concurrent_start_creates_only_one_runtime_child() {
 
 #[cfg(unix)]
 #[test]
+fn start_cannot_overwrite_an_active_model_install() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let installing_spec = require_model("drifty-qwen3-5-2b-economy").expect("install model");
+    let start_spec = require_model("drifty-qwen3-5-4b-default").expect("start model");
+    fake_download(root.path(), start_spec, &mut |_| Ok(())).expect("write start model");
+    let starts_path = root.path().join("runtime-starts.txt");
+    write_counting_fake_runtime(root.path(), &starts_path).expect("write fake runtime");
+    let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let install_root = root.path();
+
+    std::thread::scope(|scope| {
+        let install = scope.spawn(move || {
+            install_model_at_root_with_downloader(
+                install_root,
+                installing_spec.id,
+                |download_root, spec, progress| {
+                    entered_tx.send(()).expect("announce active install");
+                    release_rx.recv().expect("release active install");
+                    fake_download(download_root, spec, progress)
+                },
+                None,
+            )
+        });
+        entered_rx.recv().expect("wait for active install");
+
+        let observed = start_model_at_root(root.path(), start_spec.id, None)
+            .expect("return install owner status");
+
+        assert!(matches!(observed.state, ManagedAiInstallState::Installing));
+        assert_eq!(
+            observed.selected_model_id.as_deref(),
+            Some(installing_spec.id)
+        );
+        assert!(!starts_path.exists(), "start must not spawn during install");
+        assert!(runtime::tracked_child_model_id_for_tests(root.path()).is_none());
+        release_tx.send(()).expect("finish install");
+        let installed = install
+            .join()
+            .expect("join install")
+            .expect("install status");
+        assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    });
+}
+
+#[cfg(unix)]
+#[test]
+fn install_supersedes_and_stops_an_unready_runtime_child() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let starting_spec = require_model("drifty-qwen3-5-4b-default").expect("start model");
+    let installing_spec = require_model("drifty-qwen3-5-2b-economy").expect("install model");
+    fake_download(root.path(), starting_spec, &mut |_| Ok(())).expect("write start model");
+    let starts_path = root.path().join("runtime-starts.txt");
+    write_counting_fake_runtime(root.path(), &starts_path).expect("write fake runtime");
+    let generation = begin_runtime_status_monitor(root.path());
+    let started =
+        start_model_at_root_for_generation(root.path(), starting_spec.id, None, Some(generation))
+            .expect("start runtime");
+    wait_for_runtime_record(&starts_path).expect("observe runtime start");
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+    assert_eq!(
+        runtime::tracked_child_model_id_for_tests(root.path()),
+        Some(starting_spec.id)
+    );
+
+    let installed =
+        install_model_at_root_with_downloader(root.path(), installing_spec.id, fake_download, None)
+            .expect("install replacement model");
+
+    assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    assert_eq!(
+        installed.selected_model_id.as_deref(),
+        Some(installing_spec.id)
+    );
+    assert!(!runtime_status_monitor_is_current(root.path(), generation));
+    assert!(
+        runtime::tracked_child_model_id_for_tests(root.path()).is_none(),
+        "install must not leave an unmonitored cold-start child"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn installing_another_model_preserves_a_ready_runtime_child() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let running_spec = require_model("drifty-qwen3-5-4b-default").expect("running model");
+    let installing_spec = require_model("drifty-qwen3-5-2b-economy").expect("install model");
+    let running_artifact =
+        fake_download(root.path(), running_spec, &mut |_| Ok(())).expect("write running model");
+    let starts_path = root.path().join("runtime-starts.txt");
+    write_counting_fake_runtime(root.path(), &starts_path).expect("write fake runtime");
+
+    let started = start_runtime_and_mark_ready(root.path(), running_spec, &running_artifact);
+    wait_for_runtime_record(&starts_path).expect("observe runtime start");
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+
+    let installed =
+        install_model_at_root_with_downloader(root.path(), installing_spec.id, fake_download, None)
+            .expect("install additional model");
+
+    assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    assert_eq!(
+        runtime::tracked_child_model_id_for_tests(root.path()),
+        Some(running_spec.id),
+        "downloading another model must not interrupt a healthy current runtime"
+    );
+    runtime::stop_runtime_for_tests();
+}
+
+#[cfg(unix)]
+#[test]
+fn install_in_another_managed_root_never_stops_the_tracked_runtime() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let running_root = tempfile::tempdir().expect("create running root");
+    let install_root = tempfile::tempdir().expect("create install root");
+    let running_spec = require_model("drifty-qwen3-5-4b-default").expect("running model");
+    let installing_spec = require_model("drifty-qwen3-5-2b-economy").expect("install model");
+    fake_download(running_root.path(), running_spec, &mut |_| Ok(())).expect("write running model");
+    let starts_path = running_root.path().join("runtime-starts.txt");
+    write_counting_fake_runtime(running_root.path(), &starts_path).expect("write fake runtime");
+
+    let started = start_model_at_root(running_root.path(), running_spec.id, None)
+        .expect("start tracked runtime");
+    wait_for_runtime_record(&starts_path).expect("observe runtime start");
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+
+    let installed = install_model_at_root_with_downloader(
+        install_root.path(),
+        installing_spec.id,
+        fake_download,
+        None,
+    )
+    .expect("install in independent root");
+
+    assert!(matches!(installed.state, ManagedAiInstallState::Installed));
+    assert_eq!(
+        runtime::tracked_child_model_id_for_tests(running_root.path()),
+        Some(running_spec.id),
+        "an independent managed root cannot own or stop this child"
+    );
+    runtime::stop_runtime_for_tests();
+}
+
+#[cfg(unix)]
+#[test]
 fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
     let _globals = lock_runtime_globals();
     let _memory = SufficientMemoryForTests::pin();
@@ -168,7 +338,7 @@ fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
 
     let started = start_model_at_root(root.path(), spec.id, None).expect("start status");
     assert!(matches!(started.state, ManagedAiInstallState::Starting));
-    runtime::age_tracked_child_for_tests(Duration::from_secs(121));
+    runtime::age_tracked_child_for_tests(root.path(), Duration::from_secs(121));
 
     let observed = read_status(root.path()).expect("read aged runtime status");
 
@@ -186,57 +356,244 @@ fn runtime_that_never_becomes_ready_fails_after_two_minutes() {
 
 #[cfg(unix)]
 #[test]
-fn delete_model_reaps_adopted_runtime_server() {
+fn ready_runtime_is_not_killed_by_the_cold_start_deadline() {
     let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
     let root = tempfile::tempdir().expect("create temp root");
-    let spec = require_model("drifty-gemma-4-12b-local").expect("model spec");
-    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
     write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
         .expect("write fake runtime");
-    // Adopted server: already listening when the app launched, never tracked
-    // in RUNTIME_CHILD.
-    let mut adopted = spawn_adopted_runtime(root.path());
 
-    runtime::set_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
-    let result = super::super::delete_model_at_root(root.path(), "drifty-gemma-4-12b-local", None);
-    runtime::set_runtime_listener_pids_for_tests(None);
+    let started = start_runtime_and_mark_ready(root.path(), spec, &artifact_dir);
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+    runtime::age_tracked_child_for_tests(root.path(), Duration::from_secs(121));
+    write_status(
+        root.path(),
+        &status_for_spec(
+            ManagedAiInstallState::Running,
+            spec,
+            Some(artifact_dir),
+            "Managed local AI runtime is running.",
+        ),
+    )
+    .expect("write previously healthy status");
 
-    let status = result.expect("delete status");
-    assert!(matches!(status.state, ManagedAiInstallState::NotInstalled));
-    assert!(
-        wait_for_exit(&mut adopted),
-        "adopted llama-server must be terminated by model delete"
-    );
+    let status = super::super::status::reconcile_status(root.path())
+        .expect("reconcile previously healthy runtime");
+    assert!(matches!(status.state, ManagedAiInstallState::Running));
+
+    runtime::stop_runtime_for_tests();
 }
 
 #[cfg(unix)]
 #[test]
-fn app_exit_reaps_adopted_runtime_server() {
+fn ready_runtime_reports_failure_after_sustained_health_probe_misses() {
     let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
     let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
     write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
         .expect("write fake runtime");
+
+    let started = start_runtime_and_mark_ready(root.path(), spec, &artifact_dir);
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+    write_status(
+        root.path(),
+        &status_for_spec(
+            ManagedAiInstallState::Running,
+            spec,
+            Some(artifact_dir),
+            "Managed local AI runtime is running.",
+        ),
+    )
+    .expect("write previously healthy status");
+
+    let first = super::super::status::reconcile_status(root.path())
+        .expect("record first failed health probe");
+    assert!(matches!(first.state, ManagedAiInstallState::Running));
+    runtime::age_ready_health_failure_for_tests(root.path(), Duration::from_secs(9));
+    let second = super::super::status::reconcile_status(root.path())
+        .expect("record second failed health probe");
+    assert!(matches!(second.state, ManagedAiInstallState::Running));
+    let third = super::super::status::reconcile_status(root.path())
+        .expect("record sustained failed health probes");
+
+    assert!(matches!(third.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        third.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeFailed)
+    ));
+    assert!(third.message.contains("repeated health checks"));
+    assert_eq!(
+        runtime::tracked_child_model_id_for_tests(root.path()),
+        Some(spec.id),
+        "status observation must not kill the task-owned child"
+    );
+    runtime::stop_runtime_for_tests();
+}
+
+#[cfg(unix)]
+#[test]
+fn tracked_runtime_exit_before_ready_is_a_real_failure() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
+    write_exiting_fake_runtime(root.path()).expect("write exiting runtime");
+
+    let started = start_model_at_root(root.path(), spec.id, None).expect("start status");
+    assert!(matches!(started.state, ManagedAiInstallState::Starting));
+    let status = read_status(root.path()).expect("observe exited runtime");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimeFailed)
+    ));
+    assert!(status.message.contains("exited before it became ready"));
+    runtime::stop_runtime_for_tests();
+}
+
+#[cfg(unix)]
+#[test]
+fn tracked_runtime_exit_after_ready_is_a_real_failure() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    let artifact_dir = fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
+    write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
+        .expect("write fake runtime");
+    start_model_at_root(root.path(), spec.id, None).expect("start status");
+    runtime::mark_tracked_child_ready_for_tests(root.path(), spec.id);
+    write_status(
+        root.path(),
+        &status_for_spec(
+            ManagedAiInstallState::Running,
+            spec,
+            Some(artifact_dir),
+            "Managed local AI runtime is running.",
+        ),
+    )
+    .expect("write running status");
+
+    runtime::terminate_tracked_child_for_tests(root.path());
+    let status = read_status(root.path()).expect("observe stopped runtime");
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(status.message.contains("stopped unexpectedly"));
+    runtime::stop_runtime_for_tests();
+}
+
+#[cfg(unix)]
+#[test]
+fn foreign_listener_is_typed_as_a_port_conflict_on_start() {
+    let _globals = lock_runtime_globals();
+    let _memory = SufficientMemoryForTests::pin();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-qwen3-5-4b-default").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
+    write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
+        .expect("write fake runtime");
+    let mut foreign = Command::new("/bin/sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn foreign process");
+
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![foreign.id()]));
+    let status = start_model_at_root(root.path(), spec.id, None).expect("start status");
+    let _ = foreign.kill();
+    let _ = foreign.wait();
+
+    assert!(matches!(status.state, ManagedAiInstallState::Error));
+    assert!(matches!(
+        status.error_kind,
+        Some(ManagedAiStatusErrorKind::RuntimePortConflict)
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn delete_model_never_kills_an_untracked_exact_runtime_on_unix() {
+    let _globals = lock_runtime_globals();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-gemma-4-12b-local").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model artifact");
+    write_native_sleep_runtime(root.path()).expect("write native fake runtime");
+    // Adopted server: already listening when the app launched, never tracked
+    // in RUNTIME_CHILD.
     let mut adopted = spawn_adopted_runtime(root.path());
 
-    runtime::set_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
+    let result = super::super::delete_model_at_root(root.path(), "drifty-gemma-4-12b-local", None);
+
+    let status = result.expect("delete status");
+    assert!(matches!(status.state, ManagedAiInstallState::NotInstalled));
+    assert!(matches!(adopted.try_wait(), Ok(None)));
+    let _ = adopted.kill();
+    let _ = adopted.wait();
+}
+
+#[cfg(unix)]
+#[test]
+fn app_exit_never_kills_an_untracked_exact_runtime_on_unix() {
+    let _globals = lock_runtime_globals();
+    let root = tempfile::tempdir().expect("create temp root");
+    write_native_sleep_runtime(root.path()).expect("write native fake runtime");
+    let mut adopted = spawn_adopted_runtime(root.path());
+
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![adopted.id()]));
     let result = runtime::stop_runtime(Some(root.path()));
-    runtime::set_runtime_listener_pids_for_tests(None);
 
     result.expect("stop runtime");
-    assert!(
-        wait_for_exit(&mut adopted),
-        "adopted llama-server must be terminated on app exit"
-    );
+    assert!(matches!(adopted.try_wait(), Ok(None)));
+    let _ = adopted.kill();
+    let _ = adopted.wait();
+}
+
+#[cfg(unix)]
+#[test]
+fn cleanup_ignores_a_foreign_listener_instead_of_blocking_model_deletion() {
+    let _globals = lock_runtime_globals();
+    let root = tempfile::tempdir().expect("create temp root");
+    let spec = require_model("drifty-gemma-4-12b-local").expect("model spec");
+    fake_download(root.path(), spec, &mut |_| Ok(())).expect("write model");
+    write_fake_runtime(root.path(), &root.path().join("runtime-args.txt"))
+        .expect("write fake runtime");
+    let mut foreign = Command::new("/bin/sleep")
+        .arg("30")
+        .spawn()
+        .expect("spawn foreign process");
+
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(Some(vec![foreign.id()]));
+    let status = super::super::delete_model_at_root(root.path(), spec.id, None)
+        .expect("delete must ignore foreign listener");
+
+    assert!(matches!(status.state, ManagedAiInstallState::NotInstalled));
+    assert!(matches!(foreign.try_wait(), Ok(None)));
+    let _ = foreign.kill();
+    let _ = foreign.wait();
 }
 
 fn spawn_adopted_runtime(root: &Path) -> Child {
-    Command::new("/bin/sh")
-        .arg(root.join("runtime").join("llama-server"))
+    Command::new(root.join("runtime").join("llama-server"))
+        .arg("30")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn adopted runtime process")
+}
+
+#[cfg(unix)]
+fn write_native_sleep_runtime(root: &Path) -> Result<(), ManagedAiError> {
+    let runtime_dir = root.join("runtime");
+    std::fs::create_dir_all(&runtime_dir)?;
+    std::fs::copy("/bin/sleep", runtime_dir.join("llama-server"))?;
+    runtime::write_runtime_completion_fixture(root)
 }
 
 #[cfg(unix)]
@@ -249,6 +606,20 @@ fn write_counting_fake_runtime(root: &Path, starts_path: &Path) -> Result<(), Ma
         &runtime_path,
         format!("#!/bin/sh\nprintf 'started\\n' >> {starts_path}\nwhile true; do sleep 5; done\n"),
     )?;
+    let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
+    use std::os::unix::fs::PermissionsExt;
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(runtime_path, permissions)?;
+    runtime::write_runtime_completion_fixture(root)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn write_exiting_fake_runtime(root: &Path) -> Result<(), ManagedAiError> {
+    let runtime_dir = root.join("runtime");
+    std::fs::create_dir_all(&runtime_dir)?;
+    let runtime_path = runtime_dir.join("llama-server");
+    std::fs::write(&runtime_path, "#!/bin/sh\nexit 17\n")?;
     let mut permissions = std::fs::metadata(&runtime_path)?.permissions();
     use std::os::unix::fs::PermissionsExt;
     permissions.set_mode(0o755);
@@ -279,19 +650,9 @@ fn wait_for_runtime_record(path: &Path) -> std::io::Result<()> {
     }
 }
 
-fn wait_for_exit(child: &mut Child) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(5);
-    while Instant::now() < deadline {
-        if matches!(child.try_wait(), Ok(Some(_))) {
-            return true;
-        }
-        std::thread::sleep(Duration::from_millis(25));
-    }
-    false
-}
-
 #[test]
-fn read_status_downgrades_stale_running_without_runtime_process() {
+fn read_status_treats_previous_session_runtime_as_ready_to_start() {
+    let _globals = lock_runtime_globals();
     let root = tempfile::tempdir().expect("create temp root");
     // Distinct model id: with the same id as start_spawns_runtime_for_downloaded_model
     // this test can observe that test's live child in the process-global
@@ -308,12 +669,9 @@ fn read_status_downgrades_stale_running_without_runtime_process() {
 
     let status = read_status(root.path()).expect("read normalized status");
 
-    assert!(matches!(status.state, ManagedAiInstallState::Error));
-    assert_eq!(status.message, "Managed local AI runtime is not running.");
-    assert!(matches!(
-        status.error_kind,
-        Some(ManagedAiStatusErrorKind::RuntimeFailed)
-    ));
+    assert!(matches!(status.state, ManagedAiInstallState::Installed));
+    assert_eq!(status.message, "Managed local AI is ready to start.");
+    assert!(status.error_kind.is_none());
 }
 
 #[test]
@@ -340,6 +698,8 @@ fn status_serializes_runtime_memory_usage_bytes() {
 #[test]
 #[ignore]
 fn qa_starts_real_runtime_from_existing_managed_ai_root() {
+    let _globals = lock_runtime_globals();
+    let _listeners = runtime::override_runtime_listener_pids_for_tests(None);
     let root = std::env::var("DRIFTY_MANAGED_AI_QA_ROOT")
         .map(PathBuf::from)
         .expect("set DRIFTY_MANAGED_AI_QA_ROOT to the app managed-ai directory");

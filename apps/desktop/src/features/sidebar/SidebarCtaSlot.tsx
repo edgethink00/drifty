@@ -22,7 +22,7 @@ import "./SidebarCtaSlot.css";
  * still uses `plan: "individual"` and `create-polar-checkout` rejects anything
  * else with a 400, so the rename stays in display copy only.
  */
-export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download";
+export type SidebarCtaSlotKind = "ai" | "upgrade" | "trial" | "trial-ended" | "billing" | "device-limit" | "download" | "preparing";
 
 /** Drives the tinted drop shadow: red for "act now", gold for "handle soon". */
 export type SidebarCtaSlotAlert = "critical" | "warn";
@@ -35,7 +35,7 @@ type SidebarCtaActionState = {
   readonly copyKey: TranslationKey;
   readonly direction: "forward" | "external";
   readonly disabled: boolean;
-  readonly kind: Exclude<SidebarCtaSlotKind, "download">;
+  readonly kind: Exclude<SidebarCtaSlotKind, "download" | "preparing">;
   readonly titleKey: TranslationKey;
   /** Rendered after the title in the accent colour; only the trial countdown uses it. */
   readonly titleEmphasisCount: number | null;
@@ -66,7 +66,16 @@ type SidebarCtaDownloadState = {
   readonly tone: "download";
 };
 
-export type SidebarCtaSlotState = SidebarCtaAiState | SidebarCtaNonAiActionState | SidebarCtaDownloadState;
+type SidebarCtaPreparingState = {
+  readonly alert: null;
+  readonly detailKey: TranslationKey;
+  readonly kind: "preparing";
+  readonly modelLabel: string | null;
+  readonly titleKey: TranslationKey;
+  readonly tone: "download";
+};
+
+export type SidebarCtaSlotState = SidebarCtaAiState | SidebarCtaNonAiActionState | SidebarCtaDownloadState | SidebarCtaPreparingState;
 
 type ResolveSidebarCtaSlotInput = {
   readonly aiStatus: Pick<AiConnectionStatus, "issueKind" | "label" | "providerLabel" | "tone">;
@@ -303,6 +312,16 @@ function managedLocalErrorState(status: ManagedLocalAiStatus | null): SidebarCta
         "sidebar.cta.ai.localRuntimeMissingTitle",
         "sidebar.cta.ai.localRuntimeMissingDetail",
       );
+    case "runtime_download_failed":
+      return managedLocalRecoveryState(
+        "sidebar.cta.ai.localRuntimeDownloadFailedTitle",
+        "sidebar.cta.ai.localRuntimeDownloadFailedDetail",
+      );
+    case "runtime_port_conflict":
+      return managedLocalRecoveryState(
+        "sidebar.cta.ai.localRuntimePortConflictTitle",
+        "sidebar.cta.ai.localRuntimePortConflictDetail",
+      );
     case "runtime_failed":
       return managedLocalRecoveryState(
         "sidebar.cta.ai.localRuntimeFailedTitle",
@@ -345,9 +364,19 @@ function managedLocalRecoveryState(
   };
 }
 
-function managedLocalDownloadState(status: ManagedLocalAiStatus | null): SidebarCtaDownloadState | null {
+function managedLocalDownloadState(status: ManagedLocalAiStatus | null): SidebarCtaDownloadState | SidebarCtaPreparingState | null {
   if (status?.state !== "installing") return null;
   const model = MANAGED_LOCAL_AI_FALLBACK_CATALOG.find((candidate) => candidate.id === status.selectedModelId) ?? null;
+  if (status.artifactDir && status.progress === null) {
+    return {
+      alert: null,
+      detailKey: "sidebar.cta.download.preparingDetail",
+      kind: "preparing",
+      modelLabel: model?.label ?? null,
+      titleKey: "sidebar.cta.download.preparingTitle",
+      tone: "download",
+    };
+  }
   const progressPercent = Math.min(Math.max(Math.round(status.progress?.percent ?? 0), 0), 100);
   const fallbackTotal = model?.downloadSize.replace(/^~/, "") ?? null;
   return {
@@ -501,6 +530,27 @@ export function SidebarCtaSlot({
           : state.titleKey === "sidebar.cta.upgrade.localTitle" ? "upgrade_local" : "upgrade" }
       : null,
   );
+  if (state.kind === "preparing") {
+    const title = t(state.titleKey);
+    const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");
+    const detail = `${modelLabel} · ${t(state.detailKey)}`;
+    return (
+      <div className="sidebar-cta-slot-wrap">
+        <div
+          className="sidebar-cta-slot sidebar-cta-slot--download"
+          data-kind={state.kind}
+          data-tone={state.tone}
+          role="status"
+          aria-label={`${title} · ${detail}`}
+        >
+          <span className="sidebar-cta-slot__copy sidebar-cta-slot__download-copy">
+            <strong className="sidebar-cta-slot__title sidebar-cta-slot__download-title">{title}</strong>
+            <span className="sidebar-cta-slot__detail sidebar-cta-slot__download-detail">{detail}</span>
+          </span>
+        </div>
+      </div>
+    );
+  }
   if (state.kind === "download") {
     const title = t(state.titleKey);
     const modelLabel = state.modelLabel ?? t("sidebar.cta.download.modelFallback");

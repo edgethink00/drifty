@@ -24,6 +24,7 @@ export type DriftyModelOptionsParams = {
   /** True only for a fully-active plan whose billing can be managed. */
   readonly canManageBilling: boolean;
   readonly onInstallModel: (modelId: string) => void | Promise<void>;
+  readonly onStartModel: (modelId: string) => void | Promise<void>;
   readonly onStartCloudSetup: () => void | Promise<void>;
   readonly onManageCloudBilling: () => void | Promise<void>;
   readonly onDeleteModel: (modelId: string) => void | Promise<void>;
@@ -42,7 +43,8 @@ export type DriftyModelOptionsParams = {
  * to manage Drifty AI (there is no separate provider card): the cloud entry
  * carries an Upgrade or hover-revealed Manage-billing action, not-installed local
  * models carry a Download action (with % progress / Retry), and installed local
- * models always show their Show-in-Finder + Delete icon actions.
+ * models show their management actions, plus a direct runtime retry when the
+ * downloaded model is intact but its execution layer needs recovery.
  */
 export function driftyModelOptions({
   catalog,
@@ -53,6 +55,7 @@ export function driftyModelOptions({
   cloudSelectable,
   canManageBilling,
   onInstallModel,
+  onStartModel,
   onStartCloudSetup,
   onManageCloudBilling,
   onDeleteModel,
@@ -109,8 +112,27 @@ export function driftyModelOptions({
       const selectable = isSelectableManagedModel(model.id, status);
       if (selectable) {
         const busy = Boolean(actionModelId) || status?.state === "installing" || status?.state === "starting";
+        const preparingRuntime = status?.selectedModelId === model.id
+          && status.state === "installing"
+          && Boolean(status.artifactDir);
         const artifactDir = installedArtifactDir(model.id, status);
         const actions: SettingsSelectRowAction[] = [];
+        const retryRuntime = status?.selectedModelId === model.id
+          && status.state === "error"
+          && canRetryInstalledRuntime(status.errorKind);
+        if (retryRuntime) {
+          actions.push({
+            key: "retry-runtime",
+            label: t("settings.ai.retryManagedModelStartAria", { model: model.label }),
+            text: t("settings.ai.retry"),
+            tone: "primary",
+            disabled: busy,
+            busy: actionModelId === model.id,
+            onAction: () => {
+              void onStartModel(model.id);
+            },
+          });
+        }
         if (artifactDir) {
           actions.push({
             key: "reveal",
@@ -135,7 +157,13 @@ export function driftyModelOptions({
           value: model.id,
           label: model.label,
           ...presentation,
-          statusLabel: t(status?.selectedModelId === model.id && status.state === "running" ? "ai.resources.modelInUse" : "ai.resources.modelInstalled"),
+          statusLabel: t(
+            preparingRuntime
+              ? "ai.resources.modelPreparing"
+              : status?.selectedModelId === model.id && status.state === "running"
+                ? "ai.resources.modelInUse"
+                : "ai.resources.modelInstalled",
+          ),
           // The managed action hook deliberately ignores overlapping work. Keep a
           // second model selection from changing the persisted identity while the
           // current install/start still owns that action slot.
@@ -183,6 +211,14 @@ function installedArtifactDir(modelId: string, status: ManagedLocalAiStatus | nu
     return status.artifactDir;
   }
   return null;
+}
+
+function canRetryInstalledRuntime(errorKind: ManagedLocalAiStatus["errorKind"]): boolean {
+  return errorKind === "runtime_missing"
+    || errorKind === "runtime_download_failed"
+    || errorKind === "runtime_port_conflict"
+    || errorKind === "runtime_failed"
+    || errorKind === "insufficient_storage";
 }
 
 function FolderIcon(): JSX.Element {

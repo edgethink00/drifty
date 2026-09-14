@@ -47,13 +47,50 @@ describe("managed local AI runtime status presentation", () => {
     });
   });
 
+  it("shows runtime preparation separately from model download", () => {
+    const status = {
+      ...managedStatus("installing", "drifty-qwen3-5-2b-economy"),
+      artifactDir: "/tmp/model",
+    };
+
+    expect(applyManagedLocalAiRuntimeStatus(connectedStatus, status)).toMatchObject({
+      tone: "neutral",
+      label: "Preparing",
+      issueKind: null,
+    });
+  });
+
   it("does not present an installed artifact as a connected process", () => {
     const status = managedStatus("installed", "drifty-qwen3-5-2b-economy");
 
     expect(applyManagedLocalAiRuntimeStatus(connectedStatus, status)).toMatchObject({
       tone: "neutral",
-      label: "Checking",
+      label: "Ready",
       issueKind: null,
+    });
+  });
+
+  it("distinguishes a fixed-port conflict from a runtime crash", () => {
+    const status = managedStatus("error", "drifty-qwen3-5-2b-economy", "runtime_port_conflict");
+
+    expect(applyManagedLocalAiRuntimeStatus(connectedStatus, status)).toMatchObject({
+      tone: "error",
+      label: "Port in use",
+      issueKind: "provider",
+    });
+  });
+
+  it("distinguishes runtime setup download recovery from a model redownload", () => {
+    const status = managedStatus(
+      "error",
+      "drifty-qwen3-5-2b-economy",
+      "runtime_download_failed",
+    );
+
+    expect(applyManagedLocalAiRuntimeStatus(connectedStatus, status)).toMatchObject({
+      tone: "error",
+      label: "Setup download failed",
+      issueKind: "provider",
     });
   });
 
