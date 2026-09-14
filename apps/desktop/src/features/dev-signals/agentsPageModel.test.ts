@@ -9,7 +9,9 @@ import {
   buildAgentsRunStretches,
   buildAgentsWeekModel,
   agentMinutesByRepo,
+  agentsHourHistogram,
   agentsInsightNumbers,
+  agentsRhythmScaleMax,
   gridRepoLegend,
   lockAgentsIntensityPeak,
   visibleAgentsIntensityBands,
@@ -126,6 +128,90 @@ describe("agentMinutesByRepo", () => {
     expect(labelledCumulative).toBe(300);
     expect(buildAgentsDayModel(labelled).wallClockMinutes).toBe(270);
     expect(buildAgentsDayModel(labelled).cumulativeMinutes).toBe(330);
+  });
+});
+
+describe("agentsHourHistogram", () => {
+  it("counts parallel turns independently as hourly agent work", () => {
+    const histogram = agentsHourHistogram([{
+      ...source,
+      turns: [
+        [60, 120, "codex"],
+        [60, 120, "claude_code"],
+        [60, 120, "gemini"],
+        [60, 120, "opencode"],
+      ],
+      commits: [],
+    }]);
+
+    expect(histogram.agentWorkMinutes[1]).toBe(240);
+    expect(histogram.peakAgentWorkHour).toBe(1);
+  });
+
+  it("clips each turn to the hourly buckets it crosses", () => {
+    const histogram = agentsHourHistogram([{
+      ...source,
+      turns: [
+        [30, 90, "codex"],
+        [45, 75, "claude_code"],
+      ],
+      commits: [],
+    }]);
+
+    expect(histogram.agentWorkMinutes.slice(0, 3)).toEqual([45, 45, 0]);
+  });
+
+  it("ignores non-finite records and clips otherwise valid work to the logical day", () => {
+    const histogram = agentsHourHistogram([{
+      ...source,
+      turns: [
+        [-30, 30, "codex"],
+        [60, 120, "codex"],
+        [1430, 1500, "codex"],
+        [Number.NaN, 60, "codex"],
+        [60, Number.POSITIVE_INFINITY, "codex"],
+        [120, 60, "codex"],
+      ],
+      commits: [
+        [90, 1, 0, 1, "valid", "drifty_mac"],
+        [Number.NaN, 1, 0, 1, "nan", "drifty_mac"],
+        [Number.POSITIVE_INFINITY, 1, 0, 1, "infinite", "drifty_mac"],
+        [-1, 1, 0, 1, "before", "drifty_mac"],
+        [1440, 1, 0, 1, "after", "drifty_mac"],
+      ],
+    }]);
+
+    expect(histogram.agentWorkMinutes[0]).toBe(30);
+    expect(histogram.agentWorkMinutes[1]).toBe(60);
+    expect(histogram.agentWorkMinutes[23]).toBe(10);
+    expect(histogram.agentWorkMinutes.reduce((sum, minutes) => sum + minutes, 0)).toBe(100);
+    expect(histogram.commits.reduce((sum, count) => sum + count, 0)).toBe(1);
+    expect(histogram.commits[1]).toBe(1);
+  });
+});
+
+describe("agentsRhythmScaleMax", () => {
+  it("keeps an empty chart legible and expands past one hour with headroom", () => {
+    expect(agentsRhythmScaleMax(0)).toBe(60);
+    expect(agentsRhythmScaleMax(60)).toBe(75);
+    expect(agentsRhythmScaleMax(240)).toBe(270);
+  });
+
+  it("fails soft for non-finite observations", () => {
+    expect(agentsRhythmScaleMax(Number.NaN)).toBe(60);
+    expect(agentsRhythmScaleMax(Number.POSITIVE_INFINITY)).toBe(60);
+  });
+
+  it("stays finite, at or above every observation, and monotonic once data exists", () => {
+    const observations = [0, 1, 15, 30, 31, 60, 90, 91, 240, 241, 720, 721, 1_440, 1_441, 2_880, 2_881, 10_000];
+    const scaleMaxima = observations.map(agentsRhythmScaleMax);
+
+    scaleMaxima.forEach((maximum, index) => {
+      expect(Number.isFinite(maximum)).toBe(true);
+      expect(maximum).toBeGreaterThanOrEqual(observations[index] ?? 0);
+    });
+    const positiveScaleMaxima = scaleMaxima.slice(1);
+    expect(positiveScaleMaxima).toEqual([...positiveScaleMaxima].sort((a, b) => a - b));
   });
 });
 

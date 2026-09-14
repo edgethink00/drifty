@@ -303,6 +303,66 @@ describe("AgentsPage shared dashboard controls", () => {
 
     expect(screen.getByRole("heading", { name: "4.0h of agent work" }).textContent).toBe("Agent work4.0h");
     expect(screen.getAllByText("1.0h elapsed · peak ×4 concurrent").length).toBeGreaterThan(0);
+    expect(screen.getByText("4.5h")).toBeTruthy();
+    expect(screen.getAllByText("Agent work").length).toBeGreaterThan(1);
+  });
+
+  it("shows hourly rhythm values on pointer hover and keyboard focus", () => {
+    vi.mocked(useAgentsData).mockReturnValue({
+      days: [{
+        ...source,
+        turns: [
+          [60, 120, "codex", "drifty_mac"],
+          [60, 120, "claude_code", "drifty_mac"],
+          [60, 120, "gemini", "drifty_mac"],
+          [60, 120, "opencode", "drifty_mac"],
+        ],
+        commits: [[210, 1, 0, 1, "abc123", "drifty_mac"]],
+      }],
+      loading: false,
+      live: true,
+    });
+    renderAgentsPage();
+
+    const svg = document.querySelector<SVGSVGElement>(".agents-rhythm-chart .focus-drift__svg");
+    const hoverTarget = document.querySelector<SVGRectElement>(".agents-rhythm-chart__hover-target");
+    if (!svg || !hoverTarget) throw new Error("Expected the agent rhythm hover surface");
+    const svgBounds = vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 0, 0));
+
+    fireEvent.mouseMove(hoverTarget, { clientX: 0, clientY: 0 });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    svgBounds.mockReturnValue(new DOMRect(0, 0, 100, 100));
+
+    fireEvent.mouseMove(hoverTarget, { clientX: 10.2, clientY: 42 });
+    expect(screen.getByRole("tooltip").textContent).toContain("1 AM–2 AM");
+    expect(screen.getByRole("tooltip").textContent).toContain("4.0hAgent work");
+    expect(screen.getByRole("tooltip").textContent).toContain("0Commits");
+    expect(document.querySelector(".focus-drift__hover-dot--commits")).toBeNull();
+
+    fireEvent.mouseMove(hoverTarget, { clientX: 17.8, clientY: 36 });
+    expect(screen.getByRole("tooltip").textContent).toContain("3 AM–4 AM");
+    expect(screen.getByRole("tooltip").textContent).toContain("Hourly summary");
+    expect(document.querySelector(".focus-drift__hover-dot--commits")).toBeTruthy();
+
+    fireEvent.mouseMove(hoverTarget, { clientX: 50, clientY: 50 });
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    const commitPoint = screen.getByRole("img", { name: /Commits point for 3 AM–4 AM/ });
+    act(() => commitPoint.focus());
+    expect(screen.getByRole("tooltip").textContent).toContain("3 AM–4 AMHourly summary");
+    expect(commitPoint.getAttribute("aria-describedby")).toBe("agents-rhythm-hover-card");
+    act(() => commitPoint.blur());
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("localizes the rhythm hover summary and keyboard point", () => {
+    renderAgentsPage({}, "ko");
+
+    const agentPoint = screen.getByRole("img", { name: /1시–2시 에이전트 작업량 지점/ });
+    act(() => agentPoint.focus());
+    expect(screen.getByRole("tooltip").textContent).toContain("1시–2시시간대 요약1시간 구간");
+    act(() => agentPoint.blur());
   });
 
   it("keeps sub-minute agent time out of the headline", () => {
@@ -644,5 +704,7 @@ describe("AgentsPage shared dashboard controls", () => {
     renderAgentsPage();
 
     expect(screen.getByText(/Agents ran in drifty_mac/i)).toBeTruthy();
+    expect(screen.getAllByText("Commits").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Commits · peak/i)).toBeNull();
   });
 });

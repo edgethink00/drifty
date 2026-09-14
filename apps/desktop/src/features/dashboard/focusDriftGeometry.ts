@@ -1,8 +1,12 @@
-import type { FocusDriftPoint } from "./focusDriftChart";
-
 export type FocusDriftPathPoint = {
   readonly x: number;
   readonly y: number;
+};
+
+export type FocusDriftSplinePoint = {
+  readonly x: number;
+  readonly focusY: number;
+  readonly driftY: number;
 };
 
 type FocusDriftBezierSegment = {
@@ -49,7 +53,7 @@ export function clampFocusDriftChartY(value: number): number {
   return Math.min(Math.max(value, FOCUS_DRIFT_CHART_BOUNDS.top), FOCUS_DRIFT_CHART_BOUNDS.bottom);
 }
 
-export function buildSmoothPath(points: readonly FocusDriftPoint[], yKey: "focusY" | "driftY"): string {
+export function buildSmoothPath(points: readonly FocusDriftSplinePoint[], yKey: "focusY" | "driftY"): string {
   if (points.length === 0) return "";
 
   const pathPoints = points.map((point) => ({
@@ -79,7 +83,7 @@ export function buildSmoothPath(points: readonly FocusDriftPoint[], yKey: "focus
  *  on the visible curve, so hover markers must use this instead of a raw
  *  FocusDriftPoint y coordinate. */
 export function getSmoothPathPointAtX(
-  points: readonly FocusDriftPoint[],
+  points: readonly FocusDriftSplinePoint[],
   yKey: "focusY" | "driftY",
   x: number,
 ): FocusDriftPathPoint | null {

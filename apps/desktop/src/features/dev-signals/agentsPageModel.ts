@@ -947,38 +947,69 @@ export function agentMinutesByRepo(sources: readonly AgentsDaySource[]): Map<str
 }
 
 export type AgentsHourHistogram = {
-  /** 24 values: agent wall-clock minutes in each logical-day hour. */
-  readonly agentMinutes: readonly number[];
+  /** 24 values: cumulative agent-work minutes in each logical-day hour. */
+  readonly agentWorkMinutes: readonly number[];
   /** 24 values: commits authored in that hour. */
   readonly commits: readonly number[];
-  readonly peakAgentHour: number;
+  readonly peakAgentWorkHour: number;
   readonly peakCommitHour: number;
 };
 
-/** Logical-day rhythm across several days: when do agents run, when do commits land. */
+/**
+ * Logical-day work rhythm across several days: when do agents run, when do
+ * commits land.
+ *
+ * Every independently timed turn contributes its overlap with the hour. This
+ * intentionally differs from timeline placement, which merges overlaps onto
+ * one elapsed clock: four agents running for one hour are four agent-hours of
+ * work in this chart, matching the page headline and work-volume summaries.
+ */
 export function agentsHourHistogram(sources: readonly AgentsDaySource[]): AgentsHourHistogram {
-  const agentMinutes = new Array<number>(24).fill(0);
+  const agentWorkMinutes = new Array<number>(24).fill(0);
   const commits = new Array<number>(24).fill(0);
   for (const source of sources) {
-    const merged = mergeSpans(source.turns.map((turn) => {
+    for (const turn of source.turns) {
       const { start, end } = turnFields(turn);
-      return { start, end };
-    }));
-    for (const span of merged) {
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
       for (let hour = 0; hour < 24; hour += 1) {
         const hourStart = hour * 60;
-        const overlap = Math.min(span.end, hourStart + 60) - Math.max(span.start, hourStart);
-        if (overlap > 0) agentMinutes[hour] += overlap;
+        const overlap = Math.min(end, hourStart + 60) - Math.max(start, hourStart);
+        if (overlap > 0) agentWorkMinutes[hour] += overlap;
       }
     }
     for (const [minute] of source.commits) {
+      if (!Number.isFinite(minute)) continue;
       const hour = Math.floor(minute / 60);
       if (hour >= 0 && hour < 24) commits[hour] += 1;
     }
   }
-  const peakAgentHour = agentMinutes.indexOf(Math.max(...agentMinutes));
+  const peakAgentWorkHour = agentWorkMinutes.indexOf(Math.max(...agentWorkMinutes));
   const peakCommitHour = commits.indexOf(Math.max(...commits));
-  return { agentMinutes, commits, peakAgentHour, peakCommitHour };
+  return { agentWorkMinutes, commits, peakAgentWorkHour, peakCommitHour };
+}
+
+/**
+ * Add restrained headroom above the observed work peak and round the chart to
+ * duration-friendly steps. The domain stays useful for a quiet serial hour and
+ * expands without a fixed ceiling when several agents run in parallel.
+ */
+export function agentsRhythmScaleMax(observedPeakMinutes: number): number {
+  if (!Number.isFinite(observedPeakMinutes) || observedPeakMinutes <= 0) return 60;
+  const stepMinutes = observedPeakMinutes <= 30
+    ? 5
+    : observedPeakMinutes <= 90
+      ? 15
+      : observedPeakMinutes <= 240
+        ? 30
+        : observedPeakMinutes <= 720
+          ? 60
+          : observedPeakMinutes <= 1_440
+            ? 120
+            : observedPeakMinutes <= 2_880
+              ? 240
+              : 480;
+  const paddedPeak = observedPeakMinutes * 1.08;
+  return Math.max(15, Math.ceil(paddedPeak / stepMinutes) * stepMinutes);
 }
 
 export type AgentsInsightNumbers = {

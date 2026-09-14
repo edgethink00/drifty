@@ -21,7 +21,7 @@
  */
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, FocusEvent, MouseEvent, ReactNode } from "react";
 
 import {
   logicalMinuteOfDay,
@@ -31,6 +31,7 @@ import {
 } from "@drifty/domain";
 import { AppGlyph } from "../../components/AppGlyph";
 import { DateNavigator } from "../../components/DateNavigator";
+import { getViewportSafeHoverPosition } from "../../components/hoverCardPosition";
 import { MetricTile } from "../../components/MetricTile";
 import { ModalPresence } from "../../components/ModalPresence";
 import {
@@ -52,7 +53,7 @@ import type { FlowBlockHoverGroup } from "../flow-chart/flowHoverGroups";
 import type { ProjectLegendEntry } from "../flow-chart/projectFlowView";
 import { useLocalization, type DisplayLanguage, type LocalizationController } from "../localization/LocalizationContext";
 import { FOCUS_DRIFT_GRID_PATH } from "../dashboard/focusDriftChart";
-import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath } from "../dashboard/focusDriftGeometry";
+import { FOCUS_DRIFT_CHART_BOUNDS, buildSmoothPath, getSmoothPathPointAtX } from "../dashboard/focusDriftGeometry";
 import {
   buildAgentsDayModel,
   buildAgentsDayCellGroups,
@@ -63,6 +64,7 @@ import {
   agentMinutesByRepo,
   agentsIntensityBandFor,
   AGENTS_SEGMENT_MINUTES,
+  agentsRhythmScaleMax,
   gridRepoLegend,
   repoDominantProviders,
   agentsHourHistogram,
@@ -1135,6 +1137,123 @@ function agentsWeekStatEntries(
   ];
 }
 
+type AgentsRhythmHoverKind = "agent" | "commits";
+
+type AgentsRhythmHoverState = {
+  readonly hour: number;
+  readonly kind: AgentsRhythmHoverKind;
+  readonly workMinutes: number;
+  readonly commits: number;
+  readonly markerX: number;
+  readonly markerY: number;
+  readonly x: number;
+  readonly y: number;
+};
+
+const AGENTS_RHYTHM_HOVER_CARD_ID = "agents-rhythm-hover-card";
+const AGENTS_RHYTHM_HOUR_HALF_WIDTH = (
+  (FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left) / (24 * 2)
+);
+const AGENTS_RHYTHM_HOVER_MAX_Y_DISTANCE = 24;
+
+function hasUsableRhythmBounds(bounds: DOMRect | null): bounds is DOMRect {
+  return Boolean(
+    bounds
+    && Number.isFinite(bounds.left)
+    && Number.isFinite(bounds.top)
+    && Number.isFinite(bounds.width)
+    && Number.isFinite(bounds.height)
+    && bounds.width > 0
+    && bounds.height > 0,
+  );
+}
+
+function formatAgentsRhythmHourRange(
+  hour: number,
+  startOfDayMinutes: number,
+  language: DisplayLanguage,
+): string {
+  const start = formatLocalizedHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), language);
+  const end = formatLocalizedHourLabel(clockHourForLogicalHour(hour + 1, startOfDayMinutes), language);
+  return `${start}–${end}`;
+}
+
+function AgentsRhythmHoverCard({
+  hover,
+  startOfDayMinutes,
+}: {
+  readonly hover: AgentsRhythmHoverState;
+  readonly startOfDayMinutes: number;
+}) {
+  const { effectiveLanguage, t } = useLocalization();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
+  const workDuration = formatAgentDuration(hover.workMinutes, effectiveLanguage);
+  const timeRange = formatAgentsRhythmHourRange(hover.hour, startOfDayMinutes, effectiveLanguage);
+  const position = getViewportSafeHoverPosition(hover.x, hover.y, cardSize.width, cardSize.height);
+
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    if (!card) return undefined;
+    const currentCard = card;
+
+    function updateCardSize() {
+      const bounds = currentCard.getBoundingClientRect();
+      setCardSize((current) => (
+        current.width === bounds.width && current.height === bounds.height
+          ? current
+          : { width: bounds.width, height: bounds.height }
+      ));
+    }
+
+    updateCardSize();
+    const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(updateCardSize) : null;
+    resizeObserver?.observe(currentCard);
+    window.addEventListener("resize", updateCardSize);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", updateCardSize);
+    };
+  }, [effectiveLanguage, hover.commits, hover.hour, hover.workMinutes]);
+
+  return (
+    <div
+      id={AGENTS_RHYTHM_HOVER_CARD_ID}
+      ref={cardRef}
+      className={`focus-drift-hover-card agents-rhythm-hover-card agents-rhythm-hover-card--${hover.kind}`}
+      role="tooltip"
+      style={position}
+    >
+      <div className="focus-drift-hover-card__head">
+        <span className={`agents-rhythm-hover-card__dot agents-rhythm-hover-card__dot--${hover.kind}`} aria-hidden="true" />
+        <div className="focus-drift-hover-card__title">
+          <span className="focus-drift-hover-card__eyebrow">{timeRange}</span>
+          <strong>{t("agents.rhythm.hoverTitle")}</strong>
+        </div>
+        <span className="focus-drift-hover-card__window">{t("agents.rhythm.hoverWindow")}</span>
+      </div>
+      <span className="sr-only">
+        {t("agents.rhythm.hoverPointAria", {
+          series: t(hover.kind === "agent" ? "agents.rhythm.agentTime" : "agents.rhythm.commits"),
+          time: timeRange,
+          duration: workDuration,
+          count: hover.commits,
+        })}
+      </span>
+      <div className="focus-drift-hover-card__metrics" aria-hidden="true">
+        <div className={`focus-drift-hover-card__metric${hover.kind === "agent" ? " is-active" : ""}`}>
+          <strong>{workDuration}</strong>
+          <span>{t("agents.rhythm.agentTime")}</span>
+        </div>
+        <div className={`focus-drift-hover-card__metric${hover.kind === "commits" ? " is-active" : ""}`}>
+          <strong>{hover.commits}</strong>
+          <span>{t("agents.rhythm.commits")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Agent rhythm as the timeline dashboard's line chart: the focus/drift plot's
  * own SVG coordinate system, smoothing spline, grid, scale, and axis classes,
@@ -1144,23 +1263,28 @@ function agentsWeekStatEntries(
 function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly sources: readonly AgentsDaySource[]; readonly startOfDayMinutes: number }) {
   const { effectiveLanguage, t } = useLocalization();
   const histogram = useMemo(() => agentsHourHistogram(sources), [sources]);
-  const maxAgent = Math.max(1, ...histogram.agentMinutes);
-  const maxCommits = Math.max(1, ...histogram.commits);
+  const [rhythmHover, setRhythmHover] = useState<AgentsRhythmHoverState | null>(null);
+  const agentWorkPeakMinutes = Math.max(0, ...histogram.agentWorkMinutes);
+  const agentWorkScaleMaxMinutes = agentsRhythmScaleMax(agentWorkPeakMinutes);
+  const commitPeak = Math.max(0, ...histogram.commits);
+  const commitScaleMax = Math.max(1, commitPeak);
 
-  const { agentPath, commitsPath, agentAreaPath, axisTicks } = useMemo(() => {
+  useEffect(() => setRhythmHover(null), [histogram]);
+
+  const { agentPath, commitsPath, agentAreaPath, agentPoints, commitPoints, axisTicks } = useMemo(() => {
     const width = FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left;
     const height = FOCUS_DRIFT_CHART_BOUNDS.bottom - FOCUS_DRIFT_CHART_BOUNDS.top;
     const pointAt = (hour: number, ratio: number) => ({
       x: FOCUS_DRIFT_CHART_BOUNDS.left + ((hour + 0.5) / 24) * width,
       y: FOCUS_DRIFT_CHART_BOUNDS.bottom - ratio * height,
     });
-    const agentPoints = histogram.agentMinutes.map((minutes, hour) => {
-      const point = pointAt(hour, minutes / maxAgent);
-      return { x: point.x, focusY: point.y, driftY: point.y } as never;
+    const agentPoints = histogram.agentWorkMinutes.map((minutes, hour) => {
+      const point = pointAt(hour, minutes / agentWorkScaleMaxMinutes);
+      return { x: point.x, focusY: point.y, driftY: point.y };
     });
     const commitPoints = histogram.commits.map((count, hour) => {
-      const point = pointAt(hour, count / maxCommits);
-      return { x: point.x, focusY: point.y, driftY: point.y } as never;
+      const point = pointAt(hour, count / commitScaleMax);
+      return { x: point.x, focusY: point.y, driftY: point.y };
     });
     const agent = buildSmoothPath(agentPoints, "focusY");
     const first = agentPoints[0] as { x: number } | undefined;
@@ -1172,13 +1296,114 @@ function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly source
       agentPath: agent,
       commitsPath: buildSmoothPath(commitPoints, "focusY"),
       agentAreaPath: area,
+      agentPoints,
+      commitPoints,
       axisTicks: [0, 3, 6, 9, 12, 15, 18, 21].map((hour) => ({
         hour,
         x: FOCUS_DRIFT_CHART_BOUNDS.left + ((hour + 0.5) / 24) * width,
         label: formatLocalizedHourLabel(clockHourForLogicalHour(hour, startOfDayMinutes), effectiveLanguage),
       })),
     };
-  }, [effectiveLanguage, histogram, maxAgent, maxCommits, startOfDayMinutes]);
+  }, [agentWorkScaleMaxMinutes, commitScaleMax, effectiveLanguage, histogram, startOfDayMinutes]);
+
+  const hoverHours = histogram.agentWorkMinutes
+    .map((workMinutes, hour) => ({ hour, workMinutes, commits: histogram.commits[hour] ?? 0 }))
+    .filter(({ workMinutes, commits }) => workMinutes > 0 || commits > 0);
+
+  function hoverStateFor(
+    hour: number,
+    kind: AgentsRhythmHoverKind,
+    x: number,
+    y: number,
+  ): AgentsRhythmHoverState | null {
+    const sourcePoint = kind === "agent" ? agentPoints[hour] : commitPoints[hour];
+    const points = kind === "agent" ? agentPoints : commitPoints;
+    if (!sourcePoint) return null;
+    const marker = getSmoothPathPointAtX(points, "focusY", sourcePoint.x);
+    return {
+      hour,
+      kind,
+      workMinutes: histogram.agentWorkMinutes[hour] ?? 0,
+      commits: histogram.commits[hour] ?? 0,
+      markerX: marker?.x ?? sourcePoint.x,
+      markerY: marker?.y ?? sourcePoint.focusY,
+      x,
+      y,
+    };
+  }
+
+  function updatePointerHover(event: MouseEvent<SVGRectElement>) {
+    const svgBounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
+    if (
+      !hasUsableRhythmBounds(svgBounds)
+      || !Number.isFinite(event.clientX)
+      || !Number.isFinite(event.clientY)
+      || hoverHours.length === 0
+    ) {
+      setRhythmHover(null);
+      return;
+    }
+
+    const chartX = ((event.clientX - svgBounds.left) / svgBounds.width) * 100;
+    const chartY = ((event.clientY - svgBounds.top) / svgBounds.height) * 100;
+    const nearest = hoverHours.reduce((best, candidate) => {
+      const bestPoint = agentPoints[best.hour];
+      const candidatePoint = agentPoints[candidate.hour];
+      if (!bestPoint || !candidatePoint) return best;
+      return Math.abs(candidatePoint.x - chartX) < Math.abs(bestPoint.x - chartX) ? candidate : best;
+    });
+    const nearestPoint = agentPoints[nearest.hour];
+    if (!nearestPoint || Math.abs(nearestPoint.x - chartX) > AGENTS_RHYTHM_HOUR_HALF_WIDTH) {
+      setRhythmHover(null);
+      return;
+    }
+
+    const candidates = ([
+      nearest.workMinutes > 0 ? hoverStateFor(nearest.hour, "agent", event.clientX, event.clientY) : null,
+      nearest.commits > 0 ? hoverStateFor(nearest.hour, "commits", event.clientX, event.clientY) : null,
+    ] as const).filter((candidate): candidate is AgentsRhythmHoverState => candidate !== null);
+    const closest = candidates.reduce<AgentsRhythmHoverState | null>((best, candidate) => (
+      !best || Math.abs(candidate.markerY - chartY) < Math.abs(best.markerY - chartY) ? candidate : best
+    ), null);
+    if (!closest || Math.abs(closest.markerY - chartY) > AGENTS_RHYTHM_HOVER_MAX_Y_DISTANCE) {
+      setRhythmHover(null);
+      return;
+    }
+    setRhythmHover(closest);
+  }
+
+  function updateKeyboardHover(
+    hour: number,
+    kind: AgentsRhythmHoverKind,
+    event: FocusEvent<SVGCircleElement>,
+  ) {
+    const marker = hoverStateFor(hour, kind, 0, 0);
+    if (!marker) return;
+    const svgBounds = event.currentTarget.ownerSVGElement?.getBoundingClientRect() ?? null;
+    if (hasUsableRhythmBounds(svgBounds)) {
+      setRhythmHover({
+        ...marker,
+        x: svgBounds.left + (marker.markerX / 100) * svgBounds.width,
+        y: svgBounds.top + (marker.markerY / 100) * svgBounds.height,
+      });
+      return;
+    }
+    const targetBounds = event.currentTarget.getBoundingClientRect();
+    setRhythmHover({
+      ...marker,
+      x: targetBounds.left + targetBounds.width / 2,
+      y: targetBounds.top + targetBounds.height / 2,
+    });
+  }
+
+  function pointAriaLabel(hour: number, kind: AgentsRhythmHoverKind): string {
+    return t("agents.rhythm.hoverPointAria", {
+      series: t(kind === "agent" ? "agents.rhythm.agentTime" : "agents.rhythm.commits"),
+      time: formatAgentsRhythmHourRange(hour, startOfDayMinutes, effectiveLanguage),
+      duration: formatAgentDuration(histogram.agentWorkMinutes[hour] ?? 0, effectiveLanguage),
+      count: histogram.commits[hour] ?? 0,
+    });
+  }
 
   return (
     <section className="editorial-panel editorial-panel--soft insight-chart-panel">
@@ -1186,22 +1411,77 @@ function AgentsRhythmPanelBody({ sources, startOfDayMinutes }: { readonly source
         <span className="label-mono">{t("agents.rhythm.title")}</span>
         <div className="insight-panel-head__legend">
           <span className="chip green"><span className="sw" style={{ background: "var(--productivity-focus)" }} />{t("agents.rhythm.agentTime")}</span>
-          <span className="chip"><span className="sw" style={{ background: "var(--text-soft)" }} />{t("agents.rhythm.commits")}{maxCommits > 0 ? ` · ${t("agents.rhythm.peakCount", { count: maxCommits })}` : ""}</span>
+          <span className="chip"><span className="sw" style={{ background: "var(--text-soft)" }} />{t("agents.rhythm.commits")}{commitPeak > 0 ? ` · ${t("agents.rhythm.peakCount", { count: commitPeak })}` : ""}</span>
         </div>
       </div>
       <div className="focus-drift agents-rhythm-chart" aria-label={t("agents.rhythm.aria")}>
         <div className="focus-drift__plot">
-          <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label={t("agents.rhythm.graphicAria")}>
+          <svg className="focus-drift__svg" viewBox="0 0 100 100" preserveAspectRatio="none" role="group" aria-label={t("agents.rhythm.graphicAria")}>
             <path className="focus-drift__grid" d={FOCUS_DRIFT_GRID_PATH} />
             <path className="focus-drift__area" d={agentAreaPath} />
             <path className="focus-drift__line focus-drift__line--focus" d={agentPath} />
             <path className="focus-drift__line agents-rhythm-chart__commits-line" d={commitsPath} />
+            <rect
+              className="focus-drift__line-target agents-rhythm-chart__hover-target"
+              x={FOCUS_DRIFT_CHART_BOUNDS.left}
+              y={FOCUS_DRIFT_CHART_BOUNDS.top}
+              width={FOCUS_DRIFT_CHART_BOUNDS.right - FOCUS_DRIFT_CHART_BOUNDS.left}
+              height={100 - FOCUS_DRIFT_CHART_BOUNDS.top}
+              aria-label={t("agents.rhythm.hoverTarget")}
+              onMouseEnter={updatePointerHover}
+              onMouseMove={updatePointerHover}
+              onMouseLeave={() => setRhythmHover(null)}
+            />
+            {hoverHours.map(({ hour, workMinutes, commits }) => {
+              const agentPoint = agentPoints[hour];
+              const commitPoint = commitPoints[hour];
+              return (
+                <g key={`agents-rhythm-hour-${hour}`}>
+                  {workMinutes > 0 && agentPoint ? (
+                    <circle
+                      className="focus-drift__target focus-drift__target--focus agents-rhythm-chart__target--agent"
+                      cx={agentPoint.x}
+                      cy={agentPoint.focusY}
+                      r="3"
+                      role="img"
+                      tabIndex={0}
+                      aria-label={pointAriaLabel(hour, "agent")}
+                      aria-describedby={rhythmHover?.hour === hour && rhythmHover.kind === "agent" ? AGENTS_RHYTHM_HOVER_CARD_ID : undefined}
+                      onFocus={(event) => updateKeyboardHover(hour, "agent", event)}
+                      onBlur={() => setRhythmHover(null)}
+                    />
+                  ) : null}
+                  {commits > 0 && commitPoint ? (
+                    <circle
+                      className="focus-drift__target agents-rhythm-chart__target--commits"
+                      cx={commitPoint.x}
+                      cy={commitPoint.focusY}
+                      r="3"
+                      role="img"
+                      tabIndex={0}
+                      aria-label={pointAriaLabel(hour, "commits")}
+                      aria-describedby={rhythmHover?.hour === hour && rhythmHover.kind === "commits" ? AGENTS_RHYTHM_HOVER_CARD_ID : undefined}
+                      onFocus={(event) => updateKeyboardHover(hour, "commits", event)}
+                      onBlur={() => setRhythmHover(null)}
+                    />
+                  ) : null}
+                </g>
+              );
+            })}
           </svg>
+          {rhythmHover ? (
+            <div
+              className={`focus-drift__hover-dot${rhythmHover.kind === "commits" ? " focus-drift__hover-dot--commits" : ""}`}
+              style={{ left: `${rhythmHover.markerX}%`, top: `${rhythmHover.markerY}%` }}
+              aria-hidden="true"
+            />
+          ) : null}
           <div className="focus-drift__scale" aria-hidden="true">
-            <span style={{ "--focus-drift-scale-y": `${FOCUS_DRIFT_CHART_BOUNDS.top}%` } as CSSProperties}>{formatAgentDuration(maxAgent, effectiveLanguage)}</span>
+            <span style={{ "--focus-drift-scale-y": `${FOCUS_DRIFT_CHART_BOUNDS.top}%` } as CSSProperties}>{formatAgentDuration(agentWorkScaleMaxMinutes, effectiveLanguage)}</span>
             <span style={{ "--focus-drift-scale-y": `${FOCUS_DRIFT_CHART_BOUNDS.bottom}%` } as CSSProperties}>0</span>
           </div>
         </div>
+        {rhythmHover ? <AgentsRhythmHoverCard hover={rhythmHover} startOfDayMinutes={startOfDayMinutes} /> : null}
         <div className="focus-drift__axis" aria-hidden="true">
           {axisTicks.map((tick) => (
             <span key={tick.hour} style={{ "--focus-drift-axis-x": `${tick.x}%` } as CSSProperties}>{tick.label}</span>

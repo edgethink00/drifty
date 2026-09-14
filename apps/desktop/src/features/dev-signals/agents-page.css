@@ -877,6 +877,26 @@
   stroke-dasharray: 5 4;
 }
 
+.agents-rhythm-chart .focus-drift__hover-dot--commits {
+  background: var(--text-soft);
+}
+
+.agents-rhythm-hover-card__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--productivity-focus);
+}
+
+.agents-rhythm-hover-card__dot--commits {
+  background: var(--text-soft);
+}
+
+.agents-rhythm-hover-card--commits .focus-drift-hover-card__metric.is-active {
+  border-color: color-mix(in srgb, var(--text-soft) 44%, var(--line));
+  background: color-mix(in srgb, var(--text-soft) 9%, var(--surface-strong));
+}
+
 /* Models ranked list. */
 .agents-models {
   display: grid;
